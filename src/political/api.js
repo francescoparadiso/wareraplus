@@ -24,6 +24,7 @@
 
 import { trpcCall, cacheKey, cacheGet, cacheSet } from '../shared/trpcClient.js';
 import { CACHE_TTL_SHORT, CACHE_TTL_LONG, csvColorMap } from './config.js';
+import { showLoading, hideLoading } from './loading.js';
 
 const CACHE_NAMESPACE = 'pol';
 
@@ -40,8 +41,21 @@ const ENDPOINT_MAP = {
   '/article':    { proc: 'article.getArticleLiteById',       params: p => ({ articleId: p.id }) },
 };
 
-/* ── API (firma invariata rispetto all'originale) ── */
+/* ── API (firma invariata rispetto all'originale) ──
+   showLoading/hideLoading chiamate esplicitamente qui al posto del
+   monkey-patch di window.localFetch dell'originale (vedi loading.js) —
+   stesso comportamento visibile (loader mostrato per l'intera durata
+   della chiamata, cache-hit incluso, esattamente come prima). */
 export async function localFetch(path, params = {}, { useCache = true, ttl = null } = {}) {
+  showLoading(`Fetching ${path}...`);
+  try {
+    return await _localFetchImpl(path, params, { useCache, ttl });
+  } finally {
+    hideLoading();
+  }
+}
+
+async function _localFetchImpl(path, params, { useCache, ttl }) {
   const key = cacheKey(CACHE_NAMESPACE, path, params);
   if (useCache) {
     const cached = cacheGet(key);
