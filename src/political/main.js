@@ -24,8 +24,15 @@
      l'utente riapre Political per una nazione diversa da quella già
      caricata (equivalente al vecchio `isNewCountry` di
      politicalOverlay.js che ricaricava l'iframe).
+   - Import di src/styles/political.css: nell'originale il CSS era un
+     <link> nell'HTML dell'iframe, caricato automaticamente col
+     documento. Qui, essendo un modulo, il CSS va importato
+     esplicitamente — importato QUI (non in domTemplate.js) perché
+     main.js è l'unico entry point garantito eseguito prima che
+     qualunque markup Political diventi visibile.
    ══════════════════════════════════════════════════════════════ */
 
+import '../styles/political.css';
 import { t } from './i18n.js';
 import {
   pendingRequest, setPendingRequest,

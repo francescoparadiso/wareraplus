@@ -1,21 +1,26 @@
 /* ══════════════════════════════════════════════════════════════
-   WarEra+ — Sincronizzazione tema con Political View
+   WarEra+ — Sincronizzazione tema con Political View (Fase 2, Stage 9)
    ------------------------------------------------------------------
-   Componente NUOVO, non tocca alcun file di Diplomacy o Political.
+   Fino a questo stage, l'aggiornamento LIVE del tema (iframe già
+   aperto quando l'utente cambia tema) chiamava
+   `frameEl.contentWindow.applyTheme(...)` — funzionava solo perché
+   `applyTheme` in public/political/config.js era una function
+   declaration (quindi proprietà di `window` per hoisting) e same-origin.
 
-   Come funziona: Political View (public/political/) e lo shell
-   WarEra+ sono serviti dalla STESSA origin (stesso dominio Vercel),
-   quindi condividono lo stesso localStorage — anche dentro l'iframe.
-   Political legge il tema da `localStorage.getItem('we_theme')`
-   (public/political/config.js: initTheme()) al boot. Basta quindi
-   scrivere in quella stessa chiave quando il tema cambia nello shell,
-   e Political lo userà automaticamente al prossimo caricamento
-   dell'iframe — zero modifiche al codice Political.
+   Ora che Political gira in-page (Stage 5-8), non c'è più un
+   `contentWindow` da attraversare: `applyTheme` è una vera funzione
+   esportata da src/political/config.js, chiamabile con un `import()`
+   dinamico diretto — nessun try/catch per "iframe non ancora caricato
+   o cross-origin", quel caso non esiste più.
 
-   Per l'aggiornamento LIVE (iframe già aperto quando l'utente cambia
-   tema), chiamiamo direttamente `contentWindow.applyTheme(...)`, la
-   funzione già esistente in public/political/config.js — accessibile
-   perché same-origin, senza bisogno di postMessage.
+   Il boot iniziale resta identico: Political (src/political/config.js:
+   initTheme(), chiamata da main.js:initPoliticalView() al primo mount,
+   Stage 8) legge `localStorage.getItem('we_theme')` da sola — questo
+   file continua a scrivere quella stessa chiave condivisa, quindi
+   funziona senza alcuna azione esplicita di "sync prima dell'apertura"
+   (la vecchia `syncThemeToFrame`, rimossa: non serve più un passo
+   dedicato pre-apertura, la chiave è già scritta dal click precedente
+   sul bottone tema).
    ══════════════════════════════════════════════════════════════ */
 
 import { state } from '../diplomacy/state.js';
@@ -26,18 +31,25 @@ function _writeTheme(theme) {
   try { localStorage.setItem(WE_THEME_KEY, theme); } catch (_) {}
 }
 
-function _applyToIframeIfOpen(theme) {
-  const frame = document.getElementById('wp-political-frame');
-  if (!frame) return;
+/**
+ * Aggiorna il tema di Political SOLO se è già stata montata almeno una
+ * volta in questa sessione (altrimenti importare src/political/config.js
+ * qui scaricherebbe una parte del bundle Political solo per un toggle
+ * tema, prima ancora che l'utente abbia mai aperto quella vista —
+ * vanificando il code-splitting via import() dinamico di
+ * politicalOverlay.js). Se Political non è mai stata aperta, la chiave
+ * localStorage scritta sopra basta: initTheme() la leggerà correttamente
+ * al primo mount, quando che sia.
+ */
+async function _applyToPoliticalIfMounted(theme) {
+  const root = document.getElementById('wp-political-root');
+  if (!root || !root.children.length) return;
   try {
-    const win = frame.contentWindow;
-    if (win && typeof win.applyTheme === 'function') {
-      win.applyTheme(theme);
-    }
+    const { applyTheme } = await import('../political/config.js');
+    applyTheme(theme);
   } catch (_) {
-    // iframe non ancora caricato o cross-origin per qualche motivo
-    // imprevisto: non blocchiamo nulla, verrà comunque letto da
-    // localStorage al prossimo load.
+    // Non dovrebbe accadere (stesso documento, nessun confine iframe),
+    // ma non blocchiamo il resto dell'app se capita.
   }
 }
 
@@ -53,7 +65,7 @@ export function initThemeSync() {
   if (!btn) return;
 
   // Sincronizza subito lo stato iniziale (utile se Political viene
-  // aperto prima di qualunque toggle tema).
+  // aperta prima di qualunque toggle tema).
   _writeTheme(state.theme === 'light' ? 'light' : 'dark');
 
   btn.addEventListener('click', () => {
@@ -61,12 +73,6 @@ export function initThemeSync() {
     // (main.js), registrato prima del nostro.
     const theme = state.theme === 'light' ? 'light' : 'dark';
     _writeTheme(theme);
-    _applyToIframeIfOpen(theme);
+    _applyToPoliticalIfMounted(theme);
   });
-}
-
-/** Chiamata quando si apre/ricarica l'overlay Political, per allineare
- *  subito il tema anche se l'iframe viene ricaricato da zero. */
-export function syncThemeToFrame() {
-  _writeTheme(state.theme === 'light' ? 'light' : 'dark');
 }

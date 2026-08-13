@@ -477,10 +477,14 @@ body.light-theme .wp-panel-name {
   font-family: 'JetBrains Mono', monospace;
 }
 
-.wp-political-frame {
+/* Fase 2 (Stage 9): sostituisce il vecchio <iframe class="wp-political-frame">
+   — #wp-political-root è ora un div che riempie lo stesso spazio flex
+   (overflow-y esplicito perché, a differenza di un iframe con il proprio
+   scroll interno, un div ha bisogno che lo scroll sia dichiarato qui). */
+#wp-political-root {
   flex: 1;
   width: 100%;
-  border: none;
+  overflow-y: auto;
   background: #0d1117;
 }
 

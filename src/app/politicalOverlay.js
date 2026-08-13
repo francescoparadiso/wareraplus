@@ -1,41 +1,44 @@
 /* ══════════════════════════════════════════════════════════════
-   WarEra+ — Overlay Political View
+   WarEra+ — Overlay Political View (Fase 2, Stage 9 — CUTOVER)
    ------------------------------------------------------------------
-   Carica il Political View ORIGINALE (public/political/index.html,
-   codice invariato salvo 2 piccoli hook additivi in congress.js — vedi
-   commenti lì) dentro un iframe, sfruttando il meccanismo di deep-link
-   ?country=<id> già presente in quel tool (letto in political/config.js).
+   Fino a questo stage, Political View girava in un <iframe> che
+   caricava public/political/index.html (codice invariato, script
+   globali) — comunicando con lo shell solo via CustomEvent perché
+   `let`/`const` dichiarate in uno script classico non diventano
+   proprietà di `window`, quindi `frameEl.contentWindow.SenateView`
+   era sempre `undefined` dall'esterno anche se `SenateView` esisteva
+   dentro l'iframe.
 
-   IMPORTANTE — perché si usano solo eventi, mai `contentWindow.X`:
-   in JavaScript, `let`/`const` dichiarate a livello globale in uno
-   script classico NON diventano proprietà di `window` (solo `var` e le
-   dichiarazioni di funzione lo fanno). `SenateView` (const) e
-   `_currentCongressElectionId` (let) in Political sono quindi
-   invisibili come `frameEl.contentWindow.SenateView` dall'esterno,
-   anche se esistono e sono valide *dentro* quello script. Da qui il
-   bug della versione precedente (`Cannot read properties of undefined
-   (reading 'open')`). La soluzione: comunicare solo via
-   CustomEvent su `window` (l'oggetto window stesso È condiviso,
-   same-origin — sono i bare-name binding let/const a non esserlo),
-   con un piccolo listener dentro congress.js che ha accesso diretto
-   per nome a quelle variabili.
+   Da questo stage, Political View è un vero modulo ES (src/political/,
+   Stage 2-8) montato IN-PAGE dentro #wp-political-root, nello stesso
+   documento dello shell. Tutta la complessità precedente sparisce:
+   - Niente più iframe, niente più `frameEl.src` per "ricaricare".
+   - Niente più attesa di un evento 'load' del documento iframe.
+   - Niente più `wareraplus:elections-ready`/`wareraplus:open-senate`
+     dispatchati/ascoltati attraverso il confine dell'iframe con
+     timeout di sicurezza a 15s: `initPoliticalView()` (Stage 8) è una
+     Promise che si risolve solo a dati caricati (o falliti), quindi
+     `await`-arla è già la garanzia che serviva — l'apertura del
+     senato (`options.openSenate`) è gestita DENTRO initPoliticalView
+     stessa, non più qui.
+   - `import()` dinamico (non statico in testa al file): il bundle di
+     Political (~300KB con Chart.js/D3/TomSelect/Sortable) si scarica
+     solo alla PRIMA apertura, non al boot dell'app — questo file
+     (politicalOverlay.js) è importato staticamente da src/main.js e
+     src/panel/countryPanel.js fin dal boot, quindi un import statico
+     di src/political/main.js qui trascinerebbe l'intero bundle
+     Political nel chunk principale.
+
+   public/political/ (i file originali, invariati) RESTANO nel repo
+   come riferimento/rollback fisico — vedi CLAUDE.md, non sono stati
+   cancellati in questo stage, solo non più referenziati da nessun
+   path attivo dell'app.
    ══════════════════════════════════════════════════════════════ */
 
-import { syncThemeToFrame } from './themeSync.js';
-
-let overlayEl, frameEl, backBtn, titleEl;
-
-// Traccia, lato genitore, se il boot dati (elezioni) è già avvenuto per
-// il documento ATTUALMENTE caricato nell'iframe. Si azzera ogni volta
-// che l'iframe naviga (evento 'load'), perché un nuovo documento parte
-// sempre da zero. Non si può dedurre questo stato leggendo variabili
-// interne a Political (vedi nota sopra), quindi lo ricostruiamo qui
-// ascoltando l'evento che quello stesso codice già emette.
-let _electionsReady = false;
+let overlayEl, backBtn, titleEl;
 
 export function initPoliticalOverlay() {
   overlayEl = document.getElementById('wp-political-overlay');
-  frameEl = document.getElementById('wp-political-frame');
   backBtn = document.getElementById('wp-political-back');
   titleEl = document.getElementById('wp-political-title');
 
@@ -46,47 +49,6 @@ export function initPoliticalOverlay() {
       closePoliticalView();
     }
   });
-
-  // Ogni volta che l'iframe carica un nuovo documento, riparte da zero
-  // e si aggancia al suo evento di prontezza.
-  frameEl.addEventListener('load', () => {
-    _electionsReady = false;
-    const win = frameEl.contentWindow;
-    if (!win) return;
-    win.addEventListener('wareraplus:elections-ready', () => {
-      _electionsReady = true;
-    });
-  });
-}
-
-/**
- * Chiede a Political (via evento in ingresso, ascoltato in congress.js)
- * di aprire la Senate View. Se i dati non sono ancora pronti, aspetta
- * l'evento di prontezza prima di mandare la richiesta.
- */
-function _requestSenateOpen() {
-  const win = frameEl.contentWindow;
-  if (!win) return;
-
-  const dispatch = () => win.dispatchEvent(new CustomEvent('wareraplus:open-senate'));
-
-  if (_electionsReady) {
-    dispatch();
-    return;
-  }
-
-  let done = false;
-  const onReady = () => {
-    if (done) return;
-    done = true;
-    dispatch();
-  };
-  win.addEventListener('wareraplus:elections-ready', onReady, { once: true });
-  // Timeout di sicurezza: se l'evento non arrivasse mai (errore
-  // imprevisto nel boot), tenta comunque dopo un'attesa ragionevole.
-  setTimeout(() => {
-    if (!done) { done = true; dispatch(); }
-  }, 15000);
 }
 
 /**
@@ -95,39 +57,17 @@ function _requestSenateOpen() {
  * @param {string} [countryName] - solo per il titolo mostrato in top bar
  * @param {{ openSenate?: boolean }} [options]
  */
-export function openPoliticalView(countryId, countryName = '', options = {}) {
-  const src = `/political/index.html?country=${encodeURIComponent(countryId)}`;
-  const isNewCountry = frameEl.dataset.currentCountry !== countryId;
-
-  // Il tema va scritto PRIMA che l'iframe (ri)carichi, così Political lo
-  // legge già corretto al boot (config.js: initTheme() legge we_theme,
-  // applyTheme è una function declaration quindi ATTACCATA a window —
-  // per quella l'accesso diretto funziona, a differenza di SenateView).
-  syncThemeToFrame();
-
-  if (isNewCountry) {
-    frameEl.src = src;
-    frameEl.dataset.currentCountry = countryId;
-  }
+export async function openPoliticalView(countryId, countryName = '', options = {}) {
   titleEl.textContent = countryName ? `— ${countryName}` : '';
   overlayEl.classList.add('open');
   overlayEl.setAttribute('aria-hidden', 'false');
 
-  if (options.openSenate) {
-    if (isNewCountry) {
-      // L'iframe sta (ri)caricando: aspetta il suo 'load' (che reimposta
-      // _electionsReady e riaggancia il listener, vedi initPoliticalOverlay)
-      // prima di richiedere l'apertura della Senate View.
-      frameEl.addEventListener('load', function onLoad() {
-        frameEl.removeEventListener('load', onLoad);
-        _requestSenateOpen();
-      });
-    } else {
-      // Stessa nazione già caricata: l'iframe non ricarica, quindi nessun
-      // nuovo evento 'load' scatterà — richiama direttamente.
-      _requestSenateOpen();
-    }
-  }
+  // Import dinamico: scarica il chunk Political solo qui, alla prima
+  // apertura reale (poi resta in cache del browser/module graph per le
+  // aperture successive). initPoliticalView è idempotente: se già
+  // montata, cambia nazione solo se diversa da quella corrente (Stage 8).
+  const { initPoliticalView } = await import('../political/main.js');
+  await initPoliticalView(countryId, options);
 
   if (window.umami) {
     window.umami.track('wareraplus-expand-political', { countryId, openSenate: !!options.openSenate });
