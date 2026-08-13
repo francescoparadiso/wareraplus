@@ -6,7 +6,7 @@ principale e un pannello nazione che fa da ponte tra le due.
 
 ---
 
-## 🧭 Come funziona (architettura v1)
+## 🧭 Come funziona (architettura v2, dopo la Fase 2)
 
 ```
                     ┌─────────────────────────────┐
@@ -23,27 +23,27 @@ principale e un pannello nazione che fa da ponte tra le due.
                                    │ bottone "Espandi"
                                    ▼
                     ┌─────────────────────────────┐
-                    │  Overlay Political View        │
-                    │  (iframe → /political/*,       │
-                    │   codice originale invariato)  │
+                    │  Overlay Political View         │
+                    │  (in-page, #wp-political-root,  │
+                    │   src/political/, import()      │
+                    │   dinamico — code-split)         │
                     └─────────────────────────────┘
 ```
 
-**Decisione chiave di questa v1:** il codice di **Political View** (congress.js,
-senate.js, presidential.js, party.js, i18n.js…) è stato copiato **invariato**
-dentro `public/political/` e viene caricato in un `<iframe>` quando l'utente
-espande il pannello nazione, passando `?country=<id>` — lo stesso meccanismo
-di deep-link che esisteva già tra i due tool originali (`config.js` di
-Political lo legge di suo, zero modifiche necessarie lì).
+**Political View** (congress.js, senate.js, presidential.js, party.js,
+i18n.js…) è un vero modulo ES in `src/political/`, montato in-page dentro
+`#wp-political-root` quando l'utente espande il pannello nazione — niente
+più iframe. `initPoliticalView(countryId, options)` riceve la nazione come
+parametro esplicito (non più `?country=<id>` letto da un iframe separato).
 
-Perché un iframe e non un merge diretto a moduli ES? Political View è
-~300KB di script interdipendenti scritti per girare come script-tag
-globali (`window.X`). Convertirli alla cieca in moduli ES senza poterli
-testare dal vivo contro le API reali avrebbe introdotto rischio di bug
-sottili. L'iframe garantisce **zero rischio di rottura**: quel codice
-funziona esattamente come funzionava nel tool originale. La fusione vera
-(Opzione B "pura", un solo bundle) è pianificata come Fase 2 — vedi
-Roadmap sotto.
+**Nota storica (v1)**: la prima versione copiava Political View **invariata**
+dentro `public/political/` e la caricava in un `<iframe>`, deliberatamente,
+per azzerare il rischio di bug nella conversione a moduli ES senza poterla
+testare dal vivo. Quella v1 è stata verificata in produzione, poi la Fase 2
+ha eseguito la fusione vera pianificata fin dall'inizio (vedi Roadmap sotto
+per il resoconto completo di cosa è stato convertito e come). `public/political/`
+**esiste ancora nel repo**, invariata, come riferimento/rollback fisico — non
+è più raggiunta da nessun path attivo dell'app.
 
 **Diplomacy View**, che era già scritta a moduli ES (Vite), è stata invece
 portata **praticamente 1:1** dentro `src/diplomacy/`, diventando la vista
@@ -87,20 +87,25 @@ wareraPlus/
 ├── public/
 │   ├── icons/                  ← icone PWA (generate)
 │   └── political/              ← Political View ORIGINALE, invariato
-│       ├── index.html
-│       ├── congress.js, senate.js, presidential.js, party.js, ...
+│       ├── index.html                          (legacy, non più caricata
+│       ├── congress.js, senate.js, ...           a runtime — vedi src/political/)
 │       └── style.css
 └── src/
     ├── main.js                 ← entry point, orchestrazione
     ├── diplomacy/               ← Diplomacy View, quasi invariato (2 righe aggiunte)
     │   ├── main.js, map.js, ui.js, state.js, config.js, ...
+    ├── political/               ← NUOVO (Fase 2) — Political View a moduli ES, ATTIVA
+    │   ├── main.js, config.js, api.js, ui.js, congress.js, senate.js, ...
     ├── panel/
     │   └── countryPanel.js     ← NUOVO — pannello laterale nazione
     ├── app/
-    │   └── politicalOverlay.js ← NUOVO — gestisce l'iframe Political View
+    │   └── politicalOverlay.js ← NUOVO — apre Political in-page (import() dinamico)
+    ├── shared/
+    │   └── trpcClient.js       ← NUOVO (Fase 2) — client tRPC unificato
     └── styles/
         ├── diplomacy.css       ← CSS Diplomacy estratto (era inline nell'HTML originale)
-        └── shell.css           ← NUOVO — stile pannello/overlay (namespace `wp-*`)
+        ├── shell.css           ← NUOVO — stile pannello/overlay (namespace `wp-*`)
+        └── political.css       ← NUOVO (Fase 2) — da public/political/style.css, scopato
 ```
 
 ---
@@ -156,19 +161,39 @@ dell'app.
 
 ## 🗺️ Roadmap
 
-### Fase 2 — Fusione vera a modulo unico (Opzione B "pura")
-Oggi Political View è isolato in iframe per minimizzare il rischio. Una
-volta che questa v1 è stata testata dal vivo:
-- Convertire `public/political/*.js` da script globali a moduli ES dentro
-  `src/political/`, con lo stesso processo meccanico descritto nell'analisi
-  architetturale (ogni `function` → `export function`, `window.X` → `import`).
-- Sostituire l'iframe con un vero switch di vista in-page (stesso DOM,
-  stesso bundle), eliminando il doppio caricamento di risorse (Chart.js,
-  TomSelect, Sortable, i18n).
-- Unificare il client tRPC (`localFetch` di Political + `trpcBatch` di
-  Diplomacy) in un unico `shared/trpcClient.js`, con **una sola** fetch di
-  `country.getAllCountries` condivisa tra le due viste.
-- Unificare tema, toast, cache localStorage.
+### Fase 2 — Fusione vera a modulo unico ✅ completata
+Political View è stata convertita da script globali (iframe) a moduli ES
+in-page in 10 stage incrementali (Stage 0-9), ognuno verificato dal vivo
+contro le API reali prima di procedere. Riepilogo di cosa è stato fatto e
+cosa no rispetto al piano originale:
+
+- ✅ `public/political/*.js` convertiti a moduli ES in `src/political/`
+  (stesso processo meccanico: `function` → `export function`, `window.X` →
+  `import`/setter espliciti dove necessario per lo stato riassegnato
+  cross-file).
+- ✅ Iframe sostituito con switch di vista in-page (`#wp-political-root`,
+  montato via `import()` dinamico da `src/political/main.js:
+  initPoliticalView()` — bundle Political code-split, scaricato solo alla
+  prima apertura reale, non più al boot dell'app). Chart.js/TomSelect/
+  Sortable/D3 ora import npm invece di CDN duplicati.
+- ✅ Client tRPC unificato in `src/shared/trpcClient.js` (`trpcBatchManual`
+  stile Diplomacy + `trpcCall` stile Political, come modalità distinte
+  deliberatamente non forzate a un'unica policy — vedi CLAUDE.md). Cache
+  `localStorage` con namespace (`we_pol_*`).
+- ✅ Tema unificato (chiamata diretta a `applyTheme()`, niente più
+  `contentWindow`).
+- ⚠️ **Non fatto**: una sola fetch condivisa di `country.getAllCountries` tra
+  le due viste — restano due chiamate separate (Diplomacy diretta su api6,
+  Political via Worker). Era un obiettivo aspirazionale, non un requisito
+  verificato durante l'esecuzione — resta un possibile follow-up.
+- ⚠️ **Non fatto di proposito**: toast non unificato — Political usa ancora
+  `alert()`/`setStatus()` inline invece di `showToast` di Diplomacy, deciso
+  come cambio di UX visibile da valutare separatamente, a basso rischio, non
+  bundlato nel cutover.
+
+`public/political/` (i file originali) **non è stato cancellato** — resta
+nel repo come riferimento/rollback fisico, non più raggiunto da alcun path
+attivo.
 
 ### Fase 3 — Dati aggiuntivi (come richiesto)
 - **Military units**: nuova sezione nel pannello nazione (o nuova tab),

@@ -13,16 +13,17 @@ WarEra+ unisce due tool esistenti del gioco WarEra in un'unica app:
   guerre, NAP, sfere d'influenza, battaglie live, statistiche. Portata qui
   **praticamente 1:1**, era già scritta a moduli ES con Vite.
 - **Political View** — elezioni presidenziali/congresso, partiti, senato.
-  Copiata **invariata** dentro `public/political/` e caricata in un
-  `<iframe>` quando l'utente espande il pannello nazione (deep-link
-  `?country=<id>`, stesso meccanismo che esisteva già tra i due tool
-  originali). **Non è ancora stata convertita a moduli ES** — è ancora script
-  globali (`window.X`), di proposito (vedi "Perché l'iframe" sotto).
+  **Convertita a moduli ES in `src/political/` (Fase 2, completata)**: gira
+  in-page dentro `#wp-political-root`, montata via `import()` dinamico alla
+  prima apertura (code-split, non appesantisce il caricamento iniziale).
+  L'originale a script globali resta in `public/political/` come
+  riferimento/rollback fisico, **non più raggiunto da alcun path attivo**
+  dell'app (niente più iframe).
 
 La mappa (Diplomacy) è la vista principale. Un pannello laterale nazione
 (NUOVO, `src/panel/countryPanel.js`) fa da ponte: si apre cliccando una
 nazione, mostra dati già in memoria (zero fetch aggiuntive), e un bottone
-"Espandi" apre Political View nell'overlay iframe.
+"Espandi" apre Political View in-page nello stesso overlay.
 
 ## Stack & comandi
 
@@ -35,13 +36,16 @@ npm run preview   # testa la build in locale
 
 - **Build tool**: Vite 5, `type: module`, deploy target Vercel (root path `/`,
   vedi `vercel.json`).
-- **Dipendenze runtime**: `maplibre-gl`, `topojson-client`. Political View usa
-  CDN esterni (Chart.js, TomSelect, Sortable — non in `package.json`, caricati
-  via `<script>` in `public/political/index.html`).
-- **PWA**: `vite-plugin-pwa` (Workbox). Precache completo incluso
-  `/political/*`. Runtime caching differenziato per API tRPC (network-first,
-  10 min TTL), immagini/bandiere (cache-first, 30gg), CSV esterni
-  (stale-while-revalidate). Config in `vite.config.js`.
+- **Dipendenze runtime**: `maplibre-gl`, `topojson-client`, più (dalla Fase 2)
+  `chart.js`, `d3`, `tom-select`, `sortablejs` — tutte in `package.json`,
+  importate da `src/political/*` come moduli npm (niente più CDN). Il vecchio
+  `public/political/` (invariato, non più caricato) usa ancora i propri CDN
+  interni ma non è più raggiunto da nessun path attivo.
+- **PWA**: `vite-plugin-pwa` (Workbox). Precache completo (incluso il chunk
+  Political, ora parte del bundle principale via code-splitting). Runtime
+  caching differenziato per API tRPC (network-first, 10 min TTL),
+  immagini/bandiere (cache-first, 30gg), CSV esterni (stale-while-revalidate).
+  Config in `vite.config.js`.
 - Nessuna variabile d'ambiente richiesta: le chiamate vanno agli endpoint
   pubblici WarEra (`api2/4/6.warera.io`) e a un Worker Cloudflare esistente
   che nasconde la propria API key server-side per Political View.
@@ -55,13 +59,10 @@ wareraPlus/
 ├── vercel.json
 ├── public/
 │   ├── icons/
-│   └── political/              ← Political View ORIGINALE, invariato (script globali)
-│       ├── index.html, style.css
-│       ├── config.js, api.js, main.js, ui.js, i18n.js, loading.js
-│       ├── congress.js, senate.js, presidential.js, party.js, panels.js,
-│       │   organizer.js, ticker.js, parliament.js
-│       ├── embed.js / embed.css   ← modalità ?embed=senate (solo emiciclo, per countryPanel)
-│       └── parties_<countryId>.csv
+│   └── political/              ← Political View ORIGINALE (script globali), NON PIÙ USATO
+│       ├── index.html, style.css                a runtime — resta solo come riferimento/
+│       ├── config.js, api.js, main.js, ...       rollback fisico (Fase 2). Vedi src/political/
+│       └── parties_<countryId>.csv               per la versione attiva a moduli ES.
 └── src/
     ├── main.js                 ← entry point: importa diplomacy/main.js, poi inizializza
     │                              i componenti NUOVI dopo l'evento 'wareraplus:diplomacy-ready'
@@ -75,47 +76,75 @@ wareraPlus/
     │   ├── battleMarkers.js, battleHeatmap.js, battleFront.js, battleFront/
     │   ├── dualBadges.js, blocStats.js, weeklyDamage.js, population.js,
     │   │   regions.js, nationTooltip.js, utils.js
+    ├── political/               ← NUOVO (Fase 2) — Political View a moduli ES, attiva a runtime
+    │   ├── main.js              ← orchestratore: initPoliticalView(countryId, {openSenate})
+    │   ├── config.js            ← stato condiviso (export let + setter), tema, cache TTL
+    │   ├── api.js               ← localFetch, adapter su shared/trpcClient.js
+    │   ├── loading.js, i18n.js, ui.js, ticker.js, domTemplate.js, backgroundCanvas.js
+    │   ├── parliament.js, senate.js, congress.js, presidential.js, party.js,
+    │   │   organizer.js, panels.js
+    │   └── (nessun equivalente di embed.js — era dead code nell'originale, non portato)
     ├── panel/                   ← NUOVO
     │   ├── countryPanel.js      ← pannello laterale nazione
-    │   ├── parliamentChart.js   ← grafico emiciclo nel pannello
+    │   ├── parliamentChart.js   ← grafico emiciclo nel pannello (nativo, indipendente da src/political/)
     │   └── panelResize.js       ← drag per ridimensionare il pannello
     ├── app/                     ← NUOVO — orchestrazione integrazione
-    │   ├── politicalOverlay.js ← gestisce l'iframe Political View + comunicazione via CustomEvent
-    │   ├── themeSync.js        ← sincronizza tema (localStorage 'we_theme') tra shell e iframe
+    │   ├── politicalOverlay.js ← apre Political in-page (import() dinamico di src/political/main.js)
+    │   ├── themeSync.js        ← sincronizza tema (localStorage 'we_theme') con Political
     │   ├── battleToggle.js     ← bottone dedicato show/hide battaglie
     │   └── blocLabelsToggle.js ← toggle nomi alleanze
     ├── shared/
-    │   └── i18n.js             ← traduzioni condivise dello shell (namespace diverso da public/political/i18n.js)
+    │   ├── i18n.js              ← traduzioni condivise dello shell (namespace diverso da src/political/i18n.js)
+    │   └── trpcClient.js        ← NUOVO (Fase 2) client tRPC unificato: trpcBatchManual (stile
+    │                              Diplomacy) + trpcCall (stile Political), cache namespaced
+    │                              we_<namespace>_*. src/diplomacy/utils.js:trpcBatch NON tocca
+    │                              questo file (resta la sua implementazione locale, invariata).
     └── styles/
         ├── diplomacy.css       ← CSS Diplomacy estratto (era inline nell'HTML originale)
-        └── shell.css           ← NUOVO, namespace `wp-*`
+        ├── shell.css           ← NUOVO, namespace `wp-*`
+        └── political.css       ← NUOVO (Fase 2) — da public/political/style.css, OGNI selettore
+                                   scopato sotto #wp-political-root (necessario: c'era una
+                                   collisione reale con .panel, già usata dalla shell)
 ```
 
-⚠️ **Attenzione ai nomi duplicati tra le due viste**: `config.js`, `main.js`,
-`ui.js`, `i18n.js`, `index.html`, `style.css` esistono **sia** in
-`src/diplomacy/` **sia** in `public/political/`, con contenuti completamente
-diversi e non collegati. Specifica sempre il path completo quando chiedi
-modifiche — "modifica config.js" da solo è ambiguo.
+⚠️ **Attenzione ai nomi duplicati tra le due varianti di Political**:
+`config.js`, `main.js`, `ui.js`, `i18n.js`, `api.js`, `loading.js`,
+`ticker.js`, `parliament.js`, `senate.js`, `congress.js`, `presidential.js`,
+`party.js`, `organizer.js`, `panels.js`, `style.css` esistono **sia** in
+`src/political/` (moduli ES, ATTIVA) **sia** in `public/political/` (script
+globali, legacy/rollback, non più caricata). Contenuti quasi identici ma non
+collegati: modifiche vanno fatte in `src/political/`, non in
+`public/political/` (che resta com'era, invariata). Specifica sempre il path
+completo quando chiedi modifiche — "modifica config.js" da solo è ambiguo tra
+tre file (`src/diplomacy/config.js`, `src/political/config.js`,
+`public/political/config.js`).
 
-## Come comunicano Diplomacy, lo shell e Political (iframe)
+## Come comunicano Diplomacy, lo shell e Political (in-page dalla Fase 2)
 
-Tre meccanismi diversi, usati per scopi diversi — non mescolarli:
+Con Political ora in-page (niente più iframe), la comunicazione è più
+semplice: chiamate di funzione dirette (import statici o `import()` dinamico)
+al posto del confine cross-document. Resta un solo meccanismo cross-cutting:
 
 1. **Eventi custom su `window`** (cross-script, stesso documento) — es.
    `wareraplus:diplomacy-ready` (emesso da `diplomacy/main.js` a fine
-   `refreshData()`), `wareraplus:langchange`, `wareraplus:panel-resized`.
-2. **Eventi custom su `frameEl.contentWindow`** (shell ↔ iframe Political) —
-   usati invece di leggere variabili dell'iframe per nome, perché in uno
-   script classico `let`/`const` top-level **non** diventano proprietà di
-   `window` (solo `var` e le function declaration lo fanno). Es.:
-   `wareraplus:open-senate` (richiesta), `wareraplus:elections-ready`
-   (prontezza). Vedi il commento lungo in `politicalOverlay.js` se serve
-   toccare questa parte — spiega il bug che questo pattern risolve.
+   `refreshData()`), `wareraplus:langchange` (shell), `wareraplus:panel-resized`.
+   Anche `wareraplus:elections-ready`/`wareraplus:open-senate`
+   (`src/political/congress.js`) sopravvivono per ora invariati (Stage 7 della
+   Fase 2 li ha preservati com'erano) benché non serva più attraversare un
+   confine iframe — semplificarli a chiamata diretta è un refactor possibile
+   ma non ancora fatto.
+2. **Dependency injection esplicita** per le dipendenze forward tra moduli
+   `src/political/*` (es. `setCongressDeps`, `setPresidentialDeps`,
+   `SenateView.setSenateDeps`, chiamate una sola volta da
+   `src/political/main.js: initPoliticalView()`) — sostituisce gli
+   identificatori nudi risolti a runtime che lo script classico originale
+   dava per scontati via hoisting globale.
 3. **`localStorage` condiviso** (stessa origin) — es. `we_theme`, letto da
-   Political al boot (`public/political/config.js: initTheme()`). Per
-   l'aggiornamento *live* con iframe già aperto si chiama direttamente
-   `contentWindow.applyTheme(...)`, che funziona perché è una *function
-   declaration* (quindi attaccata a `window`), a differenza di `let`/`const`.
+   Political al boot (`src/political/config.js: initTheme()`, chiamata da
+   `initPoliticalView()`). Per l'aggiornamento *live* (`src/app/themeSync.js`)
+   si chiama direttamente `applyTheme(...)` importata da
+   `src/political/config.js` via `import()` dinamico — niente più
+   `contentWindow`, stesso documento.
 
 ## Le uniche due modifiche al codice Diplomacy esistente
 
@@ -131,29 +160,60 @@ aggiunte, entrambe additive con fallback:
 Se devi modificare `src/diplomacy/*`, preserva questo principio: cambiamenti
 additivi con fallback, non riscritture del comportamento esistente.
 
-## Perché Political View è ancora in iframe (non moduli ES)
+## Fase 2 — completata (Political View a moduli ES, in-page)
 
-Political View è ~300KB di script interdipendenti scritti per girare come
-script-tag globali. Convertirli "alla cieca" senza poterli testare dal vivo
-contro le API reali rischiava bug sottili. L'iframe garantisce zero rischio
-di rottura. **La fusione a bundle unico è pianificata come Fase 2** (vedi
-Roadmap in README.md) — non partire a farla senza che l'utente la richieda
-esplicitamente, è un lavoro grosso e rischioso.
+Political View era ~300KB di script interdipendenti scritti per girare come
+script-tag globali dentro un iframe. La conversione a moduli ES (`src/political/`)
+è stata completata in 10 stage incrementali (Stage 0-9, ognuno con verifica
+dal vivo contro le API reali prima di procedere al successivo — piano e
+storico completo in `README.md`, sezione Roadmap → "Fase 2 (completata)").
+Punti da sapere se tocchi `src/political/`:
+
+- **CSS scoping obbligatorio**: `src/styles/political.css` ha OGNI selettore
+  prefissato con `#wp-political-root` (script postcss, non a mano — 708
+  regole). Verificato dal vivo che uno scoping parziale (solo `:root`/reset/
+  `body`) romperebbe silenziosamente lo stile della legenda della mappa
+  (`.panel`, classe condivisa con Political). Se aggiungi CSS nuovo a questo
+  file, scopalo allo stesso modo — non c'è più l'isolamento naturale
+  dell'iframe.
+- **Stato condiviso cross-modulo**: `src/political/config.js` espone
+  `export let` + funzioni setter (es. `setCurrentCountryId`) per ogni
+  variabile che un tempo era una `let`/`const` globale riassegnabile da più
+  file — un `import` ES è un binding live ma **read-only**, riassegnarlo
+  direttamente lancia `TypeError`.
+- **Dipendenze forward** (moduli che si servono a vicenda, es. senate.js →
+  congress.js → main.js) risolte con setter di dependency-injection
+  (`setCongressDeps`, `setSenateDeps`, ecc.), chiamati una sola volta da
+  `initPoliticalView()`.
+- `public/political/` **non è stato cancellato** — resta come riferimento/
+  rollback fisico, ma non è più raggiunto da alcun path attivo dell'app.
+- **Toast non unificato**: Political usa ancora `alert()`/`setStatus()`
+  inline (non `showToast` di Diplomacy) — deciso esplicitamente come
+  follow-up separato a basso rischio, non fatto durante il cutover.
+- **Gap noto vs l'obiettivo originale**: la fetch di `country.getAllCountries`
+  NON è condivisa tra Diplomacy e Political (restano due chiamate separate,
+  una diretta su `api6.warera.io`, una via Worker) — era un obiettivo
+  aspirazionale della Fase 2 mai completato, non un requisito verificato.
 
 ## Pattern da conoscere prima di toccare le chiamate API
 
-- **Batching tRPC**: sia Diplomacy (`diplomacy/utils.js: trpcBatch`) sia
-  Political (`public/political/api.js`) accorpano più procedure tRPC in un
-  solo POST (`?batch=1`), con retry a backoff esponenziale su 429/5xx e
-  fallback a chiamate singole se l'intero batch fallisce. **Non aggiungere
-  fetch dirette a repetizione in loop** — usa questi helper, altrimenti si
-  riaffacciano i 429 che questo pattern è nato per risolvere.
-- **`useWorker: true`** in `trpcBatch` instrada attraverso il Worker
-  Cloudflare (`WORKER_API_BASE`, limite 500/min invece di 100) — usato SOLO
-  per battaglie ed elezioni/parlamenti, non per tutte le chiamate.
-- **Cache**: `localStorage`-based con TTL, chiave prefissata `we_`
-  (`cacheKey`/`cacheGet`/`cacheSet` in entrambe le viste — implementazioni
-  parallele, non condivise). `cacheClear()` ripulisce solo le chiavi `we_*`.
+- **Batching tRPC**: `src/diplomacy/utils.js: trpcBatch` (Diplomacy, invariato)
+  e `src/shared/trpcClient.js` (usato da Political via `src/political/api.js`)
+  accorpano più procedure tRPC in un solo POST/GET (`?batch=1`), con retry a
+  backoff esponenziale su 429/5xx e fallback a chiamate singole se l'intero
+  batch fallisce. **Non aggiungere fetch dirette a ripetizione in loop** —
+  usa questi helper, altrimenti si riaffacciano i 429 che questo pattern è
+  nato per risolvere. Le due policy di retry/batching (manuale-GET-429-only
+  per Diplomacy, auto-batch-POST-429+5xx per Political) sono **deliberatamente
+  diverse**, esposte come modalità distinte di `trpcClient.js`
+  (`trpcBatchManual` vs `trpcCall`) — non unificarle silenziosamente.
+- **`useWorker: true`** instrada attraverso il Worker Cloudflare
+  (`WORKER_API_BASE`, limite 500/min invece di 100) — usato SOLO per
+  battaglie ed elezioni/parlamenti/Political, non per tutte le chiamate.
+- **Cache**: `localStorage`-based con TTL, chiave prefissata `we_<namespace>_`
+  (`we_pol_*` per Political via `trpcClient.js`; Diplomacy non ha mai avuto
+  cache). `cacheClear(namespace)` pulisce solo il proprio namespace di
+  default.
 
 ## Cose note, non bug da "scoprire" di nuovo
 
@@ -194,7 +254,8 @@ esplicitamente, è un lavoro grosso e rischioso.
 
 ## Roadmap (non iniziare senza richiesta esplicita)
 
-Fase 2 (fusione moduli ES per Political), Fase 3 (dati military units), Fase
-4 (dashboard unificata mappa+pannello permanenti), Fase 5 (proxy/cache server
-dedicato). Dettagli completi in `README.md`. Se l'utente chiede una di queste
-aree, leggi prima la sezione Roadmap del README per il piano già pensato.
+Fase 2 (fusione moduli ES per Political) **completata**. Restano: Fase 3
+(dati military units), Fase 4 (dashboard unificata mappa+pannello
+permanenti), Fase 5 (proxy/cache server dedicato). Dettagli completi in
+`README.md`. Se l'utente chiede una di queste aree, leggi prima la sezione
+Roadmap del README per il piano già pensato.
