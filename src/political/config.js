@@ -127,6 +127,14 @@ export function setLastCongressElection(v) { lastCongressElection = v; }
 export let minVotesToWin = 0; // era _lastMinVotesToWin, vedi nota "ECCEZIONI" in testa al file
 export function setMinVotesToWin(v) { minVotesToWin = v; }
 
+/* AGGIUNTA Stage 6 (non presente nell'originale config.js): window._lastElectedParties
+   nell'originale era scritto da congress.js e letto/scritto da senate.js —
+   stato condiviso tra due file "pari grado", non owned da nessuno dei due.
+   Va quindi qui, nell'hub di stato condiviso, invece che in uno dei due
+   moduli che lo consumano (evita un altro giro di dipendenza incrociata). */
+export let lastElectedParties = [];
+export function setLastElectedParties(v) { lastElectedParties = v; }
+
 /* ── THEME ── */
 export function getTheme() { return document.documentElement.getAttribute('data-theme') || 'dark'; }
 export function applyTheme(t) {
