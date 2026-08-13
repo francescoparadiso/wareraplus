@@ -1,0 +1,860 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ shell — stili NUOVI, aggiuntivi rispetto a diplomacy.css.
+   Non ridefinisce nessuna classe già usata da Diplomacy/Political
+   (prefisso wp- su tutto per evitare collisioni, es. con .panel
+   già usato pesantemente da entrambi i tool originali).
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Selettore lingua (stesso stile visivo di #theme-toggle-btn) ── */
+.wp-lang-select {
+  height: 38px;
+  border-radius: 19px;
+  border: 0.5px solid rgba(0, 212, 255, 0.2);
+  background: rgba(13, 17, 23, 0.85);
+  backdrop-filter: blur(12px);
+  color: #58a6ff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+  max-width: 92px;
+}
+.wp-lang-select:hover {
+  background: rgba(0, 98, 255, 0.15);
+  border-color: rgba(0, 212, 255, 0.5);
+}
+.wp-lang-select option {
+  background: #0d1117;
+  color: #e6edf3;
+}
+body.light-theme .wp-lang-select {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 0, 0, 0.2);
+  color: #0062ff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+body.light-theme .wp-lang-select:hover {
+  background: rgba(0, 98, 255, 0.1);
+  border-color: #0062ff;
+}
+body.light-theme .wp-lang-select option {
+  background: #fff;
+  color: #1a1a1a;
+}
+@media (max-width: 768px) {
+  .wp-lang-select { height: 32px; font-size: 10px; max-width: 76px; }
+}
+
+/* ── Shift dei controlli in alto quando il pannello nazione è aperto ──
+   #wp-top-controls è ancorato a right:20px di default; quando il
+   pannello è aperto lo spostiamo a sinistra del bordo del pannello,
+   la cui larghezza (fissa o ridimensionata dall'utente) è nella
+   variabile CSS --wp-panel-width sincronizzata da panelResize.js. */
+#wp-top-controls {
+  transition: right 0.2s ease;
+}
+body.wp-panel-open #wp-top-controls {
+  right: calc(var(--wp-panel-width, 380px) + 32px) !important;
+}
+@media (max-width: 768px) {
+  /* Su mobile il pannello occupa tutta la larghezza: i controlli in
+     alto restano dov'erano, verranno semplicemente coperti dal
+     pannello quando aperto (comportamento accettabile su schermo
+     piccolo, dove comunque non c'è spazio per tenerli entrambi visibili). */
+  body.wp-panel-open #wp-top-controls {
+    right: 20px !important;
+  }
+}
+
+/* ── LOGO WarEra+ nella schermata di caricamento ──
+   Sostituisce l'emoji 🌍 originale (che usava font-size in diplomacy.css,
+   qui non toccato): l'animazione .loader-globe (pulse via transform/opacity,
+   definita in diplomacy.css) si applica comunque a un <img>, qui aggiungiamo
+   solo le dimensioni corrette. */
+.wp-loader-logo {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
+
+.wp-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: min(var(--wp-panel-width, 380px), 100vw);
+  background: rgba(13, 17, 23, 0.97);
+  border-left: 1px solid #30363d;
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.5);
+  z-index: 2500;
+  transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 20px;
+  box-sizing: border-box;
+  color: #e6edf3;
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+
+/* Durante il trascinamento della maniglia disattiviamo la transizione
+   (altrimenti il resize "insegue" con un ritardo fastidioso) e
+   preveniamo la selezione di testo sul resto della pagina. */
+body.wp-resizing .wp-panel {
+  transition: none;
+}
+body.wp-resizing {
+  user-select: none;
+  cursor: ew-resize;
+}
+
+.wp-panel-resize-handle {
+  position: absolute;
+  top: 0;
+  left: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 10;
+  touch-action: none;
+}
+.wp-panel-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 3px;
+  width: 2px;
+  height: 100%;
+  background: transparent;
+  transition: background 0.15s;
+}
+.wp-panel-resize-handle:hover::after,
+body.wp-resizing .wp-panel-resize-handle::after {
+  background: #58a6ff;
+}
+
+.wp-panel.open {
+  transform: translateX(0);
+}
+
+.wp-panel-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #30363d;
+  background: #161b22;
+  color: #8b949e;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.wp-panel-close:hover {
+  background: #21262d;
+  color: #e6edf3;
+}
+
+.wp-panel-content {
+  margin-top: 36px;
+}
+
+.wp-panel-empty {
+  color: #8b949e;
+  font-size: 13px;
+  text-align: center;
+  margin-top: 40px;
+}
+
+.wp-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.wp-panel-flag {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid #30363d;
+}
+
+.wp-panel-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #e6edf3;
+}
+
+.wp-panel-bloc {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  display: inline-block;
+  margin-top: 4px;
+}
+
+.wp-panel-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.wp-stat {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.wp-stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #8b949e;
+  margin-bottom: 4px;
+}
+
+.wp-stat-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e6edf3;
+}
+
+.wp-panel-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin: 18px 0 8px;
+}
+
+.wp-panel-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wp-senate-btn {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #58a6ff;
+  background: rgba(88, 166, 255, 0.1);
+  border: 1px solid rgba(88, 166, 255, 0.3);
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.wp-senate-btn:hover {
+  background: rgba(88, 166, 255, 0.2);
+  border-color: rgba(88, 166, 255, 0.5);
+}
+
+/* ── Emiciclo parlamento nativo (SVG) + box governo ── */
+.wp-parliament-embed {
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0d1117;
+  border: 1px solid #21262d;
+  margin-bottom: 8px;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.wp-parliament-loading,
+.wp-parliament-empty-msg {
+  padding: 24px 12px;
+  text-align: center;
+  color: #8b949e;
+  font-size: 12px;
+}
+
+.wp-parliament-svg-wrap {
+  width: 100%;
+  height: 240px;
+}
+.wp-parliament-svg-wrap svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Box governo: presidente in evidenza, ministri più piccoli intorno */
+.wp-gov-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  padding-bottom: 10px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #21262d;
+}
+
+.wp-gov-member {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  padding: 4px 8px 4px 4px;
+}
+
+.wp-gov-member-president {
+  background: rgba(197, 150, 74, 0.12);
+  border-color: rgba(197, 150, 74, 0.35);
+  width: 100%;
+  justify-content: center;
+}
+
+.wp-gov-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.wp-gov-avatar-big {
+  width: 34px;
+  height: 34px;
+}
+
+.wp-gov-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #21262d;
+  font-size: 12px;
+}
+
+.wp-gov-member-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.wp-gov-member-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.wp-gov-member-role {
+  font-size: 9px;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+body.light-theme .wp-parliament-embed,
+body.light-theme .wp-gov-member {
+  background: #f7f7f7;
+  border-color: #e0e0e0;
+}
+body.light-theme .wp-gov-member-name {
+  color: #1a1a1a;
+}
+
+.wp-panel-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 6px 0;
+  border-bottom: 1px solid #21262d;
+}
+
+.wp-panel-row:last-child {
+  border-bottom: none;
+}
+
+.wp-expand-btn {
+  margin-top: 24px;
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(88, 166, 255, 0.35);
+  background: rgba(88, 166, 255, 0.12);
+  color: #58a6ff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.wp-expand-btn:hover {
+  background: rgba(88, 166, 255, 0.22);
+  border-color: rgba(88, 166, 255, 0.55);
+}
+
+/* Tema chiaro */
+body.light-theme .wp-panel {
+  background: rgba(255, 255, 255, 0.97);
+  border-left-color: rgba(0, 0, 0, 0.1);
+  color: #1a1a1a;
+}
+
+body.light-theme .wp-panel-close {
+  background: #f0f0f0;
+  border-color: #ccc;
+  color: #555;
+}
+
+body.light-theme .wp-stat {
+  background: #f7f7f7;
+  border-color: #e0e0e0;
+}
+
+body.light-theme .wp-stat-value,
+body.light-theme .wp-panel-name {
+  color: #1a1a1a;
+}
+
+/* ── OVERLAY POLITICAL VIEW ── */
+.wp-political-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 6000;
+  background: #0d1117;
+  display: none;
+  flex-direction: column;
+}
+
+.wp-political-overlay.open {
+  display: flex;
+}
+
+.wp-political-topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  flex-shrink: 0;
+}
+
+.wp-political-back {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #e6edf3;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.wp-political-back:hover {
+  background: #30363d;
+}
+
+.wp-political-title {
+  font-size: 13px;
+  color: #8b949e;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.wp-political-frame {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: #0d1117;
+}
+
+/* ── MOBILE ── */
+@media (max-width: 768px) {
+  .wp-panel {
+    width: 100vw;
+    border-left: none;
+  }
+}
+
+/* ── Bottone dedicato per nascondere/mostrare le battaglie (punto 3:
+   più semplice/visibile del checkbox nel menu hamburger, che restava
+   nascosto finché non si apriva il menu). Stesso stile visivo di
+   #hamburger-btn/#bloc-stats-btn (diplomacy.css), replicato qui perché
+   quelle regole non vanno toccate. ── */
+#wp-battles-toggle-btn {
+  position: fixed;
+  top: 20px;
+  left: 132px; /* dopo hamburger (20px) e bloc-stats (76px), stesso passo di 56px */
+  z-index: 2000;
+  width: 44px;
+  height: 44px;
+  background: rgba(13, 17, 23, 0.97);
+  border: 0.5px solid rgba(0, 212, 255, 0.4);
+  color: #00d4ff;
+  border-radius: 10px;
+  font-size: 20px;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  transition: background 0.2s, box-shadow 0.2s, opacity 0.2s;
+}
+#wp-battles-toggle-btn:hover {
+  background: rgba(0, 98, 255, 0.15);
+  box-shadow: 0 4px 16px rgba(0, 98, 255, 0.3);
+}
+/* Stato "battaglie nascoste": icona attenuata, per capire a colpo
+   d'occhio lo stato attuale senza dover aprire il menu. */
+#wp-battles-toggle-btn.wp-battles-hidden {
+  opacity: 0.45;
+}
+body.light-theme #wp-battles-toggle-btn {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 98, 255, 0.35);
+  color: #0062ff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+body.light-theme #wp-battles-toggle-btn:hover {
+  background: rgba(0, 98, 255, 0.1);
+}
+@media (max-width: 768px) {
+  #wp-battles-toggle-btn {
+    top: 20px;
+    left: 128px;
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Punto 5 — News ticker diplomatico (nuovo, ispirato a quello di
+   Political ma con contenuti diversi — vedi src/app/newsTicker.js).
+   ══════════════════════════════════════════════════════════════ */
+
+.wp-news-ticker-wrapper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 30px;
+  z-index: 2100;
+  background: rgba(8, 10, 16, 0.95);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.25);
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+body.light-theme .wp-news-ticker-wrapper {
+  background: rgba(255, 255, 255, 0.95);
+  border-bottom-color: rgba(0, 98, 255, 0.25);
+}
+
+.wp-news-ticker-track {
+  white-space: nowrap;
+  display: inline-block;
+  will-change: transform;
+  padding-left: 0;
+}
+
+.wp-ticker-message {
+  display: inline-block;
+  padding: 0 28px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: #c9d1d9;
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+body.light-theme .wp-ticker-message {
+  color: #333;
+}
+
+.wp-ticker-sep {
+  display: inline-block;
+  margin: 0 14px 0 -14px;
+  color: rgba(0, 212, 255, 0.5);
+}
+
+/* Tutti i pulsanti fluttuanti in alto (compresi hamburger-btn e
+   bloc-stats-btn, definiti in diplomacy.css che non tocchiamo) devono
+   scendere di 30px+20px per lasciare spazio al ticker. shell.css è
+   caricato DOPO diplomacy.css in index.html quindi queste regole
+   vincono senza bisogno di !important. */
+#hamburger-btn,
+#bloc-stats-btn,
+#wp-battles-toggle-btn {
+  top: calc(20px + 30px) !important;
+}
+#wp-top-controls {
+  top: calc(20px + 30px) !important;
+}
+@media (max-width: 768px) {
+  .wp-news-ticker-wrapper { height: 26px; }
+  .wp-ticker-message { font-size: 10.5px; }
+  #hamburger-btn,
+  #bloc-stats-btn,
+  #wp-battles-toggle-btn,
+  #wp-top-controls {
+    top: calc(20px + 26px) !important;
+  }
+}
+
+/* ── Pannello blocco (focus su un'alleanza in modalità Blocs) ── */
+.wp-bloc-swatch {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.wp-bloc-member-block {
+  margin-bottom: 14px;
+}
+
+.wp-bloc-member-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #e6edf3;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #21262d;
+}
+.wp-bloc-member-flag {
+  width: 16px;
+  height: auto;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+body.light-theme .wp-bloc-member-header {
+  color: #1a1a1a;
+}
+
+/* Stato "in coda" dei parlamenti nel pannello blocco — visivamente più
+   discreto del messaggio di caricamento attivo, per distinguere "sto
+   aspettando il mio turno" da "sto effettivamente scaricando ora". */
+.wp-parliament-queued {
+  opacity: 0.55;
+  font-style: italic;
+}
+
+/* Immagine dell'alleanza (avatarUrl da alliance.getById) nell'header
+   del pannello blocco — stesse dimensioni dello swatch colorato che
+   sostituisce/affianca. */
+.wp-bloc-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* ── Legenda attaccata al ticker in alto (override di diplomacy.css,
+   che la posiziona in basso a sinistra come widget staccato — caricato
+   dopo, vince senza !important grazie all'ordine dei fogli di stile in
+   index.html). Il bottone diventa visivamente una "linguetta" che esce
+   dal ticker: stesso sfondo/bordo, nessuno spazio, angoli arrotondati
+   solo in basso — un prolungamento fluido, non un elemento a parte.
+   Da desktop: centrata orizzontalmente, si apre da sinistra (bottone) a
+   destra (contenuto). Da mobile: torna al layout verticale (più sicuro
+   su schermi stretti, un pannello largo centrato rischierebbe overflow). ── */
+#legend-container {
+  top: 30px; /* subito sotto il ticker (alto 30px), zero spazio */
+  bottom: auto;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: row-reverse; /* il bottone (ultimo nel DOM) appare a sinistra, il contenuto si apre a destra */
+  align-items: flex-start;
+  /* .overlay (diplomacy.css) la mette a z-index:1000 — sotto ai marker
+     battaglia sulla mappa (zIndex:2000 inline, battleMarkers.js) e
+     all'hamburger-btn (2000): da aperta finiva quindi sotto ai pin delle
+     battaglie invece di stargli sopra. Resta comunque sotto al pannello
+     nazione (2500), che ha già la sua gestione di sovrapposizione sopra. */
+  z-index: 2100;
+}
+
+.legend-toggle-btn {
+  background: rgba(8, 10, 16, 0.95);
+  border: 1px solid rgba(0, 212, 255, 0.25);
+  border-top: none; /* si salda col bordo inferiore del ticker, sopra */
+  border-radius: 0 0 10px 10px; /* "linguetta" che pende dal ticker */
+}
+body.light-theme .legend-toggle-btn {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(0, 98, 255, 0.25);
+  border-top: none;
+}
+
+.legend-content {
+  margin-bottom: 0 !important;
+  margin-left: 8px;
+  margin-top: 0;
+  transform-origin: left center !important;
+}
+
+/* Layout orizzontale "a fiume" per il contenuto della legenda: le voci
+   scorrono da sinistra a destra e vanno a capo in modo organico — una
+   continuazione naturale del ticker sopra — invece di impilarsi una sotto
+   l'altra dall'alto in basso (comportamento di default di .legend-content,
+   che è un blocco senza display:flex in diplomacy.css). I blocchi che
+   devono restare a piena larghezza (titolo sezione, barra gradiente,
+   riga min/max sotto di essa, nota finale) occupano comunque tutta la riga,
+   così da andare a capo da soli senza spezzare gli item accanto a loro. */
+#dynamic-legend.legend-content {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: stretch;
+  align-content: flex-start;
+  gap: 4px 10px;
+  /* `width` (non solo max-width): un flex container assoluto/fluttuante si
+     restringe di default al contenuto ("shrink-to-fit"), quindi con solo
+     max-width finiva comunque per impacchettare poche voci a riga (quelle
+     che bastavano a riempire la riga più larga) invece di sfruttare tutto
+     lo spazio disponibile fino al limite. Larga abbastanza da tenere anche
+     liste lunghe (es. 12+ blocchi alleanza) su poche righe invece di una
+     colonna a scendere. */
+  width: min(1180px, calc(100vw - 40px));
+  max-width: min(1180px, calc(100vw - 40px));
+}
+#dynamic-legend .legend-section-title,
+#dynamic-legend .legend-note,
+#dynamic-legend .legend-item[style*="space-between"],
+#dynamic-legend > div[style*="width:100%"] {
+  flex: 1 1 100%;
+}
+#dynamic-legend .legend-item {
+  flex: 0 1 auto;
+  min-width: 155px;
+  margin-bottom: 0;
+}
+@media (max-width: 768px) {
+  #dynamic-legend.legend-content {
+    max-width: calc(100vw - 40px);
+  }
+  #dynamic-legend .legend-item {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}
+
+/* Quando il pannello nazione (a destra, z-index più alto) è aperto, la
+   legenda — centrata di default sull'intera larghezza della finestra —
+   finiva parzialmente sotto al pannello invece di restare leggibile.
+   Come già fatto per #wp-top-controls, la ricentriamo e la restringiamo
+   sull'area mappa effettivamente ancora visibile (viewport meno pannello),
+   così "scala" per starci dentro invece di essere coperta. */
+#legend-container {
+  transition: left 0.2s ease;
+}
+body.wp-panel-open #legend-container {
+  left: calc((100vw - var(--wp-panel-width, 380px)) / 2);
+}
+body.wp-panel-open #dynamic-legend.legend-content {
+  width: min(1180px, calc(100vw - var(--wp-panel-width, 380px) - 56px));
+  max-width: min(1180px, calc(100vw - var(--wp-panel-width, 380px) - 56px));
+}
+@media (max-width: 768px) {
+  body.wp-panel-open #legend-container {
+    left: 20px;
+  }
+}
+@media (max-width: 768px) {
+  #legend-container {
+    top: 26px; /* il ticker è alto 26px su mobile (vedi .wp-news-ticker-wrapper) */
+    left: 20px;
+    right: auto;
+    transform: none;
+    flex-direction: column-reverse;
+  }
+  .legend-content {
+    margin-left: 0;
+    margin-top: 8px;
+    transform-origin: top left !important;
+  }
+}
+
+/* ── Voci di legenda cliccabili (selezione blocco dalla legenda) ── */
+.wp-legend-clickable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.wp-legend-clickable:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+body.light-theme .wp-legend-clickable:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Estetica "mappa antica", SOLO tema chiaro — vedi antiqueTheme.js
+   per pattern pergamena/easter egg (layer mappa) e labels.js per il
+   font dei nomi nazione. Qui solo i 2 overlay puramente HTML/CSS:
+   vignettatura ai bordi e bussola decorativa. Nascosti di default,
+   mostrati via `body.light-theme` — nessun costo quando sono spenti
+   (display:none) e nessuna dipendenza da script che possa fallire.
+   ══════════════════════════════════════════════════════════════ */
+
+#wp-vignette {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 400; /* sopra alla mappa (canvas), sotto a qualunque pannello/overlay dell'UI */
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(62, 47, 28, 0.38) 100%);
+}
+body.light-theme #wp-vignette {
+  display: block;
+}
+
+#wp-compass {
+  display: none;
+  position: fixed;
+  right: 20px;
+  bottom: 90px; /* sopra al pulsante "Support this project" */
+  width: 92px;
+  height: 92px;
+  z-index: 1200;
+  pointer-events: none; /* puramente decorativa */
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
+  opacity: 0.92;
+}
+body.light-theme #wp-compass {
+  display: block;
+}
+#wp-compass svg {
+  width: 100%;
+  height: 100%;
+}
+@media (max-width: 768px) {
+  #wp-compass {
+    width: 64px;
+    height: 64px;
+    right: 12px;
+    bottom: 78px;
+  }
+}

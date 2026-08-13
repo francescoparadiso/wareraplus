@@ -1,0 +1,115 @@
+// config.js
+//export const API_BASE_URL = 'https://apidev.warera.io';  // per test
+export const API_BASE_URL = 'https://api6.warera.io'; // per produzione
+export const CACHE_API_BASE_URL = 'https://gateway.warerastats.io'
+
+// WarEra+: Worker Cloudflare con API_TOKEN server-side (limite 500
+// batch/minuto invece di 100). Il codice del worker incollato dall'utente
+// corrisponde esattamente a quello già in uso da Political View
+// (public/political/config.js: stesso pattern di proxy verso
+// api2.warera.io, stessa descrizione "limite più alto (500) senza
+// esporre la key nel frontend") — assunto quindi essere lo STESSO worker
+// già deployato, non uno nuovo da creare. Se in realtà è un worker
+// diverso/con altro URL, va corretta questa singola costante.
+// Usato SOLO per battaglie ed elezioni/parlamenti (vedi trpcBatch in
+// utils.js, opzione { useWorker: true }), non per tutte le chiamate.
+export const WORKER_API_BASE = 'https://politicalview-proxy.fra-paradiso2.workers.dev';
+
+// ⚠️ RIMOSSA: la chiave era in chiaro nel bundle servito al browser, quindi
+// leggibile da chiunque aprisse i devtools. Nessun modulo la usava davvero
+// (fetchWithAuth non era chiamata da nessuna parte).
+// Se in futuro serve una chiamata autenticata, va fatta dietro un proxy
+// server-side: qualunque valore messo qui e' pubblico.
+// REVOCA la vecchia chiave sul pannello Warera, e' gia' stata esposta.
+
+export const COLORS = {
+  SELECTED: '#ffcc00',
+  // WarEra+ — schema colori guerra/nemici, rivisto due volte:
+  // 1) WAR_INDIRECT (alleati dei tuoi nemici) portato ad arancione: prima
+  //    era rosso scuro e si confondeva con WAR_DIRECT.
+  // 2) WAR_DIRECT e SWORN_ENEMY scambiati: lo sworn enemy (relazione
+  //    permanente, più grave) ora ha il rosso più acceso; la guerra
+  //    diretta "normale" il rosso scuro.
+  WAR_DIRECT: '#b30000',
+  WAR_INDIRECT: '#e67e22',
+  ALLY_DIRECT: '#2ecc71',
+  NAP: '#00d4ff',
+  DEFAULT_LAND: '#4a4e5a',
+  NEUTRAL_UNSELECTED: '#3a3d46',
+  OCEAN: '#000000',
+  ITALIAN_BLOC: '#1b557a',
+  WESTERN_BLOC: '#55a5d9',
+  AFRICAN_UNION: '#e67e22',
+  ASIAN_FEDERATION: '#8e44ad',
+  ICDP: '#c0392b',
+  HOLY_LEAGUE: '#FFD700',
+  // Nuovi colori
+  DEFENSIVE_PACT: '#9b59b6', // viola
+  SWORN_ENEMY: '#ff0000',    // rosso acceso (vedi nota sopra su WAR_DIRECT)
+};
+
+export const THEMES = {
+  dark: {
+    OCEAN: '#00042679',
+    DEFAULT_LAND: '#4a4e5a',
+    NEUTRAL_UNSELECTED: '#3a3d46',
+    TEXT: '#e6edf3',
+    TEXT_SECONDARY: '#8b949e',
+    PANEL_BG: 'rgba(10,10,10,0.95)',
+    PANEL_BORDER: '#333',
+    BUTTON_BG: '#1a1a1a',
+    BUTTON_BORDER: '#444',
+    INPUT_BG: '#1a1a1a',
+    INPUT_BORDER: '#444',
+    SWITCH_BG: '#333',
+    SWITCH_BORDER: '#444',
+    LEGEND_BG: 'rgba(13,17,23,0.92)',
+    LEGEND_BORDER: '#30363d',
+    COAST_COLOR: '#ffffff',
+    BORDER_COLOR: '#ffffff',
+    OUTLINE_COLOR: '#000000',
+  },
+  light: {
+    OCEAN: '#a2986f',        
+    DEFAULT_LAND: '#ffe7a6',  
+    NEUTRAL_UNSELECTED: '#352700',
+    TEXT: '#1a1a1a',
+    TEXT_SECONDARY: '#555555',
+    PANEL_BG: 'rgba(255,255,255,0.95)',
+    PANEL_BORDER: '#cccccc',
+    BUTTON_BG: '#f0f0f0',
+    BUTTON_BORDER: '#cccccc',
+    INPUT_BG: '#ffffff',
+    INPUT_BORDER: '#cccccc',
+    SWITCH_BG: '#dddddd',
+    SWITCH_BORDER: '#bbbbbb',
+    LEGEND_BG: 'rgba(255,255,255,0.95)',
+    LEGEND_BORDER: '#cccccc',
+    COAST_COLOR: '#000000',
+    BORDER_COLOR: '#000000',
+    OUTLINE_COLOR: '#000000',
+  }
+};
+
+export const LAYER_IDS = {
+  SRC_REGIONS: 'regions-src',
+  SRC_BORDERS: 'borders-src',
+  SRC_LABELS: 'labels-src',
+  SRC_DIPLOMACY_DUAL_BORDER: 'diplomacy-dual-border-src',
+  SRC_BATTLE_REGION: 'battle-region-src', // WarEra+: contorno della regione della battaglia selezionata
+  LYR_FILL: 'regions-fill',
+  LYR_OUTLINE: 'regions-outline',
+  LYR_COAST: 'regions-coast',
+  LYR_BORDER: 'borders-line',
+  LYR_MULTI_BLOC: 'multi-bloc-pattern',
+  LYR_DIPLOMACY_DUAL: 'diplomacy-dual-pattern',
+  LYR_BATTLE_REGION: 'battle-region-outline',
+  LYR_BATTLE_REGION_FILL: 'battle-region-fill', // WarEra+: riempimento dell'intera regione, non solo contorno
+  LYR_BLOC_FLASH: 'bloc-flash-highlight', // WarEra+: effetto "blink" al click su un'alleanza nella legenda
+};
+
+export const EXTERNAL_NAPS_URL =
+  'https://raw.githubusercontent.com/francescoparadiso/warera-tactical-diplomacy-os/refs/heads/main/warera_naps.csv';
+
+export const EXTERNAL_SPHERE_URL =
+  'https://raw.githubusercontent.com/francescoparadiso/warera-tactical-diplomacy-os/refs/heads/main/SphereOfInfluence.csv';

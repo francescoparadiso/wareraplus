@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>WarEra+</title>
+  <meta name="description" content="WarEra+ — mappa diplomatica e situazione politica di tutte le nazioni, in un'unica esperienza." />
+  <meta name="theme-color" content="#0d1117" />
+
+  <!-- Font -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@800&family=Cinzel:wght@500;700&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+
+  <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png" />
+  <link rel="icon" href="/icons/favicon-64.png" sizes="64x64" type="image/png" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+
+  <link rel="stylesheet" href="/src/styles/diplomacy.css" />
+  <link rel="stylesheet" href="/src/styles/shell.css" />
+</head>
+
+<body>
+  <!-- ════════════════════════════════════════════════════════════
+       MARKUP DIPLOMACY VIEW — invariato rispetto al tool originale.
+       map.js / ui.js / nationTooltip.js ecc. referenziano questi id
+       esattamente come prima: nessuna modifica qui dentro.
+       ════════════════════════════════════════════════════════════ -->
+
+  <!-- TOGGLE BORDERS + THEME + LANGUAGE -->
+  <div id="wp-top-controls" style="position: fixed; top: 20px; right: 20px; z-index: 1500; display: flex; gap: 8px; pointer-events: auto;">
+    <div id="border-toggle-container">
+      <span id="label-actual" class="pill-label active" data-i18n="current">Current</span>
+      <div class="pill-switch">
+        <input type="checkbox" id="toggle-borders" />
+        <span class="pill-slider"></span>
+      </div>
+      <span id="label-original" class="pill-label" data-i18n="original">Original</span>
+    </div>
+
+    <button id="theme-toggle-btn" data-i18n-title="change_theme" title="Change theme">
+      <span id="theme-icon">🌙</span>
+    </button>
+
+    <select id="wp-lang-select" class="wp-lang-select" data-i18n-title="change_language" title="Change language"></select>
+  </div>
+
+  <!-- RATE LIMIT OVERLAY -->
+  <div id="rate-limit-overlay"></div>
+
+  <!-- LOADING -->
+  <div id="loading-overlay">
+    <div class="loader">
+      <img class="loader-globe wp-loader-logo" src="/icons/logo-full.png" alt="WarEra+" />
+      <div class="loader-title">Loading Strategic Data</div>
+      <div class="loader-bar-wrap">
+        <div class="loader-bar-fill"></div>
+      </div>
+      <div class="loader-sub">Fetching nations &amp; map data…</div>
+      <div class="loader-api">api2.warera.io · api4.warera.io</div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast-container"></div>
+
+  <!-- DATALIST -->
+  <datalist id="nazioniList"></datalist>
+
+  <!-- NEWS TICKER DIPLOMATICO (NUOVO) -->
+  <div id="wp-news-ticker-wrapper" class="wp-news-ticker-wrapper">
+    <div id="wp-news-ticker-track" class="wp-news-ticker-track">
+      <span class="wp-ticker-message">📡 Loading world news…</span>
+    </div>
+  </div>
+
+  <!-- HAMBURGER BTN -->
+  <button id="hamburger-btn" aria-label="Open menu">☰</button>
+  <!-- Pulsante Bloc Stats -->
+  <button id="bloc-stats-btn" data-i18n-title="bloc_statistics" title="Bloc Statistics">📊</button>
+  <button id="wp-battles-toggle-btn" data-i18n-title="toggle_battles" title="Show/hide battles">⚔️</button>
+  <!-- HAMBURGER MENU -->
+  <div id="hamburger-menu" role="dialog" aria-label="Diplomacy controls">
+
+    <div class="menu-header">
+      <div class="menu-header-icon">🗺️</div>
+      <div>
+        <div class="menu-header-text">WarEra+</div>
+        <div class="menu-header-sub" data-i18n="app_subtitle">Strategic Map &amp; Political Data</div>
+      </div>
+    </div>
+
+    <div class="menu-body">
+      <!-- Map settings -->
+      <div class="menu-section">
+        <div class="section-label" data-i18n="map_settings">Map settings</div>
+
+        <div class="mode-toggle-group mode-toggle-row">
+          <div class="mode-slider" id="mode-slider"></div>
+          <div id="mode-diplomacy" class="mode-btn active" data-i18n="mode_diplomacy">⚔️ Diplomacy</div>
+          <div id="mode-blocs" class="mode-btn" data-i18n="mode_blocs">🏛️ Blocs</div>
+          <div id="mode-sphereOfInfluence" class="mode-btn" data-i18n="mode_sphere">🎯 Sphere</div>
+        </div>
+
+        <div class="mode-toggle-group mode-toggle-row" style="margin-top:4px;">
+          <div class="mode-slider mode-slider-bottom" id="mode-slider-bottom"></div>
+          <div id="mode-weeklyDamage" class="mode-btn" data-i18n="mode_weekly_damage">🔥 Weekly Dmg</div>
+          <div id="mode-population" class="mode-btn" data-i18n="mode_population">👥 Pop.</div>
+        </div>
+
+        <label class="switch-container">
+          <span class="switch-label" data-i18n="switch_active_battles">⚔️ Active Battles</span>
+          <div class="switch"><input type="checkbox" id="checkActiveBattles" checked /><span class="slider"></span></div>
+        </label>
+
+        <label class="switch-container">
+          <span class="switch-label" data-i18n="switch_show_names">🏷️ Show Nation Names</span>
+          <div class="switch"><input type="checkbox" id="checkLabels" checked /><span class="slider"></span></div>
+        </label>
+
+        <label class="switch-container">
+          <span class="switch-label" data-i18n="switch_show_bloc_names">🏳️ Show Alliance Names</span>
+          <div class="switch"><input type="checkbox" id="wp-checkBlocLabels" checked /><span class="slider"></span></div>
+        </label>
+
+        <label class="switch-container">
+          <span class="switch-label" data-i18n="switch_exclude_external_naps">🚫 Exclude External NAPs</span>
+          <div class="switch"><input type="checkbox" id="checkExcludeExternalNaps" /><span class="slider"></span></div>
+        </label>
+      </div>
+
+      <!-- Ricerca -->
+      <div class="menu-section">
+        <div class="section-label" data-i18n="search_label">Search</div>
+        <div id="selected-display" style="display:none;"></div>
+        <div class="search-wrap">
+          <div class="search-input-wrap">
+            <span class="search-icon-lbl">🔍</span>
+            <input type="text" id="cercaInput" list="nazioniList" data-i18n-placeholder="search_placeholder" placeholder="Search nation…" autocomplete="off" />
+          </div>
+          <button class="icon-btn primary" id="searchBtn" data-i18n-title="search_label" title="Search">→</button>
+          <button class="icon-btn secondary" id="resetBtn" title="Reset">↻</button>
+        </div>
+      </div>
+
+      <!-- NAP manuali -->
+      <div class="menu-section">
+        <div class="section-label">
+          <span data-i18n="manual_nap_label">Manual NAP</span>
+          <span class="nap-badge" id="nap-count">0</span>
+        </div>
+        <div class="nap-input-wrap">
+          <input type="text" id="napInput" list="nazioniList" data-i18n-placeholder="nap_input_placeholder" placeholder="Add nation to NAP…" autocomplete="off" />
+          <button class="nap-add-btn" id="addNapBtn" data-i18n="nap_add_btn">ADD</button>
+        </div>
+        <div class="collapsible-header" id="manualNapToggle">
+          <span data-i18n="current_manual_naps">Current manual NAPs</span>
+          <span class="collapsible-arrow" id="manual-nap-icon">▶</span>
+        </div>
+        <div class="collapsible-body" id="manual-nap-section">
+          <div class="nap-list" id="napList">
+            <div class="empty-state" data-i18n="no_manual_naps">No manual NAPs set</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NAP esterni -->
+      <div class="menu-section">
+        <div class="collapsible-header" id="externalNapToggle">
+          <span data-i18n="external_naps_readonly">External NAPs (read-only)</span>
+          <span class="collapsible-arrow" id="external-nap-icon">▶</span>
+        </div>
+        <div class="collapsible-body" id="external-nap-section">
+          <div class="nap-list" id="externalNapList">
+            <div class="empty-state" data-i18n="no_external_naps">No external NAPs loaded</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- LEGENDA -->
+  <div id="legend-container" class="overlay">
+    <div id="dynamic-legend" class="panel legend-content hidden"></div>
+    <div class="legend-toggle-btn" id="legendToggleBtn">ℹ</div>
+  </div>
+
+  <div id="map"></div>
+
+  <!-- WarEra+: vignettatura ai bordi mappa, solo tema chiaro ("mappa
+       antica invecchiata") — overlay CSS puro, non un layer mappa, non
+       intercetta click (pointer-events:none). Vedi shell.css #wp-vignette. -->
+  <div id="wp-vignette" aria-hidden="true"></div>
+
+  <!-- WarEra+: bussola decorativa, solo tema chiaro — overlay HTML/SVG
+       fisso in un angolo della mappa, non un layer MapLibre. Vedi
+       shell.css #wp-compass. -->
+  <div id="wp-compass" aria-hidden="true">
+    <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="60" cy="60" r="56" fill="rgba(250,245,235,0.85)" stroke="#3e2f1c" stroke-width="1.5" />
+      <circle cx="60" cy="60" r="47" fill="none" stroke="#3e2f1c" stroke-width="0.75" />
+      <g stroke="#3e2f1c" stroke-width="0.5">
+        <line x1="60" y1="6" x2="60" y2="114" />
+        <line x1="6" y1="60" x2="114" y2="60" />
+        <line x1="18.7" y1="18.7" x2="101.3" y2="101.3" />
+        <line x1="101.3" y1="18.7" x2="18.7" y2="101.3" />
+      </g>
+      <!-- stella a 8 punte -->
+      <path d="M60,10 L67,53 L110,60 L67,67 L60,110 L53,67 L10,60 L53,53 Z"
+        fill="#3e2f1c" opacity="0.75" />
+      <path d="M60,22 L64,56 L98,60 L64,64 L60,98 L56,64 L22,60 L56,56 Z"
+        fill="#c9a45c" opacity="0.9" />
+      <!-- punta nord evidenziata -->
+      <path d="M60,10 L66,52 L60,44 L54,52 Z" fill="#8a1f1f" />
+      <text x="60" y="24" text-anchor="middle" font-family="Cinzel, serif" font-size="11" font-weight="700" fill="#3e2f1c">N</text>
+      <text x="60" y="103" text-anchor="middle" font-family="Cinzel, serif" font-size="9" fill="#3e2f1c">S</text>
+      <text x="12" y="64" text-anchor="middle" font-family="Cinzel, serif" font-size="9" fill="#3e2f1c">O</text>
+      <text x="108" y="64" text-anchor="middle" font-family="Cinzel, serif" font-size="9" fill="#3e2f1c">E</text>
+    </svg>
+  </div>
+
+  <!-- Bloc Statistics Page (nascosta di default) -->
+  <div id="bloc-stats-page"
+    style="display:none; position:fixed; inset:0; z-index:5000; background:#0d1117; overflow-y:auto; padding:20px; color:#e6edf3;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+      <h1 style="font-size:24px;" data-i18n="bloc_statistics">Bloc Statistics</h1>
+      <button id="bloc-stats-close" data-i18n="back_to_map"
+        style="background:#0062ff; border:none; color:#fff; padding:8px 16px; border-radius:8px; cursor:pointer; font-weight:600;">←
+        Back to Map</button>
+    </div>
+    <div id="bloc-stats-content"></div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════
+       NUOVO — Pannello laterale nazione (WarEra+)
+       Non esiste né in Political né in Diplomacy: si apre cliccando
+       una nazione sulla mappa, mostra dati rapidi già disponibili
+       in memoria (nessuna nuova chiamata API) e offre il bottone
+       "Espandi" che apre Political View nell'overlay sottostante.
+       ════════════════════════════════════════════════════════════ -->
+  <aside id="wp-country-panel" class="wp-panel" aria-hidden="true">
+    <div id="wp-panel-resize-handle" class="wp-panel-resize-handle" aria-hidden="true"></div>
+    <button id="wp-panel-close" class="wp-panel-close" aria-label="Chiudi pannello">✕</button>
+    <div id="wp-panel-content" class="wp-panel-content">
+      <div class="wp-panel-empty" data-i18n="panel_empty_hint">Click a nation on the map to see details.</div>
+    </div>
+  </aside>
+
+  <!-- ════════════════════════════════════════════════════════════
+       NUOVO — Overlay Political View
+       Carica public/political/index.html (codice Political View
+       invariato) in un iframe, passando ?country=<id> — lo stesso
+       meccanismo di deep-link già esistente oggi tra i due tool.
+       ════════════════════════════════════════════════════════════ -->
+  <div id="wp-political-overlay" class="wp-political-overlay" aria-hidden="true">
+    <div class="wp-political-topbar">
+      <button id="wp-political-back" class="wp-political-back">← Torna alla mappa</button>
+      <span id="wp-political-title" class="wp-political-title"></span>
+    </div>
+    <iframe id="wp-political-frame" class="wp-political-frame" title="Political View" loading="lazy"></iframe>
+  </div>
+
+  <!-- Ko-fi Floating Button -->
+  <a href="https://ko-fi.com/frappa10" target="_blank" id="kofi-btn">
+    <span>☕ Support this project</span>
+  </a>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>

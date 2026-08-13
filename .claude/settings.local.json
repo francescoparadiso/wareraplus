@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check src/diplomacy/battleMarkers.js)",
+      "Bash(node -e ' *)",
+      "Bash(node --check src/diplomacy/oceanBackground.js)",
+      "Bash(node --check src/diplomacy/map.js)",
+      "Bash(node --check src/diplomacy/blocStats.js)",
+      "Bash(node --check src/styles/../diplomacy/blocStats.js)",
+      "Bash(node --check src/styles/../diplomacy/battleMarkers.js)",
+      "Bash(python3 -c ' *)",
+      "Bash(ls -la \"C:\\\\Users\\\\franc\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-franc-Desktop-grafica-warEra-wareraPlus\\\\ede1ea88-e85f-406c-8342-bbeba017bb74\\\\scratchpad\" 2>/dev/null *)",
+      "Bash(node --check src/diplomacy/antiqueTheme.js)",
+      "Bash(sort -u -t. -k2)",
+      "Bash(node --check src/diplomacy/nationTooltip.js)",
+      "Bash(node -e \"console.log\\(\\(0.24 * Math.pow\\(2, 8-1.7\\)\\).toFixed\\(3\\)\\)\")",
+      "Bash(node --input-type=module --check)",
+      "Bash(xargs grep -l \"mesh\")",
+      "Bash(curl -s \"https://politicalview-proxy.fra-paradiso2.workers.dev/trpc/battle.getBattles?input=%7B%22isActive%22%3Atrue%2C%22limit%22%3A3%7D\")",
+      "Bash(curl -s \"https://politicalview-proxy.fra-paradiso2.workers.dev/trpc/battle.getBattles?input=%7B%22isActive%22%3Atrue%2C%22limit%22%3A5%7D\" -o /tmp/battles.json)",
+      "Bash(curl -s \"https://politicalview-proxy.fra-paradiso2.workers.dev/trpc/battle.getBattles?input=%7B%22isActive%22%3Atrue%2C%22limit%22%3A5%7D\" -o battles.json)",
+      "Bash(curl -s https://politicalview-proxy.fra-paradiso2.workers.dev/trpc/battle.getBattles?input=%7B%22isActive%22%3Atrue%2C%22limit%22%3A5%7D -o /c/Users/franc/AppData/Local/Temp/claude/C--Users-franc-Desktop-grafica-warEra-wareraPlus/12097ffb-4c90-40e5-8da8-8b7ddb13225c/scratchpad/battles.json)",
+      "Read(//c/Users/franc/AppData/Local/Temp/claude/C--Users-franc-Desktop-grafica-warEra-wareraPlus/12097ffb-4c90-40e5-8da8-8b7ddb13225c/scratchpad/**)",
+      "Bash(curl -s \"https://politicalview-proxy.fra-paradiso2.workers.dev/trpc/battle.getLiveBattleData?input=%7B%22battleId%22%3A%226a7dca1175f7e0a849b6e3f1%22%7D\" -o \"C:/Users/franc/AppData/Local/Temp/claude/C--Users-franc-Desktop-grafica-warEra-wareraPlus/12097ffb-4c90-40e5-8da8-8b7ddb13225c/scratchpad/live.json\")",
+      "Bash(curl -s \"https://politicalview-proxy.fra-paradiso2.workers.dev/trpc/battle.getById?input=%7B%22battleId%22%3A%226a7dca1175f7e0a849b6e3f1%22%7D\" -o \"C:/Users/franc/AppData/Local/Temp/claude/C--Users-franc-Desktop-grafica-warEra-wareraPlus/12097ffb-4c90-40e5-8da8-8b7ddb13225c/scratchpad/byid.json\")",
+      "Bash(curl -s \"https://politicalview-proxy.fra-paradiso2.workers.dev/trpc/battleRanking.getRanking?input=%7B%22battleId%22%3A%226a7dca1175f7e0a849b6e3f1%22%2C%22type%22%3A%22country%22%2C%22side%22%3A%22attacker%22%2C%22dataType%22%3A%22damage%22%2C%22limit%22%3A100%7D\" -o \"C:/Users/franc/AppData/Local/Temp/claude/C--Users-franc-Desktop-grafica-warEra-wareraPlus/12097ffb-4c90-40e5-8da8-8b7ddb13225c/scratchpad/rank.json\")",
+      "Bash(curl -s \"https://politicalview-proxy.fra-paradiso2.workers.dev/trpc/battle.getBattles?input=%7B%22isActive%22%3Atrue%2C%22limit%22%3A100%7D\" -o \"C:/Users/franc/AppData/Local/Temp/claude/C--Users-franc-Desktop-grafica-warEra-wareraPlus/12097ffb-4c90-40e5-8da8-8b7ddb13225c/scratchpad/battles100.json\")",
+      "Bash(curl -s \"https://politicalview-proxy.fra-paradiso2.workers.dev/trpc/battle.getById?input=%7B%22battleId%22%3A%226a7d5ea6e07880820e784d60%22%7D\" -o \"C:/Users/franc/AppData/Local/Temp/claude/C--Users-franc-Desktop-grafica-warEra-wareraPlus/12097ffb-4c90-40e5-8da8-8b7ddb13225c/scratchpad/byid2.json\")",
+      "Bash(node \"C:/Users/franc/AppData/Local/Temp/claude/C--Users-franc-Desktop-grafica-warEra-wareraPlus/12097ffb-4c90-40e5-8da8-8b7ddb13225c/scratchpad/deadcheck.js\")",
+      "mcp__visualize__read_me",
+      "Bash(awk 'BEGIN{RS=\"}\"} /U\\\\+0000-00FF/ {print $0\"}\"}' oswald.css)",
+      "Bash(curl -s -o oswald-var.woff2 \"https://fonts.gstatic.com/s/oswald/v57/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlWHYg.woff2\")",
+      "Bash(base64 -w0 oswald-var.woff2)",
+      "Bash(command -v node)",
+      "Bash(netstat -ano)",
+      "Bash(curl -s -m 8 -o /dev/null -w \"HTTP %{http_code} in %{time_total}s\\\\n\" \"https://api2.warera.io/\")",
+      "Bash(curl -s -m 8 \"https://api6.warera.io/trpc/country.getAllCountries?input=%7B%7D\" -o /tmp/out.json -w \"HTTP %{http_code}\\\\n\")",
+      "Bash(powershell -Command \"Stop-Process -Id 3608 -Force -ErrorAction SilentlyContinue\")",
+      "Bash(npm run *)",
+      "Bash(node --check src/diplomacy/battleFront.js)"
+    ]
+  }
+}

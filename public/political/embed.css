@@ -1,0 +1,64 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — embed.css
+   ------------------------------------------------------------------
+   Foglio di stile ADDITIVO, attivo solo quando <body> ha la classe
+   'wp-embed-mode' (aggiunta da embed.js solo con ?embed=senate in
+   URL). In modalità normale queste regole non hanno alcun effetto:
+   nessuna riga di style.css viene toccata o sovrascritta altrove.
+
+   Obiettivo: dentro #senateOverlay mostrare SOLO l'emiciclo
+   (#senateSeats) e il riquadro governo (#senateGovBox), nascondendo
+   titolo, controlli/filtri, sidebar con la lista dei gruppi
+   parlamentari e la barra statistiche in basso.
+   ══════════════════════════════════════════════════════════════ */
+
+body.wp-embed-mode {
+  background: transparent !important;
+}
+
+/* Nasconde tutta la UI "chrome" del resto dell'app dietro l'overlay:
+   non strettamente necessario (l'overlay è già position:fixed a tutto
+   schermo sopra ogni altra cosa), ma evita un lampo di contenuto non
+   voluto durante il breve intervallo prima che SenateView.open() venga
+   chiamata. */
+body.wp-embed-mode > *:not(#senateOverlay):not(#loadingToast):not(script) {
+  visibility: hidden !important;
+}
+
+body.wp-embed-senate .senate-title-wrap,
+body.wp-embed-senate .senate-controls,
+body.wp-embed-senate #senatePartySidebar,
+body.wp-embed-senate .senate-stats-bar,
+body.wp-embed-senate #senateCountryBox,
+body.wp-embed-senate .senate-close-btn {
+  display: none !important;
+}
+
+body.wp-embed-senate .senate-overlay {
+  background: transparent !important;
+  backdrop-filter: none !important;
+}
+
+body.wp-embed-senate .senate-stage {
+  /* Senza sidebar (300px) e bottom bar (46px) riservati dal layout
+     originale, l'emiciclo può usare tutto lo spazio disponibile. */
+  padding: 0 !important;
+}
+
+body.wp-embed-senate #senateSeats {
+  width: 100% !important;
+  height: auto !important;
+  max-height: 62vh;
+  padding-top: 110px;
+  box-sizing: border-box;
+}
+
+/* Il riquadro governo (posizionato di default con right:300px per
+   lasciare spazio alla sidebar, qui nascosta) va riancorato per usare
+   tutta la larghezza e stare in alto, sopra l'emiciclo. */
+body.wp-embed-senate .senate-gov-box {
+  left: 0 !important;
+  right: 0 !important;
+  bottom: auto !important;
+  top: 8px !important;
+}

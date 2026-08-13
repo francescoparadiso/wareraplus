@@ -1,0 +1,497 @@
+// battleFront.js
+//
+// ═══════════════════════════════════════════════════════════════════════
+// WarEra+ — motore "Battle Front": prima viveva in un overlay a schermo
+// intero aperto da un bottone nel tooltip battaglia (vedi git history se
+// serve recuperarlo); su richiesta esplicita dell'utente ("vorrei tutto
+// direttamente nel tooltip, senza aprire un'altra pagina") è stato
+// trasformato in un widget MONTABILE dentro un contenitore qualsiasi.
+// battleMarkers.js lo monta dentro il tooltip battaglia già esistente
+// (#battle-tooltip) quando l'utente clicca un marker, e lo smonta quando il
+// tooltip si chiude — vedi mountBattleFront()/unmountBattleFront() in fondo
+// al file.
+//
+// Resta DOM/CSS puro — ZERO canvas, ZERO WebGL. Il campo è una striscia
+// compatta con due territori la cui larghezza segue la quota di danno di
+// ciascun lato, una linea del fronte che si sposta di conseguenza, una
+// linea d'origine fissa al 50%, e due manciate di "unità" (punti = fanteria,
+// punti più grandi = carri) che marciano insieme al fronte. Il movimento
+// del fronte/territori è affidato a `transition` CSS su `left`/`width`:
+// nessun render loop per animarlo.
+//
+// Gli effetti "spari/esplosioni" scattano SOLO quando un poll porta un vero
+// incremento di danno (vedi FX in refreshBattleData) — mai un'animazione
+// ambientale. Ogni "colpo" è una coppia tracciante+impatto animata con la
+// Web Animations API su un pool fisso di elementi riciclati.
+//
+// Dati reali: stessa pipeline di sempre — fetchBattleWallData()/
+// fetchBattleWallPoll() in battleHeatmap.js (ranking + battle.getLiveBattleData
+// sempre nello stesso POST batch) e battleFront/momentum.js.
+// ═══════════════════════════════════════════════════════════════════════
+
+import { state } from './state.js';
+import { fetchBattleWallData, fetchBattleWallPoll } from './battleHeatmap.js';
+import { getNation, escapeHtml } from './utils.js';
+import { fmt, formatRate, fmtDuration, hexToRgb, clamp } from './battleFront/helpers.js';
+import { pushDamageSample, updateMomentum, getLastMomentum, getMomentumAt, resetMomentum } from './battleFront/momentum.js';
+
+const POLL_MS = 1500;
+const POLL_MAX_MS = 20000;
+const POLL_FAIL_LIMIT = 4;
+const IS_MOBILE = typeof window !== 'undefined' && Math.min(window.innerWidth, window.innerHeight) <= 760;
+const FX_POOL_SIZE = IS_MOBILE ? 3 : 5;
+const FX_MAX_VOLLEY = IS_MOBILE ? 2 : 3;
+// Unità per lato: MIN sempre visibile (anche il lato che sta perdendo ha
+// un presidio), MAX raggiunto solo dal lato che sta facendo tutto il danno.
+const MIN_UNITS = 4, MAX_UNITS = IS_MOBILE ? 7 : 10;
+const TANK_SHARE = 0.25; // quota di MAX_UNITS che diventa "carro" (punto grande)
+const FLAG_BASE = 'https://media.warera.io/images/flags';
+
+function flagUrl(code) {
+  return code ? `${FLAG_BASE}/${code.toLowerCase()}.svg?v=16` : '';
+}
+
+// ==================== STATO DI MODULO ====================
+// Un solo widget montato alla volta (un solo tooltip battaglia può essere
+// pinnato per volta nell'app) — niente registro/Map di istanze multiple.
+let hostEl, fieldEl, fxLayer, unitsLayer;
+let hud = {};
+let tracerPool = { i: -1, el: [] }, blastPool = { i: -1, el: [] };
+let unitSlots = { def: [], atk: [] }; // { el, isTank, offset%, y% } generati una volta al mount
+let sessionAbort = null;
+function getSignal() {
+  if (!sessionAbort) sessionAbort = new AbortController();
+  return sessionAbort.signal;
+}
+
+let currentBattleId = null;
+let pollTimer = null, heartbeatTimer = null, pageHidden = false;
+let pollFailCount = 0;
+let lastGoodNations = null;
+let prevTotalDef = null, prevTotalAtk = null, lastPollTime = 0, lastUpdateTs = 0;
+let lastFrontPct = 50;
+let sideFlagUrl = { defender: '', attacker: '' };
+let sideName = { defender: 'Defenders', attacker: 'Attackers' };
+let reduceMotion = false;
+
+// ==================== WIDGET DOM ====================
+function buildWidget(host) {
+  reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  host.innerHTML = `
+    <style>${WIDGET_CSS}</style>
+    <div class="bfm-root">
+      <div class="bfm-field" id="bfm-field">
+        <div class="bfm-terr-atk" id="bfm-terr-atk"></div>
+        <div class="bfm-origin"></div>
+        <div class="bfm-frontline" id="bfm-frontline"></div>
+        <div class="bfm-units" id="bfm-units"></div>
+        <div class="bfm-fx" id="bfm-fx"></div>
+        <div class="bfm-status" id="bfm-status">Loading battle front…</div>
+      </div>
+      <div class="bfm-split">
+        <div class="bfm-split-bar"><div class="bfm-split-def" id="bfm-split-def" style="width:50%;"></div><div class="bfm-split-atk" id="bfm-split-atk" style="width:50%;"></div></div>
+        <div class="bfm-split-nums"><span class="d" id="bfm-split-def-pct">50.0%</span><span id="bfm-rates"></span><span class="a" id="bfm-split-atk-pct">50.0%</span></div>
+      </div>
+      <div class="bfm-momentum" id="bfm-momentum">Gathering momentum data…</div>
+    </div>
+  `;
+
+  hud = {
+    field: host.querySelector('#bfm-field'),
+    terrAtk: host.querySelector('#bfm-terr-atk'),
+    frontline: host.querySelector('#bfm-frontline'),
+    status: host.querySelector('#bfm-status'),
+    splitDef: host.querySelector('#bfm-split-def'),
+    splitAtk: host.querySelector('#bfm-split-atk'),
+    splitDefPct: host.querySelector('#bfm-split-def-pct'),
+    splitAtkPct: host.querySelector('#bfm-split-atk-pct'),
+    rates: host.querySelector('#bfm-rates'),
+    momentum: host.querySelector('#bfm-momentum'),
+  };
+
+  fieldEl = hud.field;
+  fxLayer = host.querySelector('#bfm-fx');
+  unitsLayer = host.querySelector('#bfm-units');
+
+  tracerPool = { i: -1, el: [] };
+  blastPool = { i: -1, el: [] };
+  for (let p = 0; p < FX_POOL_SIZE; p++) {
+    const t = document.createElement('div'); t.className = 'bfm-tracer'; fxLayer.appendChild(t); tracerPool.el.push(t);
+    const b = document.createElement('div'); b.className = 'bfm-blast'; fxLayer.appendChild(b); blastPool.el.push(b);
+  }
+
+  // Slot unità: generati UNA VOLTA per lato (offset dal fronte + y stabili
+  // per tutta la vita del widget) — solo quanti sono "attivi" ad ogni render
+  // vengono resi visibili, così le unità non "saltano" di posizione ad ogni
+  // poll, semplicemente marciano col fronte (stesso `left` del fronte) e
+  // compaiono/spariscono in coda alla formazione quando il conteggio cambia.
+  unitSlots = { def: [], atk: [] };
+  for (const side of ['def', 'atk']) {
+    for (let i = 0; i < MAX_UNITS; i++) {
+      const isTank = i >= MAX_UNITS - Math.max(1, Math.round(MAX_UNITS * TANK_SHARE));
+      const el = document.createElement('div');
+      el.className = 'bfm-unit' + (isTank ? ' tank' : '') + ' ' + side;
+      el.style.top = (8 + Math.random() * 84) + '%';
+      unitsLayer.appendChild(el);
+      unitSlots[side].push({ el, isTank, offset: 3 + Math.random() * 26 });
+    }
+  }
+
+  document.addEventListener('visibilitychange', onVisibilityChange, { signal: getSignal() });
+}
+
+function showStatus(mode) {
+  if (!hud.status) return;
+  if (mode === 'hidden') { hud.status.style.display = 'none'; return; }
+  hud.status.style.display = 'flex';
+  hud.status.classList.toggle('is-error', mode === 'error');
+  hud.status.textContent = mode === 'error' ? 'Connection lost — retrying…' : 'Loading battle front…';
+}
+
+// ==================== FX: traccianti + impatti ====================
+function nextPooled(pool) { pool.i = (pool.i + 1) % pool.el.length; return pool.el[pool.i]; }
+
+// reduceMotion sopprime solo lo scivolamento del tracciante (il "movimento
+// sostenuto" in senso stretto) — il lampo dell'impatto resta sempre visibile,
+// anche in quella modalità: vedi nota in testa al file.
+function fireOne(side) {
+  const w = fieldEl.clientWidth, h = fieldEl.clientHeight;
+  const top = 10 + Math.random() * 80;
+  const intoEnemy = 8 + Math.random() * 16;
+  let startPct, endPct;
+  if (side === 'def') {
+    startPct = clamp(lastFrontPct - (3 + Math.random() * 6), 2, 96);
+    endPct = clamp(lastFrontPct + intoEnemy, 2, 96);
+  } else {
+    startPct = clamp(lastFrontPct + (3 + Math.random() * 6), 2, 96);
+    endPct = clamp(lastFrontPct - intoEnemy, 2, 96);
+  }
+
+  if (!reduceMotion) {
+    const tracer = nextPooled(tracerPool);
+    const dxPx = (endPct - startPct) / 100 * w;
+    tracer.className = 'bfm-tracer ' + side;
+    tracer.style.top = (top / 100 * h) + 'px';
+    tracer.style.left = (startPct / 100 * w) + 'px';
+    if (tracer._anim) tracer._anim.cancel();
+    tracer._anim = tracer.animate([
+      { opacity: 0, transform: 'translateX(0px) scaleX(0.4)' },
+      { opacity: 1, transform: 'translateX(0px) scaleX(1)', offset: 0.16 },
+      { opacity: 1, transform: `translateX(${dxPx * 0.82}px) scaleX(1)`, offset: 0.8 },
+      { opacity: 0, transform: `translateX(${dxPx}px) scaleX(1)` },
+    ], { duration: 420 + Math.random() * 120, easing: 'cubic-bezier(.2,.6,.4,1)' });
+  }
+
+  const blast = nextPooled(blastPool);
+  blast.className = 'bfm-blast ' + side;
+  blast.style.top = (top / 100 * h) + 'px';
+  blast.style.left = (endPct / 100 * w) + 'px';
+  if (blast._anim) blast._anim.cancel();
+  const peakScale = reduceMotion ? 1.1 : 1;
+  const endScale = reduceMotion ? 1.25 : 2;
+  blast._anim = blast.animate([
+    { opacity: 0, transform: 'scale(0.3)', offset: 0 },
+    { opacity: 1, transform: `scale(${peakScale})`, offset: 0.24 },
+    { opacity: 0, transform: `scale(${endScale})`, offset: 1 },
+  ], { duration: 480, delay: reduceMotion ? 0 : 320, easing: 'ease-out', fill: 'backwards' });
+
+  flashFrontline(side);
+}
+
+function flashFrontline(side) {
+  const el = hud.frontline;
+  if (!el) return;
+  const color = side === 'def' ? 'var(--bfm-def-strong)' : 'var(--bfm-atk-strong)';
+  if (el._flash) el._flash.cancel();
+  el._flash = el.animate([
+    { boxShadow: '0 0 10px 1px rgba(226,172,77,0.45)' },
+    { boxShadow: `0 0 18px 4px ${color}`, offset: 0.3 },
+    { boxShadow: '0 0 10px 1px rgba(226,172,77,0.45)' },
+  ], { duration: 480, easing: 'ease-out' });
+}
+
+function flashRate(side) {
+  const el = hud.rates;
+  if (!el) return;
+  if (el._flash) el._flash.cancel();
+  const color = side === 'def' ? 'var(--bfm-def-strong)' : 'var(--bfm-atk-strong)';
+  el._flash = el.animate([
+    { textShadow: '0 0 0 transparent' },
+    { textShadow: `0 0 10px ${color}`, offset: 0.35 },
+    { textShadow: '0 0 0 transparent' },
+  ], { duration: 500, easing: 'ease-out' });
+}
+
+function spawnVolley(side, amount) {
+  if (!fieldEl || !amount || amount <= 0) return;
+  const n = clamp(Math.round(Math.log10(1 + amount / 1500)) + 1, 1, FX_MAX_VOLLEY);
+  flashRate(side);
+  for (let i = 0; i < n; i++) {
+    const delay = i * (90 + Math.random() * 150);
+    setTimeout(() => { if (currentBattleId) fireOne(side); }, delay);
+  }
+}
+
+// ==================== TITOLO (solo per nomi/bandiere usati dal momentum) ====================
+// Niente più masthead: regione e nomi nazione sono già mostrati sopra questo
+// widget nel tooltip (buildBattleTooltipContent in battleMarkers.js) — qui
+// servono solo per etichettare CHI nel testo del momentum qui sotto.
+function applyTitle(details) {
+  const atkNation = getNation(details?.attacker?.country);
+  const defNation = getNation(details?.defender?.country);
+  sideFlagUrl.defender = flagUrl(defNation?.code?.toLowerCase());
+  sideFlagUrl.attacker = flagUrl(atkNation?.code?.toLowerCase());
+  sideName.defender = defNation?.name || 'Defenders';
+  sideName.attacker = atkNation?.name || 'Attackers';
+}
+
+// ==================== UNITÀ (fanteria + carri) ====================
+// Conteggio per lato guidato dalla quota di danno sul totale battaglia: il
+// lato che sta facendo più danno mostra una formazione più fitta. Non è una
+// simulazione — è un indicatore visivo proporzionale, coerente con "chi sta
+// vincendo" già mostrato dalla barra split e dal fronte.
+function renderUnits(defShare) {
+  const defCount = Math.round(MIN_UNITS + (MAX_UNITS - MIN_UNITS) * defShare);
+  const atkCount = Math.round(MIN_UNITS + (MAX_UNITS - MIN_UNITS) * (1 - defShare));
+  for (const [side, count] of [['def', defCount], ['atk', atkCount]]) {
+    unitSlots[side].forEach((slot, i) => {
+      const active = i < count;
+      slot.el.style.opacity = active ? '1' : '0';
+      if (!active) return;
+      const pct = side === 'def'
+        ? clamp(lastFrontPct - slot.offset, 1, 98)
+        : clamp(lastFrontPct + slot.offset, 1, 98);
+      slot.el.style.left = pct + '%';
+    });
+  }
+}
+
+// ==================== RENDER PRINCIPALE ====================
+function render(defenderRanked, attackerRanked, totalDef, totalAtk, round) {
+  const totalAll = totalDef + totalAtk;
+  const defShare = totalAll > 0 ? totalDef / totalAll : 0.5;
+
+  const defPct = defShare * 100;
+  hud.splitDef.style.width = defPct + '%';
+  hud.splitAtk.style.width = (100 - defPct) + '%';
+  hud.splitDefPct.textContent = defPct.toFixed(1) + '%';
+  hud.splitAtkPct.textContent = (100 - defPct).toFixed(1) + '%';
+
+  const frontPct = clamp(50 + (defShare - 0.5) * 130, 12, 88);
+  lastFrontPct = frontPct;
+  hud.terrAtk.style.left = frontPct + '%';
+  hud.frontline.style.left = frontPct + '%';
+
+  renderUnits(defShare);
+}
+
+// ==================== MOMENTUM (una riga compatta) ====================
+function renderMomentum() {
+  const m = getLastMomentum();
+  if (!m) {
+    hud.momentum.textContent = 'Gathering momentum data…';
+    hud.momentum.style.color = '';
+    return;
+  }
+
+  const elapsed = Math.max(0, (Date.now() - getMomentumAt()) / 1000);
+  const leadNow = Math.max(0, m.lead - m.gain * elapsed);
+  const etaNow = (m.gain > 0 && leadNow > 0) ? leadNow / m.gain : null;
+
+  const leaderIsDef = m.leader === 'defender';
+  const leaderVar = leaderIsDef ? '--bfm-def-strong' : '--bfm-atk-strong';
+  const trailerVar = leaderIsDef ? '--bfm-atk-strong' : '--bfm-def-strong';
+  const leaderName = escapeHtml(leaderIsDef ? sideName.defender : sideName.attacker);
+  const trailerName = escapeHtml(leaderIsDef ? sideName.attacker : sideName.defender);
+
+  if (m.gain > 0.005 * (m.rateDef + m.rateAtk + 1)) {
+    const etaTxt = leadNow <= 0.5 ? 'overtake imminent' : (etaNow != null ? `overtake in ~${fmtDuration(etaNow)}` : 'closing');
+    hud.momentum.innerHTML = `<b style="color:var(${trailerVar})">${trailerName}</b> closing on <b style="color:var(${leaderVar})">${leaderName}</b> — ${etaTxt}`;
+  } else {
+    hud.momentum.innerHTML = `<b style="color:var(${leaderVar})">${leaderName}</b> extending the lead`;
+  }
+}
+
+// ==================== FETCH + STATO BATTAGLIA ====================
+async function refreshBattleData(battleId, isInitial) {
+  let nations, live, details;
+  if (isInitial) {
+    const res = await fetchBattleWallData(battleId);
+    nations = res.nations; live = res.live; details = res.details;
+  } else {
+    const res = await fetchBattleWallPoll(battleId);
+    nations = res.nations; live = res.live;
+  }
+  if (currentBattleId !== battleId) return;
+
+  if (isInitial) applyTitle(details);
+
+  if (!nations || !nations.length) {
+    pollFailCount++;
+    if (lastGoodNations && lastGoodNations.length) {
+      nations = lastGoodNations;
+      if (pollFailCount >= POLL_FAIL_LIMIT) showStatus('error');
+    } else {
+      if (pollFailCount >= POLL_FAIL_LIMIT) showStatus('error');
+      return;
+    }
+  } else {
+    pollFailCount = 0;
+    lastGoodNations = nations;
+    showStatus('hidden');
+  }
+
+  const defenderRanked = nations.filter(n => n.side === 'defender').sort((a, b) => b.totalDamage - a.totalDamage);
+  const attackerRanked = nations.filter(n => n.side === 'attacker').sort((a, b) => b.totalDamage - a.totalDamage);
+
+  const rankedSumDef = defenderRanked.reduce((s, n) => s + n.totalDamage, 0);
+  const rankedSumAtk = attackerRanked.reduce((s, n) => s + n.totalDamage, 0);
+  const round = live?.round || null;
+  const totalDef = round?.defenderDamages != null ? round.defenderDamages : rankedSumDef;
+  const totalAtk = round?.attackerDamages != null ? round.attackerDamages : rankedSumAtk;
+
+  render(defenderRanked, attackerRanked, totalDef, totalAtk, round);
+
+  const now = performance.now();
+  let rateTxt = '';
+  if (pollFailCount === 0 && prevTotalDef != null && lastPollTime > 0) {
+    const dt = (now - lastPollTime) / 1000;
+    if (dt > 0) {
+      const defRateVal = formatRate((totalDef - prevTotalDef) / dt);
+      const atkRateVal = formatRate((totalAtk - prevTotalAtk) / dt);
+      if (defRateVal) rateTxt += `🛡${defRateVal} `;
+      if (atkRateVal) rateTxt += `⚔${atkRateVal}`;
+      spawnVolley('def', totalDef - prevTotalDef);
+      spawnVolley('atk', totalAtk - prevTotalAtk);
+    }
+  }
+  if (hud.rates) hud.rates.textContent = rateTxt;
+  if (pollFailCount === 0) { prevTotalDef = totalDef; prevTotalAtk = totalAtk; lastPollTime = now; }
+
+  if (pollFailCount === 0) {
+    lastUpdateTs = Date.now();
+    pushDamageSample(totalDef, totalAtk);
+    updateMomentum(totalDef, totalAtk);
+  }
+  renderMomentum();
+}
+
+function schedulePoll(battleId) {
+  if (pollTimer) clearTimeout(pollTimer);
+  const delay = Math.min(POLL_MAX_MS, POLL_MS * Math.pow(2, Math.min(pollFailCount, 3)));
+  pollTimer = setTimeout(async () => {
+    if (currentBattleId !== battleId) return;
+    await refreshBattleData(battleId, false);
+    if (currentBattleId === battleId) schedulePoll(battleId);
+  }, delay);
+}
+
+function heartbeat() {
+  if (!lastUpdateTs) return;
+  renderMomentum();
+}
+
+function onVisibilityChange() {
+  if (document.hidden) {
+    pageHidden = true;
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    return;
+  }
+  if (!pageHidden) return;
+  pageHidden = false;
+  if (currentBattleId) {
+    if (!pollTimer) schedulePoll(currentBattleId);
+    if (!heartbeatTimer) heartbeatTimer = setInterval(heartbeat, 1000);
+  }
+}
+
+// ==================== API PUBBLICA ====================
+// mountBattleFront è idempotente: se un'istanza precedente è ancora attiva
+// (es. l'utente ha cliccato un'altra battaglia mentre un tooltip era già
+// pinnato) la smonta da sola prima di ricostruire, così battleMarkers.js
+// non deve preoccuparsi dell'ordine di chiamata.
+export async function mountBattleFront(host, battleId) {
+  if (hostEl) unmountBattleFront();
+
+  hostEl = host;
+  buildWidget(host);
+  resetMomentum();
+  prevTotalDef = null; prevTotalAtk = null; lastPollTime = 0; lastUpdateTs = 0;
+  pollFailCount = 0; lastGoodNations = null;
+  sideName = { defender: 'Defenders', attacker: 'Attackers' };
+  sideFlagUrl = { defender: '', attacker: '' };
+  currentBattleId = battleId;
+
+  showStatus('loading');
+  await refreshBattleData(battleId, true);
+  if (currentBattleId !== battleId) return; // smontato durante l'await
+
+  schedulePoll(battleId);
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  heartbeatTimer = setInterval(heartbeat, 1000);
+}
+
+export function unmountBattleFront() {
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+  pageHidden = false;
+  if (sessionAbort) { sessionAbort.abort(); sessionAbort = null; }
+  if (hostEl) hostEl.innerHTML = '';
+  hostEl = null; fieldEl = null; fxLayer = null; unitsLayer = null;
+  hud = {};
+  tracerPool = { i: -1, el: [] }; blastPool = { i: -1, el: [] };
+  unitSlots = { def: [], atk: [] };
+  currentBattleId = null;
+}
+
+// ==================== CSS ====================
+// Palette identica a prima (steel blue / ember), ma tutte le misure sono
+// pensate per vivere dentro il tooltip battaglia (max ~420px di larghezza),
+// non più a schermo intero.
+const WIDGET_CSS = `
+.bfm-root {
+  --bfm-def-strong: #8fc3e8; --bfm-def-fill: #16283a;
+  --bfm-atk-strong: #ef9269; --bfm-atk-fill: #391f16;
+  --bfm-front: #e2ac4d; --bfm-ink-faint: #7c8695;
+  margin-top: 8px;
+}
+.bfm-root * { box-sizing: border-box; }
+.bfm-field { position: relative; height: 74px; border-radius: 8px; overflow: hidden; background: var(--bfm-def-fill); }
+.bfm-terr-atk { position: absolute; top: 0; right: 0; bottom: 0; left: 50%; background: var(--bfm-atk-fill); }
+@media (prefers-reduced-motion: no-preference) { .bfm-terr-atk { transition: left 900ms cubic-bezier(.22,.61,.36,1); } }
+.bfm-origin { position: absolute; top: 0; bottom: 0; left: 50%; width: 0; border-left: 1px dashed rgba(255,255,255,0.25); }
+.bfm-frontline { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: var(--bfm-front); box-shadow: 0 0 10px 1px rgba(226,172,77,0.45); }
+@media (prefers-reduced-motion: no-preference) { .bfm-frontline { transition: left 900ms cubic-bezier(.22,.61,.36,1); } }
+.bfm-units { position: absolute; inset: 0; }
+.bfm-unit { position: absolute; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; transform: translateX(-50%); opacity: 0; }
+@media (prefers-reduced-motion: no-preference) { .bfm-unit { transition: left 900ms cubic-bezier(.22,.61,.36,1), opacity 400ms; } }
+.bfm-unit.def { background: var(--bfm-def-strong); }
+.bfm-unit.atk { background: var(--bfm-atk-strong); }
+.bfm-unit.tank { width: 8px; height: 5px; margin: -2.5px 0 0 -4px; border-radius: 1.5px; }
+.bfm-fx { position: absolute; inset: 0; overflow: hidden; pointer-events: none; mix-blend-mode: screen; }
+.bfm-tracer { position: absolute; height: 2px; width: 30px; border-radius: 2px; opacity: 0; top: 0; left: 0; transform-origin: left center; }
+.bfm-tracer.def { background: linear-gradient(90deg, transparent, #eaf6ff 45%, var(--bfm-def-strong)); box-shadow: 0 0 6px 1px var(--bfm-def-strong); }
+.bfm-tracer.atk { background: linear-gradient(90deg, transparent, #fff2e8 45%, var(--bfm-atk-strong)); box-shadow: 0 0 6px 1px var(--bfm-atk-strong); }
+.bfm-blast { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; opacity: 0; top: 0; left: 0; }
+.bfm-blast.def { background: radial-gradient(circle, #fff 0%, var(--bfm-def-strong) 42%, transparent 72%); box-shadow: 0 0 12px 3px var(--bfm-def-strong); }
+.bfm-blast.atk { background: radial-gradient(circle, #fff 0%, var(--bfm-atk-strong) 42%, transparent 72%); box-shadow: 0 0 12px 3px var(--bfm-atk-strong); }
+.bfm-status {
+  position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center;
+  background: rgba(5,7,10,0.72); color: #c9d4e4; font-size: 11px; letter-spacing: 0.03em;
+}
+.bfm-status.is-error { color: #ef9269; }
+
+.bfm-split { margin-top: 6px; }
+.bfm-split-bar { height: 4px; border-radius: 2px; overflow: hidden; display: flex; background: rgba(255,255,255,0.08); }
+.bfm-split-def { background: var(--bfm-def-strong); }
+.bfm-split-atk { background: var(--bfm-atk-strong); }
+@media (prefers-reduced-motion: no-preference) { .bfm-split-def, .bfm-split-atk { transition: width 900ms cubic-bezier(.22,.61,.36,1); } }
+.bfm-split-nums { display: flex; justify-content: space-between; align-items: baseline; margin-top: 3px; font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.bfm-split-nums .d { color: var(--bfm-def-strong); font-weight: 700; }
+.bfm-split-nums .a { color: var(--bfm-atk-strong); font-weight: 700; }
+#bfm-rates { color: var(--bfm-ink-faint); font-size: 10px; }
+
+.bfm-momentum { margin-top: 6px; font-size: 11px; color: #c9d4e4; line-height: 1.4; }
+`;
