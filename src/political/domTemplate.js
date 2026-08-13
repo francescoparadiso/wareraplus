@@ -1,0 +1,614 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Political View: markup DOM (Fase 2, Stage 5)
+   ------------------------------------------------------------------
+   Markup copiato INVARIATO dal <body> di public/political/index.html
+   (dal canvas#bgCanvas al div.tooltip, esclusi i tag <script> e
+   l'animazione dello sfondo — vedi src/political/backgroundCanvas.js
+   per quella, convertita a modulo a parte). Estratto meccanicamente
+   (sed sulle righe originali, non ritrascritto a mano) per azzerare
+   il rischio di errori di trascrizione su ~590 righe di HTML.
+
+   Montato lazy dentro #wp-political-root (index.html, root) alla
+   prima apertura di Political — mai staticamente nell'HTML shell,
+   per non appesantire il caricamento iniziale della mappa. Chiamato
+   da src/political/main.js: mountDomTemplate() (Stage 8).
+
+   Tutti gli id qui dentro (countrySelect, senateOverlay, ecc.) restano
+   quelli originali: il codice Political convertito (Stage 6/7/8) li
+   referenzia con document.getElementById(...) esattamente come prima,
+   solo che ora "prima" significa "dopo il mount", non più "al parse
+   dello script" — da qui i fix di lazy-lookup di Stage 6 (senate.js)
+   invece di cattura a top-level.
+   ══════════════════════════════════════════════════════════════ */
+
+export function getPoliticalTemplate() {
+  return `
+  <canvas id="bgCanvas"
+    style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:.75;"></canvas>
+  <!-- Barra di progresso globale (top) -->
+  <div id="globalProgressBar"
+    style="position:fixed; top:0; left:0; width:0%; height:2px; background:linear-gradient(90deg, #e8c97a, #c5964a); z-index:10000; transition:width 0.2s ease; box-shadow:0 0 6px rgba(197,150,74,0.5);">
+  </div>
+  <!-- NEWS TICKER (top bar, scrolling) -->
+  <div class="news-ticker-container">
+    <div class="news-ticker-label"><span class="ticker-live-dot"></span>LIVE</div>
+    <div class="news-ticker-wrapper">
+      <div class="news-ticker" id="newsTicker">
+        <span class="ticker-message" data-i18n="loading">Loading election updates...</span>
+      </div>
+    </div>
+  </div>
+  <!-- Tooltip flottante in basso a destra -->
+  <div id="loadingToast"
+    style="position:fixed; bottom:20px; right:20px; background:rgba(7,9,13,0.9); backdrop-filter:blur(12px); border:1px solid rgba(197,150,74,0.5); border-radius:40px; padding:8px 16px; font-size:0.75rem; color:#e8c97a; z-index:10000; display:flex; align-items:center; gap:8px; box-shadow:0 4px 12px rgba(0,0,0,0.4); opacity:0; transition:opacity 0.2s; pointer-events:none;">
+    <span>⏳</span>
+    <span id="loadingMessage" data-i18n="loading">Caricamento...</span>
+  </div>
+  <div class="app">
+
+    <!-- HEADER (invariato) -->
+    <header class="header">
+      <div class="header-brand">
+        <button id="themeToggle" class="theme-toggle-btn" data-i18n-title="theme_toggle_title"
+          data-i18n-aria="theme_toggle_aria" title="Switch to light mode" aria-label="Toggle theme">☀️</button>
+        <div class="header-logo">🏛️</div>
+        <div>
+          <div class="header-title">Political View</div>
+          <div class="header-sub">WarEra · Live data from api5.warera.io</div>
+        </div>
+      </div>
+      <div class="header-controls">
+        <button class="btn-load btn-party-view" id="partyViewBtn" data-i18n="party_view_btn">🎭 Party View</button>
+        <button class="btn-load btn-senate-view" id="senateViewBtn" data-i18n="senate_view_btn">🏛️ Senate View</button>
+        <button class="btn-load btn-elections" id="backToElectionsBtn" data-i18n="elections_btn">🗳️ Elections</button>
+
+        <div class="input-wrap select-wrap" style="margin-right:12px;">
+          <select id="countrySelect">
+            <option value="" data-i18n="country_placeholder">— Choose a country —</option>
+          </select>
+        </div>
+        <div class="input-wrap select-wrap">
+          <select id="electionSelect">
+            <option value="" data-i18n="election_placeholder">— Choose an election —</option>
+          </select>
+        </div>
+        <button class="btn-load" id="loadBtn" data-i18n="load_btn">▶ Load</button>
+        <span class="badge-status loading" id="statusBadge" data-i18n="status_waiting">Waiting…</span>
+        <div class="input-wrap select-wrap" style="margin-left:4px;">
+          <select id="langSelect" aria-label="Language" title="Language"></select>
+        </div>
+        <a href="https://ko-fi.com/frappa10" target="_blank" class="kofi-btn-top" data-i18n-title="kofi_title"
+          title="Supportami su Ko-fi"><span data-i18n="kofi_btn">☕ Support
+            me</span></a>
+      </div>
+    </header>
+    <!-- STATS (invariato) -->
+    <div class="stats-row" id="statsRow">
+      <div class="stat hl">
+        <div class="stat-label" data-i18n="stat_total_seats">Total seats</div>
+        <div class="stat-value skeleton-val" id="stat-seats">—</div>
+        <div class="stat-sub" data-i18n="stat_in_parliament">In parliament</div>
+        <div class="stat-trend neutral" id="stat-seats-trend"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label" data-i18n="stat_parties">Parties</div>
+        <div class="stat-value skeleton-val" id="stat-parties">—</div>
+        <div class="stat-sub" data-i18n="stat_represented">Represented</div>
+        <div class="stat-trend neutral" id="stat-parties-trend"></div>
+      </div>
+      <div class="stat stat-totalvotes-highlight">
+        <div class="stat-label" data-i18n="stat_total_votes">Total votes</div>
+        <div class="stat-value skeleton-val" id="stat-totalvotes">—</div>
+        <div class="stat-sub" data-i18n="stat_in_this_election">In this election</div>
+        <div class="stat-trend neutral" id="stat-votes-trend"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label" data-i18n="stat_majority">Majority</div>
+        <div class="stat-value skeleton-val" id="stat-majority">—</div>
+        <div class="stat-sub" data-i18n="stat_threshold">Threshold (50%+1)</div>
+      </div>
+      <div class="stat hl">
+        <div class="stat-label" data-i18n="stat_first_party">First party</div>
+        <div class="stat-value skeleton-val" id="stat-leader" style="font-size:.9rem;padding-top:7px;">—</div>
+        <div class="stat-sub" data-i18n="stat_by_seats">By seats</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label" data-i18n="stat_enp">ENP Fragmentation</div>
+        <div class="stat-value skeleton-val" id="stat-enp">—</div>
+        <div class="stat-sub" id="stat-enp-label">—</div>
+      </div>
+    </div>
+    <!-- Candidates container (mostrato solo in candidacy o voting phase) -->
+    <div id="candidatesContainer" style="display: none;">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-icon">👥</div>
+          <h2 id="candidatesPhaseTitle" data-i18n="candidates_title">Candidates</h2>
+          <span class="badge-count" id="candidatesCount">0</span>
+        </div>
+        <div id="candidatesList" class="candidates-grid"
+          style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;"></div>
+      </div>
+    </div>
+    <!-- ══ TIMELINE (Congress Election History) ── ora collassabile -->
+    <details class="panel timeline-panel" id="timelinePanel" style="display:none; margin-bottom:16px;" open>
+      <summary>
+        <div class="panel-icon">📈</div>
+        <h2 data-i18n="timeline_title">Congress Election History</h2>
+        <span class="badge-count" id="timelineBadge"></span>
+        <div class="timeline-legend" id="timelineLegend"></div>
+        <span class="details-marker">▼</span>
+      </summary>
+      <div class="timeline-filter-row">
+        <label class="timeline-filter-label" data-i18n="timeline_filter_label">🔍 Filter by party:</label>
+        <select id="timelinePartyFilter" class="timeline-party-select">
+          <option value="" data-i18n="all_parties">All parties</option>
+        </select>
+      </div>
+      <div class="timeline-chart-wrap">
+        <canvas id="timelineChart" role="img" aria-label="Seats trend over time"></canvas>
+      </div>
+      <div class="timeline-footer">
+        <span class="timeline-tip" data-i18n="timeline_tip">💡 Click an election to load it · Congress elections
+          only</span>
+      </div>
+    </details>
+
+    <!-- ══ PRESIDENTIAL VIEW (con pannelli collassabili e riordinabili) ══ -->
+    <div id="president-view" style="display:none;">
+      <div class="presidential-grid sortable-grid">
+
+        <!-- Government panel -->
+        <details class="panel" id="presGovernmentPanel" open>
+          <summary>
+            <div class="panel-icon">🏛️</div>
+            <h2 data-i18n="current_government">Current Government (as today)</h2>
+            <span class="badge-count" id="govBadge"></span>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div class="government-grid" id="governmentGrid"></div>
+        </details>
+
+        <!-- Presidential Race -->
+        <details class="panel" id="presRacePanel" open>
+          <summary>
+            <div class="panel-icon">🗳</div>
+            <h2 data-i18n="presidential_race">Presidential Race</h2>
+            <span class="badge-count" id="pres-status-badge"></span>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div id="presCountdown" class="pres-countdown"></div>
+          <div id="presMargin" class="pres-margin" style="display:none;"></div>
+          <div id="pres-winner-banner" class="pres-winner" style="display:none;"></div>
+          <div id="pres-race" class="pres-race"></div>
+        </details>
+
+        <!-- Vote Distribution chart -->
+        <details class="panel" id="presVotesChartPanel" open>
+          <summary>
+            <div class="panel-icon">📊</div>
+            <h2 data-i18n="vote_distribution">Vote Distribution</h2>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div class="pres-chart-wrap">
+            <canvas id="presidentChart" role="img" aria-label="Presidential election votes"></canvas>
+          </div>
+          <div id="pres-meta" class="pres-meta"></div>
+        </details>
+
+        <!-- Turnout chart -->
+        <details class="panel" id="presTurnoutChartPanel" open>
+          <summary>
+            <div class="panel-icon">📈</div>
+            <h2 data-i18n="presidential_turnout">Presidential Turnout</h2>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div class="pres-chart-wrap">
+            <canvas id="presidentTurnoutChart" role="img" aria-label="Presidential votes trend"></canvas>
+          </div>
+        </details>
+
+        <!-- Historic winners (inizialmente nascosto se pochi dati) -->
+        <details class="panel" id="presHistoricPanelWrap" style="display:none;" open>
+          <summary>
+            <div class="panel-icon">🏆</div>
+            <h2 data-i18n="past_presidential_winners">Past Presidential Winners</h2>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div id="presHistoricPanel">
+            <table class="sim-table" style="margin-top:8px;">
+              <thead>
+                <tr>
+                  <th data-i18n="col_election">Election</th>
+                  <th data-i18n="col_winner">Winner</th>
+                  <th data-i18n="col_party">Party</th>
+                  <th data-i18n="col_votes">Votes</th>
+                  <th data-i18n="col_runner_up">Runner-up</th>
+                </tr>
+              </thead>
+              <tbody id="presHistoricBody"></tbody>
+            </table>
+          </div>
+        </details>
+
+        <!-- Simulator -->
+        <details class="panel" id="presSimPanelWrap" style="display:none;" open>
+          <summary>
+            <div class="panel-icon">🧮</div>
+            <h2 data-i18n="presidential_simulator">Presidential Simulator</h2>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div id="presSimPanel">
+            <div class="pres-section-head"
+              style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+              <span data-i18n="presidential_simulator">🧮 Presidential simulator</span>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <label class="sim-slider-label" data-i18n="expected_voters">Expected voters</label>
+                <input type="number" id="presSimVoters" class="sim-input-voters" placeholder="e.g. 1000" min="1"
+                  step="1">
+              </div>
+            </div>
+            <div class="sim-historic-row" style="margin-top:10px;">
+              <span class="sim-section-label" data-i18n="historic_pres_turnout">📊 Historic presidential turnout</span>
+              <div id="presSimHistRef" class="sim-chips"></div>
+            </div>
+            <div class="sim-metrics" style="margin-top:10px;">
+              <div class="sim-metric">
+                <div class="sim-metric-label" data-i18n="avg_hist_votes">Avg hist. votes</div>
+                <div class="sim-metric-val" id="presSimAvgHist">—</div>
+              </div>
+              <div class="sim-metric hl">
+                <div class="sim-metric-label" data-i18n="expected_voters">Expected voters</div>
+                <div class="sim-metric-val" id="presSimExpected">—</div>
+              </div>
+              <div class="sim-metric pres">
+                <div class="sim-metric-label" data-i18n="votes_to_win">Votes to win (50%+1)</div>
+                <div class="sim-metric-val" id="presSimToWin">—</div>
+              </div>
+            </div>
+            <table class="sim-table" style="margin-top:12px;">
+              <thead>
+                <tr>
+                  <th data-i18n="col_candidate">Candidate</th>
+                  <th data-i18n="col_current_votes">Current votes</th>
+                  <th data-i18n="col_vote_share">Vote share</th>
+                  <th data-i18n="col_proj_share">Proj. share</th>
+                  <th data-i18n="col_still_needed">Still needed</th>
+                </tr>
+              </thead>
+              <tbody id="presSimBody"></tbody>
+            </table>
+            <div class="sim-footer" style="margin-top:8px;" data-i18n="pres_sim_note">⚠️ Projection based on current
+              votes scaled to expected turnout.</div>
+          </div>
+        </details>
+
+      </div>
+    </div>
+
+    <!-- ══ CONGRESS VIEW (con pannelli collassabili) ══ -->
+    <div id="congress-view" style="display:none;">
+
+      <div class="main-grid" id="congressMainGrid">
+        <!-- Parliament Composition (collassabile) -->
+        <details class="panel" open>
+          <summary>
+            <div class="panel-icon">🏛</div>
+            <h2 style="white-space: nowrap;" data-i18n="parliament_composition">Parliament Composition</h2>
+            <span class="badge-count" id="badgeCount" style="margin-left:0;">—</span>
+            <span class="badge-status" id="congressStatusBadge" style="margin-left:8px;"></span>
+            <div class="panel-actions" style="margin-left:auto; display:flex; gap:6px; flex-shrink:0;">
+              <button class="action-btn" id="fullscreenBtn" data-i18n-title="fullscreen_title"
+                title="Fullscreen">⛶</button>
+              <button class="action-btn" id="exportCsvBtn" title="Export CSV"><span data-i18n="export_csv">📥 Export
+                  CSV</span></button>
+            </div>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div id="congressCountdown" class="pres-countdown" style="margin-bottom:12px;"></div>
+          <div id="parliamentSkeleton" class="parliament-skeleton">
+            <div class="parl-sk-arc"></div>
+            <div class="parl-sk-dots"></div>
+          </div>
+          <div id="parliamentContainer" class="parliament-wrap" style="display:none;"></div>
+          <div id="legendContainer" class="parl-legend"></div>
+        </details>
+
+        <!-- Parliament Detail (collassabile) -->
+        <details class="panel" open>
+          <summary>
+            <div class="panel-icon">📋</div>
+            <h2 data-i18n="parliament_detail">Parliament Detail</h2>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div id="tableSkeleton" class="table-skeleton">
+            <div class="sk-row sk-header"></div>
+            <div class="sk-row"></div>
+            <div class="sk-row"></div>
+            <div class="sk-row"></div>
+            <div class="sk-row"></div>
+            <div class="sk-row"></div>
+          </div>
+          <table class="party-table" id="partyTable" style="display:none;">
+            <thead>
+              <tr>
+                <th data-i18n="col_party">Party</th>
+                <th style="width:130px" data-i18n="col_seats">Seats</th>
+                <th data-i18n="col_members">Members</th>
+                <th data-i18n="col_votes">Votes</th>
+                <th data-i18n="col_pct_seats">% seats</th>
+                <th data-i18n="col_pct_votes">% votes</th>
+                <th data-i18n="col_leader">Leader</th>
+              </tr>
+            </thead>
+            <tbody id="partyTableBody"></tbody>
+          </table>
+        </details>
+      </div>
+
+      <!-- Charts row: tre pannelli collassabili -->
+      <div class="charts-row" id="congressChartsRow" style="margin-top:16px;">
+        <!-- Seats Distribution -->
+        <details class="panel" open>
+          <summary>
+            <div class="panel-icon">🥧</div>
+            <h2 data-i18n="seats_distribution">Seats Distribution</h2>
+            <span style="font-size:.68rem;color:var(--text3);margin-left:6px;" data-i18n="click_slice_hide">click slice
+              to hide</span>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div class="chart-inner" id="seatsChartWrap">
+            <div class="sk-chart-block"></div>
+            <canvas id="seatsChart" role="img" style="display:none;"></canvas>
+          </div>
+        </details>
+
+        <!-- Votes % Distribution -->
+        <details class="panel" open>
+          <summary>
+            <div class="panel-icon">🗳️</div>
+            <h2 data-i18n="vote_share_pct">Vote Share %</h2>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div class="chart-inner" id="votesChartWrap">
+            <div class="sk-chart-block"></div>
+            <canvas id="votesChart" role="img" style="display:none;"></canvas>
+          </div>
+        </details>
+
+        <!-- Members per Party — Parliament -->
+        <details class="panel" open>
+          <summary>
+            <div class="panel-icon">📊</div>
+            <h2 data-i18n="members_per_party">Members per Party</h2>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div class="chart-inner" id="membersChartWrap">
+            <div class="sk-chart-block"></div>
+            <canvas id="membersChart" role="img" style="display:none;"></canvas>
+          </div>
+        </details>
+      </div>
+
+      <!-- All parties by members (collassabile) -->
+      <div class="single-chart-row" id="allPartiesRow" style="margin-top:16px;">
+        <details class="panel all-parties-panel" open>
+          <summary>
+            <div class="panel-icon">🗂</div>
+            <h2 data-i18n="all_parties_by_members">All parties by members</h2>
+            <span class="badge-count" id="badgeAllParties">—</span>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div class="ap-chart-outer" id="allPartiesChartWrap">
+            <div class="sk-chart-block" style="height:200px;"></div>
+            <canvas id="allPartiesChart" role="img" style="display:none;"></canvas>
+          </div>
+        </details>
+      </div>
+
+      <!-- Electoral Simulator (collassabile, con id per JavaScript) -->
+      <details class="panel sim-panel" id="simulatorPanel" style="display:none; margin-top:16px;" open>
+        <summary>
+          <div class="panel-icon">🧮</div>
+          <h2 data-i18n="electoral_simulator">Electoral Simulator</h2>
+          <span class="badge-count" id="simBadge" style="margin-left:8px;">Projection</span>
+          <span class="details-marker">▼</span>
+        </summary>
+
+        <!-- Controls row -->
+        <div class="sim-controls-row">
+          <div class="sim-control-group">
+            <label class="sim-control-label" data-i18n="expected_voters">🗳 Expected voters</label>
+            <input type="number" id="simExpectedVotersInput" class="sim-input-voters" value="" placeholder="e.g. 1000"
+              min="1" step="1">
+          </div>
+          <div class="sim-control-group">
+            <label class="sim-control-label" data-i18n="congress_seats">🏛 Congress seats</label>
+            <input type="number" id="simSeatsInput" class="sim-input-voters" value="" placeholder="e.g. 30" min="5"
+              max="50" step="1">
+            <span class="sim-control-hint" id="simSeatsHint"></span>
+          </div>
+        </div>
+
+        <!-- Historic turnout chips -->
+        <div class="sim-historic-row">
+          <span class="sim-section-label" data-i18n="historic_turnout">📊 Historic turnout</span>
+          <div id="simHistoricRef" class="sim-chips"></div>
+        </div>
+
+        <!-- Key metrics (compact 2-row grid) -->
+        <div class="sim-kpi-grid">
+          <!-- Row 1: population pill (compact) -->
+          <div class="sim-kpi-pop">
+            <span class="sim-kpi-pop-label" data-i18n="population_label">👥 Population</span>
+            <span class="sim-kpi-pop-val" id="simPopulation">—</span>
+            <span class="sim-kpi-pop-hint" id="simAvgTurnout"></span>
+          </div>
+          <!-- Row 2: 4 key numbers -->
+          <div class="sim-kpi-row">
+            <div class="sim-kpi sim-kpi-hl">
+              <div class="sim-kpi-val" id="simAvgVotes">—</div>
+              <div class="sim-kpi-label" data-i18n="congress_seats">Congress seats</div>
+            </div>
+            <div class="sim-kpi sim-kpi-hl">
+              <div class="sim-kpi-val" id="simExpVoters">—</div>
+              <div class="sim-kpi-label" data-i18n="expected_voters">Expected voters</div>
+            </div>
+            <div class="sim-kpi">
+              <div class="sim-kpi-val" id="simVotesPerSeat">—</div>
+              <div class="sim-kpi-label" data-i18n="votes_per_seat">Votes / seat</div>
+            </div>
+            <div class="sim-kpi sim-kpi-pres">
+              <div class="sim-kpi-val" id="simVotesToWin">—</div>
+              <div class="sim-kpi-label" data-i18n="to_win_presidency">To win presidency</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Projection cards -->
+        <div class="sim-proj-label">
+          <span class="sim-section-label" data-i18n="seat_projections">📐 Seat projections — based on last election vote
+            %</span>
+          <span class="sim-proj-basis" id="simProjBasis"></span>
+        </div>
+        <div id="simPartyCards" class="sim-party-cards"></div>
+
+        <!-- Mini parliament preview -->
+        <div id="simParliamentWrap" class="sim-parliament-wrap" style="display:none;">
+          <div class="sim-section-label" style="margin-bottom:8px;" data-i18n="parliament_preview">🏛 Parliament preview
+          </div>
+          <div id="simParliamentContainer" class="sim-parliament-container"></div>
+          <div id="simParliamentLegend" class="parl-legend" style="margin-top:8px;"></div>
+        </div>
+
+        <div class="sim-footer" data-i18n="sim_footer_congress">⚠️ Projection based on last election vote share. Minimum
+          5 seats total; seats scale with population (pop/20+2, max 200). You can override the seat count above.</div>
+      </details>
+
+    </div><!-- /congress-view -->
+    <div id="party-view" style="display:none;">
+      <div class="party-view-grid">
+        <!-- Party selector panel -->
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-icon">🎭</div>
+            <h2 data-i18n="party_label">Party</h2>
+            <button id="refreshPartyBtn" class="btn-refresh-party" data-i18n-title="refresh_title"
+              title="Refresh party data"><span data-i18n="refresh">↻ Refresh</span></button>
+          </div>
+          <div class="party-selector-wrap">
+            <select id="partySelect">
+              <option value="" data-i18n="select_party_placeholder">— Select a party —</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Party details panels -->
+        <details class="panel" open>
+          <summary>
+            <div class="panel-icon">📋</div>
+            <h2 data-i18n="overview">Overview</h2>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div id="partyOverview" class="party-overview">
+            <p data-i18n="select_party_hint">Select a party to see details.</p>
+          </div>
+        </details>
+
+        <details class="panel" open>
+          <summary>
+            <div class="panel-icon">👥</div>
+            <h2><span data-i18n="members">Members</span> <span id="memberCountBadge" class="badge-count">—</span></h2>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div id="partyMembersContainer" class="party-member-list"></div>
+        </details>
+
+        <details class="panel" open>
+          <summary>
+            <div class="panel-icon">🏛️</div>
+            <h2 data-i18n="elected_last_congress">Elected in last Congress</h2>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div id="partyElectedContainer" class="party-member-list"></div>
+        </details>
+
+        <details class="panel" open>
+          <summary>
+            <div class="panel-icon">👑</div>
+            <h2 data-i18n="leadership_roles">Leadership & Roles</h2>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div id="partyLeadershipContainer"></div>
+        </details>
+
+        <!-- ✅ PANNELLO MEMBER ORGANIZER – CORRETTO (senza duplicati) -->
+        <details class="panel" open>
+          <summary>
+            <div class="panel-icon">🗳️</div>
+            <h2 data-i18n="member_organizer">Member Organizer – Endorsement Groups</h2>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div class="member-organizer-new">
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+              <button id="addEndorsementGroupBtn" class="btn-load" data-i18n="new_candidate">+ New candidate</button>
+              <button id="autoAssignSupportersBtn" class="btn-load"
+                style="background: linear-gradient(135deg, #22c55e, #16a34a);" data-i18n="auto_assign">🤖 Auto-assign
+                supporters</button>
+            </div>
+            <div id="endorsementGroupsContainer" class="endorsement-groups"></div>
+          </div>
+        </details>
+      </div>
+    </div>
+    <!-- FULLSCREEN OVERLAY (invariato) -->
+    <div id="parliamentOverlay" class="parl-overlay">
+      <div class="parl-overlay-box">
+        <div class="parl-overlay-head">
+          <span class="parl-overlay-title">🏛 Parliament — Fullscreen</span>
+          <button id="overlayClose" class="overlay-close-btn">✕</button>
+        </div>
+        <div id="parliamentOverlayContent" class="parl-overlay-content"></div>
+      </div>
+    </div>
+  </div>
+  <!-- SENATE VIEW — horizontal semicircle + right panel -->
+  <div id="senateOverlay" class="senate-overlay">
+    <div class="senate-stage">
+      <!-- Header will be built by SenateView -->
+      <div class="senate-header" style="display:none;"></div>
+      <!-- Title and controls are moved by SenateView -->
+      <div class="senate-title-wrap" style="display:none;">
+        <div class="senate-title" id="senateTitle">🏛 Parliament</div>
+        <div class="senate-subtitle" id="senateSubtitle" data-i18n="senate_subtitle_loading">— loading assembly —</div>
+      </div>
+      <div class="senate-controls" style="display:none;">
+        <select id="senateCountrySelect" data-i18n-aria="senate_country_select_aria" aria-label="Filter by country"></select>
+        <select id="senateElectionSelect" data-i18n-aria="senate_election_select_aria" aria-label="Filter by election"></select>
+        <input type="text" id="senateSearch" data-i18n-placeholder="senate_search_placeholder"
+          data-i18n-aria="senate_search_aria" placeholder="🔍 Search senator..." aria-label="Search senators">
+        <select id="senatePartyFilter" data-i18n-aria="senate_filter_aria" aria-label="Filter by party">
+          <option value="all" data-i18n="all_parties">All parties</option>
+        </select>
+        <button id="senateViewToggle" data-i18n="senate_table_toggle">📋 Table</button>
+        <button id="senateCloseBtn" class="senate-close-btn" data-i18n-aria="senate_close_aria"
+          aria-label="Close">✕</button>
+      </div>
+      <!-- CENTER: semicircle (senators) -->
+      <div id="senateSeats" class="senate-seats"></div>
+      <!-- Empty state -->
+      <div id="senateEmpty" class="senate-empty" style="display:none;">
+        <span data-i18n="senate_empty_title">No elected assembly loaded yet.</span><br>
+        <span data-i18n="senate_empty_body">Load a congress election first, then reopen Senate View.</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:center;padding:12px 0 4px;opacity:.35;font-size:.7rem;">
+    <button id="clearCacheBtn" style="background:none;border:none;color:#535e72;cursor:pointer;font-size:.7rem;"
+      data-i18n="clear_cache">⌫ Clear cache</button>
+  </div>
+
+  <div class="tooltip" id="tooltip"></div>
+`;
+}

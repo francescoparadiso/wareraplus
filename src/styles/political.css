@@ -1,3 +1,32 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ Fase 2 — SCOPING sotto #wp-political-root
+   ------------------------------------------------------------------
+   L'originale (public/political/style.css) girava come documento
+   iframe a sé stante: ogni selettore era implicitamente scoped a quel
+   documento. Fuori dall'iframe (Stage 5, DOM in-page condiviso con la
+   shell) ogni selettore qui dentro si applicherebbe a TUTTA la pagina.
+
+   Verificato DAL VIVO (non solo per ipotesi): il primo tentativo di
+   scoping "manuale" (solo :root/reset/body, lasciando invariate le
+   ~3100 righe di selettori di classe assumendo fossero già innocue)
+   ha rotto silenziosamente lo stile della legenda della mappa
+   (#dynamic-legend, che ha classe `panel` — la STESSA classe che
+   Political usa pesantemente per i suoi pannelli). shell.css lo
+   segnala esplicitamente in testa: ".panel già usato pesantemente da
+   entrambi i tool originali" — collisione preesistente, invisibile
+   finché Political girava in iframe.
+
+   Rimedio: OGNI selettore di questo file (fuori da @keyframes, che
+   restano intatti) è prefissato con `#wp-political-root ` via uno
+   script postcss (non a mano — 708 regole, troppo grande e rischioso
+   da editare manualmente senza introdurre errori). :root -> il
+   contenitore stesso; body/body::after -> il contenitore stesso;
+   html{scroll-behavior:smooth} rimosso (proprietà di documento, non
+   scopabile a un div, guadagno percepito minimo). Tutto il resto
+   (~3100 righe) è INVARIATO nel contenuto delle dichiarazioni,
+   cambiato SOLO nel selettore.
+   ══════════════════════════════════════════════════════════════ */
+
 /* Google Fonts usati da Political (Playfair Display, Sora) — nell'originale
    caricati eagerly da public/political/index.html <head> per ogni visita
    dell'iframe; qui, dato che questo CSS entra nel chunk caricato via
@@ -6,30 +35,6 @@
    dell'intera app — miglioramento, non regressione. */
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Sora:wght@300;400;500;600&display=swap');
 
-/* ══════════════════════════════════════════════════════════════
-   WarEra+ Fase 2 — SCOPING sotto #wp-political-root
-   ------------------------------------------------------------------
-   L'originale (public/political/style.css) girava come documento
-   iframe a sé stante: il reset universale (*{margin:0;padding:0}) e
-   la regola `body{...}` erano innocui perché applicati SOLO al
-   documento dell'iframe. Fuori dall'iframe (Stage 5, DOM in-page
-   condiviso con la shell) quelle stesse regole si applicherebbero a
-   TUTTA la pagina (mappa, pannello nazione, legenda), sovrascrivendo
-   src/styles/shell.css e src/styles/diplomacy.css.
-
-   Le uniche righe toccate in questo file sono queste in testa (:root,
-   il reset universale, body, body::after — più i duplicati "smooth
-   theme transition" e "padding-top ticker" più sotto, marcati inline)
-   e le variabili :root sparse più giù (anch'esse spostate sotto
-   #wp-political-root per restare scoped anche loro). Tutte le altre
-   ~3100 righe sono selettori di classe già naturalmente scoped
-   (quelle classi non esistono nel resto della shell) — NON toccate.
-
-   `html{scroll-behavior:smooth}` non è stato portato: è una proprietà
-   globale del documento (non esprimibile scoped a un div), il
-   guadagno percepito era minimo, il rischio di un diff "a sorpresa"
-   sul comportamento di scroll dell'intera app non valeva la pena.
-   ══════════════════════════════════════════════════════════════ */
 #wp-political-root {
   --bg:#07090d; --s1:#0e1117; --s2:#141820; --s3:#1a2030;
   --bd:rgba(255,255,255,0.06); --bd2:rgba(255,255,255,0.11); --bd3:rgba(255,255,255,0.18);
@@ -39,20 +44,20 @@
   --r:10px; --r2:6px;
 }
 #wp-political-root, #wp-political-root *, #wp-political-root *::before, #wp-political-root *::after{margin:0;padding:0;box-sizing:border-box;}
-#wp-political-root{background:var(--bg);color:var(--text);font-family:'Sora',sans-serif;font-size:14px;min-height:100vh;overflow-x:hidden;position:relative;}
+#wp-political-root{background:var(--bg);color:var(--text);font-family:'Sora',sans-serif;font-size:14px;min-height:100vh;overflow-x:hidden;}
 #wp-political-root::after{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");pointer-events:none;z-index:0;}
 
-.app{max-width:1320px;margin:0 auto;padding:28px 20px;position:relative;z-index:1;}
+#wp-political-root .app{max-width:1320px;margin:0 auto;padding:28px 20px;position:relative;z-index:1;}
 
 /* ── HEADER ── */
-.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:18px;border-bottom:1px solid var(--bd);flex-wrap:wrap;gap:14px;}
-.header-brand{display:flex;align-items:center;gap:12px;}
-.header-logo{width:42px;height:42px;background:linear-gradient(135deg,rgba(197,150,74,.18),rgba(197,150,74,.35));border:1px solid rgba(197,150,74,.4);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 0 20px rgba(197,150,74,.08);}
-.header-title{font-family:'Playfair Display',serif;font-size:1.55rem;font-weight:700;letter-spacing:-.3px;}
-.header-sub{font-size:.75rem;color:var(--text2);margin-top:1px;letter-spacing:.3px;}
-.header-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+#wp-political-root .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:18px;border-bottom:1px solid var(--bd);flex-wrap:wrap;gap:14px;}
+#wp-political-root .header-brand{display:flex;align-items:center;gap:12px;}
+#wp-political-root .header-logo{width:42px;height:42px;background:linear-gradient(135deg,rgba(197,150,74,.18),rgba(197,150,74,.35));border:1px solid rgba(197,150,74,.4);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 0 20px rgba(197,150,74,.08);}
+#wp-political-root .header-title{font-family:'Playfair Display',serif;font-size:1.55rem;font-weight:700;letter-spacing:-.3px;}
+#wp-political-root .header-sub{font-size:.75rem;color:var(--text2);margin-top:1px;letter-spacing:.3px;}
+#wp-political-root .header-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 
-.select-wrap select{
+#wp-political-root .select-wrap select{
   background:var(--s2);border:1px solid var(--bd2);border-radius:var(--r2);
   color:var(--text);font-family:inherit;font-size:.85rem;
   padding:8px 28px 8px 12px;outline:none;cursor:pointer;
@@ -61,29 +66,29 @@
   background-repeat:no-repeat;background-position:right 10px center;
   min-width:230px;transition:border-color .2s;
 }
-.select-wrap select:focus{border-color:var(--gold);}
-.select-wrap select option{background:#141820;}
+#wp-political-root .select-wrap select:focus{border-color:var(--gold);}
+#wp-political-root .select-wrap select option{background:#141820;}
 
-.or-divider{color:var(--text3);font-size:.78rem;}
-.input-wrap input{background:var(--s2);border:1px solid var(--bd2);border-radius:var(--r2);color:var(--text);font-family:inherit;font-size:.85rem;padding:8px 12px;width:260px;outline:none;transition:border-color .2s,box-shadow .2s;}
-.input-wrap input::placeholder{color:var(--text3);}
-.input-wrap input:focus{border-color:var(--gold);box-shadow:0 0 0 2px rgba(197,150,74,.12);}
+#wp-political-root .or-divider{color:var(--text3);font-size:.78rem;}
+#wp-political-root .input-wrap input{background:var(--s2);border:1px solid var(--bd2);border-radius:var(--r2);color:var(--text);font-family:inherit;font-size:.85rem;padding:8px 12px;width:260px;outline:none;transition:border-color .2s,box-shadow .2s;}
+#wp-political-root .input-wrap input::placeholder{color:var(--text3);}
+#wp-political-root .input-wrap input:focus{border-color:var(--gold);box-shadow:0 0 0 2px rgba(197,150,74,.12);}
 
-.badge-status{font-size:.72rem;padding:4px 10px;border-radius:20px;font-weight:600;letter-spacing:.3px;background:rgba(61,190,122,.1);color:var(--green);border:1px solid rgba(61,190,122,.25);transition:.3s;}
-.badge-status.loading{background:rgba(197,150,74,.1);color:var(--gold2);border-color:rgba(197,150,74,.25);}
-.badge-status.error{background:rgba(224,82,82,.1);color:var(--red);border-color:rgba(224,82,82,.25);}
+#wp-political-root .badge-status{font-size:.72rem;padding:4px 10px;border-radius:20px;font-weight:600;letter-spacing:.3px;background:rgba(61,190,122,.1);color:var(--green);border:1px solid rgba(61,190,122,.25);transition:.3s;}
+#wp-political-root .badge-status.loading{background:rgba(197,150,74,.1);color:var(--gold2);border-color:rgba(197,150,74,.25);}
+#wp-political-root .badge-status.error{background:rgba(224,82,82,.1);color:var(--red);border-color:rgba(224,82,82,.25);}
 
-.btn-load{background:linear-gradient(135deg,var(--gold),var(--gold2));border:none;color:#07090d;padding:8px 18px;border-radius:var(--r2);font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer;letter-spacing:.2px;transition:opacity .2s,transform .15s,box-shadow .2s;box-shadow:0 2px 12px rgba(197,150,74,.25);}
-.btn-load:hover{opacity:.9;transform:translateY(-1px);box-shadow:0 4px 20px rgba(197,150,74,.35);}
-.btn-load:active{transform:scale(.97);}
-.btn-load:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+#wp-political-root .btn-load{background:linear-gradient(135deg,var(--gold),var(--gold2));border:none;color:#07090d;padding:8px 18px;border-radius:var(--r2);font-family:inherit;font-size:.85rem;font-weight:700;cursor:pointer;letter-spacing:.2px;transition:opacity .2s,transform .15s,box-shadow .2s;box-shadow:0 2px 12px rgba(197,150,74,.25);}
+#wp-political-root .btn-load:hover{opacity:.9;transform:translateY(-1px);box-shadow:0 4px 20px rgba(197,150,74,.35);}
+#wp-political-root .btn-load:active{transform:scale(.97);}
+#wp-political-root .btn-load:disabled{opacity:.4;cursor:not-allowed;transform:none;}
 
 /* ── SKELETON ANIMATION ── */
 @keyframes shimmer{
   0%{background-position:-400px 0}
   100%{background-position:400px 0}
 }
-.sk-base{
+#wp-political-root .sk-base{
   background:linear-gradient(90deg, var(--s2) 25%, var(--s3) 50%, var(--s2) 75%);
   background-size:800px 100%;
   animation:shimmer 1.6s infinite;
@@ -91,7 +96,7 @@
 }
 
 /* Stats skeleton */
-.skeleton-val{
+#wp-political-root .skeleton-val{
   position:relative; color:transparent;
   background:linear-gradient(90deg,var(--s2) 25%,var(--s3) 50%,var(--s2) 75%);
   background-size:800px 100%;
@@ -99,18 +104,18 @@
   border-radius:6px;
   min-width:40px; display:inline-block;
 }
-.skeleton-val.loaded{
+#wp-political-root .skeleton-val.loaded{
   background:none; animation:none;
   color:inherit;
 }
 
 /* Parliament skeleton */
-.parliament-skeleton{
+#wp-political-root .parliament-skeleton{
   width:100%; aspect-ratio:16/9;
   display:flex;align-items:center;justify-content:center;
   position:relative;overflow:hidden;
 }
-.parl-sk-arc{
+#wp-political-root .parl-sk-arc{
   width:80%;aspect-ratio:2/1;
   border-top-left-radius:999px;border-top-right-radius:999px;
   border:3px solid var(--s3);border-bottom:none;
@@ -120,91 +125,91 @@
 }
 
 /* Table skeleton */
-.table-skeleton{display:flex;flex-direction:column;gap:8px;padding:4px 0;}
-.sk-row{
+#wp-political-root .table-skeleton{display:flex;flex-direction:column;gap:8px;padding:4px 0;}
+#wp-political-root .sk-row{
   height:36px;border-radius:6px;
   background:linear-gradient(90deg,var(--s2) 25%,var(--s3) 50%,var(--s2) 75%);
   background-size:800px 100%;animation:shimmer 1.6s infinite;
 }
-.sk-row.sk-header{height:24px;opacity:.6;}
+#wp-political-root .sk-row.sk-header{height:24px;opacity:.6;}
 
 /* Chart skeleton */
-.sk-chart-block{
+#wp-political-root .sk-chart-block{
   width:100%;height:100%;min-height:180px;border-radius:8px;
   background:linear-gradient(90deg,var(--s2) 25%,var(--s3) 50%,var(--s2) 75%);
   background-size:800px 100%;animation:shimmer 1.6s infinite;
 }
 
 /* ── STATS ── */
-.stats-row{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px;}
-.stat{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:14px 16px;transition:border-color .2s;}
-.stat:hover{border-color:var(--bd2);}
-.stat.hl{border-color:rgba(197,150,74,.3);}
-.stat-label{font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px;}
-.stat-value{font-family:'Playfair Display',serif;font-size:1.55rem;font-weight:700;line-height:1;transition:color .3s;}
-.stat.hl .stat-value{color:var(--gold2);}
-.stat-sub{font-size:.7rem;color:var(--text2);margin-top:3px;}
+#wp-political-root .stats-row{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px;}
+#wp-political-root .stat{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:14px 16px;transition:border-color .2s;}
+#wp-political-root .stat:hover{border-color:var(--bd2);}
+#wp-political-root .stat.hl{border-color:rgba(197,150,74,.3);}
+#wp-political-root .stat-label{font-size:.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px;}
+#wp-political-root .stat-value{font-family:'Playfair Display',serif;font-size:1.55rem;font-weight:700;line-height:1;transition:color .3s;}
+#wp-political-root .stat.hl .stat-value{color:var(--gold2);}
+#wp-political-root .stat-sub{font-size:.7rem;color:var(--text2);margin-top:3px;}
 
 /* ── PANEL ── */
-.panel{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:20px;transition:border-color .2s;animation:fadeIn .35s ease both;}
-.panel:hover{border-color:var(--bd2);}
-.panel-head{display:flex;align-items:center;gap:9px;margin-bottom:16px;padding-bottom:13px;border-bottom:1px solid var(--bd);flex-wrap:wrap;}
-.panel-icon{width:26px;height:26px;border-radius:5px;background:var(--s2);border:1px solid var(--bd2);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
-.panel-head h2{font-family:'Playfair Display',serif;font-size:.95rem;font-weight:600;}
-.badge-count{font-size:.68rem;color:var(--text2);background:var(--s2);border:1px solid var(--bd2);padding:2px 7px;border-radius:20px;white-space:nowrap;}
+#wp-political-root .panel{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:20px;transition:border-color .2s;animation:fadeIn .35s ease both;}
+#wp-political-root .panel:hover{border-color:var(--bd2);}
+#wp-political-root .panel-head{display:flex;align-items:center;gap:9px;margin-bottom:16px;padding-bottom:13px;border-bottom:1px solid var(--bd);flex-wrap:wrap;}
+#wp-political-root .panel-icon{width:26px;height:26px;border-radius:5px;background:var(--s2);border:1px solid var(--bd2);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
+#wp-political-root .panel-head h2{font-family:'Playfair Display',serif;font-size:.95rem;font-weight:600;}
+#wp-political-root .badge-count{font-size:.68rem;color:var(--text2);background:var(--s2);border:1px solid var(--bd2);padding:2px 7px;border-radius:20px;white-space:nowrap;}
 
 /* ── TIMELINE ── */
-.timeline-panel{}
-.timeline-chart-wrap{position:relative;height:160px;margin-top:4px;}
-.timeline-footer{margin-top:10px;padding-top:8px;border-top:1px solid var(--bd);}
-.timeline-tip{font-size:.72rem;color:var(--text3);}
-.timeline-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-left:auto;}
-.tl-leg-item{display:flex;align-items:center;gap:5px;font-size:.72rem;color:var(--text2);cursor:pointer;transition:color .15s;}
-.tl-leg-item:hover{color:var(--text);}
-.tl-leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+#wp-political-root .timeline-panel{}
+#wp-political-root .timeline-chart-wrap{position:relative;height:160px;margin-top:4px;}
+#wp-political-root .timeline-footer{margin-top:10px;padding-top:8px;border-top:1px solid var(--bd);}
+#wp-political-root .timeline-tip{font-size:.72rem;color:var(--text3);}
+#wp-political-root .timeline-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-left:auto;}
+#wp-political-root .tl-leg-item{display:flex;align-items:center;gap:5px;font-size:.72rem;color:var(--text2);cursor:pointer;transition:color .15s;}
+#wp-political-root .tl-leg-item:hover{color:var(--text);}
+#wp-political-root .tl-leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
 
 /* ── PRESIDENTIAL ── */
-#president-view{margin-bottom:16px;}
-.pres-badge-live{background:rgba(224,82,82,.15)!important;color:#f87171!important;border-color:rgba(224,82,82,.4)!important;}
-.pres-badge-done{background:rgba(59,130,246,.15)!important;color:#60a5fa!important;border-color:rgba(59,130,246,.4)!important;}
-.pres-badge-pending{background:rgba(234,179,8,.15)!important;color:#facc15!important;border-color:rgba(234,179,8,.4)!important;}
-.pres-winner{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,rgba(197,150,74,.1),rgba(197,150,74,.05));border:1px solid rgba(197,150,74,.3);border-radius:8px;padding:14px 18px;margin-bottom:20px;gap:12px;}
-.pres-winner-left{display:flex;align-items:center;gap:12px;}
-.pres-winner-avatar{width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid rgba(197,150,74,.5);}
-.pres-winner-initials{display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:700;background:rgba(197,150,74,.2);color:var(--gold2);}
-.pres-winner-label{font-size:.72rem;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;}
-.pres-winner-name{font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:700;}
-.pres-winner-votes{text-align:right;}
-.pres-winner-vcount{font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;color:var(--gold2);}
-.pres-winner-vsub{font-size:.72rem;color:var(--text2);}
-.pres-race{display:flex;flex-direction:column;gap:10px;margin-bottom:20px;}
-.race-row{display:flex;align-items:center;gap:10px;background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;transition:border-color .15s;}
-.race-row:hover{border-color:var(--bd2);}
-.race-row.race-winner{border-color:rgba(197,150,74,.35);background:linear-gradient(135deg,rgba(197,150,74,.07),var(--s2));}
-.race-rank{font-size:.8rem;font-weight:700;color:var(--text3);min-width:18px;text-align:center;}
-.race-row.race-winner .race-rank{color:var(--gold);}
-.race-avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;border:1px solid var(--bd2);flex-shrink:0;}
-.race-initials{display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;}
-.race-info{flex:1;min-width:0;}
-.race-name{font-size:.85rem;font-weight:500;margin-bottom:5px;display:flex;align-items:center;gap:6px;}
-.race-win-chip{font-size:.65rem;background:rgba(197,150,74,.2);color:var(--gold2);border:1px solid rgba(197,150,74,.35);border-radius:4px;padding:1px 6px;font-weight:600;}
-.race-bar-wrap{height:5px;background:var(--s3);border-radius:3px;overflow:hidden;}
-.race-bar{height:100%;border-radius:3px;transition:width .6s ease;}
-.race-stats{text-align:right;flex-shrink:0;}
-.race-votes{font-size:.85rem;font-weight:600;}
-.race-pct{font-size:.72rem;color:var(--text2);}
-.pres-chart-wrap{position:relative;height:200px;margin-bottom:16px;}
-#presidentTurnoutChart {
+#wp-political-root #president-view{margin-bottom:16px;}
+#wp-political-root .pres-badge-live{background:rgba(224,82,82,.15)!important;color:#f87171!important;border-color:rgba(224,82,82,.4)!important;}
+#wp-political-root .pres-badge-done{background:rgba(59,130,246,.15)!important;color:#60a5fa!important;border-color:rgba(59,130,246,.4)!important;}
+#wp-political-root .pres-badge-pending{background:rgba(234,179,8,.15)!important;color:#facc15!important;border-color:rgba(234,179,8,.4)!important;}
+#wp-political-root .pres-winner{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,rgba(197,150,74,.1),rgba(197,150,74,.05));border:1px solid rgba(197,150,74,.3);border-radius:8px;padding:14px 18px;margin-bottom:20px;gap:12px;}
+#wp-political-root .pres-winner-left{display:flex;align-items:center;gap:12px;}
+#wp-political-root .pres-winner-avatar{width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid rgba(197,150,74,.5);}
+#wp-political-root .pres-winner-initials{display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:700;background:rgba(197,150,74,.2);color:var(--gold2);}
+#wp-political-root .pres-winner-label{font-size:.72rem;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;}
+#wp-political-root .pres-winner-name{font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:700;}
+#wp-political-root .pres-winner-votes{text-align:right;}
+#wp-political-root .pres-winner-vcount{font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;color:var(--gold2);}
+#wp-political-root .pres-winner-vsub{font-size:.72rem;color:var(--text2);}
+#wp-political-root .pres-race{display:flex;flex-direction:column;gap:10px;margin-bottom:20px;}
+#wp-political-root .race-row{display:flex;align-items:center;gap:10px;background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;transition:border-color .15s;}
+#wp-political-root .race-row:hover{border-color:var(--bd2);}
+#wp-political-root .race-row.race-winner{border-color:rgba(197,150,74,.35);background:linear-gradient(135deg,rgba(197,150,74,.07),var(--s2));}
+#wp-political-root .race-rank{font-size:.8rem;font-weight:700;color:var(--text3);min-width:18px;text-align:center;}
+#wp-political-root .race-row.race-winner .race-rank{color:var(--gold);}
+#wp-political-root .race-avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;border:1px solid var(--bd2);flex-shrink:0;}
+#wp-political-root .race-initials{display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;}
+#wp-political-root .race-info{flex:1;min-width:0;}
+#wp-political-root .race-name{font-size:.85rem;font-weight:500;margin-bottom:5px;display:flex;align-items:center;gap:6px;}
+#wp-political-root .race-win-chip{font-size:.65rem;background:rgba(197,150,74,.2);color:var(--gold2);border:1px solid rgba(197,150,74,.35);border-radius:4px;padding:1px 6px;font-weight:600;}
+#wp-political-root .race-bar-wrap{height:5px;background:var(--s3);border-radius:3px;overflow:hidden;}
+#wp-political-root .race-bar{height:100%;border-radius:3px;transition:width .6s ease;}
+#wp-political-root .race-stats{text-align:right;flex-shrink:0;}
+#wp-political-root .race-votes{font-size:.85rem;font-weight:600;}
+#wp-political-root .race-pct{font-size:.72rem;color:var(--text2);}
+#wp-political-root .pres-chart-wrap{position:relative;height:200px;margin-bottom:16px;}
+#wp-political-root #presidentTurnoutChart {
   height: 160px !important;
 }
-.pres-meta{display:flex;flex-wrap:wrap;gap:12px 24px;font-size:.78rem;color:var(--text2);padding-top:12px;border-top:1px solid var(--bd);}
-.pres-meta strong{color:var(--text);}
-.pres-meta-link{color:var(--gold);text-decoration:none;margin-left:auto;}
-.pres-meta-link:hover{color:var(--gold2);}
+#wp-political-root .pres-meta{display:flex;flex-wrap:wrap;gap:12px 24px;font-size:.78rem;color:var(--text2);padding-top:12px;border-top:1px solid var(--bd);}
+#wp-political-root .pres-meta strong{color:var(--text);}
+#wp-political-root .pres-meta-link{color:var(--gold);text-decoration:none;margin-left:auto;}
+#wp-political-root .pres-meta-link:hover{color:var(--gold2);}
 
 /* ── CONGRESS ── */
-.main-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:16px;margin-bottom:16px;}
-.parliament-wrap{
+#wp-political-root .main-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:16px;margin-bottom:16px;}
+#wp-political-root .parliament-wrap{
   position:relative;
   width:100%;
   overflow-x:auto;        /* ✅ Permette scroll orizzontale se necessario */
@@ -212,76 +217,76 @@
   -webkit-overflow-scrolling:touch;
   padding:8px 0 12px;     /* ✅ Spazio per scrollbar mobile */
 }
-.parliament-wrap svg{
+#wp-political-root .parliament-wrap svg{
   display:block;
   width:100%;
   height:auto;
   min-width:280px;        /* ✅ Minimo realistico per mobile */
   max-width:100%;         /* ✅ Non supera mai il container */
 }
-.parl-legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:14px;padding-top:12px;border-top:1px solid var(--bd);}
-.leg-item{display:flex;align-items:center;gap:5px;font-size:.75rem;color:var(--text2);cursor:default;transition:color .15s;line-height:1;}
-.leg-item:hover{color:var(--text);}
-.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-.leg-seats{background:var(--s2);color:var(--text3);padding:1px 5px;border-radius:3px;font-size:.68rem;}
+#wp-political-root .parl-legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:14px;padding-top:12px;border-top:1px solid var(--bd);}
+#wp-political-root .leg-item{display:flex;align-items:center;gap:5px;font-size:.75rem;color:var(--text2);cursor:default;transition:color .15s;line-height:1;}
+#wp-political-root .leg-item:hover{color:var(--text);}
+#wp-political-root .leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+#wp-political-root .leg-seats{background:var(--s2);color:var(--text3);padding:1px 5px;border-radius:3px;font-size:.68rem;}
 
 /* Party table */
-.party-table{width:100%;border-collapse:collapse;}
-.party-table thead tr{border-bottom:1px solid var(--bd2);}
-.party-table th{text-align:left;color:var(--text3);font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:0 8px 10px;}
-.party-table td{padding:8px;border-bottom:1px solid var(--bd);font-size:.82rem;color:var(--text);vertical-align:middle;}
-.party-table tbody tr{transition:background .15s;}
-.party-table tbody tr:hover td{background:var(--s2);}
-.party-table tbody tr:last-child td{border-bottom:none;}
-.party-color-bar{display:inline-block;width:3px;height:18px;border-radius:3px;margin-right:6px;vertical-align:middle;}
-.party-name-cell{display:flex;align-items:center;}
-.party-pct{font-size:.7rem;color:var(--text3);}
-.seats-bar-wrap{display:flex;align-items:center;gap:7px;}
-.seats-bar{flex:1;height:4px;background:var(--s3);border-radius:2px;overflow:hidden;}
-.seats-bar-fill{height:100%;border-radius:2px;transition:width .4s ease;}
-.seats-num{font-size:.8rem;font-weight:600;min-width:22px;text-align:right;}
-.leader-chip{display:inline-flex;align-items:center;gap:4px;background:var(--s2);border:1px solid var(--bd);border-radius:4px;padding:2px 7px;font-size:.72rem;color:var(--text2);}
+#wp-political-root .party-table{width:100%;border-collapse:collapse;}
+#wp-political-root .party-table thead tr{border-bottom:1px solid var(--bd2);}
+#wp-political-root .party-table th{text-align:left;color:var(--text3);font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:0 8px 10px;}
+#wp-political-root .party-table td{padding:8px;border-bottom:1px solid var(--bd);font-size:.82rem;color:var(--text);vertical-align:middle;}
+#wp-political-root .party-table tbody tr{transition:background .15s;}
+#wp-political-root .party-table tbody tr:hover td{background:var(--s2);}
+#wp-political-root .party-table tbody tr:last-child td{border-bottom:none;}
+#wp-political-root .party-color-bar{display:inline-block;width:3px;height:18px;border-radius:3px;margin-right:6px;vertical-align:middle;}
+#wp-political-root .party-name-cell{display:flex;align-items:center;}
+#wp-political-root .party-pct{font-size:.7rem;color:var(--text3);}
+#wp-political-root .seats-bar-wrap{display:flex;align-items:center;gap:7px;}
+#wp-political-root .seats-bar{flex:1;height:4px;background:var(--s3);border-radius:2px;overflow:hidden;}
+#wp-political-root .seats-bar-fill{height:100%;border-radius:2px;transition:width .4s ease;}
+#wp-political-root .seats-num{font-size:.8rem;font-weight:600;min-width:22px;text-align:right;}
+#wp-political-root .leader-chip{display:inline-flex;align-items:center;gap:4px;background:var(--s2);border:1px solid var(--bd);border-radius:4px;padding:2px 7px;font-size:.72rem;color:var(--text2);}
 
 /* Charts */
-.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
-.chart-inner{position:relative;height:220px;margin-top:8px;}
-.single-chart-row{display:grid;grid-template-columns:1fr;gap:16px;}
+#wp-political-root .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+#wp-political-root .chart-inner{position:relative;height:220px;margin-top:8px;}
+#wp-political-root .single-chart-row{display:grid;grid-template-columns:1fr;gap:16px;}
 
 /* All-parties horizontal chart */
-.all-parties-panel{}
-.ap-chart-outer{position:relative;width:100%;overflow-x:hidden;margin-top:4px;}
+#wp-political-root .all-parties-panel{}
+#wp-political-root .ap-chart-outer{position:relative;width:100%;overflow-x:hidden;margin-top:4px;}
 
 /* Tooltip */
-.tooltip{position:fixed;background:#0f1521;border:1px solid rgba(197,150,74,.35);padding:9px 13px;border-radius:7px;font-size:.78rem;color:var(--text);pointer-events:none;z-index:9999;opacity:0;transition:opacity .12s;white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,.5);backdrop-filter:blur(8px);}
-.tooltip .tt-party{color:var(--gold2);font-weight:600;margin-bottom:2px;}
-.tooltip .tt-user{color:var(--text);}
-.tooltip .tt-seat{color:var(--text2);font-size:.7rem;margin-top:1px;}
+#wp-political-root .tooltip{position:fixed;background:#0f1521;border:1px solid rgba(197,150,74,.35);padding:9px 13px;border-radius:7px;font-size:.78rem;color:var(--text);pointer-events:none;z-index:9999;opacity:0;transition:opacity .12s;white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,.5);backdrop-filter:blur(8px);}
+#wp-political-root .tooltip .tt-party{color:var(--gold2);font-weight:600;margin-bottom:2px;}
+#wp-political-root .tooltip .tt-user{color:var(--text);}
+#wp-political-root .tooltip .tt-seat{color:var(--text2);font-size:.7rem;margin-top:1px;}
 
 /* Avatars & links */
-.tooltip-avatar{width:16px;height:16px;border-radius:50%;vertical-align:middle;margin-right:4px;border:1px solid rgba(255,255,255,.2);}
-.avatar-small{width:18px;height:18px;border-radius:50%;vertical-align:middle;margin-right:4px;border:1px solid rgba(255,255,255,.2);}
-.avatar-placeholder{font-size:14px;margin-right:4px;}
-.leader-link{color:var(--text2);text-decoration:none;display:inline-flex;align-items:center;gap:4px;transition:color .15s;}
-.leader-link:hover{color:var(--gold);}
+#wp-political-root .tooltip-avatar{width:16px;height:16px;border-radius:50%;vertical-align:middle;margin-right:4px;border:1px solid rgba(255,255,255,.2);}
+#wp-political-root .avatar-small{width:18px;height:18px;border-radius:50%;vertical-align:middle;margin-right:4px;border:1px solid rgba(255,255,255,.2);}
+#wp-political-root .avatar-placeholder{font-size:14px;margin-right:4px;}
+#wp-political-root .leader-link{color:var(--text2);text-decoration:none;display:inline-flex;align-items:center;gap:4px;transition:color .15s;}
+#wp-political-root .leader-link:hover{color:var(--gold);}
 
 /* Seat dots */
-.seat-group{cursor:pointer;}
-.seat-group:hover circle:first-of-type{filter:brightness(1.3);}
+#wp-political-root .seat-group{cursor:pointer;}
+#wp-political-root .seat-group:hover circle:first-of-type{filter:brightness(1.3);}
 
 /* Misc */
-.empty{color:var(--text3);font-size:.85rem;padding:6px 0;}
-::-webkit-scrollbar{width:5px;}
-::-webkit-scrollbar-track{background:var(--s1);}
-::-webkit-scrollbar-thumb{background:var(--s3);border-radius:3px;}
+#wp-political-root .empty{color:var(--text3);font-size:.85rem;padding:6px 0;}
+#wp-political-root ::-webkit-scrollbar{width:5px;}
+#wp-political-root ::-webkit-scrollbar-track{background:var(--s1);}
+#wp-political-root ::-webkit-scrollbar-thumb{background:var(--s3);border-radius:3px;}
 
 /* ── TOM SELECT CUSTOMIZATION ── */
 /* Contenitore principale */
-.ts-wrapper {
+#wp-political-root .ts-wrapper {
   min-width: 230px;
 }
 
 /* Il campo di input/ricerca */
-.ts-wrapper .ts-control {
+#wp-political-root .ts-wrapper .ts-control {
   background: var(--s2) !important;
   border: 1px solid var(--bd2) !important;
   border-radius: var(--r2) !important;
@@ -294,24 +299,24 @@
   transition: border-color .2s, box-shadow .2s;
 }
 
-.ts-wrapper .ts-control input {
+#wp-political-root .ts-wrapper .ts-control input {
   color: var(--text) !important;
   font-family: 'Sora', sans-serif !important;
   font-size: .85rem !important;
 }
 
-.ts-wrapper .ts-control input::placeholder {
+#wp-political-root .ts-wrapper .ts-control input::placeholder {
   color: var(--text3);
 }
 
 /* Quando il menu è aperto */
-.ts-wrapper.focus .ts-control {
+#wp-political-root .ts-wrapper.focus .ts-control {
   border-color: var(--gold) !important;
   box-shadow: 0 0 0 2px rgba(197,150,74,.12) !important;
 }
 
 /* Il dropdown */
-.ts-wrapper .ts-dropdown {
+#wp-political-root .ts-wrapper .ts-dropdown {
   background: var(--s1) !important;
   border: 1px solid var(--bd2) !important;
   border-radius: var(--r2) !important;
@@ -321,38 +326,38 @@
 }
 
 /* Le opzioni nel dropdown */
-.ts-wrapper .ts-dropdown .option {
+#wp-political-root .ts-wrapper .ts-dropdown .option {
   padding: 8px 12px !important;
   font-size: .85rem !important;
   color: var(--text2) !important;
   transition: background .15s, color .15s;
 }
 
-.ts-wrapper .ts-dropdown .option.active {
+#wp-political-root .ts-wrapper .ts-dropdown .option.active {
   background: var(--s3) !important;
   color: var(--text) !important;
 }
 
-.ts-wrapper .ts-dropdown .option:hover {
+#wp-political-root .ts-wrapper .ts-dropdown .option:hover {
   background: var(--s2) !important;
   color: var(--gold2) !important;
 }
 
 /* La freccia del select */
-.ts-wrapper .ts-control .ts-dropdown-arrow {
+#wp-political-root .ts-wrapper .ts-control .ts-dropdown-arrow {
   border-top-color: var(--text3) !important;
 }
 /* ── FULLSCREEN OVERLAY ── */
-.parl-overlay {
+#wp-political-root .parl-overlay {
   position: fixed; inset: 0; z-index: 10000;
   background: rgba(7,9,13,.92);
   backdrop-filter: blur(10px);
   display: none; align-items: center; justify-content: center;
   animation: fadeIn .2s ease;
 }
-.parl-overlay.active { display: flex; }
+#wp-political-root .parl-overlay.active { display: flex; }
 
-.parl-overlay-box {
+#wp-political-root .parl-overlay-box {
   background: var(--s1);
   border: 1px solid var(--bd2);
   border-radius: 14px;
@@ -365,32 +370,32 @@
 }
 @keyframes scaleIn { from { transform: scale(.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-.parl-overlay-head {
+#wp-political-root .parl-overlay-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 18px;
   border-bottom: 1px solid var(--bd);
 }
-.parl-overlay-title {
+#wp-political-root .parl-overlay-title {
   font-family: 'Playfair Display', serif;
   font-size: 1rem; font-weight: 600; color: var(--text);
 }
-.overlay-close-btn {
+#wp-political-root .overlay-close-btn {
   background: var(--s2); border: 1px solid var(--bd2);
   border-radius: 6px; color: var(--text2);
   width: 30px; height: 30px; cursor: pointer;
   font-size: 14px; display: flex; align-items: center; justify-content: center;
   transition: background .15s, color .15s;
 }
-.overlay-close-btn:hover { background: var(--s3); color: var(--text); }
+#wp-political-root .overlay-close-btn:hover { background: var(--s3); color: var(--text); }
 
-.parl-overlay-content {
+#wp-political-root .parl-overlay-content {
   flex: 1; overflow: auto;
   padding: 24px;
   display: flex; align-items: center; justify-content: center;
 }
-.parl-overlay-content svg { width: 100%; height: auto; max-height: 72vh; }
+#wp-political-root .parl-overlay-content svg { width: 100%; height: auto; max-height: 72vh; }
 /* Opzione selezionata (quando si usa multi‑select, non nel nostro caso) */
-.ts-wrapper .item {
+#wp-political-root .ts-wrapper .item {
   background: var(--s3) !important;
   border: 1px solid var(--bd2) !important;
   border-radius: 4px !important;
@@ -398,13 +403,13 @@
 }
 
 /* Testo quando non c'è selezione */
-.ts-wrapper .ts-control .placeholder {
+#wp-political-root .ts-wrapper .ts-control .placeholder {
   color: var(--text3) !important;
   font-family: 'Sora', sans-serif !important;
   font-size: .85rem !important;
 }
 /* ── ACTION BUTTONS (export / fullscreen) ── */
-.action-btn {
+#wp-political-root .action-btn {
   background: var(--s2);
   border: 1px solid var(--bd2);
   border-radius: 5px;
@@ -414,11 +419,11 @@
   font-size: 13px; cursor: pointer;
   transition: background .15s, border-color .15s, color .15s;
 }
-.action-btn:hover { background: var(--s3); border-color: var(--bd3); color: var(--text); }
-.action-btn:active { transform: scale(.93); }
+#wp-political-root .action-btn:hover { background: var(--s3); border-color: var(--bd3); color: var(--text); }
+#wp-political-root .action-btn:active { transform: scale(.93); }
 
 /* Bottone CSV più largo */
-#exportCsvBtn {
+#wp-political-root #exportCsvBtn {
   width: auto;                  /* si adatta al testo */
   padding: 0 10px;              /* respiro orizzontale */
   font-size: 0.72rem;           /* leggermente più piccolo */
@@ -426,7 +431,7 @@
   white-space: nowrap;
 }
 /* Pulsante toggle race */
-.race-toggle-btn {
+#wp-political-root .race-toggle-btn {
   display: block;
   width: 100%;
   margin-top: 12px;
@@ -440,57 +445,57 @@
   cursor: pointer;
   transition: background .15s, border-color .15s, color .15s;
 }
-.race-toggle-btn:hover {
+#wp-political-root .race-toggle-btn:hover {
   background: var(--s3);
   border-color: var(--bd3);
   color: var(--text);
 }
 
 /* ══ ELECTORAL SIMULATOR ══ */
-.sim-panel { }
+#wp-political-root .sim-panel { }
 
 /* Slider */
-.sim-slider-label { font-size:.75rem; color:var(--text2); white-space:nowrap; }
-.sim-pct-badge {
+#wp-political-root .sim-slider-label { font-size:.75rem; color:var(--text2); white-space:nowrap; }
+#wp-political-root .sim-pct-badge {
   font-family:'Playfair Display',serif; font-size:1rem; font-weight:700;
   color:var(--gold2); min-width:38px; text-align:right;
 }
-.sim-slider {
+#wp-political-root .sim-slider {
   -webkit-appearance:none; appearance:none;
   width:140px; height:4px; border-radius:2px;
   background:var(--s3); outline:none; cursor:pointer;
 }
-.sim-slider::-webkit-slider-thumb {
+#wp-political-root .sim-slider::-webkit-slider-thumb {
   -webkit-appearance:none; width:14px; height:14px; border-radius:50%;
   background:var(--gold2); border:2px solid var(--bg); cursor:pointer;
   transition:transform .15s;
 }
-.sim-slider::-webkit-slider-thumb:hover { transform:scale(1.2); }
-.sim-slider::-moz-range-thumb {
+#wp-political-root .sim-slider::-webkit-slider-thumb:hover { transform:scale(1.2); }
+#wp-political-root .sim-slider::-moz-range-thumb {
   width:14px; height:14px; border-radius:50%;
   background:var(--gold2); border:2px solid var(--bg); cursor:pointer;
 }
 
 /* Historic chips row */
-.sim-historic-row {
+#wp-political-root .sim-historic-row {
   display:flex; align-items:center; gap:10px; flex-wrap:wrap;
   margin-bottom:14px; padding:10px 0;
   border-bottom:1px solid var(--bd);
 }
-.sim-section-label { font-size:.72rem; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; white-space:nowrap; }
-.sim-chips { display:flex; flex-wrap:wrap; gap:6px; }
-.sim-chip {
+#wp-political-root .sim-section-label { font-size:.72rem; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; white-space:nowrap; }
+#wp-political-root .sim-chips { display:flex; flex-wrap:wrap; gap:6px; }
+#wp-political-root .sim-chip {
   font-size:.72rem; color:var(--text2);
   background:var(--s2); border:1px solid var(--bd2);
   border-radius:4px; padding:2px 8px;
 }
-.sim-chip-latest {
+#wp-political-root .sim-chip-latest {
   color:var(--gold2); background:rgba(197,150,74,.1);
   border-color:rgba(197,150,74,.3);
 }
 
 /* Metrics row */
-.sim-metrics {
+#wp-political-root .sim-metrics {
   display: flex;
   flex-wrap: wrap;
   gap: 0;
@@ -500,7 +505,7 @@
   border-radius: 10px;
   overflow: hidden;
 }
-.sim-metric {
+#wp-political-root .sim-metric {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -509,47 +514,47 @@
   flex: 1;
   min-width: 120px;
 }
-.sim-metric:last-child { border-right: none; }
-.sim-metric.hl { background: rgba(197,150,74,.05); }
-.sim-metric.pres { background: rgba(59,130,246,.05); }
-.sim-metric-label { font-size:.65rem; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; white-space:nowrap; }
-.sim-metric-val {
+#wp-political-root .sim-metric:last-child { border-right: none; }
+#wp-political-root .sim-metric.hl { background: rgba(197,150,74,.05); }
+#wp-political-root .sim-metric.pres { background: rgba(59,130,246,.05); }
+#wp-political-root .sim-metric-label { font-size:.65rem; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; white-space:nowrap; }
+#wp-political-root .sim-metric-val {
   font-family:'Playfair Display',serif; font-size:.95rem; font-weight:700;
   color:var(--text); line-height:1;
 }
-.sim-metric.hl .sim-metric-val { color:var(--gold2); }
-.sim-metric.pres .sim-metric-val { color:#60a5fa; }
-.sim-metric-sub { display:none; }
+#wp-political-root .sim-metric.hl .sim-metric-val { color:var(--gold2); }
+#wp-political-root .sim-metric.pres .sim-metric-val { color:#60a5fa; }
+#wp-political-root .sim-metric-sub { display:none; }
 
 /* Projection table */
-.sim-table-wrap { overflow-x:auto; margin-bottom:10px; }
-.sim-table { width:100%; border-collapse:collapse; }
-.sim-table thead tr { border-bottom:1px solid var(--bd2); }
-.sim-table th { text-align:left; color:var(--text3); font-size:.68rem; font-weight:600; text-transform:uppercase; letter-spacing:.5px; padding:0 8px 8px; }
-.sim-table td { padding:7px 8px; border-bottom:1px solid var(--bd); font-size:.82rem; color:var(--text); vertical-align:middle; }
-.sim-table tbody tr:hover td { background:var(--s2); }
-.sim-table tbody tr:last-child td { border-bottom:none; }
+#wp-political-root .sim-table-wrap { overflow-x:auto; margin-bottom:10px; }
+#wp-political-root .sim-table { width:100%; border-collapse:collapse; }
+#wp-political-root .sim-table thead tr { border-bottom:1px solid var(--bd2); }
+#wp-political-root .sim-table th { text-align:left; color:var(--text3); font-size:.68rem; font-weight:600; text-transform:uppercase; letter-spacing:.5px; padding:0 8px 8px; }
+#wp-political-root .sim-table td { padding:7px 8px; border-bottom:1px solid var(--bd); font-size:.82rem; color:var(--text); vertical-align:middle; }
+#wp-political-root .sim-table tbody tr:hover td { background:var(--s2); }
+#wp-political-root .sim-table tbody tr:last-child td { border-bottom:none; }
 
 /* Footer */
 /* When only one panel remains in a 2-col grid, span it fully */
-.main-grid > *:only-child,
-.charts-row > *:only-child {
+#wp-political-root .main-grid > *:only-child,
+#wp-political-root .charts-row > *:only-child {
   grid-column: 1 / -1;
 }
 /* If panels end up odd-count and last is alone, stretch it */
-.main-grid > *:last-child:nth-child(odd),
-.charts-row > *:last-child:nth-child(odd) {
+#wp-political-root .main-grid > *:last-child:nth-child(odd),
+#wp-political-root .charts-row > *:last-child:nth-child(odd) {
   grid-column: 1 / -1;
 }
 
 /* ── Compact simulator KPI grid ── */
-.sim-kpi-grid {
+#wp-political-root .sim-kpi-grid {
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin-bottom: 14px;
 }
-.sim-kpi-pop {
+#wp-political-root .sim-kpi-pop {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -559,10 +564,10 @@
   border-radius: 20px;
   align-self: flex-start;
 }
-.sim-kpi-pop-label { font-size:.68rem; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; white-space:nowrap; }
-.sim-kpi-pop-val { font-family:'Playfair Display',serif; font-size:.88rem; font-weight:700; color:var(--text2); }
-.sim-kpi-pop-hint { font-size:.63rem; color:var(--text3); font-style:italic; }
-.sim-kpi-row {
+#wp-political-root .sim-kpi-pop-label { font-size:.68rem; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; white-space:nowrap; }
+#wp-political-root .sim-kpi-pop-val { font-family:'Playfair Display',serif; font-size:.88rem; font-weight:700; color:var(--text2); }
+#wp-political-root .sim-kpi-pop-hint { font-size:.63rem; color:var(--text3); font-style:italic; }
+#wp-political-root .sim-kpi-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 0;
@@ -571,7 +576,7 @@
   border-radius: 10px;
   overflow: hidden;
 }
-.sim-kpi {
+#wp-political-root .sim-kpi {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -580,29 +585,29 @@
   border-right: 1px solid var(--bd);
   text-align: center;
 }
-.sim-kpi:last-child { border-right: none; }
-.sim-kpi-hl  { background: rgba(197,150,74,.05); }
-.sim-kpi-pres{ background: rgba(59,130,246,.05); }
-.sim-kpi-val {
+#wp-political-root .sim-kpi:last-child { border-right: none; }
+#wp-political-root .sim-kpi-hl  { background: rgba(197,150,74,.05); }
+#wp-political-root .sim-kpi-pres{ background: rgba(59,130,246,.05); }
+#wp-political-root .sim-kpi-val {
   font-family: 'Playfair Display', serif;
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--text);
   line-height: 1.1;
 }
-.sim-kpi-hl  .sim-kpi-val { color: var(--gold2); }
-.sim-kpi-pres .sim-kpi-val { color: #60a5fa; }
-.sim-kpi-label { font-size:.6rem; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; margin-top:3px; white-space:nowrap; }
+#wp-political-root .sim-kpi-hl  .sim-kpi-val { color: var(--gold2); }
+#wp-political-root .sim-kpi-pres .sim-kpi-val { color: #60a5fa; }
+#wp-political-root .sim-kpi-label { font-size:.6rem; color:var(--text3); text-transform:uppercase; letter-spacing:.4px; margin-top:3px; white-space:nowrap; }
 @media (max-width:600px) {
-  .sim-kpi-row { grid-template-columns: repeat(2,1fr); }
-  .sim-kpi:nth-child(2) { border-right:none; }
-  .sim-kpi:nth-child(1), .sim-kpi:nth-child(2) { border-bottom:1px solid var(--bd); }
+  #wp-political-root .sim-kpi-row { grid-template-columns: repeat(2,1fr); }
+  #wp-political-root .sim-kpi:nth-child(2) { border-right:none; }
+  #wp-political-root .sim-kpi:nth-child(1), #wp-political-root .sim-kpi:nth-child(2) { border-bottom:1px solid var(--bd); }
 }
-[data-theme="light"] .sim-kpi-pop { background:var(--s2); border-color:var(--bd2); }
-[data-theme="light"] .sim-kpi-row { background:#fff; border-color:rgba(0,0,0,.1); }
-[data-theme="light"] .sim-kpi     { border-color:rgba(0,0,0,.08); }
+#wp-political-root [data-theme="light"] .sim-kpi-pop { background:var(--s2); border-color:var(--bd2); }
+#wp-political-root [data-theme="light"] .sim-kpi-row { background:#fff; border-color:rgba(0,0,0,.1); }
+#wp-political-root [data-theme="light"] .sim-kpi     { border-color:rgba(0,0,0,.08); }
 /* Input votanti attesi */
-.sim-input-voters {
+#wp-political-root .sim-input-voters {
   background: var(--s2);
   border: 1px solid var(--bd2);
   border-radius: 6px;
@@ -616,13 +621,13 @@
   transition: border-color .15s;
 }
 
-.sim-input-voters:focus {
+#wp-political-root .sim-input-voters:focus {
   border-color: var(--gold);
   box-shadow: 0 0 0 2px rgba(197,150,74,.12);
 }
 
 /* ── COUNTDOWN ── */
-.pres-countdown {
+#wp-political-root .pres-countdown {
   text-align: center;
   font-family: 'Sora', monospace;
   font-size: 1.05rem;
@@ -634,7 +639,7 @@
 }
 
 /* ── MARGIN OF VICTORY ── */
-.pres-margin {
+#wp-political-root .pres-margin {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -645,20 +650,20 @@
   margin-bottom: 16px;
   flex-wrap: wrap;
 }
-.margin-label { font-size:.72rem; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; }
-.margin-val   { font-family:'Playfair Display',serif; font-size:1.1rem; font-weight:700; color:#4ade80; }
-.margin-pct   { font-size:.82rem; color:#86efac; background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.25); padding:1px 7px; border-radius:4px; }
-.margin-vs    { font-size:.8rem; color:var(--text2); }
+#wp-political-root .margin-label { font-size:.72rem; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; }
+#wp-political-root .margin-val   { font-family:'Playfair Display',serif; font-size:1.1rem; font-weight:700; color:#4ade80; }
+#wp-political-root .margin-pct   { font-size:.82rem; color:#86efac; background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.25); padding:1px 7px; border-radius:4px; }
+#wp-political-root .margin-vs    { font-size:.8rem; color:var(--text2); }
 
 /* ── RACE ROW EXTRAS ── */
-.race-party-chip {
+#wp-political-root .race-party-chip {
   font-size:.65rem; font-weight:600;
   border:1px solid; border-radius:4px;
   padding:1px 6px; margin-left:4px;
   vertical-align:middle;
   white-space:nowrap;
 }
-.race-gap {
+#wp-political-root .race-gap {
   font-size:.72rem; color:#ef4444;
   background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.25);
   border-radius:4px; padding:1px 5px; margin-left:4px;
@@ -666,7 +671,7 @@
 }
 
 /* ── PRES SECTION HEAD ── */
-.pres-section-head {
+#wp-political-root .pres-section-head {
   font-family: 'Playfair Display', serif;
   font-size: .9rem; font-weight: 600;
   color: var(--text);
@@ -675,29 +680,29 @@
 }
 
 /* Evidenziazione per Total votes */
-.stat-totalvotes-highlight {
+#wp-political-root .stat-totalvotes-highlight {
   background: linear-gradient(135deg, rgba(232, 201, 122, 0.12), rgba(232, 201, 122, 0.04));
   border: 1px solid rgba(232, 201, 122, 0.5);
   box-shadow: 0 0 0 1px rgba(232, 201, 122, 0.1), 0 2px 12px rgba(0, 0, 0, 0.2);
 }
 
-.stat-totalvotes-highlight .stat-value {
+#wp-political-root .stat-totalvotes-highlight .stat-value {
   font-size: 2rem;
   font-weight: 800;
   color: #f5dfa0;
   text-shadow: 0 0 8px rgba(232, 201, 122, 0.4);
 }
 
-.stat-totalvotes-highlight .stat-label {
+#wp-political-root .stat-totalvotes-highlight .stat-label {
   color: #e8c97a;
   font-weight: 600;
 }
 
-.stat-totalvotes-highlight .stat-sub {
+#wp-political-root .stat-totalvotes-highlight .stat-sub {
   color: #c5964a;
 }
 /* Grande numero voti totali nella tabella (elezione in corso) */
-.big-votes-number {
+#wp-political-root .big-votes-number {
   font-family: 'Playfair Display', serif;
   font-size: 4rem;
   font-weight: 800;
@@ -706,7 +711,7 @@
   letter-spacing: -1px;
   line-height: 1.2;
 }
-.big-votes-label {
+#wp-political-root .big-votes-label {
   font-size: 1rem;
   font-weight: 500;
   color: #e8c97a;
@@ -714,16 +719,16 @@
   text-transform: uppercase;
   letter-spacing: 2px;
 }
-.big-votes-note {
+#wp-political-root .big-votes-note {
   font-size: 0.75rem;
   color: var(--text3);
   margin-top: 12px;
 }
-.panel:has(.party-table) {
+#wp-political-root .panel:has(.party-table) {
   overflow-x: auto;
 }
 /* ── KOFI BUTTON IN HEADER ── */
-.kofi-btn-top {
+#wp-political-root .kofi-btn-top {
   display: inline-flex;
   align-items: center;
   gap: 6px;                        /* spazio tra ☕ e testo */
@@ -741,12 +746,12 @@
   white-space: nowrap;
   flex-shrink: 0;
 }
-.kofi-btn-top:hover {
+#wp-political-root .kofi-btn-top:hover {
   transform: scale(1.05);
   box-shadow: 0 4px 14px rgba(255, 59, 48, 0.45);
   color: #fff;
 }
-.kofi-btn-top:active {
+#wp-political-root .kofi-btn-top:active {
   transform: scale(0.97);
 }
 /* ══════════════════════════════════════════════════════════
@@ -754,23 +759,23 @@
 ══════════════════════════════════════════════════════════ */
 /* ── MOBILE: Previene overflow orizzontale ── */
 @media (max-width: 600px) {
-  *, *::before, *::after {
+  #wp-political-root *, #wp-political-root *::before, #wp-political-root *::after {
     max-width: 100vw;
   }
   
-  body {
+  #wp-political-root {
     overflow-x: hidden;
     width: 100vw;
   }
   
-  .app {
+  #wp-political-root .app {
     padding: 12px 8px;
     max-width: 100%;
     overflow-x: hidden;
   }
   
   /* Parliament: ridimensiona per mobile */
-  .parliament-wrap {
+  #wp-political-root .parliament-wrap {
     overflow-x: auto;
     overflow-y: visible;
     -webkit-overflow-scrolling: touch;
@@ -779,7 +784,7 @@
     max-width: 100%;
   }
   
-  .parliament-wrap svg {
+  #wp-political-root .parliament-wrap svg {
     min-width: 280px;
     max-width: 100%;
     height: auto;
@@ -787,120 +792,116 @@
   }
   
   /* Stats: 2 colonne invece di 6 */
-  .stats-row {
+  #wp-political-root .stats-row {
     grid-template-columns: repeat(2, 1fr);
     gap: 6px;
   }
   
-  .stat {
+  #wp-political-root .stat {
     padding: 8px 10px;
   }
   
-  .stat-value {
+  #wp-political-root .stat-value {
     font-size: 1.1rem;
   }
   
-  .stat-label {
+  #wp-political-root .stat-label {
     font-size: 0.6rem;
   }
   
   /* Panel: padding ridotto */
-  .panel {
+  #wp-political-root .panel {
     padding: 12px;
     margin-bottom: 12px;
   }
   
-  .panel-head h2 {
+  #wp-political-root .panel-head h2 {
     font-size: 0.9rem;
   }
   
   /* Header: compatta */
-  .header {
+  #wp-political-root .header {
     flex-direction: column;
     gap: 10px;
     padding-bottom: 12px;
   }
   
-  .header-title {
+  #wp-political-root .header-title {
     font-size: 1.2rem;
   }
   
   /* Inputs full width */
-  .select-wrap, .select-wrap select,
-  .input-wrap, .input-wrap input,
-  .btn-load {
+  #wp-political-root .select-wrap, #wp-political-root .select-wrap select, #wp-political-root .input-wrap, #wp-political-root .input-wrap input, #wp-political-root .btn-load {
     width: 100%;
     min-width: unset;
   }
   
   /* Timeline chart: altezza ridotta */
-  .timeline-chart-wrap {
+  #wp-political-root .timeline-chart-wrap {
     height: 140px !important;
   }
   
   /* Charts: altezza ridotta */
-  .chart-inner, .pres-chart-wrap {
+  #wp-political-root .chart-inner, #wp-political-root .pres-chart-wrap {
     height: 160px !important;
   }
   
   /* Parliament legend: compatta */
-  .parl-legend {
+  #wp-political-root .parl-legend {
     gap: 4px 6px;
     flex-wrap: wrap;
   }
   
-  .leg-item {
+  #wp-political-root .leg-item {
     font-size: 0.65rem;
   }
   
-  .leg-dot {
+  #wp-political-root .leg-dot {
     width: 6px;
     height: 6px;
   }
   
   /* Table: scroll orizzontale */
-  .panel:has(.party-table) {
+  #wp-political-root .panel:has(.party-table) {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
   
-  .party-table {
+  #wp-political-root .party-table {
     min-width: 450px;
     font-size: 0.7rem;
   }
   
-  .party-table th, .party-table td {
+  #wp-political-root .party-table th, #wp-political-root .party-table td {
     padding: 4px 3px;
     white-space: nowrap;
   }
   /* ✅ PREVIENE ZOOM ACCIDENTALE SUL PARLAMENTO */
-  .parliament-wrap {
+  #wp-political-root .parliament-wrap {
     touch-action: pan-x pan-y;
   }
   
   /* ✅ ASSICURA CHE IL CONTENITORE PRINCIPALE NON SFORI */
-  .app {
+  #wp-political-root .app {
     padding: 12px 8px;
     max-width: 100%;
     overflow-x: hidden;
   }
   
   /* ✅ STATS: 2 COLONNE SU MOBILE */
-  .stats-row {
+  #wp-political-root .stats-row {
     grid-template-columns: repeat(2, 1fr);
     gap: 6px;
   }
-  .stat {
+  #wp-political-root .stat {
     padding: 8px 10px;
   }
-  .stat-value {
+  #wp-political-root .stat-value {
     font-size: 1.1rem;
   }
   
   /* ✅ INPUT FULL-WIDTH */
-  .select-wrap, .select-wrap select,
-  .input-wrap, .input-wrap input,
-  .btn-load {
+  #wp-political-root .select-wrap, #wp-political-root .select-wrap select, #wp-political-root .input-wrap, #wp-political-root .input-wrap input, #wp-political-root .btn-load {
     width: 100%;
     min-width: unset;
   }
@@ -908,19 +909,19 @@
 
 /* ── MOBILE EXTRA SMALL: 360px ── */
 @media (max-width: 360px) {
-  .stats-row {
+  #wp-political-root .stats-row {
     grid-template-columns: 1fr 1fr;
   }
   
-  .stat-value {
+  #wp-political-root .stat-value {
     font-size: 1rem;
   }
   
-  .parliament-wrap svg {
+  #wp-political-root .parliament-wrap svg {
     min-width: 260px;
   }
   
-  .header-title {
+  #wp-political-root .header-title {
     font-size: 1.1rem;
   }
 }
@@ -930,10 +931,19 @@
 
 /* ── Smooth theme transition ── */
 #wp-political-root,
-.panel, .stat, .header, .tooltip,
-.badge-status, .btn-load, .action-btn,
-.race-row, .sim-metric, .pres-winner,
-input, select, .comp-select {
+#wp-political-root .panel,
+#wp-political-root .stat,
+#wp-political-root .header,
+#wp-political-root .tooltip,
+#wp-political-root .badge-status,
+#wp-political-root .btn-load,
+#wp-political-root .action-btn,
+#wp-political-root .race-row,
+#wp-political-root .sim-metric,
+#wp-political-root .pres-winner,
+#wp-political-root input,
+#wp-political-root select,
+#wp-political-root .comp-select {
   transition:
     background-color .25s ease,
     color .22s ease,
@@ -942,22 +952,22 @@ input, select, .comp-select {
 }
 
 /* ── Panel hover: deeper shadow ── */
-.panel {
+#wp-political-root .panel {
   box-shadow: 0 2px 8px rgba(0,0,0,.18);
 }
-.panel:hover {
+#wp-political-root .panel:hover {
   box-shadow: 0 6px 24px rgba(0,0,0,.32);
   border-color: var(--bd2);
 }
-[data-theme="light"] .panel { box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-[data-theme="light"] .panel:hover { box-shadow: 0 4px 16px rgba(0,0,0,.14); }
+#wp-political-root [data-theme="light"] .panel { box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+#wp-political-root [data-theme="light"] .panel:hover { box-shadow: 0 4px 16px rgba(0,0,0,.14); }
 
 /* ── Accent border (parliament panel + presidential winner) ── */
-.panel-accented {
+#wp-political-root .panel-accented {
   position: relative;
   overflow: hidden;
 }
-.panel-accented::before {
+#wp-political-root .panel-accented::before {
   content: '';
   position: absolute;
   left: 0; top: 0; bottom: 0;
@@ -971,18 +981,18 @@ input, select, .comp-select {
 /* The SVG paths are drawn inline; no extra CSS needed */
 
 /* ── Seat dot hover ── */
-.seat-group { cursor: pointer; }
-.seat-group .seat-inner { transition: filter .12s; }
-.seat-group:hover .seat-inner { filter: brightness(1.3) drop-shadow(0 0 4px currentColor); }
+#wp-political-root .seat-group { cursor: pointer; }
+#wp-political-root .seat-group .seat-inner { transition: filter .12s; }
+#wp-political-root .seat-group:hover .seat-inner { filter: brightness(1.3) drop-shadow(0 0 4px currentColor); }
 
 /* ── Datalabels: ensure chart container has enough right padding ── */
-.ap-chart-outer canvas { padding-right: 8px; }
+#wp-political-root .ap-chart-outer canvas { padding-right: 8px; }
 
 /* ── Stat box inner glow on hl ── */
-.stat.hl {
+#wp-political-root .stat.hl {
   box-shadow: inset 0 0 0 1px rgba(197,150,74,.15), 0 2px 8px rgba(0,0,0,.18);
 }
-[data-theme="light"] .stat.hl {
+#wp-political-root [data-theme="light"] .stat.hl {
   box-shadow: inset 0 0 0 1px rgba(155,115,45,.2), 0 1px 4px rgba(0,0,0,.08);
 }
 
@@ -993,7 +1003,7 @@ input, select, .comp-select {
    LIGHT THEME — full overrides
    Applied via [data-theme="light"] on <html>
 ══════════════════════════════════════════════════════════ */
-[data-theme="light"] {
+#wp-political-root [data-theme="light"] {
   --bg:    #f9f9f1;
   --s1:    #f8f8f5;
   --s2:    #ffffff;
@@ -1012,91 +1022,91 @@ input, select, .comp-select {
 }
 
 /* Disable noise texture */
-[data-theme="light"] body::after { opacity: 0; }
+#wp-political-root [data-theme="light"] body::after { opacity: 0; }
 
 /* Inputs & selects */
-[data-theme="light"] .input-wrap input          { background: #fff; }
-[data-theme="light"] .select-wrap select        { background: #fff; }
-[data-theme="light"] .select-wrap select option { background: #fff; color: #1a1e2e; }
-[data-theme="light"] .comp-select               { background: #fff; }
-[data-theme="light"] .sim-input-voters          { background: #fff; }
+#wp-political-root [data-theme="light"] .input-wrap input          { background: #fff; }
+#wp-political-root [data-theme="light"] .select-wrap select        { background: #fff; }
+#wp-political-root [data-theme="light"] .select-wrap select option { background: #fff; color: #1a1e2e; }
+#wp-political-root [data-theme="light"] .comp-select               { background: #fff; }
+#wp-political-root [data-theme="light"] .sim-input-voters          { background: #fff; }
 
 /* Tooltip */
-[data-theme="light"] .tooltip {
+#wp-political-root [data-theme="light"] .tooltip {
   background: #fff;
   border-color: rgba(155,115,45,.4);
   box-shadow: 0 4px 20px rgba(0,0,0,.14);
 }
 
 /* Skeleton shimmer */
-[data-theme="light"] .skeleton-val,
-[data-theme="light"] .sk-row,
-[data-theme="light"] .sk-chart-block,
-[data-theme="light"] .parl-sk-arc {
+#wp-political-root [data-theme="light"] .skeleton-val,
+#wp-political-root [data-theme="light"] .sk-row,
+#wp-political-root [data-theme="light"] .sk-chart-block,
+#wp-political-root [data-theme="light"] .parl-sk-arc {
   background: linear-gradient(90deg, #e8eaf0 25%, #d8dbe6 50%, #e8eaf0 75%);
   background-size: 800px 100%;
 }
 
 /* Parliament SVG */
-[data-theme="light"] #parliamentContainer svg text { fill: #6b7280 !important; }
-[data-theme="light"] #parliamentContainer svg line  { stroke: rgba(130,95,38,.55) !important; }
+#wp-political-root [data-theme="light"] #parliamentContainer svg text { fill: #6b7280 !important; }
+#wp-political-root [data-theme="light"] #parliamentContainer svg line  { stroke: rgba(130,95,38,.55) !important; }
 
 /* Panel & stat shadows (override graphic-improvements block) */
-[data-theme="light"] .panel       { box-shadow: 0 1px 6px rgba(0,0,0,.07); }
-[data-theme="light"] .panel:hover { box-shadow: 0 4px 18px rgba(0,0,0,.13); border-color: var(--bd2); }
-[data-theme="light"] .stat.hl     { box-shadow: inset 0 0 0 1px rgba(130,95,38,.18), 0 1px 4px rgba(0,0,0,.07); }
+#wp-political-root [data-theme="light"] .panel       { box-shadow: 0 1px 6px rgba(0,0,0,.07); }
+#wp-political-root [data-theme="light"] .panel:hover { box-shadow: 0 4px 18px rgba(0,0,0,.13); border-color: var(--bd2); }
+#wp-political-root [data-theme="light"] .stat.hl     { box-shadow: inset 0 0 0 1px rgba(130,95,38,.18), 0 1px 4px rgba(0,0,0,.07); }
 
 /* Overlays */
-[data-theme="light"] .parl-overlay         { background: rgba(230,232,240,.9); backdrop-filter: blur(10px); }
-[data-theme="light"] .parl-overlay-box     { box-shadow: 0 8px 40px rgba(0,0,0,.18); }
-[data-theme="light"] .party-modal-overlay  { background: rgba(230,232,240,.88); }
-[data-theme="light"] .party-modal-box      { box-shadow: 0 8px 40px rgba(0,0,0,.16); }
+#wp-political-root [data-theme="light"] .parl-overlay         { background: rgba(230,232,240,.9); backdrop-filter: blur(10px); }
+#wp-political-root [data-theme="light"] .parl-overlay-box     { box-shadow: 0 8px 40px rgba(0,0,0,.18); }
+#wp-political-root [data-theme="light"] .party-modal-overlay  { background: rgba(230,232,240,.88); }
+#wp-political-root [data-theme="light"] .party-modal-box      { box-shadow: 0 8px 40px rgba(0,0,0,.16); }
 
 /* Action buttons */
-[data-theme="light"] .action-btn       { background: var(--s2); border-color: var(--bd2); color: var(--text2); }
-[data-theme="light"] .action-btn:hover { background: var(--s3); color: var(--text); }
+#wp-political-root [data-theme="light"] .action-btn       { background: var(--s2); border-color: var(--bd2); color: var(--text2); }
+#wp-political-root [data-theme="light"] .action-btn:hover { background: var(--s3); color: var(--text); }
 
 /* Presidential */
-[data-theme="light"] .pres-winner {
+#wp-political-root [data-theme="light"] .pres-winner {
   background: linear-gradient(135deg, rgba(130,95,38,.08), rgba(130,95,38,.04));
 }
-[data-theme="light"] .pres-countdown { color: #dc2626; }
-[data-theme="light"] .race-row         { background: var(--s2); }
-[data-theme="light"] .race-row.race-winner {
+#wp-political-root [data-theme="light"] .pres-countdown { color: #dc2626; }
+#wp-political-root [data-theme="light"] .race-row         { background: var(--s2); }
+#wp-political-root [data-theme="light"] .race-row.race-winner {
   background: linear-gradient(135deg, rgba(130,95,38,.07), var(--s2));
 }
 
 /* Simulator chips */
-[data-theme="light"] .sim-chip        { background: var(--s2); border-color: var(--bd2); color: var(--text2); }
-[data-theme="light"] .sim-chip-latest { background: rgba(130,95,38,.1); border-color: rgba(130,95,38,.3); color: var(--gold2); }
-[data-theme="light"] .sim-metrics     { background: #fff; border-color: rgba(0,0,0,.1); }
-[data-theme="light"] .sim-metric      { border-color: rgba(0,0,0,.08); }
+#wp-political-root [data-theme="light"] .sim-chip        { background: var(--s2); border-color: var(--bd2); color: var(--text2); }
+#wp-political-root [data-theme="light"] .sim-chip-latest { background: rgba(130,95,38,.1); border-color: rgba(130,95,38,.3); color: var(--gold2); }
+#wp-political-root [data-theme="light"] .sim-metrics     { background: #fff; border-color: rgba(0,0,0,.1); }
+#wp-political-root [data-theme="light"] .sim-metric      { border-color: rgba(0,0,0,.08); }
 
 /* Badges */
-[data-theme="light"] .badge-count  { background: var(--s2); border-color: var(--bd2); }
-[data-theme="light"] .badge-status { background: rgba(22,163,74,.1); color: #15803d; border-color: rgba(22,163,74,.25); }
-[data-theme="light"] .badge-status.loading { background: rgba(130,95,38,.1); color: var(--gold2); border-color: rgba(130,95,38,.25); }
-[data-theme="light"] .badge-status.error   { background: rgba(220,38,38,.1); color: #dc2626; border-color: rgba(220,38,38,.25); }
+#wp-political-root [data-theme="light"] .badge-count  { background: var(--s2); border-color: var(--bd2); }
+#wp-political-root [data-theme="light"] .badge-status { background: rgba(22,163,74,.1); color: #15803d; border-color: rgba(22,163,74,.25); }
+#wp-political-root [data-theme="light"] .badge-status.loading { background: rgba(130,95,38,.1); color: var(--gold2); border-color: rgba(130,95,38,.25); }
+#wp-political-root [data-theme="light"] .badge-status.error   { background: rgba(220,38,38,.1); color: #dc2626; border-color: rgba(220,38,38,.25); }
 
 /* Scrollbar */
-[data-theme="light"] ::-webkit-scrollbar-track { background: var(--s2); }
-[data-theme="light"] ::-webkit-scrollbar-thumb { background: var(--s3); }
+#wp-political-root [data-theme="light"] ::-webkit-scrollbar-track { background: var(--s2); }
+#wp-political-root [data-theme="light"] ::-webkit-scrollbar-thumb { background: var(--s3); }
 
 /* Header brand button */
-[data-theme="light"] .theme-toggle-btn         { background: var(--s2); border-color: var(--bd2); }
-[data-theme="light"] .theme-toggle-btn:hover   { background: var(--s3); }
+#wp-political-root [data-theme="light"] .theme-toggle-btn         { background: var(--s2); border-color: var(--bd2); }
+#wp-political-root [data-theme="light"] .theme-toggle-btn:hover   { background: var(--s3); }
 
 /* Leg items */
-[data-theme="light"] .leg-seats { background: var(--s2); color: var(--text3); }
+#wp-political-root [data-theme="light"] .leg-seats { background: var(--s2); color: var(--text3); }
 
 /* Timeline */
-[data-theme="light"] .tl-leg-item { color: var(--text2); }
+#wp-political-root [data-theme="light"] .tl-leg-item { color: var(--text2); }
 
 /* Margin of victory banner */
-[data-theme="light"] .pres-margin { background: linear-gradient(135deg, rgba(22,163,74,.07), rgba(22,163,74,.03)); }
+#wp-political-root [data-theme="light"] .pres-margin { background: linear-gradient(135deg, rgba(22,163,74,.07), rgba(22,163,74,.03)); }
 
 /* ── THEME TOGGLE BUTTON (works in both themes) ── */
-.theme-toggle-btn {
+#wp-political-root .theme-toggle-btn {
   width: 34px; height: 34px;
   background: var(--s2);
   border: 1px solid var(--bd2);
@@ -1106,62 +1116,59 @@ input, select, .comp-select {
   font-size: 16px; line-height: 1;
   transition: background .2s, border-color .2s, transform .15s;
 }
-.theme-toggle-btn:hover  { background: var(--s3); border-color: var(--bd3); transform: scale(1.08); }
-.theme-toggle-btn:active { transform: scale(.95); }
+#wp-political-root .theme-toggle-btn:hover  { background: var(--s3); border-color: var(--bd3); transform: scale(1.08); }
+#wp-political-root .theme-toggle-btn:active { transform: scale(.95); }
 
 /* ── Smooth theme transition ── */
-#wp-political-root, .panel, .stat, .header, .tooltip,
-.badge-status, .btn-load, .action-btn,
-.race-row, .sim-metric, .pres-winner,
-input, select, .comp-select, .stat-value {
+#wp-political-root, #wp-political-root .panel, #wp-political-root .stat, #wp-political-root .header, #wp-political-root .tooltip, #wp-political-root .badge-status, #wp-political-root .btn-load, #wp-political-root .action-btn, #wp-political-root .race-row, #wp-political-root .sim-metric, #wp-political-root .pres-winner, #wp-political-root input, #wp-political-root select, #wp-political-root .comp-select, #wp-political-root .stat-value {
   transition: background-color .25s ease, color .22s ease,
               border-color .22s ease, box-shadow .22s ease;
 }
 /* ── LIGHT THEME SVG & SKELETON FIXES ── */
-[data-theme="light"] #parliamentContainer svg path {
+#wp-political-root [data-theme="light"] #parliamentContainer svg path {
   stroke: rgba(0, 0, 0, 0.15) !important;
 }
-[data-theme="light"] .parl-sk-arc {
+#wp-political-root [data-theme="light"] .parl-sk-arc {
   border-color: rgba(0,0,0,0.2) !important;
   background: linear-gradient(90deg, #e8eaf0 25%, #d8dbe6 50%, #e8eaf0 75%) !important;
 }
-[data-theme="light"] .sk-base,
-[data-theme="light"] .skeleton-val,
-[data-theme="light"] .sk-row,
-[data-theme="light"] .sk-chart-block {
+#wp-political-root [data-theme="light"] .sk-base,
+#wp-political-root [data-theme="light"] .skeleton-val,
+#wp-political-root [data-theme="light"] .sk-row,
+#wp-political-root [data-theme="light"] .sk-chart-block {
   background: linear-gradient(90deg, #e8eaf0 25%, #d8dbe6 50%, #e8eaf0 75%) !important;
   background-size: 800px 100%;
 }
-[data-theme="light"] .stat-totalvotes-highlight {
+#wp-political-root [data-theme="light"] .stat-totalvotes-highlight {
   background: linear-gradient(135deg, rgba(130, 95, 38, 0.12), rgba(130, 95, 38, 0.04));
   border: 1px solid rgba(130, 95, 38, 0.45);
   box-shadow: 0 0 0 1px rgba(130, 95, 38, 0.1), 0 2px 12px rgba(0, 0, 0, 0.08);
 }
-[data-theme="light"] .stat-totalvotes-highlight .stat-value {
+#wp-political-root [data-theme="light"] .stat-totalvotes-highlight .stat-value {
   font-size: 2rem;
   font-weight: 800;
   color: #7a5a21;  /* oro scuro, leggibile su bianco */
   text-shadow: none;
 }
-[data-theme="light"] .stat-totalvotes-highlight .stat-label {
+#wp-political-root [data-theme="light"] .stat-totalvotes-highlight .stat-label {
   color: #9a7230;  /* --gold in light mode */
   font-weight: 600;
 }
-[data-theme="light"] .stat-totalvotes-highlight .stat-sub {
+#wp-political-root [data-theme="light"] .stat-totalvotes-highlight .stat-sub {
   color: #b8860b;  /* --gold2 in light mode */
 }
-[data-theme="light"] .party-color-bar {
+#wp-political-root [data-theme="light"] .party-color-bar {
   /* Bordo interno sottile per staccare il giallo dallo sfondo bianco */
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
   width: 4px; /* Leggermente più spesso per migliore visibilità */
 }
 
-.government-grid {
+#wp-political-root .government-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
 }
-.gov-card {
+#wp-political-root .gov-card {
   background: var(--s2);
   border: 1px solid var(--bd);
   border-radius: 8px;
@@ -1171,10 +1178,10 @@ input, select, .comp-select, .stat-value {
   gap: 12px;
   transition: border-color .15s;
 }
-.gov-card:hover {
+#wp-political-root .gov-card:hover {
   border-color: var(--bd2);
 }
-.gov-avatar {
+#wp-political-root .gov-avatar {
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -1182,29 +1189,29 @@ input, select, .comp-select, .stat-value {
   background: var(--s3);
   flex-shrink: 0;
 }
-.gov-info {
+#wp-political-root .gov-info {
   flex: 1;
 }
-.gov-role {
+#wp-political-root .gov-role {
   font-size: 0.68rem;
   color: var(--gold2);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 2px;
 }
-.gov-name {
+#wp-political-root .gov-name {
   font-weight: 600;
   font-size: 0.9rem;
 }
-.gov-name a {
+#wp-political-root .gov-name a {
   color: var(--text);
   text-decoration: none;
 }
-.gov-name a:hover {
+#wp-political-root .gov-name a:hover {
   color: var(--gold);
 }
 
-.toggle-chart-btn {
+#wp-political-root .toggle-chart-btn {
   background: var(--s2);
   border: 1px solid var(--bd2);
   border-radius: 4px;
@@ -1220,14 +1227,14 @@ input, select, .comp-select, .stat-value {
   justify-content: center;
   transition: all 0.2s;
 }
-.toggle-chart-btn:hover {
+#wp-political-root .toggle-chart-btn:hover {
   background: var(--s3);
   border-color: var(--bd3);
   color: var(--text);
 }
 /* ═══ GRID TRANSITIONS & SINGLE-COL STATE ═══ */
 /* ═══ GRID TRANSITIONS & SINGLE-COL STATE ═══ */
-.main-grid, .charts-row {
+#wp-political-root .main-grid, #wp-political-root .charts-row {
   display: grid;
   gap: 16px;
   /* Stato default: 2 colonne */
@@ -1236,16 +1243,16 @@ input, select, .comp-select, .stat-value {
   will-change: grid-template-columns;
 }
 
-.main-grid { grid-template-columns: 1.05fr 0.95fr; }
+#wp-political-root .main-grid { grid-template-columns: 1.05fr 0.95fr; }
 
 /* Quando uno è chiuso → 1 colonna a tutto schermo */
-.main-grid.single-col, .charts-row.single-col {
+#wp-political-root .main-grid.single-col, #wp-political-root .charts-row.single-col {
   grid-template-columns: 1fr;
   gap: 20px;
 }
 
 /* Fade-in armonioso del contenuto quando il pannello si espande */
-details.panel[open] > :not(summary) {
+#wp-political-root details.panel[open] > :not(summary) {
   animation: panelContentIn 0.35s ease both;
 }
 
@@ -1255,22 +1262,22 @@ details.panel[open] > :not(summary) {
 }
 
 /* Quando un pannello è chiuso → 1 colonna a tutto schermo */
-.charts-row.single-col { grid-template-columns: 1fr; gap: 20px; }
-.main-grid.single-col  { grid-template-columns: 1fr; gap: 24px; }
+#wp-political-root .charts-row.single-col { grid-template-columns: 1fr; gap: 20px; }
+#wp-political-root .main-grid.single-col  { grid-template-columns: 1fr; gap: 24px; }
 
 /* ═══ DETAILS PANEL UX ═══ */
-details.panel {
+#wp-political-root details.panel {
   overflow: hidden; /* Evita sbordamenti durante la transizione */
 }
 
-details.panel summary {
+#wp-political-root details.panel summary {
   cursor: pointer;
   user-select: none;
   outline: none;
 }
 
 /* Fade-in + leggero scale quando il pannello si apre */
-details.panel[open] summary ~ * {
+#wp-political-root details.panel[open] summary ~ * {
   animation: panelContentIn 0.35s ease both;
 }
 
@@ -1280,76 +1287,76 @@ details.panel[open] summary ~ * {
 }
 
 /* Opzionale: rotazione freccia se usi <summary> con icona */
-details.panel summary::-webkit-details-marker { display: none; }
-details.panel summary::after {
+#wp-political-root details.panel summary::-webkit-details-marker { display: none; }
+#wp-political-root details.panel summary::after {
   content: '▾';
   float: right;
   transition: transform 0.3s ease;
   font-size: 0.8rem;
   color: var(--text3);
 }
-details.panel[open] summary::after { transform: rotate(180deg); }
+#wp-political-root details.panel[open] summary::after { transform: rotate(180deg); }
 /* ═══ DRAG & DROP UX ═══ */
-.panel summary {
+#wp-political-root .panel summary {
   cursor: grab;
   position: relative;
   padding-left: 24px; /* spazio per l'icona drag */
 }
 
 /* Icona drag a sinistra del titolo */
-.panel summary::before {
+#wp-political-root .panel summary::before {
   content: '⠿';
   position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
   font-size: 13px; color: var(--text3); opacity: 0.4; transition: opacity .2s;
   pointer-events: none;
 }
-.panel summary:hover::before { opacity: 0.8; }
-.panel summary:active { cursor: grabbing; }
+#wp-political-root .panel summary:hover::before { opacity: 0.8; }
+#wp-political-root .panel summary:active { cursor: grabbing; }
 
 /* Feedback visivo Sortable */
-.sortable-ghost {
+#wp-political-root .sortable-ghost {
   opacity: 0.35 !important;
   background: var(--s2) !important;
   border: 1px dashed var(--gold) !important;
   transform: scale(0.98);
 }
-.sortable-chosen {
+#wp-political-root .sortable-chosen {
   box-shadow: 0 12px 32px rgba(0,0,0,0.5) !important;
   transform: scale(1.03);
   z-index: 100;
 }
-.sortable-drag { opacity: 0.9; }
+#wp-political-root .sortable-drag { opacity: 0.9; }
 
 /* Disabilita transizioni grid durante il drag per evitare "salti" */
-.main-grid.dragging, .charts-row.dragging {
+#wp-political-root .main-grid.dragging, #wp-political-root .charts-row.dragging {
   transition: none !important;
 }
 /* Disabilita transizioni durante il drag per evitare "rimbalzi" innaturali */
-.main-grid.dragging, .charts-row.dragging {
+#wp-political-root .main-grid.dragging, #wp-political-root .charts-row.dragging {
   transition: none !important;
   min-height: 220px; /* Evita collasso verticale mentre trascini via tutto */
 }
 
 /* Mantieni la transizione normale solo quando non si sta trascinando */
-.main-grid, .charts-row {
+#wp-political-root .main-grid, #wp-political-root .charts-row {
   transition: grid-template-columns 0.45s cubic-bezier(0.4, 0, 0.2, 1), 
               gap 0.3s ease, 
               min-height 0.2s ease;
 }
 
 /* Placeholder visivo per Sortable (opzionale ma consigliato) */
-.sortable-ghost {
+#wp-political-root .sortable-ghost {
   opacity: 0.3;
   border: 2px dashed var(--gold) !important;
   background: transparent !important;
   transform: scale(0.96);
 }
 /* ═══ SMOOTH PANEL TOGGLE (no scatti) ═══ */
-details.panel {
+#wp-political-root details.panel {
   overflow: hidden;
   contain: layout style; /* ottimizza reflow */
 }
-details.panel > :not(summary) {
+#wp-political-root details.panel > :not(summary) {
   display: block;
   max-height: 0;
   opacity: 0;
@@ -1359,7 +1366,7 @@ details.panel > :not(summary) {
               transform 0.3s ease;
   pointer-events: none;
 }
-details.panel[open] > :not(summary) {
+#wp-political-root details.panel[open] > :not(summary) {
   max-height: 4000px;
   opacity: 1;
   transform: translateY(0);
@@ -1367,73 +1374,73 @@ details.panel[open] > :not(summary) {
 }
 
 /* ═══ DRAG & DROP GRID SYSTEM ═══ */
-.sortable-grid {
+#wp-political-root .sortable-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   transition: grid-template-columns 0.45s cubic-bezier(0.4, 0, 0.2, 1), gap 0.3s ease;
 }
 /* Quando c'è 1 pannello o uno è chiuso → tutto lo spazio */
-.sortable-grid.single-col {
+#wp-political-root .sortable-grid.single-col {
   grid-template-columns: 1fr;
   gap: 20px;
 }
 /* Disabilita transizioni durante il drag per evitare rimbalzi */
-.sortable-grid.dragging {
+#wp-political-root .sortable-grid.dragging {
   transition: none !important;
 }
-.sortable-grid.dragging details.panel > :not(summary) {
+#wp-political-root .sortable-grid.dragging details.panel > :not(summary) {
   transition: none !important;
   max-height: 2000px;
   opacity: 1;
 }
 
 /* ═══ SORTABLE UX ═══ */
-.panel summary { cursor: grab; user-select: none; }
-.panel summary:active { cursor: grabbing; }
-.sortable-ghost {
+#wp-political-root .panel summary { cursor: grab; user-select: none; }
+#wp-political-root .panel summary:active { cursor: grabbing; }
+#wp-political-root .sortable-ghost {
   opacity: 0.25; border: 2px dashed var(--gold);
   background: transparent !important; transform: scale(0.96);
 }
-.sortable-chosen {
+#wp-political-root .sortable-chosen {
   box-shadow: 0 12px 32px rgba(0,0,0,0.45);
   transform: scale(1.02); z-index: 100;
 }
 /* Presidenziale: sempre a colonna singola (full width) */
-.presidential-grid {
+#wp-political-root .presidential-grid {
   display: grid;
   grid-template-columns: 1fr !important;   /* forza una colonna */
   gap: 16px;
 }
 /* Disabilita il cambiamento dinamico della griglia (non serve single-col) */
-.presidential-grid.single-col {
+#wp-political-root .presidential-grid.single-col {
   grid-template-columns: 1fr !important;   /* mantiene una colonna */
 }
 /* Mobile: sempre una colonna nelle griglie congressuali e presidenziali */
 @media (max-width: 768px) {
-  .main-grid,
-  .charts-row,
-  .presidential-grid {
+  #wp-political-root .main-grid,
+  #wp-political-root .charts-row,
+  #wp-political-root .presidential-grid {
     grid-template-columns: 1fr !important;
     gap: 16px;
   }
   /* Disabilita la classe single-col (non serve più) */
-  .main-grid.single-col,
-  .charts-row.single-col,
-  .presidential-grid.single-col {
+  #wp-political-root .main-grid.single-col,
+  #wp-political-root .charts-row.single-col,
+  #wp-political-root .presidential-grid.single-col {
     grid-template-columns: 1fr !important;
   }
 }
 /* Party View */
-.party-view-grid {
+#wp-political-root .party-view-grid {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-.party-selector-wrap {
+#wp-political-root .party-selector-wrap {
   margin-top: 8px;
 }
-.party-selector-wrap select {
+#wp-political-root .party-selector-wrap select {
   width: 100%;
   background: var(--s2);
   border: 1px solid var(--bd2);
@@ -1441,7 +1448,7 @@ details.panel[open] > :not(summary) {
   padding: 8px 12px;
   color: var(--text);
 }
-.party-overview {
+#wp-political-root .party-overview {
   background: var(--s2);
   border-radius: 8px;
   padding: 12px;
@@ -1449,22 +1456,22 @@ details.panel[open] > :not(summary) {
   flex-direction: column;
   gap: 8px;
 }
-.party-overview-item {
+#wp-political-root .party-overview-item {
   display: flex;
   justify-content: space-between;
   border-bottom: 1px solid var(--bd);
   padding: 6px 0;
 }
-.party-overview-label {
+#wp-political-root .party-overview-label {
   font-weight: 600;
   color: var(--gold2);
 }
-.party-member-list {
+#wp-political-root .party-member-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.member-row {
+#wp-political-root .member-row {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1472,38 +1479,38 @@ details.panel[open] > :not(summary) {
   background: var(--s2);
   border-radius: 8px;
 }
-.member-avatar {
+#wp-political-root .member-avatar {
   width: 36px;
   height: 36px;
   border-radius: 50%;
   object-fit: cover;
 }
-.member-info {
+#wp-political-root .member-info {
   flex: 1;
 }
-.member-name {
+#wp-political-root .member-name {
   font-weight: 500;
 }
-.member-name a {
+#wp-political-root .member-name a {
   color: var(--text);
   text-decoration: none;
 }
-.member-name a:hover {
+#wp-political-root .member-name a:hover {
   color: var(--gold);
 }
-.member-status {
+#wp-political-root .member-status {
   font-size: 0.7rem;
 }
-.status-active { color: #22c55e; }
-.status-inactive { color: #ef4444; }
-.candidate-filter {
+#wp-political-root .status-active { color: #22c55e; }
+#wp-political-root .status-inactive { color: #ef4444; }
+#wp-political-root .candidate-filter {
   display: flex;
   gap: 10px;
   align-items: center;
   margin-bottom: 16px;
   flex-wrap: wrap;
 }
-.candidate-filter input {
+#wp-political-root .candidate-filter input {
   background: var(--s2);
   border: 1px solid var(--bd2);
   border-radius: 6px;
@@ -1512,7 +1519,7 @@ details.panel[open] > :not(summary) {
   color: var(--text);
 }
 /* Pillole per i membri dei partiti */
-.member-pill {
+#wp-political-root .member-pill {
   background: var(--s2);
   border: 1px solid var(--bd);
   border-radius: 40px;
@@ -1522,11 +1529,11 @@ details.panel[open] > :not(summary) {
   gap: 8px;
   transition: all 0.2s;
 }
-.member-pill:hover {
+#wp-political-root .member-pill:hover {
   border-color: var(--bd2);
   background: var(--s3);
 }
-.candidate-threshold {
+#wp-political-root .candidate-threshold {
   background: var(--s2);
   border-left: 3px solid var(--gold2);
   padding: 8px 12px;
@@ -1534,23 +1541,23 @@ details.panel[open] > :not(summary) {
   border-radius: 6px;
   font-size: 0.85rem;
 }
-.member-organizer {
+#wp-political-root .member-organizer {
   display: flex;
   gap: 24px;
   flex-wrap: wrap;
 }
-.org-column {
+#wp-political-root .org-column {
   flex: 1;
   min-width: 200px;
 }
-.org-member-list {
+#wp-political-root .org-member-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
   max-height: 400px;
   overflow-y: auto;
 }
-.org-member-item {
+#wp-political-root .org-member-item {
   background: var(--s2);
   border: 1px solid var(--bd);
   border-radius: 8px;
@@ -1559,43 +1566,43 @@ details.panel[open] > :not(summary) {
   align-items: center;
   justify-content: space-between;
 }
-.org-member-name {
+#wp-political-root .org-member-name {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.org-member-name img {
+#wp-political-root .org-member-name img {
   width: 24px;
   height: 24px;
   border-radius: 50%;
 }
-.org-add-btn {
+#wp-political-root .org-add-btn {
   background: none;
   border: none;
   color: var(--gold2);
   cursor: pointer;
   font-size: 1.1rem;
 }
-.org-group-card {
+#wp-political-root .org-group-card {
   background: var(--s2);
   border: 1px solid var(--bd2);
   border-radius: 8px;
   padding: 8px;
   margin-bottom: 12px;
 }
-.org-group-title {
+#wp-political-root .org-group-title {
   font-weight: bold;
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
 }
-.org-group-members {
+#wp-political-root .org-group-members {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
-.org-group-member {
+#wp-political-root .org-group-member {
   background: var(--s3);
   border-radius: 16px;
   padding: 2px 8px;
@@ -1604,12 +1611,12 @@ details.panel[open] > :not(summary) {
   gap: 6px;
   font-size: 0.75rem;
 }
-.org-group-member img {
+#wp-political-root .org-group-member img {
   width: 18px;
   height: 18px;
   border-radius: 50%;
 }
-.org-remove-member {
+#wp-political-root .org-remove-member {
   background: none;
   border: none;
   color: var(--red);
@@ -1617,7 +1624,7 @@ details.panel[open] > :not(summary) {
   font-size: 0.8rem;
   margin-left: 4px;
 }
-.org-remove-group {
+#wp-political-root .org-remove-group {
   background: none;
   border: none;
   color: var(--red);
@@ -1625,18 +1632,18 @@ details.panel[open] > :not(summary) {
   font-size: 0.8rem;
 }
 /* Nuovo Member Organizer */
-.endorsement-groups {
+#wp-political-root .endorsement-groups {
   display: flex;
   flex-direction: column;
   gap: 24px;
 }
-.endorsement-group-card {
+#wp-political-root .endorsement-group-card {
   background: var(--s2);
   border: 1px solid var(--bd2);
   border-radius: 12px;
   padding: 16px;
 }
-.group-header {
+#wp-political-root .group-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1644,10 +1651,10 @@ details.panel[open] > :not(summary) {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--bd);
 }
-.group-candidate {
+#wp-political-root .group-candidate {
   flex: 1;
 }
-.group-candidate select {
+#wp-political-root .group-candidate select {
   width: 100%;
   max-width: 280px;
   background: var(--s1);
@@ -1656,7 +1663,7 @@ details.panel[open] > :not(summary) {
   padding: 6px 10px;
   color: var(--text);
 }
-.group-remove {
+#wp-political-root .group-remove {
   background: none;
   border: none;
   color: var(--red);
@@ -1664,18 +1671,18 @@ details.panel[open] > :not(summary) {
   font-size: 1.2rem;
   padding: 0 8px;
 }
-.group-supporters {
+#wp-political-root .group-supporters {
   margin: 12px 0 12px 20px;
   padding-left: 12px;
   border-left: 2px solid var(--gold2);
 }
-.supporter-list {
+#wp-political-root .supporter-list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
 }
-.supporter-pill {
+#wp-political-root .supporter-pill {
   background: var(--s3);
   border-radius: 20px;
   padding: 4px 10px;
@@ -1684,12 +1691,12 @@ details.panel[open] > :not(summary) {
   gap: 6px;
   font-size: 0.8rem;
 }
-.supporter-pill img {
+#wp-political-root .supporter-pill img {
   width: 20px;
   height: 20px;
   border-radius: 50%;
 }
-.remove-supporter {
+#wp-political-root .remove-supporter {
   background: none;
   border: none;
   color: var(--red);
@@ -1697,14 +1704,14 @@ details.panel[open] > :not(summary) {
   font-size: 0.8rem;
   margin-left: 4px;
 }
-.add-supporter {
+#wp-political-root .add-supporter {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 8px;
 }
-.add-supporter select {
+#wp-political-root .add-supporter select {
   background: var(--s1);
   border: 1px solid var(--bd2);
   border-radius: 6px;
@@ -1713,7 +1720,7 @@ details.panel[open] > :not(summary) {
   flex: 1;
   min-width: 160px;
 }
-.add-supporter button {
+#wp-political-root .add-supporter button {
   background: var(--gold2);
   border: none;
   border-radius: 6px;
@@ -1723,7 +1730,7 @@ details.panel[open] > :not(summary) {
   cursor: pointer;
 }
 /* Candidato card */
-.candidate-card {
+#wp-political-root .candidate-card {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1733,38 +1740,38 @@ details.panel[open] > :not(summary) {
   margin-bottom: 16px;
   border-left: 4px solid var(--gold2);
 }
-.candidate-card.empty {
+#wp-political-root .candidate-card.empty {
   background: var(--s2);
   border-left-color: var(--text3);
 }
-.candidate-avatar {
+#wp-political-root .candidate-avatar {
   width: 48px;
   height: 48px;
   border-radius: 50%;
   object-fit: cover;
 }
-.candidate-info {
+#wp-political-root .candidate-info {
   flex: 1;
 }
-.candidate-name {
+#wp-political-root .candidate-name {
   font-weight: bold;
   font-size: 1.1rem;
 }
-.candidate-role {
+#wp-political-root .candidate-role {
   font-size: 0.7rem;
   color: var(--gold2);
   text-transform: uppercase;
 }
-.candidate-stats {
+#wp-political-root .candidate-stats {
   text-align: right;
 }
-.supporter-count {
+#wp-political-root .supporter-count {
   font-size: 0.85rem;
   font-weight: bold;
   color: var(--gold2);
   display: block;
 }
-.change-candidate-btn, .select-candidate-btn {
+#wp-political-root .change-candidate-btn, #wp-political-root .select-candidate-btn {
   background: var(--s2);
   border: 1px solid var(--bd2);
   border-radius: 6px;
@@ -1774,7 +1781,7 @@ details.panel[open] > :not(summary) {
   margin-top: 4px;
 }
 /* Dialog per selezione candidato */
-.candidate-selector-dialog {
+#wp-political-root .candidate-selector-dialog {
   position: fixed;
   top: 0;
   left: 0;
@@ -1786,20 +1793,20 @@ details.panel[open] > :not(summary) {
   justify-content: center;
   z-index: 20000;
 }
-.dialog-content {
+#wp-political-root .dialog-content {
   background: var(--s1);
   border-radius: 12px;
   padding: 20px;
   min-width: 300px;
   max-width: 90vw;
 }
-.dialog-buttons {
+#wp-political-root .dialog-buttons {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
   margin-top: 16px;
 }
-.dialog-buttons button {
+#wp-political-root .dialog-buttons button {
   background: var(--s2);
   border: 1px solid var(--bd2);
   border-radius: 6px;
@@ -1807,7 +1814,7 @@ details.panel[open] > :not(summary) {
   cursor: pointer;
 }
 /* Lista sostenitori (pillole) */
-.supporter-pill {
+#wp-political-root .supporter-pill {
   background: var(--s3);
   border-radius: 20px;
   padding: 4px 10px;
@@ -1816,22 +1823,22 @@ details.panel[open] > :not(summary) {
   gap: 6px;
   font-size: 0.8rem;
 }
-.supporter-pill img {
+#wp-political-root .supporter-pill img {
   width: 20px;
   height: 20px;
   border-radius: 50%;
 }
-.remove-supporter {
+#wp-political-root .remove-supporter {
   background: none;
   border: none;
   color: var(--red);
   cursor: pointer;
   font-size: 0.8rem;
   margin-left: 4px;
-}.endorsement-group-card {
+}#wp-political-root .endorsement-group-card {
   position: relative;
 }
-.group-remove {
+#wp-political-root .group-remove {
   position: absolute;
   top: 8px;
   right: 12px;
@@ -1843,11 +1850,11 @@ details.panel[open] > :not(summary) {
   opacity: 0.6;
   transition: opacity 0.2s;
 }
-.group-remove:hover {
+#wp-political-root .group-remove:hover {
   opacity: 1;
 }
 /* Loading toast migliorato */
-#loadingToast {
+#wp-political-root #loadingToast {
   font-family: 'Sora', sans-serif;
   font-weight: 500;
   letter-spacing: 0.3px;
@@ -1856,7 +1863,7 @@ details.panel[open] > :not(summary) {
   transition: opacity 0.2s ease, transform 0.2s;
   transform: translateY(0);
 }
-#loadingToast span:first-child {
+#wp-political-root #loadingToast span:first-child {
   animation: spin 1.2s linear infinite;
 }
 @keyframes spin {
@@ -1864,7 +1871,7 @@ details.panel[open] > :not(summary) {
   to { transform: rotate(360deg); }
 }
 /* ── TICKER GLOBALE FISSO IN ALTO (stile piatto) ── */
-.global-ticker {
+#wp-political-root .global-ticker {
   position: fixed;
   top: 0;
   left: 0;
@@ -1889,7 +1896,7 @@ details.panel[open] > :not(summary) {
   }
 }
 
-.news-ticker-container {
+#wp-political-root .news-ticker-container {
   background: linear-gradient(90deg, #0e1117 0%, #141820 100%);
   border-bottom: 1px solid var(--bd2);
   display: flex;
@@ -1899,7 +1906,7 @@ details.panel[open] > :not(summary) {
   height: 42px; /* altezza fissa */
 }
 
-.news-ticker-label {
+#wp-political-root .news-ticker-label {
   background: #c5964a;
   color: #07090d;
   font-weight: 800;
@@ -1915,14 +1922,14 @@ details.panel[open] > :not(summary) {
   flex-shrink: 0;
 }
 
-.news-ticker-wrapper {
+#wp-political-root .news-ticker-wrapper {
   flex: 1;
   overflow: hidden;
   position: relative;
   height: 100%;
 }
 
-.news-ticker {
+#wp-political-root .news-ticker {
   position: absolute;
   white-space: nowrap;
   display: inline-block;
@@ -1933,21 +1940,21 @@ details.panel[open] > :not(summary) {
   line-height: 42px;
 }
 
-.news-ticker:hover {
+#wp-political-root .news-ticker:hover {
   animation-play-state: paused;
 }
 
-.ticker-message {
+#wp-political-root .ticker-message {
   display: inline-block;
   margin-right: 48px;
 }
 
-.ticker-message strong {
+#wp-political-root .ticker-message strong {
   color: var(--gold2);
   font-weight: 700;
 }
 
-.ticker-sep {
+#wp-political-root .ticker-sep {
   display: inline-block;
   margin: 0 24px;
   color: var(--gold);
@@ -1961,14 +1968,14 @@ details.panel[open] > :not(summary) {
 }
 
 /* Light theme */
-[data-theme="light"] .news-ticker-container {
+#wp-political-root [data-theme="light"] .news-ticker-container {
   background: linear-gradient(90deg, #f0f0ea 0%, #ffffff 100%);
 }
-[data-theme="light"] .news-ticker-label {
+#wp-political-root [data-theme="light"] .news-ticker-label {
   background: #9a7230;
   color: #fff;
 }
-.candidate-card {
+#wp-political-root .candidate-card {
   background: var(--s2);
   border: 1px solid var(--bd2);
   border-radius: 12px;
@@ -1979,15 +1986,15 @@ details.panel[open] > :not(summary) {
   position: relative;
   transition: transform 0.2s, border-color 0.2s;
 }
-.candidate-card:hover {
+#wp-political-root .candidate-card:hover {
   border-color: var(--gold);
   transform: translateY(-2px);
 }
-.candidate-card-leading {
+#wp-political-root .candidate-card-leading {
   border-color: var(--gold);
   box-shadow: 0 0 0 1px var(--gold) inset;
 }
-.candidate-card-rank {
+#wp-political-root .candidate-card-rank {
   position: absolute;
   top: 8px;
   right: 10px;
@@ -1995,12 +2002,12 @@ details.panel[open] > :not(summary) {
   font-weight: 700;
   color: var(--text3);
 }
-.candidate-card-level {
+#wp-political-root .candidate-card-level {
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--gold2);
 }
-.candidate-card-party-logo {
+#wp-political-root .candidate-card-party-logo {
   width: 16px;
   height: 16px;
   border-radius: 50%;
@@ -2008,44 +2015,44 @@ details.panel[open] > :not(summary) {
   vertical-align: middle;
   margin-right: 4px;
 }
-.candidate-card-avatar {
+#wp-political-root .candidate-card-avatar {
   width: 48px;
   height: 48px;
   border-radius: 50%;
   object-fit: cover;
   background: var(--s3);
 }
-.candidate-card-info {
+#wp-political-root .candidate-card-info {
   flex: 1;
 }
-.candidate-card-name {
+#wp-political-root .candidate-card-name {
   font-weight: 600;
   font-size: 1rem;
   margin-bottom: 4px;
 }
-.candidate-card-party {
+#wp-political-root .candidate-card-party {
   font-size: 0.7rem;
   color: var(--gold2);
 }
-.candidate-card-votes {
+#wp-political-root .candidate-card-votes {
   font-size: 0.8rem;
   font-weight: 500;
   color: var(--text2);
   margin-top: 4px;
 }
-.votes-count {
+#wp-political-root .votes-count {
   color: var(--gold2);
   font-weight: 700;
 }
-.candidate-card-article {
+#wp-political-root .candidate-card-article {
   font-size: 0.75rem;
   margin-top: 6px;
 }
-.candidate-card-article a {
+#wp-political-root .candidate-card-article a {
   color: var(--gold2);
   text-decoration: none;
 }
-.candidate-card-article a:hover {
+#wp-political-root .candidate-card-article a:hover {
   text-decoration: underline;
 }
 /* ══════════════════════════════════════════════════════════
@@ -2053,42 +2060,42 @@ details.panel[open] > :not(summary) {
 ══════════════════════════════════════════════════════════ */
 
 /* ── 1. HEADER: gradient title + golden border shimmer ── */
-.header-title {
+#wp-political-root .header-title {
   background: linear-gradient(135deg, #e8c97a 0%, #c5964a 60%, #e8c97a 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
-.header {
+#wp-political-root .header {
   position: relative;
 }
-.header::after {
+#wp-political-root .header::after {
   content: '';
   position: absolute;
   bottom: 0; left: 0; right: 0; height: 1px;
   background: linear-gradient(90deg, transparent 0%, rgba(197,150,74,.45) 40%, rgba(232,201,122,.6) 50%, rgba(197,150,74,.45) 60%, transparent 100%);
   pointer-events: none;
 }
-.header-logo {
+#wp-political-root .header-logo {
   background: radial-gradient(circle at 35% 35%, rgba(232,201,122,.32), rgba(197,150,74,.12));
   box-shadow: 0 0 18px rgba(197,150,74,.12), inset 0 1px 0 rgba(232,201,122,.2);
 }
-[data-theme="light"] .header-title {
+#wp-political-root [data-theme="light"] .header-title {
   background: linear-gradient(135deg, #9a7230 0%, #b8860b 60%, #9a7230 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-[data-theme="light"] .header::after {
+#wp-political-root [data-theme="light"] .header::after {
   background: linear-gradient(90deg, transparent 0%, rgba(130,95,38,.35) 40%, rgba(154,114,48,.5) 50%, rgba(130,95,38,.35) 60%, transparent 100%);
 }
 
 /* ── 2. STAT CARDS: coloured top-bar + trend row ── */
-.stat {
+#wp-political-root .stat {
   position: relative;
   overflow: hidden;
 }
-.stat::before {
+#wp-political-root .stat::before {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0; height: 2px;
@@ -2096,27 +2103,27 @@ details.panel[open] > :not(summary) {
   opacity: .65;
   border-radius: 3px 3px 0 0;
 }
-.stat.hl { --stat-accent: var(--gold2); }
-.stat.stat-totalvotes-highlight { --stat-accent: #f5dfa0; }
+#wp-political-root .stat.hl { --stat-accent: var(--gold2); }
+#wp-political-root .stat.stat-totalvotes-highlight { --stat-accent: #f5dfa0; }
 /* colori per le stat senza classe speciale */
-#statsRow .stat:nth-child(2)  { --stat-accent: #3b82f6; }
-#statsRow .stat:nth-child(4)  { --stat-accent: #a855f7; }
-#statsRow .stat:nth-child(6)  { --stat-accent: #06b6d4; }
+#wp-political-root #statsRow .stat:nth-child(2)  { --stat-accent: #3b82f6; }
+#wp-political-root #statsRow .stat:nth-child(4)  { --stat-accent: #a855f7; }
+#wp-political-root #statsRow .stat:nth-child(6)  { --stat-accent: #06b6d4; }
 
 /* Trend indicator row */
-.stat-trend {
+#wp-political-root .stat-trend {
   font-size: .68rem;
   margin-top: 3px;
   display: flex;
   align-items: center;
   gap: 3px;
 }
-.stat-trend.up   { color: var(--green); }
-.stat-trend.down { color: var(--red); }
-.stat-trend.neutral { color: var(--text3); }
+#wp-political-root .stat-trend.up   { color: var(--green); }
+#wp-political-root .stat-trend.down { color: var(--red); }
+#wp-political-root .stat-trend.neutral { color: var(--text3); }
 
 /* ── 3. PARTY TABLE: vertical colour bar + mini progress bar (already in CSS, enhance) ── */
-.party-color-bar {
+#wp-political-root .party-color-bar {
   width: 3px !important;
   height: 26px !important;
   border-radius: 3px;
@@ -2124,28 +2131,28 @@ details.panel[open] > :not(summary) {
   box-shadow: 0 0 6px rgba(0,0,0,.25);
   margin-right: 8px !important;
 }
-.party-name-abbr {
+#wp-political-root .party-name-abbr {
   font-size: .68rem;
   color: var(--text3);
   line-height: 1.1;
 }
-.party-name-main {
+#wp-political-root .party-name-main {
   font-size: .82rem;
   font-weight: 500;
   line-height: 1.2;
 }
-.party-name-stack {
+#wp-political-root .party-name-stack {
   display: flex;
   flex-direction: column;
 }
 /* seats bar taller + smoother */
-.seats-bar { height: 5px !important; }
-.seats-bar-fill { transition: width .55s cubic-bezier(.4,0,.2,1); }
-.party-table tbody tr:hover td { background: var(--s2); }
-.party-table tbody tr:hover .party-color-bar { box-shadow: 0 0 10px var(--party-glow, rgba(197,150,74,.5)); }
+#wp-political-root .seats-bar { height: 5px !important; }
+#wp-political-root .seats-bar-fill { transition: width .55s cubic-bezier(.4,0,.2,1); }
+#wp-political-root .party-table tbody tr:hover td { background: var(--s2); }
+#wp-political-root .party-table tbody tr:hover .party-color-bar { box-shadow: 0 0 10px var(--party-glow, rgba(197,150,74,.5)); }
 
 /* ── 4. PRESIDENTIAL RACE: rank badge + gradient winner bar + gold hover ── */
-.race-rank-badge {
+#wp-political-root .race-rank-badge {
   width: 22px; height: 22px;
   border-radius: 50%;
   background: rgba(255,255,255,.06);
@@ -2157,36 +2164,36 @@ details.panel[open] > :not(summary) {
   flex-shrink: 0;
   transition: background .2s, color .2s;
 }
-.race-rank-badge.first {
+#wp-political-root .race-rank-badge.first {
   background: rgba(197,150,74,.22);
   border-color: rgba(197,150,74,.5);
   color: var(--gold2);
 }
-.race-row { transition: border-color .18s, background .18s; }
-.race-row:hover { border-color: rgba(197,150,74,.28) !important; }
+#wp-political-root .race-row { transition: border-color .18s, background .18s; }
+#wp-political-root .race-row:hover { border-color: rgba(197,150,74,.28) !important; }
 /* winner bar: gold gradient */
-.race-row.race-winner .race-bar { background: linear-gradient(90deg, #c5964a, #e8c97a) !important; }
+#wp-political-root .race-row.race-winner .race-bar { background: linear-gradient(90deg, #c5964a, #e8c97a) !important; }
 /* taller bars */
-.race-bar-wrap { height: 6px !important; }
-.race-bar { height: 6px !important; border-radius: 3px; transition: width .55s cubic-bezier(.4,0,.2,1); }
+#wp-political-root .race-bar-wrap { height: 6px !important; }
+#wp-political-root .race-bar { height: 6px !important; border-radius: 3px; transition: width .55s cubic-bezier(.4,0,.2,1); }
 
-[data-theme="light"] .race-rank-badge { background: rgba(0,0,0,.04); border-color: var(--bd2); color: var(--text3); }
-[data-theme="light"] .race-rank-badge.first { background: rgba(130,95,38,.15); border-color: rgba(130,95,38,.4); color: var(--gold2); }
+#wp-political-root [data-theme="light"] .race-rank-badge { background: rgba(0,0,0,.04); border-color: var(--bd2); color: var(--text3); }
+#wp-political-root [data-theme="light"] .race-rank-badge.first { background: rgba(130,95,38,.15); border-color: rgba(130,95,38,.4); color: var(--gold2); }
 
 /* ── 5. TICKER: live dot + fade edge ── */
-.news-ticker-label {
+#wp-political-root .news-ticker-label {
   background: linear-gradient(135deg, #c5964a 0%, #e8c97a 100%) !important;
   gap: 6px;
   position: relative;
 }
-.news-ticker-label::after {
+#wp-political-root .news-ticker-label::after {
   content: '';
   position: absolute;
   right: -16px; top: 0; bottom: 0; width: 16px;
   background: linear-gradient(90deg, #c5964a, transparent);
   pointer-events: none;
 }
-.ticker-live-dot {
+#wp-political-root .ticker-live-dot {
   width: 6px; height: 6px;
   border-radius: 50%;
   background: #07090d;
@@ -2197,19 +2204,19 @@ details.panel[open] > :not(summary) {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: .35; transform: scale(.8); }
 }
-[data-theme="light"] .news-ticker-label { background: linear-gradient(135deg, #9a7230, #b8860b) !important; }
-[data-theme="light"] .news-ticker-label::after { background: linear-gradient(90deg, #9a7230, transparent); }
+#wp-political-root [data-theme="light"] .news-ticker-label { background: linear-gradient(135deg, #9a7230, #b8860b) !important; }
+#wp-political-root [data-theme="light"] .news-ticker-label::after { background: linear-gradient(90deg, #9a7230, transparent); }
 
 /* ── 6a. PARLIAMENT TOOLTIP: richer ── */
-.tooltip {
+#wp-political-root .tooltip {
   max-width: 220px;
   white-space: normal !important;
 }
-.tooltip .tt-party {
+#wp-political-root .tooltip .tt-party {
   font-size: .8rem;
   margin-bottom: 3px;
 }
-.tooltip .tt-user {
+#wp-political-root .tooltip .tt-user {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2218,12 +2225,12 @@ details.panel[open] > :not(summary) {
   color: var(--text);
   margin: 4px 0 2px;
 }
-.tooltip .tt-seat {
+#wp-political-root .tooltip .tt-seat {
   font-size: .68rem;
   color: var(--text3);
   margin-top: 2px;
 }
-.tooltip-avatar {
+#wp-political-root .tooltip-avatar {
   width: 22px !important; height: 22px !important;
   border-radius: 50%;
   border: 1px solid rgba(255,255,255,.2);
@@ -2232,10 +2239,10 @@ details.panel[open] > :not(summary) {
 
 /* ── 6b. TIMELINE: area fill + better points ── */
 /* handled in JS chartTheme — CSS only for wrap */
-.timeline-chart-wrap { height: 170px !important; }
+#wp-political-root .timeline-chart-wrap { height: 170px !important; }
 
 /* ── 6c. PARTY MEMBERS: card grid layout ── */
-.member-card-grid {
+#wp-political-root .member-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 10px;
@@ -2246,9 +2253,9 @@ details.panel[open] > :not(summary) {
   padding-right: 6px;
   content-visibility: auto;
 }
-.member-card-grid::-webkit-scrollbar { width: 8px; }
-.member-card-grid::-webkit-scrollbar-thumb { background: var(--bd2); border-radius: 4px; }
-.member-card {
+#wp-political-root .member-card-grid::-webkit-scrollbar { width: 8px; }
+#wp-political-root .member-card-grid::-webkit-scrollbar-thumb { background: var(--bd2); border-radius: 4px; }
+#wp-political-root .member-card {
   background: var(--s2);
   border: 1px solid var(--bd);
   border-radius: 10px;
@@ -2261,21 +2268,21 @@ details.panel[open] > :not(summary) {
   transition: border-color .18s, transform .18s, box-shadow .18s;
   position: relative;
 }
-.member-card:hover {
+#wp-political-root .member-card:hover {
   border-color: var(--bd2);
   transform: translateY(-2px);
   box-shadow: 0 6px 18px rgba(0,0,0,.22);
 }
-.member-card-avatar {
+#wp-political-root .member-card-avatar {
   width: 48px; height: 48px;
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid var(--bd2);
   background: var(--s3);
 }
-.member-card-avatar.active { border-color: rgba(61,190,122,.5); }
-.member-card-avatar.inactive { border-color: rgba(255,255,255,.08); filter: grayscale(.4); }
-.member-card-name {
+#wp-political-root .member-card-avatar.active { border-color: rgba(61,190,122,.5); }
+#wp-political-root .member-card-avatar.inactive { border-color: rgba(255,255,255,.08); filter: grayscale(.4); }
+#wp-political-root .member-card-name {
   font-size: .78rem;
   font-weight: 500;
   color: var(--text);
@@ -2284,23 +2291,23 @@ details.panel[open] > :not(summary) {
   text-overflow: ellipsis;
   max-width: 100%;
 }
-.member-card-name a { color: inherit; text-decoration: none; }
-.member-card-name a:hover { color: var(--gold); }
-.member-card-seen {
+#wp-political-root .member-card-name a { color: inherit; text-decoration: none; }
+#wp-political-root .member-card-name a:hover { color: var(--gold); }
+#wp-political-root .member-card-seen {
   font-size: .65rem;
   color: var(--text3);
 }
-.member-card-badge {
+#wp-political-root .member-card-badge {
   position: absolute;
   top: 6px; right: 6px;
   width: 8px; height: 8px;
   border-radius: 50%;
   border: 1.5px solid var(--s2);
 }
-.member-card-badge.active   { background: var(--green); }
-.member-card-badge.inactive { background: var(--s3); }
+#wp-political-root .member-card-badge.active   { background: var(--green); }
+#wp-political-root .member-card-badge.inactive { background: var(--s3); }
 
-.member-section-title {
+#wp-political-root .member-section-title {
   font-size: .78rem;
   font-weight: 600;
   color: var(--text2);
@@ -2311,47 +2318,47 @@ details.panel[open] > :not(summary) {
   align-items: center;
   gap: 6px;
 }
-.member-section-title:first-child { margin-top: 0; }
+#wp-political-root .member-section-title:first-child { margin-top: 0; }
 
-[data-theme="light"] .member-card { background: var(--s2); }
-[data-theme="light"] .member-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.1); }
+#wp-political-root [data-theme="light"] .member-card { background: var(--s2); }
+#wp-political-root [data-theme="light"] .member-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.1); }
 
 /* ── Timeline area-fill hint (applies when chart uses fill:true) ── */
 /* Chart.js handles fill internally; only sizing here */
-.timeline-chart-wrap canvas { image-rendering: auto; }
+#wp-political-root .timeline-chart-wrap canvas { image-rendering: auto; }
 
 
 /* ── BUTTON VARIANTS: Party View & Elections ── */
-.btn-party-view {
+#wp-political-root .btn-party-view {
   background: linear-gradient(135deg, #7c5cbf, #5a3f9e);
   color: #fff;
   box-shadow: 0 2px 12px rgba(124,92,191,.3);
 }
-.btn-party-view:hover { box-shadow: 0 4px 20px rgba(124,92,191,.45); }
+#wp-political-root .btn-party-view:hover { box-shadow: 0 4px 20px rgba(124,92,191,.45); }
 
-.btn-elections {
+#wp-political-root .btn-elections {
   background: linear-gradient(135deg, #2a8a5e, #1c6645);
   color: #fff;
   box-shadow: 0 2px 12px rgba(42,138,94,.3);
 }
-.btn-elections:hover { box-shadow: 0 4px 20px rgba(42,138,94,.45); }
+#wp-political-root .btn-elections:hover { box-shadow: 0 4px 20px rgba(42,138,94,.45); }
 
-[data-theme="light"] .btn-party-view {
+#wp-political-root [data-theme="light"] .btn-party-view {
   background: linear-gradient(135deg, #6d4fc4, #4f2fa8);
   color: #fff;
   box-shadow: 0 2px 10px rgba(109,79,196,.25);
 }
-[data-theme="light"] .btn-party-view:hover { box-shadow: 0 4px 18px rgba(109,79,196,.4); }
+#wp-political-root [data-theme="light"] .btn-party-view:hover { box-shadow: 0 4px 18px rgba(109,79,196,.4); }
 
-[data-theme="light"] .btn-elections {
+#wp-political-root [data-theme="light"] .btn-elections {
   background: linear-gradient(135deg, #1e7d53, #145c3c);
   color: #fff;
   box-shadow: 0 2px 10px rgba(30,125,83,.25);
 }
-[data-theme="light"] .btn-elections:hover { box-shadow: 0 4px 18px rgba(30,125,83,.4); }
+#wp-political-root [data-theme="light"] .btn-elections:hover { box-shadow: 0 4px 18px rgba(30,125,83,.4); }
 
 /* ── REFRESH PARTY BUTTON ── */
-.btn-refresh-party {
+#wp-political-root .btn-refresh-party {
   margin-left: auto;
   background: none;
   border: 1px solid var(--bd2);
@@ -2366,32 +2373,32 @@ details.panel[open] > :not(summary) {
   align-items: center;
   gap: 5px;
 }
-.btn-refresh-party:hover {
+#wp-political-root .btn-refresh-party:hover {
   background: var(--s3);
   color: var(--text);
   border-color: var(--bd3);
   transform: rotate(20deg) scale(1.05);
 }
-.btn-refresh-party.spinning { animation: spin360 .6s linear; }
+#wp-political-root .btn-refresh-party.spinning { animation: spin360 .6s linear; }
 @keyframes spin360 { to { transform: rotate(360deg); } }
 
-[data-theme="light"] .btn-refresh-party { border-color: rgba(0,0,0,.18); color: #4a5568; }
-[data-theme="light"] .btn-refresh-party:hover { background: #e6e9f0; color: #1a1e2e; }
+#wp-political-root [data-theme="light"] .btn-refresh-party { border-color: rgba(0,0,0,.18); color: #4a5568; }
+#wp-political-root [data-theme="light"] .btn-refresh-party:hover { background: #e6e9f0; color: #1a1e2e; }
 
 /* ── TIMELINE PARTY FILTER ── */
-.timeline-filter-row {
+#wp-political-root .timeline-filter-row {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 10px;
   flex-wrap: wrap;
 }
-.timeline-filter-label {
+#wp-political-root .timeline-filter-label {
   font-size: .75rem;
   color: var(--text3);
   white-space: nowrap;
 }
-.timeline-party-select {
+#wp-political-root .timeline-party-select {
   background: var(--s2);
   border: 1px solid var(--bd2);
   border-radius: var(--r2);
@@ -2403,19 +2410,19 @@ details.panel[open] > :not(summary) {
   min-width: 160px;
   max-width: 260px;
 }
-.timeline-party-select:focus { outline: none; border-color: var(--gold); }
-[data-theme="light"] .timeline-party-select { background: #fff; }
+#wp-political-root .timeline-party-select:focus { outline: none; border-color: var(--gold); }
+#wp-political-root [data-theme="light"] .timeline-party-select { background: #fff; }
 
 /* ── PARTY VIEW SKELETON ── */
-.psk-loading { pointer-events: none; }
+#wp-political-root .psk-loading { pointer-events: none; }
 
-.psk-overview {
+#wp-political-root .psk-overview {
   display: flex;
   gap: 14px;
   align-items: flex-start;
   padding: 4px 0;
 }
-.psk-avatar {
+#wp-political-root .psk-avatar {
   width: 64px;
   height: 64px;
   border-radius: 50%;
@@ -2424,7 +2431,7 @@ details.panel[open] > :not(summary) {
   background-size: 400px 100%;
   animation: shimmer 1.4s infinite;
 }
-.psk-mem-avatar {
+#wp-political-root .psk-mem-avatar {
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -2433,42 +2440,42 @@ details.panel[open] > :not(summary) {
   background-size: 400px 100%;
   animation: shimmer 1.4s infinite;
 }
-.psk-lines {
+#wp-political-root .psk-lines {
   display: flex;
   flex-direction: column;
   gap: 8px;
   flex: 1;
   padding-top: 6px;
 }
-.psk-line {
+#wp-political-root .psk-line {
   border-radius: 6px;
   height: 12px;
   background: linear-gradient(90deg, var(--s3) 25%, var(--s2) 50%, var(--s3) 75%);
   background-size: 400px 100%;
   animation: shimmer 1.4s infinite;
 }
-.psk-line-wide  { width: 80%; }
-.psk-line-med   { width: 55%; animation-delay: .1s; }
-.psk-line-short { width: 35%; animation-delay: .2s; }
+#wp-political-root .psk-line-wide  { width: 80%; }
+#wp-political-root .psk-line-med   { width: 55%; animation-delay: .1s; }
+#wp-political-root .psk-line-short { width: 35%; animation-delay: .2s; }
 
-.psk-member-row {
+#wp-political-root .psk-member-row {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 6px 0;
   border-bottom: 1px solid var(--bd);
 }
-.psk-member-row:last-child { border-bottom: none; }
+#wp-political-root .psk-member-row:last-child { border-bottom: none; }
 
-[data-theme="light"] .psk-avatar,
-[data-theme="light"] .psk-mem-avatar,
-[data-theme="light"] .psk-line {
+#wp-political-root [data-theme="light"] .psk-avatar,
+#wp-political-root [data-theme="light"] .psk-mem-avatar,
+#wp-political-root [data-theme="light"] .psk-line {
   background: linear-gradient(90deg, #e8eaf0 25%, #d0d4df 50%, #e8eaf0 75%);
   background-size: 400px 100%;
 }
 
 /* ── SIMULATOR REDESIGN ── */
-.sim-controls-row {
+#wp-political-root .sim-controls-row {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
@@ -2476,66 +2483,66 @@ details.panel[open] > :not(summary) {
   padding-bottom: 14px;
   border-bottom: 1px solid var(--bd);
 }
-.sim-control-group {
+#wp-political-root .sim-control-group {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
-.sim-control-label {
+#wp-political-root .sim-control-label {
   font-size: .75rem;
   color: var(--text2);
   white-space: nowrap;
   font-weight: 600;
 }
-.sim-control-hint {
+#wp-political-root .sim-control-hint {
   font-size: .65rem;
   color: var(--text3);
   font-style: italic;
 }
 
 /* Party projection cards */
-.sim-proj-label {
+#wp-political-root .sim-proj-label {
   display: flex;
   align-items: center;
   gap: 10px;
   margin: 14px 0 8px;
   flex-wrap: wrap;
 }
-.sim-proj-basis {
+#wp-political-root .sim-proj-basis {
   font-size: .65rem;
   color: var(--text3);
   font-style: italic;
 }
-.sim-party-cards {
+#wp-political-root .sim-party-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 10px;
   margin-bottom: 16px;
 }
-.sim-party-card {
+#wp-political-root .sim-party-card {
   background: var(--s2);
   border: 1px solid var(--bd);
   border-radius: 10px;
   padding: 10px 12px;
   transition: border-color .2s, transform .15s;
 }
-.sim-party-card:hover {
+#wp-political-root .sim-party-card:hover {
   border-color: var(--bd2);
   transform: translateY(-2px);
 }
-.sim-pc-head {
+#wp-political-root .sim-pc-head {
   display: flex;
   align-items: center;
   gap: 7px;
   margin-bottom: 7px;
 }
-.sim-pc-dot {
+#wp-political-root .sim-pc-dot {
   width: 9px; height: 9px;
   border-radius: 50%;
   flex-shrink: 0;
 }
-.sim-pc-name {
+#wp-political-root .sim-pc-name {
   font-size: .78rem;
   font-weight: 600;
   color: var(--text);
@@ -2544,24 +2551,24 @@ details.panel[open] > :not(summary) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sim-pc-delta {
+#wp-political-root .sim-pc-delta {
   font-size: .72rem;
   font-weight: 700;
 }
-.sim-pc-bar-wrap {
+#wp-political-root .sim-pc-bar-wrap {
   background: var(--s3);
   border-radius: 4px;
   height: 5px;
   margin-bottom: 7px;
   overflow: hidden;
 }
-.sim-pc-bar {
+#wp-political-root .sim-pc-bar {
   height: 100%;
   border-radius: 4px;
   transition: width .4s ease;
   min-width: 2px;
 }
-.sim-pc-stats {
+#wp-political-root .sim-pc-stats {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2569,23 +2576,23 @@ details.panel[open] > :not(summary) {
   color: var(--text3);
   flex-wrap: wrap;
 }
-.sim-pc-seats-now { margin-left: auto; }
-.sim-pc-seats-proj { font-size: .8rem; }
+#wp-political-root .sim-pc-seats-now { margin-left: auto; }
+#wp-political-root .sim-pc-seats-proj { font-size: .8rem; }
 
 /* Mini parliament preview in simulator */
-.sim-parliament-wrap {
+#wp-political-root .sim-parliament-wrap {
   border-top: 1px solid var(--bd);
   padding-top: 14px;
   margin-top: 4px;
   margin-bottom: 10px;
 }
-.sim-parliament-container {
+#wp-political-root .sim-parliament-container {
   max-width: 420px;
   margin: 0 auto;
 }
 
-[data-theme="light"] .sim-party-card { background: #fff; }
-[data-theme="light"] .sim-party-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.09); }
+#wp-political-root [data-theme="light"] .sim-party-card { background: #fff; }
+#wp-political-root [data-theme="light"] .sim-party-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,.09); }
 
 
 
@@ -2593,15 +2600,15 @@ details.panel[open] > :not(summary) {
    SENATE VIEW — horizontal semicircle + party cards below
 ══════════════════════════════════════════════════════════ */
 
-.senate-overlay {
+#wp-political-root .senate-overlay {
   position: fixed; inset: 0; z-index: 40000;
   display: none;
   background: var(--bg-overlay, rgba(7,9,13,0.92));
   backdrop-filter: blur(6px);
 }
-.senate-overlay.active { display: block; }
+#wp-political-root .senate-overlay.active { display: block; }
 
-.senate-stage {
+#wp-political-root .senate-stage {
   position: relative;
   width: 100%; height: 100%;
   overflow-y: auto; /* per scrollare le card partito se troppe */
@@ -2611,13 +2618,13 @@ details.panel[open] > :not(summary) {
   padding: 0 10px;
 }
 
-.senate-vignette {
+#wp-political-root .senate-vignette {
   position: absolute; inset: 0; pointer-events: none;
   box-shadow: inset 0 0 200px 60px rgba(0,0,0,0.5);
   z-index: 5;
 }
 
-.senate-header {
+#wp-political-root .senate-header {
   position: absolute; top: 0; left: 0; right: 0;
   display: flex; align-items: flex-start; justify-content: space-between;
   padding: 12px 20px;
@@ -2626,8 +2633,8 @@ details.panel[open] > :not(summary) {
   flex-wrap: wrap;
   gap: 8px;
 }
-.senate-title-wrap { pointer-events: none; }
-.senate-title {
+#wp-political-root .senate-title-wrap { pointer-events: none; }
+#wp-political-root .senate-title {
   font-family: "Playfair Display", serif;
   font-size: clamp(1.2rem, 3vw, 2rem);
   letter-spacing: .2em;
@@ -2635,7 +2642,7 @@ details.panel[open] > :not(summary) {
   color: var(--gold2, #e8c97a);
   text-shadow: 0 0 24px rgba(232,201,122,.4), 0 2px 6px rgba(0,0,0,.8);
 }
-.senate-subtitle {
+#wp-political-root .senate-subtitle {
   margin-top: 2px;
   font-family: "Sora", sans-serif;
   font-size: .7rem;
@@ -2643,7 +2650,7 @@ details.panel[open] > :not(summary) {
   color: rgba(232,201,122,.65);
   text-transform: uppercase;
 }
-.senate-close-btn {
+#wp-political-root .senate-close-btn {
   pointer-events: all;
   background: rgba(0,0,0,.4);
   border: 1px solid rgba(232,201,122,.35);
@@ -2652,10 +2659,10 @@ details.panel[open] > :not(summary) {
   cursor: pointer; font-size: .9rem;
   transition: background .15s, transform .15s;
 }
-.senate-close-btn:hover { background: rgba(232,201,122,.18); transform: scale(1.08); }
+#wp-political-root .senate-close-btn:hover { background: rgba(232,201,122,.18); transform: scale(1.08); }
 
 /* ── controls ── */
-.senate-controls {
+#wp-political-root .senate-controls {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2667,9 +2674,9 @@ details.panel[open] > :not(summary) {
   backdrop-filter: blur(4px);
   border: 1px solid rgba(255,255,255,0.06);
 }
-.senate-controls input,
-.senate-controls select,
-.senate-controls button {
+#wp-political-root .senate-controls input,
+#wp-political-root .senate-controls select,
+#wp-political-root .senate-controls button {
   background: var(--s2, #141820);
   border: 1px solid var(--bd2, rgba(255,255,255,0.11));
   border-radius: 6px;
@@ -2679,11 +2686,11 @@ details.panel[open] > :not(summary) {
   padding: 3px 8px;
   outline: none;
 }
-.senate-controls input:focus,
-.senate-controls select:focus {
+#wp-political-root .senate-controls input:focus,
+#wp-political-root .senate-controls select:focus {
   border-color: var(--gold, #c5964a);
 }
-.senate-controls button {
+#wp-political-root .senate-controls button {
   background: var(--gold, #c5964a);
   color: #07090d;
   font-weight: 600;
@@ -2692,10 +2699,10 @@ details.panel[open] > :not(summary) {
   border: none;
   padding: 3px 10px;
 }
-.senate-controls button:hover { opacity: .8; }
+#wp-political-root .senate-controls button:hover { opacity: .8; }
 
 /* ── seats container (center) ── */
-.senate-seats {
+#wp-political-root .senate-seats {
   flex: 0 0 auto;
   position: relative;
   z-index: 10;
@@ -2703,7 +2710,7 @@ details.panel[open] > :not(summary) {
   width: 100%;
   margin: 100px 0 10px;
 }
-.senate-empty {
+#wp-political-root .senate-empty {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
   color: #ffdca0; font-family: "Sora", sans-serif; font-size: 1rem;
   text-align: center; max-width: 400px; line-height: 1.5;
@@ -2713,7 +2720,7 @@ details.panel[open] > :not(summary) {
 }
 
 /* ── cards (senators) ── */
-.senate-card {
+#wp-political-root .senate-card {
   position: absolute;
   transform: translate(-50%, -100%) rotate(var(--sc-rot, 0deg));
   transform-origin: 50% 100%;
@@ -2727,12 +2734,12 @@ details.panel[open] > :not(summary) {
 @keyframes senateCardIn {
   to { opacity: 1; transform: translate(-50%, -100%) rotate(var(--sc-rot, 0deg)) scale(1); }
 }
-.senate-card:hover {
+#wp-political-root .senate-card:hover {
   transform: translate(-50%, -100%) rotate(var(--sc-rot, 0deg)) scale(1.15) translateY(-4px);
   filter: drop-shadow(0 0 18px var(--sc-color, #e8c97a)) drop-shadow(0 6px 14px rgba(0,0,0,.6));
   z-index: 9999 !important;
 }
-.senate-card-body {
+#wp-political-root .senate-card-body {
   width: 100%; height: 100%;
   display: flex; flex-direction: column;
   border-radius: 8px;
@@ -2741,7 +2748,7 @@ details.panel[open] > :not(summary) {
   box-shadow: 0 0 0 1px rgba(255,255,255,.06) inset, 0 0 14px -4px var(--sc-color, transparent);
   overflow: hidden;
 }
-.senate-card-figure {
+#wp-political-root .senate-card-figure {
   width: 100%; height: 55%;
   flex: 0 0 auto;
   background: var(--sc-color, #6b7280) center/cover no-repeat;
@@ -2749,11 +2756,11 @@ details.panel[open] > :not(summary) {
   position: relative;
   overflow: hidden;
 }
-.senate-card-figure::after {
+#wp-political-root .senate-card-figure::after {
   content: ''; position: absolute; inset: 0;
   background: linear-gradient(180deg, rgba(255,255,255,.08), transparent 40%, rgba(0,0,0,.35) 100%);
 }
-.senate-card-party-badge {
+#wp-political-root .senate-card-party-badge {
   position: absolute; top: 2px; left: 2px;
   background: rgba(0,0,0,.6);
   border: 1px solid var(--sc-color, #e8c97a);
@@ -2768,13 +2775,13 @@ details.panel[open] > :not(summary) {
   transform-origin: top left;
   transform: rotate(calc(-1 * var(--sc-rot, 0deg)));
 }
-.senate-card-initial {
+#wp-political-root .senate-card-initial {
   font-family: "Playfair Display", serif;
   font-size: 1.2rem; font-weight: 700; color: #fff;
   opacity: .85;
   text-shadow: 0 1px 4px rgba(0,0,0,.7);
 }
-.senate-card-info {
+#wp-political-root .senate-card-info {
   flex: 1 1 auto;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
@@ -2782,7 +2789,7 @@ details.panel[open] > :not(summary) {
   padding: 3px 2px;
   background: rgba(0,0,0,.25);
 }
-.senate-card-name {
+#wp-political-root .senate-card-name {
   text-align: center;
   font-family: "Sora", sans-serif;
   font-size: .58rem;
@@ -2794,31 +2801,31 @@ details.panel[open] > :not(summary) {
   max-width: 100%;
   text-shadow: 0 1px 3px rgba(0,0,0,.9);
 }
-.senate-card-stats {
+#wp-political-root .senate-card-stats {
   display: flex; align-items: center; justify-content: center;
   gap: 4px;
   flex-wrap: wrap;
 }
-.senate-card-stat {
+#wp-political-root .senate-card-stat {
   font-family: "Sora", sans-serif;
   font-size: .5rem; font-weight: 600;
   color: #d8cba0;
   text-shadow: 0 1px 2px rgba(0,0,0,.9);
   white-space: nowrap;
 }
-.senate-card-bar {
+#wp-political-root .senate-card-bar {
   width: 80%; height: 3px;
   background: rgba(255,255,255,0.15);
   border-radius: 2px;
   margin-top: 2px;
   overflow: hidden;
 }
-.senate-card-bar-fill {
+#wp-political-root .senate-card-bar-fill {
   height: 100%;
   border-radius: 2px;
   transition: width .4s ease;
 }
-.senate-card-hover {
+#wp-political-root .senate-card-hover {
   position: absolute;
   bottom: 100%; left: 50%;
   transform: rotate(calc(-1 * var(--sc-rot, 0deg))) translate(-50%, -8px);
@@ -2836,16 +2843,16 @@ details.panel[open] > :not(summary) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.senate-card:hover .senate-card-hover { opacity: 1; }
-.senate-card-hover-name  { font-size: .72rem; font-weight: 700; color: #fff; }
-.senate-card-hover-party { font-size: .62rem; font-weight: 600; margin-bottom: 3px; }
-.senate-card-hover-row   { font-size: .62rem; color: #c9c4b8; line-height: 1.3; }
+#wp-political-root .senate-card:hover .senate-card-hover { opacity: 1; }
+#wp-political-root .senate-card-hover-name  { font-size: .72rem; font-weight: 700; color: #fff; }
+#wp-political-root .senate-card-hover-party { font-size: .62rem; font-weight: 600; margin-bottom: 3px; }
+#wp-political-root .senate-card-hover-row   { font-size: .62rem; color: #c9c4b8; line-height: 1.3; }
 
 /* ── party cards: standalone, anchored near their own arc position (no longer a joined grid) ── */
-.senate-party-cards {
+#wp-political-root .senate-party-cards {
   display: none; /* replaced by radially-anchored .senate-party-card elements inside .senate-seats */
 }
-.senate-party-card {
+#wp-political-root .senate-party-card {
   position: absolute;
   width: 240px;
   background: rgba(0,0,0,0.55);
@@ -2869,64 +2876,64 @@ details.panel[open] > :not(summary) {
    list only extends upward/sideways, away from the seat arc below — it
    can never sink down and get hidden behind the senator cards, which
    sit on a much higher z-index. */
-.senate-party-card.anchor-top   { transform: translate(-50%, -100%); }
-.senate-party-card.anchor-left  { transform: translate(-100%, -100%); }
-.senate-party-card.anchor-right { transform: translate(0%, -100%); }
-.senate-party-card.anchor-top:hover   { transform: translate(-50%, -100%) scale(1.03); }
-.senate-party-card.anchor-left:hover  { transform: translate(-100%, -100%) scale(1.03); }
-.senate-party-card.anchor-right:hover { transform: translate(0%, -100%) scale(1.03); }
-.senate-party-card:hover {
+#wp-political-root .senate-party-card.anchor-top   { transform: translate(-50%, -100%); }
+#wp-political-root .senate-party-card.anchor-left  { transform: translate(-100%, -100%); }
+#wp-political-root .senate-party-card.anchor-right { transform: translate(0%, -100%); }
+#wp-political-root .senate-party-card.anchor-top:hover   { transform: translate(-50%, -100%) scale(1.03); }
+#wp-political-root .senate-party-card.anchor-left:hover  { transform: translate(-100%, -100%) scale(1.03); }
+#wp-political-root .senate-party-card.anchor-right:hover { transform: translate(0%, -100%) scale(1.03); }
+#wp-political-root .senate-party-card:hover {
   background: rgba(0,0,0,0.72);
   z-index: 9998;
 }
-.spc-stats-row {
+#wp-political-root .spc-stats-row {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 10px;
 }
-.spc-stat {
+#wp-political-root .spc-stat {
   font-family: "Sora", sans-serif;
   font-size: .66rem;
   font-weight: 600;
   color: #d8cba0;
   white-space: nowrap;
 }
-.spc-header {
+#wp-political-root .spc-header {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
-.spc-dot {
+#wp-political-root .spc-dot {
   width: 10px; height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
 }
-.spc-name {
+#wp-political-root .spc-name {
   font-weight: 700;
   font-size: .85rem;
   color: var(--text);
   flex: 1;
 }
-.spc-seats {
+#wp-political-root .spc-seats {
   font-size: .7rem;
   color: var(--gold2, #e8c97a);
   background: rgba(232,201,122,.12);
   padding: 1px 8px;
   border-radius: 12px;
 }
-.spc-votes {
+#wp-political-root .spc-votes {
   font-size: .7rem;
   color: var(--text2);
 }
-.spc-members {
+#wp-political-root .spc-members {
   display: flex;
   flex-direction: column;
   gap: 4px;
   max-height: 180px;
   overflow-y: auto;
 }
-.spc-member {
+#wp-political-root .spc-member {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2936,17 +2943,17 @@ details.panel[open] > :not(summary) {
   border-radius: 4px;
   transition: background .1s;
 }
-.spc-member:hover {
+#wp-political-root .spc-member:hover {
   background: rgba(255,255,255,0.04);
 }
-.spc-avatar {
+#wp-political-root .spc-avatar {
   width: 22px; height: 22px;
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
   background: var(--s3);
 }
-.spc-avatar-fallback {
+#wp-political-root .spc-avatar-fallback {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2954,7 +2961,7 @@ details.panel[open] > :not(summary) {
   font-weight: 700;
   color: var(--text3);
 }
-.spc-member-name {
+#wp-political-root .spc-member-name {
   flex: 1;
   font-weight: 500;
   color: var(--text);
@@ -2962,12 +2969,12 @@ details.panel[open] > :not(summary) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.spc-member-votes {
+#wp-political-root .spc-member-votes {
   font-weight: 600;
   color: var(--gold2);
   white-space: nowrap;
 }
-.spc-member-pct {
+#wp-political-root .spc-member-pct {
   font-size: .65rem;
   color: var(--text3);
   min-width: 36px;
@@ -2975,7 +2982,7 @@ details.panel[open] > :not(summary) {
 }
 
 /* ── table view (full-screen fallback) ── */
-.senate-table {
+#wp-political-root .senate-table {
   width: 90%; max-width: 800px;
   margin: 80px auto 20px;
   border-collapse: collapse;
@@ -2985,36 +2992,36 @@ details.panel[open] > :not(summary) {
   backdrop-filter: blur(4px);
   font-size: .8rem;
 }
-.senate-table th,
-.senate-table td {
+#wp-political-root .senate-table th,
+#wp-political-root .senate-table td {
   padding: 6px 10px;
   text-align: left;
   border-bottom: 1px solid rgba(255,255,255,0.06);
 }
-.senate-table th {
+#wp-political-root .senate-table th {
   background: rgba(0,0,0,0.2);
   color: var(--gold2, #e8c97a);
   font-weight: 600;
   cursor: pointer;
 }
-.senate-table th:hover { background: rgba(0,0,0,0.3); }
-.senate-table tr:hover td { background: rgba(255,255,255,0.04); }
-.senate-table-avatar {
+#wp-political-root .senate-table th:hover { background: rgba(0,0,0,0.3); }
+#wp-political-root .senate-table tr:hover td { background: rgba(255,255,255,0.04); }
+#wp-political-root .senate-table-avatar {
   width: 24px; height: 24px;
   border-radius: 50%;
   margin-right: 6px;
   vertical-align: middle;
 }
-.senate-table-link {
+#wp-political-root .senate-table-link {
   color: var(--gold2, #e8c97a);
   text-decoration: none;
   font-weight: 700;
 }
-.senate-table-link:hover { text-decoration: underline; }
+#wp-political-root .senate-table-link:hover { text-decoration: underline; }
 
 /* ── animations ── */
 #wp-political-root { --senate-animations: auto; }
-.senate-card-figure {
+#wp-political-root .senate-card-figure {
   animation: senateGlowPulse 4s ease-in-out infinite;
   animation-delay: var(--sc-pulse-delay, 0s);
 }
@@ -3022,9 +3029,9 @@ details.panel[open] > :not(summary) {
   0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,.06) inset, 0 0 8px -4px var(--sc-color, transparent); }
   50%      { box-shadow: 0 0 0 1px rgba(255,255,255,.06) inset, 0 0 14px -2px var(--sc-color, transparent); }
 }
-.senate-card:hover .senate-card-figure { animation-play-state: paused; }
+#wp-political-root .senate-card:hover .senate-card-figure { animation-play-state: paused; }
 
-.senate-stage::before, .senate-stage::after {
+#wp-political-root .senate-stage::before, #wp-political-root .senate-stage::after {
   content: '';
   position: absolute; top: 12%; width: 140px; height: 140px;
   border-radius: 50%;
@@ -3032,8 +3039,8 @@ details.panel[open] > :not(summary) {
   animation: senateTorchFlicker 5s ease-in-out infinite;
   pointer-events: none; z-index: 2;
 }
-.senate-stage::before { left: 4%; animation-delay: .3s; }
-.senate-stage::after  { right: 4%; animation-delay: 1.6s; }
+#wp-political-root .senate-stage::before { left: 4%; animation-delay: .3s; }
+#wp-political-root .senate-stage::after  { right: 4%; animation-delay: 1.6s; }
 @keyframes senateTorchFlicker {
   0%, 100% { opacity: .4; transform: scale(1); }
   30%      { opacity: .7; transform: scale(1.04); }
@@ -3041,7 +3048,7 @@ details.panel[open] > :not(summary) {
   80%      { opacity: .6; transform: scale(1.02); }
 }
 
-.senate-title {
+#wp-political-root .senate-title {
   animation: senateTitleGlow 4s ease-in-out infinite;
 }
 @keyframes senateTitleGlow {
@@ -3050,86 +3057,84 @@ details.panel[open] > :not(summary) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .senate-card, .senate-card-figure,
-  .senate-stage::before, .senate-stage::after,
-  .senate-title { animation: none !important; }
-  .senate-card { opacity: 1 !important; transform: translate(-50%, -100%) rotate(var(--sc-rot, 0deg)) scale(1) !important; }
+  #wp-political-root .senate-card, #wp-political-root .senate-card-figure, #wp-political-root .senate-stage::before, #wp-political-root .senate-stage::after, #wp-political-root .senate-title { animation: none !important; }
+  #wp-political-root .senate-card { opacity: 1 !important; transform: translate(-50%, -100%) rotate(var(--sc-rot, 0deg)) scale(1) !important; }
 }
 
 /* ── light theme ── */
-[data-theme="light"] .senate-overlay {
+#wp-political-root [data-theme="light"] .senate-overlay {
   background: rgba(230,232,240,0.92);
 }
-[data-theme="light"] .senate-stage {
+#wp-political-root [data-theme="light"] .senate-stage {
   background: var(--bg, #f9f9f1);
 }
-[data-theme="light"] .senate-title {
+#wp-political-root [data-theme="light"] .senate-title {
   color: var(--gold2, #b8860b);
   text-shadow: 0 0 20px rgba(184,134,11,0.3);
 }
-[data-theme="light"] .senate-subtitle {
+#wp-political-root [data-theme="light"] .senate-subtitle {
   color: rgba(154,114,48,0.7);
 }
-[data-theme="light"] .senate-controls {
+#wp-political-root [data-theme="light"] .senate-controls {
   background: rgba(255,255,255,0.5);
   border-color: rgba(0,0,0,0.08);
 }
-[data-theme="light"] .senate-controls input,
-[data-theme="light"] .senate-controls select {
+#wp-political-root [data-theme="light"] .senate-controls input,
+#wp-political-root [data-theme="light"] .senate-controls select {
   background: #fff;
   color: #1a1e2e;
 }
-[data-theme="light"] .senate-party-card {
+#wp-political-root [data-theme="light"] .senate-party-card {
   background: rgba(255,255,255,0.4);
   border-color: rgba(0,0,0,0.08);
 }
-[data-theme="light"] .senate-party-card:hover {
+#wp-political-root [data-theme="light"] .senate-party-card:hover {
   background: rgba(255,255,255,0.6);
 }
-[data-theme="light"] .spc-name { color: #1a1e2e; }
-[data-theme="light"] .spc-member-name { color: #1a1e2e; }
-[data-theme="light"] .spc-member:hover { background: rgba(0,0,0,0.04); }
-[data-theme="light"] .senate-table {
+#wp-political-root [data-theme="light"] .spc-name { color: #1a1e2e; }
+#wp-political-root [data-theme="light"] .spc-member-name { color: #1a1e2e; }
+#wp-political-root [data-theme="light"] .spc-member:hover { background: rgba(0,0,0,0.04); }
+#wp-political-root [data-theme="light"] .senate-table {
   background: rgba(255,255,255,0.5);
 }
-[data-theme="light"] .senate-table th {
+#wp-political-root [data-theme="light"] .senate-table th {
   background: rgba(0,0,0,0.06);
   color: #9a7230;
 }
-[data-theme="light"] .senate-card-body {
+#wp-political-root [data-theme="light"] .senate-card-body {
   background: rgba(255,255,255,0.7);
 }
-[data-theme="light"] .senate-card-name {
+#wp-political-root [data-theme="light"] .senate-card-name {
   color: #1a1e2e;
   text-shadow: none;
 }
-[data-theme="light"] .senate-card-stat {
+#wp-political-root [data-theme="light"] .senate-card-stat {
   color: #4a5568;
   text-shadow: none;
 }
-[data-theme="light"] .senate-card-figure::after {
+#wp-political-root [data-theme="light"] .senate-card-figure::after {
   background: linear-gradient(180deg, rgba(255,255,255,.2), transparent 40%, rgba(0,0,0,.05) 100%);
 }
-[data-theme="light"] .senate-card-hover {
+#wp-political-root [data-theme="light"] .senate-card-hover {
   background: #fff;
   border-color: rgba(154,114,48,0.4);
   color: #1a1e2e;
 }
-[data-theme="light"] .senate-card-hover-name { color: #1a1e2e; }
-[data-theme="light"] .senate-card-hover-row  { color: #4a5568; }
-[data-theme="light"] .senate-card-hover-party { color: #9a7230; }
+#wp-political-root [data-theme="light"] .senate-card-hover-name { color: #1a1e2e; }
+#wp-political-root [data-theme="light"] .senate-card-hover-row  { color: #4a5568; }
+#wp-political-root [data-theme="light"] .senate-card-hover-party { color: #9a7230; }
 
 @media (max-width: 640px) {
-  .senate-card-stats { display: none; }
-  .senate-card-name { font-size: .5rem; }
-  .senate-controls { padding: 4px 8px; gap: 4px; }
-  .senate-controls input,
-  .senate-controls select,
-  .senate-controls button { font-size: .6rem; padding: 2px 6px; }
-  .senate-party-cards { grid-template-columns: 1fr; padding: 10px 10px 20px; }
-  .spc-members { max-height: 120px; }
+  #wp-political-root .senate-card-stats { display: none; }
+  #wp-political-root .senate-card-name { font-size: .5rem; }
+  #wp-political-root .senate-controls { padding: 4px 8px; gap: 4px; }
+  #wp-political-root .senate-controls input,
+  #wp-political-root .senate-controls select,
+  #wp-political-root .senate-controls button { font-size: .6rem; padding: 2px 6px; }
+  #wp-political-root .senate-party-cards { grid-template-columns: 1fr; padding: 10px 10px 20px; }
+  #wp-political-root .spc-members { max-height: 120px; }
 }/* ── Senate overlay adjustments ── */
-.senate-overlay {
+#wp-political-root .senate-overlay {
   position: fixed;
   inset: 0;
   z-index: 40000;
@@ -3137,10 +3142,10 @@ details.panel[open] > :not(summary) {
   background: var(--bg-overlay, rgba(7,9,13,0.92));
   backdrop-filter: blur(6px);
 }
-.senate-overlay.active {
+#wp-political-root .senate-overlay.active {
   display: block;
 }
-.senate-stage {
+#wp-political-root .senate-stage {
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -3148,14 +3153,14 @@ details.panel[open] > :not(summary) {
   display: flex;
   flex-direction: column;
 }
-.senate-seats {
+#wp-political-root .senate-seats {
   flex: 1;
   position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
 }
-.senate-empty {
+#wp-political-root .senate-empty {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -3172,17 +3177,17 @@ details.panel[open] > :not(summary) {
   padding: 16px 22px;
   z-index: 25;
 }
-[data-theme="light"] .senate-overlay {
+#wp-political-root [data-theme="light"] .senate-overlay {
   background: rgba(230,232,240,0.92);
 }
-[data-theme="light"] .senate-stage {
+#wp-political-root [data-theme="light"] .senate-stage {
   background: var(--bg, #f9f9f1);
 }
 @media (max-width: 700px) {
-  .senate-stage .sv2-main {
+  #wp-political-root .senate-stage .sv2-main {
     flex-direction: column;
   }
-  .senate-stage .sv2-right-panel {
+  #wp-political-root .senate-stage .sv2-right-panel {
     width: 100%;
     min-width: 0;
     max-height: 40%;
@@ -3190,7 +3195,58 @@ details.panel[open] > :not(summary) {
     border-top: 1px solid rgba(197,150,74,.12);
     overflow-y: auto;
   }
-  .senate-stage .sv2-chamber-wrap {
+  #wp-political-root .senate-stage .sv2-chamber-wrap {
     height: 60%;
   }
-}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+}
+/* ── Da <style> inline in <head> di public/political/index.html
+   (dettagli/summary, freccia collassabile) — scoped sotto
+   #wp-political-root per coerenza, benché <details> non sia usato
+   altrove nello shell. ── */
+#wp-political-root details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+#wp-political-root details > summary::-webkit-details-marker {
+  display: none;
+}
+
+#wp-political-root .details-marker {
+  transition: transform 0.2s ease;
+  display: inline-block;
+  font-size: 1.1rem;
+  color: var(--text2);
+  margin-left: auto;
+}
+
+#wp-political-root details[open] .details-marker {
+  transform: rotate(180deg);
+}
+
+#wp-political-root details.panel {
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: var(--r);
+  padding: 20px;
+  transition: border-color .2s;
+  animation: fadeIn .35s ease both;
+}
+
+#wp-political-root details.panel > summary {
+  margin: -20px -20px 0 -20px;
+  padding: 20px;
+  border-bottom: 1px solid var(--bd);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+#wp-political-root details.panel[open] > summary {
+  margin-bottom: 16px;
+}
+
+#wp-political-root details.panel:hover {
+  border-color: var(--bd2);
+}

@@ -255,6 +255,16 @@
        Carica public/political/index.html (codice Political View
        invariato) in un iframe, passando ?country=<id> — lo stesso
        meccanismo di deep-link già esistente oggi tra i due tool.
+
+       Fase 2 (in corso, vedi crystalline-sauteeing-scroll.md): sotto
+       lo stesso overlay convive TEMPORANEAMENTE il nuovo contenitore
+       in-page #wp-political-root, montato lazy da
+       src/political/main.js SOLO quando l'engine "inpage" è attivo
+       (query string ?politicalEngine=inpage o localStorage
+       we_political_engine_preview) — il default resta l'iframe,
+       bit-per-bit invariato, finché lo Stage 9 (cutover) non inverte
+       il default e rimuove l'iframe da qui. Non rimuovere l'iframe
+       prima di allora: è il fallback di produzione attivo.
        ════════════════════════════════════════════════════════════ -->
   <div id="wp-political-overlay" class="wp-political-overlay" aria-hidden="true">
     <div class="wp-political-topbar">
@@ -262,6 +272,7 @@
       <span id="wp-political-title" class="wp-political-title"></span>
     </div>
     <iframe id="wp-political-frame" class="wp-political-frame" title="Political View" loading="lazy"></iframe>
+    <div id="wp-political-root" style="display:none;"></div>
   </div>
 
   <!-- Ko-fi Floating Button -->
