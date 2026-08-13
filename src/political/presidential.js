@@ -46,6 +46,10 @@ export function setPresidentialDeps({ loadElection } = {}) {
 // (Stage 8) e da config.js:toggleTheme (via parametro iniettato, Stage 2).
 export let presCountdown = null;
 export let lastPresData = null;
+// setter aggiunto in Stage 8: main.js:loadElection deve poter azzerare un
+// countdown presidenziale residuo PRIMA di sapere se la nuova elezione è
+// di tipo congress o president (reset difensivo, come nell'originale).
+export function setPresCountdown(v) { presCountdown = v; }
 
 /* ── PRESIDENTIAL ELECTION ── */
 export async function loadPresidentialElection(election, isLatestPresidential) {
