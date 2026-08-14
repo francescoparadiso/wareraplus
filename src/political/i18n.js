@@ -1579,17 +1579,35 @@ export function setLang(lang) {
   document.dispatchEvent(new CustomEvent('langchange', { detail: { lang } }));
 }
 
+// BUG FIX: prima di questa correzione, le 4 querySelectorAll qui sotto
+// giravano su `document` intero invece che sul solo sottoalbero di
+// Political. Siccome src/shared/i18n.js (lo shell — menu hamburger ecc.)
+// usa DELIBERATAMENTE la stessa convenzione `data-i18n*` (vedi il commento
+// in testa a quel file), la prima volta che Political viene montata
+// (initI18n() -> applyStaticTranslations(), chiamata da initPoliticalView）
+// questo giro spazzava via ANCHE gli elementi data-i18n dello shell (es. il
+// pannello del menu hamburger in index.html) — il dizionario I18N qui sopra
+// non ha quelle chiavi (es. "app_subtitle", "map_settings"), quindi
+// t(key) ricadeva sul fallback `?? key` (riga sopra in t()) scrivendo la
+// CHIAVE GREZZA al posto del testo tradotto, in modo permanente (mutazione
+// diretta del DOM, non reattiva). Scoping a #wp-political-root: Political
+// non ha alcun bisogno di toccare elementi fuori dal proprio root montato.
+function _politicalRoot() {
+  return document.getElementById('wp-political-root') || document;
+}
+
 export function applyStaticTranslations() {
-  document.querySelectorAll('[data-i18n]').forEach(el => {
+  const root = _politicalRoot();
+  root.querySelectorAll('[data-i18n]').forEach(el => {
     el.textContent = t(el.getAttribute('data-i18n'));
   });
-  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+  root.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
     el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
   });
-  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+  root.querySelectorAll('[data-i18n-title]').forEach(el => {
     el.title = t(el.getAttribute('data-i18n-title'));
   });
-  document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+  root.querySelectorAll('[data-i18n-aria]').forEach(el => {
     el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria')));
   });
 }

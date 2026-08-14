@@ -166,6 +166,27 @@ async function _onCountryChange(newCountryId) {
   if (newCountryId === currentCountryId) return;
 
   setCurrentCountryId(newCountryId);
+
+  // BUG FIX: quando questa funzione è invocata programmaticamente da
+  // initPoliticalView() (riapertura per una nazione diversa da quella già
+  // montata — es. "Espandi" dal pannello su una nuova nazione, senza mai
+  // chiudere l'overlay), il <select> nativo cambia valore ma il widget
+  // TomSelect che lo sostituisce visivamente (vedi loadCountries() in
+  // ui.js) NON viene aggiornato: TomSelect gestisce la propria label
+  // visualizzata internamente e non "ascolta" riassegnazioni dirette di
+  // `select.value`. Risultato: la barra di ricerca restava bloccata sulla
+  // nazione mostrata alla PRIMA apertura (es. "Italy"/qualunque paese)
+  // anche se sotto i dati si aggiornavano correttamente per quella nuova.
+  // `false` come secondo argomento (silent) evita che TomSelect rispari il
+  // suo evento 'change' → l'unico listener su quell'evento è proprio
+  // _onCountryChange (vedi _wireEventListeners), che uscirebbe comunque
+  // subito al guard `newCountryId === currentCountryId` qui sopra, ma è
+  // più pulito non innescare un giro a vuoto.
+  const countrySelectEl = document.getElementById('countrySelect');
+  if (countrySelectEl?.tomselect && countrySelectEl.tomselect.getValue() !== newCountryId) {
+    countrySelectEl.tomselect.setValue(newCountryId, true);
+  }
+
   setElectionHistory([]);
   setCurrentCongressElectionId(null);
   partyColorMap.clear();

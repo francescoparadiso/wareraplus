@@ -767,18 +767,35 @@ export function setLang(lang) {
   window.dispatchEvent(new CustomEvent('wareraplus:langchange', { detail: { lang } }));
 }
 
-/** Applica le traduzioni a tutti gli elementi con data-i18n* nel documento. */
+// BUG FIX (simmetrico a src/political/i18n.js:applyStaticTranslations):
+// `root.querySelectorAll` con root = document intero avrebbe colpito ANCHE
+// gli elementi data-i18n* dentro #wp-political-root una volta montata
+// (stessa convenzione data-i18n, namespace dizionario diverso — vedi nota
+// in testa al file) — es. cambiando lingua dal selettore dello shell mentre
+// Political è già aperta, il testo di Political sarebbe stato sovrascritto
+// con le chiavi grezze dello shell (fallback di t() su chiave mancante).
+// #wp-political-root si autogestisce (src/political/i18n.js), quindi va
+// sempre escluso da qui, non solo quando root === document esplicito.
+function _skipPoliticalRoot(el) {
+  return !!el.closest?.('#wp-political-root');
+}
+
+/** Applica le traduzioni a tutti gli elementi con data-i18n* nel documento (shell). */
 export function applyTranslations(root = document) {
   root.querySelectorAll('[data-i18n]').forEach(el => {
+    if (_skipPoliticalRoot(el)) return;
     el.textContent = t(el.getAttribute('data-i18n'));
   });
   root.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    if (_skipPoliticalRoot(el)) return;
     el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
   });
   root.querySelectorAll('[data-i18n-title]').forEach(el => {
+    if (_skipPoliticalRoot(el)) return;
     el.title = t(el.getAttribute('data-i18n-title'));
   });
   root.querySelectorAll('[data-i18n-aria]').forEach(el => {
+    if (_skipPoliticalRoot(el)) return;
     el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria')));
   });
 }

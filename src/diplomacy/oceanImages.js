@@ -17,6 +17,24 @@
 //   public/icons/ocean/wave-2.png
 // Se un file manca, il relativo layer viene semplicemente saltato (nessun
 // errore bloccante) — vedi loadOceanImages().
+//
+// Round 2 (tema SCURO — vedi darkFleetTheme.js): stesso meccanismo, altro
+// batch di illustrazioni fornite dall'utente in chat, stesso vincolo (vanno
+// salvate a mano). Nomi distinti dal batch "tema chiaro" sopra per evitare
+// collisioni:
+//   public/icons/ocean/fleet-destroyers.png  (pattuglia: sommergibile +
+//     cacciatorpediniere/fregate — la formazione da 6 navi)
+//   public/icons/ocean/fleet-carrier.png     (gruppo portaerei da 7 navi)
+//   public/icons/ocean/cargo-ship.png        (nave container/mercantile)
+//   public/icons/ocean/wave-dark.png         (l'onda singola stile
+//     "maremoto/cresta" — diversa dalle wave-1/wave-2 già in uso per il
+//     tema chiaro, non le sostituisce)
+//
+// Round 3 (varietà onde tema scuro): altre 2 texture "onda" per alternare
+// coi 3 disegni invece di ripetere sempre lo stesso (vedi WAVE_TEXTURE in
+// darkFleetTheme.js):
+//   public/icons/ocean/wave-dark-2.png
+//   public/icons/ocean/wave-dark-3.png
 
 export const OCEAN_IMAGE_IDS = {
   ship: 'wp-ocean-img-ship',
@@ -24,6 +42,12 @@ export const OCEAN_IMAGE_IDS = {
   shipwreck: 'wp-ocean-img-shipwreck',
   wave1: 'wp-ocean-img-wave-1',
   wave2: 'wp-ocean-img-wave-2',
+  fleetDestroyers: 'wp-ocean-img-fleet-destroyers',
+  fleetCarrier: 'wp-ocean-img-fleet-carrier',
+  cargoShip: 'wp-ocean-img-cargo-ship',
+  waveDark: 'wp-ocean-img-wave-dark',
+  waveDark2: 'wp-ocean-img-wave-dark-2',
+  waveDark3: 'wp-ocean-img-wave-dark-3',
 };
 
 const SOURCES = {
@@ -32,6 +56,12 @@ const SOURCES = {
   [OCEAN_IMAGE_IDS.shipwreck]: '/icons/ocean/shipwreck.png',
   [OCEAN_IMAGE_IDS.wave1]: '/icons/ocean/wave-1.png',
   [OCEAN_IMAGE_IDS.wave2]: '/icons/ocean/wave-2.png',
+  [OCEAN_IMAGE_IDS.fleetDestroyers]: '/icons/ocean/fleet-destroyers.png',
+  [OCEAN_IMAGE_IDS.fleetCarrier]: '/icons/ocean/fleet-carrier.png',
+  [OCEAN_IMAGE_IDS.cargoShip]: '/icons/ocean/cargo-ship.png',
+  [OCEAN_IMAGE_IDS.waveDark]: '/icons/ocean/wave-dark.png',
+  [OCEAN_IMAGE_IDS.waveDark2]: '/icons/ocean/wave-dark-2.png',
+  [OCEAN_IMAGE_IDS.waveDark3]: '/icons/ocean/wave-dark-3.png',
 };
 
 // La versione "nave" fornita ha sfondo bianco pieno (le altre due sono già

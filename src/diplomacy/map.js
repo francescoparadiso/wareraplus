@@ -22,6 +22,7 @@ import { initNationTooltip } from './nationTooltip.js';
 import { hide as hideTooltip } from './nationTooltip.js';
 import { initOceanBackground, applyOceanTheme } from './oceanBackground.js';
 import { initAntiqueTheme, applyAntiqueTheme } from './antiqueTheme.js';
+import { initDarkFleetTheme, applyDarkFleetTheme } from './darkFleetTheme.js';
 
 const { SRC_REGIONS, SRC_BORDERS, SRC_LABELS, SRC_DIPLOMACY_DUAL_BORDER, SRC_BATTLE_REGION, LYR_FILL, LYR_OUTLINE, LYR_COAST, LYR_BORDER, LYR_MULTI_BLOC, LYR_DIPLOMACY_DUAL, LYR_BATTLE_REGION, LYR_BATTLE_REGION_FILL, LYR_BLOC_FLASH } = LAYER_IDS;
 
@@ -116,6 +117,15 @@ export async function setupMapLayers() {
     applyOceanTheme(state);
   } catch (err) {
     console.error('[map] layer ambientale del mare non caricato:', err);
+  }
+  try {
+    // Easter egg illustrati del tema scuro (flotta/portaerei/cargo/onda) —
+    // nessun beforeId: si aggiungono sopra a tutto il resto (decorativi,
+    // stesso principio "solo immagini sulla mappa" del tema chiaro).
+    initDarkFleetTheme(state.map);
+    applyDarkFleetTheme(state);
+  } catch (err) {
+    console.error('[map] easter egg tema scuro non caricati:', err);
   }
   try {
     // Rotte "color seppia" inserite anch'esse con beforeId=LYR_FILL, come
@@ -694,6 +704,7 @@ export function applyTheme() {
   }
   applyOceanTheme(state); // nasconde il layer mare futuristico sul tema chiaro (pergamena)
   applyAntiqueTheme(state); // attiva/disattiva pergamena + easter egg quando si passa a/da tema chiaro
+  applyDarkFleetTheme(state); // attiva/disattiva gli easter egg del tema scuro (flotta/portaerei/cargo/onda)
   renderMap();
 }
 
