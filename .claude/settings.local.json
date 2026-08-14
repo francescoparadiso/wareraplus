@@ -39,7 +39,8 @@
       "Bash(npm run *)",
       "Bash(node --check src/diplomacy/battleFront.js)",
       "Bash(find \"/c/Users/franc/AppData/Local/Temp\" -maxdepth 3 -mmin -120 \\\\\\( -iname \"*.png\" -o -iname \"*.jpg\" -o -iname \"*.jpeg\" -o -iname \"*.webp\" \\\\\\) 2>/dev/null | head -50)",
-      "Bash(find \"/c/Users/franc/AppData/Local/Temp\" -maxdepth 5 -mmin -240 \\\\\\( -iname \"*.png\" -o -iname \"*.jpg\" -o -iname \"*.jpeg\" -o -iname \"*.webp\" \\\\\\) 2>/dev/null | head -80 *)"
+      "Bash(find \"/c/Users/franc/AppData/Local/Temp\" -maxdepth 5 -mmin -240 \\\\\\( -iname \"*.png\" -o -iname \"*.jpg\" -o -iname \"*.jpeg\" -o -iname \"*.webp\" \\\\\\) 2>/dev/null | head -80 *)",
+      "Bash(npm i *)"
     ]
   }
 }

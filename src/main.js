@@ -15,6 +15,14 @@
 
 import './diplomacy/main.js';
 
+// Vercel Web Analytics — conteggio visite/pageview lato Vercel, nessun
+// backend/config nostro. `inject()` è la versione framework-agnostic del
+// pacchetto (l'onboarding di Vercel mostra di default lo snippet
+// @vercel/analytics/next per Next.js, non applicabile qui: questo progetto
+// è Vite puro — vedi https://vercel.com/docs/analytics/quickstart).
+import { inject } from '@vercel/analytics';
+inject();
+
 import { initCountryPanel, selectNationInPanel } from './panel/countryPanel.js';
 import { initPoliticalOverlay } from './app/politicalOverlay.js';
 import { initThemeSync } from './app/themeSync.js';
