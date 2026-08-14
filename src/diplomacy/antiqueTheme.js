@@ -198,7 +198,9 @@ export async function initAntiqueTheme(map, beforeLayerId) {
       layout: { visibility: 'none' },
       paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 2.6, 4, 3.6, 8, 5], 'circle-color': COLOR.routeShip, 'circle-opacity': 0.9 },
     }, beforeLayerId);
-    _shipsArgs = { map, sourceId: routeShipsSrc, sampledPaths: routes.sampledPaths, opts: { intervalMs: 180, speedRange: [0.12, 0.22], withBearing: true, particlesPerPath: 1 } };
+    // WarEra+ perf: 500ms invece di 180ms — vedi nota in oceanBackground.js
+    // (stessa animazione/geometria, solo temi diversi).
+    _shipsArgs = { map, sourceId: routeShipsSrc, sampledPaths: routes.sampledPaths, opts: { intervalMs: 500, speedRange: [0.12, 0.22], withBearing: true, particlesPerPath: 1 } };
     _stopShips = makeRunner(_shipsArgs.map, _shipsArgs.sourceId, _shipsArgs.sampledPaths, _shipsArgs.opts);
 
     // --- Tinta piatta per smorzare i colori nazione (vedi nota sopra

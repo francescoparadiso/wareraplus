@@ -143,6 +143,20 @@ async function fetchAllElectionsOnce() {
   }
 }
 
+/* ── PAUSE/RESUME (WarEra+ perf) ──
+   Il loop si autoferma quando _tickerRunning passa a false (vedi
+   _tickerLoop sopra: se true diventa false, il prossimo tick esce senza
+   richiedere un altro RAF) — chiamate da
+   main.js:pausePoliticalRendering/resumePoliticalRendering quando
+   l'overlay Political viene chiuso/riaperto, così il loop non gira più
+   per sempre in background dopo la prima apertura. */
+export function pauseTicker() { _tickerRunning = false; }
+export function resumeTicker() {
+  if (_tickerRunning) return;
+  _tickerRunning = true;
+  requestAnimationFrame(_tickerLoop);
+}
+
 /* ── INIT ── */
 export function startTicker() {
   // The existing HTML is: .news-ticker-wrapper > #newsTicker

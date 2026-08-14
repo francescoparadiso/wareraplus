@@ -59,7 +59,7 @@ import {
   loadCountries, exportCSV, openParliamentFullscreen, closeParliamentFullscreen,
   safeDestroy,
 } from './ui.js';
-import { startTicker } from './ticker.js';
+import { startTicker, pauseTicker, resumeTicker } from './ticker.js';
 import { getPoliticalTemplate } from './domTemplate.js';
 import { initSenateView, SenateView } from './senate.js';
 import {
@@ -78,6 +78,10 @@ import { loadPartyColors } from './api.js';
 
 let _mounted = false;
 let _listenersWired = false;
+// WarEra+ perf: funzione di stop del canvas particellare (backgroundCanvas.js),
+// catturata qui per poterlo fermare quando l'overlay si chiude — vedi
+// pausePoliticalRendering/resumePoliticalRendering più sotto.
+let _stopBackgroundCanvas = null;
 
 /* ── LOAD ELECTION (entry point, dispatcher congress/presidential) ── */
 export async function loadElection(id) {
@@ -384,7 +388,7 @@ export async function initPoliticalView(countryId, options = {}) {
   if (isFirstMount) {
     initI18n();
     initTheme();
-    initBackgroundCanvas();
+    _stopBackgroundCanvas = initBackgroundCanvas();
     initSenateView();
     if (countryId) setCurrentCountryId(countryId);
     await _bootData();
@@ -395,4 +399,25 @@ export async function initPoliticalView(countryId, options = {}) {
   if (options.openSenate) {
     SenateView.open();
   }
+}
+
+/**
+ * WarEra+ perf: Political View resta montata (solo nascosta via CSS, mai
+ * smontata) dopo la chiusura dell'overlay — così riaprirla è istantaneo,
+ * senza rifare il boot. Il rovescio della medaglia: i suoi loop continui
+ * (canvas particellare, ticker RAF) andrebbero avanti PER SEMPRE in
+ * background da lì in poi se nessuno li ferma. Chiamate da
+ * closePoliticalView()/openPoliticalView() in
+ * src/app/politicalOverlay.js — nessun effetto se Political non è ancora
+ * mai stata aperta (_mounted false, _stopBackgroundCanvas ancora null).
+ */
+export function pausePoliticalRendering() {
+  if (_stopBackgroundCanvas) { _stopBackgroundCanvas(); _stopBackgroundCanvas = null; }
+  pauseTicker();
+}
+
+export function resumePoliticalRendering() {
+  if (!_mounted) return;
+  if (!_stopBackgroundCanvas) _stopBackgroundCanvas = initBackgroundCanvas();
+  resumeTicker();
 }

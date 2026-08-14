@@ -99,7 +99,14 @@ export function initOceanBackground(map, beforeLayerId) {
     paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 2.6, 4, 3.6, 8, 5], 'circle-color': COLOR.routeShip, 'circle-opacity': 0.85 },
   }, beforeLayerId);
   // 1 pallino "nave" per rotta.
-  _shipsArgs = { map, sourceId: routeShipsSrc, sampledPaths: routes.sampledPaths, opts: { intervalMs: 180, speedRange: [0.12, 0.22], withBearing: true, particlesPerPath: 1 } };
+  // WarEra+ perf: era 180ms (~5.5 repaint MapLibre/sec per sempre, mai in
+  // pausa mentre l'app è aperta — trainava anche drawLabels ad ogni giro,
+  // vedi labels.js). Con la velocità di avanzamento attuale (speedRange),
+  // la maggior parte dei tick a 180ms non spostava nemmeno la nave a un
+  // nuovo punto campionato del percorso (avanzamento troppo piccolo
+  // rispetto alla risoluzione dei punti) — 500ms resta fluido per un
+  // dettaglio ambientale ma ~2.8x meno repaint/sec.
+  _shipsArgs = { map, sourceId: routeShipsSrc, sampledPaths: routes.sampledPaths, opts: { intervalMs: 500, speedRange: [0.12, 0.22], withBearing: true, particlesPerPath: 1 } };
   _stopShips = makeRunner(_shipsArgs.map, _shipsArgs.sourceId, _shipsArgs.sampledPaths, _shipsArgs.opts);
 
   applyOceanTheme();

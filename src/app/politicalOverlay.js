@@ -66,8 +66,12 @@ export async function openPoliticalView(countryId, countryName = '', options = {
   // apertura reale (poi resta in cache del browser/module graph per le
   // aperture successive). initPoliticalView è idempotente: se già
   // montata, cambia nazione solo se diversa da quella corrente (Stage 8).
-  const { initPoliticalView } = await import('../political/main.js');
+  const { initPoliticalView, resumePoliticalRendering } = await import('../political/main.js');
   await initPoliticalView(countryId, options);
+  // WarEra+ perf: riavvia canvas/ticker se erano stati fermati da una
+  // chiusura precedente (no-op alla primissima apertura — vedi
+  // resumePoliticalRendering in political/main.js).
+  resumePoliticalRendering();
 
   if (window.umami) {
     window.umami.track('wareraplus-expand-political', { countryId, openSenate: !!options.openSenate });
@@ -77,6 +81,15 @@ export async function openPoliticalView(countryId, countryName = '', options = {
 export function closePoliticalView() {
   overlayEl.classList.remove('open');
   overlayEl.setAttribute('aria-hidden', 'true');
+  // WarEra+ perf: Political resta montata (solo nascosta) per riaprirla
+  // istantaneamente — ma i suoi loop continui (canvas particellare, ticker)
+  // vanno fermati esplicitamente, altrimenti girerebbero per sempre in
+  // background anche a overlay chiuso (causa maggiore del consumo CPU
+  // elevato segnalato). Import dinamico: se Political non è mai stata
+  // aperta il modulo non è nemmeno caricato, questa chiamata non dovrebbe
+  // quindi accadere — ma se capitasse comunque, il modulo è già in cache
+  // del browser dopo la prima apertura, quindi non è un fetch di rete.
+  import('../political/main.js').then(m => m.pausePoliticalRendering());
 }
 
 export function isPoliticalViewOpen() {

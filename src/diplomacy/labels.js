@@ -168,12 +168,15 @@ export function drawLabels() {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     const textY = startY + (cachedFlag ? flagH + 2 : 0);
-    ctx.shadowColor = '#000';
-    ctx.shadowBlur = 4;
+    // WarEra+ perf: shadowBlur tolto — drawLabels gira ~5-6 volte/sec per
+    // sempre (trainato dall'animazione delle navi, vedi oceanRoutes.js) e
+    // shadowBlur è tra le operazioni più costose di Canvas2D (va
+    // ricalcolato via software ad ogni chiamata che lo ha attivo). Lo
+    // strokeText nero sottostante da solo basta per la leggibilità — era un
+    // alone morbido puramente decorativo sopra un contorno già netto.
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 3;
     ctx.strokeText(nameStr, pt.x, textY);
-    ctx.shadowBlur = 0;
     ctx.fillStyle = textColor;
     ctx.fillText(nameStr, pt.x, textY);
     // ==================== BATTLE HEATMAP PERCENTUALE (sopra il nome) ====================
@@ -191,13 +194,11 @@ export function drawLabels() {
         ctx.font = `bold ${pctFontSize}px "JetBrains Mono", monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        ctx.shadowColor = '#000';
-        ctx.shadowBlur = 4;
+        // WarEra+ perf: shadowBlur tolto, vedi nota sopra sul nome nazione.
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 3;
         const pctY = textY - 4;
         ctx.strokeText(`${pctFormatted}%`, pt.x, pctY);
-        ctx.shadowBlur = 0;
         ctx.fillStyle = '#ffffff';
         ctx.fillText(`${pctFormatted}%`, pt.x, pctY);
       }
@@ -224,8 +225,7 @@ export function drawLabels() {
     ctx.font = `bold 12px "JetBrains Mono", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.shadowColor = '#000';
-    ctx.shadowBlur = 4;
+    // WarEra+ perf: shadowBlur tolto, vedi nota sopra sul nome nazione.
 
     sourceLabels.forEach(label => {
       const coords = label.coordinates;
@@ -269,8 +269,6 @@ export function drawLabels() {
         ctx.fillText(text, pt.x, textY);
       }
     });
-
-    ctx.shadowBlur = 0;
   }
   ctx.restore();
 }
@@ -361,12 +359,11 @@ function _drawBlocLabels(ctx, W, H) {
 
     bboxes.push(finalBox);
 
-    ctx.shadowColor = '#000';
-    ctx.shadowBlur = 8;
+    // WarEra+ perf: shadowBlur tolto, vedi nota in _drawBlocLabels caller
+    // sopra (drawLabels, sezione nome nazione) sul perché.
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 4;
     ctx.strokeText(bloc.name, finalPt.x, finalPt.y);
-    ctx.shadowBlur = 0;
     ctx.fillStyle = _getBlocLabelColor(bloc);
     ctx.fillText(bloc.name, finalPt.x, finalPt.y);
   }

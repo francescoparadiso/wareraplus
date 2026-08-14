@@ -159,6 +159,11 @@ export function makeRunner(map, sourceId, sampledPaths, { intervalMs, speedRange
     }
   });
   let timer = setInterval(() => {
+    // WarEra+ perf: puramente decorativo — niente setData/repaint mentre
+    // la tab è in background (minimizzata/altro tab attivo), dove nessuno
+    // lo sta comunque guardando. Il timer resta vivo (i browser lo
+    // throttlano già da soli in background) ma salta il lavoro.
+    if (document.hidden) return;
     const src = map.getSource(sourceId);
     if (!src) { clearInterval(timer); return; }
     const feats = runners.map(r => {
