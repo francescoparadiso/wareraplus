@@ -83,6 +83,26 @@ export function cacheClear(namespace) {
 
 function _sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
+// WarEra+ perf/robustezza: né _sendAutoBatch né _sendSingle avevano un
+// timeout sulla fetch (a differenza di cacheClient.js, che ne usa uno da
+// 6s) — una richiesta che resta appesa (rete degradata, worker sovraccarico)
+// bloccava l'intera catena a valle: _fallbackToSingleCalls processa il
+// chunk in sequenza (un `await` alla volta), quindi un solo item appeso
+// blocca tutti quelli dopo di lui nello stesso chunk. Sintomo osservato:
+// "Loading counter stuck, forcing reset" in loading.js (il suo timer di
+// sicurezza da 15s scatta perché showLoading/hideLoading restano sbilanciati
+// per una richiesta mai risolta, non per una vera perdita di riferimento).
+const FETCH_TIMEOUT_MS = 8000;
+async function _fetchWithTimeout(url, opts = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...opts, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function _resolveBase(useWorker, baseUrl, workerBaseUrl) {
   return useWorker ? (workerBaseUrl ?? WORKER_API_BASE) : (baseUrl ?? API_BASE_URL);
 }
@@ -189,7 +209,7 @@ async function _sendAutoBatch(chunk, q, attempt = 1) {
 
   let res;
   try {
-    res = await fetch(url, {
+    res = await _fetchWithTimeout(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -249,7 +269,7 @@ async function _fallbackToSingleCalls(chunk, base, cause) {
 
 async function _sendSingle(base, proc, params) {
   const url = `${base}/trpc/${proc}?input=${encodeURIComponent(JSON.stringify(params))}`;
-  const res = await fetch(url);
+  const res = await _fetchWithTimeout(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} → ${proc}`);
   const json = await res.json();
   if (json && json.result) return json.result.data;

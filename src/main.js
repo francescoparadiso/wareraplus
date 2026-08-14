@@ -26,9 +26,11 @@ inject();
 import { initCountryPanel, selectNationInPanel } from './panel/countryPanel.js';
 import { initPoliticalOverlay } from './app/politicalOverlay.js';
 import { initThemeSync } from './app/themeSync.js';
+import { initLangSync } from './app/langSync.js';
 import { initBattleToggle } from './app/battleToggle.js';
 import { initBlocLabelsToggle } from './app/blocLabelsToggle.js';
 import { startNewsTicker } from './app/newsTicker.js';
+import { initTimeMachine } from './app/timeMachine.js';
 import { applyTranslations, initLangButton } from './shared/i18n.js';
 import { updateDynamicLegend } from './diplomacy/ui.js';
 import { state } from './diplomacy/state.js';
@@ -65,8 +67,10 @@ window.addEventListener('wareraplus:langchange', () => {
 window.addEventListener('wareraplus:diplomacy-ready', () => {
   initCountryPanel();
   initThemeSync();
+  initLangSync();
   initBattleToggle();
   initBlocLabelsToggle();
   startNewsTicker();
+  initTimeMachine();
   handleIncomingDeepLink();
 }, { once: true });

@@ -1576,6 +1576,13 @@ export function setLang(lang) {
   try { localStorage.setItem('we_lang', lang); } catch (_) {}
   _applyDirection(lang);
   applyStaticTranslations();
+  // WarEra+: sincronizza anche il valore visibile del <select> — prima
+  // veniva impostato solo una volta in initLangSelector() al mount, quindi
+  // chiamare setLang() da fuori (es. src/app/langSync.js, quando lo shell
+  // cambia lingua mentre Political è già aperta) traduceva correttamente i
+  // testi ma lasciava il menu a tendina fermo sulla lingua precedente.
+  const sel = document.getElementById('langSelect');
+  if (sel && sel.value !== lang) sel.value = lang;
   document.dispatchEvent(new CustomEvent('langchange', { detail: { lang } }));
 }
 
