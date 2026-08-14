@@ -37,6 +37,8 @@ import {
   fetchRegionHistoryAtViaCache,
   fetchRegionHistoryEventsViaCache,
 } from '../diplomacy/cacheClient.js';
+import { pauseShipAnimation as pauseShipAnimationDark, resumeShipAnimation as resumeShipAnimationDark } from '../diplomacy/oceanBackground.js';
+import { pauseShipAnimation as pauseShipAnimationAntique, resumeShipAnimation as resumeShipAnimationAntique } from '../diplomacy/antiqueTheme.js';
 import * as topojson from 'topojson-client';
 
 const { SRC_REGIONS, SRC_BORDERS, LYR_FILL } = LAYER_IDS;
@@ -128,6 +130,22 @@ async function _activate(initialTs) {
   _buildPanelIfNeeded();
   _panel.classList.add('open');
   document.addEventListener('keydown', _onKeydown);
+  // BUG FIX (segnalato dall'utente): ← / → spostavano ANCHE la mappa
+  // (pan), non solo il giorno — MapLibre ha un proprio gestore tastiera
+  // (frecce = pan) attaccato indipendentemente dal nostro su document;
+  // preventDefault() nel nostro listener non lo ferma (sono due listener
+  // separati sullo stesso evento). Il modo corretto è disattivare il suo,
+  // non ha senso panare la mappa mentre si sfoglia lo storico comunque.
+  state.map.keyboard.disable();
+  // PERF (feedback utente: rendering in ritardo, sospetta le navi sulle
+  // rotte marine): il pallino nave è puramente decorativo (schema seedato
+  // sempre uguale, non dipende da nessun dato) ma il suo setData() ogni
+  // 500ms compete per lo stesso thread principale con le fetch/repaint
+  // della time machine — pausarlo (resta visibile, solo fermo) libera
+  // margine proprio quando la reattività dello slider conta di più. Solo
+  // uno dei due temi ha un runner attivo, l'altra chiamata è un no-op.
+  pauseShipAnimationDark();
+  pauseShipAnimationAntique();
 
   const startTs = Number.isFinite(initialTs)
     ? Math.min(Math.max(initialTs, _range.min), _range.max)
@@ -149,6 +167,9 @@ function _deactivate() {
   if (_panel) _panel.classList.remove('open');
   _hidePopup();
   document.removeEventListener('keydown', _onKeydown);
+  state.map?.keyboard.enable();
+  resumeShipAnimationDark();
+  resumeShipAnimationAntique();
   _clearUrl();
 
   const src = state.map?.getSource(SRC_REGIONS);
@@ -222,10 +243,28 @@ function _buildPanelIfNeeded() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Playback (play/pausa + velocità 1x-4x) — avanza il timestamp da solo a
-// intervalli fissi (PLAY_TICK_MS); la velocità moltiplica il PASSO per
-// tick, non la frequenza del timer, così il numero di fetch al server
-// resta costante indipendentemente dalla velocità scelta.
+// Playback (play/pausa + velocità 1x-4x).
+//
+// BUG FIX (segnalato dall'utente: "il rendering ci mette più tempo della
+// time machine, e quando la fermo continua ad andare avanti"): la prima
+// versione usava setInterval(PLAY_TICK_MS) — un nuovo tick ALLO SCADERE
+// DEL TIMER, indipendentemente da quanto la fetch precedente (rete verso
+// il VPS, non istantanea) ci avesse messo a rispondere. Se una fetch
+// impiegava più di PLAY_TICK_MS, si accumulavano PIÙ richieste in volo
+// insieme, che potevano arrivare in ordine diverso da quello di partenza
+// (rendering che salta avanti/indietro) — e quelle ancora in volo al
+// momento della pausa arrivavano comunque dopo, facendo sembrare che il
+// playback continuasse da solo.
+// Fix in due parti:
+//  1) _playLoop si RIPIANIFICA da sé con setTimeout SOLO dopo che
+//     _applyAt precedente si è risolta (mai più di una fetch in volo) —
+//     il ritmo reale si adatta da solo alla velocità di risposta del
+//     server invece di un timer fisso scollegato dalla realtà.
+//  2) _applyAt scarta le risposte "superate" (vedi _applyToken sotto): se
+//     nel frattempo è partita una richiesta più recente, il risultato di
+//     una più vecchia (arrivata in ritardo) non viene più applicato alla
+//     mappa — copre anche il caso di trascinamento manuale/salto evento
+//     mentre una fetch precedente è ancora in volo.
 // ─────────────────────────────────────────────────────────────────────────
 function _togglePlay() {
   if (_playing) _stopPlay();
@@ -238,32 +277,29 @@ function _startPlay() {
   _playBtn.textContent = '⏸';
   _playBtn.title = 'Pausa';
   // Se siamo già alla fine, ripartire da capo è più utile che restare fermi.
-  if (Number(_slider.value) >= _range.max) {
-    _slider.value = String(_range.min);
-    _applyAt(_range.min);
-  }
-  _playTimer = setInterval(_playTick, PLAY_TICK_MS);
+  if (Number(_slider.value) >= _range.max) _slider.value = String(_range.min);
+  _playLoop();
 }
 
 function _stopPlay() {
-  if (_playTimer) clearInterval(_playTimer);
+  if (_playTimer) clearTimeout(_playTimer);
   _playTimer = null;
   if (!_playing) return;
   _playing = false;
   if (_playBtn) { _playBtn.textContent = '▶'; _playBtn.title = 'Play'; }
 }
 
-function _playTick() {
+async function _playLoop() {
+  if (!_playing) return;
   const cur = Number(_slider.value);
   const next = cur + STEP_MS * PLAY_SPEEDS[_speedIdx];
-  if (next >= _range.max) {
-    _slider.value = String(_range.max);
-    _applyAt(_range.max);
-    _stopPlay();
-    return;
-  }
-  _slider.value = String(next);
-  _applyAt(next);
+  const atEnd = next >= _range.max;
+  const target = atEnd ? _range.max : next;
+  _slider.value = String(target);
+  await _applyAt(target); // aspetta il rendering VERO prima di programmare il prossimo passo
+  if (atEnd) { _stopPlay(); return; }
+  if (!_playing) return; // l'utente può aver premuto pausa MENTRE aspettavamo la fetch
+  _playTimer = setTimeout(_playLoop, PLAY_TICK_MS);
 }
 
 function _cycleSpeed() {
@@ -367,12 +403,20 @@ function _clearUrl() {
   history.replaceState(null, '', url);
 }
 
+// _applyToken: vedi commento sopra _playLoop — ogni chiamata a _applyAt si
+// prende un numero incrementale, e scarta il proprio risultato se nel
+// frattempo ne è partita una più recente (arrivata prima o dopo non
+// importa: quello che conta è "sono ancora l'ultima richiesta partita?").
+let _applyToken = 0;
+
 async function _applyAt(ts) {
+  const token = ++_applyToken;
   _label.textContent = _fmtDate(ts);
   _hidePopup();
   _syncUrl(ts);
   try {
     const { regions } = await fetchRegionHistoryAtViaCache(ts);
+    if (token !== _applyToken) return; // superata da una richiesta più recente, scartata
     _lastRegions = regions;
     _renderHistorical(regions);
   } catch (err) {
@@ -423,6 +467,14 @@ function _renderHistorical(regionsMap) {
 // properties.countryId live — `regionsMap: null` (chiamata da _deactivate)
 // ricade su properties.countryId puro, cioè esattamente la mesh live
 // originale, per il ripristino alla chiusura.
+// PERF (segnalato dall'utente: rendering in ritardo durante il playback):
+// coastMesh NON dipende dall'ownership storica (il filtro `a === b` non usa
+// affatto `ownerOf`) — è identica ad ogni chiamata per la stessa topologia,
+// eppure veniva ricalcolata da zero ad OGNI singolo passo dello slider,
+// insieme alle altre due mesh (quelle sì storiche, vanno ricalcolate). Cache
+// per topologia: la prima chiamata la calcola, le successive la riusano.
+let _coastMeshCache = null; // { topoData, mesh }
+
 function _applyBorders(regionsMap) {
   const topoData = state.mapDataGlobal?.map;
   if (!state.map || !topoData) return;
@@ -436,8 +488,11 @@ function _applyBorders(regionsMap) {
     return historical !== undefined ? historical : props.countryId;
   };
 
+  if (_coastMeshCache?.topoData !== topoData) {
+    _coastMeshCache = { topoData, mesh: topojson.mesh(topoData, topoData.objects.regions, (a, b) => a === b) };
+  }
   const bordersMesh = topojson.mesh(topoData, topoData.objects.regions, (a, b) => a !== b && ownerOf(a.properties) !== ownerOf(b.properties));
-  const coastMesh = topojson.mesh(topoData, topoData.objects.regions, (a, b) => a === b);
+  const coastMesh = _coastMeshCache.mesh;
   const regionsMesh = topojson.mesh(topoData, topoData.objects.regions, (a, b) => a !== b && ownerOf(a.properties) === ownerOf(b.properties));
 
   src.setData({

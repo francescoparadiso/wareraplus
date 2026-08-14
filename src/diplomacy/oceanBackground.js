@@ -57,6 +57,16 @@ function startAnimations() {
   }
 }
 
+// WarEra+ (feedback utente: rendering in ritardo durante la time machine —
+// il pallino nave è puramente decorativo, il suo movimento è sempre lo
+// stesso schema seedato, non dipende dai dati). A differenza di
+// setOceanBackgroundVisible sopra, questi NON toccano la visibilità dei
+// layer (le rotte/navi restano visibili, solo ferme) — pensati per essere
+// richiamati da timeMachine.js mentre è aperta, per liberare il thread
+// principale dal repaint ogni 500ms mentre il playback ne ha più bisogno.
+export function pauseShipAnimation() { stopAnimations(); }
+export function resumeShipAnimation() { startAnimations(); }
+
 // ==================== SETUP ====================
 let _initialized = false;
 
@@ -99,14 +109,15 @@ export function initOceanBackground(map, beforeLayerId) {
     paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 2.6, 4, 3.6, 8, 5], 'circle-color': COLOR.routeShip, 'circle-opacity': 0.85 },
   }, beforeLayerId);
   // 1 pallino "nave" per rotta.
-  // WarEra+ perf: era 180ms (~5.5 repaint MapLibre/sec per sempre, mai in
-  // pausa mentre l'app è aperta — trainava anche drawLabels ad ogni giro,
-  // vedi labels.js). Con la velocità di avanzamento attuale (speedRange),
-  // la maggior parte dei tick a 180ms non spostava nemmeno la nave a un
-  // nuovo punto campionato del percorso (avanzamento troppo piccolo
-  // rispetto alla risoluzione dei punti) — 500ms resta fluido per un
-  // dettaglio ambientale ma ~2.8x meno repaint/sec.
-  _shipsArgs = { map, sourceId: routeShipsSrc, sampledPaths: routes.sampledPaths, opts: { intervalMs: 500, speedRange: [0.12, 0.22], withBearing: true, particlesPerPath: 1 } };
+  // WarEra+ perf: era 180ms, poi 500ms (~5.5 -> ~2 repaint MapLibre/sec per
+  // sempre, mai in pausa mentre l'app è aperta — vedi labels.js: trainava
+  // anche drawLabels ad ogni giro, bound a map.on('render')). Ulteriore
+  // richiesta esplicita dell'utente: rallentare ancora per ridurre il
+  // costo sul thread principale — 1500ms (~3x meno repaint/sec di 500ms).
+  // `speed` (avanzamento per tick) resta invariato: intervalMs più lungo
+  // rallenta ANCHE il movimento percepito (stesso passo, meno spesso), non
+  // solo il costo — coerente con "rallenta il movimento" chiesto.
+  _shipsArgs = { map, sourceId: routeShipsSrc, sampledPaths: routes.sampledPaths, opts: { intervalMs: 1500, speedRange: [0.12, 0.22], withBearing: true, particlesPerPath: 1 } };
   _stopShips = makeRunner(_shipsArgs.map, _shipsArgs.sourceId, _shipsArgs.sampledPaths, _shipsArgs.opts);
 
   applyOceanTheme();

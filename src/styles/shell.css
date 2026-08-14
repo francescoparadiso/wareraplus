@@ -615,7 +615,18 @@ body.light-theme #wp-time-machine-btn.wp-time-machine-btn-active {
      centraggio orizzontale — senza questo margine il pannello ci finiva
      sotto (z-index più basso, 2400 < 3000 di kofi). */
   bottom: 70px;
-  transform: translate(-50%, calc(100% + 24px));
+  /* BUG FIX (segnalato dall'utente: "il pannello si nasconde invece di
+     sparire" — restava visibile uno spicchio in basso anche da chiuso,
+     tanto più evidente ora che il pannello è più alto con due righe).
+     ERRORE nella versione precedente: `calc(100% + 24px)` sposta il
+     pannello in basso della SUA ALTEZZA + 24px partendo dalla posizione
+     già ancorata a bottom:70px — ma per uscire DAVVERO dal viewport serve
+     spostarlo anche di quei 70px di ancoraggio, non solo di 24. Risultato:
+     restava scoperto uno spicchio alto (70-24=)46px in fondo allo schermo,
+     sempre, indipendentemente dall'altezza del pannello — per questo con
+     la riga di bottoni in più (più pannello alto) si notava di più.
+     Formula corretta: altezza + ancoraggio(70px) + margine(24px). */
+  transform: translate(-50%, calc(100% + 94px));
   z-index: 2400;
   display: flex;
   flex-direction: column;
@@ -631,7 +642,15 @@ body.light-theme #wp-time-machine-btn.wp-time-machine-btn-active {
   color: #e6edf3;
   font-family: 'Inter', -apple-system, sans-serif;
   font-size: 13px;
-  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0.28s;
+  /* Rete di sicurezza indipendente dalla geometria sopra: anche se in
+     futuro bottom/altezza/margini cambiassero e la formula tornasse
+     sbagliata, visibility:hidden garantisce comunque che non si veda
+     nulla a riposo (il transform continua a gestire SOLO l'animazione di
+     apertura/chiusura). Il ritardo di 0.28s sulla transizione fa sì che
+     resti visibile DURANTE lo scivolamento verso il basso alla chiusura,
+     e sparisca solo a transizione conclusa. */
+  visibility: hidden;
   /* BUG FIX (segnalato dall'utente): "scroll"/drag della mappa rimaneva
      bloccato su mobile dopo aver chiuso la time machine. Il pannello resta
      sempre nel DOM (spostato fuori schermo via transform, mai
@@ -644,6 +663,8 @@ body.light-theme #wp-time-machine-btn.wp-time-machine-btn-active {
 }
 #wp-time-machine-panel.open {
   transform: translate(-50%, 0);
+  visibility: visible;
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0s;
   pointer-events: auto;
 }
 .wp-tm-row {
@@ -729,7 +750,8 @@ body.light-theme #wp-tm-label {
   #wp-time-machine-panel {
     left: 16px;
     right: 16px;
-    transform: translateY(calc(100% + 24px));
+    /* Stesso fix del blocco base sopra: +70px di ancoraggio, non solo +24. */
+    transform: translateY(calc(100% + 94px));
     min-width: 0;
     max-width: none;
   }

@@ -152,6 +152,14 @@ function _startAnimations() {
   }
 }
 
+// WarEra+ — vedi commento gemello in oceanBackground.js (pauseShipAnimation/
+// resumeShipAnimation): stessa idea, versione tema chiaro. Solo uno dei due
+// temi ha un runner attivo alla volta (_stopShips è null nell'altro),
+// quindi timeMachine.js può chiamare entrambe le coppie senza controllare
+// quale tema è attivo — quella del tema inattivo è un no-op.
+export function pauseShipAnimation() { _stopAnimations(); }
+export function resumeShipAnimation() { _startAnimations(); }
+
 let _initialized = false;
 
 /**
@@ -198,9 +206,9 @@ export async function initAntiqueTheme(map, beforeLayerId) {
       layout: { visibility: 'none' },
       paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 2.6, 4, 3.6, 8, 5], 'circle-color': COLOR.routeShip, 'circle-opacity': 0.9 },
     }, beforeLayerId);
-    // WarEra+ perf: 500ms invece di 180ms — vedi nota in oceanBackground.js
-    // (stessa animazione/geometria, solo temi diversi).
-    _shipsArgs = { map, sourceId: routeShipsSrc, sampledPaths: routes.sampledPaths, opts: { intervalMs: 500, speedRange: [0.12, 0.22], withBearing: true, particlesPerPath: 1 } };
+    // WarEra+ perf: 1500ms (era 500ms, prima ancora 180ms) — vedi nota in
+    // oceanBackground.js (stessa animazione/geometria, solo temi diversi).
+    _shipsArgs = { map, sourceId: routeShipsSrc, sampledPaths: routes.sampledPaths, opts: { intervalMs: 1500, speedRange: [0.12, 0.22], withBearing: true, particlesPerPath: 1 } };
     _stopShips = makeRunner(_shipsArgs.map, _shipsArgs.sourceId, _shipsArgs.sampledPaths, _shipsArgs.opts);
 
     // --- Tinta piatta per smorzare i colori nazione (vedi nota sopra
