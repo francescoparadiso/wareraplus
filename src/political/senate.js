@@ -56,6 +56,7 @@ import {
   lastElectedParties, setLastElectedParties,
 } from './config.js';
 import { localFetch } from './api.js';
+import { getAllCountries } from '../shared/countries.js';
 import { openPlayerCard } from './parliament.js';
 
 // ── state ──
@@ -1238,8 +1239,9 @@ async function _populateSenateSelectors() {
 
   if (!countrySel._loaded) {
     try {
-      const data = await localFetch('/countries');
-      const items = (data?.items || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      // Fase 2 follow-up: elenco condiviso con Diplomacy (src/shared/countries.js).
+      const raw = await getAllCountries();
+      const items = raw.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       countrySel.innerHTML = '';
       items.forEach(c => {
         countryNamesMap.set(c._id, c.name);
@@ -1329,8 +1331,10 @@ async function _onSenateCountryChange(newCountryId) {
   else if (mainSel) mainSel.value = newCountryId;
 
   try {
-    const data = await localFetch('/countries', {}, { useCache: false });
-    setCurrentCountryData((data?.items || []).find(c => c._id === newCountryId) || null);
+    // Fase 2 follow-up: elenco condiviso con Diplomacy invece di una
+    // fetch dedicata (era { useCache: false } per forzare freschezza).
+    const countries = await getAllCountries();
+    setCurrentCountryData(countries.find(c => c._id === newCountryId) || null);
     const codeAlias = currentCountryData?.code || currentCountryData?.countryCode || currentCountryData?.iso || currentCountryData?.isoCode || currentCountryData?.abbr || currentCountryData?.abbreviation;
     if (codeAlias) _countryCodesMap.set(newCountryId, String(codeAlias).toLowerCase());
   } catch (_) { setCurrentCountryData(null); }
@@ -1360,8 +1364,9 @@ async function _onSenateCountryChange(newCountryId) {
 async function _ensureCurrentCountryData() {
   if (currentCountryData?._id === currentCountryId) return;
   try {
-    const data = await localFetch('/countries', {}, { useCache: false });
-    const items = data?.items || [];
+    // Fase 2 follow-up: elenco condiviso con Diplomacy invece di una
+    // fetch dedicata (era { useCache: false } per forzare freschezza).
+    const items = await getAllCountries();
     items.forEach(c => countryNamesMap.set(c._id, c.name));
     setCurrentCountryData(items.find(c => c._id === currentCountryId) || null);
   } catch (err) {

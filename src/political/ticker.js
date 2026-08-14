@@ -9,6 +9,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { localFetch } from './api.js';
+import { getAllCountries } from '../shared/countries.js';
 
 let _tickerMessages = [];
 let _tickerPos = 0;
@@ -60,12 +61,15 @@ function _rebuildTickerContent() {
 /* ── DATA FETCH ── */
 async function fetchAllElectionsOnce() {
   try {
-    const countriesData = await localFetch('/countries', {}, { useCache: false, ttl: 5 * 60 * 1000 });
-    const allCountries = countriesData?.items || [];
-    if (!allCountries.length) throw new Error('No countries');
+    // Fase 2 follow-up: elenco condiviso con Diplomacy (src/shared/countries.js)
+    // invece di una fetch dedicata ogni 5 minuti (era { useCache: false }).
+    const raw = await getAllCountries();
+    if (!raw.length) throw new Error('No countries');
 
-    // Show news for the most populous nations first.
-    allCountries.sort((a, b) =>
+    // Show news for the most populous nations first. `.slice()`: raw è
+    // l'array CONDIVISO con Diplomacy, ordinarlo in-place lo cambierebbe
+    // anche lì.
+    const allCountries = raw.slice().sort((a, b) =>
       (b.rankings?.countryActivePopulation?.value || 0) -
       (a.rankings?.countryActivePopulation?.value || 0)
     );

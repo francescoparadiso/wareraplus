@@ -51,6 +51,7 @@ import {
 } from './config.js';
 import { localFetch } from './api.js';
 import { cacheClear } from '../shared/trpcClient.js';
+import { getAllCountries } from '../shared/countries.js';
 import { initI18n } from './i18n.js';
 import { initBackgroundCanvas } from './backgroundCanvas.js';
 import {
@@ -172,8 +173,11 @@ async function _onCountryChange(newCountryId) {
   document.getElementById('candidatesContainer').style.display = 'none';
 
   try {
-    const data = await localFetch('/countries', {}, { useCache: false });
-    setCurrentCountryData((data?.items || []).find(c => c._id === newCountryId) || null);
+    // Fase 2 follow-up: elenco condiviso con Diplomacy invece di una
+    // fetch dedicata (era { useCache: false } per forzare freschezza —
+    // non più necessario, i dati sono già quelli con cui la mappa gira).
+    const countries = await getAllCountries();
+    setCurrentCountryData(countries.find(c => c._id === newCountryId) || null);
   } catch (_) { setCurrentCountryData(null); }
 
   setStatus('Loading…', 'loading');
@@ -202,6 +206,28 @@ async function _onCountryChange(newCountryId) {
 function _mountTemplate() {
   if (_mounted) return;
   const root = document.getElementById('wp-political-root');
+  if (!root) {
+    // #wp-political-root manca dal DOM: quasi sempre significa che la
+    // pagina caricata è un index.html vecchio (da prima del cutover
+    // Stage 9, quando l'overlay era ancora un <iframe>), servito dalla
+    // cache del service worker (`registerType: 'autoUpdate'` aggiorna
+    // il SW in background ma NON forza il reload di una tab già aperta
+    // con l'HTML precedente in memoria) — non un errore di codice.
+    // Un solo tentativo di reload automatico (guardia via sessionStorage
+    // per non entrare in loop se il problema fosse un altro); se persiste
+    // dopo il reload, serve uno svuotamento manuale della cache/PWA.
+    let alreadyRetried = false;
+    try { alreadyRetried = sessionStorage.getItem('we_political_root_retry') === '1'; } catch (_) {}
+    if (!alreadyRetried) {
+      try { sessionStorage.setItem('we_political_root_retry', '1'); } catch (_) {}
+      console.warn('WarEra+: #wp-political-root non trovato — probabile pagina non aggiornata dopo un deploy. Ricarico una volta...');
+      window.location.reload();
+    } else {
+      console.error('WarEra+: #wp-political-root ancora assente dopo un reload automatico. Svuota la cache del browser (o disinstalla/reinstalla la PWA) e riprova.');
+    }
+    throw new Error('#wp-political-root non trovato nel DOM');
+  }
+  try { sessionStorage.removeItem('we_political_root_retry'); } catch (_) {}
   root.innerHTML = getPoliticalTemplate();
   root.style.display = '';
   _mounted = true;
@@ -306,11 +332,14 @@ async function _bootData() {
   await loadPartyColors('/political/parties_6813b6d446e731854c7ac7a2.csv');
   loadCountries();
 
-  // La fetch di /countries (per currentCountryData) non blocca più
-  // loadElectionsHistory: girano in parallelo, e se rientrano nello
-  // stesso microtask finiscono nello stesso batch.
-  const countryDataPromise = localFetch('/countries', {}, { useCache: false })
-    .then(data => { setCurrentCountryData((data?.items || []).find(c => c._id === currentCountryId) || null); })
+  // Fase 2 follow-up: elenco condiviso con Diplomacy (src/shared/countries.js)
+  // — nel caso normale è già in memoria (state.nazioniGlobal, popolato al
+  // boot di Diplomacy prima che l'utente possa aprire Political), quindi
+  // questa non è più una vera fetch di rete: non serve più tenerla separata
+  // da loadElectionsHistory() per "non bloccare", ma restano comunque in
+  // parallelo per il caso raro di fallback a fetch reale (vedi countries.js).
+  const countryDataPromise = getAllCountries()
+    .then(countries => { setCurrentCountryData(countries.find(c => c._id === currentCountryId) || null); })
     .catch(() => { setCurrentCountryData(null); });
 
   await Promise.all([countryDataPromise, loadElectionsHistory()]);

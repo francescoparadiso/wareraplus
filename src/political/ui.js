@@ -18,9 +18,9 @@
    ══════════════════════════════════════════════════════════════ */
 
 import Chart from 'chart.js/auto';
+import { getAllCountries } from '../shared/countries.js';
 import TomSelect from 'tom-select';
 import 'tom-select/dist/css/tom-select.css';
-import { localFetch } from './api.js';
 import { currentCountryId, countryNamesMap, currentPartyId } from './config.js';
 import { t } from './i18n.js';
 
@@ -241,10 +241,14 @@ export async function loadCountries() {
     shouldSort: true,
   });
   try {
-    const data  = await localFetch('/countries');
-    const items = data?.items || [];
-    if (!Array.isArray(items) || items.length === 0) throw new Error('No countries found');
-    items.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    // Fase 2 follow-up: riusa l'elenco già caricato da Diplomacy
+    // (state.nazioniGlobal) invece di rifare la stessa fetch tramite
+    // Political — vedi src/shared/countries.js. `.slice()` prima del sort:
+    // getAllCountries() ritorna l'array CONDIVISO con Diplomacy, ordinarlo
+    // in-place ne cambierebbe l'ordine anche lì.
+    const raw = await getAllCountries();
+    if (!Array.isArray(raw) || raw.length === 0) throw new Error('No countries found');
+    const items = raw.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     items.forEach(c => {
       tomSelect.addOption({ value: c._id, text: c.name || c._id });
       countryNamesMap.set(c._id, c.name);
