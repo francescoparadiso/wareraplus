@@ -549,6 +549,183 @@ body.light-theme #wp-battles-toggle-btn:hover {
   }
 }
 
+/* ── Time machine (nuovo — src/app/timeMachine.js): stesso identico
+   stile visivo dei bottoni fissi sopra, prossimo slot in fila
+   (188px = 132px + 56px, stesso passo). ── */
+#wp-time-machine-btn {
+  position: fixed;
+  top: 20px;
+  left: 188px;
+  z-index: 2000;
+  width: 44px;
+  height: 44px;
+  background: rgba(13, 17, 23, 0.97);
+  border: 0.5px solid rgba(0, 212, 255, 0.4);
+  color: #00d4ff;
+  border-radius: 10px;
+  font-size: 20px;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  transition: background 0.2s, box-shadow 0.2s, opacity 0.2s;
+}
+#wp-time-machine-btn:hover {
+  background: rgba(0, 98, 255, 0.15);
+  box-shadow: 0 4px 16px rgba(0, 98, 255, 0.3);
+}
+#wp-time-machine-btn.wp-time-machine-btn-active {
+  background: rgba(0, 212, 255, 0.28);
+  box-shadow: 0 4px 16px rgba(0, 212, 255, 0.45);
+}
+body.light-theme #wp-time-machine-btn {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 98, 255, 0.35);
+  color: #0062ff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+body.light-theme #wp-time-machine-btn:hover {
+  background: rgba(0, 98, 255, 0.1);
+}
+body.light-theme #wp-time-machine-btn.wp-time-machine-btn-active {
+  background: rgba(0, 98, 255, 0.25);
+}
+@media (max-width: 768px) {
+  #wp-time-machine-btn {
+    top: 20px;
+    left: 174px;
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+}
+
+/* ── Pannello slider Time machine (barra in basso, stile coerente con
+   .wp-panel: sfondo scuro traslucido, bordo #30363d) — nascosto di
+   default, .open lo mostra con una transizione dal basso. ── */
+#wp-time-machine-panel {
+  position: fixed;
+  left: 50%;
+  /* 70px, non 24px: #kofi-btn (diplomacy.css) è fisso a bottom:16px, stesso
+     centraggio orizzontale — senza questo margine il pannello ci finiva
+     sotto (z-index più basso, 2400 < 3000 di kofi). */
+  bottom: 70px;
+  transform: translate(-50%, calc(100% + 24px));
+  z-index: 2400;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 340px;
+  max-width: min(640px, calc(100vw - 32px));
+  padding: 10px 16px;
+  background: rgba(13, 17, 23, 0.97);
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  color: #e6edf3;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 13px;
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#wp-time-machine-panel.open {
+  transform: translate(-50%, 0);
+}
+#wp-tm-close {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid #30363d;
+  background: #161b22;
+  color: #8b949e;
+  cursor: pointer;
+  font-size: 13px;
+}
+#wp-tm-close:hover {
+  color: #e6edf3;
+  border-color: #58a6ff;
+}
+#wp-tm-slider {
+  flex: 1;
+  accent-color: #00d4ff;
+}
+#wp-tm-label {
+  flex: 0 0 auto;
+  min-width: 150px;
+  text-align: right;
+  white-space: nowrap;
+  color: #8b949e;
+  font-size: 12px;
+}
+body.light-theme #wp-time-machine-panel {
+  background: rgba(255, 255, 255, 0.97);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #1a1a1a;
+}
+body.light-theme #wp-tm-close {
+  background: #f0f0f0;
+  border-color: #ccc;
+  color: #555;
+}
+body.light-theme #wp-tm-label {
+  color: #555;
+}
+@media (max-width: 768px) {
+  #wp-time-machine-panel {
+    left: 16px;
+    right: 16px;
+    transform: translateY(calc(100% + 24px));
+    min-width: 0;
+    max-width: none;
+  }
+  #wp-time-machine-panel.open {
+    transform: translateY(0);
+  }
+  #wp-tm-label {
+    min-width: 100px;
+  }
+}
+
+/* ── Popup click regione (Time machine): nome nazione + bandiera, segue
+   il punto cliccato sulla mappa (posizionato in JS via left/top). ── */
+#wp-time-machine-popup {
+  position: fixed;
+  z-index: 2450;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(13, 17, 23, 0.97);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  color: #e6edf3;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transform: translate(-50%, calc(-100% - 8px));
+  pointer-events: none;
+}
+#wp-time-machine-popup.visible {
+  display: flex;
+}
+.wp-tm-popup-flag {
+  width: 18px;
+  height: 13px;
+  object-fit: cover;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+body.light-theme #wp-time-machine-popup {
+  background: rgba(255, 255, 255, 0.97);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #1a1a1a;
+}
+
 /* ══════════════════════════════════════════════════════════════
    Punto 5 — News ticker diplomatico (nuovo, ispirato a quello di
    Political ma con contenuti diversi — vedi src/app/newsTicker.js).
@@ -605,7 +782,8 @@ body.light-theme .wp-ticker-message {
    vincono senza bisogno di !important. */
 #hamburger-btn,
 #bloc-stats-btn,
-#wp-battles-toggle-btn {
+#wp-battles-toggle-btn,
+#wp-time-machine-btn {
   top: calc(20px + 30px) !important;
 }
 #wp-top-controls {
@@ -617,6 +795,7 @@ body.light-theme .wp-ticker-message {
   #hamburger-btn,
   #bloc-stats-btn,
   #wp-battles-toggle-btn,
+  #wp-time-machine-btn,
   #wp-top-controls {
     top: calc(20px + 26px) !important;
   }

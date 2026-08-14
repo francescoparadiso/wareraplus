@@ -368,6 +368,12 @@ export function initCountryPanel() {
   const layerId = 'regions-fill';
   state.map.on('click', layerId, (e) => {
     if (!e.features?.[0]) return;
+    // WarEra+: mentre la time machine è aperta, il click mostra il
+    // proprietario storico (src/app/timeMachine.js, listener separato sullo
+    // stesso layer) — non deve aprire ANCHE il pannello nazione live. Stesso
+    // guard di map.js:_onRegionClick, ma questo listener è indipendente
+    // (bindato qui, non passa da _onRegionClick) quindi va ripetuto.
+    if (state.timeMachineActive) return;
     // In modalità 'blocs' la selezione è gestita da map.js:_onRegionClick,
     // che chiama selectBlocInPanel() per mostrare il pannello blocco —
     // altrimenti questo listener e quello di map.js, entrambi agganciati

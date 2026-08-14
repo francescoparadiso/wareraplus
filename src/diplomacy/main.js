@@ -11,23 +11,39 @@ import { buildOriginalLabels, loadFlagImage } from './labels.js';
 import { API_BASE_URL } from './config.js';
 import { updateBattleMarkers } from './battleMarkers.js';
 import { loadRegions } from './regions.js';
+import { fetchCountriesViaCache, fetchMapDataViaCache, fetchAlliancesViaCache, fetchDiplomacyViaCache } from './cacheClient.js';
 let battleMarkersTimer = null;
 
 // ==================== CARICAMENTO DATI ====================
-async function refreshData() {
+// WarEra+: prova prima il server di cache (un solo poller condiviso da
+// tutti gli utenti, vedi cacheClient.js), ricade sulla chiamata diretta se
+// il server non risponde o i dati sono troppo vecchi — MAI un punto di
+// fallimento unico, l'app deve continuare a funzionare come prima di
+// questo modulo anche a VPS spento.
+async function _fetchCountriesAndMap() {
   try {
-    showLoading();
+    const [nazioni, mapDataGlobal] = await Promise.all([fetchCountriesViaCache(), fetchMapDataViaCache()]);
+    return { nazioni, mapDataGlobal };
+  } catch (err) {
+    console.warn('[cache] countries/map non disponibili, fallback diretto:', err.message);
     const [resN, resM] = await Promise.all([
       fetch(`${API_BASE_URL}/trpc/country.getAllCountries`),
       fetch(`${API_BASE_URL}/trpc/map.getMapData`),
     ]);
     if (!resN.ok || !resM.ok) throw new Error('Failed to fetch data');
-
     const nationsData = await resN.json();
     const mapData = await resM.json();
+    return { nazioni: nationsData.result.data, mapDataGlobal: mapData.result.data };
+  }
+}
 
-    state.nazioniGlobal = nationsData.result.data;
-    state.mapDataGlobal = mapData.result.data;
+async function refreshData() {
+  try {
+    showLoading();
+    const { nazioni, mapDataGlobal } = await _fetchCountriesAndMap();
+
+    state.nazioniGlobal = nazioni;
+    state.mapDataGlobal = mapDataGlobal;
 
     state.nationMap.clear();
     state.nationByCode.clear();
@@ -45,10 +61,15 @@ async function refreshData() {
 
     let alliances = [];
     if (uniqueAllianceIds.length > 0) {
-      // trpcBatch chunka automaticamente oltre MAX_BATCH (50) e gestisce 429/errori
-      const calls = uniqueAllianceIds.map(id => ['alliance.getById', { allianceId: id }]);
-      const results = await trpcBatch(calls);
-      alliances = results.filter(Boolean);
+      try {
+        alliances = await fetchAlliancesViaCache(uniqueAllianceIds);
+      } catch (err) {
+        console.warn('[cache] alleanze non disponibili, fallback diretto:', err.message);
+        // trpcBatch chunka automaticamente oltre MAX_BATCH (50) e gestisce 429/errori
+        const calls = uniqueAllianceIds.map(id => ['alliance.getById', { allianceId: id }]);
+        const results = await trpcBatch(calls);
+        alliances = results.filter(Boolean);
+      }
     }
 
     state.alliancesList = alliances;
@@ -64,20 +85,25 @@ async function refreshData() {
     const countryIds = state.nazioniGlobal.map(n => n._id);
     state.diplomacyData.clear();
     try {
-      // trpcBatch chunka automaticamente a MAX_BATCH (50) elementi per POST
-      // e gestisce 429/errori per singolo item senza abortire l'intero giro.
-      for (let i = 0; i < countryIds.length; i += MAX_BATCH) {
-        const chunk = countryIds.slice(i, i + MAX_BATCH);
-        const calls = chunk.map(id => ['countryDiplomacy.getByCountry', { countryId: id }]);
-        const diplomacyResults = await trpcBatch(calls);
-        diplomacyResults.forEach((data, idx) => {
-          const nationId = chunk[idx];
-          if (!data) return;
-          state.diplomacyData.set(nationId, {
-            swornEnemy: data.swornEnemy?.enemy || null,
-            defensivePacts: (data.defensivePacts || []).map(p => p.partner),
+      try {
+        state.diplomacyData = await fetchDiplomacyViaCache(countryIds);
+      } catch (err) {
+        console.warn('[cache] diplomazia non disponibile, fallback diretto:', err.message);
+        // trpcBatch chunka automaticamente a MAX_BATCH (50) elementi per POST
+        // e gestisce 429/errori per singolo item senza abortire l'intero giro.
+        for (let i = 0; i < countryIds.length; i += MAX_BATCH) {
+          const chunk = countryIds.slice(i, i + MAX_BATCH);
+          const calls = chunk.map(id => ['countryDiplomacy.getByCountry', { countryId: id }]);
+          const diplomacyResults = await trpcBatch(calls);
+          diplomacyResults.forEach((data, idx) => {
+            const nationId = chunk[idx];
+            if (!data) return;
+            state.diplomacyData.set(nationId, {
+              swornEnemy: data.swornEnemy?.enemy || null,
+              defensivePacts: (data.defensivePacts || []).map(p => p.partner),
+            });
           });
-        });
+        }
       }
     } catch (diplErr) {
       console.error('Errore caricamento diplomazia:', diplErr);

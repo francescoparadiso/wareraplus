@@ -3,6 +3,7 @@ import { API_BASE_URL, WORKER_API_BASE, COLORS } from './config.js';
 import { showRateLimitTooltip, trpcBatch } from './utils.js';
 import { renderMap } from './map.js';
 import { updateDynamicLegend } from './ui.js';
+import { fetchActiveBattlesViaCache } from './cacheClient.js';
 
 const BATTLE_NEUTRAL = '#2a2d33';
 let liveInterval = null;
@@ -15,6 +16,19 @@ let lastSuccessfulBattlesCache = [];
 let isRateLimited = false;
 
 export async function fetchActiveBattles() {
+  // WarEra+: il server di cache tiene già lui l'elenco completo (poll
+  // periodico via Worker), quindi qui basta una fetch sola invece della
+  // paginazione a cursore sotto — che resta come fallback se il server di
+  // cache non risponde/è troppo vecchio (mai un punto di fallimento unico).
+  try {
+    const battles = await fetchActiveBattlesViaCache();
+    isRateLimited = false;
+    if (battles.length > 0) lastSuccessfulBattlesCache = battles;
+    console.log(`Fetched ${battles.length} battles (cache)`);
+    return battles;
+  } catch (err) {
+    console.warn('[cache] battaglie non disponibili, fallback diretto:', err.message);
+  }
   try {
     const all = [];
     let cursor = undefined;

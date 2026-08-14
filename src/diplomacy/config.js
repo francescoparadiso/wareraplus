@@ -3,6 +3,17 @@
 export const API_BASE_URL = 'https://api6.warera.io'; // per produzione
 export const CACHE_API_BASE_URL = 'https://gateway.warerastats.io'
 
+// WarEra+: server di cache/proxy su VPS esterno (nginx davanti a un Express
+// gestito da pm2), scritto per ridurre il carico diretto su api6/Worker: fa
+// lui il poll periodico delle API WarEra (ogni endpoint con un proprio
+// offset) e serve dati già pronti via HTTP. Non è lo stesso servizio di
+// CACHE_API_BASE_URL sopra (dominio diverso, gateway.warerastats.io — quella
+// costante resta non referenziata altrove, era già così prima). Vedi
+// src/diplomacy/cacheClient.js per come viene consumato (sempre con
+// fallback alla chiamata diretta se il server è irraggiungibile o i dati
+// sono troppo vecchi — non deve MAI essere un punto di fallimento unico).
+export const WARERA_CACHE_BASE = 'https://ampsodrick.duckdns.org/warera-cache';
+
 // WarEra+: Worker Cloudflare con API_TOKEN server-side (limite 500
 // batch/minuto invece di 100). Il codice del worker incollato dall'utente
 // corrisponde esattamente a quello già in uso da Political View

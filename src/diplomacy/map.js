@@ -462,6 +462,12 @@ function _updateDualBorderMesh(dualIds) {
 
 function _onRegionClick(e) {
   if (!e.features?.length) return;
+  // WarEra+: mentre la time machine è aperta, il click su una regione mostra
+  // il proprietario storico (gestito da src/app/timeMachine.js, che aggancia
+  // il proprio listener) invece di selezionare la nazione live — additivo,
+  // non tocca il comportamento normale (state.timeMachineActive è false di
+  // default, vedi state.js).
+  if (state.timeMachineActive) return;
   const cId = state.mapSource === 'original'
     ? e.features[0].properties.initialCountryId
     : e.features[0].properties.countryId;

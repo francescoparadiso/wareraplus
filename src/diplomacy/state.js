@@ -41,4 +41,9 @@ export const state = {
   nationByCode: new Map(),   // 'IT' (uppercase) → nation
   allianceMap: new Map(),    // allianceId → alliance
 
+  // WarEra+: true mentre il pannello "Time machine" è aperto (src/app/timeMachine.js).
+  // Letto SOLO da _onRegionClick (map.js) per non aprire la selezione/pannello
+  // nazione live mentre si sta guardando lo storico — nessun altro punto del
+  // codice esistente lo tocca, additivo con fallback (default false = comportamento invariato).
+  timeMachineActive: false,
 };

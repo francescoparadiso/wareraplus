@@ -392,6 +392,13 @@ export function initNationTooltip(map) {
   });
 
   map.on('click', layerId, (e) => {
+    // WarEra+: stesso guard di map.js:_onRegionClick e countryPanel.js —
+    // mentre la time machine è aperta, il click mostra il proprietario
+    // storico (src/app/timeMachine.js), non il tooltip "pinnato" con dati
+    // live (popolazione/ricchezza/guerre di OGGI, fuorvianti su un'epoca
+    // passata). Terzo listener indipendente sullo stesso layer/evento,
+    // stesso motivo per cui va ripetuto invece di centralizzato.
+    if (state.timeMachineActive) return;
     const nid = _extractId(e);
     if (!nid) return;
 

@@ -7,10 +7,10 @@
      - battaglie in corso (nazioni più popolose)
      - elezioni in corso/imminenti (TUTTE le nazioni — le elezioni non
        sono limitate alle più popolose, su richiesta esplicita)
-     - nuove guerre scoppiate dall'ultima visita (nazioni più popolose)
-     - cambi di sworn enemy dall'ultima visita (nazioni più popolose)
-     - variazione popolazione attiva dall'ultima visita (idem)
-     - variazione tesoro/ricchezza dall'ultima visita (idem)
+     - nuove guerre scoppiate di recente (nazioni più popolose)
+     - cambi di sworn enemy di recente (nazioni più popolose)
+     - variazione popolazione attiva di recente (idem)
+     - variazione tesoro/ricchezza di recente (idem)
 
    Ogni categoria viene limitata a un tetto massimo (CAT_CAP) prima di
    mescolare tutto insieme: così una categoria molto numerosa (es. le
@@ -19,10 +19,20 @@
    precedente, dove le guerre finivano per dominare quasi tutti gli
    slot disponibili.
 
-   "Dall'ultima visita" = confronto con uno snapshot salvato in
-   localStorage all'apertura precedente del tool (chiave
-   wp_diplo_news_snapshot). Al primissimo avvio non c'è nulla da
-   confrontare: si salva solo la base di partenza.
+   WarEra+ round 2: le ultime 4 categorie (guerre/sworn/popolazione/
+   tesoro) NON si calcolano più confrontando con uno snapshot in
+   localStorage (si perdeva cambiando dispositivo o svuotando i dati
+   del browser, e non permetteva finestre di tempo precise). Ora
+   arrivano già pronte come eventi dal server di cache
+   (fetchTickerEventsViaCache, vedi cacheClient.js e
+   server/warera-cache-server.js:pollTickerEvents) — che fa lo STESSO
+   identico calcolo (stessi campi: warsWith, swornEnemy,
+   countryActivePopulation, countryWealth/money) ma UNA volta sola,
+   condiviso da tutti gli utenti, invece che uno storico diverso per
+   ogni browser. "Recente" ora significa RECENT_WINDOW_MS (finestra
+   fissa, uguale per tutti), non più "dall'ultima visita di QUESTO
+   browser". Le battaglie e le elezioni restano fetch live come prima
+   (non hanno bisogno di uno storico: mostrano lo stato ATTUALE).
 
    I testi delle notizie usano i template tradotti in shared/i18n.js
    (chiavi ticker_*) con sostituzione di variabili — solo i NOMI di
@@ -33,12 +43,17 @@
 import { state } from '../diplomacy/state.js';
 import { trpcBatch, fmtNumber } from '../diplomacy/utils.js';
 import { fetchActiveBattles } from '../diplomacy/battleHeatmap.js';
+import { fetchTickerEventsViaCache } from '../diplomacy/cacheClient.js';
 import { t } from '../shared/i18n.js';
 
 const TOP_N = 15;
 const CAT_CAP = 5; // max messaggi per categoria prima del mix finale
-const SNAPSHOT_KEY = 'wp_diplo_news_snapshot';
 const REFRESH_MS = 5 * 60 * 1000;
+// Finestra di "notizie recenti" per guerre/sworn/popolazione/tesoro — non
+// più legata a una visita precedente (niente più localStorage), una
+// finestra fissa uguale per tutti gli utenti. 48h invece di 24h per
+// coprire comodamente anche chi non apre il tool tutti i giorni.
+const RECENT_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 /* ── UTILS ── */
 function toUTCTimestamp(dateStr) {
@@ -139,84 +154,47 @@ function formatElectionMessages(electionsRaw) {
   return messages;
 }
 
-/* ── SNAPSHOT (guerre, sworn enemy, popolazione, tesoro) — confronto
-   con l'ultima visita, limitato alle nazioni più popolose. ── */
-function loadSnapshot() {
+/* ── EVENTI SERVER-SIDE (guerre, sworn enemy, popolazione, tesoro) —
+   letti dal server di cache invece che diffati localmente, limitati alle
+   nazioni più popolose per la visualizzazione (il server li tiene TUTTI,
+   il filtro "top N" resta solo qui). ── */
+async function fetchRecentStatEvents() {
   try {
-    const raw = localStorage.getItem(SNAPSHOT_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch (_) { return null; }
-}
-function saveSnapshot(snap) {
-  try { localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snap)); } catch (_) {}
-}
-function buildCurrentSnapshot(topNations) {
-  const wars = {};
-  const sworn = {};
-  const population = {};
-  const wealth = {};
-  topNations.forEach(n => {
-    wars[n._id] = [...(n.warsWith || [])].sort();
-    sworn[n._id] = state.diplomacyData.get(n._id)?.swornEnemy || null;
-    population[n._id] = n?.rankings?.countryActivePopulation?.value ?? null;
-    wealth[n._id] = n?.rankings?.countryWealth?.value ?? n?.money ?? null;
-  });
-  return { wars, sworn, population, wealth, savedAt: Date.now() };
+    return await fetchTickerEventsViaCache(Date.now() - RECENT_WINDOW_MS);
+  } catch (err) {
+    console.warn('WarEra+ newsTicker: eventi server non disponibili:', err.message);
+    return [];
+  }
 }
 
-function diffWarMessages(prev, curr, topNations) {
-  const messages = [];
-  if (!prev) return messages;
+function formatWarMessages(events, topIds) {
   const nameOf = id => state.nationMap.get(id)?.name || id;
-  topNations.forEach(n => {
-    const prevWars = new Set(prev.wars?.[n._id] || []);
-    (curr.wars[n._id] || []).forEach(enemyId => {
-      if (!prevWars.has(enemyId)) {
-        messages.push(t('ticker_new_war', { a: n.name, b: nameOf(enemyId) }));
-      }
-    });
-  });
-  return messages;
+  return events
+    .filter(e => e.category === 'war' && topIds.has(e.countryId))
+    .map(e => t('ticker_new_war', { a: nameOf(e.countryId), b: nameOf(e.enemyId) }));
 }
 
-function diffSwornMessages(prev, curr, topNations) {
-  const messages = [];
-  if (!prev) return messages;
+function formatSwornMessages(events, topIds) {
   const nameOf = id => state.nationMap.get(id)?.name || id;
-  topNations.forEach(n => {
-    const prevSworn = Object.prototype.hasOwnProperty.call(prev.sworn || {}, n._id) ? prev.sworn[n._id] : undefined;
-    const currSworn = curr.sworn[n._id];
-    if (prevSworn === undefined || prevSworn === currSworn) return;
-    if (currSworn) {
-      messages.push(t('ticker_sworn_new', { a: n.name, b: nameOf(currSworn) }));
-    } else if (prevSworn) {
-      messages.push(t('ticker_sworn_removed', { a: n.name, b: nameOf(prevSworn) }));
-    }
-  });
-  return messages;
+  return events
+    .filter(e => (e.category === 'sworn_new' || e.category === 'sworn_removed') && topIds.has(e.countryId))
+    .map(e => e.category === 'sworn_new'
+      ? t('ticker_sworn_new', { a: nameOf(e.countryId), b: nameOf(e.enemyId) })
+      : t('ticker_sworn_removed', { a: nameOf(e.countryId), b: nameOf(e.enemyId) }));
 }
 
-// WarEra+ novità: variazione popolazione attiva / tesoro dall'ultima
-// visita, per diversificare ulteriormente il mix di notizie oltre a
-// guerre/elezioni/battaglie.
-function diffStatsMessages(prev, curr, topNations) {
+// WarEra+ novità: variazione popolazione attiva / tesoro recente, per
+// diversificare ulteriormente il mix di notizie oltre a guerre/elezioni/battaglie.
+function formatStatsMessages(events, topIds) {
+  const nameOf = id => state.nationMap.get(id)?.name || id;
   const messages = [];
-  if (!prev) return messages;
-  topNations.forEach(n => {
-    const prevPop = prev.population?.[n._id];
-    const currPop = curr.population[n._id];
-    if (typeof prevPop === 'number' && typeof currPop === 'number' && prevPop !== currPop) {
-      const delta = currPop - prevPop;
-      const sign = delta > 0 ? '+' : '';
-      messages.push(t('ticker_population_change', { nation: n.name, sign, delta: fmtNumber(delta) }));
-    }
-    const prevWealth = prev.wealth?.[n._id];
-    const currWealth = curr.wealth[n._id];
-    if (typeof prevWealth === 'number' && typeof currWealth === 'number' && prevWealth !== currWealth && prevWealth !== 0) {
-      const pct = (currWealth - prevWealth) / Math.abs(prevWealth) * 100;
-      const sign = pct > 0 ? '+' : '';
-      messages.push(t('ticker_treasury_change', { nation: n.name, sign, pct: pct.toFixed(1) }));
-    }
+  events.filter(e => e.category === 'population' && topIds.has(e.countryId)).forEach(e => {
+    const sign = e.delta > 0 ? '+' : '';
+    messages.push(t('ticker_population_change', { nation: nameOf(e.countryId), sign, delta: fmtNumber(e.delta) }));
+  });
+  events.filter(e => e.category === 'wealth' && topIds.has(e.countryId)).forEach(e => {
+    const sign = e.pct > 0 ? '+' : '';
+    messages.push(t('ticker_treasury_change', { nation: nameOf(e.countryId), sign, pct: e.pct.toFixed(1) }));
   });
   return messages;
 }
@@ -248,7 +226,10 @@ function _tickerLoop(now) {
   const deltaSeconds = Math.min((now - _tickerLastFrameTime) / 1000, 0.25); // clamp per evitare salti enormi dopo una pausa lunga (es. tab in background)
   _tickerLastFrameTime = now;
 
-  if (!track.matches(':hover')) {
+  // WarEra+ perf: niente scritture di stile (reflow) mentre la tab non è
+  // visibile — deltaSeconds resta comunque aggiornato sopra così alla
+  // ripresa non c'è un salto, semplicemente non si anima "a vuoto".
+  if (!document.hidden && !track.matches(':hover')) {
     _tickerPos += _tickerSpeedPxPerSec * deltaSeconds;
     if (_tickerUnitWidth > 0 && _tickerPos >= _tickerUnitWidth) _tickerPos -= _tickerUnitWidth;
     track.style.transform = `translateX(${-_tickerPos}px)`;
@@ -280,16 +261,13 @@ async function refreshNews() {
     if (!topNations.length) return;
     const topIds = new Set(topNations.map(n => n._id));
 
-    const [battles, electionsRaw] = await Promise.all([
+    const [battles, electionsRaw, statEvents] = await Promise.all([
       fetchRelevantBattles(topIds),
       fetchElectionsRaw(state.nazioniGlobal), // TUTTE le nazioni
+      fetchRecentStatEvents(), // guerre/sworn/popolazione/tesoro, dal server di cache
     ]);
 
-    const currSnap = buildCurrentSnapshot(topNations);
-    const prevSnap = loadSnapshot();
-    saveSnapshot(currSnap);
-
-    _lastRawData = { topNations, battles, electionsRaw, currSnap, prevSnap };
+    _lastRawData = { topIds, battles, electionsRaw, statEvents };
     _rebuildMessages();
   } catch (err) {
     console.warn('WarEra+ newsTicker: errore aggiornamento', err);
@@ -304,13 +282,13 @@ async function refreshNews() {
 // di ricreare il problema dei 429 già risolto altrove.
 function _rebuildMessages() {
   if (!_lastRawData) return;
-  const { topNations, battles, electionsRaw, currSnap, prevSnap } = _lastRawData;
+  const { topIds, battles, electionsRaw, statEvents } = _lastRawData;
 
   const battleMsgsRaw = formatBattleMessages(battles);
   const electionMsgsRaw = formatElectionMessages(electionsRaw);
-  const warMsgsRaw = diffWarMessages(prevSnap, currSnap, topNations);
-  const swornMsgsRaw = diffSwornMessages(prevSnap, currSnap, topNations);
-  const statsMsgsRaw = diffStatsMessages(prevSnap, currSnap, topNations);
+  const warMsgsRaw = formatWarMessages(statEvents, topIds);
+  const swornMsgsRaw = formatSwornMessages(statEvents, topIds);
+  const statsMsgsRaw = formatStatsMessages(statEvents, topIds);
 
   // Cap per categoria PRIMA di unire e mescolare: garantisce
   // diversificazione anche quando una categoria (tipicamente le
