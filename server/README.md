@@ -61,3 +61,29 @@ battaglie storiche è grande può volerci da qualche ora a qualche giorno
 un problema lasciarlo girare in background, la time machine funziona anche
 mentre il bootstrap è ancora a metà, solo con la storia meno dettagliata di
 prima finché non finisce.
+
+## Round 4 — sorgente esterna (spywarera.com), sostituisce di fatto il bootstrap
+
+`pollExternalHistory()` sincronizza ogni ora (`:25`, più una volta subito
+all'avvio) con `https://spywarera.com/timemachine/map/events` — un endpoint
+JSON pubblico che ha già lo storico ownership regioni completo dal 1 maggio
+2025 a oggi, più affidabile della nostra ricostruzione. Ad ogni sync
+**sostituisce interamente** `region-history-keyframes/events.json` con la
+versione esterna + i soli eventi propri più recenti dell'ultimo evento
+esterno noto (il "ponte" per il ritardo fra un loro poll e il prossimo). Se
+il fetch fallisce non tocca nulla — resta l'ultimo stato buono.
+
+```bash
+curl https://ampsodrick.duckdns.org/warera-cache/region-history/external-status
+```
+
+Risponde `{ fetchedAt, generatedAt, externalEventsCount, externalLastTs, bridgeEventsCount }`.
+
+**Bootstrap (round 3) DISATTIVATO**: dato che questo sync sovrascrive
+`region-history-*` ogni ora con una fonte già completa, il bootstrap era
+ridondante (1 pagina/minuto, poteva metterci ore/giorni per un risultato che
+questo round rimpiazza comunque entro l'ora) — `cron.schedule('* * * * *',
+pollBootstrapPage)` e la chiamata all'avvio sono commentate. Funzione e
+endpoint `/bootstrap-status` restano nel file intatti, si riattiva togliendo
+i due commenti se in futuro serve di nuovo (es. spywarera.com irraggiungibile
+a lungo).

@@ -72,6 +72,24 @@
 //    derivati da BATTAGLIE — un cambio di proprietà per compravendita
 //    regione (se esiste come meccanica) non lascerebbe traccia qui.
 //    Endpoint di stato: /bootstrap-status.
+//
+// 5) STORICO OWNERSHIP REGIONI — SORGENTE ESTERNA (pollExternalHistory):
+//    spywarera.com espone pubblicamente (https://spywarera.com/timemachine/
+//    map/events) lo stesso identico dato che i punti (3)/(4) qui sopra
+//    provano a ricostruire da soli — keyframe di genesi (initialOwnership) +
+//    eventi di trasferimento regione — ma già completo dal 1 maggio 2025 a
+//    oggi (verificato dal vivo: 11.114 eventi, ~1,3MB, aggiornato in tempo
+//    reale) e più affidabile del nostro (copre solo da quando questo server
+//    gira, più il backfill lento del punto 4). Ad ogni giro SOSTITUISCE
+//    region-history-keyframes/events.json con la versione esterna (fonte
+//    di verità) + i SOLI eventi propri catturati DOPO l'ultimo evento
+//    esterno noto ("ponte" per il ritardo fra un loro poll e il prossimo).
+//    Se il fetch fallisce (sito giù, formato cambiato, timeout) non si
+//    tocca nulla: resta l'ultimo stato buono, e il polling orario proprio
+//    (updateRegionHistory) continua ad accodare eventi come se questa
+//    fonte non esistesse — nessun punto di rottura per il client, che non
+//    parla mai direttamente con spywarera.com (solo questo server la
+//    contatta, a intervalli). Endpoint di stato: /region-history/external-status.
 // ══════════════════════════════════════════════════════════════
 
 const express = require('express');
@@ -660,6 +678,76 @@ async function pollBootstrapPage() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// STORICO OWNERSHIP REGIONI — SORGENTE ESTERNA (spywarera.com)
+// (vedi nota (5) in testa al file)
+// ═══════════════════════════════════════════════════════════════════════
+const EXTERNAL_HISTORY_URL = 'https://spywarera.com/timemachine/map/events';
+const EXTERNAL_HISTORY_TIMEOUT_MS = 20000; // risposta ~1,3MB e cresce, margine largo
+const EXTERNAL_HISTORY_STATUS_FILE = 'region-history-external-status';
+
+async function _fetchExternalHistory() {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), EXTERNAL_HISTORY_TIMEOUT_MS);
+  try {
+    const res = await fetch(EXTERNAL_HISTORY_URL, { signal: controller.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data || typeof data.initialOwnership !== 'object' || !Array.isArray(data.events)) {
+      throw new Error('formato inatteso (initialOwnership/events mancanti)');
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Sincronizza region-history-keyframes/events.json con spywarera.com,
+ *  trattandolo come fonte di verità (più affidabile del nostro polling) e
+ *  usando i nostri eventi già catturati solo per il "ponte" oltre l'ultimo
+ *  evento che spywarera conosce. Fallisce in modo silenzioso (log + return):
+ *  nessun impatto sul client, che legge sempre e solo i file locali.
+ */
+async function pollExternalHistory() {
+  let external;
+  try {
+    external = await _fetchExternalHistory();
+  } catch (err) {
+    console.error('[region-history-external] fetch spywarera fallito, mantengo lo stato attuale:', err.message);
+    return;
+  }
+
+  const externalEvents = external.events
+    .map(e => ({ ts: Date.parse(e.ts), regionId: e.regionId, toCountry: e.toCountry }))
+    .filter(e => Number.isFinite(e.ts))
+    .sort((a, b) => a.ts - b.ts);
+
+  const externalLastTs = externalEvents.length
+    ? externalEvents[externalEvents.length - 1].ts
+    : GENESIS_TS;
+
+  // Ponte: nostri eventi già osservati DOPO l'ultimo evento noto a
+  // spywarera — copre il ritardo fra il loro poll e "adesso".
+  const ownEvents = readCache(REGION_EVENTS_FILE, []);
+  const bridgeEvents = ownEvents.filter(e => e.ts > externalLastTs);
+  const mergedEvents = [...externalEvents, ...bridgeEvents];
+
+  writeCache(REGION_KEYFRAMES_FILE, [{ ts: GENESIS_TS, regions: external.initialOwnership }]);
+  writeCache(REGION_EVENTS_FILE, mergedEvents);
+  writeCache(EXTERNAL_HISTORY_STATUS_FILE, {
+    fetchedAt: Date.now(),
+    generatedAt: external.generatedAt,
+    externalEventsCount: externalEvents.length,
+    externalLastTs,
+    bridgeEventsCount: bridgeEvents.length,
+  });
+
+  console.log(
+    `[region-history-external] sync con spywarera.com: ${externalEvents.length} eventi esterni ` +
+    `(fino a ${new Date(externalLastTs).toISOString()}) + ${bridgeEvents.length} eventi propri più recenti`
+  );
+}
+
 // ---------------------------------------------------------------------------
 // SCHEDULER: ogni endpoint ha un proprio intervallo e un proprio offset
 // (minuto di partenza), così le chiamate a WarEra non si accumulano mai
@@ -672,11 +760,18 @@ cron.schedule('3,13,23,33,43,53 * * * *', pollAlliances);              // ogni 1
 cron.schedule('8,23,38,53 * * * *', pollDiplomacy);                    // ogni 15 min, :08 (alimenta anche il ticker stats)
 cron.schedule('1,4,7,10,13,16,19,22,25,28,31,34,37,40,43,46,49,52,55,58 * * * *', pollBattles); // ogni 3 min, :01
 cron.schedule('2,7,12,17,22,27,32,37,42,47,52,57 * * * *', pollElections); // ogni 5 min, :02
-// Bootstrap storico — 1 pagina (100 battaglie) al minuto, vedi nota (4) in
-// testa al file. Nessun offset da scaglionare: gira da solo, un tick al
-// minuto sul proprio minuto, non in competizione di orario con gli altri
-// poll (endpoint diverso, via Worker, non incrocia mai i loro tick).
-cron.schedule('* * * * *', pollBootstrapPage);
+// Bootstrap storico — DISATTIVATO (round 4): troppo lento (1 pagina/min,
+// poteva metterci ore/giorni) e comunque reso ridondante da
+// pollExternalHistory qui sotto, che sovrascrive region-history-keyframes/
+// events.json entro l'ora con una fonte già completa e più affidabile.
+// Funzione e endpoint /bootstrap-status lasciati intatti (nessun dato
+// perso, si può riattivare togliendo il commento) — vedi nota (4)/(5) in
+// testa al file.
+// cron.schedule('* * * * *', pollBootstrapPage);
+// Sync con la sorgente esterna — offset :25, dopo pollRegionsObject (:15)
+// così il "ponte" filtra eventi propri già scritti in quel giro, ma non è
+// un requisito stretto (i due giri non si sovrappongono mai per orario).
+cron.schedule('25 * * * *', pollExternalHistory);
 
 // Primo giro completo all'avvio (in ordine: countries prima, perché tutto
 // il resto dipende dalla cache delle nazioni), così non si parte a vuoto.
@@ -688,7 +783,8 @@ cron.schedule('* * * * *', pollBootstrapPage);
   await pollDiplomacy();
   await pollBattles();
   await pollElections();
-  await pollBootstrapPage(); // scarica subito la prima pagina, non aspetta il prossimo minuto pieno
+  // await pollBootstrapPage(); // disattivato, vedi nota sopra al cron.schedule commentato
+  await pollExternalHistory(); // sync subito con spywarera invece di aspettare fino a 1h
 })();
 
 // ---------------------------------------------------------------------------
@@ -736,6 +832,12 @@ app.get('/bootstrap-status', (req, res) => {
   const st = readCache(BOOTSTRAP_STATE_FILE, { cursor: null, done: false, finalized: false, pagesFetched: 0 });
   const battlesFetched = readCache(BOOTSTRAP_RAW_FILE, []).length;
   res.json({ ...st, battlesFetched });
+});
+
+app.get('/region-history/external-status', (req, res) => {
+  res.json(readCache(EXTERNAL_HISTORY_STATUS_FILE, {
+    fetchedAt: null, generatedAt: null, externalEventsCount: 0, externalLastTs: null, bridgeEventsCount: 0,
+  }));
 });
 
 app.get('/health', (req, res) => res.json({ status: 'ok', now: Date.now() }));
