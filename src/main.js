@@ -30,7 +30,7 @@ import { initLangSync } from './app/langSync.js';
 import { initBattleToggle } from './app/battleToggle.js';
 import { initBlocLabelsToggle } from './app/blocLabelsToggle.js';
 import { startNewsTicker } from './app/newsTicker.js';
-import { initTimeMachine } from './app/timeMachine.js';
+import { initTimeMachine, openTimeMachineAt } from './app/timeMachine.js';
 import { applyTranslations, initLangButton } from './shared/i18n.js';
 import { updateDynamicLegend } from './diplomacy/ui.js';
 import { state } from './diplomacy/state.js';
@@ -38,16 +38,24 @@ import { state } from './diplomacy/state.js';
 function handleIncomingDeepLink() {
   const params = new URLSearchParams(window.location.search);
   const countryId = params.get('country');
-  if (!countryId) return;
+  if (countryId) {
+    selectNationInPanel(countryId);
 
-  selectNationInPanel(countryId);
+    // Centra la mappa sulla nazione, riusando gli stessi dati (label
+    // coordinates) che 'cercaNazione()' usa internamente in map.js —
+    // letti qui direttamente da state, senza toccare map.js.
+    const label = state.labelsData.find(l => l.properties?.countryId === countryId);
+    if (label && state.map) {
+      state.map.flyTo({ center: label.coordinates, zoom: Math.max(state.map.getZoom(), 3) });
+    }
+  }
 
-  // Centra la mappa sulla nazione, riusando gli stessi dati (label
-  // coordinates) che 'cercaNazione()' usa internamente in map.js —
-  // letti qui direttamente da state, senza toccare map.js.
-  const label = state.labelsData.find(l => l.properties?.countryId === countryId);
-  if (label && state.map) {
-    state.map.flyTo({ center: label.coordinates, zoom: Math.max(state.map.getZoom(), 3) });
+  // ?tm=<epoch ms> — deep-link condivisibile della time machine (vedi
+  // src/app/timeMachine.js:_syncUrl/_clearUrl per dove viene scritto).
+  const tm = params.get('tm');
+  if (tm) {
+    const ts = Number(tm);
+    if (Number.isFinite(ts)) openTimeMachineAt(ts);
   }
 }
 

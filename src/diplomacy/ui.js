@@ -31,6 +31,14 @@ function _autoToggleLegend() {
   const legendEl = document.getElementById('dynamic-legend');
   if (!legendEl) return;
 
+  // WarEra+ (feedback utente): su mobile niente apertura automatica —
+  // meno clutter su uno schermo già stretto. La legenda resta esattamente
+  // com'era (aperta o chiusa) finché l'utente non la tocca lui col bottone
+  // manuale (#legendToggleBtn) — su desktop il comportamento resta
+  // automatico com'era.
+  const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window;
+  if (isMobile) return;
+
   const isDefaultView = state.coloringMode === 'diplomacy';
   const viewKey = `${state.coloringMode}|${!!state.battleHeatmapData}`;
 

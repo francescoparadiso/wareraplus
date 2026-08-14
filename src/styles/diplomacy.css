@@ -11,6 +11,13 @@
       color: #e6edf3;
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       overflow: hidden;
+      /* WarEra+ (bug segnalato: "scroll" bloccato su mobile dopo la time
+         machine, vedi shell.css #wp-time-machine-panel) — questa è un'app
+         mappa a schermo intero, non deve MAI scrollare/rimbalzare:
+         overscroll-behavior:none è una rete di sicurezza in più contro il
+         rubber-band di iOS che può restare "incastrato" dopo un drag su un
+         elemento position:fixed, qualunque sia l'elemento coinvolto. */
+      overscroll-behavior: none;
       -webkit-font-smoothing: antialiased;
     }
 

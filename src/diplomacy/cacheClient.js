@@ -190,3 +190,15 @@ export async function fetchRegionHistoryAtViaCache(ts) {
   if (!json.regions) throw new Error('cache /region-history/at: forma inattesa');
   return json;
 }
+
+/** Tutti gli eventi di trasferimento regione fra `sinceTs` e `untilTs`
+ *  (epoch ms, entrambi inclusi) — { ts, regionId, toCountry }[], NON
+ *  ordinato per garanzia del server (va ordinato lato chiamante). Usata da
+ *  timeMachine.js per "salta al prossimo/precedente evento" e per "di
+ *  chi è questa regione dal —" nel popup di click: una sola fetch per
+ *  sessione (l'intero storico, ~1-2MB), non una per interazione. */
+export async function fetchRegionHistoryEventsViaCache(sinceTs, untilTs) {
+  const json = await _fetchCacheJsonRaw(`/region-history/events?since=${encodeURIComponent(sinceTs)}&until=${encodeURIComponent(untilTs)}`);
+  if (!Array.isArray(json)) throw new Error('cache /region-history/events: forma inattesa');
+  return json;
+}

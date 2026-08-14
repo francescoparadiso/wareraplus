@@ -604,7 +604,10 @@ body.light-theme #wp-time-machine-btn.wp-time-machine-btn-active {
 
 /* ── Pannello slider Time machine (barra in basso, stile coerente con
    .wp-panel: sfondo scuro traslucido, bordo #30363d) — nascosto di
-   default, .open lo mostra con una transizione dal basso. ── */
+   default, .open lo mostra con una transizione dal basso. Due righe:
+   bottoni (chiudi/evento prec./play/evento succ./velocità) sopra,
+   slider+data sotto — troppi controlli per stare su una riga sola dai
+   ~340px in su di .wp-time-machine-panel. ── */
 #wp-time-machine-panel {
   position: fixed;
   left: 50%;
@@ -615,8 +618,8 @@ body.light-theme #wp-time-machine-btn.wp-time-machine-btn-active {
   transform: translate(-50%, calc(100% + 24px));
   z-index: 2400;
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
   min-width: 340px;
   max-width: min(640px, calc(100vw - 32px));
   padding: 10px 16px;
@@ -629,28 +632,73 @@ body.light-theme #wp-time-machine-btn.wp-time-machine-btn-active {
   font-family: 'Inter', -apple-system, sans-serif;
   font-size: 13px;
   transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  /* BUG FIX (segnalato dall'utente): "scroll"/drag della mappa rimaneva
+     bloccato su mobile dopo aver chiuso la time machine. Il pannello resta
+     sempre nel DOM (spostato fuori schermo via transform, mai
+     display:none, per poter animare la riapertura) — pointer-events:none
+     qui garantisce che, chiuso, non possa MAI intercettare un gesto anche
+     in casi limite (viewport molto basso, bug di alcuni browser mobile con
+     fixed+transform), indipendentemente dalla causa esatta del blocco.
+     .open lo riattiva. */
+  pointer-events: none;
 }
 #wp-time-machine-panel.open {
   transform: translate(-50%, 0);
+  pointer-events: auto;
 }
-#wp-tm-close {
+.wp-tm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wp-tm-controls {
+  justify-content: center;
+}
+#wp-tm-close,
+#wp-tm-prev-event,
+#wp-tm-play,
+#wp-tm-next-event,
+#wp-tm-speed {
   flex: 0 0 auto;
-  width: 28px;
   height: 28px;
+  min-width: 28px;
+  padding: 0 6px;
   border-radius: 8px;
   border: 1px solid #30363d;
   background: #161b22;
   color: #8b949e;
   cursor: pointer;
   font-size: 13px;
+  font-family: inherit;
 }
-#wp-tm-close:hover {
+#wp-tm-close:hover,
+#wp-tm-prev-event:hover:not(:disabled),
+#wp-tm-play:hover,
+#wp-tm-next-event:hover:not(:disabled),
+#wp-tm-speed:hover {
   color: #e6edf3;
   border-color: #58a6ff;
 }
+#wp-tm-prev-event:disabled,
+#wp-tm-next-event:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+#wp-tm-speed {
+  font-weight: 700;
+  min-width: 34px;
+}
+/* BUG FIX (segnalato dall'utente): "scroll" bloccato su mobile — vedi
+   commento su pointer-events sopra. touch-action:pan-x qui indica al
+   browser che un drag che parte dallo slider è gestito interamente da lui
+   (spostamento orizzontale nativo dell'input range): niente tentativo
+   concorrente di riconoscere un gesto di scroll verticale/rubber-band
+   della pagina, la causa più probabile del blocco (bug noto su iOS con
+   elementi position:fixed trascinati). */
 #wp-tm-slider {
   flex: 1;
   accent-color: #00d4ff;
+  touch-action: pan-x;
 }
 #wp-tm-label {
   flex: 0 0 auto;
@@ -665,7 +713,11 @@ body.light-theme #wp-time-machine-panel {
   border-color: rgba(0, 0, 0, 0.1);
   color: #1a1a1a;
 }
-body.light-theme #wp-tm-close {
+body.light-theme #wp-tm-close,
+body.light-theme #wp-tm-prev-event,
+body.light-theme #wp-tm-play,
+body.light-theme #wp-tm-next-event,
+body.light-theme #wp-tm-speed {
   background: #f0f0f0;
   border-color: #ccc;
   color: #555;
@@ -689,14 +741,15 @@ body.light-theme #wp-tm-label {
   }
 }
 
-/* ── Popup click regione (Time machine): nome nazione + bandiera, segue
+/* ── Popup click regione (Time machine): nome nazione + bandiera (+ "dal —"
+   se lo storico eventi è caricato, vedi timeMachine.js:_ownedSince), segue
    il punto cliccato sulla mappa (posizionato in JS via left/top). ── */
 #wp-time-machine-popup {
   position: fixed;
   z-index: 2450;
   display: none;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 3px;
   padding: 6px 10px;
   background: rgba(13, 17, 23, 0.97);
   border: 1px solid #30363d;
@@ -713,6 +766,11 @@ body.light-theme #wp-tm-label {
 #wp-time-machine-popup.visible {
   display: flex;
 }
+.wp-tm-popup-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .wp-tm-popup-flag {
   width: 18px;
   height: 13px;
@@ -720,10 +778,18 @@ body.light-theme #wp-tm-label {
   border-radius: 2px;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
 }
+.wp-tm-popup-since {
+  font-size: 11px;
+  font-weight: 400;
+  color: #8b949e;
+}
 body.light-theme #wp-time-machine-popup {
   background: rgba(255, 255, 255, 0.97);
   border-color: rgba(0, 0, 0, 0.1);
   color: #1a1a1a;
+}
+body.light-theme .wp-tm-popup-since {
+  color: #666;
 }
 
 /* ══════════════════════════════════════════════════════════════

@@ -32,10 +32,22 @@ import { LAYER_IDS, THEMES } from '../diplomacy/config.js';
 import { renderMap } from '../diplomacy/map.js';
 import { escapeHtml, showToast } from '../diplomacy/utils.js';
 import { invalidateLabelCache } from '../diplomacy/labels.js';
-import { fetchRegionHistoryRangeViaCache, fetchRegionHistoryAtViaCache } from '../diplomacy/cacheClient.js';
+import {
+  fetchRegionHistoryRangeViaCache,
+  fetchRegionHistoryAtViaCache,
+  fetchRegionHistoryEventsViaCache,
+} from '../diplomacy/cacheClient.js';
 import * as topojson from 'topojson-client';
 
 const { SRC_REGIONS, SRC_BORDERS, LYR_FILL } = LAYER_IDS;
+
+// Passo di uno "step" discreto (frecce tastiera, salto play/pausa) — un
+// giorno di gioco. La velocità di riproduzione (1x-4x) moltiplica questo
+// stesso passo invece di accorciare l'intervallo del timer: così il numero
+// di fetch al server durante il playback non dipende dalla velocità scelta.
+const STEP_MS = 24 * 60 * 60 * 1000;
+const PLAY_TICK_MS = 150;
+const PLAY_SPEEDS = [1, 2, 3, 4];
 
 // Il server semina la genesi (keyframe più vecchio) al 1 maggio 2025 — vedi
 // GENESIS_TS in server/warera-cache-server.js. Non serve duplicare la
@@ -49,6 +61,7 @@ function _fmtDate(ts) {
 }
 
 let _btn, _panel, _slider, _label, _popup;
+let _playBtn, _prevEventBtn, _nextEventBtn, _speedBtn;
 let _active = false;
 let _range = null;
 let _debounceTimer = null;
@@ -56,10 +69,34 @@ let _lastRegions = null; // { regionId: countryId } della posizione slider corre
 let _labelRegionId = null; // Map: indice in state.labelsData -> regionId "sotto" quella label (calcolato una volta, posizione fissa)
 let _labelOriginal = null; // Array: { countryId, countryName, textColor, countryCode } originali, per il ripristino
 
+// Playback (play/pausa + velocità 1x-4x)
+let _playing = false;
+let _playTimer = null;
+let _speedIdx = 0; // indice in PLAY_SPEEDS
+
+// Eventi (salto prossimo/precedente + "dal —" nel popup): UNA fetch sola
+// per sessione (l'intero storico), non una per interazione — vedi
+// cacheClient.js:fetchRegionHistoryEventsViaCache. Se fallisce, i bottoni
+// prossimo/precedente restano disabilitati e il popup non mostra "dal —":
+// degrado grazioso, il resto della time machine funziona comunque.
+let _eventTsSorted = null; // number[] ordinato, per il salto prossimo/precedente
+let _eventsByRegion = null; // Map<regionId, {ts,toCountry}[]> ordinato per ts, per "dal —"
+
 export function initTimeMachine() {
   _btn = document.getElementById('wp-time-machine-btn');
   if (!_btn) return;
   _btn.addEventListener('click', () => (_active ? _deactivate() : _activate()));
+}
+
+// Apre la time machine già posizionata su un istante specifico invece che
+// sull'ultimo (oggi) — usata dal deep-link ?tm=<epoch ms> in ingresso
+// (vedi main.js:handleIncomingDeepLink, stesso principio del deep-link
+// ?country= già esistente). Se la time machine è già aperta non fa nulla
+// (evita di riattivarla due volte se il deep-link viene richiamato più
+// volte per errore).
+export function openTimeMachineAt(ts) {
+  if (_active || !Number.isFinite(ts)) return;
+  _activate(ts);
 }
 
 // Se le battaglie attive sono visibili, le spegne — stesso checkbox/evento
@@ -74,7 +111,7 @@ function _disableBattlesIfShown() {
   }
 }
 
-async function _activate() {
+async function _activate(initialTs) {
   if (!state.map || !state.baseGeoJSON) return;
   try {
     _range = await fetchRegionHistoryRangeViaCache();
@@ -90,21 +127,29 @@ async function _activate() {
   _disableBattlesIfShown();
   _buildPanelIfNeeded();
   _panel.classList.add('open');
+  document.addEventListener('keydown', _onKeydown);
 
+  const startTs = Number.isFinite(initialTs)
+    ? Math.min(Math.max(initialTs, _range.min), _range.max)
+    : _range.max;
   _slider.min = String(_range.min);
   _slider.max = String(_range.max);
-  _slider.value = String(_range.max);
-  await _applyAt(_range.max);
+  _slider.value = String(startTs);
+  await _applyAt(startTs);
 
   state.map.on('click', LYR_FILL, _onHistoricalClick);
+  _loadEvents(); // in background, non blocca l'apertura — vedi commento sopra _eventTsSorted
 }
 
 function _deactivate() {
   _active = false;
   state.timeMachineActive = false;
+  _stopPlay();
   _btn.classList.remove('wp-time-machine-btn-active');
   if (_panel) _panel.classList.remove('open');
   _hidePopup();
+  document.removeEventListener('keydown', _onKeydown);
+  _clearUrl();
 
   const src = state.map?.getSource(SRC_REGIONS);
   if (src && state.baseGeoJSON) src.setData(state.baseGeoJSON);
@@ -113,6 +158,23 @@ function _deactivate() {
   renderMap(); // ripristina qualunque modalità colore fosse attiva prima — questo modulo non deve saperne nulla
 
   if (state.map) state.map.off('click', LYR_FILL, _onHistoricalClick);
+
+  // BUG FIX (segnalato dall'utente): dopo aver chiuso la time machine lo
+  // "scroll" (drag/pan della mappa) restava bloccato su mobile. Causa più
+  // probabile: #wp-time-machine-panel resta nel DOM (spostato fuori
+  // schermo via transform, mai display:none) con lo slider ancora
+  // focalizzabile — su iOS in particolare, un elemento position:fixed
+  // fuori viewport che riceve un gesto di trascinamento può innescare un
+  // overscroll/rubber-band della pagina che poi non si "sblocca" da solo
+  // (bug noto della combinazione position:fixed + transform + drag su
+  // touch). togliere il focus e forzare un reset dell'overscroll qui è la
+  // difesa più economica indipendentemente dalla causa esatta — vedi anche
+  // touch-action/overscroll-behavior aggiunti in shell.css sullo slider e
+  // pointer-events:none sul pannello quando chiuso (così non intercetta
+  // più eventi nemmeno se un browser lo considerasse ancora "in viewport").
+  if (document.activeElement instanceof HTMLElement && _panel?.contains(document.activeElement)) {
+    document.activeElement.blur();
+  }
 }
 
 function _buildPanelIfNeeded() {
@@ -121,17 +183,35 @@ function _buildPanelIfNeeded() {
   _panel = document.createElement('div');
   _panel.id = 'wp-time-machine-panel';
   _panel.innerHTML = `
-    <button id="wp-tm-close" title="Chiudi" aria-label="Chiudi time machine">✕</button>
-    <input id="wp-tm-slider" type="range" min="0" max="1000" value="1000" />
-    <span id="wp-tm-label">—</span>
+    <div class="wp-tm-row wp-tm-controls">
+      <button id="wp-tm-close" title="Chiudi" aria-label="Chiudi time machine">✕</button>
+      <button id="wp-tm-prev-event" title="Evento precedente" aria-label="Evento precedente" disabled>⏮</button>
+      <button id="wp-tm-play" title="Play" aria-label="Play">▶</button>
+      <button id="wp-tm-next-event" title="Evento successivo" aria-label="Evento successivo" disabled>⏭</button>
+      <button id="wp-tm-speed" title="Velocità riproduzione" aria-label="Velocità riproduzione">1x</button>
+    </div>
+    <div class="wp-tm-row wp-tm-slider-row">
+      <input id="wp-tm-slider" type="range" min="0" max="1000" value="1000" />
+      <span id="wp-tm-label">—</span>
+    </div>
   `;
   document.body.appendChild(_panel);
 
   _slider = _panel.querySelector('#wp-tm-slider');
   _label = _panel.querySelector('#wp-tm-label');
+  _playBtn = _panel.querySelector('#wp-tm-play');
+  _prevEventBtn = _panel.querySelector('#wp-tm-prev-event');
+  _nextEventBtn = _panel.querySelector('#wp-tm-next-event');
+  _speedBtn = _panel.querySelector('#wp-tm-speed');
+
   _panel.querySelector('#wp-tm-close').addEventListener('click', _deactivate);
+  _playBtn.addEventListener('click', _togglePlay);
+  _prevEventBtn.addEventListener('click', () => _jumpToEvent(-1));
+  _nextEventBtn.addEventListener('click', () => _jumpToEvent(1));
+  _speedBtn.addEventListener('click', _cycleSpeed);
 
   _slider.addEventListener('input', () => {
+    _stopPlay(); // trascinamento manuale = l'utente prende il controllo, ferma il playback
     const ts = Number(_slider.value);
     _label.textContent = _fmtDate(ts);
     // Debounce: la fetch server-side (ricostruzione keyframe+replay) non ha
@@ -141,9 +221,156 @@ function _buildPanelIfNeeded() {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Playback (play/pausa + velocità 1x-4x) — avanza il timestamp da solo a
+// intervalli fissi (PLAY_TICK_MS); la velocità moltiplica il PASSO per
+// tick, non la frequenza del timer, così il numero di fetch al server
+// resta costante indipendentemente dalla velocità scelta.
+// ─────────────────────────────────────────────────────────────────────────
+function _togglePlay() {
+  if (_playing) _stopPlay();
+  else _startPlay();
+}
+
+function _startPlay() {
+  if (!_range || _playing) return;
+  _playing = true;
+  _playBtn.textContent = '⏸';
+  _playBtn.title = 'Pausa';
+  // Se siamo già alla fine, ripartire da capo è più utile che restare fermi.
+  if (Number(_slider.value) >= _range.max) {
+    _slider.value = String(_range.min);
+    _applyAt(_range.min);
+  }
+  _playTimer = setInterval(_playTick, PLAY_TICK_MS);
+}
+
+function _stopPlay() {
+  if (_playTimer) clearInterval(_playTimer);
+  _playTimer = null;
+  if (!_playing) return;
+  _playing = false;
+  if (_playBtn) { _playBtn.textContent = '▶'; _playBtn.title = 'Play'; }
+}
+
+function _playTick() {
+  const cur = Number(_slider.value);
+  const next = cur + STEP_MS * PLAY_SPEEDS[_speedIdx];
+  if (next >= _range.max) {
+    _slider.value = String(_range.max);
+    _applyAt(_range.max);
+    _stopPlay();
+    return;
+  }
+  _slider.value = String(next);
+  _applyAt(next);
+}
+
+function _cycleSpeed() {
+  _speedIdx = (_speedIdx + 1) % PLAY_SPEEDS.length;
+  _speedBtn.textContent = `${PLAY_SPEEDS[_speedIdx]}x`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Frecce tastiera (±1 giorno) e barra spaziatrice (play/pausa) — solo
+// mentre la time machine è attiva (listener aggiunto/rimosso in
+// _activate/_deactivate) e solo se il focus non è su un campo di testo
+// altrove nell'app (es. "Cerca nazione…"), per non rubargli i tasti.
+// ─────────────────────────────────────────────────────────────────────────
+function _onKeydown(e) {
+  const ae = document.activeElement;
+  if (ae && ae.tagName === 'INPUT' && ae.type === 'text') return;
+  if (e.key === 'ArrowLeft') { e.preventDefault(); _stopPlay(); _stepBy(-STEP_MS); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); _stopPlay(); _stepBy(STEP_MS); }
+  else if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); _togglePlay(); }
+}
+
+function _stepBy(deltaMs) {
+  if (!_range) return;
+  clearTimeout(_debounceTimer); // niente apply "vecchio" in debounce che sovrascrive questo più recente
+  const next = Math.min(Math.max(Number(_slider.value) + deltaMs, _range.min), _range.max);
+  _slider.value = String(next);
+  _applyAt(next);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Eventi: caricati UNA volta per sessione (vedi commento su _eventTsSorted
+// in testa al file), abilitano prossimo/precedente e il "dal —" nel popup.
+// ─────────────────────────────────────────────────────────────────────────
+async function _loadEvents() {
+  try {
+    const events = (await fetchRegionHistoryEventsViaCache(_range.min, _range.max))
+      .slice()
+      .sort((a, b) => a.ts - b.ts);
+    _eventTsSorted = events.map(e => e.ts);
+    _eventsByRegion = new Map();
+    for (const e of events) {
+      if (!_eventsByRegion.has(e.regionId)) _eventsByRegion.set(e.regionId, []);
+      _eventsByRegion.get(e.regionId).push(e);
+    }
+    if (_prevEventBtn) _prevEventBtn.disabled = false;
+    if (_nextEventBtn) _nextEventBtn.disabled = false;
+  } catch (err) {
+    console.warn('WarEra+ time machine: eventi non disponibili (salto evento/"dal —" disattivati):', err.message);
+  }
+}
+
+function _jumpToEvent(dir) {
+  if (!_eventTsSorted?.length) return;
+  _stopPlay();
+  clearTimeout(_debounceTimer);
+  const cur = Number(_slider.value);
+  let target;
+  if (dir > 0) {
+    target = _eventTsSorted.find(ts => ts > cur);
+  } else {
+    for (let i = _eventTsSorted.length - 1; i >= 0; i--) {
+      if (_eventTsSorted[i] < cur) { target = _eventTsSorted[i]; break; }
+    }
+  }
+  if (target === undefined) return; // già al primo/ultimo evento noto
+  _slider.value = String(target);
+  _applyAt(target);
+}
+
+// Nazione che deteneva `regionId` più di recente, a `ts` o prima — null se
+// _eventsByRegion non è (ancora) disponibile, `_range.min` se non risulta
+// nessun trasferimento noto per quella regione (la possiede dalla genesi).
+function _ownedSince(regionId, ts) {
+  if (!regionId || !_eventsByRegion || !_range) return null;
+  const evs = _eventsByRegion.get(regionId);
+  if (!evs?.length) return _range.min;
+  let since = _range.min;
+  for (const e of evs) {
+    if (e.ts > ts) break;
+    since = e.ts;
+  }
+  return since;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Deep-link condivisibile (?tm=<epoch ms>) — sincronizzato ad ogni
+// posizione applicata, rimosso alla chiusura (vedi _deactivate). replaceState
+// (non pushState): muovere lo slider non deve riempire la cronologia del
+// browser di una entry per pixel trascinato.
+// ─────────────────────────────────────────────────────────────────────────
+function _syncUrl(ts) {
+  const url = new URL(window.location.href);
+  url.searchParams.set('tm', String(Math.round(ts)));
+  history.replaceState(null, '', url);
+}
+
+function _clearUrl() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has('tm')) return;
+  url.searchParams.delete('tm');
+  history.replaceState(null, '', url);
+}
+
 async function _applyAt(ts) {
   _label.textContent = _fmtDate(ts);
   _hidePopup();
+  _syncUrl(ts);
   try {
     const { regions } = await fetchRegionHistoryAtViaCache(ts);
     _lastRegions = regions;
@@ -330,10 +557,11 @@ function _onHistoricalClick(e) {
   const regionId = e.features[0].properties?.regionId;
   const countryId = regionId ? _lastRegions[regionId] : null;
   const nation = countryId ? state.nationMap.get(countryId) : null;
-  _showPopup(e.point, nation);
+  const since = nation ? _ownedSince(regionId, Number(_slider.value)) : null;
+  _showPopup(e.point, nation, since);
 }
 
-function _showPopup(point, nation) {
+function _showPopup(point, nation, sinceTs) {
   if (!_popup) {
     _popup = document.createElement('div');
     _popup.id = 'wp-time-machine-popup';
@@ -344,7 +572,15 @@ function _showPopup(point, nation) {
   } else {
     const code = nation.code?.toLowerCase();
     const flagHtml = code ? `<img src="https://media.warera.io/images/flags/${code}.svg?v=16" alt="" class="wp-tm-popup-flag" />` : '';
-    _popup.innerHTML = `${flagHtml}<span class="wp-tm-popup-name">${escapeHtml(nation.name)}</span>`;
+    // "dal —" solo se _loadEvents() è già arrivato (sincEts non-null) — vedi
+    // _ownedSince: null significa "dato non ancora disponibile", non "sconosciuto".
+    const sinceHtml = sinceTs != null
+      ? `<span class="wp-tm-popup-since">dal ${_fmtDate(sinceTs)}</span>`
+      : '';
+    _popup.innerHTML = `
+      <div class="wp-tm-popup-main">${flagHtml}<span class="wp-tm-popup-name">${escapeHtml(nation.name)}</span></div>
+      ${sinceHtml}
+    `;
   }
   // Il gap sopra il punto cliccato e il centraggio orizzontale li fa il
   // CSS (transform: translate(-50%, calc(-100% - 8px))) — qui solo il
