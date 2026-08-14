@@ -45,7 +45,7 @@ body.light-theme .wp-lang-select option {
   color: #1a1a1a;
 }
 @media (max-width: 768px) {
-  .wp-lang-select { height: 32px; font-size: 10px; max-width: 76px; }
+  .wp-lang-select { height: 32px; font-size: 10px; max-width: 60px; }
 }
 
 /* ── Shift dei controlli in alto quando il pannello nazione è aperto ──
@@ -792,12 +792,22 @@ body.light-theme .wp-ticker-message {
 @media (max-width: 768px) {
   .wp-news-ticker-wrapper { height: 26px; }
   .wp-ticker-message { font-size: 10.5px; }
+  /* WarEra+ fix: hamburger e legenda condividono la stessa colonna
+     sinistra (entrambi left:20px) — l'hamburger scende sotto alla
+     "linguetta" legenda (che resta flush sotto al ticker, top:26px, vedi
+     blocco dedicato più in basso) per non sovrapporcisi. #wp-top-controls
+     invece sta tutto a destra (right:20px) e NON condivide colonna con la
+     legenda (che è larga solo ~38px, ben lontana dal cluster destro) —
+     resta quindi vicino al ticker come l'utente si aspetta, non serve
+     scenda anche lui. */
   #hamburger-btn,
   #bloc-stats-btn,
   #wp-battles-toggle-btn,
-  #wp-time-machine-btn,
+  #wp-time-machine-btn {
+    top: 72px !important;
+  }
   #wp-top-controls {
-    top: calc(20px + 26px) !important;
+    top: 46px !important;
   }
 }
 
@@ -968,7 +978,19 @@ body.wp-panel-open #dynamic-legend.legend-content {
 }
 @media (max-width: 768px) {
   #legend-container {
-    top: 26px; /* il ticker è alto 26px su mobile (vedi .wp-news-ticker-wrapper) */
+    /* WarEra+ fix (segnalato dall'utente): il bottone legenda è disegnato
+       come "linguetta" che pende dal ticker (border-top:none, angoli
+       arrotondati solo in basso, vedi .legend-toggle-btn sopra) — DEVE
+       restare a top:26px, flush col bordo inferiore del ticker, non
+       spostata più in basso (un primo tentativo l'aveva messa sotto la
+       colonna di bottoni, snaturando la grafica "a linguetta" — sbagliato,
+       corretto qui). Il vero problema era che condivideva la riga con
+       l'hamburger (z-index più alto della legenda, 2100 vs 2000, ci si
+       disegnava sopra) — fix corretto: hamburger/cluster destro scendono
+       di una riga (top:72px, vedi blocco ticker-offset più sopra) e
+       lasciano questa riga, subito sotto al ticker, libera per la sola
+       legenda. */
+    top: 26px;
     left: 20px;
     right: auto;
     transform: none;
@@ -978,6 +1000,74 @@ body.wp-panel-open #dynamic-legend.legend-content {
     margin-left: 0;
     margin-top: 8px;
     transform-origin: top left !important;
+  }
+}
+
+/* ── Fix (segnalato dall'utente): i bottoni fluttuanti in alto finivano
+   SOTTO ai marker battaglia invece che sopra. Causa: stesso identico
+   z-index (2000, vedi battleMarkers.js:768 `zIndex: 2000` inline sui
+   marker, e diplomacy.css/shell.css sui bottoni) — a parità di z-index
+   vince chi viene aggiunto dopo nel DOM, e i marker vengono
+   (ri)aggiunti dinamicamente ad ogni refresh dati, quindi finiscono
+   sempre sopra. Serve uno scarto netto, non un pareggio: i bottoni sono
+   chrome fisso dell'interfaccia, non devono mai sparire dietro a
+   contenuto dinamico della mappa. #wp-top-controls (inline z-index:1500
+   in index.html, ANCORA più basso) e i marker (2000) valgono lo stesso
+   fix. La legenda (2100) era già a posto. ── */
+#hamburger-btn,
+#bloc-stats-btn,
+#wp-battles-toggle-btn,
+#wp-time-machine-btn {
+  z-index: 2200;
+}
+#wp-top-controls {
+  z-index: 2200 !important;
+}
+
+/* ── Fix mobile: riga di bottoni (hamburger, bloc stats, battaglie, time
+   machine) troppo larga per convivere sulla stessa riga con i controlli a
+   destra (#wp-top-controls: slider Attuale/Originale + tema + lingua) —
+   segnalato dall'utente: a 375px la riga sinistra (20px→214px) e quella
+   destra (45px→355px, ~310px di larghezza) si sovrappongono quasi
+   completamente, coprendo lo slider Attuale/Originale.
+   Fix: sotto i 768px i tre bottoni secondari (bloc stats, battaglie, time
+   machine) si spostano in colonna sotto l'hamburger, invece che in riga
+   accanto — la riga in alto resta larga solo quanto l'hamburger (44px),
+   lasciando tutto lo spazio orizzontale ai controlli a destra.
+   Specificity/ordine: questo blocco è l'ULTIMO del file che tocca questi
+   selettori (deve battere sia la regola base #id{top:...!important} sopra,
+   sia — per bloc-stats-btn — il duplicato body.light-theme#bloc-stats-btn
+   di diplomacy.css che ha specificità più alta, quindi va ripetuto qui
+   esplicitamente invece di lasciarlo alla sola cascata via ordine file). ── */
+@media (max-width: 768px) {
+  #bloc-stats-btn,
+  body.light-theme #bloc-stats-btn {
+    top: 124px !important;
+    left: 20px !important;
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+  }
+  #wp-battles-toggle-btn {
+    top: 176px !important;
+    left: 20px !important;
+  }
+  #wp-time-machine-btn {
+    top: 224px !important;
+    left: 20px !important;
+  }
+  /* Anche in colonna, l'hamburger (44px, fino a x=64) resta sulla STESSA
+     riga del cluster destro (pill Attuale/Originale + tema + lingua): a
+     375px il cluster destro da solo (~310px) non ci stava comunque senza
+     restringersi un po' — altrimenti la "A" di "ATTUALE" restava sotto
+     l'hamburger. Risparmio totale qui (~32px) sufficiente a lasciare un
+     margine libero dopo il bottone hamburger. */
+  #wp-top-controls {
+    gap: 4px !important;
+  }
+  #border-toggle-container {
+    padding: 5px 6px;
+    gap: 5px;
   }
 }
 

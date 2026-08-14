@@ -202,6 +202,31 @@ if (state.coloringMode === 'battleHeatmap' && state.battleHeatmapData) {
   `;
 
   if (isPinned) {
+    // WarEra+: su mobile il tooltip pinnato è l'UNICA cosa che si apre al
+    // click (il pannello laterale a schermo intero NON si apre più da solo,
+    // vedi countryPanel.js — guard mobile aggiunto lì) proprio per lasciare
+    // visibile la mappa/diplomazia sotto. Chi vuole i dettagli estesi
+    // (parlamento, alleati completi, ecc.) li apre esplicitamente da qui.
+    // Su desktop il pannello si apre comunque in automatico (sidebar, non
+    // copre la mappa) quindi questo bottone sarebbe ridondante — non lo
+    // mostriamo lì.
+    const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window;
+    if (isMobile) {
+      html += `
+        <div style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08);">
+          <button type="button" class="nt-expand-btn" data-country-id="${nation._id}" style="
+            display:flex; align-items:center; justify-content:center; gap:6px;
+            width:100%; padding:7px 10px; border-radius:8px;
+            background:rgba(46,204,113,0.12); border:1px solid rgba(46,204,113,0.35);
+            color:#2ecc71; font-size:12px; font-weight:600; cursor:pointer;
+            box-sizing:border-box; transition:background 0.15s, border-color 0.15s;
+          " onmouseover="this.style.background='rgba(46,204,113,0.22)'; this.style.borderColor='rgba(46,204,113,0.55)';"
+             onmouseout="this.style.background='rgba(46,204,113,0.12)'; this.style.borderColor='rgba(46,204,113,0.35)';">
+            📋 Full Details
+          </button>
+        </div>
+      `;
+    }
     // WarEra+ hook: dentro il nuovo shell il bottone apre l'overlay in-app
     // (public/political/, stesso codice Political originale) invece di una
     // nuova scheda esterna. L'href resta come fallback funzionante se
@@ -234,10 +259,19 @@ let hoverTimer = null;
 
 function show(nationId, x, y, pinned = false) {
   if (!nationId) return;
+  // WarEra+: su mobile il tooltip torna a essere l'unica cosa che si apre
+  // al click (vedi countryPanel.js — il pannello a schermo intero non si
+  // apre più in automatico lì, solo dal bottone "Full Details" qui dentro,
+  // vedi buildContent). Un primo tentativo sopprimeva del tutto il tooltip
+  // su mobile per evitare la duplicazione con il pannello, ma così facendo
+  // la mappa/diplomazia restava nascosta dietro al pannello a tutto
+  // schermo finché non lo si chiudeva — feedback dell'utente: preferibile
+  // il tooltip leggero (mappa visibile sotto) con un'azione esplicita per
+  // i dettagli estesi, invece del pannello sempre aperto in automatico.
+  const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window;
   const nation = state.nationMap.get(nationId);
   if (!nation) return;
 
-  const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window;
   const isOriginal = state.mapSource === 'original';
   const srcData = isOriginal ? state.originalLabelsData : state.labelsData;
   const label = srcData.find(l => l.properties.countryId === nationId);
@@ -430,6 +464,25 @@ export function initNationTooltip(map) {
           m.openPoliticalView(politicalBtn.dataset.countryId, politicalBtn.dataset.countryName);
         })
         .catch(() => { /* fallback: lascia che il link apra la scheda esterna */ });
+      return;
+    }
+    // WarEra+: bottone "Full Details" (solo mobile, vedi buildContent) —
+    // apre lo stesso pannello laterale che su desktop si apre in
+    // automatico al click (countryPanel.js). Import dinamico per lo stesso
+    // motivo del blocco sopra: nessuna dipendenza diretta da un modulo
+    // "superiore" nella gerarchia shell da un file di Diplomacy invariato.
+    const expandBtn = e.target.closest('.nt-expand-btn');
+    if (expandBtn) {
+      import('../panel/countryPanel.js')
+        .then(m => m.selectNationInPanel(expandBtn.dataset.countryId))
+        .catch(() => {});
+      hide();
+      hoverSuppressed = true;
+      const enableHover = () => {
+        hoverSuppressed = false;
+        document.removeEventListener('mousemove', enableHover);
+      };
+      document.addEventListener('mousemove', enableHover, { once: true });
       return;
     }
     if (isPinned && !e.target.closest('#nation-tooltip')) {

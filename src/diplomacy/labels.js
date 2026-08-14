@@ -108,6 +108,18 @@ export function drawLabels() {
   if (!showNations) { ctx.restore(); return; }
 
   const zoom = state.map.getZoom();
+  // WarEra+ fix (segnalato dall'utente: "nomi enormi, come se fossero
+  // vicinissimi allo schermo"): scale/fScale sotto sono calibrati in px
+  // assoluti pensati per uno schermo desktop — allo zoom iniziale (2,
+  // minZoom 1.7, vedi map.js) scattava già la fascia più grande (1.4x), e
+  // quello stesso font assoluto (mai scalato per densità/larghezza finora,
+  // a differenza di battleMarkers.js/labels.js:_drawBlocLabels, che hanno
+  // già un adattamento mobile) occupa una frazione enormemente maggiore di
+  // un viewport stretto. Fattore diretto (non a scatti sulle soglie sopra,
+  // che da solo non bastava — riduzione troppo lieve) applicato a fontSize
+  // e dimensioni bandiera qui sotto.
+  const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window;
+  const mobileTextScale = isMobile ? 0.68 : 1;
   const sourceLabels = state.mapSource === 'original' ? state.originalLabelsData : state.labelsData;
   const sorted = _getSortedLabels(sourceLabels);
   const drawnBoxes = [];
@@ -131,7 +143,7 @@ export function drawLabels() {
     const nameStr = props.countryName?.toUpperCase() || '';
     const baseSize = props.textSize || 10;
     const scale = zoom < 2.5 ? 1.4 : zoom < 3 ? 1.3 : zoom < 4 ? 1.2 : zoom < 5 ? 1.0 : 0.9;
-    const fontSize = Math.round(baseSize * scale);
+    const fontSize = Math.round(baseSize * scale * mobileTextScale);
 
     const nameFont = _nationLabelFont(fontSize);
     const textWidth = _measure(ctx, nameStr, nameFont);
@@ -144,8 +156,8 @@ export function drawLabels() {
 
     const code = (props.countryCode || '').toLowerCase();
     const fScale = zoom < 3 ? 1.5 : zoom < 4 ? 1.3 : zoom < 5 ? 1.1 : 1.0;
-    const flagW = Math.round(16 * fScale);
-    const flagH = Math.round(11 * fScale);
+    const flagW = Math.round(16 * fScale * mobileTextScale);
+    const flagH = Math.round(11 * fScale * mobileTextScale);
     const cachedFlag = state.flagImageCache.get(code);
     const totalH = (cachedFlag ? flagH + 2 : 0) + fontSize;
     const startY = pt.y - totalH / 2;

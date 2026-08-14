@@ -380,6 +380,15 @@ export function initCountryPanel() {
     // allo stesso evento click MapLibre, andrebbero in conflitto (uno
     // mostrerebbe la singola nazione, l'altro il blocco).
     if (state.coloringMode === 'blocs') return;
+    // WarEra+ (feedback utente): su mobile il pannello a schermo intero non
+    // si apre più da solo al click — nasconderebbe mappa/diplomazia sotto
+    // finché non lo si chiude. nationTooltip.js mostra un tooltip leggero
+    // con un bottone esplicito "Full Details" che chiama selectNationInPanel
+    // (sotto) quando l'utente vuole davvero i dettagli estesi. Su desktop
+    // resta automatico com'era: lì il pannello è una sidebar, non copre la
+    // mappa, niente da nascondere.
+    const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window;
+    if (isMobile) return;
     const props = e.features[0].properties;
     const nid = state.mapSource === 'original' ? props.initialCountryId : props.countryId;
     if (nid) render(nid);
