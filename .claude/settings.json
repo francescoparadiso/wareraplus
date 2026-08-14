@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Browser__read_console_messages",
+      "mcp__Claude_Browser__read_network_requests",
+      "mcp__Claude_Browser__read_page",
+      "mcp__Claude_Browser__tabs_context",
+      "mcp__Claude_Browser__preview_list",
+      "mcp__Claude_Browser__get_page_text",
+      "Bash(node --check *)",
+      "Bash(node --input-type=module --check *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(mkdir -p *)",
+      "Bash(cp *)",
+      "Bash(rm -f *)"
+    ]
+  }
+}
