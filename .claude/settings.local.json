@@ -79,7 +79,9 @@
       "Bash(git commit -m 'Fix: lingua Political non sincronizzata con lo shell, timeout mancante in trpcClient *)",
       "Bash(git commit -m 'Fix mobile: menu hamburger coperto dai marker battaglia, testo illeggibile, overflow in Political View *)",
       "Bash(git commit -m 'Aggiunge .claude/settings.json: allowlist comandi di routine *)",
-      "Bash(git commit -m 'Aggiorna settings.local.json: pattern permesso registrato dall'\\\\''harness *)"
+      "Bash(git commit -m 'Aggiorna settings.local.json: pattern permesso registrato dall'\\\\''harness *)",
+      "Bash(git push *)",
+      "Bash(node --check src/panel/countryPanel.js)"
     ]
   }
 }
