@@ -190,10 +190,14 @@ Punti da sapere se tocchi `src/political/`:
 - **Toast non unificato**: Political usa ancora `alert()`/`setStatus()`
   inline (non `showToast` di Diplomacy) — deciso esplicitamente come
   follow-up separato a basso rischio, non fatto durante il cutover.
-- **Gap noto vs l'obiettivo originale**: la fetch di `country.getAllCountries`
-  NON è condivisa tra Diplomacy e Political (restano due chiamate separate,
-  una diretta su `api6.warera.io`, una via Worker) — era un obiettivo
-  aspirazionale della Fase 2 mai completato, non un requisito verificato.
+- **Fetch `country.getAllCountries` condivisa** (follow-up alla Fase 2):
+  `src/shared/countries.js: getAllCountries()` legge `state.nazioniGlobal`
+  di Diplomacy (sola lettura) invece di rifare la stessa fetch via Worker —
+  usata da tutti i punti di `src/political/*` che prima chiamavano
+  `localFetch('/countries', ...)`. Fallback a fetch diretta solo se
+  Diplomacy non ha ancora i dati (raro). Non mutare mai l'array ritornato
+  in-place (`.sort()` ecc.) — è condiviso con Diplomacy, usa `.slice()`
+  prima.
 
 ## Pattern da conoscere prima di toccare le chiamate API
 

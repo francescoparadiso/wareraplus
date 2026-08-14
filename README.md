@@ -182,10 +182,11 @@ cosa no rispetto al piano originale:
   `localStorage` con namespace (`we_pol_*`).
 - ✅ Tema unificato (chiamata diretta a `applyTheme()`, niente più
   `contentWindow`).
-- ⚠️ **Non fatto**: una sola fetch condivisa di `country.getAllCountries` tra
-  le due viste — restano due chiamate separate (Diplomacy diretta su api6,
-  Political via Worker). Era un obiettivo aspirazionale, non un requisito
-  verificato durante l'esecuzione — resta un possibile follow-up.
+- ✅ **Fetch `country.getAllCountries` condivisa** (follow-up, fatto su
+  richiesta dopo il cutover): `src/shared/countries.js` — Political legge
+  `state.nazioniGlobal` di Diplomacy invece di rifare la stessa fetch via
+  Worker. Verificato dal vivo: apertura di Political con Diplomacy già
+  pronta → zero chiamate `country.getAllCountries` aggiuntive.
 - ⚠️ **Non fatto di proposito**: toast non unificato — Political usa ancora
   `alert()`/`setStatus()` inline invece di `showToast` di Diplomacy, deciso
   come cambio di UX visibile da valutare separatamente, a basso rischio, non
