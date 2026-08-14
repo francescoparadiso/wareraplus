@@ -359,7 +359,15 @@
       position: fixed;
       top: 76px;
       left: 20px;
-      z-index: 1999;
+      /* WarEra+ perf/mobile fix: era 1999, cioè PIÙ BASSO dei marker
+         battaglia (.battle-marker, z-index 2000 — vedi battleMarkers.js) e
+         del pannello nazione (.wp-panel, 2500) — su schermi con più
+         battaglie attive contemporaneamente, quei marker "sanguinavano"
+         sopra il menu aperto, illeggibile. 5000: sopra a tutta la UI di
+         base della mappa (marker, pannello nazione, kofi button), sotto
+         all'overlay Political (6000, mutuamente esclusivo con questo menu)
+         e ai livelli di sistema (toast/loading/rate-limit, 9000+). */
+      z-index: 5000;
       background: rgba(13, 17, 23, 0.98);
       border: 0.5px solid #21262d;
       border-radius: 14px;
@@ -1752,17 +1760,23 @@ body.light-theme .mode-toggle-row .mode-btn:not(.active):hover {
     gap: 2px;
     padding: 2px;
   }
-  
+
   .mode-toggle-row .mode-slider {
     left: 2px;
     top: 2px;
     bottom: 2px;
   }
-  
+
+  /* WarEra+ mobile fix: era 8px — PIÙ PICCOLO del già minuscolo 9px
+     desktop, invece che più grande. Con il colore spento (#8b949e) dei tab
+     non attivi il testo risultava praticamente illeggibile su schermo
+     piccolo (sembrava "tagliato"/sbiadito, non solo minuscolo). 10px +
+     lettere non più compresse a 0 restano comunque compatti per 3 colonne
+     (ellipsis già gestisce le traduzioni più lunghe che non ci stanno). */
   .mode-toggle-row .mode-btn {
     padding: 10px 1px;
-    font-size: 8px;
-    letter-spacing: 0;
+    font-size: 10px;
+    letter-spacing: 0.1px;
     gap: 1px;
   }
 }

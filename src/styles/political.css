@@ -602,6 +602,21 @@
   #wp-political-root .sim-kpi-row { grid-template-columns: repeat(2,1fr); }
   #wp-political-root .sim-kpi:nth-child(2) { border-right:none; }
   #wp-political-root .sim-kpi:nth-child(1), #wp-political-root .sim-kpi:nth-child(2) { border-bottom:1px solid var(--bd); }
+  /* WarEra+ mobile fix: .sim-section-label (es. "📊 Affluenza presidenziale
+     storica") con white-space:nowrap sfondava fuori dal contenitore su
+     schermi stretti — sulla riga flex (.sim-historic-row, già wrap-abile)
+     l'etichetta da sola non poteva andare a capo. Va bene su 2 righe qui,
+     molto meglio che tagliata/sborda. */
+  #wp-political-root .sim-section-label { white-space: normal; }
+  /* WarEra+ mobile fix: .race-party-chip (badge col nome partito accanto al
+     candidato in Presidential Race) è l'UNICO punto dove compare il nome
+     partito (non duplicato altrove nella riga) — con white-space:nowrap
+     ereditato e nomi partito lunghi (es. "CDR - Conselho da Democracia
+     Radical") sfondava fuori dalla card invece di andare a capo, perché
+     .race-name (il contenitore flex badge+username) non permetteva il
+     wrap. Ora il badge scende a riga nuova se non ci sta — nessuna
+     informazione persa (a differenza di un taglio con ellissi). */
+  #wp-political-root .race-name { flex-wrap: wrap; row-gap: 2px; }
 }
 #wp-political-root [data-theme="light"] .sim-kpi-pop { background:var(--s2); border-color:var(--bd2); }
 #wp-political-root [data-theme="light"] .sim-kpi-row { background:#fff; border-color:rgba(0,0,0,.1); }
