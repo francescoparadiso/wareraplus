@@ -160,43 +160,227 @@ function formatElectionMessages(electionsRaw) {
    il filtro "top N" resta solo qui). ── */
 async function fetchRecentStatEvents() {
   try {
-    return await fetchTickerEventsViaCache(Date.now() - RECENT_WINDOW_MS);
+    // La finestra scaricata deve coprire la PIÙ AMPIA fra quelle che poi
+    // vengono aggregate: quella fissa (RECENT_WINDOW_MS, guerre/sworn) e
+    // quella dell'ultima visita, che può essere molto più indietro. Una sola
+    // fetch per entrambe: filtrare per finestra è lavoro locale.
+    const since = Math.min(Date.now() - RECENT_WINDOW_MS, _visitAnchor || Infinity);
+    return await fetchTickerEventsViaCache(since);
   } catch (err) {
     console.warn('WarEra+ newsTicker: eventi server non disponibili:', err.message);
     return [];
   }
 }
 
+// WarEra+ (richiesta esplicita dell'utente: "sarebbe utile sapere quando
+// sono successe alcune notizie, come quella del nemico giurato e delle
+// dichiarazioni di guerra"). Solo per gli eventi PUNTUALI (guerra, nemico
+// giurato): quelli aggregati su una finestra — popolazione e tesoro — non
+// hanno un istante a cui appendere un orario, hanno un intervallo, e l'ora
+// lì sarebbe fuorviante.
+//
+// Fuso orario: `toLocaleTimeString` senza `timeZone` esplicito usa già
+// quello del dispositivo di chi guarda, che è la cosa chiesta ed è anche
+// più utile di UTC (nessuna conversione mentale). Se l'evento non è di
+// oggi si antepone la data breve, altrimenti "alle 16:53" su una notizia
+// di tre giorni fa direbbe l'ora giusta ma lascerebbe intendere oggi.
+// La lingua segue quella scelta nell'app: `document.documentElement.lang`
+// è già tenuto aggiornato dallo switch lingua della shell.
+function _fmtEventTime(ts) {
+  if (!ts || !Number.isFinite(ts)) return '';
+  const d = new Date(ts);
+  const locale = document.documentElement.lang || undefined;
+  const time = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  const now = new Date();
+  const sameDay = d.getFullYear() === now.getFullYear()
+    && d.getMonth() === now.getMonth()
+    && d.getDate() === now.getDate();
+  if (sameDay) return time;
+  return `${d.toLocaleDateString(locale, { day: 'numeric', month: 'short' })} ${time}`;
+}
+
+// Appende l'orario al messaggio già tradotto, invece di passarlo come
+// segnaposto {time} dentro ogni stringa: le chiavi di traduzione delle
+// guerre/sworn restano quelle di prima in tutte e 9 le lingue, e la
+// parentesi è identica ovunque (un orario non ha bisogno di essere
+// tradotto). Meno superficie da tenere in sync.
+function _withTime(msg, ts) {
+  const time = _fmtEventTime(ts);
+  return time ? `${msg} (${time})` : msg;
+}
+
 function formatWarMessages(events, topIds) {
   const nameOf = id => state.nationMap.get(id)?.name || id;
   return events
     .filter(e => e.category === 'war' && topIds.has(e.countryId))
-    .map(e => t('ticker_new_war', { a: nameOf(e.countryId), b: nameOf(e.enemyId) }));
+    .map(e => _withTime(t('ticker_new_war', { a: nameOf(e.countryId), b: nameOf(e.enemyId) }), e.timestamp));
 }
 
 function formatSwornMessages(events, topIds) {
   const nameOf = id => state.nationMap.get(id)?.name || id;
   return events
     .filter(e => (e.category === 'sworn_new' || e.category === 'sworn_removed') && topIds.has(e.countryId))
-    .map(e => e.category === 'sworn_new'
+    .map(e => _withTime(e.category === 'sworn_new'
       ? t('ticker_sworn_new', { a: nameOf(e.countryId), b: nameOf(e.enemyId) })
-      : t('ticker_sworn_removed', { a: nameOf(e.countryId), b: nameOf(e.enemyId) }));
+      : t('ticker_sworn_removed', { a: nameOf(e.countryId), b: nameOf(e.enemyId) }), e.timestamp));
 }
 
-// WarEra+ novità: variazione popolazione attiva / tesoro recente, per
-// diversificare ulteriormente il mix di notizie oltre a guerre/elezioni/battaglie.
+// WarEra+ — variazione popolazione attiva / tesoro, in DUE finestre distinte
+// (richiesta esplicita dell'utente: tenere sia "rispetto a ieri" sia
+// "dall'ultima visita").
+//
+// Prima qui si emetteva UN messaggio per OGNI evento del server. Guardando i
+// dati veri quegli eventi sono micro-variazioni di un singolo poll
+// (verificato sul server di cache: `delta: 1` cittadino, `pct: 0` sul
+// tesoro), quindi producevano notizie senza contenuto tipo "Italy: +1
+// cittadini attivi". Ora gli eventi vengono AGGREGATI per nazione su una
+// finestra, e la stessa aggregazione viene fatta due volte con due finestre
+// diverse — 24 ore fisse, e "da quando l'utente ha guardato l'ultima volta".
+//
+// Perché "ultima visita" torna a passare da localStorage dopo che era stato
+// tolto (vedi nota in testa al file): quello che era sbagliato tenere nel
+// browser era lo STORICO degli eventi (si perdeva cambiando dispositivo).
+// Il MOMENTO dell'ultima visita è invece per definizione un dato locale di
+// quel browser — non esiste un valore "condiviso" sensato. Qui in
+// localStorage finisce solo un timestamp; gli eventi restano tutti sul
+// server.
+const DAY_MS = 24 * 60 * 60 * 1000;
+// Sotto questa soglia la variazione di tesoro è rumore di arrotondamento:
+// non merita uno slot nel ticker.
+const MIN_TREASURY_PCT = 0.1;
+// Ricaricare la pagina non è "una nuova visita": sotto questo scarto la
+// sessione è considerata la stessa e l'ancora non si sposta, altrimenti dopo
+// ogni F5 "dall'ultima visita" coprirebbe due minuti e non direbbe nulla.
+const VISIT_SESSION_GAP_MS = 30 * 60 * 1000;
+// Tetto all'ancora: oltre, "dall'ultima visita" diventerebbe un cumulo poco
+// leggibile — e comunque il server non conserva lo storico all'infinito
+// (vedi TICKER_RETENTION_MS in server/warera-cache-server.js).
+const VISIT_MAX_AGE_MS = 14 * DAY_MS;
+const VISIT_ANCHOR_KEY = 'we_ticker_visit_anchor';
+const VISIT_SEEN_KEY = 'we_ticker_last_seen';
+
+// Ancora della visita corrente, decisa UNA volta al boot e poi stabile per
+// tutta la sessione (le chiamate successive di refreshNews non la spostano,
+// altrimenti la finestra si accorcerebbe ad ogni giro). `null` = prima
+// visita in assoluto da questo browser: nessun messaggio "dall'ultima
+// visita", non ci sarebbe niente di sensato da confrontare.
+let _visitAnchor = null;
+
+function initVisitAnchor() {
+  let seen = 0, anchor = 0;
+  try {
+    seen = Number(localStorage.getItem(VISIT_SEEN_KEY)) || 0;
+    anchor = Number(localStorage.getItem(VISIT_ANCHOR_KEY)) || 0;
+  } catch (err) { return; } // storage negato (modalità privata): si resta senza la finestra "ultima visita"
+
+  const now = Date.now();
+  if (!seen) {
+    _visitAnchor = null; // prima visita: solo la finestra 24h
+  } else if (now - seen >= VISIT_SESSION_GAP_MS) {
+    _visitAnchor = seen; // sessione nuova: si confronta con quando avevo smesso di guardare
+  } else {
+    _visitAnchor = anchor || seen; // ricarica dentro la stessa sessione: ancora invariata
+  }
+  if (_visitAnchor) _visitAnchor = Math.max(_visitAnchor, now - VISIT_MAX_AGE_MS);
+
+  try {
+    if (_visitAnchor) localStorage.setItem(VISIT_ANCHOR_KEY, String(_visitAnchor));
+    localStorage.setItem(VISIT_SEEN_KEY, String(now));
+  } catch (err) { /* quota/privata: l'ancora resta valida per questa sessione */ }
+}
+
+// Aggiorna solo "quando ho guardato l'ultima volta" (non l'ancora): serve a
+// far sì che alla PROSSIMA sessione il confronto parta da quando l'utente ha
+// davvero smesso di guardare, non da quando aveva aperto la pagina.
+function touchLastSeen() {
+  try { localStorage.setItem(VISIT_SEEN_KEY, String(Date.now())); } catch (err) { /* ignora */ }
+}
+
+// Aggrega gli eventi di UNA finestra per nazione. Due grandezze, due modi:
+//  - popolazione: variazioni assolute di teste, additive → somma.
+//  - tesoro: variazioni PERCENTUALI successive, che NON si sommano (+10%
+//    poi +10% fa +21%, non +20%) → si compongono moltiplicando i fattori.
+// Quando gli eventi portano i valori assoluti (`value`/`prevValue`, campi
+// aggiunti al server) si usa direttamente `ultimo.value - primo.prevValue`:
+// esatto e immune all'errore che si accumula componendo tanti passi
+// arrotondati. Il ramo delta/pct resta per le voci vecchie, ancora in
+// circolazione finché lo storico non si è rinnovato.
+function _aggregate(events, topIds, sinceTs) {
+  const pop = new Map();     // countryId -> { delta, firstPrev, last }
+  const wealth = new Map();  // countryId -> { factor, firstPrev, last }
+
+  for (const e of events) {
+    if (!(e.timestamp >= sinceTs) || !topIds.has(e.countryId)) continue;
+
+    if (e.category === 'population') {
+      const cur = pop.get(e.countryId) || { delta: 0, firstPrev: null, last: null };
+      if (typeof e.delta === 'number') cur.delta += e.delta;
+      if (typeof e.prevValue === 'number' && cur.firstPrev === null) cur.firstPrev = e.prevValue;
+      if (typeof e.value === 'number') cur.last = e.value;
+      pop.set(e.countryId, cur);
+    } else if (e.category === 'wealth') {
+      const cur = wealth.get(e.countryId) || { factor: 1, firstPrev: null, last: null };
+      if (typeof e.pct === 'number') cur.factor *= (1 + e.pct / 100);
+      if (typeof e.prevValue === 'number' && cur.firstPrev === null) cur.firstPrev = e.prevValue;
+      if (typeof e.value === 'number') cur.last = e.value;
+      wealth.set(e.countryId, cur);
+    }
+  }
+
+  const popDelta = new Map();
+  for (const [id, v] of pop) {
+    const exact = (v.firstPrev !== null && v.last !== null) ? v.last - v.firstPrev : null;
+    const d = exact !== null ? exact : v.delta;
+    if (d) popDelta.set(id, d);
+  }
+
+  const wealthPct = new Map();
+  for (const [id, v] of wealth) {
+    const exact = (v.firstPrev !== null && v.last !== null && v.firstPrev !== 0)
+      ? (v.last - v.firstPrev) / Math.abs(v.firstPrev) * 100
+      : null;
+    const pct = exact !== null ? exact : (v.factor - 1) * 100;
+    if (Math.abs(pct) >= MIN_TREASURY_PCT) wealthPct.set(id, pct);
+  }
+
+  return { popDelta, wealthPct };
+}
+
+function _emit(agg, nameOf, popKey, wealthKey) {
+  const messages = [];
+  for (const [countryId, delta] of agg.popDelta) {
+    messages.push(t(popKey, {
+      nation: nameOf(countryId),
+      sign: delta > 0 ? '+' : '−',
+      delta: fmtNumber(Math.abs(Math.round(delta))),
+    }));
+  }
+  for (const [countryId, pct] of agg.wealthPct) {
+    messages.push(t(wealthKey, {
+      nation: nameOf(countryId),
+      sign: pct > 0 ? '+' : '−',
+      pct: Math.abs(pct).toFixed(1),
+    }));
+  }
+  return messages;
+}
+
+// Finestra fissa 24h — "rispetto a ieri".
 function formatStatsMessages(events, topIds) {
   const nameOf = id => state.nationMap.get(id)?.name || id;
-  const messages = [];
-  events.filter(e => e.category === 'population' && topIds.has(e.countryId)).forEach(e => {
-    const sign = e.delta > 0 ? '+' : '';
-    messages.push(t('ticker_population_change', { nation: nameOf(e.countryId), sign, delta: fmtNumber(e.delta) }));
-  });
-  events.filter(e => e.category === 'wealth' && topIds.has(e.countryId)).forEach(e => {
-    const sign = e.pct > 0 ? '+' : '';
-    messages.push(t('ticker_treasury_change', { nation: nameOf(e.countryId), sign, pct: e.pct.toFixed(1) }));
-  });
-  return messages;
+  const agg = _aggregate(events, topIds, Date.now() - DAY_MS);
+  return _emit(agg, nameOf, 'ticker_population_24h', 'ticker_treasury_24h');
+}
+
+// Finestra "dall'ultima visita" — categoria separata da quella 24h, così
+// capCategory le limita indipendentemente e una non mangia gli slot
+// dell'altra nel mix finale. Vuota quando l'ancora manca (prima visita) o è
+// troppo recente perché il confronto dica qualcosa.
+function formatSinceVisitMessages(events, topIds) {
+  if (!_visitAnchor || Date.now() - _visitAnchor < 60 * 60 * 1000) return [];
+  const nameOf = id => state.nationMap.get(id)?.name || id;
+  const agg = _aggregate(events, topIds, _visitAnchor);
+  return _emit(agg, nameOf, 'ticker_population_change', 'ticker_treasury_change');
 }
 
 /* ── RENDER (RAF, scroll continuo) — stesso principio del ticker di
@@ -267,6 +451,12 @@ async function refreshNews() {
       fetchRecentStatEvents(), // guerre/sworn/popolazione/tesoro, dal server di cache
     ]);
 
+    // "Ho guardato fin qui": sposta solo il segnalino dell'ultima occhiata,
+    // NON l'ancora di questa sessione (vedi initVisitAnchor) — serve perché
+    // alla prossima apertura il confronto parta da quando l'utente ha
+    // davvero smesso di guardare.
+    touchLastSeen();
+
     _lastRawData = { topIds, battles, electionsRaw, statEvents };
     _rebuildMessages();
   } catch (err) {
@@ -289,6 +479,7 @@ function _rebuildMessages() {
   const warMsgsRaw = formatWarMessages(statEvents, topIds);
   const swornMsgsRaw = formatSwornMessages(statEvents, topIds);
   const statsMsgsRaw = formatStatsMessages(statEvents, topIds);
+  const sinceVisitMsgsRaw = formatSinceVisitMessages(statEvents, topIds);
 
   // Cap per categoria PRIMA di unire e mescolare: garantisce
   // diversificazione anche quando una categoria (tipicamente le
@@ -299,6 +490,7 @@ function _rebuildMessages() {
     ...capCategory(warMsgsRaw),
     ...capCategory(swornMsgsRaw),
     ...capCategory(statsMsgsRaw),
+    ...capCategory(sinceVisitMsgsRaw),
   ];
   const all = shuffle(mixed).slice(0, 30);
   _tickerMessages = all.length ? all : [t('ticker_no_news')];
@@ -310,6 +502,7 @@ export function startNewsTicker() {
   if (!track) return;
   _tickerPos = 0;
   _tickerRunning = true;
+  initVisitAnchor(); // PRIMA di refreshNews: decide da quando scaricare gli eventi
   requestAnimationFrame(_tickerLoop);
   refreshNews();
   setInterval(refreshNews, REFRESH_MS);

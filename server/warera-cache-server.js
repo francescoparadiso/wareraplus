@@ -344,7 +344,7 @@ async function pollElections() {
       });
     });
 
-    const aggiornato = [...storico, ...nuovi].sort((a, b) => a.timestamp - b.timestamp).slice(-5000);
+    const aggiornato = trimTickerHistory([...storico, ...nuovi]);
     writeCache('ticker-history', aggiornato);
     console.log(`[poll] elections/ticker aggiornato (+${nuovi.length})`);
   } catch (err) { console.error('[poll] elections fallito:', err.message); }
@@ -356,6 +356,28 @@ async function pollElections() {
 // snapshot condiviso invece che uno per browser in localStorage)
 // ═══════════════════════════════════════════════════════════════════════
 const TICKER_STATS_SNAPSHOT_FILE = 'ticker-stats-snapshot';
+
+// ── Ritenzione dello storico ticker ──────────────────────────────────────
+// Prima lo storico veniva tagliato con un `.slice(-5000)` secco. Il problema
+// non è il numero in sé ma il fatto che sia un tetto a CONTEGGIO: la finestra
+// TEMPORALE coperta si accorcia da sola man mano che il mondo produce più
+// eventi. Misurato dal vivo sul server in produzione: 5000 eventi coprivano
+// appena 26 ore, cioè il client non poteva nemmeno garantire un confronto
+// "rispetto a ieri" affidabile, e "dall'ultima visita" era impossibile per
+// chi non apriva il tool da un giorno.
+// Ora si taglia per ETÀ (la finestra è quella che serve al client, a
+// prescindere dal volume) con un tetto a conteggio che resta solo come rete
+// di sicurezza contro una crescita anomala.
+const TICKER_RETENTION_MS = 14 * 24 * 60 * 60 * 1000; // 14 giorni
+const TICKER_MAX_EVENTS = 120000;                      // ~2 settimane ai volumi attuali
+
+function trimTickerHistory(list) {
+  const cutoff = Date.now() - TICKER_RETENTION_MS;
+  return list
+    .filter(e => (e.timestamp || 0) >= cutoff)
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .slice(-TICKER_MAX_EVENTS);
+}
 
 function buildStatsSnapshot(countries, diplomacy) {
   const diplByCountry = new Map(diplomacy.map(d => [d.countryId, d.data]));
@@ -410,14 +432,38 @@ function pollTickerEvents(countries, diplomacy) {
       }
 
       // --- variazione popolazione ---
+      // `value`/`prevValue` sono NUOVI (campi aggiuntivi, retrocompatibili:
+      // le voci vecchie ne sono prive e il client sa cavarsela lo stesso).
+      // Servono perché il client aggrega su finestre arbitrarie ("ultime 24h",
+      // "dall'ultima visita"): con i soli `delta`/`pct` per-evento deve
+      // sommarli/comporli, accumulando l'errore di arrotondamento di ogni
+      // passo; avendo i valori assoluti fa `ultimo.value - primo.prevValue` e
+      // ottiene il dato ESATTO in un colpo solo, qualunque sia la finestra.
       if (typeof prev.population === 'number' && typeof curr.population === 'number' && prev.population !== curr.population) {
-        events.push({ id: `population-${id}-${now}`, category: 'population', timestamp: now, countryId: id, delta: curr.population - prev.population });
+        events.push({
+          id: `population-${id}-${now}`, category: 'population', timestamp: now, countryId: id,
+          delta: curr.population - prev.population,
+          value: curr.population, prevValue: prev.population,
+        });
       }
 
       // --- variazione tesoro (in %, come il client — evita div/0) ---
       if (typeof prev.wealth === 'number' && typeof curr.wealth === 'number' && prev.wealth !== curr.wealth && prev.wealth !== 0) {
         const pct = (curr.wealth - prev.wealth) / Math.abs(prev.wealth) * 100;
-        events.push({ id: `wealth-${id}-${now}`, category: 'wealth', timestamp: now, countryId: id, pct: Math.round(pct * 10) / 10 });
+        // `pct` era arrotondato a 1 decimale: le micro-variazioni di un
+        // singolo poll finivano a 0.0 e riempivano lo storico di eventi
+        // senza informazione (misurato: 4585 eventi wealth su 5000 totali,
+        // gran parte con pct 0). Tre decimali per non perdere il segnale, e
+        // niente evento quando anche a quella precisione la variazione è
+        // nulla — è solo rumore di arrotondamento che consuma ritenzione.
+        const pctRounded = Math.round(pct * 1000) / 1000;
+        if (pctRounded !== 0) {
+          events.push({
+            id: `wealth-${id}-${now}`, category: 'wealth', timestamp: now, countryId: id,
+            pct: pctRounded,
+            value: curr.wealth, prevValue: prev.wealth,
+          });
+        }
       }
     });
     nameOf(); // no-op, tenuto solo a documentare che i nomi si risolvono lato client
@@ -425,7 +471,7 @@ function pollTickerEvents(countries, diplomacy) {
     if (!events.length) { console.log('[poll] ticker stats: nessuna variazione'); return; }
 
     const storico = readCache('ticker-history', []);
-    const aggiornato = [...storico, ...events].sort((a, b) => a.timestamp - b.timestamp).slice(-5000);
+    const aggiornato = trimTickerHistory([...storico, ...events]);
     writeCache('ticker-history', aggiornato);
     console.log(`[poll] ticker stats: +${events.length} eventi (guerre/sworn/pop/tesoro)`);
   } catch (err) { console.error('[poll] ticker stats fallito:', err.message); }
