@@ -1048,6 +1048,25 @@ body.light-theme .legend-toggle-btn {
 #dynamic-legend .legend-section-title,
 #dynamic-legend .legend-note,
 #dynamic-legend .legend-item[style*="space-between"],
+/* BUG FIX (segnalato: "non si vede la legenda di queste due heatmap" —
+   danni settimanali e popolazione — su desktop). Il pannello si apriva e
+   titolo/min/max/nota c'erano, ma la BARRA DEI COLORI era invisibile.
+   Qui sotto c'era solo `#dynamic-legend > div[style*="width:100%"]`, che
+   cerca `width:100%` nell'attributo style del FIGLIO DIRETTO — mentre nel
+   markup della legenda quel width sta sul div INTERNO:
+       <div style="margin:4px 0;">            <- figlio diretto
+         <div style="width:100%;height:14px;background:linear-gradient(…)">
+   Il selettore quindi non ha mai agganciato il wrapper, che restava
+   `flex: 0 1 auto` con contenuto intrinseco 0 e, dentro a un
+   `flex-flow: row wrap`, collassava a larghezza 0 — trascinandosi dietro
+   la barra, che è larga il 100% di zero. Misurato: wrapper 0px, gradiente
+   0px, mentre gli altri figli (che hanno testo, quindi larghezza propria)
+   stavano a 1150px.
+   Ora il wrapper porta una classe esplicita invece di farsi riconoscere da
+   una sottostringa del suo style: non dipende più da come è scritto
+   l'attributo inline. Il vecchio selettore resta per eventuali blocchi che
+   il width:100% ce l'hanno davvero sul figlio diretto. */
+#dynamic-legend .legend-scale,
 #dynamic-legend > div[style*="width:100%"] {
   flex: 1 1 100%;
 }

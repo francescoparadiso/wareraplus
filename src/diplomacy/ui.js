@@ -82,7 +82,7 @@ export function updateDynamicLegend() {
     const subPop = THEMES[state.theme].TEXT_SECONDARY;
     box.innerHTML = `
       <div class="legend-section-title">Active Population</div>
-      <div style="margin: 4px 0;">
+      <div class="legend-scale" style="margin: 4px 0;">
         <div style="width:100%;height:14px;background:linear-gradient(to right, rgb(255,255,204), rgb(255,153,0));border-radius:3px;"></div>
       </div>
       <div class="legend-item" style="justify-content:space-between; padding: 0 4px;">
@@ -112,7 +112,7 @@ export function updateDynamicLegend() {
     const sub = THEMES[state.theme].TEXT_SECONDARY;
     box.innerHTML = `
       <div class="legend-section-title">Weekly Damage</div>
-      <div style="margin:4px 0;">
+      <div class="legend-scale" style="margin:4px 0;">
         <div style="width:100%;height:14px;background:linear-gradient(to right, rgb(69,117,180), rgb(215,48,39));border-radius:3px;"></div>
       </div>
       <div class="legend-item" style="justify-content:space-between; padding:0 4px;">
@@ -262,7 +262,7 @@ export function updateDynamicLegend() {
     box.innerHTML = `
       <div class="legend-section-title">⚔️ Battle Heatmap</div>
       <div class="legend-item"><span style="font-weight:bold;">${escapeHtml(data.battleName)}</span></div>
-      <div style="margin: 4px 0;">
+      <div class="legend-scale" style="margin: 4px 0;">
         <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
           <span style="font-size:10px; color:#58a6ff;">Attacker</span>
           <div style="flex:1; height:12px; background:linear-gradient(to right, #B0D4FF, #0044FF); border-radius:3px;"></div>
