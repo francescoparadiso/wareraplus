@@ -18,7 +18,21 @@ export function loadFlagImage(code) {
   if (!code || state.flagImageCache.has(code)) return;
   state.flagImageCache.set(code, null);
   const img = new Image();
-  img.crossOrigin = 'anonymous';
+  // BUG FIX (segnalato dall'utente: bandiere sparite accanto ai nomi
+  // nazione sulla mappa). Qui c'era `img.crossOrigin = 'anonymous'`, che
+  // pretende dal server un header Access-Control-Allow-Origin: media.
+  // warera.io NON lo manda più (verificato: `curl -I` con Origin esplicito
+  // restituisce 200 senza alcun header CORS), quindi OGNI bandiera finiva
+  // in onerror e veniva messa in cache come null — niente più bandiere.
+  // Causa esterna, non una regressione di questo repo.
+  // Toglierlo fa caricare le immagini normalmente, al prezzo di "sporcare"
+  // (taint) il canvas delle etichette: nessun problema oggi, perché nessuno
+  // ne legge i pixel (verificato: gli unici getImageData/toDataURL del
+  // progetto sono su canvas diversi, e lo screenshot della time machine usa
+  // il PROPRIO canvas etichette, che non disegna bandiere). Se un domani
+  // servisse esportare la mappa principale come immagine, va rimesso il
+  // crossOrigin e serve che l'origine mandi il CORS — o un proxy che lo
+  // aggiunga.
   img.onload = () => { state.flagImageCache.set(code, img); if (state.map) state.map.triggerRepaint(); };
   img.onerror = () => state.flagImageCache.set(code, null);
   img.src = `https://media.warera.io/images/flags/${code}.svg?v=16`;
