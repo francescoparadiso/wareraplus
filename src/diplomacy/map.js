@@ -24,7 +24,7 @@ import { initOceanBackground, applyOceanTheme } from './oceanBackground.js';
 import { initAntiqueTheme, applyAntiqueTheme } from './antiqueTheme.js';
 import { initDarkFleetTheme, applyDarkFleetTheme } from './darkFleetTheme.js';
 
-const { SRC_REGIONS, SRC_BORDERS, SRC_LABELS, SRC_DIPLOMACY_DUAL_BORDER, SRC_BATTLE_REGION, LYR_FILL, LYR_OUTLINE, LYR_COAST, LYR_BORDER, LYR_MULTI_BLOC, LYR_DIPLOMACY_DUAL, LYR_BATTLE_REGION, LYR_BATTLE_REGION_FILL, LYR_BLOC_FLASH } = LAYER_IDS;
+const { SRC_REGIONS, SRC_BORDERS, SRC_DIPLOMACY_DUAL_BORDER, SRC_BATTLE_REGION, LYR_FILL, LYR_OUTLINE, LYR_COAST, LYR_BORDER, LYR_MULTI_BLOC, LYR_DIPLOMACY_DUAL, LYR_BATTLE_REGION, LYR_BATTLE_REGION_FILL, LYR_BLOC_FLASH } = LAYER_IDS;
 
 // ==================== INIT MAPPA ====================
 export function initMap() {
@@ -43,25 +43,20 @@ export function initMap() {
     maxZoom: 8,
     renderWorldCopies: true,
     attributionControl: false,
-  });
-}
-
-function _buildLabelsWithPopulation() {
-  const source = state.mapSource === 'original' ? state.originalLabelsData : state.labelsData;
-  if (!source?.length) return [];
-  return source.map(l => {
-    const cId = l.properties.countryId;
-    const nation = state.nationMap.get(cId);
-    const pop = nation?.rankings?.countryActivePopulation?.value;
-    let popText = '';
-    if (typeof pop === 'number' && pop > 0) {
-      popText = pop >= 1_000_000 ? (pop / 1_000_000).toFixed(1) + 'M' : pop.toLocaleString();
-    }
-    return {
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: l.coordinates },
-      properties: { ...l.properties, populationText: popText }
-    };
+    // WarEra+ perf (misurato): questo è il singolo intervento più pesante
+    // sul consumo a mappa FERMA. Il default di MapLibre è 300ms di
+    // dissolvenza per i layer `symbol`; ogni volta che una qualsiasi
+    // sorgente cambia, MapLibre ri-esegue il "symbol placement" e per
+    // tutta la durata del fade tiene `_placementDirty` attivo, cioè
+    // continua a ridisegnare a frame pieno. Con i pallini-nave decorativi
+    // che fanno setData ogni 1,5s (oceanRoutes.js:makeRunner) la mappa non
+    // tornava MAI idle: 30 secondi di immobilità totale producevano ~470
+    // repaint WebGL, concentrati in burst da ~110 frame in un secondo.
+    // Con fadeDuration:0 gli stessi 30 secondi ne producono 22 (-95%).
+    // Costo: i pochi layer symbol presenti (marker flotta + texture onde
+    // dei temi, roba decorativa) compaiono di colpo invece che in
+    // dissolvenza allo zoom — impercettibile su quegli elementi.
+    fadeDuration: 0,
   });
 }
 
@@ -90,11 +85,6 @@ export async function setupMapLayers() {
         { type: 'Feature', properties: { kind: 'region' }, geometry: regionsMesh },
       ],
     },
-  });
-
-  _addOrUpdateSource(SRC_LABELS, {
-    type: 'geojson',
-    data: { type: 'FeatureCollection', features: _buildLabelsWithPopulation() },
   });
 
   if (!state.map.getLayer(LYR_FILL)) {
@@ -396,16 +386,12 @@ export function renderMap() {
     state.map.setPaintProperty(LYR_FILL, 'fill-opacity', 0.9);
   }
 
-  // _buildLabelsWithPopulation ricrea centinaia di Feature: ha senso solo nei
-  // modi che usano davvero populationText. Negli altri era lavoro sprecato ad
-  // ogni renderMap (inclusi i refresh live della heatmap ogni 10s).
-  const needsLabelSource = state.coloringMode === 'population' || state.coloringMode === 'weeklyDamage';
-  if (needsLabelSource && state.map.getSource(SRC_LABELS)) {
-    state.map.getSource(SRC_LABELS).setData({
-      type: 'FeatureCollection',
-      features: _buildLabelsWithPopulation()
-    });
-  }
+  // WarEra+ perf: qui c'era una ricostruzione di centinaia di Feature
+  // (_buildLabelsWithPopulation) ri-pubblicate su SRC_LABELS nelle modalità
+  // popolazione/danni settimanali. Rimossa insieme alla sorgente stessa:
+  // SRC_LABELS non aveva NESSUN layer che la leggesse (le etichette sono
+  // passate da tempo al canvas 2D di labels.js) — era lavoro sprecato che
+  // per giunta risvegliava il render loop ad ogni renderMap.
   if (state.labelCanvas) state.map.triggerRepaint();
 }
 

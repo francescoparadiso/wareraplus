@@ -147,6 +147,11 @@ function _stopAnimations() {
   if (_stopShips) { _stopShips(); _stopShips = null; }
 }
 function _startAnimations() {
+  // Vedi la nota gemella in oceanBackground.js:startAnimations — la guardia
+  // sul tema sta qui perché l'avvio arriva anche da resumeShipAnimation
+  // (timeMachine.js alla chiusura), che risveglia entrambi i temi senza
+  // sapere quale sia attivo.
+  if (globalState.theme !== 'light') return; // rotte "seppia": solo tema chiaro
   if (!_stopShips && _shipsArgs) {
     _stopShips = makeRunner(_shipsArgs.map, _shipsArgs.sourceId, _shipsArgs.sampledPaths, _shipsArgs.opts);
   }
@@ -157,6 +162,9 @@ function _startAnimations() {
 // temi ha un runner attivo alla volta (_stopShips è null nell'altro),
 // quindi timeMachine.js può chiamare entrambe le coppie senza controllare
 // quale tema è attivo — quella del tema inattivo è un no-op.
+// NB: questa invariante era FALSA fino al fix qui sotto in initAntiqueTheme
+// (entrambi i runner giravano insieme, misurato); ora regge davvero perché
+// l'avvio passa solo da applyAntiqueTheme()/applyOceanTheme().
 export function pauseShipAnimation() { _stopAnimations(); }
 export function resumeShipAnimation() { _startAnimations(); }
 
@@ -208,8 +216,18 @@ export async function initAntiqueTheme(map, beforeLayerId) {
     }, beforeLayerId);
     // WarEra+ perf: 1500ms (era 500ms, prima ancora 180ms) — vedi nota in
     // oceanBackground.js (stessa animazione/geometria, solo temi diversi).
+    // BUG FIX perf (misurato: il runner di QUESTO tema girava anche a tema
+    // scuro attivo, animando layer con visibility:'none'). Qui c'era un
+    // makeRunner() incondizionato. Race: initAntiqueTheme è `async` e
+    // map.js:124 NON la attende — chiama applyAntiqueTheme(state) subito
+    // dopo, quando `_initialized` è già true ma `_stopShips` è ancora null
+    // perché l'await più sotto non si è risolto. Lo _stopAnimations() di
+    // applyAntiqueTheme finiva quindi nel vuoto, e questa riga faceva
+    // partire il runner DOPO, senza più nessuno a fermarlo.
+    // Ora si registrano solo gli argomenti: chi decide se avviarlo è
+    // applyAntiqueTheme(), richiamata in fondo a questa init (sotto) a
+    // await ormai risolti.
     _shipsArgs = { map, sourceId: routeShipsSrc, sampledPaths: routes.sampledPaths, opts: { intervalMs: 1500, speedRange: [0.12, 0.22], withBearing: true, particlesPerPath: 1 } };
-    _stopShips = makeRunner(_shipsArgs.map, _shipsArgs.sourceId, _shipsArgs.sampledPaths, _shipsArgs.opts);
 
     // --- Tinta piatta per smorzare i colori nazione (vedi nota sopra
     // LAND_MUTE_COLOR) — NESSUN beforeId: si aggiunge sopra a LYR_FILL/le

@@ -26,6 +26,36 @@ let battleCache = new Map(); // battleId -> { battle, regionName, liveData, tota
 let _viewportSyncBound = false;
 let _allHidden = false; // true fra hideAllMarkers() e showAllMarkers() — vedi _syncMarkersToViewport
 
+// WarEra+: bolle "+N" per i cluster di battaglie ravvicinate (richiesta
+// esplicita: zone come i Balcani, dove a zoom lontano tante battaglie si
+// accavallano). Chiave = battleId del "vincitore" del cluster (quello che
+// resta visibile come card intera) -> { marker, el }. Ricostruite da zero
+// ad ogni _declutterMarkers (poche decine di marker al massimo, costo
+// trascurabile), non serve tracciarle in modo incrementale.
+let clusterMarkers = new Map();
+
+// WarEra+ perf: un maplibregl.Marker ATTACCATO alla mappa resta agganciato
+// ai suoi eventi 'move'/'moveend' e viene riproiettato ad ogni movimento
+// anche quando il suo elemento è display:none. Col decluttering per cluster
+// la maggior parte dei marker è nascosta (misurato dal vivo: 23 su 34 in una
+// situazione normale) e pagava quel costo per niente, oltre a tenere altri
+// 23 nodi nel DOM sopra al canvas.
+// Staccarli davvero — Marker.remove() sgancia i listener e toglie il nodo —
+// e riattaccarli quando tornano visibili costa quanto il display:none di
+// prima, ma azzera il lavoro per-movimento. Il display resta comunque
+// allineato: è quello che il resto del file legge come "stato visibile".
+// NB: Marker.addTo() chiama this.remove() come prima cosa, quindi è
+// idempotente — riattaccare un marker già attaccato è sicuro.
+function _setMarkerVisible(entry, visible) {
+  if (!entry) return;
+  entry.el.style.display = visible ? '' : 'none';
+  if (visible) {
+    if (state.map) entry.marker.addTo(state.map);
+  } else {
+    try { entry.marker.remove(); } catch (e) {}
+  }
+}
+
 function _inBounds(centroid) {
   if (!state.map || !centroid) return false;
   try {
@@ -60,9 +90,12 @@ function _syncMarkersToViewport() {
         // altri marker nascosti via hideAllMarkers), un marker che entra nel
         // viewport ORA durante quello stato non deve apparire visibile e
         // rompere l'effetto "solo il tooltip centrale, niente marker".
-        if (_allHidden) el.style.display = 'none';
-        const marker = new maplibregl.Marker({ element: el }).setLngLat(d.centroid).addTo(state.map);
-        markers.set(battleId, { marker, el });
+        // Non più .addTo() incondizionato: _setMarkerVisible attacca solo
+        // se il marker deve davvero essere visibile (vedi la sua nota).
+        const marker = new maplibregl.Marker({ element: el }).setLngLat(d.centroid);
+        const entry = { marker, el };
+        markers.set(battleId, entry);
+        _setMarkerVisible(entry, !_allHidden);
       }
     } else if (existing) {
       try { existing.marker.remove(); } catch (e) {}
@@ -88,35 +121,120 @@ function _footprintForZoom(zoom) {
 // WarEra+: con tante battaglie vicine (soprattutto zoomando lontano), i
 // marker DOM si sovrapponevano completamente rendendo la mappa illeggibile
 // in quei punti — richiesto esplicitamente "una situazione sempre chiara".
-// Non è vero clustering (nessuna bolla "+N"): passata greedy in spazio
-// schermo, ordinata per danno totale (la battaglia più "pesante" vince il
-// posto quando due si sovrappongono), che nasconde (display:none, i dati
-// restano comunque in battleCache) quelle il cui riquadro si
-// sovrapporrebbe a una già piazzata. Ricalcolata ad ogni sync (pan/zoom/
-// refresh dati), quindi si aggiusta da sola quando lo zoom separa i punti.
+// Raggruppa in CLUSTER (componenti connesse in spazio schermo, non solo
+// coppie: così un gruppo tipo i Balcani si aggrega in un unico cluster
+// anche se non tutte le battaglie si sovrappongono esattamente fra loro,
+// a catena sì) — in ogni cluster resta visibile per intero solo la
+// battaglia più "pesante" (stesso criterio di prima, danno totale), le
+// altre si nascondono (display:none, i dati restano in battleCache) e, se
+// il cluster ha più di una battaglia, compare una bolla "+N" (vedi
+// _createClusterBubble) che zooma su tutto il gruppo al click. Ricalcolato
+// ad ogni sync (pan/zoom/refresh dati), si aggiusta da solo quando lo zoom
+// separa i punti abbastanza da non aver più bisogno del cluster.
 function _declutterMarkers(zoom) {
   if (_allHidden || !state.map) return;
   const { w: cellW, h: cellH } = _footprintForZoom(zoom);
-  const placed = [];
-  const ranked = [...markers.entries()]
+
+  clusterMarkers.forEach(({ marker }) => { try { marker.remove(); } catch (e) {} });
+  clusterMarkers.clear();
+
+  const entries = [...markers.entries()]
     .map(([battleId, m]) => {
       const d = battleCache.get(battleId);
-      const total = d ? (d.totalAttackerDmg || 0) + (d.totalDefenderDmg || 0) : 0;
-      return { m, d, total };
+      if (!d) return null;
+      const total = (d.totalAttackerDmg || 0) + (d.totalDefenderDmg || 0);
+      return { battleId, m, d, total, p: state.map.project(d.centroid) };
     })
-    .filter(x => x.d)
-    .sort((a, b) => b.total - a.total);
+    .filter(Boolean);
 
-  ranked.forEach(({ m, d }) => {
-    const p = state.map.project(d.centroid);
-    const overlaps = placed.some(o => Math.abs(o.x - p.x) < cellW && Math.abs(o.y - p.y) < cellH);
-    if (overlaps) {
-      m.el.style.display = 'none';
-    } else {
-      placed.push(p);
-      m.el.style.display = '';
+  // Union-find su "si toccherebbero visivamente" — raggio leggermente più
+  // ampio (1.4x) della sola soglia di sovrapposizione del singolo marker,
+  // così un gruppo denso si aggrega in un cluster invece di restare a
+  // coppie separate. Transitivo: A vicino a B, B vicino a C -> stesso
+  // cluster anche se A e C da soli non si toccherebbero.
+  const clusterW = cellW * 1.4;
+  const clusterH = cellH * 1.4;
+  const parent = entries.map((_, i) => i);
+  const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; };
+  for (let i = 0; i < entries.length; i++) {
+    for (let j = i + 1; j < entries.length; j++) {
+      if (Math.abs(entries[i].p.x - entries[j].p.x) < clusterW && Math.abs(entries[i].p.y - entries[j].p.y) < clusterH) {
+        union(i, j);
+      }
     }
+  }
+  const groups = new Map(); // radice union-find -> entries[]
+  entries.forEach((e, i) => {
+    const r = find(i);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r).push(e);
   });
+
+  groups.forEach(group => {
+    group.sort((a, b) => b.total - a.total);
+    const [winner, ...rest] = group;
+    _setMarkerVisible(winner.m, true);
+    rest.forEach(e => _setMarkerVisible(e.m, false));
+    if (group.length > 1) _createClusterBubble(zoom, group, winner);
+  });
+}
+
+// Bolla "+N" (N = battaglie nel cluster oltre a quella già mostrata per
+// intero) ancorata allo stesso punto della card vincitrice, spostata verso
+// l'angolo in alto a destra via `offset` (pixel, indipendente dallo zoom —
+// supportato nativamente da maplibregl.Marker, non serve calcolarlo a mano
+// ad ogni frame). Al click: zoom su tutto il cluster (_zoomToCluster).
+function _createClusterBubble(zoom, group, winner) {
+  const extra = group.length - 1;
+  const { w, h } = _footprintForZoom(zoom);
+  const isLight = state.theme === 'light';
+
+  const el = document.createElement('div');
+  el.className = 'battle-cluster-bubble';
+  el.title = `${group.length} battaglie in quest'area — clicca per vederle tutte`;
+  el.style.cssText = `
+    display: flex; align-items: center; justify-content: center;
+    min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px;
+    background: linear-gradient(135deg, #ff5f5f, #d81c3f);
+    border: 2px solid ${isLight ? '#fff' : 'rgba(13,17,23,0.9)'};
+    color: #fff; font-family: Inter, system-ui, sans-serif;
+    font-size: 11px; font-weight: 800; line-height: 1;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    cursor: pointer; user-select: none; pointer-events: auto;
+  `;
+  // BUG FIX (segnalato dall'utente: bolla nascosta dietro la card): maplibre
+  // applica .maplibregl-marker (position:absolute) DIRETTAMENTE all'elemento
+  // passato a `element` — non c'è un wrapper. La card vincitrice ha
+  // z-index:2000 esplicito (vedi buildMarkerEl più sotto); un elemento
+  // fratello con z-index:auto perde SEMPRE contro un valore esplicito,
+  // indipendentemente da quale sia più recente nel DOM. Serve uno z-index
+  // esplicito più alto qui, non basta crearla dopo.
+  el.style.zIndex = '2100';
+  el.textContent = `+${extra}`;
+
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    _zoomToCluster(group);
+  });
+
+  const marker = new maplibregl.Marker({ element: el, offset: [w / 2 - 2, -h / 2 + 2] })
+    .setLngLat(winner.d.centroid)
+    .addTo(state.map);
+  clusterMarkers.set(winner.battleId, { marker, el });
+}
+
+// "Cliccando deve zoommare sulla zona in modo che si vedano tutte" — fitBounds
+// su tutti i centroidi del cluster, con margine e un tetto di zoom (evita di
+// zoommare in modo assurdo se le battaglie del cluster sono praticamente
+// nello stesso punto). moveend scatta comunque a fine animazione e
+// risincronizza/ridecluttera da sola coi punti ora più separati.
+function _zoomToCluster(group) {
+  if (!state.map || !group.length) return;
+  const bounds = new maplibregl.LngLatBounds();
+  group.forEach(e => bounds.extend(e.d.centroid));
+  state.map.fitBounds(bounds, { padding: 80, maxZoom: 7, duration: 500 });
 }
 
 function _bindViewportSync() {
@@ -892,12 +1010,13 @@ export async function updateBattleMarkers() {
 // sulla stessa battaglia per deselezionarla).
 export function hideAllMarkers() {
   _allHidden = true;
-  markers.forEach(({ el }) => { el.style.display = 'none'; });
+  markers.forEach(entry => _setMarkerVisible(entry, false));
+  clusterMarkers.forEach(entry => _setMarkerVisible(entry, false));
 }
 
 export function showAllMarkers() {
   _allHidden = false;
-  markers.forEach(({ el }) => { el.style.display = ''; });
+  markers.forEach(entry => _setMarkerVisible(entry, true));
   // La vista può essersi spostata mentre i marker erano nascosti (battaglia
   // selezionata con heatmap aperta): risincronizza col viewport corrente
   // invece di limitarsi a fare display:'' su un set potenzialmente stale.
@@ -910,6 +1029,10 @@ export function clearMarkers() {
     try { marker.remove(); } catch (e) {}
   });
   markers.clear();
+  clusterMarkers.forEach(({ marker }) => {
+    try { marker.remove(); } catch (e) {}
+  });
+  clusterMarkers.clear();
   battleCache.clear();
 }
 

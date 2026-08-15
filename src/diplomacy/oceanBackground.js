@@ -27,6 +27,9 @@
 //   la sua estetica dedicata, vedi antiqueTheme.js.
 
 import { buildRoutesData, makeRunner } from './oceanRoutes.js';
+// Rinominato in import per non confondersi col parametro `state` di
+// applyOceanTheme(state) — stesso schema già usato in antiqueTheme.js.
+import { state as globalState } from './state.js';
 
 const SRC_PREFIX = 'wp-ocean-';
 
@@ -52,6 +55,15 @@ function stopAnimations() {
 }
 
 function startAnimations() {
+  // Guardia sul tema DENTRO a start (non nei chiamanti): l'avvio arriva da
+  // più punti — applyOceanTheme via setOceanBackgroundVisible, e
+  // resumeShipAnimation chiamata da timeMachine.js alla chiusura. Quella
+  // di timeMachine.js risveglia entrambi i temi senza guardare quale sia
+  // attivo (per scelta: non deve conoscerne i dettagli), quindi il
+  // controllo deve stare qui, altrimenti il runner del tema NON attivo
+  // riparte alla chiusura della time machine e ricomincia ad animare
+  // layer nascosti.
+  if (globalState.theme === 'light') return; // rotte "futuristiche": solo tema scuro
   if (!_stopShips && _shipsArgs) {
     _stopShips = makeRunner(_shipsArgs.map, _shipsArgs.sourceId, _shipsArgs.sampledPaths, _shipsArgs.opts);
   }
@@ -117,10 +129,19 @@ export function initOceanBackground(map, beforeLayerId) {
   // `speed` (avanzamento per tick) resta invariato: intervalMs più lungo
   // rallenta ANCHE il movimento percepito (stesso passo, meno spesso), non
   // solo il costo — coerente con "rallenta il movimento" chiesto.
+  // WarEra+ perf: qui c'era anche un makeRunner() incondizionato. Ora si
+  // registrano solo gli argomenti e a decidere se avviarlo è
+  // applyOceanTheme() qui sotto (via setOceanBackgroundVisible), che
+  // conosce il tema attivo — così il runner del tema NON attivo non gira
+  // a vuoto animando layer nascosti. Stessa correzione applicata al
+  // gemello di antiqueTheme.js.
   _shipsArgs = { map, sourceId: routeShipsSrc, sampledPaths: routes.sampledPaths, opts: { intervalMs: 1500, speedRange: [0.12, 0.22], withBearing: true, particlesPerPath: 1 } };
-  _stopShips = makeRunner(_shipsArgs.map, _shipsArgs.sourceId, _shipsArgs.sampledPaths, _shipsArgs.opts);
 
-  applyOceanTheme();
+  // Era `applyOceanTheme()` senza argomento: `state?.map` risultava
+  // undefined e la funzione usciva subito, rendendo la riga un no-op
+  // silenzioso. Passando lo `state` importato (stesso singleton di map.js)
+  // fa davvero il suo lavoro — e ora è anche il punto che avvia il runner.
+  applyOceanTheme(globalState);
 }
 
 /**

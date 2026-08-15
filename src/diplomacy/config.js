@@ -105,7 +105,8 @@ export const THEMES = {
 export const LAYER_IDS = {
   SRC_REGIONS: 'regions-src',
   SRC_BORDERS: 'borders-src',
-  SRC_LABELS: 'labels-src',
+  // SRC_LABELS ('labels-src') rimossa: sorgente senza alcun layer che la
+  // leggesse (le etichette sono disegnate sul canvas 2D di labels.js).
   SRC_DIPLOMACY_DUAL_BORDER: 'diplomacy-dual-border-src',
   SRC_BATTLE_REGION: 'battle-region-src', // WarEra+: contorno della regione della battaglia selezionata
   LYR_FILL: 'regions-fill',
