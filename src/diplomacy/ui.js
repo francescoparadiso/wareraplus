@@ -36,7 +36,19 @@ function _autoToggleLegend() {
   // com'era (aperta o chiusa) finché l'utente non la tocca lui col bottone
   // manuale (#legendToggleBtn) — su desktop il comportamento resta
   // automatico com'era.
-  const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window;
+  //
+  // BUG FIX (segnalato dall'utente: "ci sono viste che non hanno legenda,
+  // come danni settimanali o popolazione", su DESKTOP): la condizione era
+  // `window.innerWidth <= 768 || 'ontouchstart' in window`. Il secondo
+  // ramo rende "mobile" QUALUNQUE dispositivo con touch, monitor da 27"
+  // compreso: su un portatile con schermo touch `'ontouchstart' in window`
+  // è true, quindi si usciva qui e la legenda — che parte chiusa — non si
+  // apriva mai, in nessuna vista. Le legende di popolazione/danni non
+  // mancavano affatto (il contenuto veniva costruito regolarmente): era il
+  // contenitore a restare nascosto.
+  // Qui conta lo SPAZIO disponibile, non come lo si tocca: un desktop
+  // touch resta un desktop. Solo la larghezza, quindi.
+  const isMobile = window.innerWidth <= 768;
   if (isMobile) return;
 
   const isDefaultView = state.coloringMode === 'diplomacy';
