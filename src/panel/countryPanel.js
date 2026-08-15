@@ -22,6 +22,7 @@ import { openPoliticalView } from '../app/politicalOverlay.js';
 import { renderParliamentChart, renderParliamentSeats, renderParliamentAvatars, fetchGroupSeatsData, fetchGroupUserData, hasParliamentSeatsCached } from './parliamentChart.js';
 import { initPanelResize } from './panelResize.js';
 import { t } from '../shared/i18n.js';
+import { trackEvent } from '../shared/analytics.js';
 
 let panelEl, contentEl, closeBtn;
 let currentNationId = null;
@@ -328,7 +329,14 @@ export function initCountryPanel() {
   contentEl = document.getElementById('wp-panel-content');
   closeBtn = document.getElementById('wp-panel-close');
 
-  closeBtn.addEventListener('click', closePanel);
+  closeBtn.addEventListener('click', () => {
+    // Tracciato QUI, non dentro closePanel(): quella è condivisa anche da
+    // selectBlocInPanel(null) (side-effect di un cambio modalità/
+    // deselezione blocco, non una vera chiusura voluta dall'utente) — in
+    // quel percorso il click sulla ✕ non c'è mai stato.
+    trackEvent('nation-panel-close');
+    closePanel();
+  });
   initPanelResize();
 
   // Ri-renderizza il pannello (stringhe tradotte) se la lingua cambia

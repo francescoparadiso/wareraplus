@@ -483,7 +483,7 @@ function _onRegionClick(e) {
     import('../panel/countryPanel.js').then(m => m.selectBlocInPanel(state.selectedBlocId));
     if (state.selectedBlocId) {
       const alliance = state.allianceMap.get(state.selectedBlocId);
-      if (alliance) trackEvent('bloc-click', { bloc: alliance.name });
+      if (alliance) trackEvent('bloc-click', { bloc: alliance.name, via: 'map' });
     }
     return;
   }

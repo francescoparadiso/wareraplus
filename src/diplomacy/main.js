@@ -167,6 +167,7 @@ async function refreshData() {
   } catch (e) {
     console.error(e);
     showToast('Failed to load game data', 'error');
+    trackEvent('data-unavailable', { source: 'boot' });
   } finally {
     hideLoading();
   }
@@ -265,8 +266,8 @@ document.getElementById('mode-population').addEventListener('click', () => {
     trackEvent('legend-toggle', { open: !legend.classList.contains('hidden') });
   });
 
-  document.getElementById('zoomInBtn')?.addEventListener('click', () => { state.map?.zoomIn(); });
-  document.getElementById('zoomOutBtn')?.addEventListener('click', () => { state.map?.zoomOut(); });
+  document.getElementById('zoomInBtn')?.addEventListener('click', () => { state.map?.zoomIn(); trackEvent('zoom-button', { direction: 'in' }); });
+  document.getElementById('zoomOutBtn')?.addEventListener('click', () => { state.map?.zoomOut(); trackEvent('zoom-button', { direction: 'out' }); });
 
   const hamburgerBtn = document.getElementById('hamburger-btn');
   const hamburgerMenu = document.getElementById('hamburger-menu');
@@ -283,6 +284,7 @@ document.getElementById('mode-population').addEventListener('click', () => {
   document.getElementById('bloc-stats-btn').addEventListener('click', () => {
     document.getElementById('map').style.display = 'none';
     document.getElementById('bloc-stats-page').style.display = 'block';
+    trackEvent('bloc-stats-open');
     import('./blocStats.js').then(m => {
       const stats = m.computeBlocStats();
       m.renderBlocStats(stats);
@@ -292,6 +294,7 @@ document.getElementById('mode-population').addEventListener('click', () => {
   document.getElementById('bloc-stats-close').addEventListener('click', () => {
     document.getElementById('bloc-stats-page').style.display = 'none';
     document.getElementById('map').style.display = 'block';
+    trackEvent('bloc-stats-close');
   });
 // Toggle Active Battles
 document.getElementById('checkActiveBattles').addEventListener('change', function() {

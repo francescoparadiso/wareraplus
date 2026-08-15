@@ -45,6 +45,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { API_BASE_URL, WORKER_API_BASE } from '../diplomacy/config.js';
+import { trackThrottled } from './analytics.js';
 
 const MAX_BATCH = 50;
 
@@ -225,6 +226,18 @@ async function _sendAutoBatch(chunk, q, attempt = 1) {
       await _sleep(waitMs);
       return _sendAutoBatch(chunk, q, attempt + 1);
     }
+    // WarEra+ (richiesta esplicita: "controlla soprattutto l'errore 429").
+    // Qui SOLO dopo che i retry sono esauriti — è il lato Political dello
+    // stesso "l'utente ha davvero sentito il rate limit" già tracciato per
+    // Diplomacy in utils.js:showRateLimitTooltip. Nome evento diverso da
+    // quello Diplomacy (dashboard separabili: due policy di retry diverse
+    // per scelta, vedi commento in testa al file) ma stesso principio di
+    // throttle — un rate-limit vero arriva quasi sempre come raffica di
+    // richieste parallele che falliscono insieme.
+    // 429 e 5xx tracciati separatamente: sono problemi diversi (rate limit
+    // lato client vs errore del server), l'utente ha chiesto in particolare
+    // il 429.
+    trackThrottled(res.status === 429 ? 'rate-limit-429-political' : 'server-error-5xx-political', { status: res.status });
     return _fallbackToSingleCalls(chunk, base, new Error(`HTTP ${res.status} → rate limit/server error after retries`));
   }
 

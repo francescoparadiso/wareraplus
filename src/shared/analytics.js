@@ -27,3 +27,27 @@ export function trackEvent(name, data) {
     // silenzioso di proposito — vedi nota sopra
   }
 }
+
+// ══════════════════════════════════════════════════════════════
+// trackThrottled — per eventi che possono arrivare A RAFFICA dallo stesso
+// utente in pochi secondi (l'uso pensato: i 429 — quando l'API è satura,
+// le chiamate in parallelo falliscono quasi tutte insieme, non una alla
+// volta). Senza throttle un singolo utente in un momento di rate-limit
+// genererebbe decine di eventi identici, seppellendo il segnale reale
+// ("quanti utenti/sessioni incontrano un 429") sotto il rumore di quante
+// richieste erano in volo in quel preciso istante — un dettaglio di
+// implementazione, non un dato interessante.
+// Traccia il primo evento di un "gruppo" subito, poi ignora i successivi
+// con lo stesso nome per `minIntervalMs`; il gruppo successivo (dopo la
+// pausa) riparte tracciato. Stato per `name`, non globale: throttle
+// indipendenti per 429-diplomacy / 429-political / altri usi futuri.
+// ══════════════════════════════════════════════════════════════
+const _lastTrackedAt = new Map();
+
+export function trackThrottled(name, data, minIntervalMs = 15000) {
+  const now = Date.now();
+  const last = _lastTrackedAt.get(name) || 0;
+  if (now - last < minIntervalMs) return;
+  _lastTrackedAt.set(name, now);
+  trackEvent(name, data);
+}

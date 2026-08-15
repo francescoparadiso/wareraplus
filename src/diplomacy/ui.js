@@ -5,6 +5,7 @@ import { getAllianceAllies, getDualAllyDefensiveIds } from './diplomacy.js';
 import { fmtNumber } from './utils.js'; // Aggiunto per formattare i numeri nella legenda
 import { escapeHtml } from './utils.js';
 import { t } from '../shared/i18n.js';
+import { trackEvent } from '../shared/analytics.js';
 
 function _fmtDmg(n) {
   if (!n) return '0';
@@ -241,6 +242,13 @@ export function updateDynamicLegend() {
           }
         });
         import('../panel/countryPanel.js').then(m => m.selectBlocInPanel(state.selectedBlocId));
+        // Stesso evento di map.js (via:'map') ma via:'legend' — percorso
+        // diverso per selezionare lo stesso blocco, senza questo il click
+        // dalla legenda era invisibile e bloc-click sottostimava l'uso reale.
+        if (!wasSelected) {
+          const alliance = state.allianceMap.get(blocId);
+          if (alliance) trackEvent('bloc-click', { bloc: alliance.name, via: 'legend' });
+        }
       });
     });
     return;
@@ -434,6 +442,7 @@ export function updateSelectedDisplay() {
   document.getElementById('deselect-btn')?.addEventListener('click', () => {
     state.selectedCountryId = null;
     import('./map.js').then(m => m.renderMap());
+    trackEvent('nation-deselect');
   });
 }
 

@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { API_BASE_URL } from './config.js';
 import { showToast } from './utils.js';
 import { fetchRegionsViaCache } from './cacheClient.js';
+import { trackEvent } from '../shared/analytics.js';
 
 export async function loadRegions() {
   try {
@@ -28,5 +29,6 @@ export async function loadRegions() {
     console.error('loadRegions error:', err);
     state.regionData = {};
     showToast('Failed to load region data', 'warning');
+    trackEvent('data-unavailable', { source: 'regions' });
   }
 }

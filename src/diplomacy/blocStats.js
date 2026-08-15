@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { trackEvent } from '../shared/analytics.js';
 
 /* ── Helpers ── */
 function fmt(n, d = 1, full = false) {
@@ -23,6 +24,10 @@ const blocColors = new Map();         // blocName → color
 let mergeCounter = 0;
 let dragData = null;
 let eventsAttached = false;
+// Ricerca tracciata una volta sola PER APERTURA del pannello (non per ogni
+// carattere digitato, che sarebbe rumore): azzerato in renderBlocStats,
+// cioè al vero punto di ingresso "il pannello si apre da capo".
+let searchTracked = false;
 
 /* ── Compute Stats ── */
 export function computeBlocStats() {
@@ -121,6 +126,7 @@ export function renderBlocStats(stats) {
   allStats = stats;
   injectStyles();
   if (!eventsAttached) { attachEvents(c); eventsAttached = true; }
+  searchTracked = false;
   buildUI();
 }
 
@@ -739,6 +745,7 @@ function showMergeMenu(srcBlocId, srcBlocName) {
         if (mergedBlocs.has(targetId)) mergedBlocs.delete(targetId);
         allStats = computeBlocStats();
         buildUI();
+        trackEvent('bloc-stats-merge', { a: srcBlocName, b: target.name });
       }
       closeMenu();
     });
@@ -752,6 +759,7 @@ function attachSearchEvent(c) {
   si.addEventListener('input', e => {
     const q = e.target.value.toLowerCase().trim(), rd = c.querySelector('#bs-results');
     if (!q) { rd.innerHTML = ''; return; }
+    if (!searchTracked) { searchTracked = true; trackEvent('bloc-stats-search'); }
     const hits = [];
     for (const b of allStats) for (const m of b.members) if (m.name.toLowerCase().includes(q)) hits.push({ ...m, blocName: b.name, blocColor: b.color });
     rd.innerHTML = hits.length

@@ -3,6 +3,7 @@ import { parseCSV, showToast } from './utils.js';
 import { EXTERNAL_SPHERE_URL, COLORS } from './config.js';
 import { renderMap } from './map.js';
 import { updateDynamicLegend } from './ui.js';
+import { trackEvent } from '../shared/analytics.js';
 
 // ==================== CARICAMENTO CSV ====================
 // CSV format: nazione_primaria,codici_proxy,label_lng,label_lat
@@ -23,6 +24,7 @@ export async function loadSphereOfInfluence() {
     console.error('Errore Sphere of Influence:', err);
     buildSphereMapFromData([]);
     showToast('Sphere of Influence data unavailable.', 'warning');
+    trackEvent('data-unavailable', { source: 'sphere-of-influence' });
   }
 }
 

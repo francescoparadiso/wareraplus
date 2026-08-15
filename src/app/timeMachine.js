@@ -148,6 +148,7 @@ async function _activate(initialTs) {
   } catch (err) {
     console.warn('WarEra+ time machine: storico non disponibile:', err.message);
     showToast('Time machine non disponibile al momento', 'warning');
+    trackEvent('data-unavailable', { source: 'time-machine' });
     return; // niente panello se il server non ha ancora nessuno storico
   }
 
@@ -407,6 +408,7 @@ function _jumpToEvent(dir) {
   if (target === undefined) return; // già al primo/ultimo evento noto
   _slider.value = String(target);
   _applyAt(target);
+  trackEvent('time-machine-jump-event', { direction: dir > 0 ? 'next' : 'prev' });
 }
 
 // Nazione che deteneva `regionId` più di recente, a `ts` o prima — null se

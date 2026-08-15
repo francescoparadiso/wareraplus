@@ -1,5 +1,6 @@
 import { API_BASE_URL, WORKER_API_BASE } from './config.js';
 import { state } from './state.js';
+import { trackThrottled } from '../shared/analytics.js';
 
 // ==================== NAZIONI ====================
 // Lookup nazione da countryId. Era duplicata identica in battleMarkers.js e
@@ -61,7 +62,7 @@ export async function trpcBatch(calls, { useWorker = false, _attempt = 1 } = {})
         await _sleep(waitMs);
         return trpcBatch(calls, { useWorker, _attempt: _attempt + 1 });
       }
-      showRateLimitTooltip();
+      showRateLimitTooltip('trpc-batch');
       return calls.map(() => null);
     }
     if (!res.ok) throw new Error(`Batch HTTP ${res.status}`);
@@ -97,7 +98,18 @@ function parseLine(line) {
 let rateLimitTooltip = null;
 let rateLimitTimeout = null;
 
-export function showRateLimitTooltip() {
+// WarEra+ (richiesta esplicita: "controlla soprattutto l'errore 429").
+// Chiamata SOLO dopo che i retry con backoff sono stati esauriti (vedi
+// sopra) — quindi ogni chiamata qui è un vero "l'utente ha sentito il
+// rate limit", non un 429 riassorbito in automatico. `source` distingue
+// da dove arriva (trpcBatch stesso, o le due fetch dirette di
+// battleHeatmap.js che non passano da trpcBatch) senza cambiare la
+// firma per i chiamanti esistenti (parametro opzionale).
+// trackThrottled (non trackEvent): durante un vero rate-limit le chiamate
+// in parallelo falliscono quasi insieme — senza throttle un solo utente
+// genererebbe decine di eventi identici nello stesso istante.
+export function showRateLimitTooltip(source = 'unknown') {
+  trackThrottled('rate-limit-429', { source });
   // Rimuovi il tooltip esistente se presente
   hideRateLimitTooltip();
   

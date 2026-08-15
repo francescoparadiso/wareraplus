@@ -42,6 +42,7 @@ export async function loadExternalNaps() {
   } catch (err) {
     console.error('Errore NAP esterni:', err);
     showToast('External NAPs unavailable.', 'warning');
+    trackEvent('data-unavailable', { source: 'external-naps' });
   }
 }
 
@@ -66,9 +67,11 @@ export function aggiungiNap() {
 }
 
 export function rimuoviNap(id) {
+  const nation = state.nationMap.get(id);
   state.customNaps = state.customNaps.filter(n => n !== id);
   updateNapListUI();
   renderMap();
+  trackEvent('remove-manual-nap', { nation: nation?.name || id });
 }
 
 // updateNapListUI vive in ui.js (versione con bandiere): qui la ri-esportiamo

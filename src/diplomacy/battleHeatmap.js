@@ -46,7 +46,7 @@ export async function fetchActiveBattles() {
       
       if (res.status === 429) {
         isRateLimited = true;
-        showRateLimitTooltip();
+        showRateLimitTooltip('battle-list-fetch');
         if (all.length > 0) {
           return all;
         }
@@ -95,7 +95,7 @@ export async function fetchBattleDetails(battleId) {
     const res = await fetch(url);
     
     if (res.status === 429) {
-      showRateLimitTooltip();
+      showRateLimitTooltip('battle-details-fetch');
       return null;
     }
     
