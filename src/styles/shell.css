@@ -679,7 +679,8 @@ body.light-theme #wp-time-machine-btn.wp-time-machine-btn-active {
 #wp-tm-prev-event,
 #wp-tm-play,
 #wp-tm-next-event,
-#wp-tm-speed {
+#wp-tm-speed,
+#wp-tm-share {
   flex: 0 0 auto;
   height: 28px;
   min-width: 28px;
@@ -696,7 +697,8 @@ body.light-theme #wp-time-machine-btn.wp-time-machine-btn-active {
 #wp-tm-prev-event:hover:not(:disabled),
 #wp-tm-play:hover,
 #wp-tm-next-event:hover:not(:disabled),
-#wp-tm-speed:hover {
+#wp-tm-speed:hover,
+#wp-tm-share:hover {
   color: #e6edf3;
   border-color: #58a6ff;
 }
@@ -721,9 +723,23 @@ body.light-theme #wp-time-machine-btn.wp-time-machine-btn-active {
   accent-color: #00d4ff;
   touch-action: pan-x;
 }
-#wp-tm-label {
+/* Giorno (Day X/Y) + data, impilati invece che affiancati: meno larghezza
+   orizzontale occupata (importante su mobile) rispetto a metterli in riga. */
+.wp-tm-info {
   flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   min-width: 150px;
+}
+#wp-tm-day {
+  white-space: nowrap;
+  color: #58a6ff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+#wp-tm-label {
   text-align: right;
   white-space: nowrap;
   color: #8b949e;
@@ -738,13 +754,17 @@ body.light-theme #wp-tm-close,
 body.light-theme #wp-tm-prev-event,
 body.light-theme #wp-tm-play,
 body.light-theme #wp-tm-next-event,
-body.light-theme #wp-tm-speed {
+body.light-theme #wp-tm-speed,
+body.light-theme #wp-tm-share {
   background: #f0f0f0;
   border-color: #ccc;
   color: #555;
 }
 body.light-theme #wp-tm-label {
   color: #555;
+}
+body.light-theme #wp-tm-day {
+  color: #2266cc;
 }
 @media (max-width: 768px) {
   #wp-time-machine-panel {
@@ -758,8 +778,11 @@ body.light-theme #wp-tm-label {
   #wp-time-machine-panel.open {
     transform: translateY(0);
   }
-  #wp-tm-label {
+  .wp-tm-info {
     min-width: 100px;
+  }
+  .wp-tm-controls {
+    flex-wrap: wrap;
   }
 }
 
@@ -1179,6 +1202,23 @@ body.light-theme .wp-legend-clickable:hover {
    mostrati via `body.light-theme` — nessun costo quando sono spenti
    (display:none) e nessuna dipendenza da script che possa fallire.
    ══════════════════════════════════════════════════════════════ */
+
+/* ── Mappa dedicata time machine (src/app/timeMachineMap.js) — nascosta di
+   default, .open la mostra al posto di #map (nascosta via JS mentre
+   questa è attiva). z-index sopra a #map (statico, nessun z-index
+   esplicito) ma sotto alla vignettatura/bussola decorative sotto e a
+   tutta l'UI (pannelli/bottoni, 2000+): la cornice del tema chiaro deve
+   restare visibile sopra a QUALUNQUE mappa, non solo quella principale. ── */
+#wp-tm-map {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: #000;
+}
+#wp-tm-map.open {
+  display: block;
+}
 
 #wp-vignette {
   display: none;

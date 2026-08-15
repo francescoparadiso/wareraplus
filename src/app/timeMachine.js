@@ -1,12 +1,12 @@
 /* ══════════════════════════════════════════════════════════════
    WarEra+ — Time machine
    ------------------------------------------------------------------
-   Componente NUOVO: bottone dedicato ("🕰️", accanto agli altri controlli
-   fissi in alto) che apre uno slider in basso e ricolora la mappa con
-   l'ownership STORICA delle regioni a un istante passato, ricostruita dal
-   server di cache (vedi cacheClient.js: fetchRegionHistoryRangeViaCache /
-   fetchRegionHistoryAtViaCache — tutto il lavoro di keyframe+replay lo fa
-   il server, qui c'è solo una fetch per ogni posizione dello slider).
+   Bottone dedicato ("🕰️", accanto agli altri controlli fissi in alto) che
+   apre uno slider in basso e mostra l'ownership STORICA delle regioni a un
+   istante passato, ricostruita dal server di cache (vedi cacheClient.js:
+   fetchRegionHistoryRangeViaCache / fetchRegionHistoryAtViaCache — tutto
+   il lavoro di keyframe+replay lo fa il server, qui c'è solo una fetch per
+   ogni posizione dello slider).
 
    Scope deliberatamente ridotto (decisione esplicita): mostra SOLO
    ownership regione + nome nazione + bandiera al click. Niente
@@ -14,24 +14,24 @@
    mai stati salvati nel tempo, mostrarli sarebbe fuorviante (sembrerebbero
    valori storici ma sarebbero quelli di OGGI).
 
-   Approccio di rendering: stesso principio della bozza mai integrata
-   (timeMachineUI.js) — NON tocchiamo state.baseGeoJSON, lo sostituiamo solo
-   come DATO pubblicato sulla sorgente mappa (stesso layer di map.js), e lo
-   ripristiniamo alla chiusura. La colorazione mentre la time machine è
-   attiva è un'espressione fill-color dedicata (un colore stabile per
-   nazione, state.nationBaseColorMap — nessuna relazione diplomatica: non ha
-   senso mostrare "guerra/alleanza di OGGI" sovrapposta a un'epoca passata),
-   applicata direttamente sul layer FUORI dal ciclo normale di renderMap()
-   — alla chiusura richiamiamo renderMap() che ripristina qualunque
-   modalità colore fosse attiva prima, senza che questo modulo debba
-   saperne nulla.
+   RENDERING (riscritto — richiesto esplicitamente dall'utente dopo che il
+   disegno restava troppo lento anche dopo diversi giri di ottimizzazione):
+   prima ridisegnava DENTRO alla mappa Diplomacy principale (sostituendo
+   temporaneamente le sue sorgenti regioni/confini, mutando state.labelsData
+   e ripristinando tutto alla chiusura) — competeva ad ogni frame con la
+   decina di layer sempre attivi lì (alleanze, blocchi, sfera d'influenza,
+   marker/heatmap battaglie, rotte navali, badge doppi, danni settimanali,
+   popolazione, pattern SVG...). Ora usa una SECONDA mappa MapLibre dedicata
+   e alleggerita (src/app/timeMachineMap.js — 3 layer in tutto, mappa fissa
+   non a scorrimento infinito), mostrata al posto della principale (che
+   viene semplicemente nascosta, non toccata) mentre la time machine è
+   aperta. Questo file resta responsabile di TUTTA la logica (fetch, stato,
+   playback, eventi, tastiera, popup, share) — timeMachineMap.js sa solo
+   "disegnare quello che gli viene passato".
    ══════════════════════════════════════════════════════════════ */
 
 import { state } from '../diplomacy/state.js';
-import { LAYER_IDS, THEMES } from '../diplomacy/config.js';
-import { renderMap } from '../diplomacy/map.js';
 import { escapeHtml, showToast } from '../diplomacy/utils.js';
-import { invalidateLabelCache } from '../diplomacy/labels.js';
 import {
   fetchRegionHistoryRangeViaCache,
   fetchRegionHistoryAtViaCache,
@@ -39,17 +39,22 @@ import {
 } from '../diplomacy/cacheClient.js';
 import { pauseShipAnimation as pauseShipAnimationDark, resumeShipAnimation as resumeShipAnimationDark } from '../diplomacy/oceanBackground.js';
 import { pauseShipAnimation as pauseShipAnimationAntique, resumeShipAnimation as resumeShipAnimationAntique } from '../diplomacy/antiqueTheme.js';
-import * as topojson from 'topojson-client';
+import {
+  activateTimeMachineMap,
+  deactivateTimeMachineMap,
+  renderTimeMachineFrame,
+  captureFrame,
+  getTimeMachineMap,
+  TM_LYR_FILL,
+} from './timeMachineMap.js';
 
-const { SRC_REGIONS, SRC_BORDERS, LYR_FILL } = LAYER_IDS;
-
-// Passo di uno "step" discreto (frecce tastiera, salto play/pausa) — un
-// giorno di gioco. La velocità di riproduzione (1x-4x) moltiplica questo
-// stesso passo invece di accorciare l'intervallo del timer: così il numero
-// di fetch al server durante il playback non dipende dalla velocità scelta.
+// Passo di uno "step" discreto (frecce tastiera) — un giorno di gioco.
 const STEP_MS = 24 * 60 * 60 * 1000;
+// PLAY_TICK_MS: cadenza NOMINALE del loop di playback, non la velocità
+// (vedi _playLoop — la velocità è calcolata sul tempo reale trascorso, non
+// su questo). 1x/2x/3x = 1/2/3 giorni di gioco al SECONDO reale.
 const PLAY_TICK_MS = 150;
-const PLAY_SPEEDS = [1, 2, 3, 4];
+const PLAY_SPEEDS = [1, 2, 3]; // giorni/secondo — 4x rimosso su richiesta esplicita
 
 // Il server semina la genesi (keyframe più vecchio) al 1 maggio 2025 — vedi
 // GENESIS_TS in server/warera-cache-server.js. Non serve duplicare la
@@ -62,18 +67,36 @@ function _fmtDate(ts) {
   });
 }
 
-let _btn, _panel, _slider, _label, _popup;
-let _playBtn, _prevEventBtn, _nextEventBtn, _speedBtn;
+// "Day 145/470" — giorno corrente dalla genesi su giorni totali coperti
+// dallo storico. Giorno 1 = genesi (_range.min), non 0.
+function _fmtDay(ts) {
+  if (!_range) return '';
+  const dayNum = Math.floor((ts - _range.min) / STEP_MS) + 1;
+  const totalDays = Math.floor((_range.max - _range.min) / STEP_MS) + 1;
+  return `Day ${dayNum}/${totalDays}`;
+}
+
+// Data in formato compatto/filesystem-safe (YYYY-MM-DD_HHmm), per il nome
+// del file PNG condiviso — _fmtDate usa slash/virgole non adatti a un nome
+// file su tutti i sistemi.
+function _fmtDateForFilename(ts) {
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+
+let _btn, _panel, _slider, _label, _dayLabel, _popup;
+let _playBtn, _prevEventBtn, _nextEventBtn, _speedBtn, _shareBtn;
 let _active = false;
 let _range = null;
 let _debounceTimer = null;
 let _lastRegions = null; // { regionId: countryId } della posizione slider corrente, per il click
-let _labelRegionId = null; // Map: indice in state.labelsData -> regionId "sotto" quella label (calcolato una volta, posizione fissa)
-let _labelOriginal = null; // Array: { countryId, countryName, textColor, countryCode } originali, per il ripristino
+let _labelRegionId = null; // Map: indice in state.labelsData -> regionId "sotto" quella label (calcolato una volta, posizione fissa — sola lettura, non muta più state.labelsData)
 
-// Playback (play/pausa + velocità 1x-4x)
+// Playback (play/pausa + velocità 1x-3x, in giorni/secondo REALI)
 let _playing = false;
 let _playTimer = null;
+let _playLastTickAt = null; // Date.now() dell'ultimo frame applicato — vedi _playLoop
 let _speedIdx = 0; // indice in PLAY_SPEEDS
 
 // Eventi (salto prossimo/precedente + "dal —" nel popup): UNA fetch sola
@@ -103,8 +126,9 @@ export function openTimeMachineAt(ts) {
 
 // Se le battaglie attive sono visibili, le spegne — stesso checkbox/evento
 // di src/app/battleToggle.js (unica fonte di verità), simulato qui invece
-// di duplicare la logica. Marker di battaglie "live" sovrapposti a una
-// mappa che mostra un'epoca passata non avrebbe senso.
+// di duplicare la logica. Ferma anche il poll periodico (updateBattleMarkers
+// controlla markersEnabled), non solo il disegno — inutile continuare a
+// interrogare l'API mentre la mappa che le mostrerebbe è nascosta.
 function _disableBattlesIfShown() {
   const checkbox = document.getElementById('checkActiveBattles');
   if (checkbox?.checked) {
@@ -114,7 +138,10 @@ function _disableBattlesIfShown() {
 }
 
 async function _activate(initialTs) {
-  if (!state.map || !state.baseGeoJSON) return;
+  // Basta che i dati di base siano pronti (baseGeoJSON/topologia) — non
+  // serve più che state.map specificamente esista già "aperta": la mappa
+  // dedicata (timeMachineMap.js) si crea/mostra da sé qui sotto.
+  if (!state.baseGeoJSON) return;
   try {
     _range = await fetchRegionHistoryRangeViaCache();
   } catch (err) {
@@ -127,25 +154,17 @@ async function _activate(initialTs) {
   state.timeMachineActive = true;
   _btn.classList.add('wp-time-machine-btn-active');
   _disableBattlesIfShown();
-  _buildPanelIfNeeded();
-  _panel.classList.add('open');
-  document.addEventListener('keydown', _onKeydown);
-  // BUG FIX (segnalato dall'utente): ← / → spostavano ANCHE la mappa
-  // (pan), non solo il giorno — MapLibre ha un proprio gestore tastiera
-  // (frecce = pan) attaccato indipendentemente dal nostro su document;
-  // preventDefault() nel nostro listener non lo ferma (sono due listener
-  // separati sullo stesso evento). Il modo corretto è disattivare il suo,
-  // non ha senso panare la mappa mentre si sfoglia lo storico comunque.
-  state.map.keyboard.disable();
-  // PERF (feedback utente: rendering in ritardo, sospetta le navi sulle
-  // rotte marine): il pallino nave è puramente decorativo (schema seedato
-  // sempre uguale, non dipende da nessun dato) ma il suo setData() ogni
-  // 500ms compete per lo stesso thread principale con le fetch/repaint
-  // della time machine — pausarlo (resta visibile, solo fermo) libera
-  // margine proprio quando la reattività dello slider conta di più. Solo
+  // PERF: il pallino nave è puramente decorativo (schema seedato sempre
+  // uguale, non dipende da nessun dato) — pausarlo (resta visibile, solo
+  // fermo) evita lavoro JS inutile mentre la sua mappa è nascosta. Solo
   // uno dei due temi ha un runner attivo, l'altra chiamata è un no-op.
   pauseShipAnimationDark();
   pauseShipAnimationAntique();
+
+  await activateTimeMachineMap(); // crea/mostra la mappa dedicata, nasconde quella principale
+  _buildPanelIfNeeded();
+  _panel.classList.add('open');
+  document.addEventListener('keydown', _onKeydown);
 
   const startTs = Number.isFinite(initialTs)
     ? Math.min(Math.max(initialTs, _range.min), _range.max)
@@ -155,7 +174,7 @@ async function _activate(initialTs) {
   _slider.value = String(startTs);
   await _applyAt(startTs);
 
-  state.map.on('click', LYR_FILL, _onHistoricalClick);
+  getTimeMachineMap().on('click', TM_LYR_FILL, _onHistoricalClick);
   _loadEvents(); // in background, non blocca l'apertura — vedi commento sopra _eventTsSorted
 }
 
@@ -167,18 +186,13 @@ function _deactivate() {
   if (_panel) _panel.classList.remove('open');
   _hidePopup();
   document.removeEventListener('keydown', _onKeydown);
-  state.map?.keyboard.enable();
   resumeShipAnimationDark();
   resumeShipAnimationAntique();
   _clearUrl();
 
-  const src = state.map?.getSource(SRC_REGIONS);
-  if (src && state.baseGeoJSON) src.setData(state.baseGeoJSON);
-  _applyBorders(null); // ripristina i confini live (stessa mesh calcolata da setupMapLayers)
-  _restoreLabels();
-  renderMap(); // ripristina qualunque modalità colore fosse attiva prima — questo modulo non deve saperne nulla
-
-  if (state.map) state.map.off('click', LYR_FILL, _onHistoricalClick);
+  const tmMap = getTimeMachineMap();
+  if (tmMap) tmMap.off('click', TM_LYR_FILL, _onHistoricalClick);
+  deactivateTimeMachineMap(); // nasconde la mappa dedicata, mostra quella principale (mai toccata, nessun ripristino da fare)
 
   // BUG FIX (segnalato dall'utente): dopo aver chiuso la time machine lo
   // "scroll" (drag/pan della mappa) restava bloccato su mobile. Causa più
@@ -210,31 +224,39 @@ function _buildPanelIfNeeded() {
       <button id="wp-tm-play" title="Play" aria-label="Play">▶</button>
       <button id="wp-tm-next-event" title="Evento successivo" aria-label="Evento successivo" disabled>⏭</button>
       <button id="wp-tm-speed" title="Velocità riproduzione" aria-label="Velocità riproduzione">1x</button>
+      <button id="wp-tm-share" title="Condividi come immagine" aria-label="Condividi come immagine">📤</button>
     </div>
     <div class="wp-tm-row wp-tm-slider-row">
       <input id="wp-tm-slider" type="range" min="0" max="1000" value="1000" />
-      <span id="wp-tm-label">—</span>
+      <div class="wp-tm-info">
+        <span id="wp-tm-day">Day —/—</span>
+        <span id="wp-tm-label">—</span>
+      </div>
     </div>
   `;
   document.body.appendChild(_panel);
 
   _slider = _panel.querySelector('#wp-tm-slider');
   _label = _panel.querySelector('#wp-tm-label');
+  _dayLabel = _panel.querySelector('#wp-tm-day');
   _playBtn = _panel.querySelector('#wp-tm-play');
   _prevEventBtn = _panel.querySelector('#wp-tm-prev-event');
   _nextEventBtn = _panel.querySelector('#wp-tm-next-event');
   _speedBtn = _panel.querySelector('#wp-tm-speed');
+  _shareBtn = _panel.querySelector('#wp-tm-share');
 
   _panel.querySelector('#wp-tm-close').addEventListener('click', _deactivate);
   _playBtn.addEventListener('click', _togglePlay);
   _prevEventBtn.addEventListener('click', () => _jumpToEvent(-1));
   _nextEventBtn.addEventListener('click', () => _jumpToEvent(1));
   _speedBtn.addEventListener('click', _cycleSpeed);
+  _shareBtn.addEventListener('click', _shareScreenshot);
 
   _slider.addEventListener('input', () => {
     _stopPlay(); // trascinamento manuale = l'utente prende il controllo, ferma il playback
     const ts = Number(_slider.value);
     _label.textContent = _fmtDate(ts);
+    _dayLabel.textContent = _fmtDay(ts);
     // Debounce: la fetch server-side (ricostruzione keyframe+replay) non ha
     // senso rifarla per OGNI pixel trascinato — solo quando l'utente si ferma.
     clearTimeout(_debounceTimer);
@@ -243,28 +265,20 @@ function _buildPanelIfNeeded() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Playback (play/pausa + velocità 1x-4x).
+// Playback (play/pausa + velocità 1x-3x, in giorni/secondo reali).
 //
-// BUG FIX (segnalato dall'utente: "il rendering ci mette più tempo della
-// time machine, e quando la fermo continua ad andare avanti"): la prima
-// versione usava setInterval(PLAY_TICK_MS) — un nuovo tick ALLO SCADERE
-// DEL TIMER, indipendentemente da quanto la fetch precedente (rete verso
-// il VPS, non istantanea) ci avesse messo a rispondere. Se una fetch
-// impiegava più di PLAY_TICK_MS, si accumulavano PIÙ richieste in volo
-// insieme, che potevano arrivare in ordine diverso da quello di partenza
-// (rendering che salta avanti/indietro) — e quelle ancora in volo al
-// momento della pausa arrivavano comunque dopo, facendo sembrare che il
-// playback continuasse da solo.
-// Fix in due parti:
-//  1) _playLoop si RIPIANIFICA da sé con setTimeout SOLO dopo che
-//     _applyAt precedente si è risolta (mai più di una fetch in volo) —
-//     il ritmo reale si adatta da solo alla velocità di risposta del
-//     server invece di un timer fisso scollegato dalla realtà.
-//  2) _applyAt scarta le risposte "superate" (vedi _applyToken sotto): se
-//     nel frattempo è partita una richiesta più recente, il risultato di
-//     una più vecchia (arrivata in ritardo) non viene più applicato alla
-//     mappa — copre anche il caso di trascinamento manuale/salto evento
-//     mentre una fetch precedente è ancora in volo.
+// L'avanzamento NON è un passo fisso per tick, ma è calcolato sul TEMPO
+// REALE trascorso dall'ultimo frame applicato (`elapsedMs`) — `giorni
+// avanzati = secondi reali trascorsi × velocità`. Così la velocità
+// dichiarata (1x = 1 giorno/sec, 2x = 2, 3x = 3) è rispettata IN MEDIA a
+// prescindere da quanto ci mette il rendering di ogni singolo passo: un
+// frame lento produce solo un salto più grande al giro dopo, non un
+// rallentamento della velocità dichiarata. Il loop si ripianifica da sé
+// con setTimeout SOLO dopo che il frame precedente si è risolto (mai più
+// di una fetch in volo), e _fetchAndRender scarta le risposte "superate"
+// (vedi _applyToken) — così anche se una fetch è più lenta del previsto
+// non si accumulano rendering fuori ordine né si vede il playback
+// "continuare da solo" dopo aver premuto pausa.
 // ─────────────────────────────────────────────────────────────────────────
 function _togglePlay() {
   if (_playing) _stopPlay();
@@ -278,6 +292,9 @@ function _startPlay() {
   _playBtn.title = 'Pausa';
   // Se siamo già alla fine, ripartire da capo è più utile che restare fermi.
   if (Number(_slider.value) >= _range.max) _slider.value = String(_range.min);
+  // Azzerato: il primissimo tick non deve "recuperare" il tempo passato da
+  // PRIMA di premere play (userebbe un intervallo enorme se non fosse null).
+  _playLastTickAt = null;
   _playLoop();
 }
 
@@ -291,12 +308,29 @@ function _stopPlay() {
 
 async function _playLoop() {
   if (!_playing) return;
+  const now = Date.now();
+  const elapsedMs = _playLastTickAt ? (now - _playLastTickAt) : PLAY_TICK_MS;
+  _playLastTickAt = now;
+
   const cur = Number(_slider.value);
-  const next = cur + STEP_MS * PLAY_SPEEDS[_speedIdx];
+  const advanceMs = (elapsedMs / 1000) * PLAY_SPEEDS[_speedIdx] * STEP_MS;
+  const next = cur + advanceMs;
   const atEnd = next >= _range.max;
   const target = atEnd ? _range.max : next;
-  _slider.value = String(target);
-  await _applyAt(target); // aspetta il rendering VERO prima di programmare il prossimo passo
+
+  const rendered = await _fetchAndRender(target);
+  // Slider/label/giorno si spostano SOLO se e quando il rendering è
+  // realmente arrivato: la posizione visibile avanza alla vera velocità
+  // del rendering, mai prima. Se la fetch fallisce/viene superata
+  // (rendered:false), non si avanza — il prossimo tick riparte dalla
+  // stessa posizione invece di saltarla.
+  if (rendered) {
+    _slider.value = String(target);
+    _label.textContent = _fmtDate(target);
+    _dayLabel.textContent = _fmtDay(target);
+    _syncUrl(target);
+    _hidePopup();
+  }
   if (atEnd) { _stopPlay(); return; }
   if (!_playing) return; // l'utente può aver premuto pausa MENTRE aspettavamo la fetch
   _playTimer = setTimeout(_playLoop, PLAY_TICK_MS);
@@ -311,7 +345,10 @@ function _cycleSpeed() {
 // Frecce tastiera (±1 giorno) e barra spaziatrice (play/pausa) — solo
 // mentre la time machine è attiva (listener aggiunto/rimosso in
 // _activate/_deactivate) e solo se il focus non è su un campo di testo
-// altrove nell'app (es. "Cerca nazione…"), per non rubargli i tasti.
+// altrove nell'app (es. "Cerca nazione…"), per non rubargli i tasti. La
+// mappa dedicata è creata con `keyboard:false` (timeMachineMap.js), quindi
+// non c'è più un gestore tastiera concorrente che pana la mappa sotto i
+// piedi di queste frecce.
 // ─────────────────────────────────────────────────────────────────────────
 function _onKeydown(e) {
   const ae = document.activeElement;
@@ -403,118 +440,53 @@ function _clearUrl() {
   history.replaceState(null, '', url);
 }
 
-// _applyToken: vedi commento sopra _playLoop — ogni chiamata a _applyAt si
-// prende un numero incrementale, e scarta il proprio risultato se nel
-// frattempo ne è partita una più recente (arrivata prima o dopo non
-// importa: quello che conta è "sono ancora l'ultima richiesta partita?").
+// _applyToken: ogni chiamata a _fetchAndRender si prende un numero
+// incrementale, e scarta il proprio risultato se nel frattempo ne è
+// partita una più recente (arrivata prima o dopo non importa: quello che
+// conta è "sono ancora l'ultima richiesta partita?").
 let _applyToken = 0;
 
-async function _applyAt(ts) {
+// Nucleo: fetch + rendering sulla mappa dedicata, SENZA toccare
+// slider/label/URL — il chiamante decide QUANDO riflettere la nuova
+// posizione nell'interfaccia (vedi _applyAt sotto per l'uso interattivo,
+// _playLoop per l'autoplay). Ritorna true se il rendering è stato
+// applicato, false se scartato (superato o fetch fallita).
+async function _fetchAndRender(ts) {
   const token = ++_applyToken;
-  _label.textContent = _fmtDate(ts);
-  _hidePopup();
-  _syncUrl(ts);
   try {
     const { regions } = await fetchRegionHistoryAtViaCache(ts);
-    if (token !== _applyToken) return; // superata da una richiesta più recente, scartata
+    if (token !== _applyToken) return false; // superata da una richiesta più recente, scartata
     _lastRegions = regions;
-    _renderHistorical(regions);
+    renderTimeMachineFrame(regions, _buildLabelEntries(regions));
+    return true;
   } catch (err) {
     console.warn('WarEra+ time machine: ricostruzione fallita:', err.message);
+    return false;
   }
 }
 
-// Sostituisce SOLO countryId per feature (properties.regionId è il campo
-// giusto per abbinare — verificato dal vivo contro map.getMapData: la bozza
-// precedente mai integrata usava `properties._id` per errore, che non
-// esiste). Non tocca state.baseGeoJSON: costruisce un oggetto nuovo,
-// ripristinabile in _deactivate() con un semplice setData(state.baseGeoJSON).
-function _renderHistorical(regionsMap) {
-  if (!state.map || !state.baseGeoJSON) return;
-  const historicalGeoJSON = {
-    ...state.baseGeoJSON,
-    features: state.baseGeoJSON.features.map(f => {
-      const regionId = f.properties?.regionId;
-      const historicalCountryId = regionId && Object.prototype.hasOwnProperty.call(regionsMap, regionId)
-        ? regionsMap[regionId]
-        : f.properties?.countryId; // regione non presente nello storico (raro): fallback al dato live
-      return { ...f, properties: { ...f.properties, countryId: historicalCountryId } };
-    }),
-  };
-  const src = state.map.getSource(SRC_REGIONS);
-  if (src) src.setData(historicalGeoJSON);
-  _applyBorders(regionsMap);
-  _applyLabels(regionsMap);
-
-  // Colore stabile per nazione — vedi commento in testa al file sul perché
-  // non riusiamo le modalità colore esistenti (diplomazia/blocchi/ecc. non
-  // hanno senso proiettate su un'epoca passata).
-  const theme = THEMES[state.theme];
-  const expr = ['match', ['get', 'countryId']];
-  for (const [id, color] of state.nationBaseColorMap.entries()) expr.push(id, color);
-  expr.push(theme.DEFAULT_LAND);
-  if (state.map.getLayer(LYR_FILL)) state.map.setPaintProperty(LYR_FILL, 'fill-color', expr);
+// Uso interattivo (trascinamento/frecce/salto evento/deep-link): riflette
+// SUBITO la nuova posizione nell'interfaccia (slider/label/URL) — per un
+// singolo movimento lo scarto rispetto al rendering (che arriva un attimo
+// dopo, via fetch) è impercettibile, esattamente come uno slider normale.
+async function _applyAt(ts) {
+  _label.textContent = _fmtDate(ts);
+  _dayLabel.textContent = _fmtDay(ts);
+  _hidePopup();
+  _syncUrl(ts);
+  await _fetchAndRender(ts);
 }
 
-// BUG FIX: i confini bianchi (SRC_BORDERS, layer LYR_BORDER) sono una mesh
-// calcolata UNA VOLTA SOLA in setupMapLayers() a partire dalla topologia
-// grezza (state.mapDataGlobal.map) — non leggono affatto da SRC_REGIONS,
-// quindi cambiare i dati di quest'ultima (sopra) non li tocca minimamente:
-// i confini restavano quelli di OGGI anche guardando un'epoca passata.
-// Ricalcola qui la stessa mesh (identica logica di setupMapLayers in
-// map.js: due arch appartengono allo stesso confine se i lati hanno
-// countryId diverso) ma usando l'ownership STORICA per regionId invece di
-// properties.countryId live — `regionsMap: null` (chiamata da _deactivate)
-// ricade su properties.countryId puro, cioè esattamente la mesh live
-// originale, per il ripristino alla chiusura.
-// PERF (segnalato dall'utente: rendering in ritardo durante il playback):
-// coastMesh NON dipende dall'ownership storica (il filtro `a === b` non usa
-// affatto `ownerOf`) — è identica ad ogni chiamata per la stessa topologia,
-// eppure veniva ricalcolata da zero ad OGNI singolo passo dello slider,
-// insieme alle altre due mesh (quelle sì storiche, vanno ricalcolate). Cache
-// per topologia: la prima chiamata la calcola, le successive la riusano.
-let _coastMeshCache = null; // { topoData, mesh }
-
-function _applyBorders(regionsMap) {
-  const topoData = state.mapDataGlobal?.map;
-  if (!state.map || !topoData) return;
-  const src = state.map.getSource(SRC_BORDERS);
-  if (!src) return;
-
-  const ownerOf = (props) => {
-    const historical = regionsMap && props.regionId && Object.prototype.hasOwnProperty.call(regionsMap, props.regionId)
-      ? regionsMap[props.regionId]
-      : undefined;
-    return historical !== undefined ? historical : props.countryId;
-  };
-
-  if (_coastMeshCache?.topoData !== topoData) {
-    _coastMeshCache = { topoData, mesh: topojson.mesh(topoData, topoData.objects.regions, (a, b) => a === b) };
-  }
-  const bordersMesh = topojson.mesh(topoData, topoData.objects.regions, (a, b) => a !== b && ownerOf(a.properties) !== ownerOf(b.properties));
-  const coastMesh = _coastMeshCache.mesh;
-  const regionsMesh = topojson.mesh(topoData, topoData.objects.regions, (a, b) => a !== b && ownerOf(a.properties) === ownerOf(b.properties));
-
-  src.setData({
-    type: 'FeatureCollection',
-    features: [
-      { type: 'Feature', properties: { kind: 'border' }, geometry: bordersMesh },
-      { type: 'Feature', properties: { kind: 'coast' }, geometry: coastMesh },
-      { type: 'Feature', properties: { kind: 'region' }, geometry: regionsMesh },
-    ],
-  });
-}
-
-// BUG FIX: le etichette coi nomi nazione (canvas separato, vedi
-// labels.js:drawLabels) leggono state.labelsData — un array FISSO
-// "una label per nazione, posizione fissa dentro il suo territorio
-// attuale" (da topoData.objects.countryLabels), mai toccato da
-// _renderHistorical sopra: restavano sempre col nome/colore di OGGI anche
-// quando il riempimento sotto mostrava un'epoca passata. Qui si trova, UNA
-// SOLA VOLTA (posizione fissa, non cambia mai durante la sessione), in
-// quale REGIONE ricade il punto di ciascuna etichetta — poi a ogni mossa
-// dello slider basta un lookup O(1) su quella regione nello storico per
-// sapere quale nazione mostrare in quel punto.
+// ─────────────────────────────────────────────────────────────────────────
+// Etichette: dove cade ciascuna (regionId sotto al punto fisso della
+// label) si calcola UNA SOLA VOLTA per sessione (posizione fissa, non
+// cambia mai) — poi ad ogni mossa dello slider basta un lookup O(1) per
+// sapere quale nazione mostrare in quel punto. A differenza della vecchia
+// versione, questa NON muta più state.labelsData (che appartiene alla
+// mappa principale, mai toccata ora): produce un array indipendente che
+// timeMachineMap.js si limita a disegnare sul proprio canvas dedicato —
+// niente più backup/ripristino alla chiusura.
+// ─────────────────────────────────────────────────────────────────────────
 function _pointInRing(pt, ring) {
   const [x, y] = pt;
   let inside = false;
@@ -566,45 +538,25 @@ function _ensureLabelRegionMap() {
   });
 }
 
-function _applyLabels(regionsMap) {
+// Ritorna [{ coordinates, countryName, textColor }] per il frame corrente
+// — sola lettura di state.labelsData, nessuna mutazione.
+function _buildLabelEntries(regionsMap) {
   _ensureLabelRegionMap();
-  if (!_labelRegionId || !state.labelsData?.length) return;
+  if (!_labelRegionId || !state.labelsData?.length) return [];
 
-  if (!_labelOriginal) {
-    // Catturati una sola volta per sessione (le label non cambiano finché
-    // non c'è un refresh completo dei dati, che questa app non fa dopo il
-    // boot) — il ripristino in _deactivate usa sempre questi.
-    _labelOriginal = state.labelsData.map(l => ({
-      countryId: l.properties.countryId,
-      countryName: l.properties.countryName,
-      countryCode: l.properties.countryCode,
-      textColor: l.properties.textColor,
-    }));
-  }
-
-  state.labelsData.forEach((label, idx) => {
+  return state.labelsData.map((label, idx) => {
     const regionId = _labelRegionId.get(idx);
-    const orig = _labelOriginal[idx];
+    const fallbackCountryId = label.properties.countryId;
     const historicalCountryId = regionId && Object.prototype.hasOwnProperty.call(regionsMap, regionId)
       ? regionsMap[regionId]
-      : orig.countryId; // punto non ricadeva in nessuna regione nota (raro): resta il dato live
+      : fallbackCountryId; // punto non ricadeva in nessuna regione nota (raro): resta il dato live
     const nation = state.nationMap.get(historicalCountryId);
-    label.properties.countryId = historicalCountryId;
-    label.properties.countryName = nation?.name || orig.countryName;
-    label.properties.countryCode = nation?.code || orig.countryCode;
-    label.properties.textColor = state.nationBaseColorMap.get(historicalCountryId) || orig.textColor;
+    return {
+      coordinates: label.coordinates,
+      countryName: nation?.name || label.properties.countryName,
+      textColor: state.nationBaseColorMap.get(historicalCountryId) || label.properties.textColor,
+    };
   });
-  invalidateLabelCache();
-}
-
-function _restoreLabels() {
-  if (!_labelOriginal || !state.labelsData?.length) return;
-  state.labelsData.forEach((label, idx) => {
-    const orig = _labelOriginal[idx];
-    if (!orig) return;
-    Object.assign(label.properties, orig);
-  });
-  invalidateLabelCache();
 }
 
 function _onHistoricalClick(e) {
@@ -627,7 +579,7 @@ function _showPopup(point, nation, sinceTs) {
   } else {
     const code = nation.code?.toLowerCase();
     const flagHtml = code ? `<img src="https://media.warera.io/images/flags/${code}.svg?v=16" alt="" class="wp-tm-popup-flag" />` : '';
-    // "dal —" solo se _loadEvents() è già arrivato (sincEts non-null) — vedi
+    // "dal —" solo se _loadEvents() è già arrivato (sinceTs non-null) — vedi
     // _ownedSince: null significa "dato non ancora disponibile", non "sconosciuto".
     const sinceHtml = sinceTs != null
       ? `<span class="wp-tm-popup-since">dal ${_fmtDate(sinceTs)}</span>`
@@ -640,8 +592,8 @@ function _showPopup(point, nation, sinceTs) {
   // Il gap sopra il punto cliccato e il centraggio orizzontale li fa il
   // CSS (transform: translate(-50%, calc(-100% - 8px))) — qui solo il
   // punto esatto, in coordinate viewport (getContainer() è relativo al
-  // canvas, va sommato all'offset del canvas nella pagina).
-  const mapContainer = state.map.getContainer().getBoundingClientRect();
+  // canvas della mappa DEDICATA, non più quella principale).
+  const mapContainer = getTimeMachineMap().getContainer().getBoundingClientRect();
   _popup.style.left = `${mapContainer.left + point.x}px`;
   _popup.style.top = `${mapContainer.top + point.y}px`;
   _popup.classList.add('visible');
@@ -649,4 +601,44 @@ function _showPopup(point, nation, sinceTs) {
 
 function _hidePopup() {
   if (_popup) _popup.classList.remove('visible');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Share (📤): esporta "quel momento" come PNG — la cattura vera e propria
+// (mappa + etichette, workaround preserveDrawingBuffer) vive in
+// timeMachineMap.js, che possiede i due canvas; qui solo la UX di
+// condivisione/download.
+// ─────────────────────────────────────────────────────────────────────────
+async function _shareScreenshot() {
+  const canvas = await captureFrame();
+  if (!canvas) { showToast('Screenshot non riuscito', 'warning'); return; }
+
+  canvas.toBlob(async (blob) => {
+    if (!blob) { showToast('Screenshot non riuscito', 'warning'); return; }
+    const ts = Number(_slider.value);
+    const filename = `warera-time-machine-${_fmtDateForFilename(ts)}.png`;
+    const file = new File([blob], filename, { type: 'image/png' });
+
+    // Web Share API (mobile e alcuni desktop): apre il pannello di
+    // condivisione nativo del sistema — quello che l'utente ha chiesto
+    // ("un tasto share"). Se non disponibile o l'utente annulla, ricade su
+    // un download diretto: la PNG resta comunque ottenuta.
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'WarEra+ Time Machine', text: _fmtDate(ts) });
+        return;
+      } catch (err) {
+        if (err?.name === 'AbortError') return; // utente ha annullato la condivisione, non è un errore
+        // altro errore (raro): ricadi sul download sotto
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, 'image/png');
 }

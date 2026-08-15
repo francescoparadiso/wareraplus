@@ -192,6 +192,12 @@
 
   <div id="map"></div>
 
+  <!-- WarEra+: mappa dedicata e alleggerita per la time machine (src/app/
+       timeMachineMap.js) — istanza MapLibre SEPARATA da #map sopra, creata
+       al primo utilizzo. Nascosta di default: mostrata al posto di #map
+       (che viene nascosta) solo mentre la time machine è aperta. -->
+  <div id="wp-tm-map"></div>
+
   <!-- WarEra+: vignettatura ai bordi mappa, solo tema chiaro ("mappa
        antica invecchiata") — overlay CSS puro, non un layer mappa, non
        intercetta click (pointer-events:none). Vedi shell.css #wp-vignette. -->
