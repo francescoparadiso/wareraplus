@@ -90,10 +90,17 @@ function buildWidget(host) {
         <div class="bfm-status" id="bfm-status">Loading battle front…</div>
       </div>
       <div class="bfm-split">
+        <div class="bfm-split-head"><span id="bfm-split-scope">Current round</span><span id="bfm-rates"></span></div>
         <div class="bfm-split-bar"><div class="bfm-split-def" id="bfm-split-def" style="width:50%;"></div><div class="bfm-split-atk" id="bfm-split-atk" style="width:50%;"></div></div>
-        <div class="bfm-split-nums"><span class="d" id="bfm-split-def-pct">50.0%</span><span id="bfm-rates"></span><span class="a" id="bfm-split-atk-pct">50.0%</span></div>
+        <div class="bfm-split-nums">
+          <span class="d"><b id="bfm-split-def-pct">50.0%</b><span class="dmg" id="bfm-split-def-dmg">—</span></span>
+          <span class="a"><span class="dmg" id="bfm-split-atk-dmg">—</span><b id="bfm-split-atk-pct">50.0%</b></span>
+        </div>
       </div>
-      <div class="bfm-momentum" id="bfm-momentum">Gathering momentum data…</div>
+      <div class="bfm-momentum" id="bfm-momentum">
+        <span class="bfm-momentum-label">Momentum</span>
+        <span class="bfm-momentum-text" id="bfm-momentum-text">Gathering momentum data…</span>
+      </div>
     </div>
   `;
 
@@ -106,8 +113,12 @@ function buildWidget(host) {
     splitAtk: host.querySelector('#bfm-split-atk'),
     splitDefPct: host.querySelector('#bfm-split-def-pct'),
     splitAtkPct: host.querySelector('#bfm-split-atk-pct'),
+    splitDefDmg: host.querySelector('#bfm-split-def-dmg'),
+    splitAtkDmg: host.querySelector('#bfm-split-atk-dmg'),
+    splitScope: host.querySelector('#bfm-split-scope'),
     rates: host.querySelector('#bfm-rates'),
     momentum: host.querySelector('#bfm-momentum'),
+    momentumText: host.querySelector('#bfm-momentum-text'),
   };
 
   fieldEl = hud.field;
@@ -278,6 +289,17 @@ function render(defenderRanked, attackerRanked, totalDef, totalAtk, round) {
   hud.splitDefPct.textContent = defPct.toFixed(1) + '%';
   hud.splitAtkPct.textContent = (100 - defPct).toFixed(1) + '%';
 
+  // WarEra+ (richiesta esplicita dell'utente): accanto alle percentuali
+  // servono anche i DANNI in valore assoluto. I due totali che arrivano qui
+  // sono già quelli del round in corso quando `round` esiste
+  // (round.defenderDamages/attackerDamages, vedi refreshBattleData); quando
+  // manca, sono la somma del ranking, cioè il totale di tutta la battaglia.
+  // L'etichetta sopra la barra dice QUALE dei due si sta guardando: senza,
+  // lo stesso numero significherebbe due cose diverse a seconda del momento.
+  if (hud.splitDefDmg) hud.splitDefDmg.textContent = fmt(totalDef);
+  if (hud.splitAtkDmg) hud.splitAtkDmg.textContent = fmt(totalAtk);
+  if (hud.splitScope) hud.splitScope.textContent = round ? 'Current round damage' : 'Total battle damage';
+
   const frontPct = clamp(50 + (defShare - 0.5) * 130, 12, 88);
   lastFrontPct = frontPct;
   hud.terrAtk.style.left = frontPct + '%';
@@ -290,8 +312,8 @@ function render(defenderRanked, attackerRanked, totalDef, totalAtk, round) {
 function renderMomentum() {
   const m = getLastMomentum();
   if (!m) {
-    hud.momentum.textContent = 'Gathering momentum data…';
-    hud.momentum.style.color = '';
+    if (hud.momentumText) hud.momentumText.textContent = 'Gathering momentum data…';
+    hud.momentum.classList.remove('is-closing', 'lead-def', 'lead-atk');
     return;
   }
 
@@ -305,11 +327,24 @@ function renderMomentum() {
   const leaderName = escapeHtml(leaderIsDef ? sideName.defender : sideName.attacker);
   const trailerName = escapeHtml(leaderIsDef ? sideName.attacker : sideName.defender);
 
-  if (m.gain > 0.005 * (m.rateDef + m.rateAtk + 1)) {
+  // WarEra+ (richiesta esplicita: "vorrei che fosse più visibile la parte
+  // sul momentum"). Il testo è lo stesso di prima, ma il blocco ora è un
+  // riquadro con la barra di stato colorata dal lato in vantaggio invece di
+  // una riga di testo da 11px persa in fondo al tooltip: le classi
+  // lead-def/lead-atk/is-closing pilotano il colore del bordo e dello
+  // sfondo (vedi WIDGET_CSS), così si capisce CHI sta vincendo con un
+  // colpo d'occhio, senza leggere la frase.
+  hud.momentum.classList.toggle('lead-def', leaderIsDef);
+  hud.momentum.classList.toggle('lead-atk', !leaderIsDef);
+
+  const closing = m.gain > 0.005 * (m.rateDef + m.rateAtk + 1);
+  hud.momentum.classList.toggle('is-closing', closing);
+
+  if (closing) {
     const etaTxt = leadNow <= 0.5 ? 'overtake imminent' : (etaNow != null ? `overtake in ~${fmtDuration(etaNow)}` : 'closing');
-    hud.momentum.innerHTML = `<b style="color:var(${trailerVar})">${trailerName}</b> closing on <b style="color:var(${leaderVar})">${leaderName}</b> — ${etaTxt}`;
+    hud.momentumText.innerHTML = `<b style="color:var(${trailerVar})">${trailerName}</b> closing on <b style="color:var(${leaderVar})">${leaderName}</b> — <span class="bfm-momentum-eta">${etaTxt}</span>`;
   } else {
-    hud.momentum.innerHTML = `<b style="color:var(${leaderVar})">${leaderName}</b> extending the lead`;
+    hud.momentumText.innerHTML = `<b style="color:var(${leaderVar})">${leaderName}</b> extending the lead`;
   }
 }
 
@@ -458,7 +493,17 @@ const WIDGET_CSS = `
   margin-top: 8px;
 }
 .bfm-root * { box-sizing: border-box; }
-.bfm-field { position: relative; height: 74px; border-radius: 8px; overflow: hidden; background: var(--bfm-def-fill); }
+/* WarEra+ (segnalato: "su desktop mancano i traccianti che ci sono su
+   mobile"). Verificato dal vivo che su desktop il meccanismo funziona
+   (pool creato, polling attivo, tracciante renderizzato se forzato): gli
+   spari scattano solo quando il danno cresce fra due poll. Il problema è
+   di LEGGIBILITÀ — il campo era alto 74px anche su desktop, con segmenti
+   da 30x2px in mix-blend-mode:screen e i puntini delle unità sopra: su
+   mobile lo stesso widget occupa proporzionalmente molto più schermo e
+   quindi si notano. Su desktop il campo ora è più alto e traccianti/
+   impatti sono più grandi e luminosi; su mobile restano com'erano, dove
+   già si vedevano. */
+.bfm-field { position: relative; height: ${IS_MOBILE ? 74 : 104}px; border-radius: 8px; overflow: hidden; background: var(--bfm-def-fill); }
 .bfm-terr-atk { position: absolute; top: 0; right: 0; bottom: 0; left: 50%; background: var(--bfm-atk-fill); }
 @media (prefers-reduced-motion: no-preference) { .bfm-terr-atk { transition: left 900ms cubic-bezier(.22,.61,.36,1); } }
 .bfm-origin { position: absolute; top: 0; bottom: 0; left: 50%; width: 0; border-left: 1px dashed rgba(255,255,255,0.25); }
@@ -471,10 +516,10 @@ const WIDGET_CSS = `
 .bfm-unit.atk { background: var(--bfm-atk-strong); }
 .bfm-unit.tank { width: 8px; height: 5px; margin: -2.5px 0 0 -4px; border-radius: 1.5px; }
 .bfm-fx { position: absolute; inset: 0; overflow: hidden; pointer-events: none; mix-blend-mode: screen; }
-.bfm-tracer { position: absolute; height: 2px; width: 30px; border-radius: 2px; opacity: 0; top: 0; left: 0; transform-origin: left center; }
-.bfm-tracer.def { background: linear-gradient(90deg, transparent, #eaf6ff 45%, var(--bfm-def-strong)); box-shadow: 0 0 6px 1px var(--bfm-def-strong); }
-.bfm-tracer.atk { background: linear-gradient(90deg, transparent, #fff2e8 45%, var(--bfm-atk-strong)); box-shadow: 0 0 6px 1px var(--bfm-atk-strong); }
-.bfm-blast { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; opacity: 0; top: 0; left: 0; }
+.bfm-tracer { position: absolute; height: ${IS_MOBILE ? 2 : 3}px; width: ${IS_MOBILE ? 30 : 44}px; border-radius: 2px; opacity: 0; top: 0; left: 0; transform-origin: left center; }
+.bfm-tracer.def { background: linear-gradient(90deg, transparent, #eaf6ff 45%, var(--bfm-def-strong)); box-shadow: 0 0 ${IS_MOBILE ? '6px 1px' : '10px 2px'} var(--bfm-def-strong); }
+.bfm-tracer.atk { background: linear-gradient(90deg, transparent, #fff2e8 45%, var(--bfm-atk-strong)); box-shadow: 0 0 ${IS_MOBILE ? '6px 1px' : '10px 2px'} var(--bfm-atk-strong); }
+.bfm-blast { position: absolute; width: ${IS_MOBILE ? 16 : 22}px; height: ${IS_MOBILE ? 16 : 22}px; margin: ${IS_MOBILE ? '-8px 0 0 -8px' : '-11px 0 0 -11px'}; border-radius: 50%; opacity: 0; top: 0; left: 0; }
 .bfm-blast.def { background: radial-gradient(circle, #fff 0%, var(--bfm-def-strong) 42%, transparent 72%); box-shadow: 0 0 12px 3px var(--bfm-def-strong); }
 .bfm-blast.atk { background: radial-gradient(circle, #fff 0%, var(--bfm-atk-strong) 42%, transparent 72%); box-shadow: 0 0 12px 3px var(--bfm-atk-strong); }
 .bfm-status {
@@ -484,14 +529,32 @@ const WIDGET_CSS = `
 .bfm-status.is-error { color: #ef9269; }
 
 .bfm-split { margin-top: 6px; }
+.bfm-split-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
+#bfm-split-scope { font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--bfm-ink-faint); }
 .bfm-split-bar { height: 4px; border-radius: 2px; overflow: hidden; display: flex; background: rgba(255,255,255,0.08); }
 .bfm-split-def { background: var(--bfm-def-strong); }
 .bfm-split-atk { background: var(--bfm-atk-strong); }
 @media (prefers-reduced-motion: no-preference) { .bfm-split-def, .bfm-split-atk { transition: width 900ms cubic-bezier(.22,.61,.36,1); } }
 .bfm-split-nums { display: flex; justify-content: space-between; align-items: baseline; margin-top: 3px; font-size: 10.5px; font-variant-numeric: tabular-nums; }
-.bfm-split-nums .d { color: var(--bfm-def-strong); font-weight: 700; }
-.bfm-split-nums .a { color: var(--bfm-atk-strong); font-weight: 700; }
+.bfm-split-nums .d, .bfm-split-nums .a { display: inline-flex; align-items: baseline; gap: 5px; }
+.bfm-split-nums .d { color: var(--bfm-def-strong); }
+.bfm-split-nums .a { color: var(--bfm-atk-strong); }
+.bfm-split-nums b { font-weight: 700; font-size: 11.5px; }
+/* I danni assoluti restano visibilmente subordinati alla percentuale
+   (colore più tenue, peso normale): sono il dettaglio, non il titolo. */
+.bfm-split-nums .dmg { color: #d5dde8; font-weight: 500; opacity: 0.82; }
 #bfm-rates { color: var(--bfm-ink-faint); font-size: 10px; }
 
-.bfm-momentum { margin-top: 6px; font-size: 11px; color: #c9d4e4; line-height: 1.4; }
+.bfm-momentum {
+  margin-top: 7px; padding: 6px 9px; border-radius: 6px; border-left: 3px solid var(--bfm-ink-faint);
+  background: rgba(255,255,255,0.045); line-height: 1.35;
+}
+.bfm-momentum.lead-def { border-left-color: var(--bfm-def-strong); }
+.bfm-momentum.lead-atk { border-left-color: var(--bfm-atk-strong); }
+/* Rimonta in corso: sfondo appena più caldo — segnala "sta succedendo
+   qualcosa" senza urlare, il colore del bordo resta quello di chi guida. */
+.bfm-momentum.is-closing { background: rgba(226,172,77,0.10); }
+.bfm-momentum-label { display: block; font-size: 9px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--bfm-ink-faint); margin-bottom: 2px; }
+.bfm-momentum-text { display: block; font-size: 12.5px; color: #e6edf3; }
+.bfm-momentum-eta { color: var(--bfm-front); font-weight: 700; }
 `;
