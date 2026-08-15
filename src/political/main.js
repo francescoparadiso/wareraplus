@@ -75,6 +75,7 @@ import {
 import { loadPartiesForSelector, loadPartyDetails } from './party.js';
 import { initPanelSystem } from './panels.js';
 import { loadPartyColors } from './api.js';
+import { trackEvent } from '../shared/analytics.js';
 
 let _mounted = false;
 let _listenersWired = false;
@@ -139,13 +140,11 @@ export async function loadElection(id) {
 
         setStatus(t('updated_data'), '');
 
-        if (window.umami) {
-          window.umami.track('election-load', {
-            electionId: election._id,
-            type: election.type,
-            countryId: election.country || currentCountryId,
-          });
-        }
+        trackEvent('election-load', {
+          electionId: election._id,
+          type: election.type,
+          countryId: election.country || currentCountryId,
+        });
       } catch (err) {
         console.error(err);
         hideSkeleton();
@@ -212,7 +211,7 @@ async function _onCountryChange(newCountryId) {
     // Forza il refresh della timeline dopo cambio paese
     if (timelineChart) timelineChart.update();
 
-    if (window.umami) window.umami.track('country-change', { country: currentCountryId });
+    trackEvent('country-change', { country: currentCountryId });
   } catch (err) {
     console.error('Error switching country:', err);
     setStatus('Error loading data', 'error');

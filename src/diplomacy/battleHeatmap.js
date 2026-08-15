@@ -4,6 +4,7 @@ import { showRateLimitTooltip, trpcBatch } from './utils.js';
 import { renderMap } from './map.js';
 import { updateDynamicLegend } from './ui.js';
 import { fetchActiveBattlesViaCache } from './cacheClient.js';
+import { trackEvent } from '../shared/analytics.js';
 
 const BATTLE_NEUTRAL = '#2a2d33';
 let liveInterval = null;
@@ -362,7 +363,8 @@ export function exitBattleHeatmap() {
   if (state.coloringMode === 'battleHeatmap') {
     const previousMode = savedColoringMode || 'diplomacy';
     console.log('Returning to mode:', previousMode);
-    
+    trackEvent('battle-heatmap-exit');
+
     state.coloringMode = previousMode;
     state.battleHeatmapData = null;
     currentBattleId = null;

@@ -47,6 +47,7 @@ import {
   getTimeMachineMap,
   TM_LYR_FILL,
 } from './timeMachineMap.js';
+import { trackEvent } from '../shared/analytics.js';
 
 // Passo di uno "step" discreto (frecce tastiera) — un giorno di gioco.
 const STEP_MS = 24 * 60 * 60 * 1000;
@@ -176,11 +177,13 @@ async function _activate(initialTs) {
 
   getTimeMachineMap().on('click', TM_LYR_FILL, _onHistoricalClick);
   _loadEvents(); // in background, non blocca l'apertura — vedi commento sopra _eventTsSorted
+  trackEvent('time-machine-open', { deepLink: Number.isFinite(initialTs) });
 }
 
 function _deactivate() {
   _active = false;
   state.timeMachineActive = false;
+  trackEvent('time-machine-close');
   _stopPlay();
   _btn.classList.remove('wp-time-machine-btn-active');
   if (_panel) _panel.classList.remove('open');
@@ -668,6 +671,7 @@ async function _shareScreenshot() {
     const ts = Number(_slider.value);
     const filename = `warera-time-machine-${_fmtDateForFilename(ts)}.png`;
     const file = new File([blob], filename, { type: 'image/png' });
+    trackEvent('time-machine-share', { method: (navigator.canShare && navigator.canShare({ files: [file] })) ? 'share-sheet' : 'download' });
 
     // Web Share API (mobile e alcuni desktop): apre il pannello di
     // condivisione nativo del sistema — quello che l'utente ha chiesto

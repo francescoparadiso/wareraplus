@@ -12,6 +12,7 @@ import { API_BASE_URL } from './config.js';
 import { updateBattleMarkers } from './battleMarkers.js';
 import { loadRegions } from './regions.js';
 import { fetchCountriesViaCache, fetchMapDataViaCache, fetchAlliancesViaCache, fetchDiplomacyViaCache } from './cacheClient.js';
+import { trackEvent } from '../shared/analytics.js';
 let battleMarkersTimer = null;
 
 // ==================== CARICAMENTO DATI ====================
@@ -177,6 +178,7 @@ function setupEventListeners() {
 document.getElementById('theme-toggle-btn').addEventListener('click', function () {
   const newTheme = state.theme === 'light' ? 'dark' : 'light';
   state.theme = newTheme;
+  trackEvent('theme-toggle', { theme: newTheme });
   document.body.classList.toggle('light-theme', newTheme === 'light');
 
   const icon = document.getElementById('theme-icon');
@@ -196,12 +198,16 @@ document.getElementById('theme-toggle-btn').addEventListener('click', function (
 
   document.getElementById('cercaInput').addEventListener('keypress', e => { if (e.key === 'Enter') cercaNazione(); });
   document.getElementById('searchBtn').addEventListener('click', cercaNazione);
-  document.getElementById('resetBtn').addEventListener('click', resetDiplomazia);
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    trackEvent('reset-diplomacy');
+    resetDiplomazia();
+  });
 
   document.getElementById('napInput').addEventListener('keypress', e => { if (e.key === 'Enter') aggiungiNap(); });
   document.getElementById('addNapBtn').addEventListener('click', aggiungiNap);
 
   document.getElementById('toggle-borders').addEventListener('change', function () {
+    trackEvent('map-source-toggle', { original: this.checked });
     setMapSource(this.checked);
   });
 
@@ -212,18 +218,21 @@ document.getElementById('mode-diplomacy').addEventListener('click', () => {
   // Nascondi lo slider della seconda riga
   const sliderBottom = document.getElementById('mode-slider-bottom');
   if (sliderBottom) sliderBottom.style.opacity = '0.3';
+  trackEvent('view-mode-change', { mode: 'diplomacy' });
   setColoringMode('diplomacy');
 });
 
 document.getElementById('mode-blocs').addEventListener('click', () => {
   const sliderBottom = document.getElementById('mode-slider-bottom');
   if (sliderBottom) sliderBottom.style.opacity = '0.3';
+  trackEvent('view-mode-change', { mode: 'blocs' });
   setColoringMode('blocs');
 });
 
 document.getElementById('mode-sphereOfInfluence')?.addEventListener('click', () => {
   const sliderBottom = document.getElementById('mode-slider-bottom');
   if (sliderBottom) sliderBottom.style.opacity = '0.3';
+  trackEvent('view-mode-change', { mode: 'sphereOfInfluence' });
   setColoringMode('sphereOfInfluence');
 });
 
@@ -231,22 +240,29 @@ document.getElementById('mode-sphereOfInfluence')?.addEventListener('click', () 
 document.getElementById('mode-weeklyDamage').addEventListener('click', () => {
   const sliderTop = document.getElementById('mode-slider');
   if (sliderTop) sliderTop.style.opacity = '0.3';
+  trackEvent('view-mode-change', { mode: 'weeklyDamage' });
   setColoringMode('weeklyDamage');
 });
 
 document.getElementById('mode-population').addEventListener('click', () => {
   const sliderTop = document.getElementById('mode-slider');
   if (sliderTop) sliderTop.style.opacity = '0.3';
+  trackEvent('view-mode-change', { mode: 'population' });
   setColoringMode('population');
 });
   document.getElementById('checkLabels').addEventListener('change', () => { if (state.map) state.map.triggerRepaint(); });
-  document.getElementById('checkExcludeExternalNaps').addEventListener('change', () => { import('./map.js').then(m => m.renderMap()); });
+  document.getElementById('checkExcludeExternalNaps').addEventListener('change', function () {
+    trackEvent('toggle-exclude-external-naps', { checked: this.checked });
+    import('./map.js').then(m => m.renderMap());
+  });
 
   document.getElementById('manualNapToggle').addEventListener('click', () => toggleNapSection('manual-nap-section'));
   document.getElementById('externalNapToggle').addEventListener('click', () => toggleNapSection('external-nap-section'));
 
   document.getElementById('legendToggleBtn').addEventListener('click', () => {
-    document.getElementById('dynamic-legend').classList.toggle('hidden');
+    const legend = document.getElementById('dynamic-legend');
+    legend.classList.toggle('hidden');
+    trackEvent('legend-toggle', { open: !legend.classList.contains('hidden') });
   });
 
   document.getElementById('zoomInBtn')?.addEventListener('click', () => { state.map?.zoomIn(); });

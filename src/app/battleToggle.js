@@ -12,6 +12,8 @@
    per un'azione che si vuole fare al volo.
    ══════════════════════════════════════════════════════════════ */
 
+import { trackEvent } from '../shared/analytics.js';
+
 export function initBattleToggle() {
   const btn = document.getElementById('wp-battles-toggle-btn');
   const checkbox = document.getElementById('checkActiveBattles');
@@ -26,6 +28,7 @@ export function initBattleToggle() {
     checkbox.checked = !checkbox.checked;
     checkbox.dispatchEvent(new Event('change'));
     sync();
+    trackEvent('battles-toggle', { visible: checkbox.checked });
   });
 
   // Se il checkbox viene cambiato da altrove (menu hamburger), tieni

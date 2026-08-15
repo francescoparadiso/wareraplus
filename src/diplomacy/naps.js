@@ -3,6 +3,7 @@ import { parseCSV, showToast } from './utils.js';
 import { EXTERNAL_NAPS_URL } from './config.js';
 import { renderMap } from './map.js';
 import { updateExternalNapsUI, updateNapListUI } from './ui.js';
+import { trackEvent } from '../shared/analytics.js';
 
 // ==================== NAP ESTERNI ====================
 export async function loadExternalNaps() {
@@ -61,6 +62,7 @@ export function aggiungiNap() {
   updateNapListUI();
   renderMap();
   showToast(`Added ${found.name} to NAP`, 'success');
+  trackEvent('add-manual-nap', { nation: found.name });
 }
 
 export function rimuoviNap(id) {

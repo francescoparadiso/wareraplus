@@ -18,6 +18,8 @@
    il testo sarà in arabo ma il layout resta LTR. Un'estensione futura.
    ══════════════════════════════════════════════════════════════ */
 
+import { trackEvent } from './analytics.js';
+
 export const LANGS = {
   en: 'English',
   it: 'Italiano',
@@ -792,6 +794,10 @@ export function setLang(lang) {
   try { localStorage.setItem('we_lang', lang); } catch (_) {}
   applyTranslations();
   window.dispatchEvent(new CustomEvent('wareraplus:langchange', { detail: { lang } }));
+  // La guardia sopra (lang === _lang) rende questo il punto giusto per il
+  // tracking: filtra da sola le chiamate a caricamento/init con la lingua
+  // già corrente, restano solo i cambi lingua VERI dell'utente.
+  trackEvent('language-change', { lang });
 }
 
 // BUG FIX (simmetrico a src/political/i18n.js:applyStaticTranslations):

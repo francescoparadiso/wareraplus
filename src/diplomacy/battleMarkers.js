@@ -6,6 +6,7 @@ import { fetchActiveBattles, setBattleHeatmap } from './battleHeatmap.js';
 import { API_BASE_URL, WORKER_API_BASE } from './config.js';
 import { trpcBatch, escapeHtml, getNation } from './utils.js';
 import { highlightBattleRegion, clearBattleRegionHighlight } from './map.js';
+import { trackEvent } from '../shared/analytics.js';
 
 let markers = new Map(); // battleId -> { marker, el } — SOLO le battaglie attualmente nel viewport (vedi _syncMarkersToViewport)
 let markersEnabled = true;
@@ -863,6 +864,7 @@ function buildMarkerEl(battle, regionName, liveData, totalAttackerDmg, totalDefe
     showBattleTooltip(d.battle, d.regionName, d.liveData, d.totalAttackerDmg, d.totalDefenderDmg, d.trend);
     setBattleHeatmap(battleId);
     hideAllMarkers();
+    trackEvent('battle-marker-click', { region: d.regionName });
 
     const regionId = d.battle.regionId || d.battle.defender?.region || d.battle.attacker?.region;
     if (regionId) {

@@ -35,6 +35,8 @@
    path attivo dell'app.
    ══════════════════════════════════════════════════════════════ */
 
+import { trackEvent } from '../shared/analytics.js';
+
 let overlayEl, backBtn, titleEl;
 
 export function initPoliticalOverlay() {
@@ -73,14 +75,17 @@ export async function openPoliticalView(countryId, countryName = '', options = {
   // resumePoliticalRendering in political/main.js).
   resumePoliticalRendering();
 
-  if (window.umami) {
-    window.umami.track('wareraplus-expand-political', { countryId, openSenate: !!options.openSenate });
-  }
+  trackEvent('wareraplus-expand-political', { countryId, openSenate: !!options.openSenate });
 }
 
 export function closePoliticalView() {
+  const wasOpen = isPoliticalViewOpen();
   overlayEl.classList.remove('open');
   overlayEl.setAttribute('aria-hidden', 'true');
+  // Guardia su wasOpen: closePoliticalView si può chiamare (Escape,
+  // backBtn) anche quando l'overlay è già chiuso — non è una vera
+  // "chiusura" da parte dell'utente, non ha senso contarla.
+  if (wasOpen) trackEvent('political-view-close');
   // WarEra+ perf: Political resta montata (solo nascosta) per riaprirla
   // istantaneamente — ma i suoi loop continui (canvas particellare, ticker)
   // vanno fermati esplicitamente, altrimenti girerebbero per sempre in

@@ -23,6 +23,7 @@ import { hide as hideTooltip } from './nationTooltip.js';
 import { initOceanBackground, applyOceanTheme } from './oceanBackground.js';
 import { initAntiqueTheme, applyAntiqueTheme } from './antiqueTheme.js';
 import { initDarkFleetTheme, applyDarkFleetTheme } from './darkFleetTheme.js';
+import { trackEvent } from '../shared/analytics.js';
 
 const { SRC_REGIONS, SRC_BORDERS, SRC_DIPLOMACY_DUAL_BORDER, SRC_BATTLE_REGION, LYR_FILL, LYR_OUTLINE, LYR_COAST, LYR_BORDER, LYR_MULTI_BLOC, LYR_DIPLOMACY_DUAL, LYR_BATTLE_REGION, LYR_BATTLE_REGION_FILL, LYR_BLOC_FLASH } = LAYER_IDS;
 
@@ -480,9 +481,9 @@ function _onRegionClick(e) {
     // (import dinamico verso src/panel/, coerente con altri collegamenti
     // cross-modulo già presenti nel progetto, es. nationTooltip.js).
     import('../panel/countryPanel.js').then(m => m.selectBlocInPanel(state.selectedBlocId));
-    if (window.umami && state.selectedBlocId) {
+    if (state.selectedBlocId) {
       const alliance = state.allianceMap.get(state.selectedBlocId);
-      if (alliance) umami.track('bloc-click', { bloc: alliance.name });
+      if (alliance) trackEvent('bloc-click', { bloc: alliance.name });
     }
     return;
   }
@@ -492,9 +493,9 @@ function _onRegionClick(e) {
     hideTooltip();
   }
   renderMap();
-  if (window.umami && state.selectedCountryId) {
+  if (state.selectedCountryId) {
     const nation = state.nationMap.get(state.selectedCountryId);
-    if (nation) umami.track('nation-click', { nation: nation.name });
+    if (nation) trackEvent('nation-click', { nation: nation.name });
   }
 }
 
@@ -533,6 +534,11 @@ export function cercaNazione() {
   const val = input.value.toLowerCase().trim();
   if (!val) return;
   const found = state.nazioniGlobal.find(n => n.name.toLowerCase() === val) || state.nazioniGlobal.find(n => n.name.toLowerCase().includes(val));
+  // Punto unico di chiamata (Enter sul campo + bottone "Cerca", entrambi in
+  // diplomacy/main.js): tracciato qui, non nei due listener, per non
+  // doverlo duplicare. Anche le ricerche senza risultato sono utili (dicono
+  // cosa gli utenti cercano e non trovano — es. nazioni scritte diverso).
+  trackEvent('search-nation', { query: val, found: !!found });
   if (found) {
     state.selectedCountryId = found._id;
     input.value = found.name;

@@ -8,6 +8,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { state } from '../diplomacy/state.js';
+import { trackEvent } from '../shared/analytics.js';
 
 export function initBlocLabelsToggle() {
   const checkbox = document.getElementById('wp-checkBlocLabels');
@@ -16,5 +17,6 @@ export function initBlocLabelsToggle() {
   checkbox.addEventListener('change', () => {
     state.showBlocLabels = checkbox.checked;
     if (state.map) state.map.triggerRepaint();
+    trackEvent('bloc-labels-toggle', { visible: checkbox.checked });
   });
 }

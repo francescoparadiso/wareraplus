@@ -57,6 +57,7 @@ import {
 } from './config.js';
 import { localFetch } from './api.js';
 import { getAllCountries } from '../shared/countries.js';
+import { trackEvent } from '../shared/analytics.js';
 import { openPlayerCard } from './parliament.js';
 
 // ── state ──
@@ -1412,6 +1413,7 @@ export function open() {
   if (!overlay) return;
   overlay.classList.add('active');
   document.body.style.overflow = 'hidden';
+  trackEvent('senate-view-open', { countryId: currentCountryId });
   if (!_resizeListenerBound) {
     _resizeListenerBound = true;
     let timer = null;
@@ -1432,6 +1434,7 @@ export function close() {
   if (!overlay) return;
   overlay.classList.remove('active');
   document.body.style.overflow = '';
+  trackEvent('senate-view-close');
 }
 
 function _bindControls() {
