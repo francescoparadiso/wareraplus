@@ -538,10 +538,57 @@ function _ensureLabelRegionMap() {
   });
 }
 
+// BUG FIX (segnalato dall'utente: "nella time machine i nomi delle nazioni
+// risultano più scuri rispetto alla mappa base"). Qui si usava
+// state.nationBaseColorMap come colore del TESTO, ma quello è il colore di
+// RIEMPIMENTO del poligono: è pensato per stare sotto a un'etichetta, non
+// per essere l'etichetta. La mappa base infatti disegna i nomi con
+// `label.properties.textColor` (vedi labels.js:drawLabels), che è una
+// versione schiarita dello stesso colore. Misurato su 188 label:
+// luminanza media 190 per textColor contro 43 per il colore base — 4,4
+// volte più scuro, esattamente lo scarto che si vedeva.
+//
+// Il textColor però appartiene alla nazione che possiede quel punto OGGI:
+// per un istante storico in cui la regione era di qualcun altro serve il
+// textColor di QUELLA nazione. Si costruisce quindi una volta sola una
+// mappa countryId -> textColor leggendola dalle label esistenti (ogni
+// nazione ne ha almeno una), e per le poche nazioni che non compaiono in
+// nessuna label si schiarisce il colore base fino alla stessa luminanza
+// che la mappa base usa per il testo.
+const LABEL_TARGET_LUM = 190; // luminanza media misurata sui textColor della mappa base
+let _textColorByCountry = null;
+
+function _lightenForText(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  if (lum >= LABEL_TARGET_LUM) return hex;
+  // Mix verso il bianco: mantiene la tinta (quindi la nazione resta
+  // riconoscibile) e alza solo la luminosità fino al bersaglio.
+  const k = (LABEL_TARGET_LUM - lum) / (255 - lum);
+  r = Math.round(r + (255 - r) * k);
+  g = Math.round(g + (255 - g) * k);
+  b = Math.round(b + (255 - b) * k);
+  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
+function _ensureTextColorMap() {
+  if (_textColorByCountry) return;
+  _textColorByCountry = new Map();
+  for (const label of state.labelsData || []) {
+    const id = label.properties?.countryId;
+    const color = label.properties?.textColor;
+    if (id && color && !_textColorByCountry.has(id)) _textColorByCountry.set(id, color);
+  }
+}
+
 // Ritorna [{ coordinates, countryName, textColor }] per il frame corrente
 // — sola lettura di state.labelsData, nessuna mutazione.
 function _buildLabelEntries(regionsMap) {
   _ensureLabelRegionMap();
+  _ensureTextColorMap();
   if (!_labelRegionId || !state.labelsData?.length) return [];
 
   return state.labelsData.map((label, idx) => {
@@ -551,10 +598,13 @@ function _buildLabelEntries(regionsMap) {
       ? regionsMap[regionId]
       : fallbackCountryId; // punto non ricadeva in nessuna regione nota (raro): resta il dato live
     const nation = state.nationMap.get(historicalCountryId);
+    const textColor = _textColorByCountry.get(historicalCountryId)
+      || _lightenForText(state.nationBaseColorMap.get(historicalCountryId))
+      || label.properties.textColor;
     return {
       coordinates: label.coordinates,
       countryName: nation?.name || label.properties.countryName,
-      textColor: state.nationBaseColorMap.get(historicalCountryId) || label.properties.textColor,
+      textColor,
     };
   });
 }
