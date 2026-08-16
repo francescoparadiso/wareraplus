@@ -408,6 +408,51 @@ body.light-theme .wp-gov-member-name {
   border-color: rgba(88, 166, 255, 0.55);
 }
 
+/* ── WarEra+: scorciatoie Political in cima al pannello nazione ──
+   Tre bottoni (Elezioni / Senato / Partiti) che aprono Political View
+   direttamente sulla vista giusta. Sostituiscono il vecchio bottone unico
+   "Espandi" in fondo al pannello: prima l'accesso alla parte politica era
+   l'ultima cosa in un pannello lungo, spesso sotto lo scroll. */
+.wp-political-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.wp-political-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(88, 166, 255, 0.35);
+  background: rgba(88, 166, 255, 0.12);
+  color: #58a6ff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.05s;
+}
+
+.wp-political-action-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.wp-political-action-btn:hover {
+  background: rgba(88, 166, 255, 0.22);
+  border-color: rgba(88, 166, 255, 0.55);
+}
+
+.wp-political-action-btn:active {
+  transform: translateY(1px);
+}
+
 /* Tema chiaro */
 body.light-theme .wp-panel {
   background: rgba(255, 255, 255, 0.97);

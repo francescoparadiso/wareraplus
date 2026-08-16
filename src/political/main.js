@@ -55,7 +55,7 @@ import { getAllCountries } from '../shared/countries.js';
 import { initI18n } from './i18n.js';
 import { initBackgroundCanvas } from './backgroundCanvas.js';
 import {
-  showView, setStatus, hideSkeleton, showPartyView,
+  showView, setStatus, hideSkeleton, showPartyView, showElectionView,
   loadCountries, exportCSV, openParliamentFullscreen, closeParliamentFullscreen,
   safeDestroy,
 } from './ui.js';
@@ -395,8 +395,37 @@ export async function initPoliticalView(countryId, options = {}) {
     await _onCountryChange(countryId);
   }
 
+  // WarEra+: le tre scorciatoie del pannello nazione (countryPanel.js)
+  // aprono Political direttamente sulla vista voluta. Devono essere
+  // DETERMINISTICHE, non affidarsi allo stato lasciato da un'apertura
+  // precedente: se l'utente aveva già navigato al Senato o ai Partiti,
+  // riaprire con un altro bottone deve comunque portare alla vista giusta
+  // (Political resta montata fra un'apertura e l'altra, vedi
+  // pausePoliticalRendering). Il senato è un overlay a sé sopra le altre
+  // viste: va chiuso esplicitamente quando si sceglie Elezioni o Partiti.
   if (options.openSenate) {
     SenateView.open();
+  } else if (options.openParty) {
+    _closeSenateIfOpen();
+    // showPartyView è la stessa funzione del bottone interno "partyViewBtn",
+    // qui invocata con le sue dipendenze (già importate in questo modulo).
+    showPartyView({ loadPartiesForSelector, loadPartyDetails });
+  } else {
+    // Default = Elezioni. showElectionView riporta in primo piano
+    // congresso/presidente (qualunque delle due era l'ultima elettorale)
+    // e ripristina stats/timeline che la vista Partiti aveva nascosto.
+    _closeSenateIfOpen();
+    showElectionView();
+  }
+}
+
+// SenateView.close() logga sempre un evento 'senate-view-close': chiamarlo
+// quando il senato non era aperto sporcherebbe le analytics con chiusure
+// mai avvenute. Qui serve solo come reset difensivo quando si sceglie
+// un'altra vista, quindi chiude davvero solo se l'overlay è attivo.
+function _closeSenateIfOpen() {
+  if (document.getElementById('senateOverlay')?.classList.contains('active')) {
+    SenateView.close();
   }
 }
 

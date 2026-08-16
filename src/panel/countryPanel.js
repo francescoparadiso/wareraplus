@@ -77,10 +77,19 @@ function buildPanelHtml(nation) {
       </div>
     </div>
 
-    <div class="wp-panel-section-title wp-panel-section-title-row">
-      <span>${t('parliament_government')}</span>
-      <button class="wp-senate-btn" id="wp-open-senate-btn" title="${t('open_senate_btn')}">🏛️ ${t('open_senate_btn')}</button>
+    <div class="wp-political-actions" role="group" aria-label="${t('explore_political_title')}">
+      <button class="wp-political-action-btn" id="wp-open-elections-btn">
+        <span class="wp-political-action-icon">🗳️</span>${t('elections_btn')}
+      </button>
+      <button class="wp-political-action-btn" id="wp-open-senate-btn">
+        <span class="wp-political-action-icon">🏛️</span>${t('senate_btn')}
+      </button>
+      <button class="wp-political-action-btn" id="wp-open-parties-btn">
+        <span class="wp-political-action-icon">🎗️</span>${t('parties_btn')}
+      </button>
     </div>
+
+    <div class="wp-panel-section-title">${t('parliament_government')}</div>
     <div class="wp-parliament-embed" id="wp-parliament-container">
       <div class="wp-parliament-loading">${t('loading_parliament')}</div>
     </div>
@@ -107,10 +116,6 @@ function buildPanelHtml(nation) {
       }).join('')}
       ${allies.length > 6 ? `<div class="wp-panel-row"><span style="color:#8b949e;">${t('plus_others', { n: allies.length - 6 })}</span></div>` : ''}
     ` : ''}
-
-    <button class="wp-expand-btn" id="wp-expand-political-btn">
-      ${t('expand_political_btn')}
-    </button>
   `;
 }
 
@@ -124,9 +129,13 @@ function render(nationId) {
   panelEl.setAttribute('aria-hidden', 'false');
   document.body.classList.add('wp-panel-open');
 
-  const expandBtn = document.getElementById('wp-expand-political-btn');
-  if (expandBtn) {
-    expandBtn.addEventListener('click', () => {
+  // WarEra+: le tre scorciatoie in cima al pannello aprono Political View
+  // direttamente sulla vista giusta (vedi initPoliticalView in
+  // src/political/main.js). "Elezioni" è la vista di default (nessuna
+  // opzione), Senato e Partiti passano la loro opzione dedicata.
+  const electionsBtn = document.getElementById('wp-open-elections-btn');
+  if (electionsBtn) {
+    electionsBtn.addEventListener('click', () => {
       openPoliticalView(nationId, nation.name);
     });
   }
@@ -135,6 +144,13 @@ function render(nationId) {
   if (senateBtn) {
     senateBtn.addEventListener('click', () => {
       openPoliticalView(nationId, nation.name, { openSenate: true });
+    });
+  }
+
+  const partiesBtn = document.getElementById('wp-open-parties-btn');
+  if (partiesBtn) {
+    partiesBtn.addEventListener('click', () => {
+      openPoliticalView(nationId, nation.name, { openParty: true });
     });
   }
 

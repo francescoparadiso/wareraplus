@@ -57,7 +57,7 @@ export function initPoliticalOverlay() {
  * Apre Political View per una nazione specifica.
  * @param {string} countryId - _id WarEra della nazione
  * @param {string} [countryName] - solo per il titolo mostrato in top bar
- * @param {{ openSenate?: boolean }} [options]
+ * @param {{ openSenate?: boolean, openParty?: boolean }} [options]
  */
 export async function openPoliticalView(countryId, countryName = '', options = {}) {
   titleEl.textContent = countryName ? `— ${countryName}` : '';
@@ -75,7 +75,13 @@ export async function openPoliticalView(countryId, countryName = '', options = {
   // resumePoliticalRendering in political/main.js).
   resumePoliticalRendering();
 
-  trackEvent('wareraplus-expand-political', { countryId, openSenate: !!options.openSenate });
+  trackEvent('wareraplus-expand-political', {
+    countryId,
+    // Quale delle tre scorciatoie del pannello nazione ha aperto la vista
+    // (elections = default, nessuna opzione) — così si vede dai dati quale
+    // dei tre bottoni viene usato di più.
+    entry: options.openSenate ? 'senate' : (options.openParty ? 'party' : 'elections'),
+  });
 }
 
 export function closePoliticalView() {
