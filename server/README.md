@@ -87,3 +87,28 @@ pollBootstrapPage)` e la chiamata all'avvio sono commentate. Funzione e
 endpoint `/bootstrap-status` restano nel file intatti, si riattiva togliendo
 i due commenti se in futuro serve di nuovo (es. spywarera.com irraggiungibile
 a lungo).
+
+## Round 5 — peso delle risposte (gzip + /ticker/summary)
+
+**Da deployare**: finché questo file non è aggiornato sul VPS il client
+continua a funzionare, ma resta sul percorso vecchio e pesante (ricade su
+`/ticker` e riprova `/ticker/summary` ogni mezz'ora).
+
+- **gzip**: le risposte JSON uscivano non compresse (né da qui né da nginx).
+  Ora vengono compresse sopra 1 KB, con `zlib` invece del middleware
+  `compression` per non aggiungere una dipendenza npm da installare a mano.
+  Misurato su `/ticker`: 1.393.778 → 134.224 byte.
+- **`/ticker/summary?since=&windows=ts1,ts2`** (nuovo): il client non usa i
+  singoli eventi di popolazione/tesoro, li somma per nazione su una finestra.
+  Ora la somma la fa il server: risposta di ~4 KB compressi contro 1,4 MB, e
+  soprattutto non cresce più con lo storico (la ritenzione a 14 giorni la
+  faceva crescere ogni giorno). `/ticker` resta invariato per i client vecchi.
+  Verificato: gli aggregati coincidono esattamente con quelli calcolati dal
+  client (580 valori confrontati su 2 finestre, zero differenze).
+- **`ticker-history.json` scritto compatto** (senza indentazione): è il file
+  che cresce di più e viene riletto e riscritto ad ogni poll.
+
+```bash
+curl -s "https://ampsodrick.duckdns.org/warera-cache/ticker/summary?since=$(( ($(date +%s) - 172800) * 1000 ))&windows=$(( ($(date +%s) - 86400) * 1000 ))" | head -c 300
+```
+

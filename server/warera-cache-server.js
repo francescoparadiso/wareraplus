@@ -97,6 +97,7 @@ const cors = require('cors');
 const cron = require('node-cron');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 
 const app = express();
 const PORT = 3001;
@@ -116,6 +117,37 @@ app.use(cors({
 }));
 
 // ---------------------------------------------------------------------------
+// COMPRESSIONE gzip delle risposte JSON
+// ---------------------------------------------------------------------------
+// Le risposte qui sono JSON grandi e molto ripetitivi (migliaia di eventi con
+// le stesse chiavi e gli stessi id nazione di 24 caratteri): verificato dal
+// vivo, uscivano NON compresse — né da qui né da nginx — e /ticker da solo
+// pesava 1,4 MB. Su rete mobile è la voce di gran lunga più cara di tutto il
+// tool. Fatto con `zlib` invece del middleware `compression` apposta per non
+// aggiungere una dipendenza npm da installare a mano sul VPS al deploy.
+// Sotto 1 KB non si comprime: l'header e la CPU costerebbero più del
+// risparmio.
+const GZIP_MIN_BYTES = 1024;
+
+app.use((req, res, next) => {
+  const sendRaw = res.send.bind(res);
+  res.json = (obj) => {
+    const body = Buffer.from(JSON.stringify(obj), 'utf-8');
+    res.set('Content-Type', 'application/json; charset=utf-8');
+    res.set('Vary', 'Accept-Encoding');
+    const wantsGzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
+    if (!wantsGzip || body.length < GZIP_MIN_BYTES) return sendRaw(body);
+    zlib.gzip(body, (err, gz) => {
+      if (err) return sendRaw(body); // meglio non compresso che niente
+      res.set('Content-Encoding', 'gzip');
+      sendRaw(gz);
+    });
+    return res;
+  };
+  next();
+});
+
+// ---------------------------------------------------------------------------
 // UTILITY: cache su disco
 // ---------------------------------------------------------------------------
 function readCache(name, fallback) {
@@ -125,8 +157,14 @@ function readCache(name, fallback) {
   catch (err) { console.error(`Errore leggendo cache ${name}:`, err.message); return fallback; }
 }
 
-function writeCache(name, data) {
-  fs.writeFileSync(path.join(CACHE_DIR, `${name}.json`), JSON.stringify(data, null, 2));
+// `compact: true` scrive senza indentazione. Serve per i file che crescono
+// molto (ticker-history: con la ritenzione a 14 giorni sono decine di
+// migliaia di eventi, riletti e riscritti ad ogni poll) — l'indentazione lì
+// è il ~35% del file, cioè lettura, parse e scrittura più lenti ad ogni giro
+// in cambio di una leggibilità che su quel file non usa nessuno.
+function writeCache(name, data, { compact = false } = {}) {
+  const json = compact ? JSON.stringify(data) : JSON.stringify(data, null, 2);
+  fs.writeFileSync(path.join(CACHE_DIR, `${name}.json`), json);
 }
 
 // ---------------------------------------------------------------------------
@@ -345,7 +383,7 @@ async function pollElections() {
     });
 
     const aggiornato = trimTickerHistory([...storico, ...nuovi]);
-    writeCache('ticker-history', aggiornato);
+    writeCache('ticker-history', aggiornato, { compact: true });
     console.log(`[poll] elections/ticker aggiornato (+${nuovi.length})`);
   } catch (err) { console.error('[poll] elections fallito:', err.message); }
 }
@@ -472,7 +510,7 @@ function pollTickerEvents(countries, diplomacy) {
 
     const storico = readCache('ticker-history', []);
     const aggiornato = trimTickerHistory([...storico, ...events]);
-    writeCache('ticker-history', aggiornato);
+    writeCache('ticker-history', aggiornato, { compact: true });
     console.log(`[poll] ticker stats: +${events.length} eventi (guerre/sworn/pop/tesoro)`);
   } catch (err) { console.error('[poll] ticker stats fallito:', err.message); }
 }
@@ -848,6 +886,93 @@ app.get('/ticker', (req, res) => {
   const storico = readCache('ticker-history', []);
   const since = req.query.since ? Number(req.query.since) : 0;
   res.json(storico.filter(e => e.timestamp >= since));
+});
+
+// ── /ticker/summary — versione AGGREGATA di /ticker ────────────────────────
+// Perché esiste: il client non usa i singoli eventi di popolazione/tesoro,
+// li aggrega per nazione su una finestra e mostra un solo messaggio per
+// nazione. Scaricare l'intero storico grezzo per farlo significa spedire
+// megabyte (misurato: 1,4 MB già con 43 ore di storico, e la ritenzione è a
+// 14 giorni) ogni 5 minuti a ogni browser — su mobile è insostenibile.
+// Qui l'aggregazione la fa il server, una volta, e manda qualche KB.
+//
+// L'aggregazione è la STESSA di src/app/newsTicker.js:_aggregate — se ne
+// tocchi una vanno allineate entrambe:
+//   - popolazione: additiva -> ultimo.value - primo.prevValue (esatto), o
+//     somma dei delta per le voci vecchie senza value/prevValue;
+//   - tesoro: variazioni PERCENTUALI successive, che non si sommano -> si
+//     compongono moltiplicando i fattori (fallback), o valore assoluto.
+// Le soglie di visualizzazione (MIN_TREASURY_PCT) e il filtro sulle top N
+// nazioni restano al client: qui si aggrega e basta.
+//
+// Query: ?since=<ts>            finestra degli eventi PUNTUALI (guerre/sworn)
+//        &windows=<ts1>,<ts2>   una o più finestre da aggregare
+function _aggregateTickerWindow(events, sinceTs) {
+  const pop = new Map();    // countryId -> { delta, firstPrev, last }
+  const wealth = new Map(); // countryId -> { factor, firstPrev, last }
+
+  for (const e of events) {
+    if (!(e.timestamp >= sinceTs)) continue;
+    if (e.category === 'population') {
+      const cur = pop.get(e.countryId) || { delta: 0, firstPrev: null, last: null };
+      if (typeof e.delta === 'number') cur.delta += e.delta;
+      if (typeof e.prevValue === 'number' && cur.firstPrev === null) cur.firstPrev = e.prevValue;
+      if (typeof e.value === 'number') cur.last = e.value;
+      pop.set(e.countryId, cur);
+    } else if (e.category === 'wealth') {
+      const cur = wealth.get(e.countryId) || { factor: 1, firstPrev: null, last: null };
+      if (typeof e.pct === 'number') cur.factor *= (1 + e.pct / 100);
+      if (typeof e.prevValue === 'number' && cur.firstPrev === null) cur.firstPrev = e.prevValue;
+      if (typeof e.value === 'number') cur.last = e.value;
+      wealth.set(e.countryId, cur);
+    }
+  }
+
+  const population = {};
+  for (const [id, v] of pop) {
+    const exact = (v.firstPrev !== null && v.last !== null) ? v.last - v.firstPrev : null;
+    const d = exact !== null ? exact : v.delta;
+    if (d) population[id] = d;
+  }
+
+  const wealthPct = {};
+  for (const [id, v] of wealth) {
+    const exact = (v.firstPrev !== null && v.last !== null && v.firstPrev !== 0)
+      ? (v.last - v.firstPrev) / Math.abs(v.firstPrev) * 100
+      : null;
+    const pct = exact !== null ? exact : (v.factor - 1) * 100;
+    // Arrotondato a 3 decimali: oltre è rumore, e ogni cifra in più è peso
+    // in rete moltiplicato per il numero di nazioni e di finestre.
+    const rounded = Math.round(pct * 1000) / 1000;
+    if (rounded) wealthPct[id] = rounded;
+  }
+
+  return { population, wealth: wealthPct };
+}
+
+app.get('/ticker/summary', (req, res) => {
+  const storico = readCache('ticker-history', []);
+  const windows = String(req.query.windows || '')
+    .split(',')
+    .map(w => Number(w))
+    .filter(w => Number.isFinite(w) && w > 0);
+  const since = req.query.since ? Number(req.query.since) : Math.min(...windows, Date.now());
+
+  // Un solo passaggio sullo storico per isolare la parte utile: tutto ciò
+  // che è più vecchio della finestra più larga richiesta non serve a niente.
+  const oldest = Math.min(since, ...(windows.length ? windows : [since]));
+  const recenti = storico.filter(e => e.timestamp >= oldest);
+
+  // Eventi puntuali: hanno un istante e un testo proprio, vanno mandati
+  // com'è (sono poche decine, non è quello il peso).
+  const punctual = recenti.filter(e =>
+    (e.category === 'war' || e.category === 'sworn_new' || e.category === 'sworn_removed')
+    && e.timestamp >= since);
+
+  const aggregates = {};
+  for (const w of windows) aggregates[w] = _aggregateTickerWindow(recenti, w);
+
+  res.json({ now: Date.now(), oldestEvent: recenti.length ? recenti[0].timestamp : null, punctual, aggregates });
 });
 
 // WarEra+ nuovi — time machine

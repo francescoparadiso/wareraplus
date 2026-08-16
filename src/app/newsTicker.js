@@ -43,7 +43,7 @@
 import { state } from '../diplomacy/state.js';
 import { trpcBatch, fmtNumber } from '../diplomacy/utils.js';
 import { fetchActiveBattles } from '../diplomacy/battleHeatmap.js';
-import { fetchTickerEventsViaCache } from '../diplomacy/cacheClient.js';
+import { fetchTickerEventsViaCache, fetchTickerSummaryViaCache } from '../diplomacy/cacheClient.js';
 import { t } from '../shared/i18n.js';
 
 const TOP_N = 15;
@@ -158,17 +158,59 @@ function formatElectionMessages(electionsRaw) {
    letti dal server di cache invece che diffati localmente, limitati alle
    nazioni più popolose per la visualizzazione (il server li tiene TUTTI,
    il filtro "top N" resta solo qui). ── */
-async function fetchRecentStatEvents() {
+const PUNCTUAL_CATEGORIES = new Set(['war', 'sworn_new', 'sworn_removed']);
+const EMPTY_AGG = { population: {}, wealth: {} };
+const SUMMARY_RETRY_MS = 30 * 60 * 1000;
+let _summaryUnavailableUntil = 0;
+
+// WarEra+ perf (mobile) — questa funzione scaricava lo storico GREZZO degli
+// eventi e lo aggregava nel browser: migliaia di micro-variazioni per
+// mostrarne una decina di righe. Con la ritenzione del server portata a 14
+// giorni quello scarico è diventato insostenibile — misurato: 843 KB per una
+// finestra di 24h, 1,4 MB con l'ancora "ultima visita" indietro di due
+// giorni, non compresso, ripetuto ad OGNI refresh (5 minuti) e destinato a
+// crescere ogni giorno.
+//
+// Ora la somma per nazione la fa il server (/ticker/summary): la risposta
+// sta in pochi KB e non cresce con lo storico. Il vecchio percorso resta come
+// FALLBACK per il caso in cui il server non abbia ancora l'endpoint (il
+// deploy sul VPS è manuale e indipendente da questo repo): stesso risultato,
+// solo pagato caro.
+async function fetchRecentStats() {
+  // La finestra scaricata deve coprire la PIÙ AMPIA fra quelle che poi
+  // vengono aggregate: quella fissa (RECENT_WINDOW_MS, guerre/sworn) e
+  // quella dell'ultima visita, che può essere molto più indietro.
+  const since = Math.min(Date.now() - RECENT_WINDOW_MS, _visitAnchor || Infinity);
+  const w24 = Date.now() - DAY_MS;
+  const wVisit = visitWindowTs();
+  const windows = wVisit ? [w24, wVisit] : [w24];
+
   try {
-    // La finestra scaricata deve coprire la PIÙ AMPIA fra quelle che poi
-    // vengono aggregate: quella fissa (RECENT_WINDOW_MS, guerre/sworn) e
-    // quella dell'ultima visita, che può essere molto più indietro. Una sola
-    // fetch per entrambe: filtrare per finestra è lavoro locale.
-    const since = Math.min(Date.now() - RECENT_WINDOW_MS, _visitAnchor || Infinity);
-    return await fetchTickerEventsViaCache(since);
-  } catch (err) {
-    console.warn('WarEra+ newsTicker: eventi server non disponibili:', err.message);
-    return [];
+    if (Date.now() < _summaryUnavailableUntil) throw new Error('/ticker/summary assente, ritento più tardi');
+    const s = await fetchTickerSummaryViaCache(since, windows);
+    _summaryUnavailableUntil = 0;
+    return {
+      punctual: s.punctual,
+      agg24: s.aggregates[w24] || EMPTY_AGG,
+      aggVisit: wVisit ? (s.aggregates[wVisit] || EMPTY_AGG) : null,
+    };
+  } catch (errSummary) {
+    // Server ancora senza l'endpoint (il deploy sul VPS è manuale): inutile
+    // riprovarci ogni 5 minuti e riempire la console di 404. Si riprova fra
+    // mezz'ora, così una tab lasciata aperta ricomincia da sola a usare la
+    // versione leggera appena il server viene aggiornato.
+    _summaryUnavailableUntil = Date.now() + SUMMARY_RETRY_MS;
+    try {
+      const events = await fetchTickerEventsViaCache(since);
+      return {
+        punctual: events.filter(e => PUNCTUAL_CATEGORIES.has(e.category)),
+        agg24: _aggregate(events, w24),
+        aggVisit: wVisit ? _aggregate(events, wVisit) : null,
+      };
+    } catch (err) {
+      console.warn('WarEra+ newsTicker: eventi server non disponibili:', err.message);
+      return { punctual: [], agg24: EMPTY_AGG, aggVisit: null };
+    }
   }
 }
 
@@ -289,6 +331,16 @@ function initVisitAnchor() {
   } catch (err) { /* quota/privata: l'ancora resta valida per questa sessione */ }
 }
 
+// Inizio della finestra "dall'ultima visita", o null se quella categoria di
+// notizie non ha senso in questa sessione: prima visita in assoluto, oppure
+// ancora troppo recente perché un confronto dica qualcosa. Unico punto di
+// verità — la usano sia il fetch (per sapere quali finestre chiedere al
+// server) sia il formatting.
+function visitWindowTs() {
+  if (!_visitAnchor || Date.now() - _visitAnchor < 60 * 60 * 1000) return null;
+  return _visitAnchor;
+}
+
 // Aggiorna solo "quando ho guardato l'ultima volta" (non l'ancora): serve a
 // far sì che alla PROSSIMA sessione il confronto parta da quando l'utente ha
 // davvero smesso di guardare, non da quando aveva aperto la pagina.
@@ -305,12 +357,19 @@ function touchLastSeen() {
 // esatto e immune all'errore che si accumula componendo tanti passi
 // arrotondati. Il ramo delta/pct resta per le voci vecchie, ancora in
 // circolazione finché lo storico non si è rinnovato.
-function _aggregate(events, topIds, sinceTs) {
+//
+// NB: questa funzione è ora il solo percorso di FALLBACK (server senza
+// /ticker/summary). Il calcolo qui e quello in
+// server/warera-cache-server.js:_aggregateTickerWindow devono restare
+// identici — stessa forma di ritorno { population: {id: delta}, wealth:
+// {id: pct} }, senza filtri di visualizzazione (top N e soglia tesoro si
+// applicano dopo, in _emit).
+function _aggregate(events, sinceTs) {
   const pop = new Map();     // countryId -> { delta, firstPrev, last }
   const wealth = new Map();  // countryId -> { factor, firstPrev, last }
 
   for (const e of events) {
-    if (!(e.timestamp >= sinceTs) || !topIds.has(e.countryId)) continue;
+    if (!(e.timestamp >= sinceTs)) continue;
 
     if (e.category === 'population') {
       const cur = pop.get(e.countryId) || { delta: 0, firstPrev: null, last: null };
@@ -327,35 +386,42 @@ function _aggregate(events, topIds, sinceTs) {
     }
   }
 
-  const popDelta = new Map();
+  const population = {};
   for (const [id, v] of pop) {
     const exact = (v.firstPrev !== null && v.last !== null) ? v.last - v.firstPrev : null;
     const d = exact !== null ? exact : v.delta;
-    if (d) popDelta.set(id, d);
+    if (d) population[id] = d;
   }
 
-  const wealthPct = new Map();
+  const wealthPct = {};
   for (const [id, v] of wealth) {
     const exact = (v.firstPrev !== null && v.last !== null && v.firstPrev !== 0)
       ? (v.last - v.firstPrev) / Math.abs(v.firstPrev) * 100
       : null;
     const pct = exact !== null ? exact : (v.factor - 1) * 100;
-    if (Math.abs(pct) >= MIN_TREASURY_PCT) wealthPct.set(id, pct);
+    if (pct) wealthPct[id] = pct;
   }
 
-  return { popDelta, wealthPct };
+  return { population, wealth: wealthPct };
 }
 
-function _emit(agg, nameOf, popKey, wealthKey) {
+// Da un aggregato (server o fallback locale) ai messaggi tradotti. Qui —
+// non nell'aggregazione — si applicano i filtri di VISUALIZZAZIONE: solo le
+// nazioni più popolose, e solo variazioni di tesoro sopra la soglia di
+// rumore.
+function _emit(agg, topIds, nameOf, popKey, wealthKey) {
+  if (!agg) return [];
   const messages = [];
-  for (const [countryId, delta] of agg.popDelta) {
+  for (const [countryId, delta] of Object.entries(agg.population || {})) {
+    if (!topIds.has(countryId) || !delta) continue;
     messages.push(t(popKey, {
       nation: nameOf(countryId),
       sign: delta > 0 ? '+' : '−',
       delta: fmtNumber(Math.abs(Math.round(delta))),
     }));
   }
-  for (const [countryId, pct] of agg.wealthPct) {
+  for (const [countryId, pct] of Object.entries(agg.wealth || {})) {
+    if (!topIds.has(countryId) || Math.abs(pct) < MIN_TREASURY_PCT) continue;
     messages.push(t(wealthKey, {
       nation: nameOf(countryId),
       sign: pct > 0 ? '+' : '−',
@@ -366,21 +432,18 @@ function _emit(agg, nameOf, popKey, wealthKey) {
 }
 
 // Finestra fissa 24h — "rispetto a ieri".
-function formatStatsMessages(events, topIds) {
+function formatStatsMessages(stats, topIds) {
   const nameOf = id => state.nationMap.get(id)?.name || id;
-  const agg = _aggregate(events, topIds, Date.now() - DAY_MS);
-  return _emit(agg, nameOf, 'ticker_population_24h', 'ticker_treasury_24h');
+  return _emit(stats.agg24, topIds, nameOf, 'ticker_population_24h', 'ticker_treasury_24h');
 }
 
 // Finestra "dall'ultima visita" — categoria separata da quella 24h, così
 // capCategory le limita indipendentemente e una non mangia gli slot
 // dell'altra nel mix finale. Vuota quando l'ancora manca (prima visita) o è
-// troppo recente perché il confronto dica qualcosa.
-function formatSinceVisitMessages(events, topIds) {
-  if (!_visitAnchor || Date.now() - _visitAnchor < 60 * 60 * 1000) return [];
+// troppo recente perché il confronto dica qualcosa (vedi visitWindowTs).
+function formatSinceVisitMessages(stats, topIds) {
   const nameOf = id => state.nationMap.get(id)?.name || id;
-  const agg = _aggregate(events, topIds, _visitAnchor);
-  return _emit(agg, nameOf, 'ticker_population_change', 'ticker_treasury_change');
+  return _emit(stats.aggVisit, topIds, nameOf, 'ticker_population_change', 'ticker_treasury_change');
 }
 
 /* ── RENDER (RAF, scroll continuo) — stesso principio del ticker di
@@ -445,10 +508,10 @@ async function refreshNews() {
     if (!topNations.length) return;
     const topIds = new Set(topNations.map(n => n._id));
 
-    const [battles, electionsRaw, statEvents] = await Promise.all([
+    const [battles, electionsRaw, stats] = await Promise.all([
       fetchRelevantBattles(topIds),
       fetchElectionsRaw(state.nazioniGlobal), // TUTTE le nazioni
-      fetchRecentStatEvents(), // guerre/sworn/popolazione/tesoro, dal server di cache
+      fetchRecentStats(), // guerre/sworn/popolazione/tesoro, dal server di cache
     ]);
 
     // "Ho guardato fin qui": sposta solo il segnalino dell'ultima occhiata,
@@ -457,7 +520,7 @@ async function refreshNews() {
     // davvero smesso di guardare.
     touchLastSeen();
 
-    _lastRawData = { topIds, battles, electionsRaw, statEvents };
+    _lastRawData = { topIds, battles, electionsRaw, stats };
     _rebuildMessages();
   } catch (err) {
     console.warn('WarEra+ newsTicker: errore aggiornamento', err);
@@ -472,14 +535,14 @@ async function refreshNews() {
 // di ricreare il problema dei 429 già risolto altrove.
 function _rebuildMessages() {
   if (!_lastRawData) return;
-  const { topIds, battles, electionsRaw, statEvents } = _lastRawData;
+  const { topIds, battles, electionsRaw, stats } = _lastRawData;
 
   const battleMsgsRaw = formatBattleMessages(battles);
   const electionMsgsRaw = formatElectionMessages(electionsRaw);
-  const warMsgsRaw = formatWarMessages(statEvents, topIds);
-  const swornMsgsRaw = formatSwornMessages(statEvents, topIds);
-  const statsMsgsRaw = formatStatsMessages(statEvents, topIds);
-  const sinceVisitMsgsRaw = formatSinceVisitMessages(statEvents, topIds);
+  const warMsgsRaw = formatWarMessages(stats.punctual, topIds);
+  const swornMsgsRaw = formatSwornMessages(stats.punctual, topIds);
+  const statsMsgsRaw = formatStatsMessages(stats, topIds);
+  const sinceVisitMsgsRaw = formatSinceVisitMessages(stats, topIds);
 
   // Cap per categoria PRIMA di unire e mescolare: garantisce
   // diversificazione anche quando una categoria (tipicamente le

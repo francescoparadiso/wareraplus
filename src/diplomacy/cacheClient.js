@@ -171,6 +171,30 @@ export async function fetchTickerEventsViaCache(sinceTs) {
   return json;
 }
 
+/** Versione AGGREGATA del ticker: gli eventi puntuali (guerre/sworn) tali e
+ *  quali da `sinceTs`, e per ogni finestra in `windowTs` la somma già fatta
+ *  per nazione di popolazione e tesoro.
+ *
+ *  Serve a non scaricare più lo storico grezzo: il client aggregava migliaia
+ *  di eventi per mostrarne una decina, e con la ritenzione server a 14 giorni
+ *  quello scarico era arrivato a 1,4 MB ogni 5 minuti (su rete mobile, la
+ *  voce più cara del tool). Qui l'aggregazione la fa il server e la risposta
+ *  sta in pochi KB.
+ *
+ *  Ritorna { now, oldestEvent, punctual: [...], aggregates: { <ts>:
+ *  { population: {countryId: delta}, wealth: {countryId: pct} } } }.
+ *  Lancia se il server non ha ancora l'endpoint (deploy non fatto): il
+ *  chiamante ricade su fetchTickerEventsViaCache. */
+export async function fetchTickerSummaryViaCache(sinceTs, windowTs) {
+  const windows = windowTs.filter(w => Number.isFinite(w) && w > 0);
+  const qs = `since=${encodeURIComponent(sinceTs)}&windows=${encodeURIComponent(windows.join(','))}`;
+  const json = await _fetchCacheJsonRaw(`/ticker/summary?${qs}`);
+  if (!json || !Array.isArray(json.punctual) || !json.aggregates) {
+    throw new Error('cache /ticker/summary: forma inattesa');
+  }
+  return json;
+}
+
 /** Range temporale coperto dallo storico ownership regioni — { min, max }
  *  in epoch ms. `min` è sempre 0 (sentinella "genesi/inizio del mondo",
  *  non una vera data — vedi commento in region-history-keyframes lato
