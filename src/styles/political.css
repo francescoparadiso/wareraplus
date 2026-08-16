@@ -1371,6 +1371,20 @@
   overflow: hidden;
   contain: layout style; /* ottimizza reflow */
 }
+
+/* WarEra+ fix (segnalato: nella vista Partiti il menu a tendina del
+   selettore finiva DIETRO al pannello "Panoramica"). Causa: il dropdown di
+   TomSelect sfora fuori dal proprio pannello, e il pannello successivo
+   (details.panel) ha `contain: layout` qui sopra — che ne fa uno stacking
+   context dipinto sopra al dropdown, a prescindere dallo z-index del
+   dropdown stesso (confinato in un contesto più in basso). La soluzione è
+   alzare l'INTERO pannello del selettore sopra i fratelli, ma solo mentre il
+   suo dropdown è aperto (TomSelect aggiunge `.dropdown-active` al wrapper),
+   così fuori da quel momento non cambia nulla nell'impaginazione. */
+#wp-political-root .panel:has(.ts-wrapper.dropdown-active) {
+  position: relative;
+  z-index: 50;
+}
 #wp-political-root details.panel > :not(summary) {
   display: block;
   max-height: 0;
