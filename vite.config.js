@@ -15,6 +15,17 @@ export default defineConfig({
       // incluso il Political View invariato sotto /political/).
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,csv}'],
+        // WarEra+ perf (mobile): le illustrazioni decorative dell'oceano
+        // (navi/mostro/relitto/onde, public/icons/ocean/) sono da sole ~8 MB
+        // degli 11,1 MB di precache — cioè il primo accesso da telefono
+        // scaricava in background 8 MB di easter egg prima ancora che
+        // servissero, e per metà erano quelli del tema non attivo. Fuori dal
+        // precache: le prende a richiesta il tema che le usa (vedi
+        // src/diplomacy/oceanImages.js) e da lì restano in cache 60 giorni
+        // grazie alla regola runtime qui sotto.
+        // Conseguenza accettata: alla PRIMA apertura offline gli easter egg
+        // non ci sono. La mappa, i dati e tutta la UI sì — sono decorazioni.
+        globIgnores: ['**/icons/ocean/**'],
         // I file politici sono tanti e alcuni superano il default:
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
 
@@ -53,6 +64,23 @@ export default defineConfig({
               expiration: {
                 maxEntries: 300,
                 maxAgeSeconds: 30 * 24 * 60 * 60, // 30 giorni
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          // ── Illustrazioni oceano (nostro dominio) — tolte dal precache
+          //    (vedi globIgnores sopra): si scaricano quando il tema che le
+          //    usa le chiede, e poi restano in cache a lungo. Sono file che
+          //    cambiano solo se li sostituiamo noi, e in quel caso cambia
+          //    anche il nome/deploy. ──
+          {
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/icons/ocean/'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'warera-ocean-art-cache',
+              expiration: {
+                maxEntries: 20,
+                maxAgeSeconds: 60 * 24 * 60 * 60, // 60 giorni
               },
               cacheableResponse: { statuses: [0, 200] },
             },

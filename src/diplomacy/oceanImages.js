@@ -85,6 +85,21 @@ function keyOutWhiteBackground(ctx, w, h) {
   ctx.putImageData(img, 0, 0);
 }
 
+// WarEra+ perf (mobile) — queste illustrazioni sono 1536x1024 l'una: a
+// risoluzione piena sono 1,5 megapixel × 4 byte = 6 MB di soli pixel per
+// immagine, che vanno scansionati da keyOutWhiteBackground, letti da
+// getImageData e tenuti in memoria da maplibre. Su un telefono è un costo
+// sproporzionato per una decorazione.
+//
+// Su schermi piccoli si dimezza il lato in fase di caricamento (un quarto
+// dei pixel). La dimensione a schermo NON cambia: maplibre calcola il lato
+// visibile come larghezza/pixelRatio, quindi dimezzando la larghezza si
+// dimezza anche il pixelRatio dichiarato più sotto. L'unica differenza è
+// la nitidezza allo zoom massimo su un'icona che, di suo, a quel punto
+// occupa già più dell'intero schermo.
+const MOBILE_MAX_WIDTH = 768;
+const isSmallScreen = () => window.innerWidth <= MOBILE_MAX_WIDTH;
+
 function loadOneImage(map, id, url) {
   return new Promise(resolve => {
     if (map.hasImage(id)) { resolve(true); return; }
@@ -92,11 +107,12 @@ function loadOneImage(map, id, url) {
     el.crossOrigin = 'anonymous';
     el.onload = () => {
       try {
+        const shrink = isSmallScreen() ? 0.5 : 1;
         const canvas = document.createElement('canvas');
-        canvas.width = el.naturalWidth;
-        canvas.height = el.naturalHeight;
+        canvas.width = Math.max(1, Math.round(el.naturalWidth * shrink));
+        canvas.height = Math.max(1, Math.round(el.naturalHeight * shrink));
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        ctx.drawImage(el, 0, 0);
+        ctx.drawImage(el, 0, 0, canvas.width, canvas.height);
         keyOutWhiteBackground(ctx, canvas.width, canvas.height);
         // ImageData, non il <canvas> grezzo: map.addImage() non lo
         // accetta direttamente in questa versione di maplibre-gl (la
@@ -104,7 +120,9 @@ function loadOneImage(map, id, url) {
         // RangeError "mismatched image size", che qui era comunque
         // contenuto dal try/catch ma faceva comunque fallire il layer).
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        if (!map.hasImage(id)) map.addImage(id, imageData, { pixelRatio: 2 });
+        // pixelRatio scalato insieme al lato (vedi nota su `shrink` sopra):
+        // è ciò che tiene la dimensione a schermo identica a prima.
+        if (!map.hasImage(id)) map.addImage(id, imageData, { pixelRatio: 2 * shrink });
         resolve(true);
       } catch (err) {
         console.warn(`[oceanImages] impossibile processare ${url}:`, err);
@@ -121,21 +139,36 @@ function loadOneImage(map, id, url) {
   });
 }
 
-let _loadPromise = null;
+// Promessa per SINGOLA immagine, non una sola per tutto il gruppo.
+// WarEra+ perf (mobile): prima esisteva un unico `_loadPromise` che
+// caricava TUTTE le 11 illustrazioni al primo chiamante — quindi il tema
+// scuro tirava dentro anche le 5 del tema chiaro (e viceversa), mai
+// mostrate. Verificato dal vivo a tema scuro: 11 immagini in mappa, 17,3
+// megapixel, ~66 MB di soli pixel. Ora ogni tema chiede le sue e paga solo
+// quelle, e la memoizzazione per-id fa sì che un'immagine condivisa fra i
+// due gruppi (oggi nessuna, ma domani chissà) venga comunque caricata una
+// volta sola.
+const _imagePromises = new Map();
 
 /**
- * Carica (una sola volta) le 3 immagini in maplibre. Ritorna una mappa
- * { [OCEAN_IMAGE_IDS.x]: boolean } con l'esito di ciascuna, così i
+ * Carica in maplibre (una sola volta ciascuna) le immagini richieste.
+ * Ritorna una mappa { [OCEAN_IMAGE_IDS.x]: boolean } con l'esito, così i
  * chiamanti possono saltare in sicurezza i layer per le immagini mancanti.
+ *
+ * @param {object} map istanza maplibre
+ * @param {string[]} [ids] id da caricare (default: tutte — mantenuto per
+ *   compatibilità, ma i due temi passano sempre il proprio sottoinsieme)
  */
-export function loadOceanImages(map) {
-  if (_loadPromise) return _loadPromise;
-  _loadPromise = (async () => {
+export function loadOceanImages(map, ids) {
+  const wanted = ids?.length ? ids : Object.keys(SOURCES);
+  return (async () => {
     const results = {};
-    for (const [id, url] of Object.entries(SOURCES)) {
-      results[id] = await loadOneImage(map, id, url);
+    for (const id of wanted) {
+      const url = SOURCES[id];
+      if (!url) { results[id] = false; continue; }
+      if (!_imagePromises.has(id)) _imagePromises.set(id, loadOneImage(map, id, url));
+      results[id] = await _imagePromises.get(id);
     }
     return results;
   })();
-  return _loadPromise;
 }

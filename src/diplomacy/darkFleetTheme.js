@@ -68,6 +68,13 @@ const WAVE_TEXTURE = [
   { id: OCEAN_IMAGE_IDS.waveDark2, lng: -5, lat: 66, rot: 18 },              // Mare del Nord/Norvegese
 ];
 
+// Solo le immagini che questo tema usa davvero (WarEra+ perf mobile): fino
+// a ieri loadOceanImages() le caricava tutte e 11, comprese le 5 del tema
+// chiaro che qui non compaiono mai. Derivato da MARKERS/WAVE_TEXTURE invece
+// che scritto a mano, così aggiungere un marker non lascia indietro la sua
+// immagine.
+const USED_IMAGE_IDS = [...new Set([...MARKERS, ...WAVE_TEXTURE].map(x => x.id))];
+
 let _initialized = false;
 
 /**
@@ -84,7 +91,7 @@ export async function initDarkFleetTheme(map) {
   // dopo l'await gira async, un throw lì non verrebbe intercettato dal
   // try/catch sincrono di map.js che avvolge la chiamata iniziale.
   try {
-    const imgResults = await loadOceanImages(map);
+    const imgResults = await loadOceanImages(map, USED_IMAGE_IDS);
 
     const features = MARKERS
       .filter(m => imgResults[m.id])

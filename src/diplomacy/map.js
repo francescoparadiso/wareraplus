@@ -110,22 +110,11 @@ export async function setupMapLayers() {
     console.error('[map] layer ambientale del mare non caricato:', err);
   }
   try {
-    // Easter egg illustrati del tema scuro (flotta/portaerei/cargo/onda) —
-    // nessun beforeId: si aggiungono sopra a tutto il resto (decorativi,
-    // stesso principio "solo immagini sulla mappa" del tema chiaro).
-    initDarkFleetTheme(state.map);
-    applyDarkFleetTheme(state);
+    // WarEra+ perf (mobile): si inizializzano solo le decorazioni del tema
+    // ATTIVO — vedi _initDecorationsForActiveTheme qui sotto.
+    _initDecorationsForActiveTheme();
   } catch (err) {
-    console.error('[map] easter egg tema scuro non caricati:', err);
-  }
-  try {
-    // Rotte "color seppia" inserite anch'esse con beforeId=LYR_FILL, come
-    // quelle del tema scuro (i marker easter-egg invece vanno in cima,
-    // nessun beforeId, gestito internamente).
-    initAntiqueTheme(state.map, LYR_FILL);
-    applyAntiqueTheme(state);
-  } catch (err) {
-    console.error('[map] estetica "mappa antica" non caricata:', err);
+    console.error('[map] decorazioni di tema non caricate:', err);
   }
 
   if (!state.map.getSource('original-borders-src')) {
@@ -682,6 +671,43 @@ export function setMapSource(isOriginal) {
   renderMap();
 }
 
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ perf (mobile) — decorazioni caricate per tema, non tutte
+   ------------------------------------------------------------------
+   Prima qui si chiamavano SEMPRE initDarkFleetTheme() e
+   initAntiqueTheme(): ognuna carica le proprie illustrazioni
+   (public/icons/ocean/*.png), quindi ogni utente si portava dietro
+   anche i disegni del tema che non stava guardando. Verificato dal
+   vivo a tema scuro: 11 immagini in mappa, 17,3 megapixel, ~66 MB di
+   soli pixel, di cui 5 immagini mai mostrate.
+
+   Ora si inizializza solo il tema attivo; l'altro viene inizializzato
+   la prima volta che ci si passa (chiamata idempotente, ogni init ha
+   la sua guardia `_initialized`). Le apply*() restano invocate
+   entrambe ad ogni cambio tema: quella del tema non inizializzato è
+   già un no-op per costruzione, quella inizializzata nasconde o
+   mostra i suoi layer come prima.
+
+   Effetto collaterale accettato: al PRIMO passaggio all'altro tema le
+   sue illustrazioni compaiono con qualche istante di ritardo (il
+   tempo di scaricarle). Dalla seconda volta in poi sono in cache.
+   ══════════════════════════════════════════════════════════════ */
+function _initDecorationsForActiveTheme() {
+  if ((state.theme ?? 'dark') === 'light') {
+    // Rotte "color seppia" inserite con beforeId=LYR_FILL, come quelle del
+    // tema scuro (i marker easter-egg invece vanno in cima, nessun
+    // beforeId, gestito internamente).
+    initAntiqueTheme(state.map, LYR_FILL);
+    applyAntiqueTheme(state);
+  } else {
+    // Easter egg illustrati del tema scuro (flotta/portaerei/cargo/onda) —
+    // nessun beforeId: si aggiungono sopra a tutto il resto (decorativi,
+    // stesso principio "solo immagini sulla mappa" del tema chiaro).
+    initDarkFleetTheme(state.map);
+    applyDarkFleetTheme(state);
+  }
+}
+
 export function applyTheme() {
   const theme = THEMES[state.theme];
   if (!state.map) return;
@@ -701,6 +727,9 @@ export function applyTheme() {
     state.map.setPaintProperty(LYR_FILL, 'fill-color', theme.NEUTRAL_UNSELECTED);
   }
   applyOceanTheme(state); // nasconde il layer mare futuristico sul tema chiaro (pergamena)
+  // Prima volta che si arriva su questo tema: le sue decorazioni non
+  // esistono ancora (vedi _initDecorationsForActiveTheme). Idempotente.
+  _initDecorationsForActiveTheme();
   applyAntiqueTheme(state); // attiva/disattiva pergamena + easter egg quando si passa a/da tema chiaro
   applyDarkFleetTheme(state); // attiva/disattiva gli easter egg del tema scuro (flotta/portaerei/cargo/onda)
   renderMap();

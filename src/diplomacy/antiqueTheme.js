@@ -168,6 +168,11 @@ function _startAnimations() {
 export function pauseShipAnimation() { _stopAnimations(); }
 export function resumeShipAnimation() { _startAnimations(); }
 
+// Solo le immagini che questo tema usa davvero — vedi la nota gemella in
+// darkFleetTheme.js (WarEra+ perf mobile: prima si caricavano tutte e 11,
+// compresi i 6 disegni del tema scuro che qui non compaiono mai).
+const USED_IMAGE_IDS = [...new Set([...MARKERS, ...WAVE_TEXTURE].map(x => x.id))];
+
 let _initialized = false;
 
 /**
@@ -247,7 +252,7 @@ export async function initAntiqueTheme(map, beforeLayerId) {
     // trovate (vedi oceanImages.js — se l'utente non ha ancora salvato i 3
     // PNG in public/icons/ocean/, questo semplicemente non aggiunge nulla,
     // nessun errore bloccante).
-    const imgResults = await loadOceanImages(map);
+    const imgResults = await loadOceanImages(map, USED_IMAGE_IDS);
     const features = MARKERS
       .filter(m => imgResults[m.id])
       .map(m => ({
