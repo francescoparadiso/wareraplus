@@ -14,6 +14,40 @@ function _nationLabelFont(fontSizePx) {
 }
 
 // ==================== FLAG CACHE ====================
+// WarEra+ perf (mobile): quello che finisce in flagImageCache NON è
+// l'<img> SVG scaricato ma un piccolo canvas in cui l'SVG è stato
+// rasterizzato UNA volta sola. Motivo: drawLabels gira ad ogni frame
+// della mappa (60/s durante pan e zoom) e `ctx.drawImage(<img> SVG, ...)`
+// costringe il browser a ri-rasterizzare il vettoriale ad ogni chiamata,
+// per ognuna delle ~40 etichette visibili. Misurato in locale a 375x812:
+// 4,57 ms per frame con le bandiere SVG contro 3,46 ms senza — un quarto
+// del lavoro di disegno, e su un telefono quel fattore va moltiplicato
+// per il divario di CPU. Con il canvas pre-rasterizzato il disegno torna
+// una copia di pixel e il costo sparisce.
+//
+// (Fino a ieri il problema non si vedeva perché NESSUNA bandiera si
+// caricava: media.warera.io aveva smesso di mandare il CORS e il
+// crossOrigin le faceva fallire tutte — vedi il fix qui sotto. Ripristinate
+// le bandiere è emerso il costo di disegno che prima non c'era.)
+const FLAG_ASPECT = 11 / 16;
+// Larghezza massima a cui una bandiera viene disegnata: 16px * fScale max
+// (1.5, vedi drawLabels) = 24px CSS, moltiplicati per la densità dello
+// schermo. Cap a 3x: oltre non si distingue e la memoria cresce e basta.
+const FLAG_RASTER_W = Math.ceil(24 * Math.min(window.devicePixelRatio || 1, 3));
+const FLAG_RASTER_H = Math.ceil(FLAG_RASTER_W * FLAG_ASPECT);
+
+function _rasterizeFlag(img) {
+  // Un SVG senza dimensioni intrinseche arriva qui con naturalWidth 0: il
+  // canvas resterebbe vuoto senza errori. In quel caso meglio l'<img>.
+  if (!img.naturalWidth || !img.naturalHeight) return null;
+  const c = document.createElement('canvas');
+  c.width = FLAG_RASTER_W;
+  c.height = FLAG_RASTER_H;
+  const cx = c.getContext('2d');
+  cx.drawImage(img, 0, 0, FLAG_RASTER_W, FLAG_RASTER_H);
+  return c;
+}
+
 export function loadFlagImage(code) {
   if (!code || state.flagImageCache.has(code)) return;
   state.flagImageCache.set(code, null);
@@ -33,7 +67,17 @@ export function loadFlagImage(code) {
   // servisse esportare la mappa principale come immagine, va rimesso il
   // crossOrigin e serve che l'origine mandi il CORS — o un proxy che lo
   // aggiunga.
-  img.onload = () => { state.flagImageCache.set(code, img); if (state.map) state.map.triggerRepaint(); };
+  img.onload = () => {
+    try {
+      state.flagImageCache.set(code, _rasterizeFlag(img) || img);
+    } catch (err) {
+      // Se la rasterizzazione fallisce (SVG senza dimensioni intrinseche in
+      // qualche browser) si torna all'immagine originale: bandiera più cara
+      // da disegnare, ma visibile.
+      state.flagImageCache.set(code, img);
+    }
+    if (state.map) state.map.triggerRepaint();
+  };
   img.onerror = () => state.flagImageCache.set(code, null);
   img.src = `https://media.warera.io/images/flags/${code}.svg?v=16`;
 }
