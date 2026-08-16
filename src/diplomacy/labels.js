@@ -113,15 +113,33 @@ export function resizeLabelCanvas() {
 // esecuzioni al secondo. Prima ad ogni frame si copiava e ordinava l'intero
 // array di label e si chiamava measureText per ognuna. Ora l'ordinamento e le
 // larghezze del testo sono cachati e ricalcolati solo quando cambiano davvero.
-let _sortedCache = { src: null, list: null };
+let _sortedCache = { src: null, mode: null, list: null };
 const _textWidthCache = new Map();
 
-function _getSortedLabels(sourceLabels) {
-  if (_sortedCache.src === sourceLabels && _sortedCache.list) return _sortedCache.list;
-  const list = [...sourceLabels].sort(
-    (a, b) => (b.properties.flagSize || 0) - (a.properties.flagSize || 0)
+// WarEra+: nelle heatmap popolazione/danni la PRIORITÀ di disegno (chi vince
+// la collisione e resta visibile quando lo spazio è poco) è il VALORE della
+// metrica, non la dimensione della capitale. Così "zoom lontano = vedo solo i
+// più grandi" significa davvero i più popolosi / quelli che fanno più danni,
+// come chiesto. Negli altri modi resta l'ordinamento per flagSize (capitale),
+// che era il criterio storico. La cache è chiavata anche sul modo: cambiando
+// vista l'ordinamento si ricalcola.
+function _labelMetric(label, mode) {
+  const n = state.nationMap.get(label.properties.countryId);
+  if (!n) return -Infinity;
+  const v = mode === 'population'
+    ? n?.rankings?.countryActivePopulation?.value
+    : n?.rankings?.weeklyCountryDamages?.value;
+  return typeof v === 'number' ? v : -Infinity;
+}
+
+function _getSortedLabels(sourceLabels, mode) {
+  if (_sortedCache.src === sourceLabels && _sortedCache.mode === mode && _sortedCache.list) return _sortedCache.list;
+  const isMetric = mode === 'population' || mode === 'weeklyDamage';
+  const list = [...sourceLabels].sort(isMetric
+    ? (a, b) => _labelMetric(b, mode) - _labelMetric(a, mode)
+    : (a, b) => (b.properties.flagSize || 0) - (a.properties.flagSize || 0)
   );
-  _sortedCache = { src: sourceLabels, list };
+  _sortedCache = { src: sourceLabels, mode, list };
   return list;
 }
 
@@ -138,7 +156,7 @@ function _measure(ctx, text, font) {
 
 // Da chiamare quando labelsData/originalLabelsData vengono rigenerati.
 export function invalidateLabelCache() {
-  _sortedCache = { src: null, list: null };
+  _sortedCache = { src: null, mode: null, list: null };
   _textWidthCache.clear();
 }
 
@@ -179,8 +197,46 @@ export function drawLabels() {
   const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window;
   const mobileTextScale = isMobile ? 0.68 : 1;
   const sourceLabels = state.mapSource === 'original' ? state.originalLabelsData : state.labelsData;
-  const sorted = _getSortedLabels(sourceLabels);
+  const sorted = _getSortedLabels(sourceLabels, state.coloringMode);
   const drawnBoxes = [];
+
+  // WarEra+ (bug segnalato: nelle heatmap popolazione/danni i numeri non
+  // scalavano, comparivano senza il nome nazione e si sovrapponevano). La
+  // causa era che il numero veniva disegnato in un secondo giro SEPARATO,
+  // senza filtro di zoom né collision-avoidance: nome e numero erano due
+  // etichette scollegate. Ora il numero è parte integrante dell'etichetta
+  // nazione — stessa unità di collisione, stesso font che scala col nome,
+  // stesso ordinamento per priorità (vedi _getSortedLabels): se il nome è
+  // visibile lo è anche il numero, e viceversa, senza mai sovrapporsi.
+  const metricMode = state.coloringMode === 'population' || state.coloringMode === 'weeklyDamage';
+  let _minDmg = Infinity, _maxDmg = -Infinity;
+  if (state.coloringMode === 'weeklyDamage') {
+    for (const nation of state.nationMap.values()) {
+      const dmg = nation?.rankings?.weeklyCountryDamages?.value;
+      if (typeof dmg === 'number' && dmg >= 0) {
+        if (dmg < _minDmg) _minDmg = dmg;
+        if (dmg > _maxDmg) _maxDmg = dmg;
+      }
+    }
+  }
+  // Testo + colore della metrica per una nazione, o null se non ha un valore.
+  function _metricLabel(cId) {
+    const nation = state.nationMap.get(cId);
+    if (!nation) return null;
+    if (state.coloringMode === 'population') {
+      const pop = nation?.rankings?.countryActivePopulation?.value;
+      if (typeof pop !== 'number' || pop <= 0) return null;
+      return { text: pop >= 1_000_000 ? (pop / 1_000_000).toFixed(1) + 'M' : pop.toLocaleString(), color: '#ffffff' };
+    }
+    const dmg = nation?.rankings?.weeklyCountryDamages?.value;
+    if (typeof dmg !== 'number' || dmg < 0) return null;
+    const text = dmg >= 1e6 ? (dmg / 1e6).toFixed(1) + 'M' : dmg >= 1e3 ? (dmg / 1e3).toFixed(1) + 'K' : String(dmg);
+    const tt = (_maxDmg > _minDmg) ? (dmg - _minDmg) / (_maxDmg - _minDmg) : 0;
+    const r = Math.round(69 + (215 - 69) * tt);
+    const g = Math.round(117 + (48 - 117) * tt);
+    const b = Math.round(180 + (39 - 180) * tt);
+    return { text, color: `rgb(${r},${g},${b})` };
+  }
 
   function intersects(b1, b2) {
     return !(b2.xMin > b1.xMax || b2.xMax < b1.xMin || b2.yMin > b1.yMax || b2.yMax < b1.yMin);
@@ -192,8 +248,14 @@ export function drawLabels() {
     if (!coords) return;
     // era zoom < 3.3: le label nazione sparivano quasi sempre in modalita' blocs
     if (state.coloringMode === 'blocs' && zoom < 2.8) return;
-    if (zoom < 2.5 && props.flagSize < 0.15) return;
-    if (zoom < 3.5 && props.flagSize < 0.08) return;
+    // Il cull per dimensione capitale allo zoom basso NON si applica in
+    // popolazione/danni: lì la priorità è il valore (ordinamento per metrica)
+    // e a diradare le etichette ci pensa la collision-avoidance — così una
+    // nazione molto popolosa ma con capitale "piccola" non viene nascosta.
+    if (!metricMode) {
+      if (zoom < 2.5 && props.flagSize < 0.15) return;
+      if (zoom < 3.5 && props.flagSize < 0.08) return;
+    }
 
     const pt = state.map.project([coords[0], coords[1]]);
     if (pt.x < -100 || pt.x > W + 100 || pt.y < -60 || pt.y > H + 60) return;
@@ -206,7 +268,26 @@ export function drawLabels() {
     const nameFont = _nationLabelFont(fontSize);
     const textWidth = _measure(ctx, nameStr, nameFont);
     ctx.font = nameFont;
-    const nationBox = { xMin: pt.x - textWidth / 2 - 1, xMax: pt.x + textWidth / 2 + 1, yMin: pt.y - fontSize / 2 - 1, yMax: pt.y + fontSize / 2 + 1 };
+
+    // Metrica (popolazione/danni) come seconda riga sotto il nome: entra nel
+    // box di collisione così il numero e il nome vivono e muoiono insieme.
+    let metric = null, numFontSize = 0, numFont = '', numWidth = 0;
+    if (metricMode) {
+      metric = _metricLabel(props.countryId);
+      if (metric) {
+        numFontSize = Math.max(9, Math.round(fontSize * 0.95));
+        numFont = `bold ${numFontSize}px "JetBrains Mono", monospace`;
+        numWidth = _measure(ctx, metric.text, numFont);
+      }
+    }
+
+    const halfW = Math.max(textWidth, numWidth) / 2 + 1;
+    const nationBox = {
+      xMin: pt.x - halfW,
+      xMax: pt.x + halfW,
+      yMin: pt.y - fontSize / 2 - 1,
+      yMax: pt.y + fontSize / 2 + 1 + (metric ? numFontSize + 3 : 0),
+    };
 
     if (state.coloringMode === 'blocs' && blocBBoxes.some(b => intersects(nationBox, b))) return;
     if (drawnBoxes.some(b => intersects(nationBox, b))) return;
@@ -249,6 +330,20 @@ export function drawLabels() {
     ctx.strokeText(nameStr, pt.x, textY);
     ctx.fillStyle = textColor;
     ctx.fillText(nameStr, pt.x, textY);
+
+    // Numero della metrica (popolazione/danni) sotto il nome — già validato
+    // dalla stessa collision-box del nome qui sopra.
+    if (metric) {
+      ctx.font = numFont;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      const numY = textY + fontSize + 2;
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.strokeText(metric.text, pt.x, numY);
+      ctx.fillStyle = metric.color;
+      ctx.fillText(metric.text, pt.x, numY);
+    }
     // ==================== BATTLE HEATMAP PERCENTUALE (sopra il nome) ====================
     if (state.coloringMode === 'battleHeatmap' && state.battleHeatmapData) {
       const data = state.battleHeatmapData;
@@ -275,71 +370,6 @@ export function drawLabels() {
     }
   });
 
-  // === ETICHETTE AGGIUNTIVE: Popolazione o Danni ===
-  if (state.coloringMode === 'population' || state.coloringMode === 'weeklyDamage') {
-    const isPopulation = state.coloringMode === 'population';
-    const sourceLabels = state.mapSource === 'original' ? state.originalLabelsData : state.labelsData;
-    const zoom = state.map.getZoom();
-
-    let minDmg = Infinity, maxDmg = -Infinity;
-    if (!isPopulation) {
-      for (const nation of state.nationMap.values()) {
-        const dmg = nation?.rankings?.weeklyCountryDamages?.value;
-        if (typeof dmg === 'number' && dmg >= 0) {
-          if (dmg < minDmg) minDmg = dmg;
-          if (dmg > maxDmg) maxDmg = dmg;
-        }
-      }
-    }
-
-    ctx.font = `bold 12px "JetBrains Mono", monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    // WarEra+ perf: shadowBlur tolto, vedi nota sopra sul nome nazione.
-
-    sourceLabels.forEach(label => {
-      const coords = label.coordinates;
-      if (!coords) return;
-
-      const pt = state.map.project([coords[0], coords[1]]);
-      if (pt.x < -100 || pt.x > W + 100 || pt.y < -60 || pt.y > H + 60) return;
-
-      const cId = label.properties.countryId;
-      const nation = state.nationMap.get(cId);
-      if (!nation) return;
-
-      let text = '';
-      let color = '#ffffff';
-
-      if (isPopulation) {
-        const pop = nation?.rankings?.countryActivePopulation?.value;
-        if (typeof pop === 'number' && pop > 0) {
-          text = pop >= 1_000_000 ? (pop / 1_000_000).toFixed(1) + 'M' : pop.toLocaleString();
-        }
-      } else {
-        const dmg = nation?.rankings?.weeklyCountryDamages?.value;
-        if (typeof dmg === 'number' && dmg >= 0) {
-          text = dmg >= 1e6 ? (dmg / 1e6).toFixed(1) + 'M' :
-            dmg >= 1e3 ? (dmg / 1e3).toFixed(1) + 'K' :
-            String(dmg);
-          const t = (maxDmg > minDmg) ? (dmg - minDmg) / (maxDmg - minDmg) : 0;
-          const r = Math.round(69 + (215 - 69) * t);
-          const g = Math.round(117 + (48 - 117) * t);
-          const b = Math.round(180 + (39 - 180) * t);
-          color = `rgb(${r},${g},${b})`;
-        }
-      }
-
-      if (text) {
-        const textY = pt.y + 16;
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 3;
-        ctx.strokeText(text, pt.x, textY);
-        ctx.fillStyle = color;
-        ctx.fillText(text, pt.x, textY);
-      }
-    });
-  }
   ctx.restore();
 }
 
