@@ -32,9 +32,34 @@ const MAX_STALENESS_MS = 20 * 60 * 1000; // 20 minuti
 // Timeout breve: se il VPS è giù/lento, meglio fallire rapido e ricadere
 // sulla chiamata diretta piuttosto che far aspettare l'utente il timeout
 // di rete di default del browser.
-const FETCH_TIMEOUT_MS = 6000;
+const FETCH_TIMEOUT_MS = 3000;
+
+// Circuit breaker: se una chiamata al server di cache fallisce per timeout/
+// rete (server giù o irraggiungibile), le chiamate successive entro questa
+// finestra saltano direttamente la fetch e vanno al fallback — altrimenti
+// ogni endpoint (countries+map, alleanze, diplomazia, regions, battles,
+// ticker...) paga il suo FETCH_TIMEOUT_MS pieno in sequenza, fino a
+//30s+ persi solo in attese quando il VPS è giù. Non scatta per errori
+// applicativi (404, dato scaduto, forma inattesa): solo per "il server non
+// ha risposto affatto", il segnale che indica VPS giù piuttosto che un
+// singolo endpoint con un problema transitorio.
+const CIRCUIT_BREAKER_MS = 2 * 60 * 1000; // 2 minuti
+let _circuitOpenUntil = 0;
+
+function _isNetworkFailure(err) {
+  return err?.name === 'AbortError' || err instanceof TypeError;
+}
+
+function _circuitOpen() {
+  return Date.now() < _circuitOpenUntil;
+}
+
+function _tripCircuit() {
+  _circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_MS;
+}
 
 async function _fetchCacheJson(path) {
+  if (_circuitOpen()) throw new Error('cache: circuit breaker aperto (server irraggiungibile di recente)');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -45,6 +70,9 @@ async function _fetchCacheJson(path) {
       throw new Error(`cache dato scaduto (${Math.round((Date.now() - json.fetchedAt) / 1000)}s)`);
     }
     return json;
+  } catch (err) {
+    if (_isNetworkFailure(err)) _tripCircuit();
+    throw err;
   } finally {
     clearTimeout(timeout);
   }
@@ -58,12 +86,16 @@ async function _fetchCacheJson(path) {
 // cosa fare se il server non risponde (per il ticker: niente eventi extra;
 // per la time machine: mostrare che non è disponibile, non una mappa vuota).
 async function _fetchCacheJsonRaw(path) {
+  if (_circuitOpen()) throw new Error('cache: circuit breaker aperto (server irraggiungibile di recente)');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(`${WARERA_CACHE_BASE}${path}`, { signal: controller.signal });
     if (!res.ok) throw new Error(`cache HTTP ${res.status}`);
     return await res.json();
+  } catch (err) {
+    if (_isNetworkFailure(err)) _tripCircuit();
+    throw err;
   } finally {
     clearTimeout(timeout);
   }
