@@ -173,7 +173,15 @@ async function _activate(initialTs) {
   _slider.min = String(_range.min);
   _slider.max = String(_range.max);
   _slider.value = String(startTs);
-  await _applyAt(startTs);
+  const ok = await _applyAt(startTs);
+  if (!ok) {
+    // Il range c'era (spesso nginx serve un file /range stale) ma la
+    // ricostruzione del frame fallisce: non lasciamo una time machine aperta e
+    // vuota senza spiegazione — _fetchAndRender ha già mostrato il toast, qui
+    // chiudiamo tutto e torniamo alla mappa normale.
+    _deactivate();
+    return;
+  }
 
   getTimeMachineMap().on('click', TM_LYR_FILL, _onHistoricalClick);
   _loadEvents(); // in background, non blocca l'apertura — vedi commento sopra _eventTsSorted
@@ -596,8 +604,23 @@ async function _fetchAndRender(ts) {
     return true;
   } catch (err) {
     console.warn('WarEra+ time machine: ricostruzione fallita:', err.message);
+    _notifyHistoryError();
     return false;
   }
+}
+
+// BUG FIX (segnalato dall'utente: col server di cache giù la time machine
+// resta "de facto inutilizzabile" e NON esce alcun errore). Lo storico
+// regioni è calcolato solo dal server di cache (nessun fallback diretto
+// possibile, vedi cacheClient.js): quando risponde a metà (es. nginx serve un
+// /range stale ma /at fallisce) la mappa restava vuota senza segnale. Qui un
+// toast visibile, throttlato per non spammare durante il playback/scrub.
+let _lastErrorToastAt = 0;
+function _notifyHistoryError() {
+  const now = Date.now();
+  if (now - _lastErrorToastAt < 8000) return;
+  _lastErrorToastAt = now;
+  showToast('Time machine non disponibile: server storico offline', 'warning');
 }
 
 // Uso interattivo (trascinamento/frecce/salto evento/deep-link): riflette
@@ -610,7 +633,7 @@ async function _applyAt(ts) {
   _updateClock(ts);
   _hidePopup();
   _syncUrl(ts);
-  await _fetchAndRender(ts);
+  return await _fetchAndRender(ts);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

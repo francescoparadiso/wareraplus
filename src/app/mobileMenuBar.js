@@ -363,7 +363,9 @@ function buildInsightsAccordion() {
   politica.appendChild(iconEl('landmark'));
   politica.appendChild(regSpan('politics'));
   politica.addEventListener('click', () => {
-    if (isStatsOpen()) document.getElementById('bloc-stats-close')?.click();
+    // Chiude ogni sub-view (inclusa l'Ottimizzatore) prima di aprire Political,
+    // altrimenti l'eco resta sopra e la vista non cambia (bug segnalato).
+    closeAnySubview();
     const id = state.selectedCountryId || lastSelectedCountryId;
     if (id) {
       state.selectedCountryId = id;
@@ -385,7 +387,7 @@ function buildInsightsAccordion() {
   stats.appendChild(iconEl('pie'));
   stats.appendChild(regSpan('allianceStats'));
   stats.addEventListener('click', () => {
-    if (isPoliticalOpen()) closePoliticalView();
+    closeAnySubview();
     document.getElementById('bloc-stats-btn')?.click();
     closeDrawer();
   });

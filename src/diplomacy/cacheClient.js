@@ -20,7 +20,7 @@
 //   /diplomacy → { fetchedAt, data: [ { countryId, data: <diplomazia grezza> } ] }
 // ══════════════════════════════════════════════════════════════
 
-import { WARERA_CACHE_BASE } from './config.js';
+import { WARERA_CACHE_BASE, WORKER_API_BASE } from './config.js';
 
 // Oltre questa età il dato in cache è considerato inaffidabile (server
 // bloccato/pm2 giù ma ancora raggiungibile via nginx con l'ultimo file
@@ -195,14 +195,89 @@ export async function fetchTickerSummaryViaCache(sinceTs, windowTs) {
   return json;
 }
 
+// ══════════════════════════════════════════════════════════════
+// FALLBACK time machine — sorgente esterna spywarera.com (via worker)
+// ------------------------------------------------------------------
+// Lo storico ownership è calcolato SOLO dal server di cache: se quello è giù,
+// la time machine era inutilizzabile (nessun percorso diretto). spywarera.com
+// espone lo STESSO dato (initialOwnership + events), ma senza header CORS —
+// il browser non può leggerla direttamente. Passa quindi dal worker Cloudflare
+// (route /timemachine/events, passthrough + CORS + cache edge 5 min). Da quei
+// dati ricostruiamo qui range/at/events con lo stesso replay che fa il server
+// (genesi + eventi ordinati per ts), così i tre metodi sotto degradano da soli
+// come tutti gli altri di questo file. Scaricato UNA sola volta per sessione
+// (~1,3MB) e tenuto in memoria; se anche il worker è giù, il metodo rilancia e
+// il chiamante (timeMachine.js) mostra il toast "server storico offline".
+const EXTERNAL_HISTORY_URL = `${WORKER_API_BASE}/timemachine/events`;
+const EXTERNAL_HISTORY_TIMEOUT_MS = 30000; // ~1,3MB e cresce, margine largo
+// Genesi: stessa costante del server (1 maggio 2025) — vedi GENESIS_TS in
+// server/warera-cache-server.js.
+const FALLBACK_GENESIS_TS = Date.UTC(2025, 4, 1);
+
+let _externalHistoryPromise = null;
+function _loadExternalHistory() {
+  if (_externalHistoryPromise) return _externalHistoryPromise;
+  _externalHistoryPromise = (async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), EXTERNAL_HISTORY_TIMEOUT_MS);
+    try {
+      const res = await fetch(EXTERNAL_HISTORY_URL, { signal: controller.signal });
+      if (!res.ok) throw new Error(`fallback storico HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data || typeof data.initialOwnership !== 'object' || !Array.isArray(data.events)) {
+        throw new Error('fallback storico: formato inatteso (initialOwnership/events)');
+      }
+      // spywarera non garantisce l'ordine: normalizziamo ts e ordiniamo qui.
+      const events = data.events
+        .map(e => ({ ts: Date.parse(e.ts), regionId: e.regionId, toCountry: e.toCountry }))
+        .filter(e => Number.isFinite(e.ts) && e.regionId)
+        .sort((a, b) => a.ts - b.ts);
+      console.warn(`[region-history] fallback spywarera attivo: ${events.length} eventi caricati (server di cache non disponibile)`);
+      return { initialOwnership: data.initialOwnership, events };
+    } finally {
+      clearTimeout(timeout);
+    }
+  })();
+  // Se il caricamento fallisce, azzera la promise così un tentativo successivo
+  // (es. l'utente riapre la time machine) riprova invece di riusare l'errore.
+  _externalHistoryPromise.catch(() => { _externalHistoryPromise = null; });
+  return _externalHistoryPromise;
+}
+
+async function _fallbackRange() {
+  await _loadExternalHistory(); // garantisce che i dati siano disponibili
+  // max = adesso: _fallbackAt(now) rigioca tutti gli eventi e dà lo stato
+  // corrente, coerente con range.max ~ "oggi" del server.
+  return { min: FALLBACK_GENESIS_TS, max: Date.now() };
+}
+async function _fallbackAt(ts) {
+  const { initialOwnership, events } = await _loadExternalHistory();
+  const regions = { ...initialOwnership };
+  for (const e of events) {
+    if (e.ts > ts) break; // eventi ordinati per ts
+    regions[e.regionId] = e.toCountry;
+  }
+  return { requestedTs: ts, baseTs: FALLBACK_GENESIS_TS, regions };
+}
+async function _fallbackEvents(sinceTs, untilTs) {
+  const { events } = await _loadExternalHistory();
+  return events
+    .filter(e => e.ts >= sinceTs && e.ts <= untilTs)
+    .map(e => ({ ts: e.ts, regionId: e.regionId, toCountry: e.toCountry }));
+}
+
 /** Range temporale coperto dallo storico ownership regioni — { min, max }
- *  in epoch ms. `min` è sempre 0 (sentinella "genesi/inizio del mondo",
- *  non una vera data — vedi commento in region-history-keyframes lato
- *  server), `max` è il momento più recente conosciuto (~adesso). */
+ *  in epoch ms. `min` è la genesi (1 maggio 2025), `max` è il momento più
+ *  recente conosciuto (~adesso). Fallback su spywarera se la cache è giù. */
 export async function fetchRegionHistoryRangeViaCache() {
-  const json = await _fetchCacheJsonRaw('/region-history/range');
-  if (json.min == null || json.max == null) throw new Error('cache /region-history/range: nessuno storico ancora disponibile');
-  return json;
+  try {
+    const json = await _fetchCacheJsonRaw('/region-history/range');
+    if (json.min == null || json.max == null) throw new Error('cache /region-history/range: nessuno storico ancora disponibile');
+    return json;
+  } catch (err) {
+    console.warn('[region-history] range dal server di cache non disponibile, fallback spywarera:', err.message);
+    return _fallbackRange();
+  }
 }
 
 /** Ricostruzione server-side dell'ownership delle regioni a un istante
@@ -210,9 +285,13 @@ export async function fetchRegionHistoryRangeViaCache() {
  *  countryId} } — tutto il lavoro di keyframe+replay lo fa il server,
  *  qui non c'è altro che una fetch. */
 export async function fetchRegionHistoryAtViaCache(ts) {
-  const json = await _fetchCacheJsonRaw(`/region-history/at?ts=${encodeURIComponent(ts)}`);
-  if (!json.regions) throw new Error('cache /region-history/at: forma inattesa');
-  return json;
+  try {
+    const json = await _fetchCacheJsonRaw(`/region-history/at?ts=${encodeURIComponent(ts)}`);
+    if (!json.regions) throw new Error('cache /region-history/at: forma inattesa');
+    return json;
+  } catch (err) {
+    return _fallbackAt(ts);
+  }
 }
 
 /** Tutti gli eventi di trasferimento regione fra `sinceTs` e `untilTs`
@@ -222,7 +301,11 @@ export async function fetchRegionHistoryAtViaCache(ts) {
  *  chi è questa regione dal —" nel popup di click: una sola fetch per
  *  sessione (l'intero storico, ~1-2MB), non una per interazione. */
 export async function fetchRegionHistoryEventsViaCache(sinceTs, untilTs) {
-  const json = await _fetchCacheJsonRaw(`/region-history/events?since=${encodeURIComponent(sinceTs)}&until=${encodeURIComponent(untilTs)}`);
-  if (!Array.isArray(json)) throw new Error('cache /region-history/events: forma inattesa');
-  return json;
+  try {
+    const json = await _fetchCacheJsonRaw(`/region-history/events?since=${encodeURIComponent(sinceTs)}&until=${encodeURIComponent(untilTs)}`);
+    if (!Array.isArray(json)) throw new Error('cache /region-history/events: forma inattesa');
+    return json;
+  } catch (err) {
+    return _fallbackEvents(sinceTs, untilTs);
+  }
 }

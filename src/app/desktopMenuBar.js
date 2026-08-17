@@ -352,7 +352,10 @@ function buildInsightsDropdown() {
   politicaItem.appendChild(iconEl('landmark'));
   politicaItem.appendChild(regSpan('politics'));
   politicaItem.addEventListener('click', () => {
-    if (isStatsOpen()) document.getElementById('bloc-stats-close')?.click();
+    // Chiude QUALSIASI sub-view aperta prima di aprire Political — inclusa
+    // l'Ottimizzatore: altrimenti l'eco restava sopra e la vista non cambiava
+    // (bug segnalato dall'utente).
+    closeAnySubview();
     const id = state.selectedCountryId || lastSelectedCountryId;
     if (id) {
       state.selectedCountryId = id;
@@ -371,7 +374,7 @@ function buildInsightsDropdown() {
   const stats = el('button', 'wp-mb-item', { type: 'button' });
   stats.appendChild(iconEl('pie'));
   stats.appendChild(regSpan('allianceStats'));
-  stats.addEventListener('click', () => { if (isPoliticalOpen()) closePoliticalView(); document.getElementById('bloc-stats-btn')?.click(); closeAllDropdowns(); });
+  stats.addEventListener('click', () => { closeAnySubview(); document.getElementById('bloc-stats-btn')?.click(); closeAllDropdowns(); });
   panel.appendChild(stats);
 
   // Ottimizzatore industriale (tool ideato da ArgusIA, vedi src/eco/).
