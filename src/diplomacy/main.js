@@ -144,7 +144,13 @@ async function refreshData() {
 
     // loadExternalNaps era importata ma mai chiamata: la lista NAP esterni
     // restava vuota e il ramo isExternalNap in getColorForCountry era morto.
-    await loadExternalNaps();
+    // WarEra+ perf: NON awaited. I due CSV stanno su raw.githubusercontent.com
+    // che può essere lento/429 (limite per-IP) e bloccava l'apertura dell'app
+    // per secondi (peggiorato dal retry a backoff). Ora partono in background:
+    // la mappa è subito interattiva e le due funzioni ridisegnano da sole
+    // (updateExternalNapsUI/renderMap) quando i dati arrivano. updateExternalNapsUI()
+    // qui sotto fa il primo render (lista vuota) finché il fetch non completa.
+    loadExternalNaps();
     updateExternalNapsUI();
     syncUIToState();
     loadSphereOfInfluence();

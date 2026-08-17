@@ -1,0 +1,225 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Ottimizzatore industriale (src/eco/*) — stile
+   ------------------------------------------------------------------
+   Namespace `wp-eco-*`. Estetica coerente con la topbar/menu bar di
+   WarEra+ (dashboard militare scura: #0d1117 / #161b22 / #21262d, bordi
+   #30363d, testo #e6edf3, secondario #8b949e). Il sistema di segnali
+   verde/giallo/bianco riprende quello del bot originale (embeds.py).
+   Caricato via import() dinamico da src/eco/main.js — non pesa sul boot.
+   Non serve scoping tipo #wp-political-root: i selettori wp-eco-* sono già
+   unici, montati dentro #wp-eco-root.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Il root montato dentro l'overlay: deve scrollare come #wp-political-root
+   (un div, a differenza di un iframe, ha bisogno che flex+overflow siano
+   dichiarati qui, altrimenti il contenuto sfora senza scorrere). */
+#wp-eco-root {
+  flex: 1;
+  width: 100%;
+  overflow-y: auto;
+  background: #0d1117;
+}
+
+.wp-eco {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 22px 18px 80px;
+  color: #e6edf3;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ── Card crediti autore ── */
+.wp-eco-credit {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  margin-bottom: 22px;
+  background: linear-gradient(135deg, #161b22 0%, #1a2130 100%);
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color .15s, transform .15s;
+}
+.wp-eco-credit:hover { border-color: #3fb950; transform: translateY(-1px); }
+.wp-eco-credit-avatar {
+  width: 46px; height: 46px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #238636, #2ea043);
+  color: #fff; font-weight: 800; font-size: 20px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.wp-eco-credit-body { flex: 1; min-width: 0; line-height: 1.35; }
+.wp-eco-credit-by { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #8b949e; }
+.wp-eco-credit-name { font-size: 17px; font-weight: 700; color: #e6edf3; }
+.wp-eco-credit-meta { font-size: 12px; color: #8b949e; }
+.wp-eco-credit-cta {
+  flex-shrink: 0; font-size: 12px; font-weight: 600; color: #3fb950;
+  border: 1px solid #2ea04355; border-radius: 8px; padding: 6px 10px;
+  white-space: nowrap;
+}
+
+/* ── Header ── */
+.wp-eco-head { margin-bottom: 18px; }
+.wp-eco-title { font-size: 24px; font-weight: 800; margin: 0 0 4px; letter-spacing: -.01em; }
+.wp-eco-subtitle { margin: 0; color: #8b949e; font-size: 13.5px; max-width: 640px; }
+
+/* ── Form ── */
+.wp-eco-form { margin-bottom: 14px; }
+.wp-eco-inputrow { display: flex; gap: 10px; }
+.wp-eco-input {
+  flex: 1; min-width: 0;
+  background: #0d1117; border: 1px solid #30363d; border-radius: 9px;
+  color: #e6edf3; font-size: 15px; padding: 12px 14px;
+  transition: border-color .15s;
+}
+.wp-eco-input:focus { outline: none; border-color: #3fb950; }
+.wp-eco-run {
+  flex-shrink: 0; padding: 0 22px;
+  background: #238636; border: 1px solid #2ea043; border-radius: 9px;
+  color: #fff; font-size: 14.5px; font-weight: 700; cursor: pointer;
+  transition: background .15s;
+}
+.wp-eco-run:hover { background: #2ea043; }
+.wp-eco-run:disabled { opacity: .6; cursor: default; }
+
+.wp-eco-adv { display: flex; align-items: flex-end; gap: 18px; margin-top: 10px; flex-wrap: wrap; }
+.wp-eco-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 220px; }
+.wp-eco-field-label { font-size: 11.5px; color: #8b949e; }
+.wp-eco-wage {
+  background: #0d1117; border: 1px solid #30363d; border-radius: 8px;
+  color: #e6edf3; font-size: 13px; padding: 8px 10px;
+}
+.wp-eco-wage:focus { outline: none; border-color: #3fb950; }
+.wp-eco-remember { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: #8b949e; cursor: pointer; padding-bottom: 8px; }
+.wp-eco-remember input { accent-color: #2ea043; }
+
+/* ── Stati ── */
+.wp-eco-status { font-size: 13px; }
+.wp-eco-empty, .wp-eco-loading, .wp-eco-error, .wp-eco-setup, .wp-eco-note {
+  padding: 16px; border-radius: 10px; font-size: 14px;
+}
+.wp-eco-empty { color: #8b949e; text-align: center; border: 1px dashed #30363d; }
+.wp-eco-loading { display: flex; align-items: center; gap: 10px; color: #8b949e; }
+.wp-eco-spinner {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid #30363d; border-top-color: #3fb950;
+  animation: wp-eco-spin .8s linear infinite;
+}
+@keyframes wp-eco-spin { to { transform: rotate(360deg); } }
+.wp-eco-error { background: #2d1416; border: 1px solid #b3000055; color: #ff9b9b; }
+.wp-eco-setup { background: #1c1a10; border: 1px solid #d2992255; color: #e3c07a; }
+.wp-eco-setup p { margin: 8px 0 0; color: #c9b784; font-size: 13px; line-height: 1.5; }
+.wp-eco-note { background: #161b22; border: 1px solid #30363d; color: #8b949e; margin-bottom: 12px; }
+
+/* ── Sezioni ── */
+.wp-eco-section {
+  background: #0f141b; border: 1px solid #21262d; border-radius: 14px;
+  padding: 18px; margin-top: 16px;
+}
+.wp-eco-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.wp-eco-sec-title { font-size: 16px; font-weight: 700; margin: 0; text-transform: uppercase; letter-spacing: .05em; color: #e6edf3; }
+.wp-eco-sec-headline { font-size: 14px; font-weight: 600; padding: 5px 12px; border-radius: 20px; }
+.wp-eco-sec-headline.green { background: #1b3a24; color: #56d364; border: 1px solid #2ea04355; }
+.wp-eco-sec-headline.yellow { background: #332912; color: #e3b341; border: 1px solid #d2992255; }
+.wp-eco-sec-headline.neutral { background: #1c2531; color: #8b949e; border: 1px solid #30363d; }
+
+/* Headline: numero grande in evidenza */
+.wp-eco-sec-headline .wp-eco-big { font-size: 19px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+
+/* ── Competenze: confronto totali attuale → consigliato ── */
+.wp-eco-totals { display: flex; align-items: stretch; gap: 12px; margin-bottom: 16px; }
+.wp-eco-total-col {
+  flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 12px 14px;
+  background: #0d1117; border: 1px solid #21262d; border-radius: 10px;
+}
+.wp-eco-total-col.best { border-color: #2ea04366; box-shadow: inset 0 0 0 1px #2ea04322; }
+.wp-eco-total-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #8b949e; }
+.wp-eco-total-val { font-size: 26px; font-weight: 800; font-family: 'JetBrains Mono', monospace; color: #adbac7; line-height: 1.1; }
+.wp-eco-total-col.best .wp-eco-total-val { color: #56d364; }
+.wp-eco-total-unit { font-size: 11px; color: #6e7681; }
+.wp-eco-total-arrow { display: flex; align-items: center; color: #6e7681; font-size: 20px; }
+
+/* ── Barre livello skill ── */
+.wp-eco-skills { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; margin-bottom: 4px; }
+.wp-eco-skill-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.wp-eco-skill-name { font-size: 13px; font-weight: 600; color: #e6edf3; }
+.wp-eco-skill-lvls { font-size: 12.5px; color: #8b949e; font-family: 'JetBrains Mono', monospace; }
+.wp-eco-skill-lvls strong { color: #e6edf3; }
+.wp-eco-arrow { color: #6e7681; }
+.wp-eco-delta { margin-left: 4px; font-size: 11px; font-weight: 700; }
+.wp-eco-delta.up { color: #56d364; }
+.wp-eco-delta.down { color: #f85149; }
+.wp-eco-delta.same { color: #6e7681; }
+.wp-eco-segbar { display: flex; gap: 2px; }
+.wp-eco-seg { flex: 1; height: 7px; border-radius: 2px; background: #21262d; }
+.wp-eco-seg.on { background: #4b5563; }
+.wp-eco-seg.add { background: #2ea043; }
+.wp-eco-seg.rem { background: #6e2b2b; }
+
+.wp-eco-meta-rows { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+.wp-eco-kv { font-size: 13px; color: #c9d1d9; line-height: 1.5; }
+.wp-eco-kv > span:first-child { color: #8b949e; margin-right: 6px; }
+.wp-eco-dim { color: #6e7681; }
+
+/* ── Aziende: card con barra oro/giorno + tag ── */
+.wp-eco-colist { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.wp-eco-cocard { background: #0d1117; border: 1px solid #21262d; border-radius: 10px; padding: 11px 13px; }
+.wp-eco-co-disabled { opacity: .5; }
+.wp-eco-cocard-main { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.wp-eco-cocard-title { font-size: 13.5px; min-width: 0; }
+.wp-eco-cocard-gold { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; font-weight: 700; color: #adbac7; white-space: nowrap; }
+.wp-eco-cobar { height: 5px; background: #21262d; border-radius: 3px; overflow: hidden; margin: 7px 0; }
+.wp-eco-cobar > span { display: block; height: 100%; background: linear-gradient(90deg, #238636, #3fb950); }
+.wp-eco-cocard-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-eco-tag { font-size: 11px; color: #8b949e; background: #161b22; border: 1px solid #21262d; border-radius: 6px; padding: 2px 7px; }
+.wp-eco-tag strong { color: #c9d1d9; }
+.wp-eco-disabled-tag { font-size: 9.5px; font-weight: 700; color: #d29922; border: 1px solid #d2992255; border-radius: 4px; padding: 1px 4px; letter-spacing: .03em; }
+
+/* ── Assunzioni ── */
+.wp-eco-hire-intro { font-size: 13px; color: #adbac7; margin-bottom: 10px; }
+
+/* ── Liste (posizione / lavoratori) ── */
+.wp-eco-list { display: flex; flex-direction: column; gap: 9px; }
+.wp-eco-item { padding: 12px 14px; border-radius: 10px; background: #0d1117; border: 1px solid #21262d; border-left-width: 3px; }
+.wp-eco-item-green { border-left-color: #2ea043; }
+.wp-eco-item-yellow { border-left-color: #d29922; }
+.wp-eco-item-white { border-left-color: #30363d; opacity: .92; }
+.wp-eco-item-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.wp-eco-item-body { font-size: 13px; color: #adbac7; line-height: 1.55; }
+.wp-eco-gain { color: #56d364; font-weight: 700; }
+.wp-eco-deposit { margin-top: 6px; font-size: 12px; color: #e3b341; }
+
+.wp-eco-footnote { margin-top: 12px; font-size: 11.5px; color: #6e7681; line-height: 1.5; }
+
+/* ── Tema chiaro (body.light-theme) ── */
+body.light-theme .wp-eco { color: #1a1a1a; }
+body.light-theme .wp-eco-title,
+body.light-theme .wp-eco-sec-title,
+body.light-theme .wp-eco-skill-name,
+body.light-theme .wp-eco-credit-name { color: #10131a; }
+body.light-theme .wp-eco-section { background: #f6f8fa; border-color: #d0d7de; }
+body.light-theme .wp-eco-input,
+body.light-theme .wp-eco-wage,
+body.light-theme .wp-eco-item,
+body.light-theme .wp-eco-total-col,
+body.light-theme .wp-eco-cocard { background: #fff; border-color: #d0d7de; color: #1a1a1a; }
+body.light-theme .wp-eco-tag { background: #eef1f4; border-color: #d0d7de; }
+body.light-theme .wp-eco-seg { background: #d0d7de; }
+body.light-theme .wp-eco-seg.on { background: #8b949e; }
+body.light-theme .wp-eco-total-val { color: #57606a; }
+body.light-theme .wp-eco-total-col.best .wp-eco-total-val { color: #1a7f37; }
+
+/* ── Mobile ── */
+@media (max-width: 640px) {
+  .wp-eco { padding: 16px 12px 60px; }
+  .wp-eco-skills,
+  .wp-eco-colist { grid-template-columns: 1fr; }
+  .wp-eco-inputrow { flex-direction: column; }
+  .wp-eco-run { padding: 12px; }
+  .wp-eco-credit-cta { display: none; }
+  .wp-eco-totals { flex-direction: column; }
+  .wp-eco-total-arrow { justify-content: center; transform: rotate(90deg); }
+}

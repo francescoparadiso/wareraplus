@@ -24,6 +24,10 @@
   <!-- WarEra+ TEST desktop-only: barra menù sopra il ticker. Caricato
        DOPO shell.css apposta (vedi src/styles/menubar.css). -->
   <link rel="stylesheet" href="/src/styles/menubar.css" />
+  <!-- WarEra+: barra menù MOBILE (≤768px). Caricato DOPO menubar.css e
+       shell.css così le sue regole @media(max-width:768px) vincono a parità
+       di specificità. Vedi src/styles/mobile-menubar.css. -->
+  <link rel="stylesheet" href="/src/styles/mobile-menubar.css" />
 
   <!-- WarEra+: analytics Umami — sito NUOVO creato apposta per questo tool
        (l'utente ha sostituito l'ID che riusava quello del vecchio tool,
@@ -291,6 +295,21 @@
       <span id="wp-political-title" class="wp-political-title"></span>
     </div>
     <div id="wp-political-root" style="display:none;"></div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════
+       NUOVO — Overlay Ottimizzatore industriale (src/eco/*)
+       Vista sotto "Approfondimenti": port a moduli ES del bot Discord
+       "WarEra Eco Optimizer" (ideato da ArgusIA). Montata IN-PAGE dentro
+       #wp-eco-root da src/eco/main.js: initEcoView(), aperta da
+       src/app/ecoOverlay.js. Stesso pattern dell'overlay Political.
+       ════════════════════════════════════════════════════════════ -->
+  <div id="wp-eco-overlay" class="wp-political-overlay wp-eco-overlay" aria-hidden="true">
+    <div class="wp-political-topbar">
+      <button id="wp-eco-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
+      <span class="wp-political-title">Ottimizzatore industriale</span>
+    </div>
+    <div id="wp-eco-root" style="display:none;"></div>
   </div>
 
   <!-- Ko-fi Floating Button -->

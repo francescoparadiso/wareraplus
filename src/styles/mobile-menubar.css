@@ -1,0 +1,449 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Barra menù MOBILE (≤768px)
+   ------------------------------------------------------------------
+   Equivalente mobile di menubar.css: stessa estetica "dashboard
+   militare" (dark, blur, accento ciano; tema chiaro = pergamena) ma su
+   tre superfici touch — top bar fissa, drawer laterale, bottom tab bar.
+
+   Tutto gated sotto @media (max-width: 768px): sopra la soglia è
+   display:none e la UI desktop resta identica. Namespace: wp-mmb-.
+
+   Caricato DOPO menubar.css e shell.css in index.html, così queste
+   regole @media(max-width:768px) vincono a parità di specificità sui
+   pochi override che condividono (ticker/legenda/float).
+   ══════════════════════════════════════════════════════════════ */
+
+/* Fuori dalla soglia mobile: tutto spento (nessun impatto desktop). */
+.wp-mmb-topbar,
+.wp-mmb-bottombar,
+.wp-mmb-drawer,
+.wp-mmb-scrim,
+.wp-mmb-search-overlay { display: none; }
+
+@media (max-width: 768px) {
+
+  body {
+    --wp-mbar-h: 52px;      /* top bar */
+    --wp-mbottom-h: 58px;   /* bottom tab bar */
+  }
+
+  /* ══ Chrome esistente spinto sotto la top bar ══ */
+  .wp-news-ticker-wrapper { top: var(--wp-mbar-h); }
+  /* Legenda "linguetta": resta flush sotto il bordo inferiore del ticker
+     (top bar + ticker 26px). */
+  #legend-container { top: calc(var(--wp-mbar-h) + 26px); }
+
+  /* I float adottati spariscono: funzioni ora nelle barre mobile. */
+  #hamburger-btn,
+  #bloc-stats-btn,
+  #wp-battles-toggle-btn,
+  #wp-time-machine-btn { display: none !important; }
+
+  /* #wp-top-controls: nascosto finché non è rilocato nel drawer (evita il
+     flash top-right di 1 frame prima del relocate in rAF). Diventa
+     visibile solo come figlio della riga del drawer. */
+  #wp-top-controls { visibility: hidden; }
+  .wp-mmb-toprow #wp-top-controls { visibility: visible; }
+
+  /* ══════════════════════════════════════════════════════════
+     TOP BAR
+     ══════════════════════════════════════════════════════════ */
+  .wp-mmb-topbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: var(--wp-mbar-h);
+    padding: 0 10px;
+    z-index: 7000;
+    background: rgba(11, 14, 20, 0.82);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    box-shadow: 0 1px 12px rgba(0, 0, 0, 0.35);
+    font-family: 'Inter', -apple-system, sans-serif;
+    padding-top: env(safe-area-inset-top, 0);
+    box-sizing: content-box;
+  }
+  body.light-theme .wp-mmb-topbar {
+    background: linear-gradient(rgba(244, 234, 213, 0.88), rgba(238, 226, 202, 0.88));
+    border-bottom: 1px solid rgba(120, 92, 56, 0.4);
+    box-shadow: 0 1px 0 rgba(255, 250, 238, 0.5) inset, 0 2px 14px rgba(90, 67, 37, 0.14);
+  }
+
+  .wp-mmb-brand {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+  }
+  .wp-mmb-logo { height: 30px; width: auto; border-radius: 6px; object-fit: contain; }
+  .wp-mmb-spacer { flex: 1 1 auto; }
+
+  .wp-mmb-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px; height: 40px;
+    background: transparent;
+    border: none;
+    border-radius: 9px;
+    color: #cdd5e0;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease;
+  }
+  .wp-mmb-icon-btn:active { background: rgba(255, 255, 255, 0.1); }
+  .wp-mmb-icon-btn svg {
+    width: 22px; height: 22px;
+    stroke: currentColor; fill: none;
+    stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round;
+  }
+  body.light-theme .wp-mmb-icon-btn { color: #5a4326; }
+
+  /* ☰ / ← swap: default mostra ☰, sub-view mostra ←. */
+  .wp-mmb-menu-btn .wp-mmb-i-back { display: none; }
+  body.wp-subview-open .wp-mmb-menu-btn .wp-mmb-i-menu { display: none; }
+  body.wp-subview-open .wp-mmb-menu-btn .wp-mmb-i-back { display: block; }
+
+  /* ══════════════════════════════════════════════════════════
+     DRAWER + scrim
+     ══════════════════════════════════════════════════════════ */
+  .wp-mmb-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 7100;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
+  }
+  .wp-mmb-scrim.open { opacity: 1; pointer-events: auto; }
+
+  .wp-mmb-drawer {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0; right: 0;
+    width: min(86vw, 360px);
+    height: 100%;
+    z-index: 7200;
+    padding: calc(var(--wp-mbar-h) + 8px) 0 16px;
+    background: rgba(16, 20, 28, 0.98);
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: -12px 0 40px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    transform: translateX(100%);
+    transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: 'Inter', -apple-system, sans-serif;
+  }
+  .wp-mmb-drawer.open { transform: translateX(0); }
+  body.light-theme .wp-mmb-drawer {
+    background: rgba(248, 242, 232, 0.99);
+    border-left: 1px solid rgba(139, 115, 85, 0.22);
+    box-shadow: -12px 0 40px rgba(90, 67, 37, 0.24);
+  }
+
+  /* ── Riga fissa Lingua/Tema/Attuale-Originale (relocate) ── */
+  .wp-mmb-toprow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0 12px 8px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+  }
+  body.light-theme .wp-mmb-toprow { background: rgba(139, 115, 85, 0.1); }
+  .wp-mmb-toprow #wp-top-controls {
+    position: static; top: auto; right: auto; z-index: auto;
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; justify-content: space-between;
+    pointer-events: auto;
+  }
+  /* Appiattisce lo stile "pillola di vetro" originale come fa il desktop. */
+  .wp-mmb-toprow #border-toggle-container {
+    height: 40px; gap: 8px; padding: 0 12px;
+    background: transparent; border: none; box-shadow: none;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
+  .wp-mmb-toprow .pill-label { font-size: 11px; letter-spacing: 0.3px; color: #8b95a6; }
+  .wp-mmb-toprow .pill-label.active { color: #00d4ff; }
+  body.light-theme .wp-mmb-toprow .pill-label { color: #6b5637; }
+  body.light-theme .wp-mmb-toprow .pill-label.active { color: #a06a1a; }
+  .wp-mmb-toprow #theme-toggle-btn {
+    width: 40px; height: 40px; border-radius: 10px;
+    border: none; background: transparent; box-shadow: none;
+    backdrop-filter: none; -webkit-backdrop-filter: none; font-size: 18px;
+  }
+  .wp-mmb-toprow .wp-lang-select {
+    height: 40px; max-width: 92px; border-radius: 10px;
+    border: none; background: transparent; box-shadow: none;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+    color: #cdd5e0; font-size: 13px; font-weight: 500; padding: 0 6px;
+  }
+  .wp-mmb-toprow .wp-lang-select option { background: #12161e; color: #e6edf3; }
+  body.light-theme .wp-mmb-toprow .wp-lang-select { color: #6b5637; }
+  body.light-theme .wp-mmb-toprow .wp-lang-select option { background: #faf6ee; color: #2e1f0c; }
+
+  /* ── Accordion ── */
+  .wp-mmb-acc { border-top: 1px solid rgba(255, 255, 255, 0.06); margin: 0 12px; }
+  .wp-mmb-acc:first-of-type { border-top: none; }
+  body.light-theme .wp-mmb-acc { border-top-color: rgba(139, 115, 85, 0.18); }
+  .wp-mmb-acc-header {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    padding: 15px 4px;
+    background: transparent;
+    border: none;
+    color: #cdd5e0;
+    font-size: 15px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+  .wp-mmb-acc-header > span { flex: 1 1 auto; }
+  .wp-mmb-acc-icon { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
+  .wp-mmb-acc-caret { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: 0.6; transition: transform 0.2s ease; }
+  .wp-mmb-acc.open .wp-mmb-acc-caret { transform: rotate(180deg); }
+  body.light-theme .wp-mmb-acc-header { color: #4a3820; }
+  /* corpo collassabile */
+  .wp-mmb-acc-body { display: none; padding: 0 0 12px; }
+  .wp-mmb-acc.open .wp-mmb-acc-body { display: block; }
+
+  /* voce generica (Approfondimenti) */
+  .wp-mmb-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 13px 10px;
+    background: transparent;
+    border: none;
+    border-radius: 10px;
+    color: #aab3c2;
+    font-size: 14.5px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+  }
+  .wp-mmb-item:active { background: rgba(255, 255, 255, 0.06); }
+  .wp-mmb-item svg { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
+  body.light-theme .wp-mmb-item { color: #6b5637; }
+
+  /* Viste mappa: griglia 2 colonne di 5 icone. Il display:grid è scopato
+     sotto .open con specificità (0,3,0) per battere la regola generica
+     .wp-mmb-acc.open .wp-mmb-acc-body { display:block } (0,2,0); da chiuso
+     resta display:none ereditato da .wp-mmb-acc-body. */
+  .wp-mmb-modes-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding-bottom: 12px;
+  }
+  .wp-mmb-acc.open .wp-mmb-acc-body.wp-mmb-modes-grid { display: grid; }
+  .wp-mmb-mode {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    padding: 14px 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    color: #aab3c2;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+  }
+  .wp-mmb-mode svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; opacity: 0.9; }
+  .wp-mmb-mode:active { background: rgba(255, 255, 255, 0.09); }
+  .wp-mmb-mode.active {
+    background: rgba(0, 212, 255, 0.12);
+    border-color: rgba(0, 212, 255, 0.4);
+    color: #00d4ff;
+  }
+  .wp-mmb-mode.active svg { opacity: 1; filter: drop-shadow(0 0 5px rgba(0, 212, 255, 0.5)); }
+  body.light-theme .wp-mmb-mode { background: rgba(139, 115, 85, 0.08); border-color: rgba(139, 115, 85, 0.18); color: #6b5637; }
+  body.light-theme .wp-mmb-mode.active { background: rgba(160, 106, 26, 0.14); border-color: rgba(160, 106, 26, 0.45); color: #a06a1a; }
+
+  /* Impostazioni: switch proxy + sezioni NAP rilocate */
+  .wp-mmb-proxy-switch {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 13px 10px;
+    color: #aab3c2;
+    font-size: 14.5px;
+    cursor: pointer;
+  }
+  body.light-theme .wp-mmb-proxy-switch { color: #6b5637; }
+  .wp-mmb-proxy-switch input { width: 20px; height: 20px; accent-color: #00d4ff; cursor: pointer; flex-shrink: 0; }
+  /* Le .menu-section NAP rilocate: si adattano al fondo dark del drawer. */
+  .wp-mmb-settings-body .menu-section { padding: 10px 2px; }
+  .wp-mmb-settings-body .menu-section:first-of-type {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    margin-top: 6px; padding-top: 12px;
+  }
+  body.light-theme .wp-mmb-settings-body .menu-section:first-of-type { border-top-color: rgba(139, 115, 85, 0.22); }
+
+  /* ══════════════════════════════════════════════════════════
+     BOTTOM TAB BAR
+     ══════════════════════════════════════════════════════════ */
+  .wp-mmb-bottombar {
+    display: flex;
+    align-items: stretch;
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    height: calc(var(--wp-mbottom-h) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    z-index: 7000;
+    background: rgba(11, 14, 20, 0.9);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    box-shadow: 0 -1px 12px rgba(0, 0, 0, 0.35);
+  }
+  body.light-theme .wp-mmb-bottombar {
+    background: linear-gradient(rgba(238, 226, 202, 0.92), rgba(244, 234, 213, 0.92));
+    border-top: 1px solid rgba(120, 92, 56, 0.4);
+  }
+  /* Nascosta dentro le sub-view: là serve solo il ← in top bar. */
+  body.wp-subview-open .wp-mmb-bottombar { display: none; }
+
+  .wp-mmb-tab {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    background: transparent;
+    border: none;
+    color: #8b95a6;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.14s ease;
+  }
+  .wp-mmb-tab svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .wp-mmb-tab:active { background: rgba(255, 255, 255, 0.05); }
+  body.light-theme .wp-mmb-tab { color: #6b5637; }
+
+  /* Battaglie (rosso) — spento quando battaglie nascoste */
+  .wp-mmb-tab-battles { color: #ff6a6e; }
+  .wp-mmb-tab-battles svg { filter: drop-shadow(0 0 4px rgba(229, 72, 77, 0.4)); }
+  .wp-mmb-tab-battles.wp-mmb-off { color: #6f7682; }
+  .wp-mmb-tab-battles.wp-mmb-off svg { filter: none; }
+  body.light-theme .wp-mmb-tab-battles { color: #9e2b2b; }
+  body.light-theme .wp-mmb-tab-battles.wp-mmb-off { color: #8a7d68; }
+
+  /* Time machine (ambra) — accesa quando aperta */
+  .wp-mmb-tab-timemachine { color: #e3a838; }
+  .wp-mmb-tab-timemachine svg { filter: drop-shadow(0 0 4px rgba(217, 154, 43, 0.4)); }
+  .wp-mmb-tab-timemachine.wp-mmb-active { color: #f5c368; }
+  .wp-mmb-tab-timemachine.wp-mmb-active svg { filter: drop-shadow(0 0 8px rgba(217, 154, 43, 0.9)); }
+  body.light-theme .wp-mmb-tab-timemachine { color: #9c6b1f; }
+  body.light-theme .wp-mmb-tab-timemachine.wp-mmb-active { color: #6f4a10; }
+
+  /* ══════════════════════════════════════════════════════════
+     RICERCA — overlay fullscreen
+     ══════════════════════════════════════════════════════════ */
+  .wp-mmb-search-overlay {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    inset: 0;
+    z-index: 7500;
+    background: rgba(11, 14, 20, 0.98);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    padding-top: env(safe-area-inset-top, 0);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease;
+    font-family: 'Inter', -apple-system, sans-serif;
+  }
+  .wp-mmb-search-overlay.open { opacity: 1; pointer-events: auto; }
+  body.light-theme .wp-mmb-search-overlay { background: rgba(248, 242, 232, 0.99); }
+
+  .wp-mmb-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  body.light-theme .wp-mmb-search-bar { border-bottom-color: rgba(139, 115, 85, 0.22); }
+  .wp-mmb-search-icon { width: 20px; height: 20px; stroke: #7b8494; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+  .wp-mmb-search-input {
+    flex: 1 1 auto;
+    height: 44px;
+    background: transparent;
+    border: none;
+    color: #e6edf3;
+    font-size: 16px; /* ≥16px: evita lo zoom automatico iOS al focus */
+    outline: none;
+  }
+  .wp-mmb-search-input::placeholder { color: #6f7885; }
+  body.light-theme .wp-mmb-search-input { color: #2e1f0c; }
+  .wp-mmb-search-close {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; flex-shrink: 0;
+    background: transparent; border: none; border-radius: 9px;
+    color: #cdd5e0; cursor: pointer;
+  }
+  .wp-mmb-search-close svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  body.light-theme .wp-mmb-search-close { color: #5a4326; }
+  .wp-mmb-search-results { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px 12px 24px; }
+
+  /* ── Righe risultato / preferiti (condivise) ── */
+  .wp-mmb-res-group {
+    padding: 12px 6px 5px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: #5f6a7a;
+  }
+  body.light-theme .wp-mmb-res-group { color: #a3906f; }
+  .wp-mmb-res-row {
+    display: flex; align-items: center; gap: 11px;
+    padding: 12px 8px; border-radius: 10px;
+    cursor: pointer; color: #cdd5e0; font-size: 15px;
+  }
+  .wp-mmb-res-row:active,
+  .wp-mmb-res-row.wp-mmb-res-active { background: rgba(0, 212, 255, 0.12); color: #fff; }
+  body.light-theme .wp-mmb-res-row { color: #4a3820; }
+  body.light-theme .wp-mmb-res-row:active,
+  body.light-theme .wp-mmb-res-row.wp-mmb-res-active { background: rgba(160, 106, 26, 0.14); color: #2e1f0c; }
+  .wp-mmb-res-img { width: 28px; height: 20px; object-fit: cover; border-radius: 4px; flex-shrink: 0; background: rgba(255, 255, 255, 0.08); }
+  .wp-mmb-res-img.wp-mmb-res-logo { width: 24px; height: 24px; object-fit: contain; border-radius: 5px; }
+  .wp-mmb-res-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wp-mmb-res-empty { padding: 20px; text-align: center; color: #6f7885; font-size: 14px; }
+
+  .wp-mmb-pin, .wp-mmb-unpin {
+    flex-shrink: 0; background: transparent; border: none; cursor: pointer;
+    line-height: 1; padding: 6px 8px; border-radius: 6px;
+  }
+  .wp-mmb-pin { color: #6f7885; font-size: 20px; }
+  .wp-mmb-pin.pinned { color: #e3a838; }
+  .wp-mmb-unpin { color: #6f7885; font-size: 22px; }
+  .wp-mmb-unpin:active { color: #ff6a6e; background: rgba(229, 72, 77, 0.14); }
+  body.light-theme .wp-mmb-pin.pinned { color: #9c6b1f; }
+
+  /* ══ Sub-view spinte sotto la top bar; loro chrome originale nascosto
+     (rimpiazzato dal ← in top bar), come fa il desktop. ══ */
+  .wp-political-overlay { padding-top: var(--wp-mbar-h); }
+  .wp-political-topbar { display: none !important; }
+  #bloc-stats-page { padding-top: calc(var(--wp-mbar-h) + 12px) !important; }
+  #bloc-stats-close { display: none !important; }
+  #wp-eco-overlay { padding-top: var(--wp-mbar-h); }
+}

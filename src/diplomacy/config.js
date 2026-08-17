@@ -26,6 +26,19 @@ export const WARERA_CACHE_BASE = 'https://ampsodrick.duckdns.org/warera-cache';
 // utils.js, opzione { useWorker: true }), non per tutte le chiamate.
 export const WORKER_API_BASE = 'https://politicalview-proxy.fra-paradiso2.workers.dev';
 
+// WarEra+: base per l'Ottimizzatore industriale (src/eco/*). Alcuni endpoint
+// economici sono TOKEN-GATED (worker.getWorkers,
+// transaction.getPaginatedTransactions,
+// company.getRecommendedRegionIdsByItemCode): rispondono "API token required"
+// (401) senza X-API-Key. Coprono 2 delle 3 funzioni del tool (Lavoratori,
+// Posizione) + il reddito-lavoratori di Competenze, quindi servono davvero.
+// Passano dallo STESSO Worker Cloudflare, che inietta la key server-side come
+// header X-API-Key (secret Cloudflare, mai nel browser). NB: perché funzioni,
+// il worker deve aggiungere `X-API-Key: <token>` — NON `Authorization: Bearer`
+// (WarEra ignora quest'ultimo → 401). Se il tool mostra lo stato "setup", il
+// worker non sta iniettando la key: controlla il secret API_TOKEN e l'header.
+export const ECO_PROXY_BASE = WORKER_API_BASE;
+
 // ⚠️ RIMOSSA: la chiave era in chiaro nel bundle servito al browser, quindi
 // leggibile da chiunque aprisse i devtools. Nessun modulo la usava davvero
 // (fetchWithAuth non era chiamata da nessuna parte).

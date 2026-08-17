@@ -27,6 +27,7 @@
 import { state } from '../diplomacy/state.js';
 import { renderMap, setColoringMode } from '../diplomacy/map.js';
 import { openPoliticalView, closePoliticalView } from './politicalOverlay.js';
+import { openEcoView, closeEcoView, isEcoViewOpen } from './ecoOverlay.js';
 import { trackEvent } from '../shared/analytics.js';
 import { getLang } from '../shared/i18n.js';
 import { getPinned, isPinned, togglePin } from './pins.js';
@@ -35,15 +36,15 @@ const FLAG_BASE = 'https://media.warera.io/images/flags';
 
 // ══ i18n locale della barra ═══════════════════════════════════════
 const MB_DICT = {
-  en: { views: 'Views', insights: 'Insights', settings: 'Settings', battles: 'Battles', timeMachine: 'Time machine', diplomacy: 'Diplomacy', alliances: 'Alliances', sphere: 'Sphere', damage: 'Weekly Dmg', population: 'Population', politics: 'Politics', allianceStats: 'Alliance stats', searchPh: 'Search nation or alliance…', groupNations: 'Nations', groupAlliances: 'Alliances', noResults: 'No results', favorites: 'Favorites', back: 'Back', noFavorites: 'No pinned items yet' },
-  it: { views: 'Viste mappa', insights: 'Approfondimenti', settings: 'Impostazioni', battles: 'Battaglie', timeMachine: 'Time machine', diplomacy: 'Diplomazia', alliances: 'Alleanze', sphere: 'Sfera', damage: 'Danni Sett.', population: 'Popolazione', politics: 'Politica', allianceStats: 'Statistiche alleanze', searchPh: 'Cerca nazione o alleanza…', groupNations: 'Nazioni', groupAlliances: 'Alleanze', noResults: 'Nessun risultato', favorites: 'Preferiti', back: 'Indietro', noFavorites: 'Nessun elemento salvato' },
-  es: { views: 'Vistas', insights: 'Análisis', settings: 'Ajustes', battles: 'Batallas', timeMachine: 'Time machine', diplomacy: 'Diplomacia', alliances: 'Alianzas', sphere: 'Esfera', damage: 'Daño Sem.', population: 'Población', politics: 'Política', allianceStats: 'Estadísticas de alianzas', searchPh: 'Buscar nación o alianza…', groupNations: 'Naciones', groupAlliances: 'Alianzas', noResults: 'Sin resultados', favorites: 'Favoritos', back: 'Atrás', noFavorites: 'Aún no hay elementos guardados' },
-  de: { views: 'Ansichten', insights: 'Einblicke', settings: 'Einstellungen', battles: 'Schlachten', timeMachine: 'Zeitmaschine', diplomacy: 'Diplomatie', alliances: 'Bündnisse', sphere: 'Sphäre', damage: 'Wöch. Schaden', population: 'Bevölkerung', politics: 'Politik', allianceStats: 'Bündnisstatistiken', searchPh: 'Nation oder Bündnis suchen…', groupNations: 'Nationen', groupAlliances: 'Bündnisse', noResults: 'Keine Ergebnisse', favorites: 'Favoriten', back: 'Zurück', noFavorites: 'Noch nichts angeheftet' },
-  fr: { views: 'Vues', insights: 'Analyses', settings: 'Paramètres', battles: 'Batailles', timeMachine: 'Time machine', diplomacy: 'Diplomatie', alliances: 'Alliances', sphere: 'Sphère', damage: 'Dégâts Hebdo.', population: 'Population', politics: 'Politique', allianceStats: 'Stats des alliances', searchPh: 'Rechercher nation ou alliance…', groupNations: 'Nations', groupAlliances: 'Alliances', noResults: 'Aucun résultat', favorites: 'Favoris', back: 'Retour', noFavorites: 'Aucun élément épinglé' },
-  nl: { views: 'Weergaven', insights: 'Inzichten', settings: 'Instellingen', battles: 'Veldslagen', timeMachine: 'Tijdmachine', diplomacy: 'Diplomatie', alliances: 'Bondgenootschappen', sphere: 'Invloedssfeer', damage: 'Wekel. Schade', population: 'Bevolking', politics: 'Politiek', allianceStats: 'Alliantiestatistieken', searchPh: 'Zoek natie of alliantie…', groupNations: 'Naties', groupAlliances: 'Bondgenootschappen', noResults: 'Geen resultaten', favorites: 'Favorieten', back: 'Terug', noFavorites: 'Nog niets vastgezet' },
-  sv: { views: 'Vyer', insights: 'Insikter', settings: 'Inställningar', battles: 'Strider', timeMachine: 'Tidsmaskin', diplomacy: 'Diplomati', alliances: 'Allianser', sphere: 'Sfär', damage: 'Veckoskada', population: 'Befolkning', politics: 'Politik', allianceStats: 'Alliansstatistik', searchPh: 'Sök nation eller allians…', groupNations: 'Nationer', groupAlliances: 'Allianser', noResults: 'Inga resultat', favorites: 'Favoriter', back: 'Tillbaka', noFavorites: 'Inget fäst ännu' },
-  pt: { views: 'Vistas', insights: 'Análises', settings: 'Definições', battles: 'Batalhas', timeMachine: 'Máquina do tempo', diplomacy: 'Diplomacia', alliances: 'Alianças', sphere: 'Esfera', damage: 'Dano Sem.', population: 'População', politics: 'Política', allianceStats: 'Estatísticas de alianças', searchPh: 'Procurar nação ou aliança…', groupNations: 'Nações', groupAlliances: 'Alianças', noResults: 'Sem resultados', favorites: 'Favoritos', back: 'Voltar', noFavorites: 'Nada fixado ainda' },
-  ar: { views: 'العروض', insights: 'رؤى', settings: 'الإعدادات', battles: 'المعارك', timeMachine: 'آلة الزمن', diplomacy: 'الدبلوماسية', alliances: 'التحالفات', sphere: 'النطاق', damage: 'الضرر الأسبوعي', population: 'السكان', politics: 'السياسة', allianceStats: 'إحصاءات التحالفات', searchPh: 'ابحث عن دولة أو تحالف…', groupNations: 'الدول', groupAlliances: 'التحالفات', noResults: 'لا نتائج', favorites: 'المفضلة', back: 'رجوع', noFavorites: 'لا عناصر مثبتة بعد' },
+  en: { views: 'Views', insights: 'Insights', settings: 'Settings', battles: 'Battles', timeMachine: 'Time machine', diplomacy: 'Diplomacy', alliances: 'Alliances', sphere: 'Sphere', damage: 'Weekly Dmg', population: 'Population', politics: 'Politics', allianceStats: 'Alliance stats', ecoOptimizer: 'Industrial Optimizer', searchPh: 'Search nation or alliance…', groupNations: 'Nations', groupAlliances: 'Alliances', noResults: 'No results', favorites: 'Favorites', back: 'Back', noFavorites: 'No pinned items yet' },
+  it: { views: 'Viste mappa', insights: 'Approfondimenti', settings: 'Impostazioni', battles: 'Battaglie', timeMachine: 'Time machine', diplomacy: 'Diplomazia', alliances: 'Alleanze', sphere: 'Sfera', damage: 'Danni Sett.', population: 'Popolazione', politics: 'Politica', allianceStats: 'Statistiche alleanze', ecoOptimizer: 'Ottimizzatore industriale', searchPh: 'Cerca nazione o alleanza…', groupNations: 'Nazioni', groupAlliances: 'Alleanze', noResults: 'Nessun risultato', favorites: 'Preferiti', back: 'Indietro', noFavorites: 'Nessun elemento salvato' },
+  es: { views: 'Vistas', insights: 'Análisis', settings: 'Ajustes', battles: 'Batallas', timeMachine: 'Time machine', diplomacy: 'Diplomacia', alliances: 'Alianzas', sphere: 'Esfera', damage: 'Daño Sem.', population: 'Población', politics: 'Política', allianceStats: 'Estadísticas de alianzas', ecoOptimizer: 'Optimizador industrial', searchPh: 'Buscar nación o alianza…', groupNations: 'Naciones', groupAlliances: 'Alianzas', noResults: 'Sin resultados', favorites: 'Favoritos', back: 'Atrás', noFavorites: 'Aún no hay elementos guardados' },
+  de: { views: 'Ansichten', insights: 'Einblicke', settings: 'Einstellungen', battles: 'Schlachten', timeMachine: 'Zeitmaschine', diplomacy: 'Diplomatie', alliances: 'Bündnisse', sphere: 'Sphäre', damage: 'Wöch. Schaden', population: 'Bevölkerung', politics: 'Politik', allianceStats: 'Bündnisstatistiken', ecoOptimizer: 'Industrie-Optimierer', searchPh: 'Nation oder Bündnis suchen…', groupNations: 'Nationen', groupAlliances: 'Bündnisse', noResults: 'Keine Ergebnisse', favorites: 'Favoriten', back: 'Zurück', noFavorites: 'Noch nichts angeheftet' },
+  fr: { views: 'Vues', insights: 'Analyses', settings: 'Paramètres', battles: 'Batailles', timeMachine: 'Time machine', diplomacy: 'Diplomatie', alliances: 'Alliances', sphere: 'Sphère', damage: 'Dégâts Hebdo.', population: 'Population', politics: 'Politique', allianceStats: 'Stats des alliances', ecoOptimizer: 'Optimiseur industriel', searchPh: 'Rechercher nation ou alliance…', groupNations: 'Nations', groupAlliances: 'Alliances', noResults: 'Aucun résultat', favorites: 'Favoris', back: 'Retour', noFavorites: 'Aucun élément épinglé' },
+  nl: { views: 'Weergaven', insights: 'Inzichten', settings: 'Instellingen', battles: 'Veldslagen', timeMachine: 'Tijdmachine', diplomacy: 'Diplomatie', alliances: 'Bondgenootschappen', sphere: 'Invloedssfeer', damage: 'Wekel. Schade', population: 'Bevolking', politics: 'Politiek', allianceStats: 'Alliantiestatistieken', ecoOptimizer: 'Industriële optimizer', searchPh: 'Zoek natie of alliantie…', groupNations: 'Naties', groupAlliances: 'Bondgenootschappen', noResults: 'Geen resultaten', favorites: 'Favorieten', back: 'Terug', noFavorites: 'Nog niets vastgezet' },
+  sv: { views: 'Vyer', insights: 'Insikter', settings: 'Inställningar', battles: 'Strider', timeMachine: 'Tidsmaskin', diplomacy: 'Diplomati', alliances: 'Allianser', sphere: 'Sfär', damage: 'Veckoskada', population: 'Befolkning', politics: 'Politik', allianceStats: 'Alliansstatistik', ecoOptimizer: 'Industrioptimerare', searchPh: 'Sök nation eller allians…', groupNations: 'Nationer', groupAlliances: 'Allianser', noResults: 'Inga resultat', favorites: 'Favoriter', back: 'Tillbaka', noFavorites: 'Inget fäst ännu' },
+  pt: { views: 'Vistas', insights: 'Análises', settings: 'Definições', battles: 'Batalhas', timeMachine: 'Máquina do tempo', diplomacy: 'Diplomacia', alliances: 'Alianças', sphere: 'Esfera', damage: 'Dano Sem.', population: 'População', politics: 'Política', allianceStats: 'Estatísticas de alianças', ecoOptimizer: 'Otimizador industrial', searchPh: 'Procurar nação ou aliança…', groupNations: 'Nações', groupAlliances: 'Alianças', noResults: 'Sem resultados', favorites: 'Favoritos', back: 'Voltar', noFavorites: 'Nada fixado ainda' },
+  ar: { views: 'العروض', insights: 'رؤى', settings: 'الإعدادات', battles: 'المعارك', timeMachine: 'آلة الزمن', diplomacy: 'الدبلوماسية', alliances: 'التحالفات', sphere: 'النطاق', damage: 'الضرر الأسبوعي', population: 'السكان', politics: 'السياسة', allianceStats: 'إحصاءات التحالفات', ecoOptimizer: 'مُحسِّن صناعي', searchPh: 'ابحث عن دولة أو تحالف…', groupNations: 'الدول', groupAlliances: 'التحالفات', noResults: 'لا نتائج', favorites: 'المفضلة', back: 'رجوع', noFavorites: 'لا عناصر مثبتة بعد' },
 };
 function mbT(key) {
   return MB_DICT[getLang()]?.[key] ?? MB_DICT.en[key] ?? key;
@@ -111,6 +112,7 @@ const ICON_PATHS = {
   users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   landmark: '<polygon points="12 2 21 8 3 8 12 2"/><line x1="5" y1="10" x2="5" y2="18"/><line x1="10" y1="10" x2="10" y2="18"/><line x1="14" y1="10" x2="14" y2="18"/><line x1="19" y1="10" x2="19" y2="18"/><line x1="3" y1="21" x2="21" y2="21"/>',
   pie: '<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
+  factory: '<path d="M2 20h20"/><path d="M3 20V9l6 4V9l6 4V6l6 3v11"/><line x1="7" y1="16" x2="7" y2="16.5"/><line x1="12" y1="16" x2="12" y2="16.5"/><line x1="17" y1="16" x2="17" y2="16.5"/>',
   star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
   back: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
 };
@@ -198,6 +200,7 @@ function isStatsOpen() {
 }
 function closeAnySubview() {
   if (isPoliticalOpen()) closePoliticalView();
+  if (isEcoViewOpen()) closeEcoView();
   if (isStatsOpen()) document.getElementById('bloc-stats-close')?.click();
   closeAllDropdowns();
 }
@@ -205,9 +208,11 @@ function closeAnySubview() {
 // spinge la vista sotto la barra.
 function setupSubviewWatch() {
   const pol = document.getElementById('wp-political-overlay');
+  const eco = document.getElementById('wp-eco-overlay');
   const stats = document.getElementById('bloc-stats-page');
-  const update = () => document.body.classList.toggle('wp-subview-open', isPoliticalOpen() || isStatsOpen());
+  const update = () => document.body.classList.toggle('wp-subview-open', isPoliticalOpen() || isEcoViewOpen() || isStatsOpen());
   if (pol) new MutationObserver(update).observe(pol, { attributes: true, attributeFilter: ['class'] });
+  if (eco) new MutationObserver(update).observe(eco, { attributes: true, attributeFilter: ['class'] });
   if (stats) new MutationObserver(update).observe(stats, { attributes: true, attributeFilter: ['style'] });
   update();
 }
@@ -354,6 +359,18 @@ function buildInsightsDropdown() {
   stats.appendChild(regSpan('allianceStats'));
   stats.addEventListener('click', () => { if (isPoliticalOpen()) closePoliticalView(); document.getElementById('bloc-stats-btn')?.click(); closeAllDropdowns(); });
   panel.appendChild(stats);
+
+  // Ottimizzatore industriale (tool ideato da ArgusIA, vedi src/eco/).
+  const ecoItem = el('button', 'wp-mb-item', { type: 'button' });
+  ecoItem.appendChild(iconEl('factory'));
+  ecoItem.appendChild(regSpan('ecoOptimizer'));
+  ecoItem.addEventListener('click', () => {
+    closeAnySubview();
+    openEcoView();
+    trackEvent('menubar-open-eco');
+    closeAllDropdowns();
+  });
+  panel.appendChild(ecoItem);
 
   root.addEventListener('mouseenter', rememberSelection);
   root.querySelector('.wp-mb-btn').addEventListener('click', rememberSelection);

@@ -25,11 +25,13 @@ inject();
 
 import { initCountryPanel, selectNationInPanel } from './panel/countryPanel.js';
 import { initPoliticalOverlay } from './app/politicalOverlay.js';
+import { initEcoOverlay } from './app/ecoOverlay.js';
 import { initThemeSync } from './app/themeSync.js';
 import { initLangSync } from './app/langSync.js';
 import { initBattleToggle } from './app/battleToggle.js';
 import { initBlocLabelsToggle } from './app/blocLabelsToggle.js';
 import { initDesktopMenuBar } from './app/desktopMenuBar.js';
+import { initMobileMenuBar } from './app/mobileMenuBar.js';
 import { startNewsTicker } from './app/newsTicker.js';
 import { initTimeMachine, openTimeMachineAt } from './app/timeMachine.js';
 import { applyTranslations, initLangButton } from './shared/i18n.js';
@@ -62,6 +64,7 @@ function handleIncomingDeepLink() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initPoliticalOverlay();
+  initEcoOverlay();
   applyTranslations();
   initLangButton();
 });
@@ -79,6 +82,10 @@ window.addEventListener('wareraplus:diplomacy-ready', () => {
   initLangSync();
   initBattleToggle();
   initBlocLabelsToggle();
+  // Mobile PRIMA di desktop: cattura la home pristine dei nodi condivisi
+  // (#wp-top-controls, sezioni NAP) prima che il desktop li riloci. Vedi
+  // nota "nodi CONDIVISI" in src/app/mobileMenuBar.js.
+  initMobileMenuBar();
   initDesktopMenuBar();
   startNewsTicker();
   initTimeMachine();

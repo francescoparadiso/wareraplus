@@ -5,6 +5,21 @@ import { renderMap } from './map.js';
 import { updateDynamicLegend } from './ui.js';
 import { trackEvent } from '../shared/analytics.js';
 
+// WarEra+ fix (429): stesso problema di naps.js — cache-buster `?t=Date.now()`
+// che annullava la cache SWR di raw.githubusercontent.com e causava i 429.
+// Rimosso + retry a backoff su 429/5xx. Vedi nota estesa in naps.js.
+async function fetchCsvWithRetry(url, { retries = 3, base = 800 } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    const resp = await fetch(url);
+    if (resp.ok) return resp;
+    if ((resp.status === 429 || resp.status >= 500) && attempt < retries) {
+      await new Promise(r => setTimeout(r, base * 2 ** attempt));
+      continue;
+    }
+    throw new Error(`HTTP ${resp.status}`);
+  }
+}
+
 // ==================== CARICAMENTO CSV ====================
 // CSV format: nazione_primaria,codici_proxy,label_lng,label_lat
 // nazione_primaria : codice ISO della nazione primaria (es. "RU")
@@ -12,9 +27,7 @@ import { trackEvent } from '../shared/analytics.js';
 // label_lng/label_lat (opzionali) : coordinate per un eventuale label di gruppo
 export async function loadSphereOfInfluence() {
   try {
-    const resp = await fetch(EXTERNAL_SPHERE_URL + `?t=${Date.now()}`);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const csv = await resp.text();
+    const resp = await fetchCsvWithRetry(EXTERNAL_SPHERE_URL);
     const data = parseCSV(csv);
     buildSphereMapFromData(data);
     updateDynamicLegend();
