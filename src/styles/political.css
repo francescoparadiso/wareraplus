@@ -1384,6 +1384,22 @@
 #wp-political-root .panel:has(.ts-wrapper.dropdown-active) {
   position: relative;
   z-index: 50;
+  /* BUG FIX (segnalato dall'utente: aprendo "Add supporter" la tendina era
+     tagliata, pochissimo spazio in fondo). Il .panel ha overflow:hidden (per
+     l'animazione collapse/bordi): tagliava la .ts-dropdown. Mentre un dropdown
+     è aperto NON deve tagliare — fuori da quel momento resta hidden com'era. */
+  overflow: visible;
+}
+#wp-political-root .panel:has(.ts-wrapper.dropdown-active) > :not(summary) {
+  overflow: visible;
+}
+/* Tendina verso l'ALTO quando sotto non c'è spazio (es. card sostenitori in
+   fondo alla pagina): la classe ts-drop-up la mette organizer.js all'apertura. */
+#wp-political-root .ts-wrapper.ts-drop-up .ts-dropdown {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 2px;
 }
 #wp-political-root details.panel > :not(summary) {
   display: block;

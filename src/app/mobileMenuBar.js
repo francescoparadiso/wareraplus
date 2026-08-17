@@ -80,9 +80,18 @@ function regSpan(key) {
   i18nRegistry.push({ el: s, key });
   return s;
 }
+// Vedi desktopMenuBar: le label degli switch originali iniziano con
+// un'emoji, che stona con le icone flat della barra. La togliamo nei proxy.
+function stripLeadingEmoji(s) {
+  return (s || '').replace(/^[\p{Extended_Pictographic}️‍\s]+/u, '').trim();
+}
+const proxyLabels = [];
 function translateBar() {
   i18nRegistry.forEach(({ el, key }) => { el.textContent = mbT(key); });
   i18nTitles.forEach(({ el, key }) => { el.setAttribute('aria-label', mbT(key)); el.title = mbT(key); });
+  proxyLabels.forEach(({ span, realLabel, fallback }) => {
+    span.textContent = stripLeadingEmoji(realLabel?.textContent || fallback);
+  });
   if (searchInput) searchInput.placeholder = mbT('searchPh');
 }
 
@@ -412,9 +421,12 @@ function buildSettingsAccordion() {
     const real = document.getElementById(id);
     if (!real) return;
     const row = el('label', 'wp-mmb-proxy-switch');
-    const span = el('span', null, { 'data-i18n': i18n });
+    // Niente data-i18n: ritradotto in translateBar dalla label reale, senza
+    // emoji (vedi desktopMenuBar).
+    const span = el('span', null);
     const realLabel = real.closest('.switch-container')?.querySelector('.switch-label');
-    span.textContent = realLabel?.textContent || fallback;
+    span.textContent = stripLeadingEmoji(realLabel?.textContent || fallback);
+    proxyLabels.push({ span, realLabel, fallback });
     const cb = el('input', null, { type: 'checkbox' });
     cb.checked = real.checked;
     cb.addEventListener('change', () => {
@@ -507,7 +519,12 @@ function buildBottombar() {
   timeMachineTab = el('button', 'wp-mmb-tab wp-mmb-tab-timemachine', { type: 'button' });
   timeMachineTab.appendChild(iconEl('history'));
   timeMachineTab.appendChild(regSpan('timeMachine'));
-  timeMachineTab.addEventListener('click', () => document.getElementById('wp-time-machine-btn')?.click());
+  timeMachineTab.addEventListener('click', () => {
+    // Vedi desktopMenuBar: la mappa dedicata della time machine finirebbe
+    // sotto una sub-view aperta (Political/Statistiche/Eco). Chiudila prima.
+    closeAnySubview();
+    document.getElementById('wp-time-machine-btn')?.click();
+  });
 
   bottombar.append(battlesTab, timeMachineTab);
 }

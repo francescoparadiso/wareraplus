@@ -16,6 +16,14 @@ import { escapeHtml, minVotesToWin } from './config.js';
 
 let _endorsementGroups = [];
 
+// WarEra+ (richiesto dall'utente): in WarEra si può votare solo dal livello
+// 15 in su. Lo split dei voti deve quindi (1) contare SEMPRE il candidato
+// come proprio elettore (autovote) e (2) distribuire come sostenitori solo i
+// membri di livello ≥ 15 — gli altri non possono votare e vanno esclusi.
+const VOTE_MIN_LEVEL = 15;
+function _memberLevel(m) { return m?.level ?? m?.lvl ?? m?.leveling?.level ?? 0; }
+function _canVote(m) { return _memberLevel(m) >= VOTE_MIN_LEVEL; }
+
 export function initMemberOrganizer(members, partyId) {
   const container = document.getElementById('endorsementGroupsContainer');
   if (!container) return;
@@ -62,11 +70,15 @@ function autoAssignSupporters(members, partyId, minVotesToWinArg) {
     g.supporterIds.forEach(sid => assignedUserIds.add(sid));
   });
 
-  let unassigned = [...members].filter(m => !assignedUserIds.has(m._id));
+  // Solo membri di livello ≥ 15 possono votare: gli altri non entrano nel
+  // pool dei sostenitori assegnabili.
+  let unassigned = [...members].filter(m => !assignedUserIds.has(m._id) && _canVote(m));
 
   const groupsNeeds = groupsWithCandidate.map(g => ({
     group: g,
-    needed: Math.max(0, minVotesToWinArg - g.supporterIds.length),
+    // -1: il candidato vota sé stesso (autovote sempre incluso), quindi
+    // servono minVotesToWin-1 sostenitori oltre a lui per raggiungere soglia.
+    needed: Math.max(0, minVotesToWinArg - 1 - g.supporterIds.length),
   }));
 
   for (const need of groupsNeeds) {
@@ -111,7 +123,7 @@ function renderEndorsementGroups(members, partyId) {
           <div class="candidate-role">Candidate</div>
         </div>
         <div class="candidate-stats">
-          <span class="supporter-count">${supporters.length} / ${minVotesToWin}</span>
+          <span class="supporter-count" title="Includes the candidate's own vote (autovote)">${supporters.length + 1} / ${minVotesToWin}</span>
           <button class="change-candidate-btn" data-group-idx="${idx}">✎ Change</button>
         </div>
       </div>
@@ -132,7 +144,8 @@ function renderEndorsementGroups(members, partyId) {
       </div>
     `).join('');
 
-    const availableForSupporter = members.filter(m => m._id !== group.candidateId && !group.supporterIds.includes(m._id));
+    // Solo ≥ liv 15 può votare: gli altri non sono aggiungibili come sostenitori.
+    const availableForSupporter = members.filter(m => m._id !== group.candidateId && !group.supporterIds.includes(m._id) && _canVote(m));
     const supporterSelectOptions = availableForSupporter.map(m => `<option value="${m._id}">${escapeHtml(m.username)}</option>`).join('');
 
     return `
@@ -179,9 +192,16 @@ function _tomSelectMemberRender(members) {
 function initTomSelectForSupporters(members) {
   document.querySelectorAll('.supporter-select').forEach(select => {
     if (select.tomselect) select.tomselect.destroy();
-    new TomSelect(select, {
+    const ts = new TomSelect(select, {
       placeholder: 'Search member...', allowEmptyOption: true, create: false, sortField: 'text',
       render: _tomSelectMemberRender(members),
+    });
+    // Se il controllo è vicino al fondo dello schermo apri la tendina verso
+    // l'alto invece che sotto (dove sarebbe fuori schermo) — vedi ts-drop-up
+    // in political.css. 240px ≈ altezza tipica di qualche opzione + ricerca.
+    ts.on('dropdown_open', () => {
+      const rect = ts.control.getBoundingClientRect();
+      ts.wrapper.classList.toggle('ts-drop-up', (window.innerHeight - rect.bottom) < 240);
     });
   });
 }
@@ -223,6 +243,21 @@ function attachGroupEvents(members, partyId) {
 }
 
 function openCandidateSelector(groupIdx, members, partyId) {
+  // BUG FIX (segnalato dall'utente: "Tom Select already initialized on this
+  // element" e candidato non selezionabile). Due cause:
+  //  1) se restava aperto un dialog precedente, il nuovo aveva lo STESSO id
+  //     #temp-candidate-select: `new TomSelect('#…')` prendeva il primo (già
+  //     inizializzato) e lanciava. Ora rimuoviamo prima ogni dialog residuo e
+  //     passiamo l'ELEMENTO (non l'id) a TomSelect.
+  //  2) `dialog.onclick = () => dialog.remove()` scattava anche cliccando
+  //     un'opzione della tendina (bubbling), chiudendo il dialog prima che la
+  //     selezione si applicasse. Ora chiude SOLO se il click è sullo sfondo
+  //     (e.target === dialog), e il valore si legge da ts.getValue().
+  document.querySelectorAll('.candidate-selector-dialog').forEach(d => {
+    d.querySelector('#temp-candidate-select')?.tomselect?.destroy();
+    d.remove();
+  });
+
   const dialog = document.createElement('div');
   dialog.className = 'candidate-selector-dialog';
   dialog.innerHTML = `
@@ -238,23 +273,32 @@ function openCandidateSelector(groupIdx, members, partyId) {
       </div>
     </div>
   `;
-  document.body.appendChild(dialog);
-  new TomSelect('#temp-candidate-select', {
+  // BUG FIX (segnalato dall'utente: candidato non selezionabile). Tutto il CSS
+  // del dialog e della tendina TomSelect è scopato sotto #wp-political-root
+  // (src/styles/political.css). Appeso a document.body — fuori da quel root —
+  // l'overlay e la .ts-dropdown restavano senza stile: la tendina non era
+  // cliccabile. Va quindi montato DENTRO #wp-political-root.
+  const mountRoot = document.getElementById('wp-political-root') || document.body;
+  mountRoot.appendChild(dialog);
+
+  const selectEl = dialog.querySelector('#temp-candidate-select');
+  const ts = new TomSelect(selectEl, {
     placeholder: 'Search member...', allowEmptyOption: true, create: false, sortField: 'text',
     render: _tomSelectMemberRender(members),
   });
+  const close = () => { try { ts.destroy(); } catch (_) {} dialog.remove(); };
+
   dialog.querySelector('#confirm-candidate').onclick = () => {
-    const candidateId = document.getElementById('temp-candidate-select').value;
+    const candidateId = ts.getValue();
     if (candidateId) {
       _endorsementGroups[groupIdx].candidateId   = candidateId;
       _endorsementGroups[groupIdx].supporterIds  = _endorsementGroups[groupIdx].supporterIds.filter(id => id !== candidateId);
       saveAndRefresh(members, partyId);
     }
-    dialog.remove();
+    close();
   };
-  dialog.querySelector('#cancel-candidate').onclick = () => dialog.remove();
-  dialog.querySelector('.dialog-content').addEventListener('click', e => e.stopPropagation());
-  dialog.onclick = () => dialog.remove();
+  dialog.querySelector('#cancel-candidate').onclick = close;
+  dialog.addEventListener('click', e => { if (e.target === dialog) close(); });
 }
 
 function _saveEndorsementGroups(partyId) {

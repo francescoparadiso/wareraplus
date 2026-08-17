@@ -110,7 +110,7 @@ function buildPanelHtml(nation) {
         <span class="wp-political-action-icon">🏛️</span>${t('senate_btn')}
       </button>
       <button class="wp-political-action-btn" id="wp-open-parties-btn">
-        <span class="wp-political-action-icon">🎗️</span>${t('parties_btn')}
+        <span class="wp-political-action-icon">👥</span>${t('parties_btn')}
       </button>
     </div>
 

@@ -747,6 +747,7 @@ body.light-theme #wp-time-machine-btn.wp-time-machine-btn-active {
 #wp-tm-play,
 #wp-tm-next-event,
 #wp-tm-speed,
+#wp-tm-standings-toggle,
 #wp-tm-share {
   flex: 0 0 auto;
   height: 28px;
@@ -765,9 +766,15 @@ body.light-theme #wp-time-machine-btn.wp-time-machine-btn-active {
 #wp-tm-play:hover,
 #wp-tm-next-event:hover:not(:disabled),
 #wp-tm-speed:hover,
+#wp-tm-standings-toggle:hover,
 #wp-tm-share:hover {
   color: #e6edf3;
   border-color: #58a6ff;
+}
+#wp-tm-standings-toggle.wp-tm-btn-active {
+  color: #f5c368;
+  border-color: #f5c368;
+  background: rgba(217, 154, 43, 0.16);
 }
 #wp-tm-prev-event:disabled,
 #wp-tm-next-event:disabled {
@@ -822,6 +829,7 @@ body.light-theme #wp-tm-prev-event,
 body.light-theme #wp-tm-play,
 body.light-theme #wp-tm-next-event,
 body.light-theme #wp-tm-speed,
+body.light-theme #wp-tm-standings-toggle,
 body.light-theme #wp-tm-share {
   background: #f0f0f0;
   border-color: #ccc;
@@ -902,6 +910,228 @@ body.light-theme #wp-time-machine-popup {
 }
 body.light-theme .wp-tm-popup-since {
   color: #666;
+}
+
+/* ── Indicatore "sei nella time machine": badge + orologio analogico (le
+   lancette seguono l'ORA DELL'EVENTO, vedi timeMachine.js:_updateClock) +
+   data + card di ringraziamento a Nettrix. In alto a sinistra, scivola da
+   sopra all'apertura. ── */
+#wp-tm-indicator {
+  position: fixed;
+  top: 84px;
+  left: 16px;
+  z-index: 2400;
+  width: 190px;
+  padding: 12px 14px;
+  background: rgba(13, 17, 23, 0.97);
+  border: 1px solid rgba(217, 154, 43, 0.5);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(12px);
+  color: #e6edf3;
+  font-family: 'Inter', -apple-system, sans-serif;
+  transform: translateY(-16px);
+  opacity: 0;
+  visibility: hidden;
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.28s ease, visibility 0s linear 0.28s;
+  pointer-events: none;
+}
+#wp-tm-indicator.open {
+  transform: translateY(0);
+  opacity: 1;
+  visibility: visible;
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.28s ease, visibility 0s linear 0s;
+  pointer-events: auto;
+}
+.wp-tm-ind-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  color: #f5c368;
+  margin-bottom: 10px;
+}
+.wp-tm-ind-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f5c368;
+  box-shadow: 0 0 8px #f5c368;
+  animation: wpTmPulse 1.6s ease-in-out infinite;
+}
+@keyframes wpTmPulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+.wp-tm-ind-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.wp-tm-clock {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+}
+.wp-tm-clock-face {
+  fill: rgba(255, 255, 255, 0.04);
+  stroke: rgba(217, 154, 43, 0.55);
+  stroke-width: 2;
+}
+.wp-tm-clock-ticks line { stroke: rgba(230, 237, 243, 0.45); stroke-width: 2; stroke-linecap: round; }
+.wp-tm-hand-hour { stroke: #e6edf3; stroke-width: 4; stroke-linecap: round; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.wp-tm-hand-min { stroke: #f5c368; stroke-width: 3; stroke-linecap: round; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.wp-tm-clock-pin { fill: #f5c368; }
+.wp-tm-ind-hm {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  color: #e6edf3;
+  font-variant-numeric: tabular-nums;
+}
+.wp-tm-ind-date {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #8b949e;
+  white-space: nowrap;
+}
+.wp-tm-credit {
+  display: block;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 10.5px;
+  color: #8b949e;
+  text-decoration: none;
+}
+.wp-tm-credit strong { color: #f5c368; }
+.wp-tm-credit:hover { color: #e6edf3; }
+body.light-theme #wp-tm-indicator {
+  background: rgba(255, 255, 255, 0.97);
+  border-color: rgba(156, 107, 31, 0.5);
+  color: #1a1a1a;
+}
+body.light-theme .wp-tm-ind-head { color: #9c6b1f; }
+body.light-theme .wp-tm-ind-dot { background: #9c6b1f; box-shadow: 0 0 8px #9c6b1f; }
+body.light-theme .wp-tm-clock-face { fill: rgba(0, 0, 0, 0.03); stroke: rgba(156, 107, 31, 0.55); }
+body.light-theme .wp-tm-clock-ticks line { stroke: rgba(60, 47, 28, 0.4); }
+body.light-theme .wp-tm-hand-hour { stroke: #3e2f1c; }
+body.light-theme .wp-tm-hand-min { stroke: #9c6b1f; }
+body.light-theme .wp-tm-clock-pin { fill: #9c6b1f; }
+body.light-theme .wp-tm-ind-hm { color: #1a1a1a; }
+body.light-theme .wp-tm-credit { color: #6b5637; border-top-color: rgba(0, 0, 0, 0.1); }
+body.light-theme .wp-tm-credit strong { color: #9c6b1f; }
+
+/* ── Classifica territorio ("hall of fame" + lista regioni per nazione),
+   pannello a destra, aggiornato ad ogni istante mostrato (vedi
+   timeMachine.js:_updateStandings). Toggle 🏆 nella barra controlli. ── */
+#wp-tm-standings {
+  position: fixed;
+  top: 84px;
+  right: 16px;
+  bottom: 190px;
+  z-index: 2400;
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(13, 17, 23, 0.97);
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(12px);
+  color: #e6edf3;
+  font-family: 'Inter', -apple-system, sans-serif;
+  transform: translateX(16px);
+  opacity: 0;
+  visibility: hidden;
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.28s ease, visibility 0s linear 0.28s;
+}
+#wp-tm-standings.open {
+  transform: translateX(0);
+  opacity: 1;
+  visibility: visible;
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.28s ease, visibility 0s linear 0s;
+}
+.wp-tm-st-title {
+  flex: 0 0 auto;
+  padding: 12px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: #f5c368;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.wp-tm-st-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px;
+}
+.wp-tm-st-empty { padding: 16px; text-align: center; color: #8b949e; }
+.wp-tm-st-podium {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.wp-tm-st-podium-item {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+}
+.wp-tm-st-p1 { border-color: rgba(245, 195, 104, 0.55); background: rgba(245, 195, 104, 0.1); }
+.wp-tm-st-medal { font-size: 16px; line-height: 1; }
+.wp-tm-st-pname { font-size: 10px; font-weight: 600; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.wp-tm-st-pcount { font-size: 13px; font-weight: 800; color: #f5c368; }
+.wp-tm-st-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.wp-tm-st-row:hover { background: rgba(255, 255, 255, 0.05); }
+.wp-tm-st-rank { flex: 0 0 18px; text-align: right; color: #8b949e; font-size: 11px; font-variant-numeric: tabular-nums; }
+.wp-tm-st-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; }
+.wp-tm-st-flag { width: 18px; height: 13px; object-fit: cover; border-radius: 2px; flex: 0 0 auto; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15); }
+.wp-tm-st-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-tm-st-bar { flex: 0 0 42px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.1); overflow: hidden; }
+.wp-tm-st-fill { display: block; height: 100%; border-radius: 3px; }
+.wp-tm-st-count { flex: 0 0 auto; min-width: 24px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+body.light-theme #wp-tm-standings {
+  background: rgba(255, 255, 255, 0.97);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #1a1a1a;
+}
+body.light-theme .wp-tm-st-title { color: #9c6b1f; border-bottom-color: rgba(0, 0, 0, 0.1); }
+body.light-theme .wp-tm-st-pcount { color: #9c6b1f; }
+body.light-theme .wp-tm-st-p1 { border-color: rgba(156, 107, 31, 0.5); background: rgba(156, 107, 31, 0.1); }
+body.light-theme .wp-tm-st-row:hover { background: rgba(0, 0, 0, 0.05); }
+body.light-theme .wp-tm-st-bar { background: rgba(0, 0, 0, 0.1); }
+
+/* Indicatore e classifica: adattamento mobile (spazio ridotto). L'indicatore
+   scende sotto il chrome superiore mobile; la classifica diventa una fascia
+   più stretta e più bassa, sopra il pannello slider. */
+@media (max-width: 768px) {
+  #wp-tm-indicator {
+    top: 70px;
+    left: 10px;
+    width: 150px;
+    padding: 9px 11px;
+  }
+  .wp-tm-clock { width: 44px; height: 44px; }
+  .wp-tm-ind-hm { font-size: 18px; }
+  #wp-tm-standings {
+    top: 70px;
+    right: 10px;
+    bottom: 210px;
+    width: 168px;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════

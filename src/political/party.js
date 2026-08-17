@@ -40,13 +40,23 @@ export async function loadPartiesForSelector() {
   try {
     const parties = await loadPartiesForCountry(currentCountryId);
     parties.forEach(p => tomSelect.addOption({ value: p._id, text: p.name || p._id }));
-    if (currentPartyId && tomSelect.options[currentPartyId]) {
-      tomSelect.setValue(currentPartyId);
-    } else {
-      tomSelect.setValue('');
+    // BUG FIX (segnalato dall'utente): aprendo la sezione partito compariva il
+    // partito salvato (preferredPartyId) anche quando apparteneva a una NAZIONE
+    // DIVERSA da quella ora selezionata. currentPartyId è valido solo se è tra
+    // i partiti di QUESTA nazione: altrimenti lo scartiamo e non mostriamo
+    // nessun partito (invece di uno vecchio di un altro paese).
+    const validSaved = !!(currentPartyId && tomSelect.options[currentPartyId]);
+    if (currentPartyId && !validSaved) {
+      setCurrentPartyId(null);
+      try { localStorage.removeItem('preferredPartyId'); } catch (_) {}
     }
+    tomSelect.setValue(validSaved ? currentPartyId : '');
     select.tomselect = tomSelect;
     tomSelect.on('change', value => loadPartyDetails(value || null));
+    // Carica i dettagli coerenti con la selezione risolta sopra: il partito
+    // valido di questa nazione, oppure "nessun partito". (Prima ci pensava
+    // showPartyView con currentPartyId grezzo — da cui il partito stantìo.)
+    loadPartyDetails(validSaved ? currentPartyId : null);
   } catch (err) {
     console.warn('Error loading parties:', err);
   }

@@ -30,6 +30,13 @@ const { SRC_REGIONS, SRC_BORDERS, SRC_DIPLOMACY_DUAL_BORDER, SRC_BATTLE_REGION, 
 // ==================== INIT MAPPA ====================
 export function initMap() {
   const theme = THEMES[state.theme];
+  // WarEra+ (richiesto dall'utente): su mobile (schermo stretto, verticale)
+  // a minZoom 1.7 il mondo non ci sta in larghezza — resta tagliato ai lati.
+  // Abbassiamo il minimo così ci si può allontanare fino a vedere tutto il
+  // mondo. Su desktop resta 1.7 (lì a 1.7 il mondo è già intero e più in giù
+  // sarebbe solo oceano vuoto). Le scale decorative (antique/darkFleet)
+  // interpolano su [1.7, 8] e si limitano a clampare sotto 1.7: nessun danno.
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
   state.map = new maplibregl.Map({
     container: 'map',
     style: {
@@ -39,8 +46,8 @@ export function initMap() {
       layers: [{ id: 'background', type: 'background', paint: { 'background-color': theme.OCEAN } }],
     },
     center: [0, 20],
-    zoom: 2,
-    minZoom: 1.7,
+    zoom: isMobile ? 1.1 : 2,
+    minZoom: isMobile ? 0.7 : 1.7,
     maxZoom: 8,
     renderWorldCopies: true,
     attributionControl: false,

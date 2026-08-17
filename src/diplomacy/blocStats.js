@@ -256,7 +256,18 @@ function injectStyles() {
     .bs-addbtn:hover{background:rgba(255,255,255,.1)}
     .bs-addbtn.f1{border-color:#58a6ff;color:#58a6ff} .bs-addbtn.f2{border-color:#3fb950;color:#3fb950}
     @media(max-width:1024px){.bs-sum{grid-template-columns:repeat(2,1fr)}.bs-sel,.bs-fcmp{grid-template-columns:1fr}.bs-popup.bloc-popup{width:95vw}.bs-popup.nation-popup{width:95vw}}
-    @media(max-width:640px){.bs-sum{grid-template-columns:1fr}.bs-grid{grid-template-columns:1fr}}
+    @media(max-width:640px){.bs-sum{grid-template-columns:1fr}.bs-grid{grid-template-columns:1fr}
+      /* 1vs1: le barre di confronto (bs-srow) restavano a 3 colonne con
+         valori/tracce a min-width fissa → sforavano in orizzontale sul
+         telefono. Qui riduciamo gap e min-width così la barra "tiro alla
+         fune" rientra nella larghezza dello schermo. */
+      .bs-srow{gap:8px}
+      .bs-sgrid,.bs-wsec{padding:14px}
+      .bs-bwrap{gap:6px}
+      .bs-btrack{min-width:0}
+      .bs-bval{min-width:0}
+      .bs-slbl{font-size:11px;white-space:normal}
+      .bs-vs{padding:8px;font-size:22px}}
 
     /* ===== LIGHT THEME ===== */
     body.light-theme .bsw{color:#3e2f1c}

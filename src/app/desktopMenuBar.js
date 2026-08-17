@@ -58,9 +58,23 @@ function regSpan(key) {
   i18nRegistry.push({ el: s, key });
   return s;
 }
+// Le label degli switch originali (index.html) iniziano con un'emoji
+// (🏷️/🏳️/⚔️/🚫): stona con le icone flat (SVG currentColor) del resto della
+// barra. Le stacchiamo per i proxy della barra — l'originale nel menù
+// laterale resta intatto.
+function stripLeadingEmoji(s) {
+  return (s || '').replace(/^[\p{Extended_Pictographic}️‍\s]+/u, '').trim();
+}
+// {span, realLabel, fallback} degli switch Impostazioni: il testo si prende
+// dalla label reale (già tradotta da applyTranslations) e si ripulisce
+// dall'emoji ad ogni cambio lingua — vedi translateBar.
+const proxyLabels = [];
 function translateBar() {
   i18nRegistry.forEach(({ el, key }) => { el.textContent = mbT(key); });
   i18nTitles.forEach(({ el, key }) => { el.title = mbT(key); });
+  proxyLabels.forEach(({ span, realLabel, fallback }) => {
+    span.textContent = stripLeadingEmoji(realLabel?.textContent || fallback);
+  });
   if (searchInput) searchInput.placeholder = mbT('searchPh');
 }
 
@@ -398,9 +412,13 @@ function buildSettingsDropdown() {
     const real = document.getElementById(id);
     if (!real) return;
     const row = el('label', 'wp-mb-proxy-switch');
-    const span = el('span', null, { 'data-i18n': i18n });
+    // Niente data-i18n sul proxy: lo ritradurremmo noi in translateBar
+    // leggendo la label reale (già tradotta) e togliendo l'emoji iniziale —
+    // così applyTranslations non ce la rimette a ogni cambio lingua.
+    const span = el('span', null);
     const realLabel = real.closest('.switch-container')?.querySelector('.switch-label');
-    span.textContent = realLabel?.textContent || fallback;
+    span.textContent = stripLeadingEmoji(realLabel?.textContent || fallback);
+    proxyLabels.push({ span, realLabel, fallback });
     const cb = el('input', null, { type: 'checkbox' });
     cb.checked = real.checked;
     cb.addEventListener('change', () => {
@@ -428,7 +446,13 @@ function buildTimeMachineButton() {
   timeMachineBtn = el('button', 'wp-mb-btn wp-mb-action wp-mb-timemachine', { type: 'button' });
   timeMachineBtn.appendChild(iconEl('history'));
   timeMachineBtn.appendChild(regSpan('timeMachine'));
-  timeMachineBtn.addEventListener('click', () => document.getElementById('wp-time-machine-btn')?.click());
+  timeMachineBtn.addEventListener('click', () => {
+    // Time machine usa una mappa dedicata mostrata al posto di #map: se una
+    // sub-view (Political/Statistiche/Eco, z-index 5000-6000) è aperta la
+    // coprirebbe, dando l'impressione che "non si apra". Chiudila prima.
+    closeAnySubview();
+    document.getElementById('wp-time-machine-btn')?.click();
+  });
   return timeMachineBtn;
 }
 function setupToggleMirror() {

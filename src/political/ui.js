@@ -52,8 +52,11 @@ export function showPartyView({ loadPartiesForSelector, loadPartyDetails } = {})
   if (statsRow) statsRow.style.display = 'none';
   if (timelinePanel) timelinePanel.style.display = 'none';
 
+  // loadPartiesForSelector risolve da sé quale partito mostrare (quello valido
+  // della nazione corrente o nessuno) e carica i dettagli — vedi party.js. Non
+  // ricarichiamo più currentPartyId "grezzo" qui: apparteneva potenzialmente a
+  // un'altra nazione e mostrava un partito stantìo (bug segnalato dall'utente).
   loadPartiesForSelector?.();
-  if (currentPartyId) loadPartyDetails?.(currentPartyId);
 }
 
 export function showElectionView() {

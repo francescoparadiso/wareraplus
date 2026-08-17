@@ -88,6 +88,15 @@ function _fmtDateForFilename(ts) {
 
 let _btn, _panel, _slider, _label, _dayLabel, _popup;
 let _playBtn, _prevEventBtn, _nextEventBtn, _speedBtn, _shareBtn;
+// Indicatore "sei nella time machine" (badge + orologio analogico + data) e
+// classifica territorio ("hall of fame" + lista regioni per nazione).
+let _indicator, _clockHour, _clockMin, _clockHM, _clockDate;
+let _standings, _standingsList, _standingsBtn;
+let _standingsVisible = !window.matchMedia('(max-width: 768px)').matches; // di default aperta su desktop, chiusa su mobile (poco spazio)
+
+// Nettrix ha reso possibile lo storico della time machine (server di cache):
+// una card di ringraziamento nell'indicatore linka al suo profilo.
+const NETTRIX_URL = 'https://app.warera.io/user/69baf405edc9a346931b27c5';
 let _active = false;
 let _range = null;
 let _debounceTimer = null;
@@ -125,19 +134,6 @@ export function openTimeMachineAt(ts) {
   _activate(ts);
 }
 
-// Se le battaglie attive sono visibili, le spegne — stesso checkbox/evento
-// di src/app/battleToggle.js (unica fonte di verità), simulato qui invece
-// di duplicare la logica. Ferma anche il poll periodico (updateBattleMarkers
-// controlla markersEnabled), non solo il disegno — inutile continuare a
-// interrogare l'API mentre la mappa che le mostrerebbe è nascosta.
-function _disableBattlesIfShown() {
-  const checkbox = document.getElementById('checkActiveBattles');
-  if (checkbox?.checked) {
-    checkbox.checked = false;
-    checkbox.dispatchEvent(new Event('change'));
-  }
-}
-
 async function _activate(initialTs) {
   // Basta che i dati di base siano pronti (baseGeoJSON/topologia) — non
   // serve più che state.map specificamente esista già "aperta": la mappa
@@ -155,7 +151,6 @@ async function _activate(initialTs) {
   _active = true;
   state.timeMachineActive = true;
   _btn.classList.add('wp-time-machine-btn-active');
-  _disableBattlesIfShown();
   // PERF: il pallino nave è puramente decorativo (schema seedato sempre
   // uguale, non dipende da nessun dato) — pausarlo (resta visibile, solo
   // fermo) evita lavoro JS inutile mentre la sua mappa è nascosta. Solo
@@ -165,7 +160,11 @@ async function _activate(initialTs) {
 
   await activateTimeMachineMap(); // crea/mostra la mappa dedicata, nasconde quella principale
   _buildPanelIfNeeded();
+  _buildIndicatorIfNeeded();
+  _buildStandingsIfNeeded();
   _panel.classList.add('open');
+  _indicator.classList.add('open');
+  _applyStandingsVisibility();
   document.addEventListener('keydown', _onKeydown);
 
   const startTs = Number.isFinite(initialTs)
@@ -188,6 +187,8 @@ function _deactivate() {
   _stopPlay();
   _btn.classList.remove('wp-time-machine-btn-active');
   if (_panel) _panel.classList.remove('open');
+  if (_indicator) _indicator.classList.remove('open');
+  if (_standings) _standings.classList.remove('open');
   _hidePopup();
   document.removeEventListener('keydown', _onKeydown);
   resumeShipAnimationDark();
@@ -228,6 +229,7 @@ function _buildPanelIfNeeded() {
       <button id="wp-tm-play" title="Play" aria-label="Play">▶</button>
       <button id="wp-tm-next-event" title="Evento successivo" aria-label="Evento successivo" disabled>⏭</button>
       <button id="wp-tm-speed" title="Velocità riproduzione" aria-label="Velocità riproduzione">1x</button>
+      <button id="wp-tm-standings-toggle" title="Classifica territorio" aria-label="Classifica territorio">🏆</button>
       <button id="wp-tm-share" title="Condividi come immagine" aria-label="Condividi come immagine">📤</button>
     </div>
     <div class="wp-tm-row wp-tm-slider-row">
@@ -248,12 +250,14 @@ function _buildPanelIfNeeded() {
   _nextEventBtn = _panel.querySelector('#wp-tm-next-event');
   _speedBtn = _panel.querySelector('#wp-tm-speed');
   _shareBtn = _panel.querySelector('#wp-tm-share');
+  _standingsBtn = _panel.querySelector('#wp-tm-standings-toggle');
 
   _panel.querySelector('#wp-tm-close').addEventListener('click', _deactivate);
   _playBtn.addEventListener('click', _togglePlay);
   _prevEventBtn.addEventListener('click', () => _jumpToEvent(-1));
   _nextEventBtn.addEventListener('click', () => _jumpToEvent(1));
   _speedBtn.addEventListener('click', _cycleSpeed);
+  _standingsBtn.addEventListener('click', _toggleStandings);
   _shareBtn.addEventListener('click', _shareScreenshot);
 
   _slider.addEventListener('input', () => {
@@ -266,6 +270,130 @@ function _buildPanelIfNeeded() {
     clearTimeout(_debounceTimer);
     _debounceTimer = setTimeout(() => _applyAt(ts), 180);
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Indicatore "sei nella time machine": badge lampeggiante + orologio
+// analogico le cui lancette si muovono all'ora dell'ISTANTE mostrato (non
+// l'ora reale) + data. Card di ringraziamento a Nettrix (server storico) in
+// fondo. Creato una volta, mostrato/nascosto in _activate/_deactivate.
+// ─────────────────────────────────────────────────────────────────────────
+function _buildIndicatorIfNeeded() {
+  if (_indicator) return;
+  _indicator = document.createElement('div');
+  _indicator.id = 'wp-tm-indicator';
+  _indicator.innerHTML = `
+    <div class="wp-tm-ind-head"><span class="wp-tm-ind-dot"></span>TIME MACHINE</div>
+    <div class="wp-tm-ind-body">
+      <svg class="wp-tm-clock" viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="46" class="wp-tm-clock-face"/>
+        <g class="wp-tm-clock-ticks">
+          <line x1="50" y1="6" x2="50" y2="13"/><line x1="50" y1="94" x2="50" y2="87"/>
+          <line x1="6" y1="50" x2="13" y2="50"/><line x1="94" y1="50" x2="87" y2="50"/>
+        </g>
+        <line x1="50" y1="50" x2="50" y2="29" class="wp-tm-hand-hour"/>
+        <line x1="50" y1="50" x2="50" y2="19" class="wp-tm-hand-min"/>
+        <circle cx="50" cy="50" r="3" class="wp-tm-clock-pin"/>
+      </svg>
+      <div class="wp-tm-ind-time">
+        <div class="wp-tm-ind-hm">--:--</div>
+        <div class="wp-tm-ind-date">—</div>
+      </div>
+    </div>
+    <a class="wp-tm-credit" href="${NETTRIX_URL}" target="_blank" rel="noopener">
+      Storico offerto da <strong>Nettrix</strong> ↗
+    </a>
+  `;
+  document.body.appendChild(_indicator);
+  _clockHour = _indicator.querySelector('.wp-tm-hand-hour');
+  _clockMin = _indicator.querySelector('.wp-tm-hand-min');
+  _clockHM = _indicator.querySelector('.wp-tm-ind-hm');
+  _clockDate = _indicator.querySelector('.wp-tm-ind-date');
+}
+
+// Muove le lancette all'ora dell'istante `ts` (ora locale dell'evento) e
+// aggiorna ora/data testuali. La transizione CSS sulle lancette fa sì che in
+// playback l'orologio "giri" invece di scattare.
+function _updateClock(ts) {
+  if (!_clockHour) return;
+  const d = new Date(ts);
+  const h = d.getHours(), m = d.getMinutes();
+  const minAng = m * 6;                     // 360/60
+  const hourAng = (h % 12) * 30 + m * 0.5;  // 360/12 + drift al minuto
+  _clockMin.setAttribute('transform', `rotate(${minAng} 50 50)`);
+  _clockHour.setAttribute('transform', `rotate(${hourAng} 50 50)`);
+  _clockHM.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  _clockDate.textContent = d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Classifica territorio ("hall of fame" + lista regioni): nazioni ordinate
+// per numero di regioni possedute NELL'ISTANTE mostrato. Podio top-3 in
+// cima, poi la lista completa. Si aggiorna ad ogni frame applicato (vedi
+// _fetchAndRender) — dati già in memoria (_lastRegions + state.nationMap),
+// nessuna fetch. Toggle 🏆 nella barra controlli (di default aperta su
+// desktop, chiusa su mobile).
+// ─────────────────────────────────────────────────────────────────────────
+function _buildStandingsIfNeeded() {
+  if (_standings) return;
+  _standings = document.createElement('div');
+  _standings.id = 'wp-tm-standings';
+  _standings.innerHTML = `
+    <div class="wp-tm-st-title">🏆 Hall of Fame — Territorio</div>
+    <div class="wp-tm-st-list"></div>
+  `;
+  document.body.appendChild(_standings);
+  _standingsList = _standings.querySelector('.wp-tm-st-list');
+}
+
+function _flagImg(nation) {
+  const code = nation?.code?.toLowerCase();
+  return code ? `<img class="wp-tm-st-flag" src="https://media.warera.io/images/flags/${code}.svg?v=16" alt="" loading="lazy" onerror="this.style.visibility='hidden'"/>` : '<span class="wp-tm-st-flag"></span>';
+}
+
+function _updateStandings(regionsMap) {
+  if (!_standings || !_standingsList || !regionsMap) return;
+  const counts = new Map();
+  for (const rid in regionsMap) {
+    const cid = regionsMap[rid];
+    if (cid) counts.set(cid, (counts.get(cid) || 0) + 1);
+  }
+  const rows = [...counts.entries()]
+    .map(([cid, n]) => ({ cid, n, nation: state.nationMap.get(cid) }))
+    .sort((a, b) => b.n - a.n);
+  if (!rows.length) { _standingsList.innerHTML = '<div class="wp-tm-st-empty">—</div>'; return; }
+  const max = rows[0].n || 1;
+  const medal = ['🥇', '🥈', '🥉'];
+
+  const podium = rows.slice(0, 3).map((r, i) => `
+    <div class="wp-tm-st-podium-item wp-tm-st-p${i + 1}">
+      <div class="wp-tm-st-medal">${medal[i]}</div>
+      ${_flagImg(r.nation)}
+      <div class="wp-tm-st-pname">${escapeHtml(r.nation?.name || '—')}</div>
+      <div class="wp-tm-st-pcount">${r.n}</div>
+    </div>`).join('');
+
+  const list = rows.map((r, i) => `
+    <div class="wp-tm-st-row">
+      <span class="wp-tm-st-rank">${i + 1}</span>
+      <span class="wp-tm-st-dot" style="background:${state.nationBaseColorMap.get(r.cid) || '#888'}"></span>
+      ${_flagImg(r.nation)}
+      <span class="wp-tm-st-name">${escapeHtml(r.nation?.name || String(r.cid))}</span>
+      <span class="wp-tm-st-bar"><span class="wp-tm-st-fill" style="width:${(r.n / max * 100).toFixed(1)}%;background:${state.nationBaseColorMap.get(r.cid) || '#58a6ff'}"></span></span>
+      <span class="wp-tm-st-count">${r.n}</span>
+    </div>`).join('');
+
+  _standingsList.innerHTML = `<div class="wp-tm-st-podium">${podium}</div>${list}`;
+}
+
+function _applyStandingsVisibility() {
+  if (_standings) _standings.classList.toggle('open', _standingsVisible);
+  if (_standingsBtn) _standingsBtn.classList.toggle('wp-tm-btn-active', _standingsVisible);
+}
+function _toggleStandings() {
+  _standingsVisible = !_standingsVisible;
+  _applyStandingsVisibility();
+  trackEvent('time-machine-standings-toggle', { visible: _standingsVisible });
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -332,6 +460,7 @@ async function _playLoop() {
     _slider.value = String(target);
     _label.textContent = _fmtDate(target);
     _dayLabel.textContent = _fmtDay(target);
+    _updateClock(target);
     _syncUrl(target);
     _hidePopup();
   }
@@ -463,6 +592,7 @@ async function _fetchAndRender(ts) {
     if (token !== _applyToken) return false; // superata da una richiesta più recente, scartata
     _lastRegions = regions;
     renderTimeMachineFrame(regions, _buildLabelEntries(regions));
+    _updateStandings(regions);
     return true;
   } catch (err) {
     console.warn('WarEra+ time machine: ricostruzione fallita:', err.message);
@@ -477,6 +607,7 @@ async function _fetchAndRender(ts) {
 async function _applyAt(ts) {
   _label.textContent = _fmtDate(ts);
   _dayLabel.textContent = _fmtDay(ts);
+  _updateClock(ts);
   _hidePopup();
   _syncUrl(ts);
   await _fetchAndRender(ts);

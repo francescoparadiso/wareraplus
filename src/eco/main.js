@@ -396,10 +396,30 @@ function relTime(iso) {
 // Costruzione vista
 // ══════════════════════════════════════════════════════════════
 let built = false;
+let builtLang = null;      // lingua con cui è stato costruito l'ultima volta
+let containerEl = null;    // per ricostruire al cambio lingua
 let rootEl, inputEl, wageEl, rememberEl, runBtn, resultsEl;
 
+// BUG FIX (segnalato dall'utente: "tool ottimizzazione ancora non tradotto").
+// initEcoView costruiva UNA sola volta (guardia `built`) e non si ritraduceva
+// mai: aperto una volta in una lingua, restava in quella per sempre anche
+// cambiando lingua all'app. Ora si ricostruisce se la lingua è cambiata —
+// alla riapertura (guardia qui sotto) e dal vivo (listener langchange).
+let _ecoLangBound = false;
+function _bindEcoLangListener() {
+  if (_ecoLangBound) return;
+  _ecoLangBound = true;
+  window.addEventListener('wareraplus:langchange', () => {
+    if (!containerEl || !rootEl?.isConnected) return;
+    built = false; // forza la ricostruzione nella nuova lingua
+    initEcoView(containerEl);
+  });
+}
+
 export function initEcoView(container) {
-  if (built && rootEl?.isConnected) return;
+  containerEl = container;
+  _bindEcoLangListener();
+  if (built && rootEl?.isConnected && builtLang === getLang()) return;
   container.innerHTML = '';
   rootEl = h('div', 'wp-eco');
   rootEl.appendChild(buildCreditCard());
@@ -436,6 +456,7 @@ export function initEcoView(container) {
   form.addEventListener('submit', (e) => { e.preventDefault(); run(); });
   container.appendChild(rootEl);
   built = true;
+  builtLang = getLang();
 }
 
 function buildCreditCard() {
@@ -460,6 +481,19 @@ async function enrichCreditCard(metaEl) {
     if (!res.ok) return;
     const data = (await res.json())?.result?.data;
     if (!data) return;
+    // Foto profilo reale di ArgusIA (prima c'era solo l'iniziale "A").
+    if (data.avatarUrl) {
+      const avatarEl = metaEl.closest('.wp-eco-credit')?.querySelector('.wp-eco-credit-avatar');
+      if (avatarEl) {
+        const img = document.createElement('img');
+        img.src = data.avatarUrl;
+        img.alt = '';
+        img.onerror = () => { avatarEl.classList.remove('has-img'); img.remove(); };
+        avatarEl.textContent = '';
+        avatarEl.classList.add('has-img');
+        avatarEl.appendChild(img);
+      }
+    }
     const parts = [];
     if (data.leveling?.level != null) parts.push(`${tf('level')} ${data.leveling.level}`);
     try {

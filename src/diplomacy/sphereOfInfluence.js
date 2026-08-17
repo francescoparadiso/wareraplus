@@ -28,6 +28,7 @@ async function fetchCsvWithRetry(url, { retries = 3, base = 800 } = {}) {
 export async function loadSphereOfInfluence() {
   try {
     const resp = await fetchCsvWithRetry(EXTERNAL_SPHERE_URL);
+    const csv = await resp.text();
     const data = parseCSV(csv);
     buildSphereMapFromData(data);
     updateDynamicLegend();

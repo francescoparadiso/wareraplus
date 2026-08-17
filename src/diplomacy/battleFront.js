@@ -179,19 +179,31 @@ function fireOne(side) {
     endPct = clamp(lastFrontPct - intoEnemy, 2, 96);
   }
 
-  if (!reduceMotion) {
+  {
     const tracer = nextPooled(tracerPool);
     const dxPx = (endPct - startPct) / 100 * w;
     tracer.className = 'bfm-tracer ' + side;
     tracer.style.top = (top / 100 * h) + 'px';
     tracer.style.left = (startPct / 100 * w) + 'px';
     if (tracer._anim) tracer._anim.cancel();
-    tracer._anim = tracer.animate([
-      { opacity: 0, transform: 'translateX(0px) scaleX(0.4)' },
-      { opacity: 1, transform: 'translateX(0px) scaleX(1)', offset: 0.16 },
-      { opacity: 1, transform: `translateX(${dxPx * 0.82}px) scaleX(1)`, offset: 0.8 },
-      { opacity: 0, transform: `translateX(${dxPx}px) scaleX(1)` },
-    ], { duration: 420 + Math.random() * 120, easing: 'cubic-bezier(.2,.6,.4,1)' });
+    // BUG FIX (segnalato dall'utente: "non si vedono traccianti su desktop").
+    // Causa: con prefers-reduced-motion:reduce attivo (comune su desktop) il
+    // ramo che disegnava i traccianti era saltato del tutto — restava solo il
+    // lampo d'impatto. Ora il tracciante si vede SEMPRE: a moto ridotto come
+    // breve lampo statico (niente scivolamento sostenuto, rispetta comunque
+    // la preferenza), altrimenti con lo scivolamento pieno di prima.
+    tracer._anim = reduceMotion
+      ? tracer.animate([
+          { opacity: 0, transform: 'scaleX(0.6)' },
+          { opacity: 1, transform: 'scaleX(1)', offset: 0.3 },
+          { opacity: 0, transform: 'scaleX(1)' },
+        ], { duration: 360, easing: 'ease-out' })
+      : tracer.animate([
+          { opacity: 0, transform: 'translateX(0px) scaleX(0.4)' },
+          { opacity: 1, transform: 'translateX(0px) scaleX(1)', offset: 0.16 },
+          { opacity: 1, transform: `translateX(${dxPx * 0.82}px) scaleX(1)`, offset: 0.8 },
+          { opacity: 0, transform: `translateX(${dxPx}px) scaleX(1)` },
+        ], { duration: 420 + Math.random() * 120, easing: 'cubic-bezier(.2,.6,.4,1)' });
   }
 
   const blast = nextPooled(blastPool);

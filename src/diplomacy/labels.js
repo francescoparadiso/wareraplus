@@ -94,6 +94,15 @@ export function initLabelCanvas() {
   state.labelCtx = state.labelCanvas.getContext('2d');
   resizeLabelCanvas();
   state.map.on('render', drawLabels);
+  // BUG FIX (segnalato dall'utente: i nomi nazione sparivano da fermi "dopo un
+  // timer"). Le etichette vivono su questo canvas 2D separato, ridisegnato SOLO
+  // su 'render'. Quando la mappa va davvero idle (navi in pausa a tab nascosta,
+  // timer throttlati) nessun 'render' parte: il canvas non si rinfresca e il
+  // compositore può scartarne il buffer → nomi spariti finché non si fa
+  // pan/zoom. Un ridisegno al "settle" (idle) e al ritorno in primo piano
+  // (visibilitychange) lo rimette a posto senza un timer sempre attivo.
+  state.map.on('idle', drawLabels);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) drawLabels(); });
   window.addEventListener('resize', resizeLabelCanvas);
 }
 
