@@ -23,6 +23,30 @@ import { renderParliamentChart, renderParliamentSeats, renderParliamentAvatars, 
 import { initPanelResize } from './panelResize.js';
 import { t } from '../shared/i18n.js';
 import { trackEvent } from '../shared/analytics.js';
+import { isPinned, togglePin } from '../app/pins.js';
+
+// Stella di pin per l'intestazione del pannello (nazione o alleanza).
+function pinStarHtml(type, id) {
+  const on = isPinned(type, id);
+  return `<button class="wp-panel-pin${on ? ' pinned' : ''}" id="wp-panel-pin"
+            data-pin-type="${type}" data-pin-id="${id}"
+            title="${on ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}"
+            aria-label="Preferiti">${on ? '★' : '☆'}</button>`;
+}
+function wirePinStar() {
+  const btn = document.getElementById('wp-panel-pin');
+  if (!btn) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const type = btn.dataset.pinType;
+    const id = btn.dataset.pinId;
+    const on = togglePin(type, id);
+    btn.classList.toggle('pinned', on);
+    btn.textContent = on ? '★' : '☆';
+    btn.title = on ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti';
+    trackEvent('pin-toggle', { type, id, pinned: on, source: 'panel' });
+  });
+}
 
 let panelEl, contentEl, closeBtn;
 let currentNationId = null;
@@ -75,6 +99,7 @@ function buildPanelHtml(nation) {
         <div class="wp-panel-name">${escapeHtml(nation.name)}</div>
         ${blocInfo ? `<span class="wp-panel-bloc" style="background:${blocInfo.color}22;color:${blocInfo.color}">${escapeHtml(blocInfo.name)}</span>` : ''}
       </div>
+      ${pinStarHtml('nation', nation._id)}
     </div>
 
     <div class="wp-political-actions" role="group" aria-label="${t('explore_political_title')}">
@@ -128,6 +153,7 @@ function render(nationId) {
   panelEl.classList.add('open');
   panelEl.setAttribute('aria-hidden', 'false');
   document.body.classList.add('wp-panel-open');
+  wirePinStar();
 
   // WarEra+: le tre scorciatoie in cima al pannello aprono Political View
   // direttamente sulla vista giusta (vedi initPoliticalView in
@@ -205,6 +231,7 @@ function buildBlocPanelHtml(allianceId) {
         <div class="wp-panel-name">${escapeHtml(alliance.name)}</div>
         <span class="wp-panel-bloc" style="background:${color}22;color:${color}">${members.length} nations</span>
       </div>
+      ${pinStarHtml('alliance', allianceId)}
     </div>
 
     <div class="wp-panel-grid">
@@ -302,6 +329,7 @@ function renderBlocPanel(allianceId) {
   panelEl.classList.add('open');
   panelEl.setAttribute('aria-hidden', 'false');
   document.body.classList.add('wp-panel-open');
+  wirePinStar();
 
   // Stesso ordine (popolazione decrescente) usato per costruire l'HTML
   // in buildBlocPanelHtml, così il primo gruppo caricato è anche quello

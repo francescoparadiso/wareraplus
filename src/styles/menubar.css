@@ -1,0 +1,623 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Barra menù desktop (TEST, desktop-only)
+   ------------------------------------------------------------------
+   Barra fissa SOPRA il ticker, estetica "dashboard militare": dark,
+   compatta, icone flat (SVG currentColor iniettate da
+   desktopMenuBar.js) che si illuminano in hover/attivo. Menù a tendina
+   senza bordi, che si aprono in hover. Tutto gated sotto
+   @media (min-width: 769px): sotto quella soglia è display:none e la UI
+   torna identica a prima (nessun impatto mobile).
+
+   Caricato DOPO diplomacy.css e shell.css in index.html.
+   ══════════════════════════════════════════════════════════════ */
+
+.wp-menubar {
+  display: none;
+}
+
+@media (min-width: 769px) {
+
+  /* ══ Barra ══ */
+  .wp-menubar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--wp-bar-h);
+    /* Sopra a Political (6000) e Statistiche (5000): la barra resta sempre
+       visibile anche dentro quelle viste. Sotto ai livelli di sistema
+       (toast/loading/rate-limit 9000+). */
+    z-index: 7000;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+    /* Semitrasparente + blur: si intravede sfocato ciò che sta dietro,
+       restando leggibile. */
+    background: rgba(11, 14, 20, 0.72);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    font-family: 'Inter', -apple-system, sans-serif;
+    box-shadow: 0 1px 12px rgba(0, 0, 0, 0.35);
+    /* Scala responsive: l'altezza resta BASSA e quasi costante a tutte le
+       risoluzioni (42→44→46). Sui monitor grandi cresce la LARGHEZZA
+       (padding, gap, ricerca), non l'altezza — vedi ≥1440/≥1920 in fondo. */
+    --mb-h: 30px;
+    --mb-font: 12.5px;
+    --mb-icon: 16px;
+    --mb-pad: 9px;
+    transition: right 0.22s ease;
+  }
+  body.light-theme .wp-menubar {
+    /* Variante "mappa antica": pergamena invecchiata semitrasparente */
+    background:
+      linear-gradient(rgba(244, 234, 213, 0.8), rgba(238, 226, 202, 0.8));
+    border-bottom: 1px solid rgba(120, 92, 56, 0.4);
+    box-shadow: 0 1px 0 rgba(255, 250, 238, 0.5) inset, 0 2px 14px rgba(90, 67, 37, 0.14);
+  }
+
+  /* Altezza barra come variabile (letta anche da ticker e legenda, che
+     stanno FUORI dalla barra). Ridimensiona tutta la catena in un colpo. */
+  body { --wp-bar-h: 42px; }
+  .wp-news-ticker-wrapper { top: var(--wp-bar-h); }
+  #legend-container { top: calc(var(--wp-bar-h) + 30px); } /* +altezza ticker */
+
+  /* I bottoni flottanti spariscono (funzioni ora nella barra) */
+  #hamburger-btn,
+  #bloc-stats-btn,
+  #wp-battles-toggle-btn,
+  #wp-time-machine-btn {
+    display: none !important;
+  }
+
+  /* Pannello nazione: parte SOTTO la barra+ticker invece che da top:0.
+     Così non copre più il cluster destro della barra (Attuale/Originale +
+     tema + lingua) — con la barra a piena larghezza non c'era spazio per
+     "spostarli a sinistra" senza sovrapporli al resto; tenerli semplicemente
+     scoperti è più pulito e non nasconde nulla. La colonna resta agganciata
+     sotto al chrome superiore (barra 44 + ticker 30 = 74). */
+  #wp-country-panel.wp-panel {
+    top: calc(var(--wp-bar-h) + 30px);
+    height: calc(100vh - var(--wp-bar-h) - 30px);
+  }
+
+  /* ══ Bottoni generici (trigger dropdown + azioni) ══ */
+  .wp-mb-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: var(--mb-h);
+    padding: 0 var(--mb-pad);
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    color: #8b95a6;
+    font-size: var(--mb-font);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.14s ease, color 0.14s ease;
+  }
+  .wp-mb-btn svg {
+    width: var(--mb-icon);
+    height: var(--mb-icon);
+    flex-shrink: 0;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: filter 0.14s ease;
+  }
+  .wp-mb-btn .wp-mb-caret {
+    width: 12px;
+    height: 12px;
+    opacity: 0.6;
+    margin-left: -2px;
+  }
+  /* Hover / focus: l'icona e il testo si "illuminano" */
+  .wp-mb-btn:hover,
+  .wp-mb-dropdown.open .wp-mb-btn {
+    background: rgba(255, 255, 255, 0.06);
+    color: #e6edf3;
+  }
+  /* Attivo/aperto: accento ciano */
+  .wp-mb-dropdown.open .wp-mb-btn {
+    color: #00d4ff;
+    background: rgba(0, 212, 255, 0.1);
+  }
+  .wp-mb-dropdown.open .wp-mb-btn svg {
+    filter: drop-shadow(0 0 5px rgba(0, 212, 255, 0.55));
+  }
+  body.light-theme .wp-mb-btn { color: #6b5637; }
+  body.light-theme .wp-mb-btn:hover,
+  body.light-theme .wp-mb-dropdown.open .wp-mb-btn {
+    background: rgba(139, 115, 85, 0.15);
+    color: #2e1f0c;
+  }
+  body.light-theme .wp-mb-dropdown.open .wp-mb-btn {
+    color: #a06a1a;
+    background: rgba(160, 106, 26, 0.12);
+  }
+
+  /* ══ Bottoni azione evidenti: Battaglie (rosso) / Time machine (ambra) ══
+     Sono gli UNICI due con contorno, per distinguerli dai menù. Distanziati
+     tra loro dal .wp-mb-gap. Icona colorata sempre, glow in hover/attivo. */
+  .wp-mb-action {
+    border: 1px solid currentColor;
+    border-radius: 8px;
+  }
+  /* Distanziatore fisso tra Battaglie e Time machine */
+  .wp-mb-gap { flex: 0 0 14px; }
+
+  /* Battaglie */
+  .wp-mb-battles { color: #ff6a6e; border-color: rgba(229, 72, 77, 0.55); }
+  .wp-mb-battles svg { filter: drop-shadow(0 0 4px rgba(229, 72, 77, 0.45)); }
+  .wp-mb-battles:hover {
+    background: rgba(229, 72, 77, 0.16);
+    color: #ff8b8e;
+    border-color: #ff8b8e;
+  }
+  .wp-mb-battles:hover svg { filter: drop-shadow(0 0 7px rgba(229, 72, 77, 0.8)); }
+  /* Stato "battaglie nascoste": spento (grigio) */
+  .wp-mb-battles.wp-mb-off {
+    color: #6f7682;
+    border-color: rgba(111, 118, 130, 0.5);
+  }
+  .wp-mb-battles.wp-mb-off svg { filter: none; }
+
+  /* Time machine */
+  .wp-mb-timemachine { color: #e3a838; border-color: rgba(217, 154, 43, 0.55); }
+  .wp-mb-timemachine svg { filter: drop-shadow(0 0 4px rgba(217, 154, 43, 0.4)); }
+  .wp-mb-timemachine:hover {
+    background: rgba(217, 154, 43, 0.16);
+    color: #f0b755;
+    border-color: #f0b755;
+  }
+  .wp-mb-timemachine:hover svg { filter: drop-shadow(0 0 7px rgba(217, 154, 43, 0.8)); }
+  /* Attiva (time machine aperta): ambra piena */
+  .wp-mb-timemachine.wp-mb-active {
+    background: rgba(217, 154, 43, 0.2);
+    color: #f5c368;
+    border-color: #f5c368;
+  }
+  .wp-mb-timemachine.wp-mb-active svg { filter: drop-shadow(0 0 8px rgba(217, 154, 43, 0.9)); }
+
+  /* Tema chiaro (mappa antica): inchiostro più profondo su pergamena */
+  body.light-theme .wp-mb-battles { color: #9e2b2b; border-color: rgba(140, 40, 40, 0.55); }
+  body.light-theme .wp-mb-battles:hover { background: rgba(158, 43, 43, 0.12); color: #7e1f1f; border-color: #7e1f1f; }
+  body.light-theme .wp-mb-battles.wp-mb-off { color: #8a7d68; border-color: rgba(120, 100, 70, 0.45); }
+  body.light-theme .wp-mb-timemachine { color: #9c6b1f; border-color: rgba(150, 105, 30, 0.55); }
+  body.light-theme .wp-mb-timemachine:hover { background: rgba(156, 107, 31, 0.12); color: #7d5514; border-color: #7d5514; }
+  body.light-theme .wp-mb-timemachine.wp-mb-active { background: rgba(156, 107, 31, 0.16); color: #6f4a10; border-color: #6f4a10; }
+
+  /* ══ Dropdown (senza bordi) ══ */
+  .wp-mb-dropdown {
+    position: relative;
+    display: inline-flex;
+  }
+  .wp-mb-panel {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    min-width: 220px;
+    max-height: 74vh;
+    overflow-y: auto;
+    z-index: 2250;
+    padding: 6px;
+    background: rgba(18, 22, 30, 0.98);
+    border: none;
+    border-radius: 11px;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(14px);
+    display: none;
+  }
+  .wp-mb-dropdown.open .wp-mb-panel { display: block; }
+  body.light-theme .wp-mb-panel {
+    background: rgba(250, 246, 238, 0.99);
+    box-shadow: 0 12px 34px rgba(90, 67, 37, 0.22), 0 0 0 1px rgba(139, 115, 85, 0.12);
+  }
+
+  /* Voce di dropdown */
+  .wp-mb-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 8px 10px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: #aab3c2;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .wp-mb-item svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.85;
+  }
+  .wp-mb-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #e6edf3;
+  }
+  .wp-mb-item.active {
+    background: rgba(0, 212, 255, 0.12);
+    color: #00d4ff;
+    font-weight: 600;
+  }
+  .wp-mb-item.active svg { opacity: 1; filter: drop-shadow(0 0 4px rgba(0, 212, 255, 0.5)); }
+  .wp-mb-item.active::after {
+    content: '';
+    width: 6px;
+    height: 6px;
+    margin-left: auto;
+    border-radius: 50%;
+    background: #00d4ff;
+    box-shadow: 0 0 6px rgba(0, 212, 255, 0.8);
+  }
+  body.light-theme .wp-mb-item { color: #6b5637; }
+  body.light-theme .wp-mb-item:hover { background: rgba(139, 115, 85, 0.15); color: #2e1f0c; }
+  body.light-theme .wp-mb-item.active { background: rgba(160, 106, 26, 0.14); color: #a06a1a; }
+  body.light-theme .wp-mb-item.active::after { background: #a06a1a; box-shadow: 0 0 6px rgba(160, 106, 26, 0.7); }
+
+  /* ══ Menù Impostazioni: switch proxy + sezioni NAP rilocate ══ */
+  .wp-mb-settings-panel { min-width: 300px; }
+  .wp-mb-proxy-switch {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    color: #aab3c2;
+    font-size: 13px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .wp-mb-proxy-switch:hover { background: rgba(255, 255, 255, 0.05); }
+  body.light-theme .wp-mb-proxy-switch { color: #6b5637; }
+  .wp-mb-proxy-switch input {
+    width: 16px; height: 16px;
+    accent-color: #00d4ff;
+    cursor: pointer;
+  }
+  .wp-mb-settings-panel .menu-section { padding: 8px 0; }
+  .wp-mb-settings-panel .menu-section:first-of-type {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 10px;
+    margin-top: 4px;
+  }
+  body.light-theme .wp-mb-settings-panel .menu-section:first-of-type {
+    border-top-color: rgba(139, 115, 85, 0.22);
+  }
+
+  /* ══ Search: command box compatta ══ */
+  .wp-mb-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 0 1 240px;
+    min-width: 158px;
+    height: var(--mb-h);
+    margin-left: 4px;
+  }
+  .wp-mb-search-icon {
+    position: absolute;
+    left: 10px;
+    width: 15px; height: 15px;
+    stroke: #7b8494;
+    fill: none;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    pointer-events: none;
+    transition: stroke 0.14s ease;
+  }
+  .wp-mb-search-input {
+    width: 100%;
+    height: var(--mb-h);
+    padding: 0 46px 0 32px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    color: #e6edf3;
+    font-size: var(--mb-font);
+    outline: none;
+    transition: background 0.14s ease, border-color 0.14s ease;
+  }
+  .wp-mb-search-input::placeholder { color: #6f7885; }
+  .wp-mb-search-input:focus {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(0, 212, 255, 0.4);
+  }
+  .wp-mb-search:focus-within .wp-mb-search-icon { stroke: #00d4ff; }
+  /* Badge scorciatoia ⌘K / Ctrl K */
+  .wp-mb-kbd {
+    position: absolute;
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    height: 19px;
+    padding: 0 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 5px;
+    color: #7b8494;
+    font-size: 10.5px;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    transition: opacity 0.14s ease;
+  }
+  .wp-mb-search:focus-within .wp-mb-kbd { opacity: 0; }
+  body.light-theme .wp-mb-search-input {
+    background: rgba(255, 255, 255, 0.55);
+    border-color: rgba(139, 115, 85, 0.25);
+    color: #2e1f0c;
+  }
+  body.light-theme .wp-mb-search-input::placeholder { color: #9a866a; }
+  body.light-theme .wp-mb-search-icon { stroke: #9a866a; }
+  body.light-theme .wp-mb-kbd { background: rgba(139, 115, 85, 0.15); color: #8a7255; }
+
+  /* Risultati ricerca (senza bordi) */
+  .wp-mb-search-results {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0;
+    right: 0;
+    max-height: 62vh;
+    overflow-y: auto;
+    z-index: 2250;
+    padding: 6px;
+    background: rgba(18, 22, 30, 0.98);
+    border: none;
+    border-radius: 11px;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(14px);
+    display: none;
+  }
+  .wp-mb-search.open .wp-mb-search-results { display: block; }
+  body.light-theme .wp-mb-search-results {
+    background: rgba(250, 246, 238, 0.99);
+    box-shadow: 0 12px 34px rgba(90, 67, 37, 0.22), 0 0 0 1px rgba(139, 115, 85, 0.12);
+  }
+  .wp-mb-res-group {
+    padding: 7px 10px 3px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #5f6a7a;
+  }
+  body.light-theme .wp-mb-res-group { color: #a3906f; }
+  .wp-mb-res-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #aab3c2;
+    font-size: 13px;
+    transition: background 0.1s ease, color 0.1s ease;
+  }
+  .wp-mb-res-row:hover,
+  .wp-mb-res-row.wp-mb-res-active {
+    background: rgba(0, 212, 255, 0.12);
+    color: #fff;
+  }
+  body.light-theme .wp-mb-res-row { color: #6b5637; }
+  body.light-theme .wp-mb-res-row:hover,
+  body.light-theme .wp-mb-res-row.wp-mb-res-active {
+    background: rgba(160, 106, 26, 0.14);
+    color: #2e1f0c;
+  }
+  .wp-mb-res-img {
+    width: 22px; height: 16px;
+    object-fit: cover;
+    border-radius: 3px;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .wp-mb-res-img.wp-mb-res-logo {
+    width: 18px; height: 18px;
+    object-fit: contain;
+    border-radius: 4px;
+  }
+  .wp-mb-res-empty {
+    padding: 10px;
+    text-align: center;
+    color: #6f7885;
+    font-size: 12px;
+  }
+
+  /* Spaziatori: centrano Battaglie/Time machine tra search e cluster destro */
+  .wp-mb-spacer { flex: 1 1 auto; }
+
+  /* ══ Brand (logo + nome) in alto a sinistra ══ */
+  .wp-mb-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 6px 0 2px;
+    flex-shrink: 0;
+    user-select: none;
+  }
+  .wp-mb-logo {
+    height: calc(var(--mb-h) - 10px);
+    width: auto;
+    border-radius: 5px;
+    object-fit: contain;
+  }
+  .wp-mb-brand-name {
+    font-size: var(--mb-font);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: #e6edf3;
+    white-space: nowrap;
+  }
+  body.light-theme .wp-mb-brand-name { color: #3e2f1c; font-family: 'Cinzel', serif; }
+
+  /* ══ Bottone "Indietro": solo dentro Political/Statistiche ══ */
+  .wp-mb-back { display: none; color: #e6edf3; }
+  body.wp-subview-open .wp-mb-back { display: inline-flex; }
+  .wp-mb-back:hover { background: rgba(255, 255, 255, 0.08); }
+  body.light-theme .wp-mb-back { color: #3e2f1c; }
+
+  /* ══ Trigger dropdown icon-only (Preferiti) ══ */
+  .wp-mb-btn.wp-mb-icon-only { padding: 0 8px; gap: 3px; }
+  .wp-mb-fav-panel { min-width: 250px; }
+  .wp-mb-fav-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ══ Stella pin (risultati ricerca) e rimozione (preferiti) ══ */
+  .wp-mb-pin, .wp-mb-unpin {
+    flex-shrink: 0;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 5px;
+  }
+  .wp-mb-pin {
+    color: #6f7885;
+    font-size: 15px;
+  }
+  .wp-mb-pin:hover { color: #e3a838; background: rgba(217, 154, 43, 0.14); }
+  .wp-mb-pin.pinned { color: #e3a838; }
+  .wp-mb-unpin {
+    color: #6f7885;
+    font-size: 17px;
+  }
+  .wp-mb-unpin:hover { color: #ff6a6e; background: rgba(229, 72, 77, 0.14); }
+  body.light-theme .wp-mb-pin.pinned, body.light-theme .wp-mb-pin:hover { color: #9c6b1f; }
+
+  /* ══ Sotto-viste sotto la barra + topbar originali nascosti ══
+     La barra (z 7000) sta sopra Political/Statistiche: qui le spingiamo
+     sotto e togliamo i loro "torna alla mappa" (rimpiazzati da barra +
+     bottone Indietro). */
+  .wp-political-overlay { padding-top: var(--wp-bar-h); }
+  .wp-political-topbar { display: none !important; }
+  #bloc-stats-page { padding-top: calc(var(--wp-bar-h) + 20px) !important; }
+  #bloc-stats-close { display: none !important; }
+
+  /* ══ #wp-top-controls rilocato: da fixed a inline, stile PIATTO ══
+     Il cluster destro (Attuale/Originale + tema + lingua) usava lo stile
+     "pillola di vetro" originale di Diplomacy (bordi ciano, blur, ombre,
+     cerchi 38px): stonava con i bottoni piatti/trasparenti di sinistra.
+     Qui lo riallineiamo a .wp-mb-btn — trasparente, senza bordo/ombra,
+     altezza var(--mb-h), hover che "illumina". Scopato sotto .wp-menubar
+     così il mobile (fuori barra) resta con lo stile originale. */
+  .wp-mb-right { flex: 0 0 auto; }
+  .wp-menubar #wp-top-controls {
+    position: static;
+    top: auto;
+    right: auto;
+    z-index: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    pointer-events: auto;
+  }
+
+  /* Gruppo Attuale/Originale */
+  .wp-menubar #border-toggle-container {
+    height: var(--mb-h);
+    gap: 7px;
+    padding: 0 10px;
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    transition: background 0.14s ease;
+  }
+  .wp-menubar #border-toggle-container:hover { background: rgba(255, 255, 255, 0.06); }
+  .wp-menubar .pill-label { font-size: 9.5px; letter-spacing: 0.3px; color: #8b95a6; }
+  .wp-menubar .pill-label.active { color: #00d4ff; }
+  body.light-theme .wp-menubar #border-toggle-container { background: transparent; border: none; box-shadow: none; }
+  body.light-theme .wp-menubar #border-toggle-container:hover { background: rgba(139, 115, 85, 0.15); }
+  body.light-theme .wp-menubar .pill-label { color: #6b5637; }
+  body.light-theme .wp-menubar .pill-label.active { color: #a06a1a; }
+
+  /* Bottone tema */
+  .wp-menubar #theme-toggle-btn {
+    width: var(--mb-h);
+    height: var(--mb-h);
+    border-radius: 7px;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    font-size: 15px;
+    transition: background 0.14s ease;
+  }
+  .wp-menubar #theme-toggle-btn:hover { background: rgba(255, 255, 255, 0.06); border-color: transparent; }
+  body.light-theme .wp-menubar #theme-toggle-btn { background: transparent; border: none; box-shadow: none; }
+  body.light-theme .wp-menubar #theme-toggle-btn:hover { background: rgba(139, 115, 85, 0.15); }
+
+  /* Selettore lingua */
+  .wp-menubar .wp-lang-select {
+    height: var(--mb-h);
+    max-width: 84px;
+    border-radius: 7px;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    color: #8b95a6;
+    font-size: var(--mb-font);
+    font-weight: 500;
+    padding: 0 6px;
+    transition: background 0.14s ease, color 0.14s ease;
+  }
+  .wp-menubar .wp-lang-select:hover { background: rgba(255, 255, 255, 0.06); border-color: transparent; color: #e6edf3; }
+  .wp-menubar .wp-lang-select option { background: #12161e; color: #e6edf3; }
+  body.light-theme .wp-menubar .wp-lang-select { background: transparent; border: none; box-shadow: none; color: #6b5637; }
+  body.light-theme .wp-menubar .wp-lang-select:hover { background: rgba(139, 115, 85, 0.15); color: #2e1f0c; }
+  body.light-theme .wp-menubar .wp-lang-select option { background: #faf6ee; color: #2e1f0c; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Schermi grandi (≥1440px): barra e comandi più generosi. Basta
+   ridefinire le variabili di scala + qualche misura non-var.
+   ══════════════════════════════════════════════════════════════ */
+@media (min-width: 1440px) {
+  /* Altezza quasi invariata (42→44); a crescere è la LARGHEZZA. */
+  body { --wp-bar-h: 44px; }
+  .wp-menubar {
+    --mb-h: 31px;
+    --mb-font: 13px;
+    --mb-icon: 16.5px;
+    --mb-pad: 14px;
+    gap: 8px;
+    padding: 0 22px;
+  }
+  .wp-mb-gap { flex-basis: 48px; }        /* più distanza tra Battaglie/TM */
+  .wp-mb-search { flex-basis: 340px; }    /* command box più larga */
+  .wp-mb-panel { min-width: 240px; }
+  .wp-menubar #wp-lang-select { max-width: 140px; }
+}
+
+/* Schermi molto grandi (≥1920px): ancora più respiro orizzontale, altezza
+   pressoché ferma (44→46). */
+@media (min-width: 1920px) {
+  body { --wp-bar-h: 46px; }
+  .wp-menubar { --mb-h: 32px; --mb-font: 13.5px; --mb-icon: 17px; --mb-pad: 18px; gap: 10px; padding: 0 34px; }
+  .wp-mb-gap { flex-basis: 72px; }
+  .wp-mb-search { flex-basis: 420px; }
+}

@@ -29,6 +29,7 @@ import { initThemeSync } from './app/themeSync.js';
 import { initLangSync } from './app/langSync.js';
 import { initBattleToggle } from './app/battleToggle.js';
 import { initBlocLabelsToggle } from './app/blocLabelsToggle.js';
+import { initDesktopMenuBar } from './app/desktopMenuBar.js';
 import { startNewsTicker } from './app/newsTicker.js';
 import { initTimeMachine, openTimeMachineAt } from './app/timeMachine.js';
 import { applyTranslations, initLangButton } from './shared/i18n.js';
@@ -78,6 +79,7 @@ window.addEventListener('wareraplus:diplomacy-ready', () => {
   initLangSync();
   initBattleToggle();
   initBlocLabelsToggle();
+  initDesktopMenuBar();
   startNewsTicker();
   initTimeMachine();
   handleIncomingDeepLink();

@@ -92,6 +92,9 @@ function buildMember(cid) {
     dmg:   n?.rankings?.weeklyCountryDamages?.value || 0,
     totalDmg: n?.rankings?.countryDamages?.value || 0,
     money: n?.rankings?.countryWealth?.value ?? n.money ?? 0,
+    dev:   n?.rankings?.countryDevelopment?.value || 0,
+    bounty: n?.rankings?.countryBounty?.value || 0,
+    dpc:   n?.rankings?.weeklyCountryDamagesPerCitizen?.value || 0,
     wars:  n?.warsWith?.length || 0,
     sworn: n?.swornEnemies?.length || 0,
     allies:n?.allies?.length || 0,
@@ -100,21 +103,27 @@ function buildMember(cid) {
 
 function buildBlocStat(displayName, internalId, idSet, color, isMerged = false, isUnaligned = false) {
   let totalPop = 0, totalDmg = 0, totalMoney = 0, totalWars = 0, totalSworn = 0, totalAllies = 0, totalAbsoluteDmg = 0;
+  let totalBounty = 0, totalDev = 0;
   const members = [];
   idSet.forEach(cid => {
     const m = buildMember(cid); if (!m) return;
     totalPop += m.pop; totalDmg += m.dmg; totalMoney += m.money;
     totalWars += m.wars; totalSworn += m.sworn; totalAllies += m.allies;
-    totalAbsoluteDmg += m.totalDmg;
+    totalAbsoluteDmg += m.totalDmg; totalBounty += m.bounty; totalDev += m.dev;
     members.push(m);
   });
+  const countryCount = members.length;
   return {
     id: internalId,
     name: displayName,
     color, isMerged, isUnaligned,
     members: members.sort((a, b) => b.dmg - a.dmg),
-    countryCount: members.length,
-    totalPop, totalDmg, totalMoney, totalWars, totalSworn, totalAllies, totalAbsoluteDmg
+    countryCount,
+    totalPop, totalDmg, totalMoney, totalWars, totalSworn, totalAllies, totalAbsoluteDmg,
+    totalBounty, totalDev,
+    // Derivate: sviluppo medio e danno settimanale per cittadino dell'alleanza.
+    avgDev: countryCount ? totalDev / countryCount : 0,
+    dpc: totalPop ? totalDmg / totalPop : 0,
   };
 }
 
@@ -224,6 +233,7 @@ function injectStyles() {
     .bs-bi:hover{background:rgba(255,255,255,.06)}
     .bs-bi.sel1{background:rgba(88,166,255,.15);border-color:#58a6ff}
     .bs-bi.sel2{background:rgba(63,185,80,.15);border-color:#3fb950}
+    .bs-bi.taken{opacity:.3;pointer-events:none;filter:grayscale(1)}
     .bs-vs{display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;color:#8b949e;opacity:.6;padding:20px}
     .bs-fcmp{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-bottom:28px}
     .bs-fcard{background:rgba(88,166,255,.1);border:1px solid rgba(88,166,255,.3);border-radius:14px;padding:20px;text-align:center}
@@ -326,6 +336,38 @@ function injectStyles() {
     body.light-theme #bloc-stats-content {
       background: #f0e6d2;
     }
+
+    /* ── Faction 1vs2: toolbar reset selezione ── */
+    .bs-f-toolbar{display:flex;justify-content:flex-end;margin-bottom:14px}
+    .bs-f-reset{background:rgba(255,80,80,.15);border:1px solid rgba(255,80,80,.5);border-radius:8px;padding:6px 14px;color:#ff6b6b;cursor:pointer;font-size:13px;font-weight:500;transition:all .2s}
+    .bs-f-reset:hover:not(:disabled){background:rgba(255,80,80,.25);border-color:#ff6b6b}
+    .bs-f-reset:disabled{opacity:.4;cursor:default}
+    body.light-theme .bs-f-reset{background:rgba(158,43,43,.12);border-color:rgba(140,40,40,.4);color:#9e2b2b}
+    body.light-theme .bs-f-reset:hover:not(:disabled){background:rgba(158,43,43,.2);border-color:#7e1f1f}
+
+    /* ── Alliance Overview: banner istruzioni drag & drop ── */
+    .bs-dnd-tip{display:flex;align-items:center;gap:14px;padding:14px 18px;margin-bottom:22px;background:linear-gradient(90deg,rgba(88,166,255,.14),rgba(88,166,255,.04));border:1px solid rgba(88,166,255,.3);border-radius:12px}
+    .bs-dnd-ico{font-size:22px;flex-shrink:0}
+    .bs-dnd-txt{display:flex;flex-direction:column;gap:3px;font-size:13px;line-height:1.45}
+    .bs-dnd-txt strong{color:#58a6ff;font-size:14px}
+    .bs-dnd-txt span{color:#8b949e}
+    .bs-dnd-txt em{color:#c9d1d9;font-style:normal;background:rgba(255,255,255,.08);padding:1px 6px;border-radius:4px}
+    body.light-theme .bs-dnd-tip{background:linear-gradient(90deg,rgba(139,90,43,.14),rgba(139,90,43,.04));border-color:rgba(139,90,43,.3)}
+    body.light-theme .bs-dnd-txt strong{color:#8b5a2b}
+    body.light-theme .bs-dnd-txt span{color:#6b5a47}
+    body.light-theme .bs-dnd-txt em{color:#3e2f1c;background:rgba(0,0,0,.06)}
+
+    /* ── Wars & Enemies: bar chart orizzontale per alleanze ── */
+    .bs-hbar-row{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13px}
+    .bs-hbar-label{flex:0 0 140px;display:flex;align-items:center;gap:7px;min-width:0}
+    .bs-hbar-label span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e6edf3;font-weight:500}
+    .bs-hbar-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+    .bs-hbar-track{flex:1;height:9px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden;min-width:40px}
+    .bs-hbar-fill{height:100%;border-radius:5px;transition:width .4s ease}
+    .bs-hbar-val{flex:0 0 auto;min-width:64px;text-align:right;font-weight:600;font-size:12.5px;color:#c9d1d9}
+    body.light-theme .bs-hbar-label span:last-child{color:#3e2f1c}
+    body.light-theme .bs-hbar-track{background:rgba(0,0,0,.08)}
+    body.light-theme .bs-hbar-val{color:#3e2f1c}
   `;
   document.head.appendChild(s);
 }
@@ -477,15 +519,14 @@ function buildUI() {
       <button class="bs-reset-btn" id="bs-reset-all">⟳ Reset all merges & assignments</button>
     </div>
     <div class="bs-tabs">
-      ${['factions', 'faction1vs2', 'wars', 'lookup'].map(t => `
+      ${['factions', 'faction1vs2', 'wars'].map(t => `
         <div class="bs-tab${currentTab === t ? ' active' : ''}" data-tab="${t}">
-          ${t === 'factions' ? 'Alliance Overview' : t === 'faction1vs2' ? 'Faction 1 vs 2' : t === 'wars' ? 'Wars & Enemies' : 'Country Lookup'}
+          ${t === 'factions' ? 'Alliance Overview' : t === 'faction1vs2' ? 'Faction 1 vs 2' : 'Wars & Enemies'}
         </div>`).join('')}
     </div>`;
-  if (currentTab === 'factions') html += renderFactions();
-  else if (currentTab === 'faction1vs2') html += render1vs1();
+  if (currentTab === 'faction1vs2') html += render1vs1();
   else if (currentTab === 'wars') html += renderWars();
-  else html += renderLookup();
+  else html += renderFactions();
   html += '</div>';
   c.innerHTML = html;
   attachSearchEvent(c);
@@ -520,7 +561,15 @@ function renderFactions() {
     <div class="bs-sc"><div class="bs-sl">Unaligned</div><div class="bs-sv" style="color:#8b949e">${unaligned?.countryCount || 0}</div></div>
     <div class="bs-sc"><div class="bs-sl">Total Wealth</div><div class="bs-sv" style="color:#3fb950">${fmt(globalMoney)}</div></div>
     <div class="bs-sc"><div class="bs-sl">Total Population</div><div class="bs-sv" style="color:#e6edf3">${fmt(globalPop)}</div></div>
-  </div><div class="bs-grid">`;
+  </div>
+  <div class="bs-dnd-tip">
+    <span class="bs-dnd-ico">✋</span>
+    <div class="bs-dnd-txt">
+      <strong>Drag &amp; drop to reorganize alliances</strong>
+      <span>Drag a nation from one alliance card to another, drop an <em>Unaligned</em> nation into any alliance, or drag an alliance's header onto another to merge them.</span>
+    </div>
+  </div>
+  <div class="bs-grid">`;
   for (const b of aligned) html += blocCard(b, false);
   if (unaligned) html += blocCard(unaligned, true);
   html += '</div>';
@@ -552,7 +601,11 @@ function blocCard(bloc, isUnaligned) {
 
 function render1vs1() {
   const f1 = aggFaction(faction1Blocs), f2 = aggFaction(faction2Blocs);
-  return `<div class="bs-sel">
+  const hasSel = faction1Blocs.length || faction2Blocs.length;
+  return `<div class="bs-f-toolbar">
+    <button class="bs-f-reset" id="bs-faction-reset"${hasSel ? '' : ' disabled'}>⟳ Reset selection</button>
+  </div>
+  <div class="bs-sel">
     ${factionSel(1, f1)}
     <div class="bs-vs">VS</div>
     ${factionSel(2, f2)}
@@ -567,19 +620,25 @@ function render1vs1() {
 
 function factionSel(n, fst) {
   const cls = n === 1 ? 'f1' : 'f2';
+  const selfSel  = n === 1 ? faction1Blocs : faction2Blocs;
+  const otherSel = n === 1 ? faction2Blocs : faction1Blocs;
+  const selCls   = n === 1 ? 'sel1' : 'sel2';
   return `<div class="bs-fsec">
     <div class="bs-ftitle ${cls}">
       <span>${n === 1 ? '🔵' : '🟢'} Faction ${n}</span>
       <span style="color:#8b949e;font-size:12px">${fst.countryCount} nations</span>
       <button class="bs-addbtn ${cls}" data-addf="${n}" style="margin-left:auto">+ Random</button>
     </div>
-    ${allStats.map(b => `
-      <div class="bs-bi ${faction1Blocs.includes(b.id) ? 'sel1' : faction2Blocs.includes(b.id) ? 'sel2' : ''}" data-bloc="${b.id}" data-faction="${n}">
+    ${allStats.map(b => {
+      const biCls = selfSel.includes(b.id) ? selCls : otherSel.includes(b.id) ? 'taken' : '';
+      return `
+      <div class="bs-bi ${biCls}" data-bloc="${b.id}" data-faction="${n}">
         <div class="bs-dot" style="background:${b.color}"></div>
         <span style="flex:1">${b.name}</span>
         <span style="color:#8b949e;font-size:11px">${b.countryCount}</span>
         <button class="bs-addbtn ${cls}" data-bloc="${b.id}" data-faction="${n}" style="padding:2px 6px;font-size:10px;margin-left:4px">+</button>
-      </div>`).join('')}
+      </div>`;
+    }).join('')}
   </div>`;
 }
 
@@ -622,19 +681,13 @@ function renderWars() {
     if (m.wars > 0) wars.push({ ...m, blocName: b.name, blocColor: b.color });
   }
   const allMembers = allStats.flatMap(b => b.members.map(m => ({ ...m, blocName: b.name, blocColor: b.color })));
+  const aligned = allStats.filter(b => !b.isUnaligned);
 
-  const row = m => `<div class="bs-wi">${flagImg(m.code, '16px')}
-    <span style="font-weight:600">${m.name}</span>
-    <span style="color:#8b949e;font-size:12px">${m.blocName}</span>
-    <span style="margin-left:auto;font-weight:600">${m.wars ? `⚔️ ${m.wars}` : ''}</span>
-  </div>`;
-
-  const topWeekly = [...allMembers].sort((a,b) => b.dmg - a.dmg).slice(0, 10);
-  const topTotal  = [...allMembers].sort((a,b) => b.totalDmg - a.totalDmg).slice(0, 10);
-  const topPop    = [...allMembers].sort((a,b) => b.pop - a.pop).slice(0, 10);
-  const topWealth = [...allMembers].sort((a,b) => b.money - a.money).slice(0, 10);
-  const topAllies = [...allMembers].sort((a,b) => b.allies - a.allies).slice(0, 10);
-  const topWars   = [...wars].sort((a, b) => b.wars - a.wars).slice(0, 15);
+  // ── Metriche di sintesi globali (in cima alla scheda) ──
+  const gWeekly = allStats.reduce((s, b) => s + b.totalDmg, 0);
+  const gPop    = allStats.reduce((s, b) => s + b.totalPop, 0);
+  const gBounty = allStats.reduce((s, b) => s + b.totalBounty, 0);
+  const globalDpc = gPop ? gWeekly / gPop : 0;
 
   const statRow = (m, val, color = '#e6edf3') => `<div class="bs-wi">${flagImg(m.code, '16px')}
     <span style="font-weight:600">${m.name}</span>
@@ -642,37 +695,66 @@ function renderWars() {
     <span style="margin-left:auto;font-weight:600;color:${color}">${val}</span>
   </div>`;
 
-  // ── Classifiche alleanze ──
-  const aligned = allStats.filter(b => !b.isUnaligned);
-  const blocRow = (b, val, color) => `<div class="bs-wi">
-    <div style="width:10px;height:10px;border-radius:50%;background:${b.color};flex-shrink:0"></div>
-    <span style="font-weight:600">${b.name}</span>
-    <span style="color:#8b949e;font-size:12px">${b.countryCount} nations</span>
-    <span style="margin-left:auto;font-weight:600;color:${color}">${val}</span>
-  </div>`;
+  const topWeekly = [...allMembers].sort((a,b) => b.dmg - a.dmg).slice(0, 10);
+  const topTotal  = [...allMembers].sort((a,b) => b.totalDmg - a.totalDmg).slice(0, 10);
+  const topPop    = [...allMembers].sort((a,b) => b.pop - a.pop).slice(0, 10);
+  const topWealth = [...allMembers].sort((a,b) => b.money - a.money).slice(0, 10);
+  const topDev    = [...allMembers].sort((a,b) => b.dev - a.dev).slice(0, 10);
+  const topDpc    = [...allMembers].sort((a,b) => b.dpc - a.dpc).slice(0, 10);
+  const topBounty = [...allMembers].sort((a,b) => b.bounty - a.bounty).slice(0, 10);
+  const topAllies = [...allMembers].sort((a,b) => b.allies - a.allies).slice(0, 10);
 
-  const topBlocWars   = [...aligned].sort((a,b) => b.totalWars - a.totalWars).slice(0, 10);
-  const topBlocDmg    = [...aligned].sort((a,b) => b.totalDmg - a.totalDmg).slice(0, 10);
+  // ── Bar chart orizzontale per le classifiche alleanze (barra
+  //    proporzionale al massimo della lista, colore = colore alleanza). ──
+  const blocBar = (metric, fmtFn) => {
+    const items = [...aligned].sort((a, b) => (b[metric] || 0) - (a[metric] || 0)).slice(0, 8);
+    const max = Math.max(...items.map(b => b[metric] || 0), 1);
+    return items.map(b => {
+      const v = b[metric] || 0;
+      return `<div class="bs-hbar-row">
+        <div class="bs-hbar-label"><span class="bs-hbar-dot" style="background:${b.color}"></span><span title="${b.name}">${b.name}</span></div>
+        <div class="bs-hbar-track"><div class="bs-hbar-fill" style="width:${(v / max * 100).toFixed(1)}%;background:${b.color}"></div></div>
+        <div class="bs-hbar-val">${fmtFn(v)}</div>
+      </div>`;
+    }).join('') || '<p style="color:#8b949e">No data</p>';
+  };
+  const dev1 = v => v.toFixed(1);
 
   return `
+    <div class="bs-sum" style="grid-template-columns:repeat(4,1fr)">
+      <div class="bs-sc"><div class="bs-sl">Alliances</div><div class="bs-sv" style="color:#e6edf3">${aligned.length}</div></div>
+      <div class="bs-sc"><div class="bs-sl">Nations at War</div><div class="bs-sv" style="color:#f85149">${fmt(wars.length, 0, true)}</div></div>
+      <div class="bs-sc"><div class="bs-sl">Avg Dmg / Citizen</div><div class="bs-sv" style="color:#58a6ff">${fmt(globalDpc)}</div></div>
+      <div class="bs-sc"><div class="bs-sl">Total Bounty</div><div class="bs-sv" style="color:#f0ad4e">${fmt(gBounty)}</div></div>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
       <div class="bs-wsec">
-        <h3 style="margin:0 0 10px">Active Wars (${wars.length})</h3>
-        ${topWars.map(row).join('') || '<p style="color:#8b949e">None</p>'}
+        <h3 style="margin:0 0 14px">🏆 Alliance Ranking — Weekly Damage</h3>
+        ${blocBar('totalDmg', v => fmt(v))}
       </div>
       <div class="bs-wsec">
-        <h3 style="margin:0 0 10px">Top Allies</h3>
-        ${topAllies.map(m => statRow(m, `🤝 ${m.allies}`, '#3fb950')).join('')}
+        <h3 style="margin:0 0 14px">🏆 Alliance Ranking — Total Damage</h3>
+        ${blocBar('totalAbsoluteDmg', v => fmt(v))}
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
       <div class="bs-wsec">
-        <h3 style="margin:0 0 10px">🏆 Alliance Ranking — Wars</h3>
-        ${topBlocWars.map(b => blocRow(b, `⚔️ ${b.totalWars}`, '#f85149')).join('') || '<p style="color:#8b949e">No data</p>'}
+        <h3 style="margin:0 0 14px">🏆 Alliance Ranking — Population</h3>
+        ${blocBar('totalPop', v => fmt(v))}
       </div>
       <div class="bs-wsec">
-        <h3 style="margin:0 0 10px">🏆 Alliance Ranking — Weekly Dmg</h3>
-        ${topBlocDmg.map(b => blocRow(b, fmt(b.totalDmg), '#58a6ff')).join('') || '<p style="color:#8b949e">No data</p>'}
+        <h3 style="margin:0 0 14px">🏆 Alliance Ranking — Wealth</h3>
+        ${blocBar('totalMoney', v => fmt(v))}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+      <div class="bs-wsec">
+        <h3 style="margin:0 0 14px">🏆 Alliance Ranking — Avg Development</h3>
+        ${blocBar('avgDev', dev1)}
+      </div>
+      <div class="bs-wsec">
+        <h3 style="margin:0 0 14px">🏆 Alliance Ranking — Weekly Dmg / Citizen</h3>
+        ${blocBar('dpc', v => fmt(v))}
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
@@ -685,7 +767,17 @@ function renderWars() {
         ${topTotal.map(m => statRow(m, fmt(m.totalDmg), '#f0ad4e')).join('')}
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+      <div class="bs-wsec">
+        <h3 style="margin:0 0 10px">Top 10 Dmg / Citizen</h3>
+        ${topDpc.map(m => statRow(m, fmt(m.dpc), '#58a6ff')).join('')}
+      </div>
+      <div class="bs-wsec">
+        <h3 style="margin:0 0 10px">Top 10 Development</h3>
+        ${topDev.map(m => statRow(m, m.dev.toFixed(1), '#a371f7')).join('')}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
       <div class="bs-wsec">
         <h3 style="margin:0 0 10px">Top 10 Population</h3>
         ${topPop.map(m => statRow(m, fmt(m.pop), '#e6edf3')).join('')}
@@ -694,11 +786,17 @@ function renderWars() {
         <h3 style="margin:0 0 10px">Top 10 Wealth</h3>
         ${topWealth.map(m => statRow(m, fmt(m.money), '#3fb950')).join('')}
       </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="bs-wsec">
+        <h3 style="margin:0 0 10px">Top 10 Bounty</h3>
+        ${topBounty.map(m => statRow(m, fmt(m.bounty), '#f0ad4e')).join('')}
+      </div>
+      <div class="bs-wsec">
+        <h3 style="margin:0 0 10px">Top 10 Allies</h3>
+        ${topAllies.map(m => statRow(m, `🤝 ${m.allies}`, '#3fb950')).join('')}
+      </div>
     </div>`;
-}
-
-function renderLookup() {
-  return `<input class="bs-linput" id="bs-search" placeholder="Search for a nation..."><div id="bs-results"></div>`;
 }
 
 /* ── Merge Menu (visivo) ── */
@@ -814,6 +912,14 @@ function attachEvents(c) {
     if (split) {
       mergedBlocs.delete(split.dataset.split);
       allStats = computeBlocStats();
+      buildUI();
+      return;
+    }
+
+    const factionReset = e.target.closest('#bs-faction-reset');
+    if (factionReset) {
+      faction1Blocs = [];
+      faction2Blocs = [];
       buildUI();
       return;
     }

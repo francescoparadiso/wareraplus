@@ -21,6 +21,9 @@
 
   <link rel="stylesheet" href="/src/styles/diplomacy.css" />
   <link rel="stylesheet" href="/src/styles/shell.css" />
+  <!-- WarEra+ TEST desktop-only: barra menù sopra il ticker. Caricato
+       DOPO shell.css apposta (vedi src/styles/menubar.css). -->
+  <link rel="stylesheet" href="/src/styles/menubar.css" />
 
   <!-- WarEra+: analytics Umami — sito NUOVO creato apposta per questo tool
        (l'utente ha sostituito l'ID che riusava quello del vecchio tool,
@@ -90,7 +93,7 @@
   <!-- HAMBURGER BTN -->
   <button id="hamburger-btn" aria-label="Open menu">☰</button>
   <!-- Pulsante Bloc Stats -->
-  <button id="bloc-stats-btn" data-i18n-title="bloc_statistics" title="Bloc Statistics">📊</button>
+  <button id="bloc-stats-btn" data-i18n-title="bloc_statistics" title="Alliance Statistics">📊</button>
   <button id="wp-battles-toggle-btn" data-i18n-title="toggle_battles" title="Show/hide battles">⚔️</button>
   <button id="wp-time-machine-btn" data-i18n-title="time_machine" title="Time machine">🕰️</button>
   <!-- HAMBURGER MENU -->
@@ -244,7 +247,7 @@
   <div id="bloc-stats-page"
     style="display:none; position:fixed; inset:0; z-index:5000; background:#0d1117; overflow-y:auto; padding:20px; color:#e6edf3;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-      <h1 style="font-size:24px;" data-i18n="bloc_statistics">Bloc Statistics</h1>
+      <h1 style="font-size:24px;" data-i18n="bloc_statistics">Alliance Statistics</h1>
       <button id="bloc-stats-close" data-i18n="back_to_map"
         style="background:#0062ff; border:none; color:#fff; padding:8px 16px; border-radius:8px; cursor:pointer; font-weight:600;">←
         Back to Map</button>

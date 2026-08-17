@@ -180,6 +180,28 @@ body.wp-resizing .wp-panel-resize-handle::after {
   margin-bottom: 18px;
 }
 
+/* WarEra+: stella "Preferiti" nell'intestazione del pannello (nazione/
+   alleanza). Store condiviso in src/app/pins.js; i preferiti si aprono
+   dal dropdown ⭐ della barra menù su desktop. */
+.wp-panel-pin {
+  margin-left: auto;
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  color: #6f7885;
+  padding: 2px 4px;
+  border-radius: 6px;
+  transition: color 0.14s, background 0.14s;
+}
+.wp-panel-pin:hover { color: #e3a838; background: rgba(217, 154, 43, 0.14); }
+.wp-panel-pin.pinned { color: #e3a838; }
+body.light-theme .wp-panel-pin { color: #9a866a; }
+body.light-theme .wp-panel-pin.pinned,
+body.light-theme .wp-panel-pin:hover { color: #9c6b1f; }
+
 .wp-panel-flag {
   width: 40px;
   height: 40px;
@@ -894,16 +916,19 @@ body.light-theme .wp-tm-popup-since {
   right: 0;
   height: 30px;
   z-index: 2100;
-  background: rgba(8, 10, 16, 0.95);
-  border-bottom: 1px solid rgba(0, 212, 255, 0.25);
-  backdrop-filter: blur(10px);
+  /* Semitrasparente + blur: coerente con la barra menù, si intravede
+     sfocato ciò che scorre sotto restando leggibile. */
+  background: rgba(8, 10, 16, 0.6);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.22);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
   overflow: hidden;
   display: flex;
   align-items: center;
 }
 body.light-theme .wp-news-ticker-wrapper {
-  background: rgba(255, 255, 255, 0.95);
-  border-bottom-color: rgba(0, 98, 255, 0.25);
+  background: rgba(250, 245, 235, 0.68);
+  border-bottom-color: rgba(0, 98, 255, 0.22);
 }
 
 .wp-news-ticker-track {
@@ -1085,10 +1110,12 @@ body.light-theme .legend-toggle-btn {
      max-width finiva comunque per impacchettare poche voci a riga (quelle
      che bastavano a riempire la riga più larga) invece di sfruttare tutto
      lo spazio disponibile fino al limite. Larga abbastanza da tenere anche
-     liste lunghe (es. 12+ blocchi alleanza) su poche righe invece di una
-     colonna a scendere. */
-  width: min(1180px, calc(100vw - 40px));
-  max-width: min(1180px, calc(100vw - 40px));
+     liste lunghe (es. 13 blocchi alleanza) su 2 righe invece di 3: con
+     nomi lunghi (es. "Malacca Strait Treaty Organization" ~237px) il cap a
+     1180px lasciava avanzare una terza riga da 2 sole voci; a 1240+ le 13
+     alleanze stanno su 2 righe (verificato a viewport 1280). */
+  width: min(1300px, calc(100vw - 40px));
+  max-width: min(1300px, calc(100vw - 40px));
 }
 #dynamic-legend .legend-section-title,
 #dynamic-legend .legend-note,
