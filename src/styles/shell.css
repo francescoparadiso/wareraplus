@@ -1329,7 +1329,7 @@ body.light-theme .legend-toggle-btn {
    devono restare a piena larghezza (titolo sezione, barra gradiente,
    riga min/max sotto di essa, nota finale) occupano comunque tutta la riga,
    così da andare a capo da soli senza spezzare gli item accanto a loro. */
-#dynamic-legend.legend-content {
+#dynamic-legend.legend-content.legend-wide {
   display: flex;
   flex-flow: row wrap;
   align-items: stretch;
@@ -1347,9 +1347,9 @@ body.light-theme .legend-toggle-btn {
   width: min(1300px, calc(100vw - 40px));
   max-width: min(1300px, calc(100vw - 40px));
 }
-#dynamic-legend .legend-section-title,
-#dynamic-legend .legend-note,
-#dynamic-legend .legend-item[style*="space-between"],
+#dynamic-legend.legend-wide .legend-section-title,
+#dynamic-legend.legend-wide .legend-note,
+#dynamic-legend.legend-wide .legend-item[style*="space-between"],
 /* BUG FIX (segnalato: "non si vede la legenda di queste due heatmap" —
    danni settimanali e popolazione — su desktop). Il pannello si apriva e
    titolo/min/max/nota c'erano, ma la BARRA DEI COLORI era invisibile.
@@ -1368,20 +1368,20 @@ body.light-theme .legend-toggle-btn {
    una sottostringa del suo style: non dipende più da come è scritto
    l'attributo inline. Il vecchio selettore resta per eventuali blocchi che
    il width:100% ce l'hanno davvero sul figlio diretto. */
-#dynamic-legend .legend-scale,
-#dynamic-legend > div[style*="width:100%"] {
+#dynamic-legend.legend-wide .legend-scale,
+#dynamic-legend.legend-wide > div[style*="width:100%"] {
   flex: 1 1 100%;
 }
-#dynamic-legend .legend-item {
+#dynamic-legend.legend-wide .legend-item {
   flex: 0 1 auto;
   min-width: 155px;
   margin-bottom: 0;
 }
 @media (max-width: 768px) {
-  #dynamic-legend.legend-content {
+  #dynamic-legend.legend-content.legend-wide {
     max-width: calc(100vw - 40px);
   }
-  #dynamic-legend .legend-item {
+  #dynamic-legend.legend-wide .legend-item {
     flex: 1 1 100%;
     min-width: 0;
   }
@@ -1399,7 +1399,7 @@ body.light-theme .legend-toggle-btn {
 body.wp-panel-open #legend-container {
   left: calc((100vw - var(--wp-panel-width, 380px)) / 2);
 }
-body.wp-panel-open #dynamic-legend.legend-content {
+body.wp-panel-open #dynamic-legend.legend-content.legend-wide {
   width: min(1180px, calc(100vw - var(--wp-panel-width, 380px) - 56px));
   max-width: min(1180px, calc(100vw - var(--wp-panel-width, 380px) - 56px));
 }

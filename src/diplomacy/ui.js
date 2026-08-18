@@ -52,8 +52,16 @@ function _autoToggleLegend() {
   const isMobile = window.innerWidth <= 768;
   if (isMobile) return;
 
-  const isDefaultView = state.coloringMode === 'diplomacy';
-  const viewKey = `${state.coloringMode}|${!!state.battleHeatmapData}`;
+  // BUG FIX (segnalato dall'utente: "non si apre la legenda in automatico in
+  // diplomacy mode"): la vista diplomacy CON una nazione selezionata ha una
+  // legenda vera (relazioni: NAP/alleato/nemico/...), non è "default" quanto
+  // la vista senza selezione — va aperta anche lei. `viewKey` includeva solo
+  // coloringMode+battleHeatmapData: passare da nessuna selezione a una
+  // nazione selezionata (sempre in modalità 'diplomacy') non cambiava la
+  // viewKey, quindi non ri-attivava mai il toggle automatico dopo la prima
+  // apertura/chiusura manuale dell'utente.
+  const isDefaultView = state.coloringMode === 'diplomacy' && !state.selectedCountryId;
+  const viewKey = `${state.coloringMode}|${!!state.battleHeatmapData}|${!!state.selectedCountryId}`;
 
   if (viewKey === _lastLegendViewKey) return; // stessa vista di prima, non toccare lo stato utente
   _lastLegendViewKey = viewKey;
@@ -64,6 +72,23 @@ function _autoToggleLegend() {
 export function updateDynamicLegend() {
   _autoToggleLegend();
   const box = document.getElementById('dynamic-legend');
+
+  // WarEra+ (feedback utente: "la legenda per le heatmap è troppo grande"):
+  // il layout "largo" a più colonne (#dynamic-legend.legend-wide in
+  // shell.css, width fino a 1300px) serve solo alle legende con tante voci
+  // affiancate (blocchi/alleanze, sfere d'influenza). Le legende "a
+  // gradiente" (popolazione, danni settimanali, battle heatmap) hanno 2-3
+  // righe di contenuto: senza questa classe restano compatte (vedi
+  // .legend-content in diplomacy.css, min-width 150/max-width 200).
+  // WarEra+ (feedback utente: la legenda di una nazione selezionata, che ha
+  // fino a 9 voci — SELECTED/NAP/DEFENSIVE PACT/SWORN ENEMY/DIRECT WAR/
+  // INDIRECT ENEMY/DIRECT ALLY/ALLY+DEFENSIVE PACT/NEUTRAL — si apriva in
+  // colonna singola invece che a più colonne come prima di questo giro di
+  // fix). Senza selezione la vista diplomacy ha solo 2 voci: resta compatta.
+  const wideModes = state.coloringMode === 'blocs'
+    || state.coloringMode === 'sphereOfInfluence'
+    || (state.coloringMode === 'diplomacy' && !!state.selectedCountryId);
+  box.classList.toggle('legend-wide', wideModes);
 
   if (state.coloringMode === 'population') {
     let min = Infinity, max = -Infinity;
