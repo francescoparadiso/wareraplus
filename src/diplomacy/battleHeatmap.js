@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { API_BASE_URL, WORKER_API_BASE, COLORS } from './config.js';
 import { showRateLimitTooltip, trpcBatch } from './utils.js';
-import { renderMap } from './map.js';
+import { renderMap, captureHeatmapFadeFrom, startHeatmapFadeIn, clearHeatmapFade } from './map.js';
 import { updateDynamicLegend } from './ui.js';
 import { fetchActiveBattlesViaCache } from './cacheClient.js';
 import { trackEvent } from '../shared/analytics.js';
@@ -340,6 +340,14 @@ export async function setBattleHeatmap(battleId) {
       rankingRaw: rankingData,
     };
     
+    // BUG FIX (segnalato dall'utente: "effetto flashbang" all'apertura).
+    // Ricorda i colori ATTUALI della mappa PRIMA che renderMap() li
+    // sostituisca con la heatmap: resteranno sotto mentre la heatmap
+    // sfuma in sopra (vedi map.js, blocco "Dissolvenza in ingresso della
+    // heatmap battaglia" — spiega anche perché fill-color-transition di
+    // MapLibre qui non funziona e perché la dissolvenza è invertita).
+    const fading = captureHeatmapFadeFrom();
+
     state.coloringMode = 'battleHeatmap';
     currentBattleId = battleId;
 
@@ -349,6 +357,7 @@ export async function setBattleHeatmap(battleId) {
 
     // Forza il rendering
     renderMap();
+    if (fading) startHeatmapFadeIn();
     updateDynamicLegend();
     console.log('Heatmap updated for battle:', battleName);
     
@@ -368,10 +377,13 @@ export function exitBattleHeatmap() {
     state.coloringMode = previousMode;
     state.battleHeatmapData = null;
     currentBattleId = null;
-    
+
     stopLiveUpdates();
-    
-    
+
+    // Un'uscita durante la dissolvenza non deve lasciare il velo appeso
+    // sopra alla mappa tornata in modalità normale (vedi map.js).
+    clearHeatmapFade();
+
     // WarEra+ fix: prima qui si faceva clearMarkers() + una NUOVA fetch di
     // rete (fetchActiveBattles, non dalla cache) con 100ms di ritardo —
     // anche se hideBattleTooltip() (battleMarkers.js) aveva già reso
@@ -437,18 +449,36 @@ export function buildBattleHeatmapColorExpression(isOriginal = false) {
 
   let maxAttackerDmg = 0;
   let maxDefenderDmg = 0;
+  // Totali di lato (somma danni di TUTTE le nazioni di quel lato) — servono
+  // solo per il cutoff sotto, non per il colore (che resta relativo al
+  // massimo contributore, come prima). Stessa definizione di "Share" già
+  // mostrata in legenda (ui.js: "Share = nation damage / side total").
+  let totalAttackerDmg = 0;
+  let totalDefenderDmg = 0;
   nations.forEach(item => {
-    if (item.side === 'attacker' && item.totalDamage > maxAttackerDmg) {
-      maxAttackerDmg = item.totalDamage;
-    } else if (item.side === 'defender' && item.totalDamage > maxDefenderDmg) {
-      maxDefenderDmg = item.totalDamage;
+    if (item.side === 'attacker') {
+      totalAttackerDmg += item.totalDamage;
+      if (item.totalDamage > maxAttackerDmg) maxAttackerDmg = item.totalDamage;
+    } else {
+      totalDefenderDmg += item.totalDamage;
+      if (item.totalDamage > maxDefenderDmg) maxDefenderDmg = item.totalDamage;
     }
   });
 
   if (maxAttackerDmg === 0) maxAttackerDmg = 1;
   if (maxDefenderDmg === 0) maxDefenderDmg = 1;
 
+  // CUTOFF (richiesto dall'utente): nazioni sotto l'1% del danno del
+  // proprio lato restano fuori dalla mappa colori (colore neutro invece di
+  // una tinta quasi invisibile) — decine di paesi con un contributo
+  // trascurabile rendevano la heatmap "rumorosa" e difficile da leggere.
+  const MIN_SIDE_SHARE = 0.01;
+
   nations.forEach(item => {
+    const sideTotal = item.side === 'attacker' ? totalAttackerDmg : totalDefenderDmg;
+    const share = sideTotal > 0 ? item.totalDamage / sideTotal : 0;
+    if (share < MIN_SIDE_SHARE) return; // sotto soglia: niente colore, resta BATTLE_NEUTRAL
+
     let pct;
     if (item.side === 'attacker') {
       pct = item.totalDamage / maxAttackerDmg;
@@ -470,10 +500,10 @@ export function buildBattleHeatmapColorExpression(isOriginal = false) {
       color = `rgb(${r},${Math.max(0,g)},${Math.max(0,b)})`;
     }
     
-    if (item.totalDamage === 0) {
-      color = item.side === 'attacker' ? 'rgb(214,232,255)' : 'rgb(255,217,217)';
-    }
-    
+    // (Il vecchio caso speciale "totalDamage === 0 → colore più chiaro" è
+    // stato rimosso: con il cutoff sopra una nazione a 0 danni ha sempre
+    // share 0%, quindi esce già dal `return` prima di arrivare qui.)
+
     colorMap.set(item.countryId, color);
   });
 

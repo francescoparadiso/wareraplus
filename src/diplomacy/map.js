@@ -25,7 +25,7 @@ import { initAntiqueTheme, applyAntiqueTheme } from './antiqueTheme.js';
 import { initDarkFleetTheme, applyDarkFleetTheme } from './darkFleetTheme.js';
 import { trackEvent } from '../shared/analytics.js';
 
-const { SRC_REGIONS, SRC_BORDERS, SRC_DIPLOMACY_DUAL_BORDER, SRC_BATTLE_REGION, LYR_FILL, LYR_OUTLINE, LYR_COAST, LYR_BORDER, LYR_MULTI_BLOC, LYR_DIPLOMACY_DUAL, LYR_BATTLE_REGION, LYR_BATTLE_REGION_FILL, LYR_BLOC_FLASH } = LAYER_IDS;
+const { SRC_REGIONS, SRC_BORDERS, SRC_DIPLOMACY_DUAL_BORDER, SRC_BATTLE_REGION, LYR_FILL, LYR_OUTLINE, LYR_COAST, LYR_BORDER, LYR_MULTI_BLOC, LYR_DIPLOMACY_DUAL, LYR_BATTLE_REGION, LYR_BATTLE_REGION_FILL, LYR_BLOC_FLASH, LYR_HEATMAP_FADE } = LAYER_IDS;
 
 // ==================== INIT MAPPA ====================
 export function initMap() {
@@ -97,6 +97,32 @@ export async function setupMapLayers() {
 
   if (!state.map.getLayer(LYR_FILL)) {
     state.map.addLayer({ id: LYR_FILL, type: 'fill', source: SRC_REGIONS, paint: { 'fill-color': COLORS.NEUTRAL_UNSELECTED, 'fill-opacity': 0.9 } });
+  }
+
+  // WarEra+ — dissolvenza in ingresso della heatmap battaglia (vedi
+  // captureHeatmapFadeFrom/startHeatmapFadeOut in fondo a questo file).
+  // Creato QUI, subito dopo LYR_FILL e prima di tutti gli altri layer, così
+  // resta esattamente sopra al riempimento dei paesi ma SOTTO a confini,
+  // contorni, regione della battaglia e ogni altro overlay — che durante la
+  // dissolvenza devono restare nitidi, non venire coperti da un velo.
+  // Stessa sorgente di LYR_FILL: la geometria combacia al pixel.
+  // Due dettagli non ovvi, entrambi anti-lampo (vedi il blocco
+  // "Dissolvenza in ingresso della heatmap battaglia" in fondo al file):
+  //  · nessun `visibility` — il velo resta SEMPRE nel render, spento con
+  //    fill-opacity:0, perché un toggle di visibility costa un frame;
+  //  · il colore nasce già come espressione DATA-DRIVEN (anche se qui
+  //    resa costante da un match che non matcha nulla). Passare un layer
+  //    da colore costante a data-driven obbliga MapLibre a ricostruire da
+  //    zero i buffer di quel layer, cosa che richiede qualche frame:
+  //    nascendo già data-driven, il primo colore vero si applica subito.
+  if (!state.map.getLayer(LYR_HEATMAP_FADE)) {
+    state.map.addLayer({
+      id: LYR_HEATMAP_FADE, type: 'fill', source: SRC_REGIONS,
+      paint: {
+        'fill-color': ['match', ['get', 'countryId'], '___none___', '#000000', COLORS.NEUTRAL_UNSELECTED],
+        'fill-opacity': 0,
+      },
+    });
   }
 
   // WarEra+: layer ambientale del mare (rotte commerciali, tema scuro) e
@@ -626,6 +652,112 @@ export function flashBlocOnMap(allianceId) {
     _blocFlashRAF = requestAnimationFrame(step);
   }
   _blocFlashRAF = requestAnimationFrame(step);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Dissolvenza in ingresso della heatmap battaglia
+   ------------------------------------------------------------------
+   BUG FIX (segnalato dall'utente due volte: prima "effetto flashbang"
+   all'apertura, poi "ora è solo ritardato ma è comunque bello veloce").
+
+   Il primo tentativo usava 'fill-color-transition' di MapLibre. NON
+   funziona qui, e il motivo è strutturale, non un valore da tarare: la
+   heatmap colora i paesi con un'espressione `match` sulle proprietà
+   della feature, quindi la proprietà è DATA-DRIVEN — e MapLibre, per le
+   proprietà data-driven, salta l'interpolazione e applica il valore
+   finale di colpo (properties.ts: `else if (this.value.isDataDriven())
+   { this.prior = null; return finalValue; }`). Alzare la durata non
+   avrebbe cambiato nulla: la transizione non è mai partita.
+
+   Soluzione: la dissolvenza la facciamo noi, con un layer velo
+   (LYR_HEATMAP_FADE) che mostra i colori PRECEDENTI della mappa e si
+   dissolve verso la trasparenza, scoprendo gradualmente la heatmap già
+   dipinta sotto su LYR_FILL. Nessun colore viene interpolato: si
+   incrociano due immagini, che è ciò che l'occhio legge come fade.
+
+   SECONDO GIRO (l'utente segnalava ancora "va prima di botto e poi si
+   illumina lentamente"): la prima versione metteva sul velo i colori
+   VECCHI e lo dissolveva, scoprendo la heatmap già dipinta sotto. Il
+   difetto è che il velo cambiava colore proprio nell'istante del click:
+   MapLibre deve ricostruire i buffer di quel layer e ci mette qualche
+   frame, mentre LYR_FILL (buffer già pronti) mostrava la heatmap
+   IMMEDIATAMENTE — quindi si vedeva prima il lampo e solo dopo compariva
+   il velo che iniziava a sfumare. Esattamente il sintomo descritto.
+
+   Ora è invertito, e la differenza è sostanziale: a t=0 NON cambia nulla
+   di ciò che si vede. Sotto restano i colori vecchi (LYR_FILL viene
+   riportato indietro subito dopo renderMap, nello stesso frame), e la
+   heatmap sta sul velo che parte da opacità 0 e cresce. Se i buffer del
+   velo ci mettono qualche frame a essere pronti, quei frame il velo è
+   invisibile: nessun lampo possibile, al massimo la dissolvenza comincia
+   un istante dopo. A fine corsa LYR_FILL torna alla heatmap e il velo si
+   spegne — stessi colori su entrambi in quel momento, nessuno scatto.
+
+   Uso in due tempi (vedi battleHeatmap.js:setBattleHeatmap): PRIMA
+   captureHeatmapFadeFrom() — che NON tocca la mappa, si limita a
+   ricordare l'espressione colore attuale finché è ancora quella vecchia —
+   poi renderMap(), infine startHeatmapFadeIn().
+   ══════════════════════════════════════════════════════════════ */
+let _heatmapFadeRAF = null;
+let _heatmapFadeFromExpr = null;
+
+export function captureHeatmapFadeFrom() {
+  if (!state.map?.getLayer(LYR_HEATMAP_FADE) || !state.map.getLayer(LYR_FILL)) return false;
+  if (_heatmapFadeRAF) { cancelAnimationFrame(_heatmapFadeRAF); _heatmapFadeRAF = null; }
+  _heatmapFadeFromExpr = state.map.getPaintProperty(LYR_FILL, 'fill-color');
+  return true;
+}
+
+export function startHeatmapFadeIn(durationMs = 750) {
+  const map = state.map;
+  if (!map?.getLayer(LYR_HEATMAP_FADE) || !_heatmapFadeFromExpr) return;
+  if (_heatmapFadeRAF) cancelAnimationFrame(_heatmapFadeRAF);
+
+  // renderMap() ha appena messo la heatmap su LYR_FILL: la spostiamo sul
+  // velo (ancora invisibile) e rimettiamo sotto i colori di prima. Tutto
+  // nello stesso task, quindi nello stesso frame: l'occhio non vede
+  // nessun passaggio intermedio.
+  const toExpr = map.getPaintProperty(LYR_FILL, 'fill-color');
+  map.setPaintProperty(LYR_HEATMAP_FADE, 'fill-color', toExpr);
+  map.setPaintProperty(LYR_HEATMAP_FADE, 'fill-opacity', 0);
+  map.setPaintProperty(LYR_FILL, 'fill-color', _heatmapFadeFromExpr);
+
+  const startTime = performance.now();
+  function step(now) {
+    const t = Math.min((now - startTime) / durationMs, 1);
+    // ease-in-out: parte piano (si nota che "sta iniziando"), accelera in
+    // mezzo, si posa dolcemente — una rampa lineare sembra più brusca a
+    // parità di durata.
+    const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    map.setPaintProperty(LYR_HEATMAP_FADE, 'fill-opacity', 0.9 * eased);
+    if (t >= 1) {
+      // Fine: la heatmap torna sul layer di base (dove la vogliono i
+      // successivi renderMap/aggiornamenti live) e il velo si spegne. In
+      // questo istante i due mostrano gli stessi identici colori, quindi
+      // lo scambio è invisibile.
+      map.setPaintProperty(LYR_FILL, 'fill-color', toExpr);
+      map.setPaintProperty(LYR_HEATMAP_FADE, 'fill-opacity', 0);
+      _heatmapFadeRAF = null;
+      return;
+    }
+    _heatmapFadeRAF = requestAnimationFrame(step);
+  }
+  _heatmapFadeRAF = requestAnimationFrame(step);
+}
+
+// Interrompe la dissolvenza e spegne il velo — chiamata all'uscita dalla
+// heatmap, così un'uscita rapida non lascia il velo appeso sopra alla
+// mappa tornata in modalità normale. Spento con l'opacità, MAI con
+// `visibility`: vedi il commento sul layer in setupMapLayers.
+// Non serve rimettere a posto il colore di LYR_FILL (durante la
+// dissolvenza tiene ancora quelli vecchi): chi chiama fa comunque un
+// renderMap() subito dopo, che lo ridipinge secondo la modalità corrente.
+export function clearHeatmapFade() {
+  if (_heatmapFadeRAF) { cancelAnimationFrame(_heatmapFadeRAF); _heatmapFadeRAF = null; }
+  _heatmapFadeFromExpr = null;
+  if (state.map?.getLayer(LYR_HEATMAP_FADE)) {
+    state.map.setPaintProperty(LYR_HEATMAP_FADE, 'fill-opacity', 0);
+  }
 }
 
 // WarEra+: nasconde immediatamente il layer di flash, usata come

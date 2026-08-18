@@ -131,6 +131,7 @@ export const LAYER_IDS = {
   LYR_BATTLE_REGION: 'battle-region-outline',
   LYR_BATTLE_REGION_FILL: 'battle-region-fill', // WarEra+: riempimento dell'intera regione, non solo contorno
   LYR_BLOC_FLASH: 'bloc-flash-highlight', // WarEra+: effetto "blink" al click su un'alleanza nella legenda
+  LYR_HEATMAP_FADE: 'heatmap-fade-overlay', // WarEra+: dissolvenza in ingresso della heatmap battaglia (vedi map.js)
 };
 
 export const EXTERNAL_NAPS_URL =

@@ -560,6 +560,48 @@ function _rebuildMessages() {
   _rebuildTrack();
 }
 
+/* ══════════════════════════════════════════════════════════════
+   Vista "News" (Approfondimenti) — richiesta esplicita dell'utente:
+   "un notiziario con tutte le info del ticker".
+   ------------------------------------------------------------------
+   Il ticker mostra a rotazione un SOTTOINSIEME delle notizie (max 5 per
+   categoria, mescolate, tagliate a 30 — vedi _rebuildMessages): serve a
+   dare un assaggio, non l'elenco completo. La vista News mostra invece
+   TUTTO, raggruppato per categoria e senza mescolare.
+
+   Perché sta qui e non in newsView.js: le funzioni format* e i dati
+   grezzi già scaricati (_lastRawData) vivono in questo modulo. Esporre
+   i gruppi già formattati evita sia di duplicare la logica dei testi
+   sia — soprattutto — di rifare le stesse chiamate di rete (le elezioni
+   sono una chiamata per OGNI nazione: rifarle all'apertura della vista
+   riaprirebbe il problema dei 429 che il batching ha risolto).
+   ══════════════════════════════════════════════════════════════ */
+
+// Chiavi stabili (non testi): la vista le traduce con il proprio
+// dizionario, così aggiungere una lingua non tocca questo file.
+export function getNewsGroups() {
+  if (!_lastRawData) return null;
+  const { topIds, battles, electionsRaw, stats } = _lastRawData;
+  return [
+    { key: 'battles', icon: '⚔️', messages: formatBattleMessages(battles) },
+    { key: 'elections', icon: '🗳️', messages: formatElectionMessages(electionsRaw) },
+    { key: 'wars', icon: '💥', messages: formatWarMessages(stats.punctual, topIds) },
+    { key: 'sworn', icon: '🎯', messages: formatSwornMessages(stats.punctual, topIds) },
+    { key: 'stats24', icon: '📊', messages: formatStatsMessages(stats, topIds) },
+    { key: 'sinceVisit', icon: '👁️', messages: formatSinceVisitMessages(stats, topIds) },
+  ];
+}
+
+// La vista News può essere aperta prima che il primo refresh del ticker
+// sia arrivato (o dopo un fallimento): in quel caso rifà il giro una
+// volta sola invece di mostrare una pagina vuota. Se i dati ci sono già,
+// non tocca la rete.
+export async function ensureNewsData({ force = false } = {}) {
+  if (!force && _lastRawData) return getNewsGroups();
+  await refreshNews();
+  return getNewsGroups();
+}
+
 export function startNewsTicker() {
   const track = document.getElementById('wp-news-ticker-track');
   if (!track) return;

@@ -326,6 +326,22 @@
     <div id="wp-eco-root" style="display:none;"></div>
   </div>
 
+  <!-- ════════════════════════════════════════════════════════════
+       NUOVO — Overlay News (src/app/newsView.js)
+       Vista sotto "Approfondimenti": il notiziario completo con TUTTE
+       le notizie che il ticker in cima alla mappa fa scorrere solo a
+       campione. Montata IN-PAGE dentro #wp-news-root da
+       src/app/newsView.js: initNewsView(), aperta da
+       src/app/newsOverlay.js. Stesso pattern degli overlay Political/Eco.
+       ════════════════════════════════════════════════════════════ -->
+  <div id="wp-news-overlay" class="wp-political-overlay wp-news-overlay" aria-hidden="true">
+    <div class="wp-political-topbar">
+      <button id="wp-news-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
+      <span class="wp-political-title">News</span>
+    </div>
+    <div id="wp-news-root" style="display:none;"></div>
+  </div>
+
   <!-- Ko-fi + pill autore (desktop): wrapper condiviso che li centra
        appaiati in basso — vedi shell.css #wp-bottom-credits e
        src/app/authorPill.js per l'arricchimento con la foto profilo
