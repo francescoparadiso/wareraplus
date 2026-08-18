@@ -33,6 +33,16 @@
      (top bar + ticker 26px). */
   #legend-container { top: calc(var(--wp-mbar-h) + 26px); }
 
+  /* BUG FIX (segnalato dall'utente): l'indicatore/orologio e la classifica
+     della time machine (shell.css, top:70px fisso) finivano dentro alla
+     fascia del ticker (top bar 52px + ticker mobile 26px = 52-78px),
+     coprendolo leggermente. Qui, caricato dopo shell.css, si spinge
+     entrambi sotto al bordo inferiore reale del ticker. */
+  #wp-tm-indicator,
+  #wp-tm-standings {
+    top: calc(var(--wp-mbar-h) + 26px + 8px) !important;
+  }
+
   /* I float adottati spariscono: funzioni ora nelle barre mobile. */
   #hamburger-btn,
   #bloc-stats-btn,

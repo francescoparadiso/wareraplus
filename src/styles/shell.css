@@ -699,7 +699,12 @@ body.light-theme #wp-time-machine-btn.wp-time-machine-btn-active {
   flex-direction: column;
   gap: 10px;
   min-width: 340px;
-  max-width: min(640px, calc(100vw - 32px));
+  /* Allargato su richiesta esplicita dell'utente (desktop): con 640px lo
+     slider copriva l'intero range storico in pochi pixel per giorno,
+     difficile "beccare" una data precisa col mouse. 960px = più pixel per
+     giorno, drag più preciso. Il vincolo mobile (max-width:768px sotto)
+     resta invariato, qui vale solo da desktop in su. */
+  max-width: min(960px, calc(100vw - 32px));
   padding: 10px 16px;
   background: rgba(13, 17, 23, 0.97);
   border: 1px solid #30363d;
@@ -792,10 +797,62 @@ body.light-theme #wp-time-machine-btn.wp-time-machine-btn-active {
    concorrente di riconoscere un gesto di scroll verticale/rubber-band
    della pagina, la causa più probabile del blocco (bug noto su iOS con
    elementi position:fixed trascinati). */
+/* Ingrandito su richiesta esplicita dell'utente ("il rettangolo per la
+   scelta della data" troppo piccolo, giro/drag scomodo). `height` da solo
+   su un <input type=range> non basta: la maggior parte dei browser
+   continua a centrare una traccia sottile dentro la box più alta — serve
+   stilizzare esplicitamente track e thumb via pseudo-elementi
+   (-webkit-/-moz-) per ottenere una traccia e un pallino davvero più
+   grandi e facili da afferrare, specie a dito su mobile. accent-color
+   resta solo come fallback per browser che non supportano queste
+   pseudo-classi (nessuno rilevante oggi, ma innocuo tenerlo). */
 #wp-tm-slider {
   flex: 1;
+  height: 28px;
+  margin: 0;
   accent-color: #00d4ff;
   touch-action: pan-x;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+#wp-tm-slider::-webkit-slider-runnable-track {
+  height: 10px;
+  border-radius: 5px;
+  background: #30363d;
+}
+#wp-tm-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -8px; /* (26 - 10) / 2, centra il pallino sulla traccia da 10px */
+  border-radius: 50%;
+  background: #00d4ff;
+  border: 3px solid #0d1117;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+#wp-tm-slider::-moz-range-track {
+  height: 10px;
+  border-radius: 5px;
+  background: #30363d;
+}
+#wp-tm-slider::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #00d4ff;
+  border: 3px solid #0d1117;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+body.light-theme #wp-tm-slider::-webkit-slider-runnable-track,
+body.light-theme #wp-tm-slider::-moz-range-track {
+  background: #ddd;
+}
+body.light-theme #wp-tm-slider::-webkit-slider-thumb,
+body.light-theme #wp-tm-slider::-moz-range-thumb {
+  border-color: #fff;
 }
 /* Giorno (Day X/Y) + data, impilati invece che affiancati: meno larghezza
    orizzontale occupata (importante su mobile) rispetto a metterli in riga. */
@@ -1132,6 +1189,19 @@ body.light-theme .wp-tm-st-bar { background: rgba(0, 0, 0, 0.1); }
     bottom: 210px;
     width: 168px;
   }
+  /* BUG FIX (segnalato dall'utente): a 168px la riga (rank+pallino+
+     bandiera+nome+barra+conteggio) non ci stava — tutti gli elementi
+     fissi hanno flex-shrink:0, quindi il totale superava la larghezza
+     del pannello e .wp-tm-st-list (overflow-y:auto ma non -x) scrollava
+     in orizzontale per vedere il resto. Barra progresso rimossa (il
+     conteggio/ordinamento bastano su schermi stretti) e larghezze
+     ridotte: la riga ora sta tutta senza scroll orizzontale, larghezza
+     pannello invariata (168px, non collide con l'indicatore a sinistra
+     sui viewport più stretti, es. 360px). */
+  .wp-tm-st-bar { display: none; }
+  .wp-tm-st-row { gap: 5px; padding: 5px 4px; }
+  .wp-tm-st-rank { flex-basis: 14px; }
+  .wp-tm-st-flag { width: 16px; height: 12px; }
 }
 
 /* ══════════════════════════════════════════════════════════════

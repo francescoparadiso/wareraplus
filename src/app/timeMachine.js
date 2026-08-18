@@ -319,17 +319,91 @@ function _buildIndicatorIfNeeded() {
   _clockDate = _indicator.querySelector('.wp-tm-ind-date');
 }
 
-// Muove le lancette all'ora dell'istante `ts` (ora locale dell'evento) e
-// aggiorna ora/data testuali. La transizione CSS sulle lancette fa sì che in
-// playback l'orologio "giri" invece di scattare.
+// ─────────────────────────────────────────────────────────────────────────
+// Orologio analogico — rotazione SEMPRE nel verso del tempo
+//
+// BUG FIX (segnalato due volte dall'utente: "le lancette saltano invece di
+// girare in senso orario", poi "continuano a saltare, vorrei desse l'idea
+// del correre del tempo"). Due cause distinte, entrambe risolte qui:
+//
+// 1. Angolo riportato in [0,360). La transizione CSS interpola i due valori
+//    NUMERICAMENTE: da 354° a 0° (minuto 59 -> 00) anima all'indietro di
+//    354° invece che avanti di 6°. Risolto tenendo un angolo CONTINUO,
+//    accumulato, che può superare i 360° (rotate() accetta 725° senza
+//    problemi).
+// 2. Percorso più breve (±180°). Era il rimedio del primo giro, ma resta
+//    "a scatti": un avanzamento di 50 minuti di gioco è più breve percorso
+//    ALL'INDIETRO (-60°), quindi la lancetta tornava comunque indietro pur
+//    andando avanti nel tempo. Ora il verso della rotazione lo decide il
+//    SEGNO dell'avanzamento temporale, non la distanza angolare: tempo che
+//    avanza = lancette sempre orarie, tempo che torna indietro (slider
+//    trascinato a sinistra) = sempre antiorarie.
+//
+// "Idea del correre del tempo" sui salti: per un balzo di ore/giorni non
+// basta la posizione finale — si aggiungono GIRI INTERI extra proporzionali
+// al tempo saltato (fino a un tetto, altrimenti un salto di un anno
+// vorrebbe 8760 giri) e si allunga la durata della transizione, così la
+// lancetta si vede vorticare prima di fermarsi. Durante il playback
+// continuo, invece, gli aggiornamenti arrivano ogni ~150ms: lì i giri extra
+// sono soppressi (CLOCK_DENSE_MS) — la lancetta gira già da sé ad ogni
+// frame, aggiungerne altri la trasformerebbe in una macchia e la
+// accumulerebbe sempre più in ritardo sulla posizione reale.
+// ─────────────────────────────────────────────────────────────────────────
+const CLOCK_DENSE_MS = 260;        // sotto questa distanza REALE fra due update = playback continuo, non un salto
+const CLOCK_MAX_EXTRA_MIN = 2;     // giri interi extra massimi, lancetta dei minuti
+const CLOCK_MAX_EXTRA_HOUR = 1;    // idem, lancetta delle ore (12h a giro, ne bastano meno)
+
+let _clockHourAng = 0, _clockMinAng = 0;
+let _clockLastTs = null;       // istante di GIOCO dell'ultimo frame mostrato
+let _clockLastUpdateAt = 0;    // Date.now() REALE dell'ultimo aggiornamento
+
+// Nuovo angolo continuo per una lancetta: raggiunge `targetDeg` (posizione
+// 0-360 sul quadrante) muovendosi SOLO nel verso `dir`, più `extraTurns`
+// giri interi nello stesso verso.
+function _handAngle(curAng, targetDeg, dir, extraTurns) {
+  // Quanto manca al bersaglio andando in avanti: sempre in [0,360).
+  const fwd = (((targetDeg - curAng) % 360) + 360) % 360;
+  // Andando indietro: lo stesso punto, ma raggiunto in senso antiorario.
+  const base = dir >= 0 ? fwd : (fwd === 0 ? 0 : fwd - 360);
+  return curAng + base + extraTurns * 360 * (dir >= 0 ? 1 : -1);
+}
+
 function _updateClock(ts) {
   if (!_clockHour) return;
   const d = new Date(ts);
   const h = d.getHours(), m = d.getMinutes();
-  const minAng = m * 6;                     // 360/60
-  const hourAng = (h % 12) * 30 + m * 0.5;  // 360/12 + drift al minuto
-  _clockMin.setAttribute('transform', `rotate(${minAng} 50 50)`);
-  _clockHour.setAttribute('transform', `rotate(${hourAng} 50 50)`);
+  const targetMin = m * 6;                     // 360/60
+  const targetHour = (h % 12) * 30 + m * 0.5;  // 360/12 + drift al minuto
+
+  const now = Date.now();
+  const dense = (now - _clockLastUpdateAt) < CLOCK_DENSE_MS;
+  const deltaMs = _clockLastTs == null ? 0 : ts - _clockLastTs;
+  const dir = deltaMs < 0 ? -1 : 1;
+  const jumpedMs = Math.abs(deltaMs);
+  _clockLastTs = ts;
+  _clockLastUpdateAt = now;
+
+  // Giri "pieni" che quel salto vale davvero per ciascuna lancetta (un giro
+  // = 1h per i minuti, 12h per le ore), tagliati al tetto.
+  const extraMin = dense ? 0 : Math.min(Math.floor(jumpedMs / 3600000), CLOCK_MAX_EXTRA_MIN);
+  const extraHour = dense ? 0 : Math.min(Math.floor(jumpedMs / (12 * 3600000)), CLOCK_MAX_EXTRA_HOUR);
+
+  const nextMin = _handAngle(_clockMinAng, targetMin, dir, extraMin);
+  const nextHour = _handAngle(_clockHourAng, targetHour, dir, extraHour);
+
+  // Durata proporzionale a quanto c'è da percorrere (ma limitata): un
+  // aggiustamento di pochi gradi resta immediato, un vortice di due giri si
+  // prende il tempo di farsi vedere. In playback resta corta e fissa, per
+  // non accumulare ritardo sul tick successivo.
+  const spin = Math.max(Math.abs(nextMin - _clockMinAng), Math.abs(nextHour - _clockHourAng));
+  const durSec = dense ? 0.15 : Math.min(0.25 + (spin / 360) * 0.32, 1.2);
+  _clockMin.style.transitionDuration = `${durSec}s`;
+  _clockHour.style.transitionDuration = `${durSec}s`;
+
+  _clockMinAng = nextMin;
+  _clockHourAng = nextHour;
+  _clockMin.setAttribute('transform', `rotate(${_clockMinAng} 50 50)`);
+  _clockHour.setAttribute('transform', `rotate(${_clockHourAng} 50 50)`);
   _clockHM.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   _clockDate.textContent = d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
 }
