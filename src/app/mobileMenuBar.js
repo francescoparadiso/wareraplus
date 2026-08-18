@@ -218,6 +218,14 @@ function buildTopbar() {
   brand.appendChild(el('img', 'wp-mmb-logo', { src: '/icons/logo-full.png', alt: '' }));
   brand.addEventListener('click', resetView);
 
+  // Nome del tool centrato nella barra (richiesto dall'utente: la barra
+  // risultava "spoglia" col solo logo a sinistra). Posizionato in absolute
+  // dal CSS (centrato sull'intera topbar, non sullo spazio fra logo e
+  // icone) così resta fermo al centro indipendentemente da quanti bottoni
+  // ci sono a destra.
+  const title = el('div', 'wp-mmb-title');
+  title.textContent = 'WarEra+';
+
   const spacer = el('div', 'wp-mmb-spacer');
 
   const searchBtn = el('button', 'wp-mmb-icon-btn', { type: 'button' });
@@ -237,7 +245,7 @@ function buildTopbar() {
     else toggleDrawer();
   });
 
-  topbar.append(brand, spacer, searchBtn, hamburgerBtn);
+  topbar.append(brand, title, spacer, searchBtn, hamburgerBtn);
 }
 function resetView() {
   closeAnySubview();
@@ -687,10 +695,16 @@ function enterMobile() {
     const topControls = document.getElementById('wp-top-controls');
     const napManual = document.getElementById('napInput')?.closest('.menu-section');
     const napExternal = document.getElementById('externalNapToggle')?.closest('.menu-section');
+    const authorCredit = document.getElementById('wp-author-credit');
     relocatedEls = [];
     if (topControls && drawerTopRow) { relocate(topControls, drawerTopRow); relocatedEls.push(topControls); }
     if (napManual && settingsBody) { relocate(napManual, settingsBody); relocatedEls.push(napManual); }
     if (napExternal && settingsBody) { relocate(napExternal, settingsBody); relocatedEls.push(napExternal); }
+    // Credit autore (richiesto dall'utente): stesso <a> di index.html
+    // (#hamburger-menu su desktop lo rilocca in settingsPanel — vedi
+    // desktopMenuBar.js:enterDesktop), qui in fondo alla sezione
+    // Impostazioni del drawer — un solo elemento, due destinazioni.
+    if (authorCredit && settingsBody) { relocate(authorCredit, settingsBody); relocatedEls.push(authorCredit); }
   });
 }
 function exitMobile() {

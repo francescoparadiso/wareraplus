@@ -35,6 +35,7 @@ export const LANGS = {
 const DICT = {
   en: {
     app_subtitle: 'Strategic Map & Political Data',
+    author_credit_label: 'Created by',
     map_settings: 'Map settings',
     mode_diplomacy: '⚔️ Diplomacy',
     mode_blocs: '🏛️ Blocs',
@@ -119,6 +120,7 @@ const DICT = {
   },
   it: {
     app_subtitle: 'Mappa Strategica e Dati Politici',
+    author_credit_label: 'Creato da',
     map_settings: 'Impostazioni mappa',
     mode_diplomacy: '⚔️ Diplomazia',
     mode_blocs: '🏛️ Blocchi',
@@ -203,6 +205,7 @@ const DICT = {
   },
   es: {
     app_subtitle: 'Mapa Estratégico y Datos Políticos',
+    author_credit_label: 'Creado por',
     map_settings: 'Ajustes del mapa',
     mode_diplomacy: '⚔️ Diplomacia',
     mode_blocs: '🏛️ Bloques',
@@ -287,6 +290,7 @@ const DICT = {
   },
   de: {
     app_subtitle: 'Strategische Karte & Politische Daten',
+    author_credit_label: 'Erstellt von',
     map_settings: 'Karteneinstellungen',
     mode_diplomacy: '⚔️ Diplomatie',
     mode_blocs: '🏛️ Blöcke',
@@ -371,6 +375,7 @@ const DICT = {
   },
   fr: {
     app_subtitle: 'Carte Stratégique et Données Politiques',
+    author_credit_label: 'Créé par',
     map_settings: 'Paramètres de la carte',
     mode_diplomacy: '⚔️ Diplomatie',
     mode_blocs: '🏛️ Blocs',
@@ -455,6 +460,7 @@ const DICT = {
   },
   nl: {
     app_subtitle: 'Strategische Kaart & Politieke Gegevens',
+    author_credit_label: 'Gemaakt door',
     map_settings: 'Kaartinstellingen',
     mode_diplomacy: '⚔️ Diplomatie',
     mode_blocs: '🏛️ Blokken',
@@ -539,6 +545,7 @@ const DICT = {
   },
   sv: {
     app_subtitle: 'Strategisk Karta & Politisk Data',
+    author_credit_label: 'Skapad av',
     map_settings: 'Kartinställningar',
     mode_diplomacy: '⚔️ Diplomati',
     mode_blocs: '🏛️ Block',
@@ -623,6 +630,7 @@ const DICT = {
   },
   pt: {
     app_subtitle: 'Mapa Estratégico e Dados Políticos',
+    author_credit_label: 'Criado por',
     map_settings: 'Configurações do mapa',
     mode_diplomacy: '⚔️ Diplomacia',
     mode_blocs: '🏛️ Blocos',
@@ -707,6 +715,7 @@ const DICT = {
   },
   ar: {
     app_subtitle: 'الخريطة الاستراتيجية والبيانات السياسية',
+    author_credit_label: 'بواسطة',
     map_settings: 'إعدادات الخريطة',
     mode_diplomacy: '⚔️ الدبلوماسية',
     mode_blocs: '🏛️ الكتل',

@@ -91,6 +91,31 @@
     cursor: pointer;
   }
   .wp-mmb-logo { height: 30px; width: auto; border-radius: 6px; object-fit: contain; }
+
+  /* Nome del tool centrato nella barra (richiesto dall'utente: barra
+     "spoglia" col solo logo a sinistra). Absolute + transform invece che
+     centrarlo nello spazio flex fra logo e icone: così resta fermo al
+     centro ESATTO della barra, non del gap residuo (che si restringe
+     quando ci sono più icone a destra). pointer-events:none: puramente
+     decorativo, non deve rubare tap al resto della barra. text-overflow
+     di sicurezza se in futuro affiancasse un badge/lingua più largo. */
+  .wp-mmb-title {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    color: #e6edf3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 45%;
+    pointer-events: none;
+  }
+  body.light-theme .wp-mmb-title { color: #3e2f1c; }
+
   .wp-mmb-spacer { flex: 1 1 auto; }
 
   .wp-mmb-icon-btn {

@@ -198,6 +198,20 @@
         </div>
       </div>
 
+      <!-- Credit autore (richiesto dall'utente, sia desktop che mobile).
+           #hamburger-menu (dove sta questo markup) non si apre più né su
+           desktop né su mobile (soppiantato da desktopMenuBar.js/
+           mobileMenuBar.js) — questo è solo il "luogo di riposo" nel DOM.
+           A runtime viene RILOCATO: desktopMenuBar.js:enterDesktop() lo
+           sposta in fondo al dropdown ⚙️ Impostazioni, mobileMenuBar.js:
+           enterMobile() nella sezione Impostazioni del drawer. Stesso <a>,
+           un solo posto da tenere aggiornato. Stile a riga discreta,
+           coerente con la card di ringraziamento a Nettrix nella time
+           machine (shell.css .wp-tm-credit). -->
+      <a id="wp-author-credit" class="wp-author-credit" href="https://app.warera.io/user/69d2ed249f38d300d59a2af1" target="_blank" rel="noopener">
+        <span data-i18n="author_credit_label">Creato da</span> <strong>frappa10</strong> ↗
+      </a>
+
     </div>
   </div>
 
@@ -312,10 +326,24 @@
     <div id="wp-eco-root" style="display:none;"></div>
   </div>
 
-  <!-- Ko-fi Floating Button -->
-  <a href="https://ko-fi.com/frappa10" target="_blank" id="kofi-btn">
-    <span>☕ Support this project</span>
-  </a>
+  <!-- Ko-fi + pill autore (desktop): wrapper condiviso che li centra
+       appaiati in basso — vedi shell.css #wp-bottom-credits e
+       src/app/authorPill.js per l'arricchimento con la foto profilo
+       reale. La pill è nascosta sotto i 769px (solo desktop, richiesto
+       dall'utente): su mobile il credit autore vive nel drawer ☰
+       (mobileMenuBar.js), non qui. -->
+  <div id="wp-bottom-credits">
+    <a href="https://ko-fi.com/frappa10" target="_blank" id="kofi-btn">
+      <span>☕ Support this project</span>
+    </a>
+    <a id="wp-author-pill" class="wp-author-pill" href="https://app.warera.io/user/69d2ed249f38d300d59a2af1" target="_blank" rel="noopener">
+      <span class="wp-author-pill-avatar" aria-hidden="true">F</span>
+      <span class="wp-author-pill-text">
+        <span class="wp-author-pill-label" data-i18n="author_credit_label">Creato da</span>
+        <span class="wp-author-pill-name">frappa10</span>
+      </span>
+    </a>
+  </div>
 
   <script type="module" src="/src/main.js"></script>
 </body>

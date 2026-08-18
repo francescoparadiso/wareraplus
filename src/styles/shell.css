@@ -1078,6 +1078,129 @@ body.light-theme .wp-tm-ind-hm { color: #1a1a1a; }
 body.light-theme .wp-tm-credit { color: #6b5637; border-top-color: rgba(0, 0, 0, 0.1); }
 body.light-theme .wp-tm-credit strong { color: #9c6b1f; }
 
+/* ── Wrapper condiviso Ko-fi + pill autore (richiesto dall'utente:
+   li tiene appaiati, centrati in basso — prima solo #kofi-btn aveva
+   position:fixed proprio, ora il centraggio lo fa questo wrapper e
+   #kofi-btn resta un normale child flex, vedi diplomacy.css). Pill
+   nascosta sotto i 769px: su mobile il credit autore vive nel drawer
+   ☰, non qui (vedi blocco .wp-author-pill sotto e mobileMenuBar.js). ── */
+#wp-bottom-credits {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+@media (max-width: 768px) {
+  #wp-bottom-credits { bottom: 10px; }
+}
+
+/* Stessa "taglia" del Ko-fi adiacente (richiesto dall'utente esplicitamente:
+   "la dimensione deve essere quella del kofi") — misurato dal vivo:
+   #kofi-btn è alto 32px (padding 8px verticale + testo, nessun bordo).
+   Qui c'è un bordo di 1px (per restare distinguibile a sfondo simile) E
+   un avatar tondo di 22px (più alto di una riga di testo): padding
+   verticale ridotto a 4px per tornare alla STESSA altezza totale
+   (4+22+4+1+1bordo=32px) invece di sommarsi sopra. Sfondo rosso (richiesto
+   dall'utente), testo su due parti — label "Creato da" (i18n condiviso
+   con .wp-author-credit, vedi sotto) più tenue, nome in evidenza — sulla
+   falsariga della card di ArgusIA nell'ottimizzatore (src/eco/main.js). */
+.wp-author-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #b62324;
+  color: #fff;
+  border: 1px solid #8a1a1b;
+  border-radius: 24px;
+  padding: 4px 16px 4px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  transition: background 0.2s, transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  white-space: nowrap;
+}
+.wp-author-pill:hover {
+  background: #cc2829;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(182, 35, 36, 0.5);
+}
+.wp-author-pill-text {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.wp-author-pill-label {
+  font-weight: 400;
+  opacity: 0.85;
+  font-size: 11px;
+}
+.wp-author-pill-name { font-weight: 700; }
+.wp-author-pill-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+}
+.wp-author-pill-avatar.has-img { background: none; }
+.wp-author-pill-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+body.light-theme .wp-author-pill {
+  background: #c9302c;
+  border-color: #a02622;
+  color: #fff;
+}
+body.light-theme .wp-author-pill:hover { background: #d63a35; }
+@media (max-width: 768px) {
+  .wp-author-pill { display: none; }
+}
+
+/* ── Credit autore (richiesto dall'utente, sia desktop che mobile).
+   Elemento UNICO (index.html, #wp-author-credit, dentro #hamburger-menu
+   come fallback statico) ma RILOCATO a runtime nella superficie
+   effettivamente raggiungibile su ciascun layout — #hamburger-menu non è
+   mai aperto né su desktop (barra dropdown, desktopMenuBar.js) né su
+   mobile (drawer, mobileMenuBar.js), è solo il "luogo di riposo" nel DOM:
+     • desktop (≥769px): relocate in fondo al dropdown ⚙️ Impostazioni
+       (desktopMenuBar.js:enterDesktop, dopo le sezioni NAP rilocate).
+     • mobile (≤768px): relocate in fondo alla stessa sezione Impostazioni
+       del drawer (mobileMenuBar.js:enterMobile).
+   Stile ricalcato su .wp-tm-credit sopra per coerenza visiva fra i due
+   "credit" dell'app. ── */
+.wp-author-credit {
+  display: block;
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 0.5px solid #21262d;
+  font-size: 11px;
+  color: #8b949e;
+  text-decoration: none;
+  text-align: center;
+}
+.wp-author-credit strong { color: #00d4ff; }
+.wp-author-credit:hover { color: #e6edf3; }
+body.light-theme .wp-author-credit { color: #6b5637; border-top-color: rgba(0, 0, 0, 0.1); }
+body.light-theme .wp-author-credit strong { color: #0062ff; }
+/* Nel drawer mobile (sfondo/spaziatura diversi dal dropdown desktop)
+   serve un margine laterale coerente col resto del drawer — vedi
+   .wp-mmb-acc { margin: 0 12px } in mobile-menubar.css. */
+.wp-mmb-drawer .wp-author-credit {
+  margin: 8px 12px 0;
+  padding-top: 14px;
+}
+
 /* ── Classifica territorio ("hall of fame" + lista regioni per nazione),
    pannello a destra, aggiornato ad ogni istante mostrato (vedi
    timeMachine.js:_updateStandings). Toggle 🏆 nella barra controlli. ── */

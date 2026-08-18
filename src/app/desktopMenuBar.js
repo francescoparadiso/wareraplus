@@ -656,6 +656,11 @@ function enterDesktop() {
   const napExternal = document.getElementById('externalNapToggle')?.closest('.menu-section');
   if (napManual) relocate(napManual, settingsPanel);
   if (napExternal) relocate(napExternal, settingsPanel);
+  // Credit autore (richiesto dall'utente, sia desktop che mobile): stesso
+  // <a> di index.html, rilocato in fondo al dropdown Impostazioni — vedi
+  // mobileMenuBar.js:enterMobile per l'equivalente nel drawer mobile.
+  const authorCredit = document.getElementById('wp-author-credit');
+  if (authorCredit) relocate(authorCredit, settingsPanel);
 }
 function exitDesktop() {
   [...relocStash.keys()].forEach(restore);
