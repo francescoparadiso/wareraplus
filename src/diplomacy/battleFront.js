@@ -108,15 +108,14 @@ function buildWidget(host) {
       </div>
       <div class="bfm-points" id="bfm-points" style="display:none;">
         <div class="bfm-split-head"><span>Round points</span><span class="bfm-points-target">first to ${ROUND_WIN_POINTS}</span></div>
-        <div class="bfm-points-row">
-          <span class="bfm-points-icon" id="bfm-points-def-icon">🛡</span>
-          <span class="bfm-points-bar-track"><span class="bfm-points-bar-fill def" id="bfm-points-def-fill" style="width:0%;"></span></span>
-          <span class="bfm-points-num" id="bfm-points-def-num">0</span>
+        <div class="bfm-points-track" id="bfm-points-track">
+          <div class="bfm-points-fill def" id="bfm-points-def-fill" style="width:0%;"></div>
+          <div class="bfm-points-mid"></div>
+          <div class="bfm-points-fill atk" id="bfm-points-atk-fill" style="width:0%;"></div>
         </div>
-        <div class="bfm-points-row">
-          <span class="bfm-points-icon" id="bfm-points-atk-icon">⚔</span>
-          <span class="bfm-points-bar-track"><span class="bfm-points-bar-fill atk" id="bfm-points-atk-fill" style="width:0%;"></span></span>
-          <span class="bfm-points-num" id="bfm-points-atk-num">0</span>
+        <div class="bfm-split-nums">
+          <span class="d"><b id="bfm-points-def-num">0</b></span>
+          <span class="a"><b id="bfm-points-atk-num">0</b></span>
         </div>
       </div>
       <div class="bfm-momentum" id="bfm-momentum">
@@ -349,13 +348,23 @@ function render(defenderRanked, attackerRanked, totalDef, totalAtk, round) {
 }
 
 // ==================== PUNTI ROUND (chi arriva a 300 vince) ====================
-// A differenza della barra danno sopra (una quota SUL TOTALE dei due lati,
-// sempre 100% insieme), i punti round sono due corse INDIPENDENTI verso lo
-// stesso traguardo (ROUND_WIN_POINTS) — non hanno senso come un'unica barra
-// split, quindi due barre separate, una per lato. Visibile solo quando
+// Barra UNICA che converge verso il centro (richiesta esplicita
+// dell'utente, con riferimento visivo): a differenza della barra danno
+// sopra (una quota SUL TOTALE dei due lati, sempre 100% insieme), i punti
+// round sono due corse INDIPENDENTI verso lo stesso traguardo
+// (ROUND_WIN_POINTS) — ogni lato riempie la propria metà della barra dal
+// proprio bordo esterno verso il centro (max 50% di larghezza ciascuno,
+// raggiunto quando arriva a ROUND_WIN_POINTS). Visibile solo quando
 // `round` esiste (round.attackerPoints/defenderPoints arrivano solo da
 // battle.getLiveBattleData, non dal solo ranking) — niente barra se manca,
 // invece di mostrare 0/300 fuorviante.
+//
+// BUG FIX (segnalato dall'utente, screenshot: barra sempre vuota anche con
+// punti >0): i riempimenti erano <span> — un elemento inline ignora
+// `width` per definizione CSS, qualunque sia il valore impostato via JS.
+// Ora sono <div> posizionati assolutamente dentro .bfm-points-track (vedi
+// WIDGET_CSS), block-level per costruzione: stesso identico bug non può
+// ripresentarsi.
 function renderRoundPoints(round) {
   if (!hud.pointsWrap) return;
   const defPoints = round?.defenderPoints;
@@ -364,8 +373,10 @@ function renderRoundPoints(round) {
   hud.pointsWrap.style.display = hasPoints ? 'block' : 'none';
   if (!hasPoints) return;
 
-  const defPct = clamp(defPoints / ROUND_WIN_POINTS * 100, 0, 100);
-  const atkPct = clamp(atkPoints / ROUND_WIN_POINTS * 100, 0, 100);
+  // Ciascun lato può occupare al più metà barra (50%) — a ROUND_WIN_POINTS
+  // il proprio riempimento tocca esattamente il divisorio centrale.
+  const defPct = clamp(defPoints / ROUND_WIN_POINTS * 50, 0, 50);
+  const atkPct = clamp(atkPoints / ROUND_WIN_POINTS * 50, 0, 50);
   hud.pointsDefFill.style.width = defPct + '%';
   hud.pointsAtkFill.style.width = atkPct + '%';
   hud.pointsDefNum.textContent = `${defPoints}/${ROUND_WIN_POINTS}`;
@@ -727,15 +738,20 @@ const WIDGET_CSS = `
 
 .bfm-points { margin-top: 8px; }
 .bfm-points-target { font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--bfm-ink-faint); }
-.bfm-points-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
-.bfm-points-row:first-of-type { margin-top: 3px; }
-.bfm-points-icon { font-size: 10px; flex-shrink: 0; width: 12px; text-align: center; }
-.bfm-points-bar-track { flex: 1; height: 5px; border-radius: 2.5px; overflow: hidden; background: rgba(255,255,255,0.08); }
-.bfm-points-bar-fill { height: 100%; }
-.bfm-points-bar-fill.def { background: var(--bfm-def-strong); }
-.bfm-points-bar-fill.atk { background: var(--bfm-atk-strong); }
-@media (prefers-reduced-motion: no-preference) { .bfm-points-bar-fill { transition: width 900ms cubic-bezier(.22,.61,.36,1); } }
-.bfm-points-num { font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 40px; text-align: right; color: #d5dde8; flex-shrink: 0; }
+/* Barra unica: due riempimenti ASSOLUTI ancorati ai bordi esterni, che
+   crescono l'uno verso l'altro fino a un massimo del 50% ciascuno (si
+   toccherebbero esattamente al centro se entrambi arrivassero a
+   ROUND_WIN_POINTS, cosa che in pratica non succede: il round finisce
+   appena il primo lato ci arriva). */
+.bfm-points-track { position: relative; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,0.08); }
+.bfm-points-fill { position: absolute; top: 0; bottom: 0; }
+.bfm-points-fill.def { left: 0; background: var(--bfm-def-strong); }
+.bfm-points-fill.atk { right: 0; background: var(--bfm-atk-strong); }
+@media (prefers-reduced-motion: no-preference) { .bfm-points-fill { transition: width 900ms cubic-bezier(.22,.61,.36,1); } }
+.bfm-points-mid { position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; margin-left: -0.5px; background: rgba(255,255,255,0.25); z-index: 1; }
+/* Riusa lo stesso stile numeri della barra danno sopra (.d/.a già definiti
+   in .bfm-split-nums) — stessa gerarchia visiva, un solo posto da cambiare
+   se cambia la palette. */
 
 .bfm-momentum {
   margin-top: 7px; padding: 6px 9px; border-radius: 6px; border-left: 3px solid var(--bfm-ink-faint);
