@@ -703,7 +703,7 @@ function buildBattleTooltipContent(battle, regionName, liveData, totalAttackerDm
         </div>
 
         <div style="margin-top:8px; font-size:10px; color:${subColor}; text-align:center;">
-          Click again to open the heatmap · ✕ to close
+          Click the marker again or ✕ to close
         </div>
       </div>
     </div>
