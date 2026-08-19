@@ -292,69 +292,69 @@ function formatSwornMessages(events, topIds) {
 // ── EVENTI UFFICIALI WarEra (event.getEventsPaginated, via pollGameEvents
 //    lato server) — IN AGGIUNTA al diffing sopra (guerre/sworn), non lo
 //    sostituisce (richiesta esplicita dell'utente). Copre tipi che il
-//    diffing non può vedere: nuovo presidente, pace, patto difensivo,
-//    regione liberata, rivoluzione, bancarotta.
+//    diffing non può vedere: pace, alleanza formata/sciolta, regione
+//    liberata, nuovo presidente, rivoluzione, bancarotta.
 //
-// NOTA (vedi anche server/warera-cache-server.js nota 6): i nomi dei campi
-// di event.getEventsPaginated non sono stati verificati dal vivo — si
-// provano più candidati per ciascun campo, così un nome diverso da quello
-// previsto fa saltare silenziosamente il singolo evento invece di
-// mostrare una nazione sbagliata. `e.raw` (il dato grezzo salvato dal
-// server) è lì apposta per aggiustare i candidati dopo il primo giro in
-// produzione. ──
-const GAME_EVENT_SINGLE_KEYS = {
-  newPresident: 'ticker_game_new_president',
-  regionLiberated: 'ticker_game_region_liberated',
-  revolutionStarted: 'ticker_game_revolution_started',
-  revolutionEnded: 'ticker_game_revolution_ended',
-  bankruptcy: 'ticker_game_bankruptcy',
+// SCHEMA REALE (vedi anche server/warera-cache-server.js nota 6, esempio
+// fornito dall'utente da un giro live): ogni evento grezzo (`e.raw`) è
+// `{ _id, countries: [id, id], data: { type, ...campi specifici }, ... }`.
+// Confermati dal vivo: peaceMade, allianceFormed, allianceBroken (coppia
+// in `countries`), regionLiberated (`data.fromCountry`/`data.toCountry`
+// espliciti, più significativi della posizione in `countries`).
+// newPresident/revolutionStarted/revolutionEnded/bankruptcy/
+// defensivePactFormed/defensivePactBroken NON sono comparsi nel campione:
+// si assume la stessa forma (`countries[0]` per i tipi a una sola nazione)
+// — se si rivelasse sbagliata, GAME_EVENT_HANDLERS scarta l'evento invece
+// di mostrare una nazione sbagliata o "undefined" (mai un crash). ──
+const GAME_EVENT_HANDLERS = {
+  // kind 'single': una nazione sola, presa da countries[0].
+  newPresident: { kind: 'single', key: 'ticker_game_new_president' },
+  revolutionStarted: { kind: 'single', key: 'ticker_game_revolution_started' },
+  revolutionEnded: { kind: 'single', key: 'ticker_game_revolution_ended' },
+  bankruptcy: { kind: 'single', key: 'ticker_game_bankruptcy' },
+  // kind 'pair': due nazioni, prese da countries[0]/[1] (ordine non
+  // significativo per questi tipi — pace/alleanza sono simmetriche).
+  peace_agreement: { kind: 'pair', key: 'ticker_game_peace' },
+  peaceMade: { kind: 'pair', key: 'ticker_game_peace' },
+  allianceFormed: { kind: 'pair', key: 'ticker_game_alliance_formed' },
+  allianceBroken: { kind: 'pair', key: 'ticker_game_alliance_broken' },
+  defensivePactFormed: { kind: 'pair', key: 'ticker_game_defpact_formed' },
+  defensivePactBroken: { kind: 'pair', key: 'ticker_game_defpact_broken' },
+  // kind 'fromTo': campi ESPLICITI data.fromCountry/data.toCountry
+  // (verificato dal vivo) — l'ordine è significativo (chi liberava da chi).
+  regionLiberated: { kind: 'fromTo', key: 'ticker_game_region_liberated' },
 };
-const GAME_EVENT_PAIR_KEYS = {
-  peace_agreement: 'ticker_game_peace',
-  peaceMade: 'ticker_game_peace',
-  defensivePactFormed: 'ticker_game_defpact_formed',
-  defensivePactBroken: 'ticker_game_defpact_broken',
-};
-
-function _pickCountryId(item, candidates) {
-  for (const c of candidates) if (item?.[c]) return item[c];
-  return null;
-}
-function _pickPairCountries(item) {
-  const pairs = [
-    ['countryId', 'enemyId'],
-    ['countryA', 'countryB'],
-    ['country1', 'country2'],
-    ['fromCountry', 'toCountry'],
-  ];
-  for (const [ka, kb] of pairs) {
-    const a = item?.[ka], b = item?.[kb];
-    if (a && b) return [a, b];
-  }
-  return null;
-}
 
 function formatGameEventMessages(events, topIds) {
   const messages = [];
   events.forEach(e => {
     if (e.category !== 'game_event') return;
+    const handler = GAME_EVENT_HANDLERS[e.eventType];
+    if (!handler) return;
     const item = e.raw || {};
-    const singleKey = GAME_EVENT_SINGLE_KEYS[e.eventType];
-    const pairKey = GAME_EVENT_PAIR_KEYS[e.eventType];
-    if (singleKey) {
-      const countryId = _pickCountryId(item, ['countryId', 'country', 'targetCountry', 'nationId']);
+    const data = item.data || {};
+    const countries = Array.isArray(item.countries) ? item.countries : [];
+
+    if (handler.kind === 'single') {
+      const countryId = countries[0] || data.countryId || data.country || null;
       const nation = countryId ? state.nationMap.get(countryId) : null;
       if (!nation) return; // campo non riconosciuto o nazione ignota: salta invece di mostrare "undefined"
       if (topIds && !topIds.has(countryId)) return;
-      messages.push(_withTime(t(singleKey, { nation: nation.name }), e.timestamp));
-    } else if (pairKey) {
-      const pair = _pickPairCountries(item);
-      if (!pair) return;
-      const [aId, bId] = pair;
+      messages.push(_withTime(t(handler.key, { nation: nation.name }), e.timestamp));
+    } else if (handler.kind === 'pair') {
+      const [aId, bId] = countries;
+      if (!aId || !bId || aId === bId) return;
       const a = state.nationMap.get(aId), b = state.nationMap.get(bId);
       if (!a || !b) return;
       if (topIds && !topIds.has(aId) && !topIds.has(bId)) return;
-      messages.push(_withTime(t(pairKey, { a: a.name, b: b.name }), e.timestamp));
+      messages.push(_withTime(t(handler.key, { a: a.name, b: b.name }), e.timestamp));
+    } else if (handler.kind === 'fromTo') {
+      const fromId = data.fromCountry, toId = data.toCountry;
+      if (!fromId || !toId) return;
+      const a = state.nationMap.get(fromId), b = state.nationMap.get(toId);
+      if (!a || !b) return;
+      if (topIds && !topIds.has(fromId) && !topIds.has(toId)) return;
+      messages.push(_withTime(t(handler.key, { a: a.name, b: b.name }), e.timestamp));
     }
   });
   return messages;

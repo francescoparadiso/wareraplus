@@ -411,15 +411,31 @@ async function pollElections() {
 // ═══════════════════════════════════════════════════════════════════════
 // EVENTI UFFICIALI WarEra (event.getEventsPaginated) — vedi nota (6) in
 // testa al file. Tipi scelti: news-worthy senza essere troppo frequenti
-// (esclusi warDeclared/peaceMade duplicati del diffing, allianceMember*
-// troppo granulari, regionTransfer/countryMoneyTransfer troppo rumorosi,
-// depositDiscovered/resistanceIncreased ecc. — tutti tipi che l'API offre
-// ma che qui si è scelto di non mostrare per non sommergere il ticker).
+// (esclusi warDeclared duplicato del diffing, allianceMember* troppo
+// granulari, regionTransfer/countryMoneyTransfer/depositDiscovered/
+// resistanceIncreased/battleEnded/battleOpened ecc. — tutti tipi che
+// l'API offre ma che qui si è scelto di non mostrare per non sommergere
+// il ticker).
+//
+// SCHEMA REALE (esempio fornito dall'utente da un giro live, 2026-05-12):
+//   { _id, countries: [id, id], priority, data: { type, ...campi
+//     specifici del tipo }, createdAt, updatedAt }
+// Confermati dal vivo: peaceMade, allianceFormed, allianceBroken,
+// regionLiberated (data.fromCountry/data.toCountry), battleEnded,
+// depositDiscovered, countryMoneyTransfer (questi ultimi tre esclusi
+// deliberatamente, vedi sopra). newPresident/revolutionStarted/
+// revolutionEnded/bankruptcy/defensivePactFormed/defensivePactBroken NON
+// sono comparsi nel campione: restano un'ipotesi (stessa forma { countries,
+// data: { type } } delle altre) da verificare al primo giro reale su questi
+// tipi — se il nome campo fosse diverso, l'evento viene scartato lato
+// client senza crash (vedi newsTicker.js:formatGameEventMessages).
 // ═══════════════════════════════════════════════════════════════════════
 const GAME_EVENT_TYPES = [
   'newPresident',
   'peace_agreement',
   'peaceMade',
+  'allianceFormed',
+  'allianceBroken',
   'defensivePactFormed',
   'defensivePactBroken',
   'regionLiberated',
@@ -447,7 +463,10 @@ async function fetchGameEvents() {
 }
 
 // Stesso schema append-only + dedupe-per-id di pollElections, accodato
-// allo stesso ticker-history.json (vedi nota (6)).
+// allo stesso ticker-history.json (vedi nota (6)). id/timestamp/type presi
+// dai campi REALI confermati (_id, createdAt, data.type) — non più
+// candidati multipli come al primo giro (quello restava necessario solo
+// per i tipi non ancora visti dal vivo, gestito lato client).
 async function pollGameEvents() {
   try {
     const items = await fetchGameEvents();
@@ -456,16 +475,16 @@ async function pollGameEvents() {
     const idEsistenti = new Set(storico.map(e => e.id));
     const nuovi = [];
     items.forEach(item => {
-      const id = item.id || item._id;
+      const id = item._id || item.id;
       if (!id || idEsistenti.has(id)) return;
-      const type = item.type || item.eventType;
+      const type = item.data?.type || item.type;
       if (!GAME_EVENT_TYPES.includes(type)) return; // paracadute se l'API ignorasse il filtro eventTypes
       nuovi.push({
         id,
         category: 'game_event',
         eventType: type,
-        timestamp: Date.parse(item.createdAt || item.timestamp || item.date || item.updatedAt) || Date.now(),
-        raw: item, // dato grezzo, vedi nota (6): serve a correggere i candidati dei campi dopo il primo giro
+        timestamp: Date.parse(item.createdAt) || Date.now(),
+        raw: item, // dato grezzo: countries[]/data.* letti lato client (newsTicker.js)
       });
     });
 
