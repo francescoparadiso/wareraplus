@@ -115,14 +115,18 @@ async function fetchAllActiveBattles() {
 }
 
 // topIds null/omesso = nessun filtro per nazione (tutte).
-function formatBattleMessages(battles, topIds = null) {
+// refreshedAt: le battaglie non hanno un timestamp proprio nella risposta
+// API (sono "in corso", non un istante puntuale) — si mostra invece
+// l'orario in cui QUESTO aggiornamento del ticker le ha rilevate attive,
+// stesso principio delle statistiche aggregate sotto (vedi _emit).
+function formatBattleMessages(battles, topIds = null, refreshedAt = null) {
   const messages = [];
   battles.forEach(b => {
     if (topIds && !topIds.has(b.attacker?.country) && !topIds.has(b.defender?.country)) return;
     const atk = state.nationMap.get(b.attacker?.country);
     const def = state.nationMap.get(b.defender?.country);
     if (!atk || !def) return;
-    messages.push(t('ticker_battle', { a: atk.name, b: def.name }));
+    messages.push(_withTime(t('ticker_battle', { a: atk.name, b: def.name }), refreshedAt));
   });
   return messages;
 }
@@ -153,9 +157,11 @@ function formatElectionMessages(electionsRaw) {
       if (!start || !end) return;
       const type = e.type === 'president' ? t('ticker_type_presidential') : (e.type === 'congress' ? t('ticker_type_congress') : e.type);
       if (now >= start && now <= end) {
-        messages.push(t('ticker_election_live', { nation: nation.name, type }));
+        // Voto già in corso: l'orario utile è quando CHIUDE, non quando è
+        // iniziato (che potrebbe essere giorni fa).
+        messages.push(_withTime(t('ticker_election_live', { nation: nation.name, type }), end));
       } else if (now < start) {
-        messages.push(t('ticker_election_candidacy', { nation: nation.name, type }));
+        messages.push(_withTime(t('ticker_election_candidacy', { nation: nation.name, type }), start));
       }
     });
   });
@@ -222,12 +228,13 @@ async function fetchRecentStats() {
   }
 }
 
-// WarEra+ (richiesta esplicita dell'utente: "sarebbe utile sapere quando
-// sono successe alcune notizie, come quella del nemico giurato e delle
-// dichiarazioni di guerra"). Solo per gli eventi PUNTUALI (guerra, nemico
-// giurato): quelli aggregati su una finestra — popolazione e tesoro — non
-// hanno un istante a cui appendere un orario, hanno un intervallo, e l'ora
-// lì sarebbe fuorviante.
+// WarEra+ (richiesta esplicita dell'utente: prima solo per guerra/nemico
+// giurato, poi estesa a TUTTE le notizie del ticker). Per gli eventi
+// PUNTUALI (guerra, nemico giurato, elezioni) l'orario è quello vero
+// dell'istante/scadenza. Per le categorie senza un istante singolo
+// (battaglie in corso, variazioni aggregate su finestra) si usa invece
+// l'orario in cui QUESTO aggiornamento del ticker le ha rilevate/misurate —
+// vedi refreshedAt in refreshNews().
 //
 // Fuso orario: `toLocaleTimeString` senza `timeZone` esplicito usa già
 // quello del dispositivo di chi guarda, che è la cosa chiesta ed è anche
@@ -430,7 +437,12 @@ function _aggregate(events, sinceTs) {
 // oggetto non vuol dire niente per chi legge — le variazioni più grosse
 // devono venire prima. Popolazione e tesoro restano due liste separate
 // (grandezze non confrontabili: teste contro percentuali).
-function _emit(agg, topIds, nameOf, popKey, wealthKey) {
+// refreshedAt: la variazione è calcolata su una FINESTRA (24h o "dall'ultima
+// visita"), non su un istante — non esiste un "quando è successo" singolo
+// da riportare. Si mostra invece l'orario in cui QUESTO aggiornamento del
+// ticker ha misurato la variazione (fine finestra = adesso), coerente con
+// lo stesso trattamento delle battaglie sopra.
+function _emit(agg, topIds, nameOf, popKey, wealthKey, refreshedAt) {
   if (!agg) return [];
   const messages = [];
 
@@ -438,40 +450,40 @@ function _emit(agg, topIds, nameOf, popKey, wealthKey) {
     .filter(([countryId, delta]) => delta && (!topIds || topIds.has(countryId)))
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
     .forEach(([countryId, delta]) => {
-      messages.push(t(popKey, {
+      messages.push(_withTime(t(popKey, {
         nation: nameOf(countryId),
         sign: delta > 0 ? '+' : '−',
         delta: fmtNumber(Math.abs(Math.round(delta))),
-      }));
+      }), refreshedAt));
     });
 
   Object.entries(agg.wealth || {})
     .filter(([countryId, pct]) => Math.abs(pct) >= MIN_TREASURY_PCT && (!topIds || topIds.has(countryId)))
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
     .forEach(([countryId, pct]) => {
-      messages.push(t(wealthKey, {
+      messages.push(_withTime(t(wealthKey, {
         nation: nameOf(countryId),
         sign: pct > 0 ? '+' : '−',
         pct: Math.abs(pct).toFixed(1),
-      }));
+      }), refreshedAt));
     });
 
   return messages;
 }
 
 // Finestra fissa 24h — "rispetto a ieri".
-function formatStatsMessages(stats, topIds) {
+function formatStatsMessages(stats, topIds, refreshedAt) {
   const nameOf = id => state.nationMap.get(id)?.name || id;
-  return _emit(stats.agg24, topIds, nameOf, 'ticker_population_24h', 'ticker_treasury_24h');
+  return _emit(stats.agg24, topIds, nameOf, 'ticker_population_24h', 'ticker_treasury_24h', refreshedAt);
 }
 
 // Finestra "dall'ultima visita" — categoria separata da quella 24h, così
 // capCategory le limita indipendentemente e una non mangia gli slot
 // dell'altra nel mix finale. Vuota quando l'ancora manca (prima visita) o è
 // troppo recente perché il confronto dica qualcosa (vedi visitWindowTs).
-function formatSinceVisitMessages(stats, topIds) {
+function formatSinceVisitMessages(stats, topIds, refreshedAt) {
   const nameOf = id => state.nationMap.get(id)?.name || id;
-  return _emit(stats.aggVisit, topIds, nameOf, 'ticker_population_change', 'ticker_treasury_change');
+  return _emit(stats.aggVisit, topIds, nameOf, 'ticker_population_change', 'ticker_treasury_change', refreshedAt);
 }
 
 /* ── RENDER (RAF, scroll continuo) — stesso principio del ticker di
@@ -548,7 +560,7 @@ async function refreshNews() {
     // davvero smesso di guardare.
     touchLastSeen();
 
-    _lastRawData = { topIds, battles, electionsRaw, stats };
+    _lastRawData = { topIds, battles, electionsRaw, stats, refreshedAt: Date.now() };
     _rebuildMessages();
   } catch (err) {
     console.warn('WarEra+ newsTicker: errore aggiornamento', err);
@@ -563,14 +575,14 @@ async function refreshNews() {
 // di ricreare il problema dei 429 già risolto altrove.
 function _rebuildMessages() {
   if (!_lastRawData) return;
-  const { topIds, battles, electionsRaw, stats } = _lastRawData;
+  const { topIds, battles, electionsRaw, stats, refreshedAt } = _lastRawData;
 
-  const battleMsgsRaw = formatBattleMessages(battles, topIds);
+  const battleMsgsRaw = formatBattleMessages(battles, topIds, refreshedAt);
   const electionMsgsRaw = formatElectionMessages(electionsRaw);
   const warMsgsRaw = formatWarMessages(stats.punctual, topIds);
   const swornMsgsRaw = formatSwornMessages(stats.punctual, topIds);
-  const statsMsgsRaw = formatStatsMessages(stats, topIds);
-  const sinceVisitMsgsRaw = formatSinceVisitMessages(stats, topIds);
+  const statsMsgsRaw = formatStatsMessages(stats, topIds, refreshedAt);
+  const sinceVisitMsgsRaw = formatSinceVisitMessages(stats, topIds, refreshedAt);
 
   // Cap per categoria PRIMA di unire e mescolare: garantisce
   // diversificazione anche quando una categoria (tipicamente le
@@ -616,14 +628,14 @@ function _rebuildMessages() {
 // filtro di visualizzazione.
 export function getNewsGroups() {
   if (!_lastRawData) return null;
-  const { battles, electionsRaw, stats } = _lastRawData;
+  const { battles, electionsRaw, stats, refreshedAt } = _lastRawData;
   return [
-    { key: 'battles', icon: '⚔️', messages: formatBattleMessages(battles) },
+    { key: 'battles', icon: '⚔️', messages: formatBattleMessages(battles, null, refreshedAt) },
     { key: 'elections', icon: '🗳️', messages: formatElectionMessages(electionsRaw) },
     { key: 'wars', icon: '💥', messages: formatWarMessages(stats.punctual, null) },
     { key: 'sworn', icon: '🎯', messages: formatSwornMessages(stats.punctual, null) },
-    { key: 'stats24', icon: '📊', messages: formatStatsMessages(stats, null) },
-    { key: 'sinceVisit', icon: '👁️', messages: formatSinceVisitMessages(stats, null) },
+    { key: 'stats24', icon: '📊', messages: formatStatsMessages(stats, null, refreshedAt) },
+    { key: 'sinceVisit', icon: '👁️', messages: formatSinceVisitMessages(stats, null, refreshedAt) },
   ];
 }
 
