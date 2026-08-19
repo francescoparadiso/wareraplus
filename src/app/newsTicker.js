@@ -437,12 +437,12 @@ function _aggregate(events, sinceTs) {
 // oggetto non vuol dire niente per chi legge — le variazioni più grosse
 // devono venire prima. Popolazione e tesoro restano due liste separate
 // (grandezze non confrontabili: teste contro percentuali).
-// refreshedAt: la variazione è calcolata su una FINESTRA (24h o "dall'ultima
-// visita"), non su un istante — non esiste un "quando è successo" singolo
-// da riportare. Si mostra invece l'orario in cui QUESTO aggiornamento del
-// ticker ha misurato la variazione (fine finestra = adesso), coerente con
-// lo stesso trattamento delle battaglie sopra.
-function _emit(agg, topIds, nameOf, popKey, wealthKey, refreshedAt) {
+// Niente orario qui (deciso esplicitamente dall'utente dopo prova): la
+// variazione è calcolata su una FINESTRA (24h o "dall'ultima visita"), non
+// su un istante, e mostrare l'ora di questo refresh accanto non aggiungeva
+// informazione utile — il testo stesso ("rispetto a ieri" / "dall'ultima
+// visita") già dice qual è il periodo di riferimento.
+function _emit(agg, topIds, nameOf, popKey, wealthKey) {
   if (!agg) return [];
   const messages = [];
 
@@ -450,40 +450,40 @@ function _emit(agg, topIds, nameOf, popKey, wealthKey, refreshedAt) {
     .filter(([countryId, delta]) => delta && (!topIds || topIds.has(countryId)))
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
     .forEach(([countryId, delta]) => {
-      messages.push(_withTime(t(popKey, {
+      messages.push(t(popKey, {
         nation: nameOf(countryId),
         sign: delta > 0 ? '+' : '−',
         delta: fmtNumber(Math.abs(Math.round(delta))),
-      }), refreshedAt));
+      }));
     });
 
   Object.entries(agg.wealth || {})
     .filter(([countryId, pct]) => Math.abs(pct) >= MIN_TREASURY_PCT && (!topIds || topIds.has(countryId)))
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
     .forEach(([countryId, pct]) => {
-      messages.push(_withTime(t(wealthKey, {
+      messages.push(t(wealthKey, {
         nation: nameOf(countryId),
         sign: pct > 0 ? '+' : '−',
         pct: Math.abs(pct).toFixed(1),
-      }), refreshedAt));
+      }));
     });
 
   return messages;
 }
 
 // Finestra fissa 24h — "rispetto a ieri".
-function formatStatsMessages(stats, topIds, refreshedAt) {
+function formatStatsMessages(stats, topIds) {
   const nameOf = id => state.nationMap.get(id)?.name || id;
-  return _emit(stats.agg24, topIds, nameOf, 'ticker_population_24h', 'ticker_treasury_24h', refreshedAt);
+  return _emit(stats.agg24, topIds, nameOf, 'ticker_population_24h', 'ticker_treasury_24h');
 }
 
 // Finestra "dall'ultima visita" — categoria separata da quella 24h, così
 // capCategory le limita indipendentemente e una non mangia gli slot
 // dell'altra nel mix finale. Vuota quando l'ancora manca (prima visita) o è
 // troppo recente perché il confronto dica qualcosa (vedi visitWindowTs).
-function formatSinceVisitMessages(stats, topIds, refreshedAt) {
+function formatSinceVisitMessages(stats, topIds) {
   const nameOf = id => state.nationMap.get(id)?.name || id;
-  return _emit(stats.aggVisit, topIds, nameOf, 'ticker_population_change', 'ticker_treasury_change', refreshedAt);
+  return _emit(stats.aggVisit, topIds, nameOf, 'ticker_population_change', 'ticker_treasury_change');
 }
 
 /* ── RENDER (RAF, scroll continuo) — stesso principio del ticker di
@@ -581,8 +581,8 @@ function _rebuildMessages() {
   const electionMsgsRaw = formatElectionMessages(electionsRaw);
   const warMsgsRaw = formatWarMessages(stats.punctual, topIds);
   const swornMsgsRaw = formatSwornMessages(stats.punctual, topIds);
-  const statsMsgsRaw = formatStatsMessages(stats, topIds, refreshedAt);
-  const sinceVisitMsgsRaw = formatSinceVisitMessages(stats, topIds, refreshedAt);
+  const statsMsgsRaw = formatStatsMessages(stats, topIds);
+  const sinceVisitMsgsRaw = formatSinceVisitMessages(stats, topIds);
 
   // Cap per categoria PRIMA di unire e mescolare: garantisce
   // diversificazione anche quando una categoria (tipicamente le
@@ -634,8 +634,8 @@ export function getNewsGroups() {
     { key: 'elections', icon: '🗳️', messages: formatElectionMessages(electionsRaw) },
     { key: 'wars', icon: '💥', messages: formatWarMessages(stats.punctual, null) },
     { key: 'sworn', icon: '🎯', messages: formatSwornMessages(stats.punctual, null) },
-    { key: 'stats24', icon: '📊', messages: formatStatsMessages(stats, null, refreshedAt) },
-    { key: 'sinceVisit', icon: '👁️', messages: formatSinceVisitMessages(stats, null, refreshedAt) },
+    { key: 'stats24', icon: '📊', messages: formatStatsMessages(stats, null) },
+    { key: 'sinceVisit', icon: '👁️', messages: formatSinceVisitMessages(stats, null) },
   ];
 }
 
