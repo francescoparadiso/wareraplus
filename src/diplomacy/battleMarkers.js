@@ -290,6 +290,16 @@ const CONTRIB_NARROW_MQ = '(max-width: 768px)';
 const isNarrowLayout = () => window.matchMedia(CONTRIB_NARROW_MQ).matches;
 let contribOpenDesktop = true;
 let contribOpenMobile = false;
+// Simbolo del caret coerente col verso in cui il pannello si apre davvero:
+// su desktop e' una colonna a DESTRA (◀/▶), su mobile una sezione che si
+// apre SOTTO (▲/▼) — segnalato dall'utente: la freccia era sempre ▲/▼ anche
+// sul layout desktop, dove il pannello si apre di lato.
+function contribCaret(open) {
+  // Stessa convenzione dell'accordion mobile (chiuso = punta verso dove si
+  // aprirebbe, aperto = punta indietro verso la chiusura): chiuso -> ▶
+  // (si apre a destra), aperto -> ◀ (si richiude verso sinistra).
+  return isNarrowLayout() ? (open ? '▲' : '▼') : (open ? '◀' : '▶');
+}
 // Modalità "leggi bene" — ingrandisce SOLO il pannello contribuenti (riquadro
 // più alto/largo, righe più grandi). Unica per i due layout (a differenza di
 // contribOpen*: qui non c'è motivo di volerla diversa da desktop a mobile,
@@ -610,6 +620,7 @@ function buildBattleTooltipContent(battle, regionName, liveData, totalAttackerDm
   // in testa al file): serve solo a disegnare il verso della freccia coerente
   // col pannello che quel bottone apre qui e ora.
   const contribOpen = isNarrowLayout() ? contribOpenMobile : contribOpenDesktop;
+  const contribCaretSymbol = contribCaret(contribOpen);
   // Pollice della scrollbar tinto sul tema — le liste lo leggono da queste
   // variabili (vedi injectContribStyles).
   const sbVars = (isLight
@@ -692,7 +703,7 @@ function buildBattleTooltipContent(battle, regionName, liveData, totalAttackerDm
              nazioni sotto l'1% (classe bfm-contrib-has-data, assegnata da
              renderOtherContributors in battleFront.js). -->
         <div id="battle-contrib-toggle" class="bfm-contrib-toggle" style="margin-top:8px; align-items:center; justify-content:center; gap:5px; cursor:pointer; font-size:10px; color:${subColor}; border:1px solid ${border}; border-radius:6px; padding:5px;">
-          👥 All contributors <span id="battle-contrib-count" style="opacity:.7;"></span> <span id="battle-contrib-caret">${contribOpen ? '▲' : '▼'}</span>
+          👥 All contributors <span id="battle-contrib-count" style="opacity:.7;"></span> <span id="battle-contrib-caret">${contribCaretSymbol}</span>
         </div>
         <div id="battle-contrib-mobile-section" class="bfm-contrib-mobile-section" style="margin-top:6px; border-top:1px solid ${border};">
           <div style="display:flex; justify-content:flex-end; padding:4px 10px 0;">
@@ -728,7 +739,7 @@ function applyContribVisibility(el) {
   root.classList.toggle('bfm-contrib-desktop-open', contribOpenDesktop);
   root.classList.toggle('bfm-contrib-mobile-open', contribOpenMobile);
   const caret = root.querySelector('#battle-contrib-caret');
-  if (caret) caret.textContent = (isNarrowLayout() ? contribOpenMobile : contribOpenDesktop) ? '▲' : '▼';
+  if (caret) caret.textContent = contribCaret(isNarrowLayout() ? contribOpenMobile : contribOpenDesktop);
 }
 
 // Attraversare il breakpoint cambia QUALE pannello il bottone comanda: senza
