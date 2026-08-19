@@ -48,6 +48,7 @@ import {
   TM_LYR_FILL,
 } from './timeMachineMap.js';
 import { trackEvent } from '../shared/analytics.js';
+import { t } from '../shared/i18n.js';
 
 // Passo di uno "step" discreto (frecce tastiera) — un giorno di gioco.
 const STEP_MS = 24 * 60 * 60 * 1000;
@@ -74,7 +75,7 @@ function _fmtDay(ts) {
   if (!_range) return '';
   const dayNum = Math.floor((ts - _range.min) / STEP_MS) + 1;
   const totalDays = Math.floor((_range.max - _range.min) / STEP_MS) + 1;
-  return `Day ${dayNum}/${totalDays}`;
+  return t('tm_day', { n: dayNum, total: totalDays });
 }
 
 // Data in formato compatto/filesystem-safe (YYYY-MM-DD_HHmm), per il nome
@@ -143,7 +144,7 @@ async function _activate(initialTs) {
     _range = await fetchRegionHistoryRangeViaCache();
   } catch (err) {
     console.warn('WarEra+ time machine: storico non disponibile:', err.message);
-    showToast('Time machine non disponibile al momento', 'warning');
+    showToast(t('tm_unavailable_now'), 'warning');
     trackEvent('data-unavailable', { source: 'time-machine' });
     return; // niente panello se il server non ha ancora nessuno storico
   }
@@ -232,18 +233,18 @@ function _buildPanelIfNeeded() {
   _panel.id = 'wp-time-machine-panel';
   _panel.innerHTML = `
     <div class="wp-tm-row wp-tm-controls">
-      <button id="wp-tm-close" title="Chiudi" aria-label="Chiudi time machine">✕</button>
-      <button id="wp-tm-prev-event" title="Evento precedente" aria-label="Evento precedente" disabled>⏮</button>
-      <button id="wp-tm-play" title="Play" aria-label="Play">▶</button>
-      <button id="wp-tm-next-event" title="Evento successivo" aria-label="Evento successivo" disabled>⏭</button>
-      <button id="wp-tm-speed" title="Velocità riproduzione" aria-label="Velocità riproduzione">1x</button>
-      <button id="wp-tm-standings-toggle" title="Classifica territorio" aria-label="Classifica territorio">🏆</button>
-      <button id="wp-tm-share" title="Condividi come immagine" aria-label="Condividi come immagine">📤</button>
+      <button id="wp-tm-close" data-i18n-title="tm_close" data-i18n-aria="tm_close" title="${t('tm_close')}" aria-label="${t('tm_close')}">✕</button>
+      <button id="wp-tm-prev-event" data-i18n-title="tm_prev_event" data-i18n-aria="tm_prev_event" title="${t('tm_prev_event')}" aria-label="${t('tm_prev_event')}" disabled>⏮</button>
+      <button id="wp-tm-play" data-i18n-title="tm_play" data-i18n-aria="tm_play" title="${t('tm_play')}" aria-label="${t('tm_play')}">▶</button>
+      <button id="wp-tm-next-event" data-i18n-title="tm_next_event" data-i18n-aria="tm_next_event" title="${t('tm_next_event')}" aria-label="${t('tm_next_event')}" disabled>⏭</button>
+      <button id="wp-tm-speed" data-i18n-title="tm_speed_title" data-i18n-aria="tm_speed_title" title="${t('tm_speed_title')}" aria-label="${t('tm_speed_title')}">1x</button>
+      <button id="wp-tm-standings-toggle" data-i18n-title="tm_standings" data-i18n-aria="tm_standings" title="${t('tm_standings')}" aria-label="${t('tm_standings')}">🏆</button>
+      <button id="wp-tm-share" data-i18n-title="tm_share" data-i18n-aria="tm_share" title="${t('tm_share')}" aria-label="${t('tm_share')}">📤</button>
     </div>
     <div class="wp-tm-row wp-tm-slider-row">
       <input id="wp-tm-slider" type="range" min="0" max="1000" value="1000" />
       <div class="wp-tm-info">
-        <span id="wp-tm-day">Day —/—</span>
+        <span id="wp-tm-day">${t('tm_day', { n: '—', total: '—' })}</span>
         <span id="wp-tm-label">—</span>
       </div>
     </div>
@@ -291,7 +292,7 @@ function _buildIndicatorIfNeeded() {
   _indicator = document.createElement('div');
   _indicator.id = 'wp-tm-indicator';
   _indicator.innerHTML = `
-    <div class="wp-tm-ind-head"><span class="wp-tm-ind-dot"></span>TIME MACHINE</div>
+    <div class="wp-tm-ind-head"><span class="wp-tm-ind-dot"></span><span data-i18n="tm_indicator_label">${t('tm_indicator_label')}</span></div>
     <div class="wp-tm-ind-body">
       <svg class="wp-tm-clock" viewBox="0 0 100 100" aria-hidden="true">
         <circle cx="50" cy="50" r="46" class="wp-tm-clock-face"/>
@@ -309,7 +310,7 @@ function _buildIndicatorIfNeeded() {
       </div>
     </div>
     <a class="wp-tm-credit" href="${NETTRIX_URL}" target="_blank" rel="noopener">
-      Storico offerto da <strong>Nettrix</strong> ↗
+      <span data-i18n="tm_credit_prefix">${t('tm_credit_prefix')}</span> <strong>Nettrix</strong> ↗
     </a>
   `;
   document.body.appendChild(_indicator);
@@ -421,7 +422,7 @@ function _buildStandingsIfNeeded() {
   _standings = document.createElement('div');
   _standings.id = 'wp-tm-standings';
   _standings.innerHTML = `
-    <div class="wp-tm-st-title">🏆 Hall of Fame — Territorio</div>
+    <div class="wp-tm-st-title">🏆 <span data-i18n="tm_hall_of_fame">${t('tm_hall_of_fame')}</span></div>
     <div class="wp-tm-st-list"></div>
   `;
   document.body.appendChild(_standings);
@@ -503,7 +504,10 @@ function _startPlay() {
   if (!_range || _playing) return;
   _playing = true;
   _playBtn.textContent = '⏸';
-  _playBtn.title = 'Pausa';
+  _playBtn.title = t('tm_pause');
+  _playBtn.setAttribute('aria-label', t('tm_pause'));
+  _playBtn.dataset.i18nTitle = 'tm_pause';
+  _playBtn.dataset.i18nAria = 'tm_pause';
   // Se siamo già alla fine, ripartire da capo è più utile che restare fermi.
   if (Number(_slider.value) >= _range.max) _slider.value = String(_range.min);
   // Azzerato: il primissimo tick non deve "recuperare" il tempo passato da
@@ -517,7 +521,13 @@ function _stopPlay() {
   _playTimer = null;
   if (!_playing) return;
   _playing = false;
-  if (_playBtn) { _playBtn.textContent = '▶'; _playBtn.title = 'Play'; }
+  if (_playBtn) {
+    _playBtn.textContent = '▶';
+    _playBtn.title = t('tm_play');
+    _playBtn.setAttribute('aria-label', t('tm_play'));
+    _playBtn.dataset.i18nTitle = 'tm_play';
+    _playBtn.dataset.i18nAria = 'tm_play';
+  }
 }
 
 async function _playLoop() {
@@ -694,7 +704,7 @@ function _notifyHistoryError() {
   const now = Date.now();
   if (now - _lastErrorToastAt < 8000) return;
   _lastErrorToastAt = now;
-  showToast('Time machine non disponibile: server storico offline', 'warning');
+  showToast(t('tm_server_offline'), 'warning');
 }
 
 // Uso interattivo (trascinamento/frecce/salto evento/deep-link): riflette
@@ -858,14 +868,14 @@ function _showPopup(point, nation, sinceTs) {
     document.body.appendChild(_popup);
   }
   if (!nation) {
-    _popup.innerHTML = `<span class="wp-tm-popup-name">— nessuna nazione —</span>`;
+    _popup.innerHTML = `<span class="wp-tm-popup-name">${t('tm_no_nation')}</span>`;
   } else {
     const code = nation.code?.toLowerCase();
     const flagHtml = code ? `<img src="https://media.warera.io/images/flags/${code}.svg?v=16" alt="" class="wp-tm-popup-flag" />` : '';
     // "dal —" solo se _loadEvents() è già arrivato (sinceTs non-null) — vedi
     // _ownedSince: null significa "dato non ancora disponibile", non "sconosciuto".
     const sinceHtml = sinceTs != null
-      ? `<span class="wp-tm-popup-since">dal ${_fmtDate(sinceTs)}</span>`
+      ? `<span class="wp-tm-popup-since">${t('tm_since', { date: _fmtDate(sinceTs) })}</span>`
       : '';
     _popup.innerHTML = `
       <div class="wp-tm-popup-main">${flagHtml}<span class="wp-tm-popup-name">${escapeHtml(nation.name)}</span></div>
@@ -894,10 +904,10 @@ function _hidePopup() {
 // ─────────────────────────────────────────────────────────────────────────
 async function _shareScreenshot() {
   const canvas = await captureFrame();
-  if (!canvas) { showToast('Screenshot non riuscito', 'warning'); return; }
+  if (!canvas) { showToast(t('tm_screenshot_failed'), 'warning'); return; }
 
   canvas.toBlob(async (blob) => {
-    if (!blob) { showToast('Screenshot non riuscito', 'warning'); return; }
+    if (!blob) { showToast(t('tm_screenshot_failed'), 'warning'); return; }
     const ts = Number(_slider.value);
     const filename = `warera-time-machine-${_fmtDateForFilename(ts)}.png`;
     const file = new File([blob], filename, { type: 'image/png' });
