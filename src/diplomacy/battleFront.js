@@ -360,6 +360,117 @@ function renderMomentum() {
   }
 }
 
+// ==================== ALTRI CONTRIBUENTI (<1%) + ALL DATA (per lato) ====================
+// WarEra+: richiesta esplicita — oltre ai due schieramenti aggregati (barra
+// split sopra), due viste sullo stesso pannello:
+//  - compatta (default): solo le nazioni che hanno contribuito con MENO
+//    dell'1% del danno del PROPRIO LATO;
+//  - "All data" (bottone espandi): OGNI nazione che ha fatto danno > 0,
+//    divisa per lato (difensore/attaccante) — non solo quelle sotto l'1%.
+//
+// DENOMINATORE DELLE PERCENTUALI (richiesta esplicita): il totale del proprio
+// lato, NON il totale della battaglia — stessa identica semantica della
+// heatmap (battleHeatmap.js: computeHighlightedIds usa `n.totalDamage /
+// sideTotal`, e la legenda dice "Share = nation damage / side total"), così i
+// due numeri che l'utente vede per la stessa nazione combaciano invece di
+// raccontare due cose diverse. I due totali di lato si ricavano qui dallo
+// stesso array `nations` che genera le righe: non vanno MAI presi da
+// totalDef/totalAtk del chiamante, che quando esiste un round live sono il
+// danno del solo round corrente mentre `n.totalDamage` è cumulativo — era
+// esattamente la causa delle percentuali gonfiate (94% dove il vero valore
+// era 29%) segnalate in precedenza.
+//
+// Riusa `nations` gia' scaricato per il ranking (nessuna fetch aggiuntiva) —
+// si aggiorna quindi alla stessa cadenza di tutto il resto del widget (ogni
+// poll, ~1.5s, live). I contenitori DOM (colonna desktop + sezione
+// collassabile mobile) vivono in battleMarkers.js/buildBattleTooltipContent;
+// qui si scrive solo il contenuto, per id — stesso pattern usato dal resto
+// del file per hud.*. Entrambe le viste vengono scritte ad ogni poll (e non
+// solo quella attiva): il bottone "espandi" in battleMarkers.js si limita a
+// mostrare/nascondere via CSS, cosi' non deve rincorrere lo stato per
+// chiedere un ri-render qui.
+function _contribRow(n, sideTotal) {
+  const nation = getNation(n.countryId);
+  const name = escapeHtml(nation?.name || n.countryId);
+  const code = nation?.code?.toLowerCase();
+  const pct = (sideTotal > 0 ? (n.totalDamage / sideTotal) * 100 : 0).toFixed(2);
+  return `
+    <div class="bfm-contrib-row">
+      ${code ? `<img class="bfm-contrib-flag" src="${flagUrl(code)}" alt="" onerror="this.style.visibility='hidden'">` : '<span class="bfm-contrib-flag"></span>'}
+      <span class="bfm-contrib-main">
+        <span class="bfm-contrib-name">${name}</span>
+        <span class="bfm-contrib-dmg">${fmt(n.totalDamage)}</span>
+      </span>
+      <span class="bfm-contrib-pct">${pct}%</span>
+    </div>`;
+}
+
+// Una colonna della vista "All data". `side` pilota i colori (def/atk) via
+// le classi, vedi injectContribStyles in battleMarkers.js. Nell'intestazione
+// il totale del lato — cioè il denominatore delle percentuali della colonna,
+// che altrimenti resterebbe implicito.
+function _contribCol(side, label, list, sideTotal) {
+  return `
+    <div class="bfm-contrib-col bfm-contrib-col-${side}">
+      <div class="bfm-contrib-side-title">
+        ${label} <span class="bfm-contrib-side-count">(${list.length})</span>
+        <span class="bfm-contrib-side-total">${fmt(sideTotal)}</span>
+      </div>
+      ${list.length ? list.map(n => _contribRow(n, sideTotal)).join('') : '<div class="bfm-contrib-empty">—</div>'}
+    </div>`;
+}
+
+function renderOtherContributors(nations) {
+  const desktopWrap = document.getElementById('battle-tooltip-contributors');
+  const toggleBtn = document.getElementById('battle-contrib-toggle');
+  const countEl = document.getElementById('battle-contrib-count');
+  const mobileSection = document.getElementById('battle-contrib-mobile-section');
+  const desktopList = document.getElementById('battle-contrib-list-desktop');
+  const mobileList = document.getElementById('battle-contrib-list-mobile');
+  const desktopListFull = document.getElementById('battle-contrib-list-desktop-full');
+  const mobileListFull = document.getElementById('battle-contrib-list-mobile-full');
+  if (!desktopWrap && !toggleBtn) return; // tooltip non (ancora) costruito
+
+  // `all` è già filtrato a totalDamage > 0: nelle liste finiscono solo le
+  // nazioni che hanno davvero fatto danno, mai quelle presenti nel ranking
+  // con zero.
+  const all = (nations || []).filter(n => n.totalDamage > 0);
+  const defenderAll = all.filter(n => n.side === 'defender').sort((a, b) => b.totalDamage - a.totalDamage);
+  const attackerAll = all.filter(n => n.side === 'attacker').sort((a, b) => b.totalDamage - a.totalDamage);
+
+  // I due denominatori (vedi nota in testa alla sezione): stessa formula di
+  // battleHeatmap.js:computeHighlightedIds.
+  const defTotal = defenderAll.reduce((s, n) => s + n.totalDamage, 0);
+  const atkTotal = attackerAll.reduce((s, n) => s + n.totalDamage, 0);
+  const sideTotalOf = (n) => (n.side === 'defender' ? defTotal : atkTotal);
+
+  const minor = all
+    .filter(n => { const t = sideTotalOf(n); return t > 0 && (n.totalDamage / t) < 0.01; })
+    .sort((a, b) => b.totalDamage - a.totalDamage);
+
+  const rowsHtml = minor.map(n => _contribRow(n, sideTotalOf(n))).join('') || '<div class="bfm-contrib-empty">—</div>';
+  if (desktopList) desktopList.innerHTML = rowsHtml;
+  if (mobileList) mobileList.innerHTML = rowsHtml;
+
+  const fullHtml = `
+    <div class="bfm-contrib-cols">
+      ${_contribCol('def', '🛡️ Defence', defenderAll, defTotal)}
+      ${_contribCol('atk', '⚔️ Attack', attackerAll, atkTotal)}
+    </div>`;
+  if (desktopListFull) desktopListFull.innerHTML = fullHtml;
+  if (mobileListFull) mobileListFull.innerHTML = fullHtml;
+
+  // Il bottone compare se c'e' qualcosa di utile da mostrare in ALMENO una
+  // delle due viste: la compatta (nazioni <1%) o quella completa (piu' di
+  // due nazioni coinvolte in totale — con solo attaccante+difensore "All
+  // data" mostrerebbe le stesse due righe gia' visibili sopra, inutile).
+  const hasData = minor.length > 0 || all.length > 2;
+  if (countEl) countEl.textContent = minor.length > 0 ? `(${minor.length})` : '';
+  desktopWrap?.classList.toggle('bfm-contrib-has-data', hasData);
+  toggleBtn?.classList.toggle('bfm-contrib-has-data', hasData);
+  mobileSection?.classList.toggle('bfm-contrib-has-data', hasData);
+}
+
 // ==================== FETCH + STATO BATTAGLIA ====================
 async function refreshBattleData(battleId, isInitial) {
   let nations, live, details;
@@ -399,6 +510,11 @@ async function refreshBattleData(battleId, isInitial) {
   const totalAtk = round?.attackerDamages != null ? round.attackerDamages : rankedSumAtk;
 
   render(defenderRanked, attackerRanked, totalDef, totalAtk, round);
+  // I denominatori delle percentuali se li calcola da sé, per lato, dallo
+  // stesso `nations` che genera le righe — vedi la nota in testa alla sezione
+  // "ALTRI CONTRIBUENTI": passargli totalDef/totalAtk da qui sarebbe sbagliato
+  // (sono il round corrente, non il cumulativo).
+  renderOtherContributors(nations);
 
   const now = performance.now();
   let rateTxt = '';

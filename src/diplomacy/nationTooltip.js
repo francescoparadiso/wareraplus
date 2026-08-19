@@ -394,14 +394,24 @@ export function initNationTooltip(map) {
   map.on('mouseleave', layerId, () => _setHoverBorder(map, null));
 
   map.on('mouseenter', layerId, (e) => {
-    if (isPinned || hoverSuppressed) return;
+    // WarEra+ fix ("passando il mouse sopra la regione evidenziata la
+    // battaglia si spegne"): non era che la battaglia si disattivasse
+    // davvero — il tooltip nazione (hover, non pinnato) si apre proprio
+    // accanto al cursore, ~20px di offset, e con la regione evidenziata
+    // spesso piccola finiva PROPRIO sopra al riquadro giallo, coprendolo
+    // (elemento DOM sopra al canvas della mappa). In battleHeatmap il
+    // tooltip nazione al hover non serve comunque (c'è già il tooltip
+    // battaglia fisso in basso) — stesso principio già applicato
+    // all'evidenziazione bordo hover in _setHoverBorder qui sopra, solo
+    // che lì il guard mancava proprio su questo handler.
+    if (isPinned || hoverSuppressed || state.coloringMode === 'battleHeatmap') return;
     clearTimeout(hoverTimer);
     const nid = _extractId(e);
     if (nid && nid !== currentId) show(nid, e.originalEvent.clientX, e.originalEvent.clientY);
   });
 
   map.on('mousemove', layerId, (e) => {
-    if (isPinned || hoverSuppressed) return;
+    if (isPinned || hoverSuppressed || state.coloringMode === 'battleHeatmap') return;
     const tooltip = document.getElementById('nation-tooltip');
     if (!tooltip?.classList.contains('visible')) return;
 

@@ -24,8 +24,14 @@ import { initOceanBackground, applyOceanTheme } from './oceanBackground.js';
 import { initAntiqueTheme, applyAntiqueTheme } from './antiqueTheme.js';
 import { initDarkFleetTheme, applyDarkFleetTheme } from './darkFleetTheme.js';
 import { trackEvent } from '../shared/analytics.js';
+// WarEra+: landmass Antartide, puramente decorativa — non è una regione del
+// gioco (nessun countryId, nessuna interazione). Geometria semplificata
+// (~650 punti) da johan/world.geo.json (derivata Natural Earth, dominio
+// pubblico), bundlata qui invece che scaricata a runtime: coerente con
+// "niente più CDN" del resto del progetto e con il precache PWA.
+import antarcticaGeoJSON from './data/antarctica.geo.json';
 
-const { SRC_REGIONS, SRC_BORDERS, SRC_DIPLOMACY_DUAL_BORDER, SRC_BATTLE_REGION, LYR_FILL, LYR_OUTLINE, LYR_COAST, LYR_BORDER, LYR_MULTI_BLOC, LYR_DIPLOMACY_DUAL, LYR_BATTLE_REGION, LYR_BATTLE_REGION_FILL, LYR_BLOC_FLASH, LYR_HEATMAP_FADE } = LAYER_IDS;
+const { SRC_REGIONS, SRC_BORDERS, SRC_DIPLOMACY_DUAL_BORDER, SRC_BATTLE_REGION, LYR_FILL, LYR_OUTLINE, LYR_COAST, LYR_BORDER, LYR_MULTI_BLOC, LYR_DIPLOMACY_DUAL, LYR_BATTLE_REGION, LYR_BATTLE_REGION_FILL, LYR_BLOC_FLASH, LYR_HEATMAP_FADE, LYR_ANTARCTICA, LYR_ANTARCTICA_COAST } = LAYER_IDS;
 
 // ==================== INIT MAPPA ====================
 export function initMap() {
@@ -66,6 +72,108 @@ export function initMap() {
     // dissolvenza allo zoom — impercettibile su quegli elementi.
     fadeDuration: 0,
   });
+
+  applyVerticalPanLimit();
+  // La banda utile dipende dall'altezza della viewport (vedi sotto): a
+  // finestra ridimensionata va ricalcolata, altrimenti su una finestra
+  // diventata più alta il limite forzerebbe uno zoom non richiesto. Il giro
+  // su 'load' copre il caso in cui al costruttore il container non abbia
+  // ancora un'altezza (la funzione esce senza fare nulla).
+  state.map.on('resize', applyVerticalPanLimit);
+  state.map.once('load', applyVerticalPanLimit);
+  // La banda dipende anche dallo zoom (vedi _computeLatRange): stretta dove
+  // c'è margine, allargata solo agli zoom più bassi dove la viewport copre
+  // quasi tutto il mondo.
+  state.map.on('zoom', _refreshVerticalPanLimit);
+}
+
+// ==================== LIMITE DI PANORAMICA VERTICALE ====================
+// WarEra+ (segnalato dall'utente): a zoom minimo si poteva trascinare la
+// mappa ben oltre il bordo inferiore dell'Antartide, lasciando mezzo schermo
+// di vuoto nero sotto la "linea" della landmass. Serve un limite di
+// spostamento verticale che si fermi lì.
+//
+// Perché NON `map.setMaxBounds()`: quello imposta ANCHE il vincolo
+// orizzontale (`lngRange`), e con `renderWorldCopies: true` ammazzerebbe lo
+// scorrimento infinito est/ovest che la mappa ha oggi. MapLibre tiene i due
+// vincoli separati internamente (`transform.latRange` / `transform.lngRange`,
+// vedi `getConstrained`) ma l'API pubblica li imposta solo in coppia: qui si
+// scrive quindi il solo `latRange`, lasciando `lngRange` a null.
+//
+// L'estremo sud NON è una costante scritta a mano: è il punto più a sud della
+// geometria Antartide realmente bundlata (data/antarctica.geo.json, che si
+// ferma a ~-70° e non al polo), così se un giorno quel file cambia il limite
+// lo segue da solo invece di sfasarsi in silenzio.
+const MERC_MAX_LAT = 85.051129; // limite della proiezione Web Mercator
+const _mercY = (lat) => (180 - (180 / Math.PI) * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360))) / 360;
+const _mercYToLat = (y) => Math.atan(Math.exp((180 - y * 360) * Math.PI / 180)) * 360 / Math.PI - 90;
+
+let _southEdgeCache = null;
+function _antarcticaSouthEdge() {
+  if (_southEdgeCache != null) return _southEdgeCache;
+  let min = 90;
+  const walk = (c) => {
+    if (typeof c[0] === 'number') { if (c[1] < min) min = c[1]; return; }
+    for (const part of c) walk(part);
+  };
+  for (const f of antarcticaGeoJSON.features || []) {
+    if (f.geometry?.coordinates) walk(f.geometry.coordinates);
+  }
+  _southEdgeCache = min < 90 ? min : -MERC_MAX_LAT;
+  return _southEdgeCache;
+}
+
+// ATTENZIONE (verificato leggendo `getConstrained` di MapLibre): se la banda
+// consentita è più CORTA in pixel della viewport, MapLibre non la clampa —
+// forza uno zoom in avanti per farcela stare. Allo zoom minimo su mobile la
+// finestra è alta quasi quanto tutto il mondo (mondo 832px, viewport 812:
+// misurato dal vivo), quindi un limite stretto si tradurrebbe in "non puoi
+// più allontanarti", perdendo la vista del mondo intero che su mobile era
+// stata chiesta apposta. Qui si calcola quindi la banda MINIMA che copre la
+// viewport e, se il limite ideale è più stretto, lo si allarga verso sud solo
+// quel tanto che basta.
+//
+// Il calcolo usa uno zoom con un livello di margine sotto quello corrente,
+// non lo zoom esatto: il ricalcolo avviene su evento 'zoom', cioè DOPO che il
+// transform è già cambiato, e senza margine una zoomata all'indietro
+// troverebbe per un frame una banda ancora troppo stretta — cioè MapLibre
+// rimbalzerebbe lo zoom in avanti mentre l'utente lo tira indietro. Con un
+// livello di margine la banda è già larga abbastanza prima che serva.
+function _computeLatRange() {
+  const map = state.map;
+  const t = map.transform;
+  const height = t.height || map.getCanvas()?.clientHeight || 0;
+  if (!height) return null;
+
+  const safeZoom = Math.max(map.getMinZoom(), map.getZoom() - 1);
+  const needed = Math.min(1, height / (t.tileSize * Math.pow(2, safeZoom)));
+
+  const top = _mercY(MERC_MAX_LAT);               // ~0 (nord)
+  let bottom = _mercY(_antarcticaSouthEdge());    // la "linea" sotto l'Antartide
+  if (bottom - top < needed) bottom = Math.min(1, top + needed);
+
+  return [_mercYToLat(bottom), _mercYToLat(top)];
+}
+
+function applyVerticalPanLimit() {
+  const map = state.map;
+  if (!map?.transform) return;
+  const range = _computeLatRange();
+  if (!range) return;
+  map.transform.latRange = range;
+  // latRange scritto a mano non ri-applica il vincolo da solo: lo si forza
+  // con un jumpTo sulla posizione corrente (che passa da getConstrained).
+  map.jumpTo({ center: map.getCenter(), zoom: map.getZoom() });
+}
+
+// Versione per l'evento 'zoom': aggiorna la banda SENZA jumpTo — siamo nel
+// mezzo di un movimento, il frame successivo applica il vincolo da sé e un
+// jumpTo qui interromperebbe l'animazione in corso.
+function _refreshVerticalPanLimit() {
+  const map = state.map;
+  if (!map?.transform) return;
+  const range = _computeLatRange();
+  if (range) map.transform.latRange = range;
 }
 
 // ==================== SETUP LAYER ====================
@@ -148,6 +256,31 @@ export async function setupMapLayers() {
     _initDecorationsForActiveTheme();
   } catch (err) {
     console.error('[map] decorazioni di tema non caricate:', err);
+  }
+
+  try {
+    // WarEra+: Antartide, decorativa — stesso avvolgimento try/catch degli
+    // altri layer ambientali sopra (un errore qui non deve rompere il resto
+    // della mappa). beforeId=LYR_FILL: resta sotto ai territori del gioco,
+    // sopra all'oceano — non riceve mai i listener click/hover della mappa
+    // (quelli filtrano per layer specifici, vedi più sotto in questo file).
+    if (!state.map.getSource('antarctica-src')) {
+      state.map.addSource('antarctica-src', { type: 'geojson', data: antarcticaGeoJSON });
+    }
+    if (!state.map.getLayer(LYR_ANTARCTICA)) {
+      state.map.addLayer({
+        id: LYR_ANTARCTICA, type: 'fill', source: 'antarctica-src',
+        paint: { 'fill-color': THEMES[state.theme].ANTARCTICA, 'fill-opacity': 0.9 },
+      }, LYR_FILL);
+    }
+    if (!state.map.getLayer(LYR_ANTARCTICA_COAST)) {
+      state.map.addLayer({
+        id: LYR_ANTARCTICA_COAST, type: 'line', source: 'antarctica-src',
+        paint: { 'line-color': THEMES[state.theme].COAST_COLOR, 'line-width': 1.0, 'line-opacity': 0.9 },
+      }, LYR_FILL);
+    }
+  } catch (err) {
+    console.error('[map] layer Antartide non caricato:', err);
   }
 
   if (!state.map.getSource('original-borders-src')) {
@@ -581,6 +714,27 @@ export function cercaNazione() {
 // EFFETTIVAMENTE renderizzata in quel punto — poi si usa la SUA
 // geometria per disegnare il contorno. Robusto indipendentemente dai
 // nomi delle proprietà nei dati vettoriali.
+// Bbox [minLng, minLat, maxLng, maxLat] di una geometria Polygon/MultiPolygon
+// GeoJSON — usata solo per stimare un centroide approssimativo (nessuna
+// libreria di geometria in più solo per questo).
+function _lngLatBboxOf(geometry) {
+  if (!geometry) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const visit = (coords, depth) => {
+    if (depth === 0) {
+      const [x, y] = coords;
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    } else {
+      for (const c of coords) visit(c, depth - 1);
+    }
+  };
+  const depth = geometry.type === 'MultiPolygon' ? 3 : geometry.type === 'Polygon' ? 2 : null;
+  if (depth == null) return null;
+  visit(geometry.coordinates, depth);
+  return minX === Infinity ? null : [minX, minY, maxX, maxY];
+}
+
 export function highlightBattleRegion(position) {
   if (!state.map || !position) return;
   let lngLat;
@@ -592,12 +746,44 @@ export function highlightBattleRegion(position) {
 
   try {
     const screenPoint = state.map.project(lngLat);
-    const features = state.map.queryRenderedFeatures(screenPoint, { layers: [LYR_FILL] });
     const source = state.map.getSource(SRC_BATTLE_REGION);
     if (!source) return;
+
+    // WarEra+ fix ("non sempre la regione si evidenzia di giallo"): un
+    // query a un solo pixel esatto falliva spesso (0 feature, verificato dal
+    // vivo — la `position` della regione può cadere anche a decine di px dal
+    // poligono effettivamente renderizzato, es. un punto pensato per
+    // un'etichetta più che per una query pixel-perfect). Si allarga
+    // progressivamente il riquadro di ricerca attorno al punto finché non si
+    // trova qualcosa, invece di un singolo raggio fisso che a volte bastava
+    // e a volte no.
+    let features = [];
+    for (const PAD of [6, 20, 60, 150]) {
+      features = state.map.queryRenderedFeatures(
+        [[screenPoint.x - PAD, screenPoint.y - PAD], [screenPoint.x + PAD, screenPoint.y + PAD]],
+        { layers: [LYR_FILL] }
+      );
+      if (features.length) break;
+    }
     if (!features.length) {
       source.setData({ type: 'FeatureCollection', features: [] });
       return;
+    }
+    if (features.length > 1) {
+      // Feature il cui centroide (bbox in lng/lat, poi riproiettato in
+      // pixel) è più vicino allo screenPoint originale — di solito ce n'è
+      // una sola nel riquadro, ma a basso zoom con regioni vicine minuscole
+      // sceglie quella giusta invece di una qualunque tra quelle trovate.
+      let best = features[0], bestDist = Infinity;
+      for (const f of features) {
+        const b = _lngLatBboxOf(f.geometry);
+        if (!b) continue;
+        const centerLngLat = [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
+        const p = state.map.project(centerLngLat);
+        const d = (p.x - screenPoint.x) ** 2 + (p.y - screenPoint.y) ** 2;
+        if (d < bestDist) { bestDist = d; best = f; }
+      }
+      features = [best];
     }
     source.setData({
       type: 'FeatureCollection',
@@ -864,6 +1050,12 @@ export function applyTheme() {
   }
   if (state.map.getLayer(LYR_FILL)) {
     state.map.setPaintProperty(LYR_FILL, 'fill-color', theme.NEUTRAL_UNSELECTED);
+  }
+  if (state.map.getLayer(LYR_ANTARCTICA)) {
+    state.map.setPaintProperty(LYR_ANTARCTICA, 'fill-color', theme.ANTARCTICA);
+  }
+  if (state.map.getLayer(LYR_ANTARCTICA_COAST)) {
+    state.map.setPaintProperty(LYR_ANTARCTICA_COAST, 'line-color', theme.COAST_COLOR);
   }
   applyOceanTheme(state); // nasconde il layer mare futuristico sul tema chiaro (pergamena)
   // Prima volta che si arriva su questo tema: le sue decorazioni non

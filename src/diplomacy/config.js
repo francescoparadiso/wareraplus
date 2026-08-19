@@ -77,6 +77,11 @@ export const THEMES = {
     OCEAN: '#00042679',
     DEFAULT_LAND: '#4a4e5a',
     NEUTRAL_UNSELECTED: '#3a3d46',
+    // WarEra+: Antartide — non è una regione del gioco (nessun countryId,
+    // nessuna interazione), aggiunta solo come sfondo geografico. Colore
+    // volutamente diverso da NEUTRAL_UNSELECTED così non sembra un paese
+    // cliccabile "spento".
+    ANTARCTICA: '#8a94a3',
     TEXT: '#e6edf3',
     TEXT_SECONDARY: '#8b949e',
     PANEL_BG: 'rgba(10,10,10,0.95)',
@@ -94,9 +99,10 @@ export const THEMES = {
     OUTLINE_COLOR: '#000000',
   },
   light: {
-    OCEAN: '#a2986f',        
-    DEFAULT_LAND: '#ffe7a6',  
+    OCEAN: '#a2986f',
+    DEFAULT_LAND: '#ffe7a6',
     NEUTRAL_UNSELECTED: '#352700',
+    ANTARCTICA: '#e8e1cd', // vedi nota nel tema dark sopra
     TEXT: '#1a1a1a',
     TEXT_SECONDARY: '#555555',
     PANEL_BG: 'rgba(255,255,255,0.95)',
@@ -132,6 +138,8 @@ export const LAYER_IDS = {
   LYR_BATTLE_REGION_FILL: 'battle-region-fill', // WarEra+: riempimento dell'intera regione, non solo contorno
   LYR_BLOC_FLASH: 'bloc-flash-highlight', // WarEra+: effetto "blink" al click su un'alleanza nella legenda
   LYR_HEATMAP_FADE: 'heatmap-fade-overlay', // WarEra+: dissolvenza in ingresso della heatmap battaglia (vedi map.js)
+  LYR_ANTARCTICA: 'antarctica-fill', // WarEra+: landmass decorativa, non è una regione del gioco (vedi map.js)
+  LYR_ANTARCTICA_COAST: 'antarctica-coast',
 };
 
 export const EXTERNAL_NAPS_URL =

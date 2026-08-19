@@ -277,6 +277,27 @@ function computeTrend(battleId, atkDmg, defDmg) {
 
 // ==================== BATTLE TOOLTIP (pin in basso) ====================
 let pinnedBattleId = null;
+// WarEra+: stato collassato del tooltip battaglia — persiste tra i rebuild
+// innescati dal refresh marker (~30s), cosi' l'utente non deve ri-collassare
+// ogni volta. Reset solo quando il tooltip si chiude (hideBattleTooltip).
+let tooltipCollapsed = false;
+// Apertura del pannello "Other contributors", separata per breakpoint: su
+// desktop e' una colonna a lato e c'e' spazio per tenerla aperta di default,
+// su mobile e' una sezione dentro la card e parte chiusa (richiesta
+// esplicita). Tenerle distinte evita che un resize della finestra erediti
+// lo stato dell'altro layout. Reset in hideBattleTooltip, come tooltipCollapsed.
+const CONTRIB_NARROW_MQ = '(max-width: 768px)';
+const isNarrowLayout = () => window.matchMedia(CONTRIB_NARROW_MQ).matches;
+let contribOpenDesktop = true;
+let contribOpenMobile = false;
+// Modalità "leggi bene" — ingrandisce SOLO il pannello contribuenti (riquadro
+// più alto/largo, righe più grandi). Unica per i due layout (a differenza di
+// contribOpen*: qui non c'è motivo di volerla diversa da desktop a mobile,
+// resta solo "espanso sì/no"). Reset in hideBattleTooltip.
+let contribExpanded = false;
+// Etichetta del bottone "espandi": collassato invita ad aprire la vista
+// completa ("All data"), espanso invita a tornare a quella compatta.
+const contribExpandLabel = (expanded) => expanded ? '🔼 Top only' : '📊 All data';
 
 function fmt(n) {
   if (n == null || isNaN(n)) return '—';
@@ -335,7 +356,181 @@ function brightenAndSaturate(color, saturationBoost = 0.4) {
 }
 
 // ==================== TOOLTIP FUNCTIONS ====================
+// WarEra+: colonna "Other contributors" (nazioni sotto l'1% del danno
+// totale) — solo desktop, a destra del tooltip principale, stile "hall of
+// fame" (vedi src/app/timeMachine.js per il precedente usato come
+// riferimento visivo). Su mobile diventa una sezione collassabile DENTRO il
+// tooltip stesso (bottone dedicato, chiusa di default). Layout via classi +
+// media query (non JS isMobile) cosi' reagisce anche al resize della
+// finestra, non solo al render iniziale — stesso principio di
+// injectStyles() in blocStats.js: iniettato una sola volta, idempotente.
+function injectContribStyles() {
+  if (document.getElementById('bfm-contrib-style')) return;
+  const s = document.createElement('style');
+  s.id = 'bfm-contrib-style';
+  s.textContent = `
+    /* Colonna desktop: a scomparsa come la sezione mobile — si apre/chiude
+       dallo STESSO bottone dentro la card della battaglia (.bfm-contrib-toggle),
+       che pilota le classi bfm-contrib-desktop-open / bfm-contrib-mobile-open
+       sul wrapper #battle-tooltip. Due flag separate (una per breakpoint):
+       su desktop c'e' spazio e parte aperta, su mobile parte chiusa. */
+    /* Ancorata FUORI dal flusso flex, agganciata al fianco destro della card
+       (left:100% = bordo destro del wrapper, che con la colonna in absolute
+       è largo quanto la sola card). Serve perché il wrapper è centrato con
+       translateX(-50%): da figlio flex, allargare la colonna spingeva la
+       card di battaglia verso sinistra ad ogni "All data". Così la card non
+       si muove di un pixel e il pannello cresce solo verso destra. */
+    #battle-tooltip-contributors {
+      display: none;
+      position: absolute;
+      left: 100%;
+      bottom: 0;
+      margin-left: 8px;
+      flex-direction: column;
+      width: 208px;
+      /* Lo spazio REALE a destra della card: metà viewport, meno metà card
+         (il 50% si risolve sulla larghezza del wrapper = la card, essendo
+         questo elemento fuori dal flusso), meno il margine di 8px e 10px di
+         aria dal bordo finestra. Vale anche qui da collassata, altrimenti su
+         finestre strette la versione compatta risulterebbe più larga di
+         quella espansa. */
+      max-width: min(230px, calc(50vw - 50% - 18px));
+      max-height: 320px;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+      flex-shrink: 0;
+      box-sizing: border-box;
+    }
+    #battle-tooltip.bfm-contrib-desktop-open #battle-tooltip-contributors.bfm-contrib-has-data { display: flex; }
+    @media (max-width: 768px) {
+      #battle-tooltip-contributors { display: none !important; }
+    }
+    #battle-contrib-list-desktop, #battle-contrib-list-desktop-full { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+    #battle-contrib-list-mobile, #battle-contrib-list-mobile-full { max-height: 190px; overflow-y: auto; }
+    .bfm-contrib-title { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 10px 6px; flex-shrink: 0; }
+    /* Bottone "All data": la vista compatta (solo nazioni <1%) serve a non
+       ingombrare la mappa, ma non fa vedere il quadro completo. Cliccandolo
+       si passa alla vista estesa — OGNI nazione che ha fatto danno, divisa
+       per lato — in un riquadro anche piu' grande per leggerla comoda
+       (richiesta esplicita). Le due liste (compatta/-full) convivono nel
+       DOM, sempre aggiornate insieme (renderOtherContributors in
+       battleFront.js): qui si sceglie solo quale mostrare. */
+    .bfm-contrib-expand { display: flex; align-items: center; gap: 3px; cursor: pointer; opacity: 0.65; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; line-height: 1; padding: 3px 6px; border-radius: 4px; flex-shrink: 0; }
+    .bfm-contrib-expand:hover { opacity: 1; background: rgba(128,128,128,0.15); }
+    #battle-contrib-list-desktop-full, #battle-contrib-list-mobile-full { display: none; }
+    #battle-tooltip-contributors.bfm-contrib-expanded #battle-contrib-list-desktop { display: none; }
+    #battle-tooltip-contributors.bfm-contrib-expanded #battle-contrib-list-desktop-full { display: block; }
+    #battle-contrib-mobile-section.bfm-contrib-expanded #battle-contrib-list-mobile { display: none; }
+    #battle-contrib-mobile-section.bfm-contrib-expanded #battle-contrib-list-mobile-full { display: block; }
+    /* Espansa: cresce verso destra (vedi left:100% sopra), fin dove arriva lo
+       spazio disponibile. Se la finestra è troppo stretta per due colonne il
+       grid qui sotto le impila da solo invece di sfondare il bordo. */
+    #battle-tooltip-contributors.bfm-contrib-expanded {
+      width: 440px;
+      max-width: calc(50vw - 50% - 18px);
+      max-height: min(70vh, 560px);
+    }
+    #battle-contrib-mobile-section.bfm-contrib-expanded #battle-contrib-list-mobile-full { max-height: min(60vh, 420px); }
+
+    /* Due colonne affiancate (difesa | attacco) nella vista "All data".
+       auto-fit + minmax: restano affiancate finché c'è spazio, si impilano
+       da sole sotto i ~150px per colonna (caso mobile stretto) senza dover
+       duplicare il markup in una media query. */
+    .bfm-contrib-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); align-items: start; }
+    .bfm-contrib-col { min-width: 0; }
+    .bfm-contrib-col + .bfm-contrib-col { border-left: 1px solid rgba(128,128,128,0.18); }
+    .bfm-contrib-col-def { background: color-mix(in srgb, var(--bfm-c-def, #8fc3e8) 7%, transparent); }
+    .bfm-contrib-col-atk { background: color-mix(in srgb, var(--bfm-c-atk, #ef9269) 7%, transparent); }
+    .bfm-contrib-col-def .bfm-contrib-side-title, .bfm-contrib-col-def .bfm-contrib-pct { color: var(--bfm-c-def-ink, #8fc3e8); }
+    .bfm-contrib-col-atk .bfm-contrib-side-title, .bfm-contrib-col-atk .bfm-contrib-pct { color: var(--bfm-c-atk-ink, #ef9269); }
+    /* Intestazione di colonna sempre visibile mentre si scorre: senza, in una
+       lista lunga si perde di vista quale colonna si sta leggendo. Lo sfondo
+       pieno è obbligatorio o le righe ci passerebbero sotto in trasparenza. */
+    .bfm-contrib-side-title {
+      position: sticky; top: 0; z-index: 1;
+      display: flex; align-items: baseline; gap: 4px;
+      padding: 7px 10px 4px; font-size: 9.5px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.4px;
+      background: var(--bfm-c-bg, rgba(13,17,23,0.97));
+      border-bottom: 1px solid rgba(128,128,128,0.18);
+    }
+    .bfm-contrib-side-count { font-weight: 500; opacity: 0.75; text-transform: none; }
+    /* Totale del lato = denominatore delle percentuali della colonna. */
+    .bfm-contrib-side-total { margin-left: auto; font-variant-numeric: tabular-nums; text-transform: none; }
+    /* Riga su DUE livelli: nome sopra, danno sotto in piccolo. Con tutto su
+       una riga sola il danno (non comprimibile, e' un numero) schiacciava
+       il nome fino a una lettera sola — verificato dal vivo in una colonna
+       da 190px. Cosi' il nome ha l'intera larghezza. */
+    .bfm-contrib-row { display: flex; align-items: center; gap: 7px; padding: 5px 10px; font-size: 11px; }
+    .bfm-contrib-row:not(:last-child) { border-bottom: 1px solid rgba(128,128,128,0.12); }
+    .bfm-contrib-flag { width: 15px; height: 11px; object-fit: cover; border-radius: 1px; flex-shrink: 0; }
+    .bfm-contrib-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .bfm-contrib-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bfm-contrib-dmg { opacity: 0.62; font-variant-numeric: tabular-nums; font-size: 9px; white-space: nowrap; }
+    .bfm-contrib-pct { flex-shrink: 0; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 42px; text-align: right; }
+    .bfm-contrib-empty { padding: 10px; text-align: center; font-size: 11px; opacity: 0.6; }
+    .bfm-contrib-expanded .bfm-contrib-row { gap: 9px; padding: 7px 12px; font-size: 13px; }
+    .bfm-contrib-expanded .bfm-contrib-flag { width: 19px; height: 14px; }
+    .bfm-contrib-expanded .bfm-contrib-dmg { font-size: 10.5px; }
+    .bfm-contrib-expanded .bfm-contrib-pct { min-width: 50px; font-size: 13px; }
+    .bfm-contrib-expanded .bfm-contrib-side-title { font-size: 11px; padding: 10px 12px 4px; }
+
+    /* Scrollbar: quella nativa (larga, grigio sistema, con frecce su Windows)
+       stonava con il resto del tool. Qui e' sottile, senza frecce e senza
+       traccia visibile, col pollice tinto sui colori del tema — i due colori
+       arrivano da variabili CSS impostate inline sul contenitore in
+       buildBattleTooltipContent, che e' il punto dove si sa gia' se il tema
+       e' chiaro o scuro. Firefox non supporta ::-webkit-scrollbar ma ha
+       scrollbar-width/scrollbar-color, quindi entrambe le sintassi. */
+    #battle-contrib-list-desktop, #battle-contrib-list-mobile,
+    #battle-contrib-list-desktop-full, #battle-contrib-list-mobile-full {
+      scrollbar-width: thin;
+      scrollbar-color: var(--bfm-sb-thumb, rgba(139,148,158,0.45)) transparent;
+      overscroll-behavior: contain;
+    }
+    #battle-contrib-list-desktop::-webkit-scrollbar,
+    #battle-contrib-list-mobile::-webkit-scrollbar,
+    #battle-contrib-list-desktop-full::-webkit-scrollbar,
+    #battle-contrib-list-mobile-full::-webkit-scrollbar { width: 6px; height: 6px; }
+    #battle-contrib-list-desktop::-webkit-scrollbar-track,
+    #battle-contrib-list-mobile::-webkit-scrollbar-track,
+    #battle-contrib-list-desktop-full::-webkit-scrollbar-track,
+    #battle-contrib-list-mobile-full::-webkit-scrollbar-track { background: transparent; }
+    #battle-contrib-list-desktop::-webkit-scrollbar-thumb,
+    #battle-contrib-list-mobile::-webkit-scrollbar-thumb,
+    #battle-contrib-list-desktop-full::-webkit-scrollbar-thumb,
+    #battle-contrib-list-mobile-full::-webkit-scrollbar-thumb {
+      background: var(--bfm-sb-thumb, rgba(139,148,158,0.45));
+      border-radius: 3px;
+    }
+    #battle-contrib-list-desktop::-webkit-scrollbar-thumb:hover,
+    #battle-contrib-list-mobile::-webkit-scrollbar-thumb:hover,
+    #battle-contrib-list-desktop-full::-webkit-scrollbar-thumb:hover,
+    #battle-contrib-list-mobile-full::-webkit-scrollbar-thumb:hover {
+      background: var(--bfm-sb-thumb-hover, rgba(139,148,158,0.75));
+    }
+    #battle-contrib-list-desktop::-webkit-scrollbar-button,
+    #battle-contrib-list-mobile::-webkit-scrollbar-button,
+    #battle-contrib-list-desktop-full::-webkit-scrollbar-button,
+    #battle-contrib-list-mobile-full::-webkit-scrollbar-button { display: none; height: 0; width: 0; }
+    #battle-contrib-list-desktop::-webkit-scrollbar-corner,
+    #battle-contrib-list-mobile::-webkit-scrollbar-corner,
+    #battle-contrib-list-desktop-full::-webkit-scrollbar-corner,
+    #battle-contrib-list-mobile-full::-webkit-scrollbar-corner { background: transparent; }
+
+    .bfm-contrib-toggle { display: none; }
+    .bfm-contrib-toggle.bfm-contrib-has-data { display: flex; }
+    .bfm-contrib-mobile-section { display: none; overflow: hidden; }
+    @media (max-width: 768px) {
+      #battle-tooltip.bfm-contrib-mobile-open .bfm-contrib-mobile-section.bfm-contrib-has-data { display: block; }
+    }
+  `;
+  document.head.appendChild(s);
+}
+
 function getBattleTooltipEl() {
+  injectContribStyles();
   let el = document.getElementById('battle-tooltip');
   if (!el) {
     el = document.createElement('div');
@@ -350,10 +545,14 @@ function getBattleTooltipEl() {
       pointer-events: auto;
       opacity: 0;
       transition: opacity 0.18s ease, transform 0.18s ease;
-      /* Responsivo: mai piu' largo della viewport meno un margine, invece del
-         fisso max-width:420px che su schermi stretti (<440px) veniva tagliato
-         o spingeva oltre il bordo, rompendo il layout su mobile. */
-      width: min(420px, calc(100vw - 20px));
+      /* Ora un contenitore flex: il tooltip principale (#battle-tooltip-main,
+         width vincolata li' sotto) piu', su desktop, la colonna "Other
+         contributors" come sibling a destra (#battle-tooltip-contributors).
+         Su mobile quest'ultima e' display:none via media query, quindi la
+         larghezza del wrapper collassa comunque su quella del solo main. */
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
       max-width: calc(100vw - 20px);
       box-sizing: border-box;
     `;
@@ -407,6 +606,30 @@ function buildBattleTooltipContent(battle, regionName, liveData, totalAttackerDm
   const nameFontSize = isMobile ? '12px' : '13px';
   const flagHeight = isMobile ? '14px' : '16px';
 
+  // Stato del pannello contribuenti per il layout ATTUALE (vedi le due flag
+  // in testa al file): serve solo a disegnare il verso della freccia coerente
+  // col pannello che quel bottone apre qui e ora.
+  const contribOpen = isNarrowLayout() ? contribOpenMobile : contribOpenDesktop;
+  // Pollice della scrollbar tinto sul tema — le liste lo leggono da queste
+  // variabili (vedi injectContribStyles).
+  const sbVars = (isLight
+    ? '--bfm-sb-thumb: rgba(0,0,0,0.22); --bfm-sb-thumb-hover: rgba(0,0,0,0.38);'
+    : '--bfm-sb-thumb: rgba(139,148,158,0.45); --bfm-sb-thumb-hover: rgba(139,148,158,0.75);')
+    // Colori delle due colonne "All data": gli STESSI dei due schieramenti in
+    // testa al tooltip (colore nazione ravvivato), non una palette a parte —
+    // così la colonna difesa/attacco si riconosce a colpo d'occhio. --bfm-c-bg
+    // serve alle intestazioni sticky, che devono coprire le righe sotto.
+    //
+    // Le varianti "-ink" servono al TESTO. Il colore nazione grezzo può essere
+    // molto scuro (misurato dal vivo: Serbia rgb(29,125,66), Italia
+    // rgb(13,72,198)) e su tema scuro un titolo o una percentuale in quel
+    // colore è illeggibile; la tinta di sfondo al 7% invece va bene com'è.
+    // Su tema chiaro vale l'opposto — schiarire ancora sbiadirebbe il testo
+    // sul bianco — quindi lì si tiene il colore originale.
+    + ` --bfm-c-def: ${defColor}; --bfm-c-atk: ${atkColor}; --bfm-c-bg: ${bg};`
+    + ` --bfm-c-def-ink: ${isLight ? defColor : brightenAndSaturate(defColor, 0.25)};`
+    + ` --bfm-c-atk-ink: ${isLight ? atkColor : brightenAndSaturate(atkColor, 0.25)};`;
+
   // WarEra+: la riga di momentum "a scatti" (derivata dal trend fra un
   // refresh marker e l'altro, ogni ~30s — vedi computeTrend) è stata
   // rimossa da qui: il widget battleFront montato più sotto calcola il
@@ -415,54 +638,119 @@ function buildBattleTooltipContent(battle, regionName, liveData, totalAttackerDm
   // buildMarkerMarkup lo usa ancora per l'indicatore sul marker stesso.
 
   return `
-    <div style="
+    <div id="battle-tooltip-main" style="
+      ${sbVars}
       background: ${bg};
       border: 1px solid ${border};
       border-radius: 10px;
       padding: ${padding};
       box-shadow: 0 8px 32px rgba(0,0,0,0.35);
-      width: 100%;
+      width: min(420px, calc(100vw - 20px));
+      max-width: calc(100vw - 20px);
       box-sizing: border-box;
+      flex: 0 1 auto;
     ">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px;">
         <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:${subColor}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">
           ⚔️ ${escapeHtml(regionName || 'Battle')}${useLive ? ' <span style="color:#ff4444;">🔴 Live</span>' : ''}
         </span>
+        <span id="battle-tooltip-collapse" style="cursor:pointer; font-size:16px; color:${subColor}; padding:4px; line-height:1; flex-shrink:0;">${tooltipCollapsed ? '▲' : '▼'}</span>
         <span id="battle-tooltip-close" style="cursor:pointer; font-size:16px; color:${subColor}; padding:4px; line-height:1; flex-shrink:0;">✕</span>
       </div>
 
-      <div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
-        <div style="display:flex; align-items:center; gap:5px; flex:1 1 40%; min-width:0;">
-          ${defCode ? `<img src="${flagUrl(defCode)}" style="height:${flagHeight}; border-radius:2px; flex-shrink:0;" onerror="this.style.display='none'">` : ''}
-          <span style="font-size:${nameFontSize}; font-weight:700; color:${defColor}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(defName)}</span>
+      <div id="battle-tooltip-body" style="display:${tooltipCollapsed ? 'none' : 'block'};">
+        <div style="display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+          <div style="display:flex; align-items:center; gap:5px; flex:1 1 40%; min-width:0;">
+            ${defCode ? `<img src="${flagUrl(defCode)}" style="height:${flagHeight}; border-radius:2px; flex-shrink:0;" onerror="this.style.display='none'">` : ''}
+            <span style="font-size:${nameFontSize}; font-weight:700; color:${defColor}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(defName)}</span>
+          </div>
+          <span style="font-size:10px; color:${subColor}; flex-shrink:0;">vs</span>
+          <div style="display:flex; align-items:center; gap:5px; flex:1 1 40%; min-width:0; justify-content:flex-end;">
+            <span style="font-size:${nameFontSize}; font-weight:700; color:${atkColor}; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(atkName)}</span>
+            ${atkCode ? `<img src="${flagUrl(atkCode)}" style="height:${flagHeight}; border-radius:2px; flex-shrink:0;" onerror="this.style.display='none'">` : ''}
+          </div>
         </div>
-        <span style="font-size:10px; color:${subColor}; flex-shrink:0;">vs</span>
-        <div style="display:flex; align-items:center; gap:5px; flex:1 1 40%; min-width:0; justify-content:flex-end;">
-          <span style="font-size:${nameFontSize}; font-weight:700; color:${atkColor}; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(atkName)}</span>
-          ${atkCode ? `<img src="${flagUrl(atkCode)}" style="height:${flagHeight}; border-radius:2px; flex-shrink:0;" onerror="this.style.display='none'">` : ''}
-        </div>
-      </div>
 
-      <div id="battle-front-mount" style="margin-bottom:10px;"></div>
+        <div id="battle-front-mount" style="margin-bottom:10px;"></div>
 
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; color:${subColor};">
-        <div style="display:flex; align-items:center; gap:4px;">
-          ${defCode ? `<img src="${flagUrl(defCode)}" style="height:10px; border-radius:1px; flex-shrink:0;" onerror="this.style.display='none'">` : '🛡️'}
-          <span>Defender total: <strong style="color:${textColor};">${fmt(totalDefenderDmg)}</strong></span>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; color:${subColor};">
+          <div style="display:flex; align-items:center; gap:4px;">
+            ${defCode ? `<img src="${flagUrl(defCode)}" style="height:10px; border-radius:1px; flex-shrink:0;" onerror="this.style.display='none'">` : '🛡️'}
+            <span>Defender total: <strong style="color:${textColor};">${fmt(totalDefenderDmg)}</strong></span>
+          </div>
+          <div style="display:flex; align-items:center; gap:4px; justify-content:flex-end;">
+            <span>Attacker total: <strong style="color:${textColor};">${fmt(totalAttackerDmg)}</strong></span>
+            ${atkCode ? `<img src="${flagUrl(atkCode)}" style="height:10px; border-radius:1px; flex-shrink:0;" onerror="this.style.display='none'">` : '⚔️'}
+          </div>
+          <div style="grid-column:1 / -1;">💥 Combined total: <strong style="color:${textColor};">${fmt(battleTotal)}</strong></div>
+          ${roundsToWin ? `<div style="grid-column:1 / -1;">🏆 Rounds won: <strong style="color:${defColor};">${defWon}</strong> – <strong style="color:${atkColor};">${atkWon}</strong> <span style="opacity:.75;">(first to ${roundsToWin})</span></div>` : ''}
         </div>
-        <div style="display:flex; align-items:center; gap:4px; justify-content:flex-end;">
-          <span>Attacker total: <strong style="color:${textColor};">${fmt(totalAttackerDmg)}</strong></span>
-          ${atkCode ? `<img src="${flagUrl(atkCode)}" style="height:10px; border-radius:1px; flex-shrink:0;" onerror="this.style.display='none'">` : '⚔️'}
-        </div>
-        <div style="grid-column:1 / -1;">💥 Combined total: <strong style="color:${textColor};">${fmt(battleTotal)}</strong></div>
-        ${roundsToWin ? `<div style="grid-column:1 / -1;">🏆 Rounds won: <strong style="color:${defColor};">${defWon}</strong> – <strong style="color:${atkColor};">${atkWon}</strong> <span style="opacity:.75;">(first to ${roundsToWin})</span></div>` : ''}
-      </div>
 
-      <div style="margin-top:8px; font-size:10px; color:${subColor}; text-align:center;">
-        Click again to open the heatmap · ✕ to close
+        <!-- WarEra+: bottone unico "Other contributors" — su desktop apre/
+             chiude la colonna a lato (fuori da questa card, vedi sotto), su
+             mobile la sezione qui dentro. Compare solo se ci sono davvero
+             nazioni sotto l'1% (classe bfm-contrib-has-data, assegnata da
+             renderOtherContributors in battleFront.js). -->
+        <div id="battle-contrib-toggle" class="bfm-contrib-toggle" style="margin-top:8px; align-items:center; justify-content:center; gap:5px; cursor:pointer; font-size:10px; color:${subColor}; border:1px solid ${border}; border-radius:6px; padding:5px;">
+          👥 All contributors <span id="battle-contrib-count" style="opacity:.7;"></span> <span id="battle-contrib-caret">${contribOpen ? '▲' : '▼'}</span>
+        </div>
+        <div id="battle-contrib-mobile-section" class="bfm-contrib-mobile-section" style="margin-top:6px; border-top:1px solid ${border};">
+          <div style="display:flex; justify-content:flex-end; padding:4px 10px 0;">
+            <span id="battle-contrib-expand-mobile" class="bfm-contrib-expand" title="Show every nation that dealt damage, by side">${contribExpandLabel(contribExpanded)}</span>
+          </div>
+          <div id="battle-contrib-list-mobile"></div>
+          <div id="battle-contrib-list-mobile-full"></div>
+        </div>
+
+        <div style="margin-top:8px; font-size:10px; color:${subColor}; text-align:center;">
+          Click again to open the heatmap · ✕ to close
+        </div>
       </div>
     </div>
+    <div id="battle-tooltip-contributors" style="${sbVars} background:${bg}; border:1px solid ${border}; color:${textColor};">
+      <div class="bfm-contrib-title" style="color:${subColor}; border-bottom:1px solid ${border};">
+        <span>👥 All contributors <span style="opacity:.6; font-weight:500; text-transform:none;">(&lt;1% of side)</span></span>
+        <span id="battle-contrib-expand-desktop" class="bfm-contrib-expand" title="Show every nation that dealt damage, by side">${contribExpandLabel(contribExpanded)}</span>
+      </div>
+      <div id="battle-contrib-list-desktop"></div>
+      <div id="battle-contrib-list-desktop-full"></div>
+    </div>
   `;
+}
+
+// Riflette le due flag di apertura sul DOM: classi sul wrapper (le regole CSS
+// scelgono da sole QUALE pannello mostrare in base al breakpoint) + verso
+// della freccia del bottone, che deve seguire il pannello effettivamente
+// pilotato nel layout corrente.
+function applyContribVisibility(el) {
+  const root = el || document.getElementById('battle-tooltip');
+  if (!root) return;
+  root.classList.toggle('bfm-contrib-desktop-open', contribOpenDesktop);
+  root.classList.toggle('bfm-contrib-mobile-open', contribOpenMobile);
+  const caret = root.querySelector('#battle-contrib-caret');
+  if (caret) caret.textContent = (isNarrowLayout() ? contribOpenMobile : contribOpenDesktop) ? '▲' : '▼';
+}
+
+// Attraversare il breakpoint cambia QUALE pannello il bottone comanda: senza
+// questo la freccia resterebbe quella dell'altro layout finche' non si
+// riapre il tooltip.
+if (typeof window !== 'undefined' && window.matchMedia) {
+  window.matchMedia(CONTRIB_NARROW_MQ).addEventListener('change', () => applyContribVisibility());
+}
+
+// Riflette contribExpanded sui due pannelli (solo quello del layout attivo
+// e' visibile, ma tenerli sincronizzati entrambi evita un disallineamento
+// se l'utente attraversa il breakpoint mentre e' espanso).
+function applyContribExpand(el) {
+  const root = el || document.getElementById('battle-tooltip');
+  if (!root) return;
+  root.querySelector('#battle-tooltip-contributors')?.classList.toggle('bfm-contrib-expanded', contribExpanded);
+  root.querySelector('#battle-contrib-mobile-section')?.classList.toggle('bfm-contrib-expanded', contribExpanded);
+  const label = contribExpandLabel(contribExpanded);
+  const btnD = root.querySelector('#battle-contrib-expand-desktop');
+  const btnM = root.querySelector('#battle-contrib-expand-mobile');
+  if (btnD) btnD.textContent = label;
+  if (btnM) btnM.textContent = label;
 }
 
 function showBattleTooltip(battle, regionName, liveData, totalAttackerDmg, totalDefenderDmg, trend) {
@@ -474,10 +762,43 @@ function showBattleTooltip(battle, regionName, liveData, totalAttackerDmg, total
   el.innerHTML = buildBattleTooltipContent(battle, regionName, liveData, totalAttackerDmg, totalDefenderDmg, trend);
   pinnedBattleId = battle._id;
 
+  el.querySelector('#battle-tooltip-collapse')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    tooltipCollapsed = !tooltipCollapsed;
+    const body = el.querySelector('#battle-tooltip-body');
+    const btn = el.querySelector('#battle-tooltip-collapse');
+    if (body) body.style.display = tooltipCollapsed ? 'none' : 'block';
+    if (btn) btn.textContent = tooltipCollapsed ? '▲' : '▼';
+  });
+
   el.querySelector('#battle-tooltip-close')?.addEventListener('click', (e) => {
     e.stopPropagation();
     hideBattleTooltip();
   });
+
+  // Bottone unico "Other contributors": su desktop apre/chiude la colonna a
+  // lato, su mobile la sezione dentro la card — quale delle due lo decide la
+  // media query, qui si aggiorna solo la flag del layout corrente.
+  applyContribVisibility(el);
+  el.querySelector('#battle-contrib-toggle')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (isNarrowLayout()) contribOpenMobile = !contribOpenMobile;
+    else contribOpenDesktop = !contribOpenDesktop;
+    applyContribVisibility(el);
+  });
+
+  // Bottone "espandi" — presente sia sopra la colonna desktop sia sopra la
+  // lista mobile, ma e' sempre lo STESSO stato (contribExpanded): stopPropagation
+  // qui serve anche a non far scattare il click sul bottone toggle sottostante
+  // (nel caso mobile il bottone espandi vive dentro la sezione che il toggle apre).
+  applyContribExpand(el);
+  const onExpandClick = (e) => {
+    e.stopPropagation();
+    contribExpanded = !contribExpanded;
+    applyContribExpand(el);
+  };
+  el.querySelector('#battle-contrib-expand-desktop')?.addEventListener('click', onExpandClick);
+  el.querySelector('#battle-contrib-expand-mobile')?.addEventListener('click', onExpandClick);
 
   // Il campo di battaglia vive direttamente nel tooltip (WarEra+: prima
   // apriva un overlay a schermo intero da un bottone dedicato — richiesta
@@ -505,6 +826,10 @@ export function hideBattleTooltip() {
     el.style.pointerEvents = 'none';
   }
   pinnedBattleId = null;
+  tooltipCollapsed = false;
+  contribOpenDesktop = true;
+  contribOpenMobile = false;
+  contribExpanded = false;
 
   // Ferma il poll live del widget battleFront montato nel tooltip — senza
   // questo continuerebbe a interrogare l'API anche a tooltip chiuso.
@@ -685,6 +1010,13 @@ function buildMarkerMarkup(battle, regionName, liveData, totalAttackerDmg, total
   const effectiveZoom = isMobile ? Math.max(zoom, 3.5) : zoom;
   const isZoomLow = effectiveZoom < 3.5;
   const isZoomMedium = effectiveZoom >= 3.5 && effectiveZoom < 5;
+  // WarEra+: a zoom minimo su mobile il floor sopra spinge sempre in fascia
+  // "medium" (mai "low", per restare leggibile — vedi commento sopra), ma le
+  // dimensioni della fascia medium restano identiche al desktop: a zoom
+  // minimo il marker occupa troppo schermo su un telefono. Riduce SOLO
+  // l'ingombro (min/max-width, padding, badge), non i font — restano
+  // leggibili come da intento originale.
+  const mobileMinZoom = isMobile && zoom < 3.5;
   // WarEra+: font innalzati rispetto all'originale (erano 5-9px, quasi
   // illeggibili) — nuova fascia 9-12px, ancora scalata per zoom ma sempre
   // leggibile anche nella fascia "low".
@@ -694,9 +1026,9 @@ function buildMarkerMarkup(battle, regionName, liveData, totalAttackerDmg, total
   // WarEra+: padding leggermente più generoso + angoli molto più arrotondati
   // (prima 4-7px, quasi un rettangolo secco) — la card ora si legge come un
   // "badge" invece che una scheda squadrata.
-  const padding = isZoomLow ? '5px 7px' : (isZoomMedium ? '6px 8px' : '7px 10px');
-  const minWidth = isZoomLow ? 68 : (isZoomMedium ? 98 : 128);
-  const maxWidth = isZoomLow ? 100 : (isZoomMedium ? 140 : 190);
+  const padding = isZoomLow ? '5px 7px' : (isZoomMedium ? (mobileMinZoom ? '5px 7px' : '6px 8px') : '7px 10px');
+  const minWidth = isZoomLow ? 68 : (isZoomMedium ? (mobileMinZoom ? 85 : 98) : 128);
+  const maxWidth = isZoomLow ? 100 : (isZoomMedium ? (mobileMinZoom ? 122 : 140) : 190);
   const borderRadius = isZoomLow ? '10px' : '14px';
   const gap = isZoomLow ? '2px' : '4px';
   const marginBottom = isZoomLow ? '1px' : '3px';
@@ -750,7 +1082,7 @@ function buildMarkerMarkup(battle, regionName, liveData, totalAttackerDmg, total
   // cima, ora si legge subito come "scheda di battaglia" invece che una
   // card generica.
   const ribbonHeight = isZoomLow ? '3px' : '4px';
-  const badgeSize = isZoomLow ? '14px' : '18px';
+  const badgeSize = isZoomLow ? '14px' : (mobileMinZoom ? '16px' : '18px');
 
   return `
     <div style="
