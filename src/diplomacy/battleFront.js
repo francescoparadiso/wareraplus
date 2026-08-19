@@ -46,6 +46,15 @@ const FX_MAX_VOLLEY = IS_MOBILE ? 2 : 3;
 const MIN_UNITS = 4, MAX_UNITS = IS_MOBILE ? 7 : 10;
 const TANK_SHARE = 0.25; // quota di MAX_UNITS che diventa "carro" (punto grande)
 const FLAG_BASE = 'https://media.warera.io/images/flags';
+// WarEra+ (richiesta esplicita dell'utente): ogni round ha, oltre al danno,
+// un punteggio a tick (round.attackerPoints/defenderPoints in
+// battle.getLiveBattleData — già scaricati da fetchBattleWallPoll, prima
+// ignorati) — il primo lato che arriva a 300 vince il round (riferito
+// dall'utente da un giro live: roundHistory registrava wonBy:"attacker" con
+// attackerPoints:303, poco sopra la soglia per via del tick che l'ha
+// superata). round.actualTickPoints (quanti punti vale il prossimo tick, già
+// nella risposta) non è ancora usato — resta per un'estensione futura.
+const ROUND_WIN_POINTS = 300;
 
 function flagUrl(code) {
   return code ? `${FLAG_BASE}/${code.toLowerCase()}.svg?v=16` : '';
@@ -97,6 +106,19 @@ function buildWidget(host) {
           <span class="a"><span class="dmg" id="bfm-split-atk-dmg">—</span><b id="bfm-split-atk-pct">50.0%</b></span>
         </div>
       </div>
+      <div class="bfm-points" id="bfm-points" style="display:none;">
+        <div class="bfm-split-head"><span>Round points</span><span class="bfm-points-target">first to ${ROUND_WIN_POINTS}</span></div>
+        <div class="bfm-points-row">
+          <span class="bfm-points-icon" id="bfm-points-def-icon">🛡</span>
+          <span class="bfm-points-bar-track"><span class="bfm-points-bar-fill def" id="bfm-points-def-fill" style="width:0%;"></span></span>
+          <span class="bfm-points-num" id="bfm-points-def-num">0</span>
+        </div>
+        <div class="bfm-points-row">
+          <span class="bfm-points-icon" id="bfm-points-atk-icon">⚔</span>
+          <span class="bfm-points-bar-track"><span class="bfm-points-bar-fill atk" id="bfm-points-atk-fill" style="width:0%;"></span></span>
+          <span class="bfm-points-num" id="bfm-points-atk-num">0</span>
+        </div>
+      </div>
       <div class="bfm-momentum" id="bfm-momentum">
         <span class="bfm-momentum-label">Momentum</span>
         <span class="bfm-momentum-text" id="bfm-momentum-text">Gathering momentum data…</span>
@@ -117,6 +139,11 @@ function buildWidget(host) {
     splitAtkDmg: host.querySelector('#bfm-split-atk-dmg'),
     splitScope: host.querySelector('#bfm-split-scope'),
     rates: host.querySelector('#bfm-rates'),
+    pointsWrap: host.querySelector('#bfm-points'),
+    pointsDefFill: host.querySelector('#bfm-points-def-fill'),
+    pointsAtkFill: host.querySelector('#bfm-points-atk-fill'),
+    pointsDefNum: host.querySelector('#bfm-points-def-num'),
+    pointsAtkNum: host.querySelector('#bfm-points-atk-num'),
     momentum: host.querySelector('#bfm-momentum'),
     momentumText: host.querySelector('#bfm-momentum-text'),
   };
@@ -318,6 +345,31 @@ function render(defenderRanked, attackerRanked, totalDef, totalAtk, round) {
   hud.frontline.style.left = frontPct + '%';
 
   renderUnits(defShare);
+  renderRoundPoints(round);
+}
+
+// ==================== PUNTI ROUND (chi arriva a 300 vince) ====================
+// A differenza della barra danno sopra (una quota SUL TOTALE dei due lati,
+// sempre 100% insieme), i punti round sono due corse INDIPENDENTI verso lo
+// stesso traguardo (ROUND_WIN_POINTS) — non hanno senso come un'unica barra
+// split, quindi due barre separate, una per lato. Visibile solo quando
+// `round` esiste (round.attackerPoints/defenderPoints arrivano solo da
+// battle.getLiveBattleData, non dal solo ranking) — niente barra se manca,
+// invece di mostrare 0/300 fuorviante.
+function renderRoundPoints(round) {
+  if (!hud.pointsWrap) return;
+  const defPoints = round?.defenderPoints;
+  const atkPoints = round?.attackerPoints;
+  const hasPoints = typeof defPoints === 'number' && typeof atkPoints === 'number';
+  hud.pointsWrap.style.display = hasPoints ? 'block' : 'none';
+  if (!hasPoints) return;
+
+  const defPct = clamp(defPoints / ROUND_WIN_POINTS * 100, 0, 100);
+  const atkPct = clamp(atkPoints / ROUND_WIN_POINTS * 100, 0, 100);
+  hud.pointsDefFill.style.width = defPct + '%';
+  hud.pointsAtkFill.style.width = atkPct + '%';
+  hud.pointsDefNum.textContent = `${defPoints}/${ROUND_WIN_POINTS}`;
+  hud.pointsAtkNum.textContent = `${atkPoints}/${ROUND_WIN_POINTS}`;
 }
 
 // ==================== MOMENTUM (una riga compatta) ====================
@@ -672,6 +724,18 @@ const WIDGET_CSS = `
    (colore più tenue, peso normale): sono il dettaglio, non il titolo. */
 .bfm-split-nums .dmg { color: #d5dde8; font-weight: 500; opacity: 0.82; }
 #bfm-rates { color: var(--bfm-ink-faint); font-size: 10px; }
+
+.bfm-points { margin-top: 8px; }
+.bfm-points-target { font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--bfm-ink-faint); }
+.bfm-points-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.bfm-points-row:first-of-type { margin-top: 3px; }
+.bfm-points-icon { font-size: 10px; flex-shrink: 0; width: 12px; text-align: center; }
+.bfm-points-bar-track { flex: 1; height: 5px; border-radius: 2.5px; overflow: hidden; background: rgba(255,255,255,0.08); }
+.bfm-points-bar-fill { height: 100%; }
+.bfm-points-bar-fill.def { background: var(--bfm-def-strong); }
+.bfm-points-bar-fill.atk { background: var(--bfm-atk-strong); }
+@media (prefers-reduced-motion: no-preference) { .bfm-points-bar-fill { transition: width 900ms cubic-bezier(.22,.61,.36,1); } }
+.bfm-points-num { font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 40px; text-align: right; color: #d5dde8; flex-shrink: 0; }
 
 .bfm-momentum {
   margin-top: 7px; padding: 6px 9px; border-radius: 6px; border-left: 3px solid var(--bfm-ink-faint);
