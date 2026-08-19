@@ -713,9 +713,6 @@ function buildBattleTooltipContent(battle, regionName, liveData, totalAttackerDm
           <div id="battle-contrib-list-mobile-full"></div>
         </div>
 
-        <div style="margin-top:8px; font-size:10px; color:${subColor}; text-align:center;">
-          Click ✕ to close
-        </div>
       </div>
     </div>
     <div id="battle-tooltip-contributors" style="${sbVars} background:${bg}; border:1px solid ${border}; color:${textColor};">
