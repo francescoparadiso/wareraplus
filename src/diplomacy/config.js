@@ -12,7 +12,7 @@ export const CACHE_API_BASE_URL = 'https://gateway.warerastats.io'
 // src/diplomacy/cacheClient.js per come viene consumato (sempre con
 // fallback alla chiamata diretta se il server è irraggiungibile o i dati
 // sono troppo vecchi — non deve MAI essere un punto di fallimento unico).
-export const WARERA_CACHE_BASE = 'https://ampsodrick.duckdns.org/warera-cache';
+export const WARERA_CACHE_BASE = 'https://warera-oracle.duckdns.org/warera-cache';
 
 // WarEra+: Worker Cloudflare con API_TOKEN server-side (limite 500
 // batch/minuto invece di 100). Il codice del worker incollato dall'utente

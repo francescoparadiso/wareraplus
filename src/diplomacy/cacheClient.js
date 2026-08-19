@@ -1,7 +1,7 @@
 // cacheClient.js
 // ══════════════════════════════════════════════════════════════
 // WarEra+ — client per il server di cache su VPS esterno
-// (ampsodrick.duckdns.org/warera-cache/, vedi WARERA_CACHE_BASE in
+// (warera-oracle.duckdns.org/warera-cache/, vedi WARERA_CACHE_BASE in
 // config.js). Il server fa lui il poll periodico delle API WarEra e
 // risparmia ai browser degli utenti di doverlo fare ognuno per conto suo
 // — l'obiettivo è ridurre i 429, non introdurre un punto di fallimento
