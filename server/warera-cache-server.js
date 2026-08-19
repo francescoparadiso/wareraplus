@@ -90,6 +90,26 @@
 //    fonte non esistesse — nessun punto di rottura per il client, che non
 //    parla mai direttamente con spywarera.com (solo questo server la
 //    contatta, a intervalli). Endpoint di stato: /region-history/external-status.
+//
+// 6) EVENTI UFFICIALI WarEra (pollGameEvents, event.getEventsPaginated) —
+//    richiesta esplicita dell'utente: aggiungere al ticker i tipi di
+//    evento che pollTickerEvents (punto 2) NON può vedere perché non sono
+//    un cambio di stato osservabile diffando country.getAllCountries/
+//    countryDiplomacy — nuovo presidente, pace, patto difensivo, regione
+//    liberata, rivoluzione, bancarotta. IN AGGIUNTA al diffing esistente,
+//    non lo sostituisce: guerre/sworn/popolazione/tesoro restano come sono.
+//    Stesso file di storico (ticker-history.json), nuova `category:
+//    'game_event'` con `eventType` a dire quale dei tipi sopra è.
+//    ATTENZIONE (a differenza del resto di questo file): i nomi dei campi
+//    di event.getEventsPaginated NON sono stati verificati dal vivo contro
+//    l'API reale (questo ambiente di sviluppo non raggiunge le API
+//    WarEra) — si provano più candidati per ciascun campo (vedi
+//    _pickCountryId/_pickPairCountries) così un nome diverso da quello
+//    previsto degrada silenziosamente a "evento saltato", mai a un
+//    crash o a un messaggio con la nazione sbagliata. L'evento grezzo
+//    resta comunque salvato in `raw` (stesso pattern di pollElections):
+//    dopo il primo giro in produzione si può controllare cache/
+//    ticker-history.json e correggere i candidati se serve.
 // ══════════════════════════════════════════════════════════════
 
 const express = require('express');
@@ -386,6 +406,74 @@ async function pollElections() {
     writeCache('ticker-history', aggiornato, { compact: true });
     console.log(`[poll] elections/ticker aggiornato (+${nuovi.length})`);
   } catch (err) { console.error('[poll] elections fallito:', err.message); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EVENTI UFFICIALI WarEra (event.getEventsPaginated) — vedi nota (6) in
+// testa al file. Tipi scelti: news-worthy senza essere troppo frequenti
+// (esclusi warDeclared/peaceMade duplicati del diffing, allianceMember*
+// troppo granulari, regionTransfer/countryMoneyTransfer troppo rumorosi,
+// depositDiscovered/resistanceIncreased ecc. — tutti tipi che l'API offre
+// ma che qui si è scelto di non mostrare per non sommergere il ticker).
+// ═══════════════════════════════════════════════════════════════════════
+const GAME_EVENT_TYPES = [
+  'newPresident',
+  'peace_agreement',
+  'peaceMade',
+  'defensivePactFormed',
+  'defensivePactBroken',
+  'regionLiberated',
+  'revolutionStarted',
+  'revolutionEnded',
+  'bankruptcy',
+];
+
+// Chiamata GLOBALE (nessun countryId): un solo poll copre tutte le
+// nazioni, non uno per country come le elezioni — a differenza di
+// election.getElections, event.getEventsPaginated accetta countryId come
+// filtro OPZIONALE (vedi doc endpoint), quindi omesso restituisce il feed
+// mondiale. Se in produzione risultasse invece filtrato implicitamente
+// (es. sull'account anonimo del token), va rivisto per un giro per
+// country come pollElections — l'evento grezzo salvato in `raw` aiuta a
+// capirlo dal primo giro.
+async function fetchGameEvents() {
+  const input = { limit: 100, eventTypes: GAME_EVENT_TYPES };
+  const url = `${API_BASE_URL}/trpc/event.getEventsPaginated?input=${encodeURIComponent(JSON.stringify(input))}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  const payload = data?.result?.data ?? data;
+  return Array.isArray(payload) ? payload : (payload?.items || []);
+}
+
+// Stesso schema append-only + dedupe-per-id di pollElections, accodato
+// allo stesso ticker-history.json (vedi nota (6)).
+async function pollGameEvents() {
+  try {
+    const items = await fetchGameEvents();
+
+    const storico = readCache('ticker-history', []);
+    const idEsistenti = new Set(storico.map(e => e.id));
+    const nuovi = [];
+    items.forEach(item => {
+      const id = item.id || item._id;
+      if (!id || idEsistenti.has(id)) return;
+      const type = item.type || item.eventType;
+      if (!GAME_EVENT_TYPES.includes(type)) return; // paracadute se l'API ignorasse il filtro eventTypes
+      nuovi.push({
+        id,
+        category: 'game_event',
+        eventType: type,
+        timestamp: Date.parse(item.createdAt || item.timestamp || item.date || item.updatedAt) || Date.now(),
+        raw: item, // dato grezzo, vedi nota (6): serve a correggere i candidati dei campi dopo il primo giro
+      });
+    });
+
+    if (!nuovi.length) { console.log('[poll] game events: nessun evento nuovo'); return; }
+    const aggiornato = trimTickerHistory([...storico, ...nuovi]);
+    writeCache('ticker-history', aggiornato, { compact: true });
+    console.log(`[poll] game events aggiornato (+${nuovi.length})`);
+  } catch (err) { console.error('[poll] game events fallito:', err.message); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -844,6 +932,7 @@ cron.schedule('3,13,23,33,43,53 * * * *', pollAlliances);              // ogni 1
 cron.schedule('8,23,38,53 * * * *', pollDiplomacy);                    // ogni 15 min, :08 (alimenta anche il ticker stats)
 cron.schedule('1,4,7,10,13,16,19,22,25,28,31,34,37,40,43,46,49,52,55,58 * * * *', pollBattles); // ogni 3 min, :01
 cron.schedule('2,7,12,17,22,27,32,37,42,47,52,57 * * * *', pollElections); // ogni 5 min, :02
+cron.schedule('9,24,39,54 * * * *', pollGameEvents);                  // ogni 15 min, :09 (nota 6)
 // Bootstrap storico — DISATTIVATO (round 4): troppo lento (1 pagina/min,
 // poteva metterci ore/giorni) e comunque reso ridondante da
 // pollExternalHistory qui sotto, che sovrascrive region-history-keyframes/
@@ -867,6 +956,7 @@ cron.schedule('25 * * * *', pollExternalHistory);
   await pollDiplomacy();
   await pollBattles();
   await pollElections();
+  await pollGameEvents();
   // await pollBootstrapPage(); // disattivato, vedi nota sopra al cron.schedule commentato
   await pollExternalHistory(); // sync subito con spywarera invece di aspettare fino a 1h
 })();
@@ -966,7 +1056,7 @@ app.get('/ticker/summary', (req, res) => {
   // Eventi puntuali: hanno un istante e un testo proprio, vanno mandati
   // com'è (sono poche decine, non è quello il peso).
   const punctual = recenti.filter(e =>
-    (e.category === 'war' || e.category === 'sworn_new' || e.category === 'sworn_removed')
+    (e.category === 'war' || e.category === 'sworn_new' || e.category === 'sworn_removed' || e.category === 'game_event')
     && e.timestamp >= since);
 
   const aggregates = {};

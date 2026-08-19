@@ -172,7 +172,7 @@ function formatElectionMessages(electionsRaw) {
    letti dal server di cache invece che diffati localmente, limitati alle
    nazioni più popolose per la visualizzazione (il server li tiene TUTTI,
    il filtro "top N" resta solo qui). ── */
-const PUNCTUAL_CATEGORIES = new Set(['war', 'sworn_new', 'sworn_removed']);
+const PUNCTUAL_CATEGORIES = new Set(['war', 'sworn_new', 'sworn_removed', 'game_event']);
 const EMPTY_AGG = { population: {}, wealth: {} };
 const SUMMARY_RETRY_MS = 30 * 60 * 1000;
 let _summaryUnavailableUntil = 0;
@@ -287,6 +287,77 @@ function formatSwornMessages(events, topIds) {
     .map(e => _withTime(e.category === 'sworn_new'
       ? t('ticker_sworn_new', { a: nameOf(e.countryId), b: nameOf(e.enemyId) })
       : t('ticker_sworn_removed', { a: nameOf(e.countryId), b: nameOf(e.enemyId) }), e.timestamp));
+}
+
+// ── EVENTI UFFICIALI WarEra (event.getEventsPaginated, via pollGameEvents
+//    lato server) — IN AGGIUNTA al diffing sopra (guerre/sworn), non lo
+//    sostituisce (richiesta esplicita dell'utente). Copre tipi che il
+//    diffing non può vedere: nuovo presidente, pace, patto difensivo,
+//    regione liberata, rivoluzione, bancarotta.
+//
+// NOTA (vedi anche server/warera-cache-server.js nota 6): i nomi dei campi
+// di event.getEventsPaginated non sono stati verificati dal vivo — si
+// provano più candidati per ciascun campo, così un nome diverso da quello
+// previsto fa saltare silenziosamente il singolo evento invece di
+// mostrare una nazione sbagliata. `e.raw` (il dato grezzo salvato dal
+// server) è lì apposta per aggiustare i candidati dopo il primo giro in
+// produzione. ──
+const GAME_EVENT_SINGLE_KEYS = {
+  newPresident: 'ticker_game_new_president',
+  regionLiberated: 'ticker_game_region_liberated',
+  revolutionStarted: 'ticker_game_revolution_started',
+  revolutionEnded: 'ticker_game_revolution_ended',
+  bankruptcy: 'ticker_game_bankruptcy',
+};
+const GAME_EVENT_PAIR_KEYS = {
+  peace_agreement: 'ticker_game_peace',
+  peaceMade: 'ticker_game_peace',
+  defensivePactFormed: 'ticker_game_defpact_formed',
+  defensivePactBroken: 'ticker_game_defpact_broken',
+};
+
+function _pickCountryId(item, candidates) {
+  for (const c of candidates) if (item?.[c]) return item[c];
+  return null;
+}
+function _pickPairCountries(item) {
+  const pairs = [
+    ['countryId', 'enemyId'],
+    ['countryA', 'countryB'],
+    ['country1', 'country2'],
+    ['fromCountry', 'toCountry'],
+  ];
+  for (const [ka, kb] of pairs) {
+    const a = item?.[ka], b = item?.[kb];
+    if (a && b) return [a, b];
+  }
+  return null;
+}
+
+function formatGameEventMessages(events, topIds) {
+  const messages = [];
+  events.forEach(e => {
+    if (e.category !== 'game_event') return;
+    const item = e.raw || {};
+    const singleKey = GAME_EVENT_SINGLE_KEYS[e.eventType];
+    const pairKey = GAME_EVENT_PAIR_KEYS[e.eventType];
+    if (singleKey) {
+      const countryId = _pickCountryId(item, ['countryId', 'country', 'targetCountry', 'nationId']);
+      const nation = countryId ? state.nationMap.get(countryId) : null;
+      if (!nation) return; // campo non riconosciuto o nazione ignota: salta invece di mostrare "undefined"
+      if (topIds && !topIds.has(countryId)) return;
+      messages.push(_withTime(t(singleKey, { nation: nation.name }), e.timestamp));
+    } else if (pairKey) {
+      const pair = _pickPairCountries(item);
+      if (!pair) return;
+      const [aId, bId] = pair;
+      const a = state.nationMap.get(aId), b = state.nationMap.get(bId);
+      if (!a || !b) return;
+      if (topIds && !topIds.has(aId) && !topIds.has(bId)) return;
+      messages.push(_withTime(t(pairKey, { a: a.name, b: b.name }), e.timestamp));
+    }
+  });
+  return messages;
 }
 
 // WarEra+ — variazione popolazione attiva / tesoro, in DUE finestre distinte
@@ -581,6 +652,7 @@ function _rebuildMessages() {
   const electionMsgsRaw = formatElectionMessages(electionsRaw);
   const warMsgsRaw = formatWarMessages(stats.punctual, topIds);
   const swornMsgsRaw = formatSwornMessages(stats.punctual, topIds);
+  const gameEventMsgsRaw = formatGameEventMessages(stats.punctual, topIds);
   const statsMsgsRaw = formatStatsMessages(stats, topIds);
   const sinceVisitMsgsRaw = formatSinceVisitMessages(stats, topIds);
 
@@ -592,6 +664,7 @@ function _rebuildMessages() {
     ...capCategory(electionMsgsRaw),
     ...capCategory(warMsgsRaw),
     ...capCategory(swornMsgsRaw),
+    ...capCategory(gameEventMsgsRaw),
     ...capCategory(statsMsgsRaw),
     ...capCategory(sinceVisitMsgsRaw),
   ];
@@ -634,6 +707,7 @@ export function getNewsGroups() {
     { key: 'elections', icon: '🗳️', messages: formatElectionMessages(electionsRaw) },
     { key: 'wars', icon: '💥', messages: formatWarMessages(stats.punctual, null) },
     { key: 'sworn', icon: '🎯', messages: formatSwornMessages(stats.punctual, null) },
+    { key: 'gameEvents', icon: '📰', messages: formatGameEventMessages(stats.punctual, null) },
     { key: 'stats24', icon: '📊', messages: formatStatsMessages(stats, null) },
     { key: 'sinceVisit', icon: '👁️', messages: formatSinceVisitMessages(stats, null) },
   ];
