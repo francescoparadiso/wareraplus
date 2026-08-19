@@ -7,6 +7,35 @@ import { fetchActiveBattlesViaCache } from './cacheClient.js';
 import { trackEvent } from '../shared/analytics.js';
 
 const BATTLE_NEUTRAL = '#2a2d33';
+
+// CUTOFF (richiesto dall'utente): sotto l'1% del danno del PROPRIO lato una
+// nazione non entra nella heatmap — decine di paesi con un contributo
+// trascurabile la rendevano rumorosa e illeggibile. "Share" ha la stessa
+// definizione già mostrata in legenda (ui.js: nation damage / side total).
+const MIN_SIDE_SHARE = 0.01;
+
+// Unico punto di verità su CHI è evidenziato. Il risultato finisce in
+// state.battleHeatmapData.highlightedIds e viene letto da due posti che
+// devono per forza essere d'accordo:
+//   · buildBattleHeatmapColorExpression — chi riceve un colore;
+//   · labels.js:drawLabels — di chi si disegna il nome sulla mappa
+//     (richiesta dell'utente: nascondere i nomi dei paesi che non hanno
+//     combattuto, sia per togliere rumore sia perché così i nomi di chi
+//     ha combattuto non perdono più le collisioni contro i vicini muti).
+function computeHighlightedIds(nations) {
+  let totalAttacker = 0, totalDefender = 0;
+  nations.forEach(n => {
+    if (n.side === 'attacker') totalAttacker += n.totalDamage;
+    else totalDefender += n.totalDamage;
+  });
+  const ids = new Set();
+  nations.forEach(n => {
+    const sideTotal = n.side === 'attacker' ? totalAttacker : totalDefender;
+    if (sideTotal > 0 && n.totalDamage / sideTotal >= MIN_SIDE_SHARE) ids.add(n.countryId);
+  });
+  return ids;
+}
+
 let liveInterval = null;
 let currentBattleId = null;
 let savedColoringMode = 'diplomacy';
@@ -338,6 +367,7 @@ export async function setBattleHeatmap(battleId) {
       nations,
       maxDamage,
       rankingRaw: rankingData,
+      highlightedIds: computeHighlightedIds(nations),
     };
     
     // BUG FIX (segnalato dall'utente: "effetto flashbang" all'apertura).
@@ -424,6 +454,10 @@ function startLiveUpdates(battleId) {
         state.battleHeatmapData.nations = nations;
         state.battleHeatmapData.maxDamage = maxDamage;
         state.battleHeatmapData.rankingRaw = rankingData;
+        // Ricalcolato ad ogni giro: durante la battaglia una nazione può
+        // superare la soglia (o scenderci sotto), e nomi e colori devono
+        // aggiornarsi insieme.
+        state.battleHeatmapData.highlightedIds = computeHighlightedIds(nations);
         renderMap();
       }
     } catch (err) {
@@ -447,20 +481,18 @@ export function buildBattleHeatmapColorExpression(isOriginal = false) {
   const { nations } = state.battleHeatmapData;
   const colorMap = new Map();
 
+  // Chi va evidenziato: calcolato una volta sola quando arrivano i dati
+  // (vedi computeHighlightedIds) e riusato qui, così colori sulla mappa e
+  // nomi nazione (labels.js) non possono mai divergere. Il fallback
+  // ricalcola per i rari casi in cui l'insieme non fosse ancora pronto.
+  const highlighted = state.battleHeatmapData.highlightedIds || computeHighlightedIds(nations);
+
   let maxAttackerDmg = 0;
   let maxDefenderDmg = 0;
-  // Totali di lato (somma danni di TUTTE le nazioni di quel lato) — servono
-  // solo per il cutoff sotto, non per il colore (che resta relativo al
-  // massimo contributore, come prima). Stessa definizione di "Share" già
-  // mostrata in legenda (ui.js: "Share = nation damage / side total").
-  let totalAttackerDmg = 0;
-  let totalDefenderDmg = 0;
   nations.forEach(item => {
     if (item.side === 'attacker') {
-      totalAttackerDmg += item.totalDamage;
       if (item.totalDamage > maxAttackerDmg) maxAttackerDmg = item.totalDamage;
     } else {
-      totalDefenderDmg += item.totalDamage;
       if (item.totalDamage > maxDefenderDmg) maxDefenderDmg = item.totalDamage;
     }
   });
@@ -468,16 +500,8 @@ export function buildBattleHeatmapColorExpression(isOriginal = false) {
   if (maxAttackerDmg === 0) maxAttackerDmg = 1;
   if (maxDefenderDmg === 0) maxDefenderDmg = 1;
 
-  // CUTOFF (richiesto dall'utente): nazioni sotto l'1% del danno del
-  // proprio lato restano fuori dalla mappa colori (colore neutro invece di
-  // una tinta quasi invisibile) — decine di paesi con un contributo
-  // trascurabile rendevano la heatmap "rumorosa" e difficile da leggere.
-  const MIN_SIDE_SHARE = 0.01;
-
   nations.forEach(item => {
-    const sideTotal = item.side === 'attacker' ? totalAttackerDmg : totalDefenderDmg;
-    const share = sideTotal > 0 ? item.totalDamage / sideTotal : 0;
-    if (share < MIN_SIDE_SHARE) return; // sotto soglia: niente colore, resta BATTLE_NEUTRAL
+    if (!highlighted.has(item.countryId)) return; // sotto soglia: resta BATTLE_NEUTRAL
 
     let pct;
     if (item.side === 'attacker') {

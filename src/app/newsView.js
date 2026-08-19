@@ -29,15 +29,15 @@ import { getLang } from '../shared/i18n.js';
 import { trackEvent } from '../shared/analytics.js';
 
 const NV_DICT = {
-  en: { masthead: 'The WarEra Times', tagline: 'World edition · Live from the front', breaking: 'BREAKING', refresh: 'Refresh', loading: 'Printing the edition…', empty: 'No news at the moment', emptyCat: 'Nothing in this category', updated: 'Updated at', stories: 'stories', battles: 'Ongoing battles', elections: 'Elections', wars: 'New wars', sworn: 'Sworn enemies', stats24: 'Last 24 hours', sinceVisit: 'Since your last visit' },
-  it: { masthead: 'Il WarEra Times', tagline: 'Edizione mondiale · In diretta dal fronte', breaking: 'ULTIM\'ORA', refresh: 'Aggiorna', loading: 'Stampa dell\'edizione…', empty: 'Nessuna notizia al momento', emptyCat: 'Nulla in questa categoria', updated: 'Aggiornato alle', stories: 'notizie', battles: 'Battaglie in corso', elections: 'Elezioni', wars: 'Nuove guerre', sworn: 'Nemici giurati', stats24: 'Ultime 24 ore', sinceVisit: 'Dall\'ultima visita' },
-  es: { masthead: 'El WarEra Times', tagline: 'Edición mundial · En directo desde el frente', breaking: 'ÚLTIMA HORA', refresh: 'Actualizar', loading: 'Imprimiendo la edición…', empty: 'No hay noticias por ahora', emptyCat: 'Nada en esta categoría', updated: 'Actualizado a las', stories: 'noticias', battles: 'Batallas en curso', elections: 'Elecciones', wars: 'Nuevas guerras', sworn: 'Enemigos jurados', stats24: 'Últimas 24 horas', sinceVisit: 'Desde tu última visita' },
-  de: { masthead: 'Die WarEra Times', tagline: 'Weltausgabe · Live von der Front', breaking: 'EILMELDUNG', refresh: 'Aktualisieren', loading: 'Ausgabe wird gedruckt…', empty: 'Derzeit keine Nachrichten', emptyCat: 'Nichts in dieser Kategorie', updated: 'Aktualisiert um', stories: 'Meldungen', battles: 'Laufende Schlachten', elections: 'Wahlen', wars: 'Neue Kriege', sworn: 'Erzfeinde', stats24: 'Letzte 24 Stunden', sinceVisit: 'Seit deinem letzten Besuch' },
-  fr: { masthead: 'Le WarEra Times', tagline: 'Édition mondiale · En direct du front', breaking: 'DERNIÈRE HEURE', refresh: 'Actualiser', loading: 'Impression de l\'édition…', empty: 'Aucune actualité pour le moment', emptyCat: 'Rien dans cette catégorie', updated: 'Mis à jour à', stories: 'actualités', battles: 'Batailles en cours', elections: 'Élections', wars: 'Nouvelles guerres', sworn: 'Ennemis jurés', stats24: 'Dernières 24 heures', sinceVisit: 'Depuis votre dernière visite' },
-  nl: { masthead: 'De WarEra Times', tagline: 'Wereldeditie · Live vanaf het front', breaking: 'LAATSTE NIEUWS', refresh: 'Vernieuwen', loading: 'Editie wordt gedrukt…', empty: 'Momenteel geen nieuws', emptyCat: 'Niets in deze categorie', updated: 'Bijgewerkt om', stories: 'berichten', battles: 'Lopende veldslagen', elections: 'Verkiezingen', wars: 'Nieuwe oorlogen', sworn: 'Aartsvijanden', stats24: 'Laatste 24 uur', sinceVisit: 'Sinds je laatste bezoek' },
-  sv: { masthead: 'The WarEra Times', tagline: 'Världsupplaga · Direkt från fronten', breaking: 'SENASTE NYTT', refresh: 'Uppdatera', loading: 'Upplagan trycks…', empty: 'Inga nyheter just nu', emptyCat: 'Inget i den här kategorin', updated: 'Uppdaterad kl.', stories: 'nyheter', battles: 'Pågående strider', elections: 'Val', wars: 'Nya krig', sworn: 'Svurna fiender', stats24: 'Senaste 24 timmarna', sinceVisit: 'Sedan ditt senaste besök' },
-  pt: { masthead: 'O WarEra Times', tagline: 'Edição mundial · Em direto da frente', breaking: 'ÚLTIMA HORA', refresh: 'Atualizar', loading: 'A imprimir a edição…', empty: 'Sem notícias de momento', emptyCat: 'Nada nesta categoria', updated: 'Atualizado às', stories: 'notícias', battles: 'Batalhas em curso', elections: 'Eleições', wars: 'Novas guerras', sworn: 'Inimigos jurados', stats24: 'Últimas 24 horas', sinceVisit: 'Desde a sua última visita' },
-  ar: { masthead: 'ووركيرا تايمز', tagline: 'الطبعة العالمية · مباشرة من الجبهة', breaking: 'عاجل', refresh: 'تحديث', loading: 'جارٍ طباعة العدد…', empty: 'لا توجد أخبار حالياً', emptyCat: 'لا شيء في هذه الفئة', updated: 'آخر تحديث', stories: 'أخبار', battles: 'معارك جارية', elections: 'الانتخابات', wars: 'حروب جديدة', sworn: 'أعداء محلفون', stats24: 'آخر 24 ساعة', sinceVisit: 'منذ زيارتك الأخيرة' },
+  en: { masthead: 'The WarEra Times', tagline: 'World edition · Live from the front', breaking: 'BREAKING', refresh: 'Refresh', loading: 'Printing the edition…', empty: 'No news at the moment', emptyCat: 'Nothing in this category', updated: 'Updated at', stories: 'stories', searchPh: 'Search the edition — e.g. Italy, sworn…', results: 'results for', noMatch: 'No story matches', clear: 'Clear', battles: 'Ongoing battles', elections: 'Elections', wars: 'New wars', sworn: 'Sworn enemies', stats24: 'Last 24 hours', sinceVisit: 'Since your last visit' },
+  it: { masthead: 'Il WarEra Times', tagline: 'Edizione mondiale · In diretta dal fronte', breaking: 'ULTIM\'ORA', refresh: 'Aggiorna', loading: 'Stampa dell\'edizione…', empty: 'Nessuna notizia al momento', emptyCat: 'Nulla in questa categoria', updated: 'Aggiornato alle', stories: 'notizie', searchPh: 'Cerca nell\'edizione — es. Italy, sworn…', results: 'risultati per', noMatch: 'Nessuna notizia corrisponde a', clear: 'Pulisci', battles: 'Battaglie in corso', elections: 'Elezioni', wars: 'Nuove guerre', sworn: 'Nemici giurati', stats24: 'Ultime 24 ore', sinceVisit: 'Dall\'ultima visita' },
+  es: { masthead: 'El WarEra Times', tagline: 'Edición mundial · En directo desde el frente', breaking: 'ÚLTIMA HORA', refresh: 'Actualizar', loading: 'Imprimiendo la edición…', empty: 'No hay noticias por ahora', emptyCat: 'Nada en esta categoría', updated: 'Actualizado a las', stories: 'noticias', searchPh: 'Buscar en la edición — p. ej. Italy, sworn…', results: 'resultados para', noMatch: 'Ninguna noticia coincide con', clear: 'Limpiar', battles: 'Batallas en curso', elections: 'Elecciones', wars: 'Nuevas guerras', sworn: 'Enemigos jurados', stats24: 'Últimas 24 horas', sinceVisit: 'Desde tu última visita' },
+  de: { masthead: 'Die WarEra Times', tagline: 'Weltausgabe · Live von der Front', breaking: 'EILMELDUNG', refresh: 'Aktualisieren', loading: 'Ausgabe wird gedruckt…', empty: 'Derzeit keine Nachrichten', emptyCat: 'Nichts in dieser Kategorie', updated: 'Aktualisiert um', stories: 'Meldungen', searchPh: 'Ausgabe durchsuchen — z. B. Italy, sworn…', results: 'Treffer für', noMatch: 'Keine Meldung passt zu', clear: 'Löschen', battles: 'Laufende Schlachten', elections: 'Wahlen', wars: 'Neue Kriege', sworn: 'Erzfeinde', stats24: 'Letzte 24 Stunden', sinceVisit: 'Seit deinem letzten Besuch' },
+  fr: { masthead: 'Le WarEra Times', tagline: 'Édition mondiale · En direct du front', breaking: 'DERNIÈRE HEURE', refresh: 'Actualiser', loading: 'Impression de l\'édition…', empty: 'Aucune actualité pour le moment', emptyCat: 'Rien dans cette catégorie', updated: 'Mis à jour à', stories: 'actualités', searchPh: 'Rechercher dans l\'édition — ex. Italy, sworn…', results: 'résultats pour', noMatch: 'Aucune actualité ne correspond à', clear: 'Effacer', battles: 'Batailles en cours', elections: 'Élections', wars: 'Nouvelles guerres', sworn: 'Ennemis jurés', stats24: 'Dernières 24 heures', sinceVisit: 'Depuis votre dernière visite' },
+  nl: { masthead: 'De WarEra Times', tagline: 'Wereldeditie · Live vanaf het front', breaking: 'LAATSTE NIEUWS', refresh: 'Vernieuwen', loading: 'Editie wordt gedrukt…', empty: 'Momenteel geen nieuws', emptyCat: 'Niets in deze categorie', updated: 'Bijgewerkt om', stories: 'berichten', searchPh: 'Zoek in de editie — bv. Italy, sworn…', results: 'resultaten voor', noMatch: 'Geen bericht komt overeen met', clear: 'Wissen', battles: 'Lopende veldslagen', elections: 'Verkiezingen', wars: 'Nieuwe oorlogen', sworn: 'Aartsvijanden', stats24: 'Laatste 24 uur', sinceVisit: 'Sinds je laatste bezoek' },
+  sv: { masthead: 'The WarEra Times', tagline: 'Världsupplaga · Direkt från fronten', breaking: 'SENASTE NYTT', refresh: 'Uppdatera', loading: 'Upplagan trycks…', empty: 'Inga nyheter just nu', emptyCat: 'Inget i den här kategorin', updated: 'Uppdaterad kl.', stories: 'nyheter', searchPh: 'Sök i upplagan — t.ex. Italy, sworn…', results: 'träffar för', noMatch: 'Ingen nyhet matchar', clear: 'Rensa', battles: 'Pågående strider', elections: 'Val', wars: 'Nya krig', sworn: 'Svurna fiender', stats24: 'Senaste 24 timmarna', sinceVisit: 'Sedan ditt senaste besök' },
+  pt: { masthead: 'O WarEra Times', tagline: 'Edição mundial · Em direto da frente', breaking: 'ÚLTIMA HORA', refresh: 'Atualizar', loading: 'A imprimir a edição…', empty: 'Sem notícias de momento', emptyCat: 'Nada nesta categoria', updated: 'Atualizado às', stories: 'notícias', searchPh: 'Procurar na edição — ex. Italy, sworn…', results: 'resultados para', noMatch: 'Nenhuma notícia corresponde a', clear: 'Limpar', battles: 'Batalhas em curso', elections: 'Eleições', wars: 'Novas guerras', sworn: 'Inimigos jurados', stats24: 'Últimas 24 horas', sinceVisit: 'Desde a sua última visita' },
+  ar: { masthead: 'ووركيرا تايمز', tagline: 'الطبعة العالمية · مباشرة من الجبهة', breaking: 'عاجل', refresh: 'تحديث', loading: 'جارٍ طباعة العدد…', empty: 'لا توجد أخبار حالياً', emptyCat: 'لا شيء في هذه الفئة', updated: 'آخر تحديث', stories: 'أخبار', searchPh: '…ابحث في العدد — مثل Italy أو sworn', results: 'نتائج لـ', noMatch: 'لا يوجد خبر مطابق لـ', clear: 'مسح', battles: 'معارك جارية', elections: 'الانتخابات', wars: 'حروب جديدة', sworn: 'أعداء محلفون', stats24: 'آخر 24 ساعة', sinceVisit: 'منذ زيارتك الأخيرة' },
 };
 function nvT(key) {
   return NV_DICT[getLang()]?.[key] ?? NV_DICT.en[key] ?? key;
@@ -45,9 +45,45 @@ function nvT(key) {
 
 let rootEl = null;
 let loading = false;
+// Ultimi gruppi disegnati e testo cercato: la ricerca filtra SOLO il corpo
+// (vedi renderBody), senza rifare né la testata né il ticker — che
+// altrimenti si ricostruirebbero ad ogni tasto premuto, riavviando
+// l'animazione del nastro e facendo perdere il fuoco al campo.
+let lastGroups = null;
+let query = '';
+
+// Confronto senza accenti né maiuscole: cercare "italy" o "ITALY" o
+// "Türkiye" scrivendo "turkiye" deve funzionare comunque.
+function norm(s) {
+  return String(s ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
+}
+
+// Filtro: tutti i termini scritti devono comparire (AND), ciascuno nel
+// testo della notizia OPPURE nel nome/chiave della categoria. La chiave
+// serve perché è in inglese e stabile: l'utente ha chiesto esplicitamente
+// che scrivere "sworn" trovi i nemici giurati anche con l'interfaccia in
+// italiano, dove la notizia dice "nemico giurato".
+function filterGroups(groups, q) {
+  const terms = norm(q).split(/\s+/).filter(Boolean);
+  if (!terms.length) return groups;
+  return groups.map(g => {
+    const cat = `${norm(g.key)} ${norm(nvT(g.key))}`;
+    return {
+      ...g,
+      messages: g.messages.filter(m => {
+        const hay = `${norm(m)} ${cat}`;
+        return terms.every(term => hay.includes(term));
+      }),
+    };
+  });
+}
 
 export async function initNewsView(container) {
   rootEl = container;
+  bindLangChange();
   render({ pending: true });
   // Alla PRIMA apertura i dati potrebbero non essere ancora arrivati (il
   // ticker fa il suo primo giro poco dopo il boot): ensureNewsData li
@@ -57,15 +93,38 @@ export async function initNewsView(container) {
   trackEvent('news-view-open');
 }
 
+// BUG FIX (segnalato dall'utente): cambiando lingua l'intestazione si
+// traduceva subito ma le NOTIZIE restavano nella lingua precedente fino a
+// un ricaricamento della pagina. Il ticker sulla mappa questo caso lo
+// gestiva già (newsTicker.js si riformatta su 'wareraplus:langchange'),
+// questa vista no.
+//
+// Basta ridisegnare: getNewsGroups() riformatta i messaggi dai dati grezzi
+// già scaricati chiamando t() con la lingua nuova — nessuna chiamata di
+// rete (rifare le elezioni, una per nazione, ad ogni cambio lingua
+// riaprirebbe il problema dei 429 risolto col batching). Il testo cercato
+// resta quello che è: è roba scritta dall'utente, non da tradurre.
+let langBound = false;
+function bindLangChange() {
+  if (langBound) return; // una sola volta: initNewsView gira ad ogni apertura
+  langBound = true;
+  window.addEventListener('wareraplus:langchange', () => {
+    if (!rootEl || !lastGroups) return;
+    lastGroups = getNewsGroups() || lastGroups;
+    render({ groups: lastGroups });
+  });
+}
+
 async function load(force) {
   if (loading) return;
   loading = true;
   try {
-    const groups = await ensureNewsData({ force });
-    render({ groups });
+    lastGroups = await ensureNewsData({ force });
+    render({ groups: lastGroups });
   } catch (err) {
     console.warn('WarEra+ newsView: caricamento fallito', err);
-    render({ groups: getNewsGroups() });
+    lastGroups = getNewsGroups();
+    render({ groups: lastGroups });
   } finally {
     loading = false;
   }
@@ -111,20 +170,39 @@ function render({ groups, pending } = {}) {
     return;
   }
 
+  // Campo di ricerca (richiesta esplicita dell'utente): filtra l'edizione
+  // già scaricata, nessuna chiamata di rete. `search` con type="search"
+  // per avere la crocetta nativa di svuotamento sui browser che la danno.
+  const searchBar = `
+    <div class="wp-news-search">
+      <span class="wp-news-search-icon" aria-hidden="true">🔍</span>
+      <input type="search" id="wp-news-search-input" class="wp-news-search-input"
+             placeholder="${escapeHtml(nvT('searchPh'))}" aria-label="${escapeHtml(nvT('searchPh'))}"
+             value="${escapeHtml(query)}" autocomplete="off" />
+      <span class="wp-news-search-count" id="wp-news-search-count"></span>
+    </div>`;
+
   // Fascia ULTIM'ORA in stile telegiornale (richiesta esplicita: "che
-  // rimanesse il ticker che scorre"). Scorre TUTTE le notizie, non il
-  // campione ridotto del ticker sulla mappa. Il nastro è duplicato due
-  // volte e l'animazione CSS trasla di -50%: quando la prima copia esce a
-  // sinistra la seconda è esattamente al suo posto, quindi il ciclo si
-  // richiude senza stacco (stesso trucco del ticker in cima alla mappa,
-  // qui però basta il CSS: nessun rAF, nessun costo quando la vista è
-  // chiusa). Durata proporzionale al numero di notizie, così la velocità
-  // di lettura resta la stessa con 10 o con 100 pezzi.
+  // rimanesse il ticker che scorre"). Il nastro è duplicato due volte e
+  // l'animazione CSS trasla di -50%: quando la prima copia esce a sinistra
+  // la seconda è esattamente al suo posto, quindi il ciclo si richiude
+  // senza stacco (stesso trucco del ticker in cima alla mappa, qui però
+  // basta il CSS: nessun rAF, nessun costo quando la vista è chiusa).
+  //
+  // Il nastro mostra un CAMPIONE (TICKER_MAX), non tutta l'edizione: ora
+  // che le notizie coprono tutti i paesi possono essere centinaia, e un
+  // giro completo diventerebbe lungo decine di minuti — nessuno lo
+  // vedrebbe mai per intero, in compenso il DOM peserebbe il doppio di
+  // quei nodi. L'archivio completo è sotto, nelle rubriche, con la
+  // ricerca per trovarci dentro. Il ticker NON è filtrato dalla ricerca:
+  // è la striscia "in diretta" del telegiornale e ricrearla ad ogni tasto
+  // riavvierebbe l'animazione.
   const allMessages = groups.flatMap(g => g.messages.map(m => ({ icon: g.icon, text: m })));
-  const strip = allMessages
+  const tickerMessages = allMessages.slice(0, TICKER_MAX);
+  const strip = tickerMessages
     .map(m => `<span class="wp-news-tick-item"><span class="wp-news-tick-icon">${m.icon}</span>${escapeHtml(m.text)}</span>`)
     .join('');
-  const tickerSeconds = Math.max(30, allMessages.length * 5);
+  const tickerSeconds = Math.max(30, tickerMessages.length * 5);
   const ticker = `
     <div class="wp-news-breaking">
       <div class="wp-news-breaking-label">${escapeHtml(nvT('breaking'))}</div>
@@ -133,19 +211,57 @@ function render({ groups, pending } = {}) {
       </div>
     </div>`;
 
-  // La prima notizia disponibile fa da apertura: titolo grande a piena
-  // larghezza, come il pezzo di spalla di una prima pagina.
-  const lead = allMessages[0]
+  rootEl.innerHTML = `
+    <div class="wp-news-paper">
+      ${masthead}
+      ${searchBar}
+      ${ticker}
+      <div class="wp-news-body" id="wp-news-body"></div>
+    </div>`;
+  bindRefresh();
+  bindSearch();
+  renderBody();
+}
+
+// Numero massimo di notizie nel nastro scorrevole — vedi il commento
+// sopra: campione, non archivio.
+const TICKER_MAX = 60;
+
+// Corpo dell'edizione (apertura + rubriche), l'unica parte che la ricerca
+// ridisegna. Testata, campo di ricerca e nastro restano dov'erano: così
+// l'animazione del ticker non riparte e il campo non perde il fuoco
+// mentre si scrive.
+function renderBody() {
+  const body = rootEl?.querySelector('#wp-news-body');
+  if (!body || !lastGroups) return;
+
+  const groups = filterGroups(lastGroups, query);
+  const shown = groups.reduce((sum, g) => sum + g.messages.length, 0);
+
+  const countEl = rootEl.querySelector('#wp-news-search-count');
+  if (countEl) countEl.textContent = query.trim() ? `${shown} ${nvT('results')} “${query.trim()}”` : '';
+
+  if (!shown) {
+    body.innerHTML = `<div class="wp-news-empty">${escapeHtml(nvT('noMatch'))} “${escapeHtml(query.trim())}”</div>`;
+    return;
+  }
+
+  const first = groups.find(g => g.messages.length);
+  const lead = first
     ? `<article class="wp-news-lead">
-         <div class="wp-news-lead-kicker">${allMessages[0].icon} ${escapeHtml(nvT(groups.find(g => g.messages.length)?.key || 'battles'))}</div>
-         <h2 class="wp-news-lead-title">${escapeHtml(allMessages[0].text)}</h2>
+         <div class="wp-news-lead-kicker">${first.icon} ${escapeHtml(nvT(first.key))}</div>
+         <h2 class="wp-news-lead-title">${escapeHtml(first.messages[0])}</h2>
        </article>`
     : '';
 
-  // Categorie vuote mostrate comunque (con la loro riga "nulla qui"): la
-  // lista di sezioni resta stabile fra un aggiornamento e l'altro, invece
-  // di veder sparire e riapparire blocchi interi.
-  const sections = groups.map(g => `
+  // Con la ricerca attiva le categorie senza risultati sparirebbero
+  // lasciando titoli a zero: si mostrano solo quelle che hanno qualcosa.
+  // Senza ricerca restano tutte (anche vuote, con la riga "nulla qui"),
+  // così l'indice della pagina non balla fra un aggiornamento e l'altro.
+  const filtering = !!query.trim();
+  const sections = groups
+    .filter(g => !filtering || g.messages.length)
+    .map(g => `
     <section class="wp-news-rubric">
       <h3 class="wp-news-rubric-title">
         <span class="wp-news-rubric-icon">${g.icon}</span>
@@ -157,14 +273,20 @@ function render({ groups, pending } = {}) {
         : `<div class="wp-news-group-empty">${escapeHtml(nvT('emptyCat'))}</div>`}
     </section>`).join('');
 
-  rootEl.innerHTML = `
-    <div class="wp-news-paper">
-      ${masthead}
-      ${ticker}
-      ${lead}
-      <div class="wp-news-columns">${sections}</div>
-    </div>`;
-  bindRefresh();
+  body.innerHTML = `${lead}<div class="wp-news-columns">${sections}</div>`;
+}
+
+function bindSearch() {
+  const input = rootEl?.querySelector('#wp-news-search-input');
+  if (!input) return;
+  input.addEventListener('input', () => { query = input.value; renderBody(); });
+  // Esc svuota il campo senza doverlo selezionare tutto a mano.
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && input.value) {
+      e.stopPropagation(); // altrimenti l'Esc chiuderebbe l'intero overlay
+      input.value = ''; query = ''; renderBody();
+    }
+  });
 }
 
 function bindRefresh() {

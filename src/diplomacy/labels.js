@@ -251,17 +251,35 @@ export function drawLabels() {
     return !(b2.xMin > b1.xMax || b2.xMax < b1.xMin || b2.yMin > b1.yMax || b2.yMax < b1.yMin);
   }
 
+  // WarEra+ (richiesta esplicita dell'utente, leggibilità della heatmap
+  // battaglia): in quella modalità si disegnano SOLO i nomi dei paesi
+  // evidenziati, cioè quelli che hanno davvero combattuto sopra la soglia
+  // dell'1% del proprio lato (insieme calcolato in battleHeatmap.js:
+  // computeHighlightedIds — stesso criterio con cui ricevono un colore,
+  // così nomi e colori non possono divergere). Gli altri, che sulla mappa
+  // sono grigio neutro, restavano etichettati come sempre: rumore puro, e
+  // per giunta rubavano lo spazio della collision-avoidance ai nomi che
+  // contano davvero, che sparivano. Se l'insieme non c'è (dati non ancora
+  // pronti) si mostrano tutti, come prima.
+  const heatmapIds = state.coloringMode === 'battleHeatmap'
+    ? state.battleHeatmapData?.highlightedIds
+    : null;
+
   sorted.forEach(label => {
     const props = label.properties;
     const coords = label.coordinates;
     if (!coords) return;
+    if (heatmapIds && !heatmapIds.has(props.countryId)) return;
     // era zoom < 3.3: le label nazione sparivano quasi sempre in modalita' blocs
     if (state.coloringMode === 'blocs' && zoom < 2.8) return;
     // Il cull per dimensione capitale allo zoom basso NON si applica in
     // popolazione/danni: lì la priorità è il valore (ordinamento per metrica)
     // e a diradare le etichette ci pensa la collision-avoidance — così una
     // nazione molto popolosa ma con capitale "piccola" non viene nascosta.
-    if (!metricMode) {
+    // Stessa eccezione anche per la heatmap battaglia: lì sono rimasti in
+    // gioco pochi paesi selezionati per merito (quota di danno), sarebbe
+    // assurdo nasconderne uno perché ha la capitale piccola.
+    if (!metricMode && !heatmapIds) {
       if (zoom < 2.5 && props.flagSize < 0.15) return;
       if (zoom < 3.5 && props.flagSize < 0.08) return;
     }

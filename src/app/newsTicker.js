@@ -95,22 +95,30 @@ function getTopPopulousNations(n = TOP_N) {
     .slice(0, n);
 }
 
-/* ── BATTAGLIE IN CORSO (nazioni più popolose) ──
+/* ── BATTAGLIE IN CORSO ──
    Separata in fetch (dati grezzi, nessuna traduzione) + format (testo
    tradotto): così un cambio lingua può ri-generare i messaggi dalla
-   cache senza rifare le chiamate di rete — vedi _rebuildMessages sotto. */
-async function fetchRelevantBattles(topIds) {
+   cache senza rifare le chiamate di rete — vedi _rebuildMessages sotto.
+
+   Si scaricano TUTTE le battaglie attive e il filtro "solo nazioni più
+   popolose" è spostato nel format: il ticker continua a mostrarne un
+   campione ristretto, la vista News (getNewsGroups) le vuole tutte —
+   richiesta esplicita dell'utente, "notizie per più paesi non solo i top
+   15". Nessun costo di rete in più: la fetch era già completa, prima si
+   buttava via il resto subito. */
+async function fetchAllActiveBattles() {
   try {
-    const battles = await fetchActiveBattles();
-    return (battles || []).filter(b => topIds.has(b.attacker?.country) || topIds.has(b.defender?.country));
+    return (await fetchActiveBattles()) || [];
   } catch (_) {
     return [];
   }
 }
 
-function formatBattleMessages(battles) {
+// topIds null/omesso = nessun filtro per nazione (tutte).
+function formatBattleMessages(battles, topIds = null) {
   const messages = [];
   battles.forEach(b => {
+    if (topIds && !topIds.has(b.attacker?.country) && !topIds.has(b.defender?.country)) return;
     const atk = state.nationMap.get(b.attacker?.country);
     const def = state.nationMap.get(b.defender?.country);
     if (!atk || !def) return;
@@ -251,17 +259,24 @@ function _withTime(msg, ts) {
   return time ? `${msg} (${time})` : msg;
 }
 
+// topIds null = tutte le nazioni (vedi nota su fetchAllActiveBattles).
+// Ordine cronologico inverso: con molti più paesi in gioco la notizia più
+// fresca deve stare in cima, altrimenti l'elenco è un mucchio senza capo.
 function formatWarMessages(events, topIds) {
   const nameOf = id => state.nationMap.get(id)?.name || id;
   return events
-    .filter(e => e.category === 'war' && topIds.has(e.countryId))
+    .filter(e => e.category === 'war' && (!topIds || topIds.has(e.countryId)))
+    .slice() // gli eventi arrivano condivisi: mai ordinare l'array del chiamante in place
+    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
     .map(e => _withTime(t('ticker_new_war', { a: nameOf(e.countryId), b: nameOf(e.enemyId) }), e.timestamp));
 }
 
 function formatSwornMessages(events, topIds) {
   const nameOf = id => state.nationMap.get(id)?.name || id;
   return events
-    .filter(e => (e.category === 'sworn_new' || e.category === 'sworn_removed') && topIds.has(e.countryId))
+    .filter(e => (e.category === 'sworn_new' || e.category === 'sworn_removed') && (!topIds || topIds.has(e.countryId)))
+    .slice()
+    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
     .map(e => _withTime(e.category === 'sworn_new'
       ? t('ticker_sworn_new', { a: nameOf(e.countryId), b: nameOf(e.enemyId) })
       : t('ticker_sworn_removed', { a: nameOf(e.countryId), b: nameOf(e.enemyId) }), e.timestamp));
@@ -406,28 +421,41 @@ function _aggregate(events, sinceTs) {
 }
 
 // Da un aggregato (server o fallback locale) ai messaggi tradotti. Qui —
-// non nell'aggregazione — si applicano i filtri di VISUALIZZAZIONE: solo le
-// nazioni più popolose, e solo variazioni di tesoro sopra la soglia di
-// rumore.
+// non nell'aggregazione — si applicano i filtri di VISUALIZZAZIONE: le
+// nazioni da mostrare (topIds null = tutte, vedi nota su
+// fetchAllActiveBattles) e la soglia di rumore sul tesoro.
+//
+// Ordinamento per grandezza decrescente: senza il filtro top-15 qui
+// finiscono anche centinaia di paesi, e l'ordine delle chiavi di un
+// oggetto non vuol dire niente per chi legge — le variazioni più grosse
+// devono venire prima. Popolazione e tesoro restano due liste separate
+// (grandezze non confrontabili: teste contro percentuali).
 function _emit(agg, topIds, nameOf, popKey, wealthKey) {
   if (!agg) return [];
   const messages = [];
-  for (const [countryId, delta] of Object.entries(agg.population || {})) {
-    if (!topIds.has(countryId) || !delta) continue;
-    messages.push(t(popKey, {
-      nation: nameOf(countryId),
-      sign: delta > 0 ? '+' : '−',
-      delta: fmtNumber(Math.abs(Math.round(delta))),
-    }));
-  }
-  for (const [countryId, pct] of Object.entries(agg.wealth || {})) {
-    if (!topIds.has(countryId) || Math.abs(pct) < MIN_TREASURY_PCT) continue;
-    messages.push(t(wealthKey, {
-      nation: nameOf(countryId),
-      sign: pct > 0 ? '+' : '−',
-      pct: Math.abs(pct).toFixed(1),
-    }));
-  }
+
+  Object.entries(agg.population || {})
+    .filter(([countryId, delta]) => delta && (!topIds || topIds.has(countryId)))
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+    .forEach(([countryId, delta]) => {
+      messages.push(t(popKey, {
+        nation: nameOf(countryId),
+        sign: delta > 0 ? '+' : '−',
+        delta: fmtNumber(Math.abs(Math.round(delta))),
+      }));
+    });
+
+  Object.entries(agg.wealth || {})
+    .filter(([countryId, pct]) => Math.abs(pct) >= MIN_TREASURY_PCT && (!topIds || topIds.has(countryId)))
+    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+    .forEach(([countryId, pct]) => {
+      messages.push(t(wealthKey, {
+        nation: nameOf(countryId),
+        sign: pct > 0 ? '+' : '−',
+        pct: Math.abs(pct).toFixed(1),
+      }));
+    });
+
   return messages;
 }
 
@@ -509,7 +537,7 @@ async function refreshNews() {
     const topIds = new Set(topNations.map(n => n._id));
 
     const [battles, electionsRaw, stats] = await Promise.all([
-      fetchRelevantBattles(topIds),
+      fetchAllActiveBattles(), // tutte; il ticker filtra in formattazione, la vista News no
       fetchElectionsRaw(state.nazioniGlobal), // TUTTE le nazioni
       fetchRecentStats(), // guerre/sworn/popolazione/tesoro, dal server di cache
     ]);
@@ -537,7 +565,7 @@ function _rebuildMessages() {
   if (!_lastRawData) return;
   const { topIds, battles, electionsRaw, stats } = _lastRawData;
 
-  const battleMsgsRaw = formatBattleMessages(battles);
+  const battleMsgsRaw = formatBattleMessages(battles, topIds);
   const electionMsgsRaw = formatElectionMessages(electionsRaw);
   const warMsgsRaw = formatWarMessages(stats.punctual, topIds);
   const swornMsgsRaw = formatSwornMessages(stats.punctual, topIds);
@@ -579,16 +607,23 @@ function _rebuildMessages() {
 
 // Chiavi stabili (non testi): la vista le traduce con il proprio
 // dizionario, così aggiungere una lingua non tocca questo file.
+//
+// `topIds` NON viene passato a nessuna delle format*: la vista News copre
+// TUTTI i paesi (richiesta esplicita dell'utente, "non solo i top 15"),
+// mentre il ticker sulla mappa resta un campione ristretto — è una barra
+// che scorre, non un archivio. Nessuna chiamata di rete in più: i dati
+// del server contengono già tutte le nazioni, il top-15 era solo un
+// filtro di visualizzazione.
 export function getNewsGroups() {
   if (!_lastRawData) return null;
-  const { topIds, battles, electionsRaw, stats } = _lastRawData;
+  const { battles, electionsRaw, stats } = _lastRawData;
   return [
     { key: 'battles', icon: '⚔️', messages: formatBattleMessages(battles) },
     { key: 'elections', icon: '🗳️', messages: formatElectionMessages(electionsRaw) },
-    { key: 'wars', icon: '💥', messages: formatWarMessages(stats.punctual, topIds) },
-    { key: 'sworn', icon: '🎯', messages: formatSwornMessages(stats.punctual, topIds) },
-    { key: 'stats24', icon: '📊', messages: formatStatsMessages(stats, topIds) },
-    { key: 'sinceVisit', icon: '👁️', messages: formatSinceVisitMessages(stats, topIds) },
+    { key: 'wars', icon: '💥', messages: formatWarMessages(stats.punctual, null) },
+    { key: 'sworn', icon: '🎯', messages: formatSwornMessages(stats.punctual, null) },
+    { key: 'stats24', icon: '📊', messages: formatStatsMessages(stats, null) },
+    { key: 'sinceVisit', icon: '👁️', messages: formatSinceVisitMessages(stats, null) },
   ];
 }
 

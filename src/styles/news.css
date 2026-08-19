@@ -92,6 +92,47 @@ body.light-theme .wp-news-colophon { color: #6b5637; }
 body.light-theme .wp-news-refresh:hover:not(:disabled) { color: #1a1208; border-color: #1a1208; }
 .wp-news-refresh:disabled { opacity: 0.5; cursor: progress; }
 
+/* ── Ricerca nell'edizione ─────────────────────────────────── */
+.wp-news-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 16px;
+  padding: 9px 13px;
+  border: 1px solid rgba(139, 148, 158, 0.4);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.03);
+}
+body.light-theme .wp-news-search {
+  border-color: rgba(120, 92, 56, 0.4);
+  background: rgba(255, 253, 247, 0.7);
+}
+.wp-news-search:focus-within { border-color: #b62324; }
+.wp-news-search-icon { flex-shrink: 0; opacity: 0.7; font-size: 13px; }
+.wp-news-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  /* 16px: sotto questa soglia iOS ingrandisce la pagina al focus. */
+  font-size: 16px;
+  outline: none;
+}
+.wp-news-search-input::placeholder { color: #8b949e; opacity: 0.9; }
+body.light-theme .wp-news-search-input::placeholder { color: #8a7758; }
+.wp-news-search-count {
+  flex-shrink: 0;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #8b949e;
+  white-space: nowrap;
+}
+body.light-theme .wp-news-search-count { color: #6b5637; }
+
 /* ── Fascia ULTIM'ORA (telegiornale) ───────────────────────── */
 .wp-news-breaking {
   display: flex;
@@ -251,4 +292,8 @@ body.light-theme .wp-news-paper { color: #1a1208; }
   .wp-news-columns { column-count: 1; column-rule: none; }
   .wp-news-colophon { font-size: 10.5px; gap: 6px; }
   .wp-news-breaking-label { padding: 8px 10px; font-size: 10.5px; letter-spacing: 1px; }
+  /* Il conteggio risultati va a capo sotto al campo invece di
+     comprimerlo: su schermo stretto lo spazio serve a scrivere. */
+  .wp-news-search { flex-wrap: wrap; }
+  .wp-news-search-count { width: 100%; text-align: right; }
 }
