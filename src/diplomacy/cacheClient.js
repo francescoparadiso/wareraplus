@@ -21,6 +21,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { WARERA_CACHE_BASE, WORKER_API_BASE } from './config.js';
+import { trpcBatch } from './utils.js'; // WarEra+: solo per il fallback di fetchPartiesDetailViaCache
 
 // Oltre questa età il dato in cache è considerato inaffidabile (server
 // bloccato/pm2 giù ma ancora raggiungibile via nginx con l'ultimo file
@@ -181,6 +182,107 @@ export async function fetchDiplomacyViaCache(countryIds) {
   return result;
 }
 
+// WarEra+: partiti — vedi server/warera-cache-server.js:pollParties.
+// Prima Political (src/political/api.js, path '/parties'/'/party') e il
+// grafico Parlamento (src/panel/parliamentChart.js) chiamavano il Worker
+// direttamente da OGNI browser. Fallback dentro queste funzioni (non al
+// chiamante, a differenza di fetchAlliancesViaCache/fetchDiplomacyViaCache
+// sopra) perché qui i punti di chiamata sono tre diversi file: centralizzare
+// qui evita di triplicare lo stesso try/catch in ognuno.
+
+/** party.getManyPaginated per una nazione — lista "leggera" (non il
+ *  dettaglio pieno di ogni partito), stessa forma che ci si aspetta da
+ *  ENDPOINT_MAP['/parties'] in political/api.js (json.items). */
+export async function fetchPartiesForCountryViaCache(countryId) {
+  try {
+    const json = await _fetchCacheJson(`/parties?countryId=${encodeURIComponent(countryId)}`);
+    if (!Array.isArray(json.data)) throw new Error('cache /parties: forma inattesa');
+    return json.data;
+  } catch (err) {
+    const url = `${WORKER_API_BASE}/trpc/party.getManyPaginated?input=${encodeURIComponent(JSON.stringify({ countryId, page: 1, limit: 100 }))}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = (await res.json())?.result?.data;
+    return Array.isArray(raw) ? raw : (raw?.items || raw?.docs || raw?.results || raw?.data || []);
+  }
+}
+
+/** party.getById in batch — stesso principio di fetchAlliancesViaCache
+ *  (il server tiene il dettaglio di TUTTI i partiti conosciuti, qui si
+ *  filtra sul sottoinsieme richiesto), ma ritorna una Map partyId->data
+ *  invece di un array: entrambi i chiamanti (political/api.js per un
+ *  singolo id, parliamentChart.js per un gruppo) vogliono un lookup per
+ *  id, non un elenco posizionale. */
+export async function fetchPartiesDetailViaCache(partyIds) {
+  try {
+    const json = await _fetchCacheJson('/parties-detail');
+    if (!Array.isArray(json.data)) throw new Error('cache /parties-detail: forma inattesa');
+    const byId = new Map(json.data.map(item => [item.partyId, item.data]));
+    const missing = partyIds.filter(id => !byId.has(id));
+    if (missing.length) throw new Error(`cache /parties-detail: ${missing.length} partiti mancanti`);
+    const result = new Map();
+    for (const id of partyIds) result.set(id, byId.get(id));
+    return result;
+  } catch (err) {
+    // Fallback: stessa chiamata batch diretta che c'era prima in ogni file.
+    const calls = partyIds.map(id => ['party.getById', { partyId: id }]);
+    const results = await trpcBatch(calls, { useWorker: true });
+    const result = new Map();
+    partyIds.forEach((id, i) => { if (results[i]) result.set(id, results[i]); });
+    return result;
+  }
+}
+
+// WarEra+: elezioni — vedi server/warera-cache-server.js:pollElections.
+// Stesso principio di parties sopra: la lista per nazione è "leggera"
+// (discovery), il dettaglio pieno (candidati/voti/votesStartAt/votesEndAt)
+// arriva separatamente. Un'elezione chiusa è immutabile e il server la
+// tiene per sempre — un'elezione ancora in candidatura/voto viene
+// rinfrescata dal server ogni ~3 minuti, che è la stessa cadenza a cui
+// erano già impostati TTL/poll di questo tool: sufficiente perché i
+// numeri restino vicini al valore reale in game senza inseguire il
+// secondo. Fallback diretto al Worker se il server di cache non risponde,
+// stesso schema di fetchPartiesForCountryViaCache/fetchPartiesDetailViaCache.
+
+/** election.getElections per una nazione — array grezzo (solo
+ *  _id/type/createdAt per item, il resto sta nel dettaglio), stessa forma
+ *  attesa da ENDPOINT_MAP['/elections'] in political/api.js (json.items). */
+export async function fetchElectionsForCountryViaCache(countryId) {
+  try {
+    const json = await _fetchCacheJson(`/elections?countryId=${encodeURIComponent(countryId)}`);
+    if (!Array.isArray(json.data)) throw new Error('cache /elections: forma inattesa');
+    return json.data;
+  } catch (err) {
+    const url = `${WORKER_API_BASE}/trpc/election.getElections?input=${encodeURIComponent(JSON.stringify({ countryId }))}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = (await res.json())?.result?.data;
+    return Array.isArray(raw) ? raw : (raw?.items || raw?.docs || raw?.results || raw?.data || []);
+  }
+}
+
+/** election.getElection — dettaglio pieno di una elezione (candidati,
+ *  votes{}, votesCount, votesStartAt/votesEndAt). Chiusa → dato permanente
+ *  dalla cache, mai una chiamata a WarEra. Candidatura/voto → l'ultimo dato
+ *  che il server ha, aggiornato da lui ogni ~3 minuti. Niente controllo di
+ *  staleness via _fetchCacheJson qui: un'elezione chiusa può restare ferma
+ *  per mesi nel file e sarebbe scartata come "scaduta" ad ogni richiesta
+ *  pur essendo valida per definizione (è immutabile) — uso quindi
+ *  _fetchCacheJsonRaw, col fallback diretto solo se il server non risponde
+ *  affatto (rete giù, non "dato vecchio"). */
+export async function fetchElectionDetailViaCache(electionId) {
+  try {
+    const json = await _fetchCacheJsonRaw(`/election/${encodeURIComponent(electionId)}`);
+    if (json.data) return json.data;
+    throw new Error('cache /election: non ancora disponibile'); // mai vista dal server, poll non ancora passato
+  } catch (err) {
+    const url = `${WORKER_API_BASE}/trpc/election.getElection?input=${encodeURIComponent(JSON.stringify({ electionId }))}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return (await res.json())?.result?.data ?? null;
+  }
+}
+
 // ══════════════════════════════════════════════════════════════
 // Endpoint SENZA equivalente diretto — calcolati sul server di cache
 // (storico ticker guerre/sworn enemy/popolazione/tesoro, storico ownership
@@ -339,5 +441,41 @@ export async function fetchRegionHistoryEventsViaCache(sinceTs, untilTs) {
     return json;
   } catch (err) {
     return _fallbackEvents(sinceTs, untilTs);
+  }
+}
+
+// WarEra+: "crediti" statici del tool (userId fisso) — vedi
+// server/warera-cache-server.js:pollCreditProfiles (poll ogni 6 ore, un
+// solo batch per tutti). Prima ognuno chiamava il Worker separatamente da
+// OGNI browser per lo stesso identico dato, per tutti uguale. Mappa
+// duplicata qui SOLO per il fallback diretto (se il server di cache non
+// risponde) — la fonte di verità resta CREDIT_PROFILES sul server.
+const CREDIT_PROFILE_USER_IDS = {
+  author: '69d2ed249f38d300d59a2af1', // frappa10 — pill principale (authorPill.js)
+  argus:  '69cc14d4efc3f3f4291e93a9', // ArgusIA — credito Ottimizzatore (eco/main.js)
+};
+
+async function _fallbackCreditProfile(userId) {
+  const url = `${WORKER_API_BASE}/trpc/user.getUserLite?input=${encodeURIComponent(JSON.stringify({ userId }))}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json())?.result?.data ?? null;
+}
+
+/** user.getUserLite per un "credito" statico del tool — `key` è una delle
+ *  chiavi in CREDIT_PROFILE_USER_IDS ('author', 'argus', ...). Ritorna
+ *  l'oggetto utente grezzo (già "srotolato", niente involucro
+ *  {result:{data:...}}), stessa forma che i chiamanti si aspettavano dalla
+ *  chiamata diretta che sostituisce. */
+export async function fetchCreditProfileViaCache(key) {
+  const userId = CREDIT_PROFILE_USER_IDS[key];
+  if (!userId) throw new Error(`credit profile sconosciuto: '${key}'`);
+  try {
+    const json = await _fetchCacheJson('/credit-profiles');
+    const data = json.data?.[key];
+    if (!data) throw new Error(`cache /credit-profiles: '${key}' assente`);
+    return data;
+  } catch (err) {
+    return _fallbackCreditProfile(userId);
   }
 }

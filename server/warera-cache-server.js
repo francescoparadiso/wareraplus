@@ -131,6 +131,15 @@ const API_BASE_URL = 'https://api6.warera.io';
 // più alto, 500/min invece di 100). Se in futuro cambia URL nel progetto,
 // va aggiornato anche qui.
 const WORKER_API_BASE = 'https://politicalview-proxy.fra-paradiso2.workers.dev';
+// WarEra+: "crediti" statici del tool (userId fisso, sempre lo stesso) —
+// prima ognuno faceva la sua chiamata separata al Worker da OGNI browser
+// (src/app/authorPill.js, src/eco/main.js:enrichCreditCard). Generalizzato
+// qui in un'unica mappa: aggiungere un futuro terzo credito significa solo
+// aggiungere una riga sotto, nessun'altra modifica al server.
+const CREDIT_PROFILES = {
+  author: '69d2ed249f38d300d59a2af1', // frappa10 — pill principale (Ko-fi)
+  argus:  '69cc14d4efc3f3f4291e93a9', // ArgusIA — credito Ottimizzatore industriale
+};
 
 app.use(cors({
   origin: '*' // TODO: restringere all'URL vero del tool una volta online
@@ -192,7 +201,12 @@ function writeCache(name, data, { compact = false } = {}) {
 // portata lato server: combina più chiamate in un solo POST/GET batch,
 // chunka automaticamente oltre 50, ritenta sui 429 con backoff esponenziale.
 // ---------------------------------------------------------------------------
-const MAX_BATCH = 50;
+// WarEra+: portato da 50 a 100 — dimezza il numero di richieste HTTP al
+// Worker per chunk (quindi meno probabilità di sbattere sui 500/min), il
+// payload resta comunque piccolo (countryId/partyId/electionId, poche decine
+// di byte a call). Se il Worker dovesse rifiutare batch così grandi (URL
+// troppo lunga, improbabile ma da tenere d'occhio nei log 429), tornare a 50.
+const MAX_BATCH = 100;
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_BASE_MS = 1200;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -328,6 +342,60 @@ async function pollAlliances() {
   } catch (err) { console.error('[poll] alliances fallito:', err.message); }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// PARTITI POLITICI (pollParties) — stesso principio di pollAlliances:
+// prima Political View (src/political/api.js) e il grafico Parlamento nel
+// pannello nazione (src/panel/parliamentChart.js) chiamavano
+// party.getManyPaginated/party.getById via Worker da OGNI browser, a ogni
+// apertura. Qui un solo giro condiviso: 1) lista partiti per nazione
+// (discovery, come election.getElections), 2) dettaglio pieno per ogni
+// partito scoperto (nome/leader/iscritti), in un solo batch per TUTTI i
+// partiti conosciuti — non uno per nazione.
+// ═══════════════════════════════════════════════════════════════════════
+async function pollParties() {
+  try {
+    const countriesCache = readCache('countries', null);
+    const countries = countriesCache?.data?.result?.data || countriesCache?.data || [];
+    if (!countries.length) { console.log('[poll] parties: nessuna nazione in cache ancora, salto'); return; }
+
+    // 1) lista per nazione — stesso dato che oggi Political scarica live
+    //    per ogni nazione visitata (party.getManyPaginated).
+    const listCalls = countries.map(n => ['party.getManyPaginated', { countryId: n._id, page: 1, limit: 100 }]);
+    const listResults = await trpcBatch(listCalls, { useWorker: true });
+
+    // WarEra+: stesso fix di pollElections — un chunk 429-ato ritorna `null`
+    // per ogni call al suo interno; senza questo fallback quelle nazioni
+    // perdevano i partiti già noti ad ogni giro sfortunato (byCountry
+    // riscritto per intero). Su fallimento si tiene il dato del giro precedente.
+    const prevByCountry = readCache('parties-by-country', { data: {} }).data || {};
+    const byCountry = {};
+    const allPartyIds = new Set();
+    countries.forEach((n, i) => {
+      const raw = listResults[i];
+      const items = Array.isArray(raw) ? raw : (raw?.items || raw?.docs || raw?.results || raw?.data || (raw == null ? (prevByCountry[n._id] || []) : []));
+      byCountry[n._id] = items;
+      items.forEach(p => { const id = p._id || p.id; if (id) allPartyIds.add(id); });
+    });
+    writeCache('parties-by-country', { fetchedAt: Date.now(), data: byCountry });
+
+    // 2) dettaglio pieno, un solo batch per tutti i partiti scoperti sopra
+    //    (party.getById) — trpcBatch chunka automaticamente oltre MAX_BATCH.
+    // WarEra+: idem, un chunk 429-ato non deve far sparire dal risultato
+    // finale i partiti di cui avevamo già il dettaglio da un giro precedente.
+    const prevDetail = readCache('parties-detail', { data: [] }).data || [];
+    const prevDetailById = new Map(prevDetail.map(p => [p.partyId, p.data]));
+    const ids = [...allPartyIds];
+    const detailCalls = ids.map(id => ['party.getById', { partyId: id }]);
+    const detailResults = ids.length ? await trpcBatch(detailCalls, { useWorker: true }) : [];
+    const parties = ids
+      .map((id, i) => ({ partyId: id, data: detailResults[i] || prevDetailById.get(id) }))
+      .filter(p => p.data);
+    writeCache('parties-detail', { fetchedAt: Date.now(), data: parties });
+
+    console.log(`[poll] parties aggiornato (${countries.length} nazioni, ${parties.length}/${ids.length} partiti)`);
+  } catch (err) { console.error('[poll] parties fallito:', err.message); }
+}
+
 // Diplomazia (sworn enemy + patti difensivi) per ogni nazione. WarEra+: ora
 // alimenta ANCHE il ticker server-side (vedi pollTickerEvents sotto),
 // chiamata subito dopo aver scritto la cache — stesso identico dato, un
@@ -373,8 +441,44 @@ async function pollBattles() {
   } catch (err) { console.error('[poll] battles fallito:', err.message); }
 }
 
-// Ticker storico: elezioni per ogni nazione, append-only (accumula storia
-// più profonda di quella che il browser potrebbe mai tenere in cache)
+// ═══════════════════════════════════════════════════════════════════════
+// ELEZIONI (pollElections) — stessa idea di pollParties: la lista per
+// nazione (discovery) va sempre riscritta, il DETTAGLIO di ogni elezione
+// invece si scarica una volta sola se è chiusa (immutabile per sempre),
+// e si ricontrolla ad ogni giro finché non lo è (candidatura o voto
+// ancora in corso). File-per-elezione (cache/elections/<id>.json) invece
+// di un unico blob: una volta scritta con resolved:true, un'elezione
+// chiusa non viene MAI PIÙ riletta/riscritta — a differenza di
+// ticker-history.json (che invece va riscritto per intero ad ogni giro,
+// da cui il `compact:true` lì), qui non c'è nessun motivo di toccare un
+// file già scritto e definitivo.
+//
+// `votesStartAt`/`votesEndAt`/`votesCount`/`votes{userId:count}` sono i
+// nomi di campo confermati sul dettaglio (election.getElection) — li usa
+// già il client (src/political/congress.js, src/political/presidential.js).
+// Compaiono SOLO nel dettaglio, non nella lista (election.getElections dà
+// solo _id/type/createdAt) — da cui la necessità di aprire il dettaglio
+// per sapere se un'elezione è risolta o no.
+// ═══════════════════════════════════════════════════════════════════════
+const ELECTIONS_DIR = path.join(CACHE_DIR, 'elections');
+if (!fs.existsSync(ELECTIONS_DIR)) fs.mkdirSync(ELECTIONS_DIR);
+
+function readElectionDetail(electionId) {
+  const file = path.join(ELECTIONS_DIR, `${electionId}.json`);
+  if (!fs.existsSync(file)) return null;
+  try { return JSON.parse(fs.readFileSync(file, 'utf-8')); }
+  catch (err) { console.error(`Errore leggendo election ${electionId}:`, err.message); return null; }
+}
+
+function writeElectionDetail(electionId, payload) {
+  fs.writeFileSync(path.join(ELECTIONS_DIR, `${electionId}.json`), JSON.stringify(payload));
+}
+
+function isElectionResolved(electionData) {
+  const endTs = Date.parse(electionData?.votesEndAt || 0);
+  return Number.isFinite(endTs) && endTs < Date.now();
+}
+
 async function pollElections() {
   try {
     const countriesCache = readCache('countries', null);
@@ -384,28 +488,99 @@ async function pollElections() {
     const calls = countries.map(n => ['election.getElections', { countryId: n._id }]);
     const results = await trpcBatch(calls, { useWorker: true });
 
+    // ── ticker (invariato) ──
     const storico = readCache('ticker-history', []);
     const idEsistenti = new Set(storico.map(e => e.id));
-    const nuovi = [];
+    const nuoviTicker = [];
+
+    // ── lista completa per nazione, sempre riscritta (compatta: solo gli
+    //    item grezzi della lista, non il dettaglio pesante con candidati/voti) ──
+    // WarEra+: fix bug segnalato — trpcBatch chunka a MAX_BATCH e, se un
+    // chunk prende 429 e supera i retry, ritorna `null` per OGNI call di
+    // quel chunk (silenzioso, solo un warn). Prima si scriveva `[]` per quelle
+    // nazioni, cancellando anche i dati buoni del giro precedente (byCountry
+    // viene scritto per intero ogni volta). Ora su fallimento si tiene il
+    // dato precedente invece di azzerarlo — un chunk rate-limitato lascia le
+    // nazioni coinvolte "ferme all'ultimo giro buono" invece che vuote.
+    const prevByCountry = readCache('elections-by-country', { data: {} }).data || {};
+    const byCountry = {};
+
+    // ── quali electionId serve dettagliare in questo giro: non le ho mai
+    //    scaricate, O l'ultima volta non erano ancora risolte ──
+    const needsDetail = []; // [{electionId, countryId}]
+
     countries.forEach((n, i) => {
-      const items = Array.isArray(results[i]) ? results[i] : [];
+      // WarEra+: fix bug reale trovato in produzione — election.getElections
+      // via batch NON torna un array nudo, torna { items: [...] } (come
+      // party.getManyPaginated, vedi pollParties sopra). `Array.isArray(raw)`
+      // da solo era SEMPRE false → ogni nazione, ogni giro, finiva nel ramo
+      // di fallback, a prescindere da 429/errori (i log erano puliti perché
+      // non falliva nulla, scartava silenziosamente un oggetto valido).
+      // Stesso pattern di unwrap di pollParties; `raw == null` resta l'unico
+      // caso che tiene il dato del giro precedente (fallimento batch vero).
+      const raw = results[i];
+      const items = Array.isArray(raw) ? raw : (raw?.items || raw?.docs || raw?.results || raw?.data || (raw == null ? (prevByCountry[n._id] || []) : []));
+      byCountry[n._id] = items;
+
       items.forEach(item => {
         const id = item.id || item._id || `${n._id}-${item.startedAt || item.createdAt}`;
-        if (idEsistenti.has(id)) return;
-        nuovi.push({
-          id,
-          category: 'election', // vedi nota in testa al file: retrocompatibile con le voci vecchie senza questo campo
-          timestamp: item.startedAt || item.createdAt || Date.now(),
-          countryId: n._id,
-          raw: item,
-        });
+
+        if (!idEsistenti.has(id)) {
+          nuoviTicker.push({
+            id, category: 'election', // retrocompatibile: voci vecchie senza `category` restano implicitamente elezioni
+            timestamp: item.startedAt || item.createdAt || Date.now(),
+            countryId: n._id, raw: item,
+          });
+        }
+
+        const existing = readElectionDetail(id);
+        if (!existing || !existing.resolved) needsDetail.push({ electionId: id, countryId: n._id });
       });
     });
 
-    const aggiornato = trimTickerHistory([...storico, ...nuovi]);
-    writeCache('ticker-history', aggiornato, { compact: true });
-    console.log(`[poll] elections/ticker aggiornato (+${nuovi.length})`);
+    writeCache('elections-by-country', { fetchedAt: Date.now(), data: byCountry });
+
+    const aggiornatoTicker = trimTickerHistory([...storico, ...nuoviTicker]);
+    writeCache('ticker-history', aggiornatoTicker, { compact: true });
+    console.log(`[poll] elections/ticker aggiornato (+${nuoviTicker.length} nuove, ${needsDetail.length} dettagli da (ri)scaricare)`);
+
+    // ── dettaglio: batch separato, solo per candidatura/voto ancora aperti
+    //    o mai scaricati — le elezioni già chiuse non arrivano mai qui ──
+    if (needsDetail.length) {
+      const detailCalls = needsDetail.map(({ electionId }) => ['election.getElection', { electionId }]);
+      const detailResults = await trpcBatch(detailCalls, { useWorker: true });
+      let scaricate = 0, risolteOra = 0;
+      needsDetail.forEach(({ electionId }, i) => {
+        const data = detailResults[i];
+        if (!data) return; // fallita, il prossimo giro ritenta (resta come prima o assente)
+        const resolved = isElectionResolved(data);
+        writeElectionDetail(electionId, { fetchedAt: Date.now(), resolved, data });
+        scaricate++;
+        if (resolved) risolteOra++;
+      });
+      console.log(`[poll] election detail: ${scaricate}/${needsDetail.length} scaricate (${risolteOra} appena risolte, non più toccate d'ora in poi)`);
+    }
   } catch (err) { console.error('[poll] elections fallito:', err.message); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CREDITI STATICI DEL TOOL (pollCreditProfiles) — un solo poll ogni 6 ore
+// per TUTTI i profili in CREDIT_PROFILES, in un'unica chiamata batch
+// (stesso principio di pollAlliances/pollDiplomacy: una fetch per N id,
+// non N fetch separate). Ognuno cambia di rado (nome/avatar), ma prima
+// veniva richiesto al Worker da OGNI browser che apriva la relativa
+// sezione del tool (pill principale, credito Ottimizzatore).
+// ═══════════════════════════════════════════════════════════════════════
+async function pollCreditProfiles() {
+  try {
+    const keys = Object.keys(CREDIT_PROFILES);
+    const calls = keys.map(k => ['user.getUserLite', { userId: CREDIT_PROFILES[k] }]);
+    const results = await trpcBatch(calls, { useWorker: true });
+    const data = {};
+    keys.forEach((k, i) => { if (results[i]) data[k] = results[i]; });
+    writeCache('credit-profiles', { fetchedAt: Date.now(), data });
+    console.log(`[poll] credit profiles aggiornato (${Object.keys(data).length}/${keys.length})`);
+  } catch (err) { console.error('[poll] credit profiles fallito:', err.message); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -948,9 +1123,10 @@ cron.schedule('0,10,20,30,40,50 * * * *', pollCountries);              // ogni 1
 cron.schedule('5,20,35,50 * * * *', pollMap);                          // ogni 15 min, :05
 cron.schedule('15 * * * *', pollRegionsObject);                        // ogni ora, :15 (alimenta anche la region-history)
 cron.schedule('3,13,23,33,43,53 * * * *', pollAlliances);              // ogni 10 min, :03
+cron.schedule('11,21,31,41,51 * * * *', pollParties);                  // ogni 10 min, :11
 cron.schedule('8,23,38,53 * * * *', pollDiplomacy);                    // ogni 15 min, :08 (alimenta anche il ticker stats)
 cron.schedule('1,4,7,10,13,16,19,22,25,28,31,34,37,40,43,46,49,52,55,58 * * * *', pollBattles); // ogni 3 min, :01
-cron.schedule('2,7,12,17,22,27,32,37,42,47,52,57 * * * *', pollElections); // ogni 5 min, :02
+cron.schedule('2,5,8,11,14,17,20,23,26,29,32,35,38,41,44,47,50,53,56,59 * * * *', pollElections); // ogni 3 min, :02
 cron.schedule('9,24,39,54 * * * *', pollGameEvents);                  // ogni 15 min, :09 (nota 6)
 // Bootstrap storico — DISATTIVATO (round 4): troppo lento (1 pagina/min,
 // poteva metterci ore/giorni) e comunque reso ridondante da
@@ -964,6 +1140,7 @@ cron.schedule('9,24,39,54 * * * *', pollGameEvents);                  // ogni 15
 // così il "ponte" filtra eventi propri già scritti in quel giro, ma non è
 // un requisito stretto (i due giri non si sovrappongono mai per orario).
 cron.schedule('25 * * * *', pollExternalHistory);
+cron.schedule('18 */6 * * *', pollCreditProfiles);          // ogni 6 ore, :18
 
 // Primo giro completo all'avvio (in ordine: countries prima, perché tutto
 // il resto dipende dalla cache delle nazioni), così non si parte a vuoto.
@@ -972,12 +1149,14 @@ cron.schedule('25 * * * *', pollExternalHistory);
   await pollMap();
   await pollRegionsObject();
   await pollAlliances();
+  await pollParties();
   await pollDiplomacy();
   await pollBattles();
   await pollElections();
   await pollGameEvents();
   // await pollBootstrapPage(); // disattivato, vedi nota sopra al cron.schedule commentato
   await pollExternalHistory(); // sync subito con spywarera invece di aspettare fino a 1h
+  await pollCreditProfiles();
 })();
 
 // ---------------------------------------------------------------------------
@@ -987,6 +1166,29 @@ app.get('/countries', (req, res) => res.json(readCache('countries', { fetchedAt:
 app.get('/map', (req, res) => res.json(readCache('map', { fetchedAt: null, data: [] })));
 app.get('/regions', (req, res) => res.json(readCache('regions', { fetchedAt: null, data: [] })));
 app.get('/alliances', (req, res) => res.json(readCache('alliances', { fetchedAt: null, data: [] })));
+
+app.get('/parties', (req, res) => {
+  const { countryId } = req.query;
+  const cache = readCache('parties-by-country', { fetchedAt: null, data: {} });
+  const list = countryId ? (cache.data[countryId] || []) : [];
+  res.json({ fetchedAt: cache.fetchedAt, data: list });
+});
+
+app.get('/parties-detail', (req, res) => res.json(readCache('parties-detail', { fetchedAt: null, data: [] })));
+
+app.get('/elections', (req, res) => {
+  const { countryId } = req.query;
+  const cache = readCache('elections-by-country', { fetchedAt: null, data: {} });
+  const list = countryId ? (cache.data[countryId] || []) : [];
+  res.json({ fetchedAt: cache.fetchedAt, data: list });
+});
+
+app.get('/election/:id', (req, res) => {
+  const detail = readElectionDetail(req.params.id);
+  if (!detail) return res.json({ fetchedAt: null, resolved: false, data: null });
+  res.json(detail);
+});
+
 app.get('/diplomacy', (req, res) => res.json(readCache('diplomacy', { fetchedAt: null, data: [] })));
 app.get('/battles', (req, res) => res.json(readCache('battles', { fetchedAt: null, data: [] })));
 app.get('/battle-regions', (req, res) => res.json(readCache('battle-regions', { fetchedAt: null, data: [] })));
@@ -1119,6 +1321,8 @@ app.get('/region-history/external-status', (req, res) => {
     fetchedAt: null, generatedAt: null, externalEventsCount: 0, externalLastTs: null, bridgeEventsCount: 0,
   }));
 });
+
+app.get('/credit-profiles', (req, res) => res.json(readCache('credit-profiles', { fetchedAt: null, data: {} })));
 
 app.get('/health', (req, res) => res.json({ status: 'ok', now: Date.now() }));
 

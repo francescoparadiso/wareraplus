@@ -22,7 +22,7 @@
 import '../styles/eco.css';
 import { getLang } from '../shared/i18n.js';
 import { trackEvent } from '../shared/analytics.js';
-import { WORKER_API_BASE } from '../diplomacy/config.js';
+import { fetchCreditProfileViaCache } from '../diplomacy/cacheClient.js';
 
 import { loadGameData, EcoProxyUnavailableError, ecoCall } from './api.js';
 import { makeGameData } from './gameData.js';
@@ -476,10 +476,13 @@ function buildCreditCard() {
 async function enrichCreditCard(metaEl) {
   if (!metaEl) return;
   try {
-    const url = `${WORKER_API_BASE}/trpc/user.getUserLite?input=${encodeURIComponent(JSON.stringify({ userId: AUTHOR.userId }))}`;
-    const res = await fetch(url);
-    if (!res.ok) return;
-    const data = (await res.json())?.result?.data;
+    // WarEra+: passa dal server di cache Oracle (fetchCreditProfileViaCache
+    // 'argus', vedi cacheClient.js e server/warera-cache-server.js:
+    // pollCreditProfiles) invece di chiamare il Worker direttamente da
+    // OGNI browser che apre l'Ottimizzatore — stesso identico dato
+    // statico, prima richiesto uno per utente. Ricade comunque sulla
+    // chiamata diretta se la cache non risponde, nessuna regressione.
+    const data = await fetchCreditProfileViaCache('argus');
     if (!data) return;
     // Foto profilo reale di ArgusIA (prima c'era solo l'iniziale "A").
     if (data.avatarUrl) {

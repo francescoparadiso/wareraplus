@@ -25,6 +25,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { trpcBatch, hashColor, escapeHtml } from '../diplomacy/utils.js';
+import { fetchPartiesDetailViaCache, fetchElectionsForCountryViaCache, fetchElectionDetailViaCache } from '../diplomacy/cacheClient.js';
 import { t } from '../shared/i18n.js';
 
 // Cache leggera per country: evita di rifare tutte le fetch se l'utente
@@ -63,30 +64,30 @@ function _unwrapList(res) {
    seggi) può completarsi per TUTTE le nazioni del blocco prima di avviare
    la fase 2 (avatar), riducendo il picco di richieste simultanee. */
 async function fetchParliamentSeatsData(countryId) {
-  // 1) elezioni del paese → individua l'ultimo congresso
-  const [electionsRes] = await trpcBatch([['election.getElections', { countryId }]], { useWorker: true });
-  const elections = _unwrapList(electionsRes)
+  // 1) elezioni del paese → individua l'ultimo congresso.
+  // WarEra+: dalla cache Oracle (server/warera-cache-server.js:pollElections)
+  // invece che dal Worker — vedi cacheClient.js.
+  const electionsRaw = await fetchElectionsForCountryViaCache(countryId).catch(() => []);
+  const elections = _unwrapList(electionsRaw)
     .filter(e => e.type === 'congress')
     .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   const latestCongress = elections[elections.length - 1];
 
-  // 2) dettaglio ultimo congresso + governo, in un'unica chiamata batch
-  const calls = [];
-  if (latestCongress) calls.push(['election.getElection', { electionId: latestCongress._id }]);
-  calls.push(['government.getByCountryId', { countryId }]);
-  const results = await trpcBatch(calls, { useWorker: true });
-  const electionDetail = latestCongress ? results[0] : null;
-  const gov = latestCongress ? results[1] : results[0];
+  // 2) dettaglio ultimo congresso (cache Oracle) + governo (resta su
+  //    trpcBatch/Worker: nessun equivalente cache per government.getByCountryId
+  //    in questo progetto)
+  const [electionDetail, [gov]] = await Promise.all([
+    latestCongress ? fetchElectionDetailViaCache(latestCongress._id).catch(() => null) : Promise.resolve(null),
+    trpcBatch([['government.getByCountryId', { countryId }]], { useWorker: true }),
+  ]);
 
   const candidates = (electionDetail?.candidates || []).filter(c => c.isElected);
 
-  // 3) SOLO nomi partito (batch, id unici) — gli utenti arrivano in fase 2
+  // 3) SOLO nomi partito (batch, id unici) — gli utenti arrivano in fase 2.
+  // WarEra+: dalla cache Oracle (server/warera-cache-server.js:pollParties)
+  // invece che dal Worker direttamente — vedi cacheClient.js.
   const partyIds = [...new Set(candidates.map(c => c.party || c.partyId).filter(Boolean))];
-  const partyResults = partyIds.length
-    ? await trpcBatch(partyIds.map(id => ['party.getById', { partyId: id }]), { useWorker: true })
-    : [];
-  const partyMap = new Map();
-  partyIds.forEach((id, i) => { if (partyResults[i]) partyMap.set(id, partyResults[i]); });
+  const partyMap = partyIds.length ? await fetchPartiesDetailViaCache(partyIds) : new Map();
 
   const seats = candidates.map(c => {
     const partyId = c.party || c.partyId || 'unknown';
@@ -174,9 +175,13 @@ export async function fetchGroupSeatsData(countryIds) {
   const idsToFetch = countryIds.filter(id => !_cacheSeats.has(id));
   if (!idsToFetch.length) return;
 
-  // 1) elezioni di TUTTE le nazioni del gruppo in un'unica richiesta batch
-  const electionsCalls = idsToFetch.map(id => ['election.getElections', { countryId: id }]);
-  const electionsResults = await trpcBatch(electionsCalls, { useWorker: true });
+  // 1) elezioni di TUTTE le nazioni del gruppo — dalla cache Oracle, una
+  //    fetch per nazione ma verso il server di cache (non il Worker),
+  //    quindi nessun rischio 429: vedi cacheClient.js/
+  //    server/warera-cache-server.js:pollElections.
+  const electionsResults = await Promise.all(
+    idsToFetch.map(id => fetchElectionsForCountryViaCache(id).catch(() => []))
+  );
 
   const latestCongressByCountry = new Map(); // countryId -> election | null
   idsToFetch.forEach((id, i) => {
@@ -186,27 +191,19 @@ export async function fetchGroupSeatsData(countryIds) {
     latestCongressByCountry.set(id, elections[elections.length - 1] || null);
   });
 
-  // 2) dettaglio elezione + governo di TUTTE le nazioni in un'unica
-  //    richiesta batch (chunk automatico oltre 50 procs, gestito da trpcBatch)
-  const detailCalls = [];
-  const detailCallMeta = [];
-  idsToFetch.forEach(id => {
-    const latest = latestCongressByCountry.get(id);
-    if (latest) {
-      detailCalls.push(['election.getElection', { electionId: latest._id }]);
-      detailCallMeta.push({ countryId: id, type: 'election' });
-    }
-    detailCalls.push(['government.getByCountryId', { countryId: id }]);
-    detailCallMeta.push({ countryId: id, type: 'gov' });
-  });
-  const detailResults = detailCalls.length ? await trpcBatch(detailCalls, { useWorker: true }) : [];
+  // 2) dettaglio elezione (cache Oracle, per nazione) + governo di TUTTE
+  //    le nazioni in un'unica richiesta batch (government.getByCountryId
+  //    resta su trpcBatch/Worker: nessun equivalente cache in questo progetto)
+  const idsWithElection = idsToFetch.filter(id => latestCongressByCountry.get(id));
+  const [electionDetails, govResults] = await Promise.all([
+    Promise.all(idsWithElection.map(id => fetchElectionDetailViaCache(latestCongressByCountry.get(id)._id).catch(() => null))),
+    trpcBatch(idsToFetch.map(id => ['government.getByCountryId', { countryId: id }]), { useWorker: true }),
+  ]);
 
   const electionDetailByCountry = new Map();
+  idsWithElection.forEach((id, i) => electionDetailByCountry.set(id, electionDetails[i]));
   const govByCountry = new Map();
-  detailCallMeta.forEach((meta, i) => {
-    if (meta.type === 'election') electionDetailByCountry.set(meta.countryId, detailResults[i]);
-    else govByCountry.set(meta.countryId, detailResults[i]);
-  });
+  idsToFetch.forEach((id, i) => govByCountry.set(id, govResults[i]));
 
   // 3) candidati eletti per nazione + party id UNICI su tutto il gruppo,
   //    in un'unica richiesta batch
@@ -219,12 +216,9 @@ export async function fetchGroupSeatsData(countryIds) {
     candidates.forEach(c => { const p = c.party || c.partyId; if (p) allPartyIds.add(p); });
   });
 
+  // WarEra+: dalla cache Oracle invece che dal Worker — vedi cacheClient.js.
   const partyIdsArr = [...allPartyIds];
-  const partyResults = partyIdsArr.length
-    ? await trpcBatch(partyIdsArr.map(id => ['party.getById', { partyId: id }]), { useWorker: true })
-    : [];
-  const partyMap = new Map();
-  partyIdsArr.forEach((id, i) => { if (partyResults[i]) partyMap.set(id, partyResults[i]); });
+  const partyMap = partyIdsArr.length ? await fetchPartiesDetailViaCache(partyIdsArr) : new Map();
 
   // 4) costruisce e salva in cache il risultato per OGNI nazione del gruppo
   const govRoleKeys = ['president', 'vicePresident', 'minOfDefense', 'minOfEconomy', 'minOfForeignAffairs'];

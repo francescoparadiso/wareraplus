@@ -65,6 +65,18 @@ export async function trpcBatch(calls, { useWorker = false, _attempt = 1 } = {})
       showRateLimitTooltip('trpc-batch');
       return calls.map(() => null);
     }
+    // WarEra+: 404 qui è quasi sempre una entità sparita lato WarEra (es.
+    // party.getById su un partito sciolto/cancellato dopo l'elezione a cui
+    // apparteneva un candidato) — non un fallimento di rete/cache. Prima
+    // finiva nel ramo generico sotto (`throw` → catch → console.error con
+    // stack completo), rumoroso in console per un caso già gestito
+    // correttamente a valle (i chiamanti trattano `null` come "non
+    // disponibile" e degradano senza rompersi). Log silenzioso, stesso
+    // comportamento di ritorno (null per ogni call del batch).
+    if (res.status === 404) {
+      console.debug(`trpcBatch: 404 (entità non trovata, es. partito/elezione rimossa) su ${procedureNames}`);
+      return calls.map(() => null);
+    }
     if (!res.ok) throw new Error(`Batch HTTP ${res.status}`);
 
     const results = await res.json();

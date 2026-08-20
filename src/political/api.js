@@ -25,6 +25,7 @@
 import { trpcCall, cacheKey, cacheGet, cacheSet } from '../shared/trpcClient.js';
 import { CACHE_TTL_SHORT, CACHE_TTL_LONG, csvColorMap } from './config.js';
 import { showLoading, hideLoading } from './loading.js';
+import { fetchPartiesForCountryViaCache, fetchPartiesDetailViaCache, fetchElectionsForCountryViaCache, fetchElectionDetailViaCache } from '../diplomacy/cacheClient.js';
 
 const CACHE_NAMESPACE = 'pol';
 
@@ -32,8 +33,8 @@ const CACHE_NAMESPACE = 'pol';
    Copiata invariata da public/political/api.js. */
 const ENDPOINT_MAP = {
   '/countries':  { proc: 'country.getAllCountries',        params: () => ({}) },
-  '/party':      { proc: 'party.getById',                  params: p => ({ partyId: p.id }) },
-  '/parties':    { proc: 'party.getManyPaginated',          params: p => ({ countryId: p.countryId, page: p.page || 1, limit: p.limit || 100 }) },
+  '/party':      { proc: 'party.getById',                  params: p => ({ partyId: p.id }) }, // WarEra+: bypassato in _localFetchImpl, vedi sotto — lasciato solo come riferimento
+  '/parties':    { proc: 'party.getManyPaginated',          params: p => ({ countryId: p.countryId, page: p.page || 1, limit: p.limit || 100 }) }, // idem
   '/user':       { proc: 'user.getUserLite',                params: p => ({ userId: p.id }) },
   '/election':   { proc: 'election.getElection',            params: p => ({ electionId: p.id }) },
   '/elections':  { proc: 'election.getElections',            params: p => ({ countryId: p.countryId }) },
@@ -63,11 +64,28 @@ async function _localFetchImpl(path, params, { useCache, ttl }) {
   }
 
   const cleanPath = '/' + path.replace('/api/', '').replace(/^\//, '');
-  const mapping = ENDPOINT_MAP[cleanPath];
-  if (!mapping) throw new Error(`Nessuna mappatura tRPC per l'endpoint ${cleanPath}`);
 
-  const trpcParams = mapping.params(params);
-  let json = await trpcCall(mapping.proc, trpcParams, { useWorker: true });
+  // WarEra+: partiti ed elezioni serviti dalla cache Oracle invece che dal
+  // Worker — vedi server/warera-cache-server.js:pollParties/pollElections
+  // e cacheClient.js. Bypassa ENDPOINT_MAP/trpcCall SOLO per questi
+  // quattro path, tutto il resto della funzione (normalizzazione items,
+  // cache locale, TTL) invariato.
+  let json;
+  if (cleanPath === '/parties') {
+    json = { items: await fetchPartiesForCountryViaCache(params.countryId) };
+  } else if (cleanPath === '/party') {
+    const detailMap = await fetchPartiesDetailViaCache([params.id]);
+    json = detailMap.get(params.id) || null;
+  } else if (cleanPath === '/elections') {
+    json = { items: await fetchElectionsForCountryViaCache(params.countryId) };
+  } else if (cleanPath === '/election') {
+    json = await fetchElectionDetailViaCache(params.id);
+  } else {
+    const mapping = ENDPOINT_MAP[cleanPath];
+    if (!mapping) throw new Error(`Nessuna mappatura tRPC per l'endpoint ${cleanPath}`);
+    const trpcParams = mapping.params(params);
+    json = await trpcCall(mapping.proc, trpcParams, { useWorker: true });
+  }
 
   if (Array.isArray(json)) json = { items: json };
   if (json && !json.items) {
