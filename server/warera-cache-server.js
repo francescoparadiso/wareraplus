@@ -522,20 +522,195 @@ function leanMu(m) {
 // ogni 30 minuti, fuori discussione.
 //
 // La nazione di un utente però cambia raramente: si tiene quindi una mappa
-// PERSISTENTE userId → [countryId, quando l'abbiamo chiesto]
-// (mu-user-countries.json) e ad ogni giro si risolvono solo gli id
-// sconosciuti o più vecchi di MU_USER_TTL_MS, al massimo
-// MU_USER_LOOKUP_BUDGET per volta. Primo riempimento: ~8 giri (4 ore) a
-// ~8,5 MB l'uno, poi a regime restano solo i membri nuovi — poche decine.
-// Finché la mappa è incompleta la composizione esce parziale, non
-// sbagliata: si riporta anche `known` (quanti membri sono stati risolti)
-// così il client sa quanto pesa il dato.
+// PERSISTENTE userId → [countryId, quando l'abbiamo chiesto, stile di gioco,
+// ultimo reset skill noto] (mu-user-countries.json).
+//
+// Lo STILE DI GIOCO ('w' guerra / 'e' economia / 'm' misto / 'u' nessun
+// punto speso) esce dalla STESSA risposta user.getUserLite già scaricata per
+// la nazione: vedi classifyPlaystyle. Non costa quindi una sola chiamata in
+// più — è il motivo per cui sta qui dentro e non in un poll suo.
+//
+// QUANDO ricontrollare un utente — non un TTL fisso, ma il regolamento vero
+// del gioco (verificato dal vivo: gameConfig.getGameConfig().user.
+// resetSkillDaysCooldown = 7): chi ha resettato le skill meno di 7 giorni fa
+// NON PUÒ averle ricambiate, è una certezza del gioco, non una stima —
+// va saltato del tutto finché il cooldown non scade (BLOCCATO). Chi invece
+// può aver cambiato (mai resettato, o cooldown scaduto) non ha nessuna
+// scadenza nota da sfruttare: bisogna ricontrollarlo, ma non tutti insieme
+// in un solo giro — il pool "libero" è tipicamente il 60-70% dei membri
+// (misurato dal vivo: 65,7% su un campione di 300), scaricarlo intero
+// farebbe un picco invece di un flusso. Si ricontrolla quindi a fette,
+// i più in ritardo prima (`windowShare` più sotto), completando il giro
+// del pool ogni REFRESH_WINDOW_MS.
+//
+// Ancora incompleta, la composizione esce parziale, non sbagliata: si
+// riporta anche `known` (quanti membri sono stati risolti) così il client
+// sa quanto pesa il dato.
 //
 // La mappa viene potata ad ogni giro ai soli utenti che sono membri di
 // qualche MU adesso: senza potatura crescerebbe per sempre.
 const MU_USER_COUNTRIES_FILE = 'mu-user-countries';
-const MU_USER_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 giorni
-const MU_USER_LOOKUP_BUDGET = 2000;              // ~8,5 MB per giro
+const RESET_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;   // gameConfig.user.resetSkillDaysCooldown
+// Ogni utente "libero" (mai resettato, o oltre il cooldown) viene
+// ricontrollato entro questa finestra. Due ore, non un giorno: quello che
+// interessa non è il singolo utente — che per regolamento può cambiare al
+// massimo una volta ogni 7 giorni — ma l'AGGREGATO per nazione, cioè
+// accorgersi che venti persone hanno spostato le skill sulla guerra mentre
+// sta succedendo, non il giorno dopo. Con 24h, chi apriva il tool alle 16
+// poteva vedere ancora la fotografia delle 15 del giorno prima.
+const REFRESH_WINDOW_MS = 2 * 60 * 60 * 1000;
+const REFRESH_CYCLES_PER_WINDOW = 4;                 // pollMuDirectory gira ogni 30 min: 4 giri in 2 ore
+// Tetto di sicurezza per giro — NON il vero limitatore: quello è `dailyShare`
+// più sotto, che spalma il refresh dei "liberi" sui 48 giri del giorno a
+// prescindere da questo numero. Questo tetto entra in gioco solo quando
+// `unknown` (nuovi membri o voci da migrare) è grande — cold start dopo un
+// deploy, o l'aggiunta di un campo come questo stesso `lastSkillsResetAt`.
+//
+// Misurato dal vivo contro il Worker (stesso client di trpcBatch, chunk da
+// 100 come sempre): ~286ms a chunk. Risolvere l'INTERA popolazione di oggi
+// (16.122 membri, 162 chunk) richiederebbe ~46s e ~210 richieste/min,
+// comodamente sotto il limite di 500/min del Worker — e pollMuDirectory
+// gira a :12/:42, minuti in cui nessun altro poll (battles, elections,
+// parties: vedi i cron.schedule più sotto) tocca il Worker. Il tetto è
+// quindi fissato ben sopra la popolazione reale: non deve mai essere lui
+// a rallentare una migrazione o un primo riempimento.
+const MU_USER_LOOKUP_BUDGET = 20000;
+
+// ── Stile di gioco: guerra / economia ─────────────────────────────────
+// Ogni skill dell'utente è un oggetto { level, value, weapon, equipment,
+// total, ... }. Conta SOLO `level`: è l'unica parte che il giocatore ha
+// scelto. `value`/`total` includono la base che hanno tutti (esempio reale:
+// criticalDamages vale 100 anche con level 0), le armi, l'equipaggiamento e
+// la percentuale da grado militare — usarli farebbe risultare guerriero
+// chiunque abbia raccolto un fucile.
+//
+// I livelli non costano uguale: portare una skill a livello n costa
+// n(n+1)/2 punti cumulati. Verificato su 900 utenti campionati dalle
+// classifiche (ricchezza, danni, livello, territorio, casse): la somma dei
+// costi su tutte le skill coincide con leveling.spentSkillPoints per 900 su
+// 900. Contare i livelli invece dei punti sovrastimerebbe le skill basse
+// (livello 8 costa 36 punti, livello 2 ne costa 3).
+//
+// Le skill neutre (energy/health/hunger) restano fuori: le prende chiunque
+// (15% dei punti in mediana) e includerle schiaccerebbe solo l'indice verso
+// il centro.
+//
+// Soglie 0,3 / 0,7: la distribuzione dell'indice è nettamente bimodale —
+// sui 900 campionati, 682 stanno sopra 0,8 o sotto 0,2, e la fascia centrale
+// è il 5%. Controllo che l'indice descriva il gioco reale e non se stesso:
+// chi sta sopra 0,7 ha danni mediani 47,3M contro 20,1M, chi sta sotto 0,3
+// ha ricchezza mediana 40.070 contro 25.560 (danni e ricchezza non entrano
+// nel calcolo, sono due misure indipendenti).
+const WAR_SKILLS = ['attack', 'criticalChance', 'criticalDamages', 'armor', 'precision', 'dodge', 'lootChance'];
+const ECO_SKILLS = ['companies', 'entrepreneurship', 'production', 'management'];
+const skillCost = n => (n * (n + 1)) / 2;
+
+/** 'w' | 'e' | 'm' | 'u' — una lettera sola perché finisce in 16k voci di
+ *  un file che viene riletto e riscritto ad ogni poll. */
+function classifyPlaystyle(user) {
+  const pts = key => skillCost(user?.skills?.[key]?.level || 0);
+  const war = WAR_SKILLS.reduce((s, k) => s + pts(k), 0);
+  const eco = ECO_SKILLS.reduce((s, k) => s + pts(k), 0);
+  if (war + eco === 0) return 'u'; // nessun punto speso: indeciso, non neutrale
+  const index = war / (war + eco);
+  if (index >= 0.7) return 'w';
+  if (index <= 0.3) return 'e';
+  return 'm';
+}
+
+/** Conteggio degli stili fra i membri di una MU. `known` è su quanti membri
+ *  è calcolato: finché la mappa utenti si riempie, il totale non torna con
+ *  memberCount, e il client deve poterlo dire. */
+function muPlaystyle(members, userCountries) {
+  const out = { war: 0, eco: 0, mixed: 0, undecided: 0, known: 0 };
+  for (const id of members || []) {
+    const mode = userCountries[id]?.[2];
+    if (!mode) continue;
+    out.known++;
+    if (mode === 'w') out.war++;
+    else if (mode === 'e') out.eco++;
+    else if (mode === 'm') out.mixed++;
+    else out.undecided++;
+  }
+  return out;
+}
+
+/** Stessa scomposizione ma per NAZIONE, sui cittadini che militano in una
+ *  unità militare. È l'unico insieme di utenti di cui conosciamo le skill:
+ *  WarEra non espone un elenco dei cittadini di un paese, quindi questo NON
+ *  è un censimento della popolazione — è un campione (i tesserati), e come
+ *  tale va etichettato nell'interfaccia. */
+
+// ── Storico degli aggregati per nazione ───────────────────────────────
+// Serve a rispondere a "quanti cittadini sono passati alla guerra da ieri?",
+// che è la domanda vera dietro il concetto di nazione in "war mode": una
+// nazione può avere battaglie ovunque e restare economica (l'Italia, con
+// battaglie in corso, ha comunque la maggioranza dei cittadini sull'economia),
+// quindi lo stato di guerra non si legge dalle guerre ma da dove la gente
+// mette i punti abilità.
+//
+// Costa ZERO chiamate: playstyleByCountry() gira già ad ogni poll sulla
+// mappa che abbiamo in RAM. L'unica aggiunta è non buttare via il valore
+// precedente.
+//
+// Si scrive una riga solo quando i numeri di quella nazione CAMBIANO
+// davvero (delta encoding): la maggior parte delle nazioni resta ferma per
+// giri interi, e salvare 48 fotografie identiche al giorno per 151 nazioni
+// gonfierebbe il file senza aggiungere informazione.
+const MU_PLAYSTYLE_HISTORY_FILE = 'mu-playstyle-history';
+const PLAYSTYLE_HISTORY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 giorni
+// Tetto ai `countryIds` di /mu-playstyle-history: il blocco piu' grande in
+// gioco ha poche decine di nazioni, il limite e' solo per non far costruire a
+// una richiesta arbitraria una risposta arbitrariamente grande.
+const MU_PLAYSTYLE_HISTORY_MAX_IDS = 60;
+
+/** Aggiunge allo storico le nazioni i cui conteggi sono cambiati rispetto
+ *  all'ultimo campione salvato. Formato compatto per nazione:
+ *  [ts, war, eco, mixed, undecided, known]. */
+function appendPlaystyleHistory(byCountry, now) {
+  const history = readCache(MU_PLAYSTYLE_HISTORY_FILE, { data: {} }).data || {};
+  const cutoff = now - PLAYSTYLE_HISTORY_RETENTION_MS;
+  let changed = 0;
+
+  for (const [countryId, c] of Object.entries(byCountry)) {
+    const series = history[countryId] || (history[countryId] = []);
+    const last = series[series.length - 1];
+    const sameAsLast = last
+      && last[1] === c.war && last[2] === c.eco
+      && last[3] === c.mixed && last[4] === c.undecided && last[5] === c.known;
+    if (sameAsLast) continue;
+    series.push([now, c.war, c.eco, c.mixed, c.undecided, c.known]);
+    changed++;
+  }
+
+  // Potatura per ritenzione, tenendo però SEMPRE l'ultimo campione di ogni
+  // nazione: se una nazione non cambia da più di 30 giorni, buttare via
+  // tutta la sua serie la farebbe sparire dallo storico invece di dire
+  // "ferma da un mese".
+  for (const [countryId, series] of Object.entries(history)) {
+    const kept = series.filter(row => row[0] >= cutoff);
+    history[countryId] = kept.length ? kept : series.slice(-1);
+  }
+
+  writeCache(MU_PLAYSTYLE_HISTORY_FILE, { fetchedAt: now, data: history }, { compact: true });
+  return changed;
+}
+
+function playstyleByCountry(userCountries) {
+  const byCountry = {};
+  for (const entry of Object.values(userCountries)) {
+    const [country, , mode] = entry;
+    if (!country || !mode) continue;
+    const row = byCountry[country] || (byCountry[country] = { war: 0, eco: 0, mixed: 0, undecided: 0, known: 0 });
+    row.known++;
+    if (mode === 'w') row.war++;
+    else if (mode === 'e') row.eco++;
+    else if (mode === 'm') row.mixed++;
+    else row.undecided++;
+  }
+  return byCountry;
+}
+
 
 /** Composizione per nazione dei membri: totale, quanti risolti, e le prime
  *  CINQUE nazioni per numero di membri. Misurato sulle 60 MU di vertice: una
@@ -576,24 +751,43 @@ async function pollMuDirectory() {
     const now = Date.now();
     const userCountries = readCache(MU_USER_COUNTRIES_FILE, { data: {} }).data || {};
 
-    // Chi va (ri)chiesto: prima gli sconosciuti, poi i più vecchi del TTL.
+    // Chi va (ri)chiesto, in ordine di priorità:
+    //   1) chi non conosciamo affatto (nuovo membro) — sempre, subito;
+    //   2) chi è in mappa da prima che salvassimo lastSkillsResetAt (voci a
+    //      meno di 4 elementi, da una versione precedente di questo file)
+    //      — trattato come "dovuto subito", è la migrazione automatica
+    //      della mappa dopo il deploy, senza cancellarla;
+    //   3) chi è "libero" (mai resettato, o oltre il cooldown di 7 giorni)
+    //      ed è passato più di un giorno dall'ultimo controllo — ma solo
+    //      una FETTA per giro (dailyShare), i più in ritardo prima, per
+    //      spalmare il refresh giornaliero sui 48 giri del giorno invece
+    //      di scaricarlo tutto in un colpo.
+    // Chi è ancora dentro il cooldown non entra proprio in lista: è
+    // CERTO che non sia cambiato, controllarlo sarebbe puro spreco.
     const unknown = [];
-    const stale = [];
+    const eligibleDue = []; // [id, ultimo controllo] — "liberi" e scaduto il giorno
     const currentMembers = new Set();
     for (const m of mus) {
       for (const id of m.members || []) {
         currentMembers.add(id);
         const entry = userCountries[id];
-        if (!entry) unknown.push(id);
-        else if (now - entry[1] > MU_USER_TTL_MS) stale.push(id);
+        if (!entry || entry.length < 4) { unknown.push(id); continue; }
+        const lastReset = entry[3];
+        const locked = lastReset && (now - Date.parse(lastReset)) < RESET_COOLDOWN_MS;
+        if (locked) continue; // bloccato dal cooldown: non può essere cambiato, si salta
+        if (now - entry[1] >= REFRESH_WINDOW_MS) eligibleDue.push([id, entry[1]]);
       }
     }
-    const toResolve = [...new Set([...unknown, ...stale])].slice(0, MU_USER_LOOKUP_BUDGET);
+    eligibleDue.sort((a, b) => a[1] - b[1]); // i più in ritardo prima
+    const windowShare = Math.max(50, Math.ceil(eligibleDue.length / REFRESH_CYCLES_PER_WINDOW));
+    const dueBatch = eligibleDue.slice(0, windowShare).map(([id]) => id);
+
+    const toResolve = [...new Set([...unknown, ...dueBatch])].slice(0, MU_USER_LOOKUP_BUDGET);
     if (toResolve.length) {
       const users = await trpcBatch(toResolve.map(id => ['user.getUserLite', { userId: id }]), { useWorker: true });
       toResolve.forEach((id, i) => {
-        const country = users[i]?.country;
-        if (country) userCountries[id] = [country, now];
+        const u = users[i];
+        if (u?.country) userCountries[id] = [u.country, now, classifyPlaystyle(u), u.dates?.lastSkillsResetAt || null];
       });
     }
 
@@ -606,12 +800,21 @@ async function pollMuDirectory() {
     const data = mus.map(m => {
       const lean = leanMu(m);
       lean.composition = muComposition(m.members, userCountries);
+      lean.playstyle = muPlaystyle(m.members, userCountries);
       return lean;
     });
     writeCache('mu-directory', { fetchedAt: now, data }, { compact: true });
 
+    // Aggregato per nazione: 165 nazioni per quattro numeri, qualche KB —
+    // sta in un file suo perché il pannello nazione non deve scaricarsi
+    // l'intera directory (~1 MB) per mostrare tre conteggi.
+    const byCountry = playstyleByCountry(userCountries);
+    writeCache('mu-playstyle-by-country', { fetchedAt: now, data: byCountry });
+    const historyChanged = appendPlaystyleHistory(byCountry, now);
+
     const resolved = Object.keys(userCountries).length;
-    console.log(`[poll] mu-directory aggiornato (${mus.length} MU, ${resolved}/${currentMembers.size} membri con nazione nota, ${toResolve.length} risolti in questo giro)`);
+    const styled = Object.values(userCountries).filter(e => e.length >= 3).length;
+    console.log(`[poll] mu-directory aggiornato (${mus.length} MU, ${resolved}/${currentMembers.size} membri con nazione nota, ${styled} con stile di gioco, ${eligibleDue.length} liberi in attesa di refresh (presi ${dueBatch.length}/${windowShare} di quota per giro), ${toResolve.length} risolti in questo giro, ${historyChanged} nazioni con storico aggiornato)`);
   } catch (err) { console.error('[poll] mu-directory fallito:', err.message); }
 }
 
@@ -1370,6 +1573,37 @@ app.get('/battles', (req, res) => res.json(readCache('battles', { fetchedAt: nul
 app.get('/battle-regions', (req, res) => res.json(readCache('battle-regions', { fetchedAt: null, data: [] })));
 
 app.get('/mu-directory', (req, res) => res.json(readCache('mu-directory', { fetchedAt: null, data: [] })));
+app.get('/mu-playstyle-by-country', (req, res) => res.json(readCache('mu-playstyle-by-country', { fetchedAt: null, data: {} })));
+
+// Storico di UNA nazione: [[ts, war, eco, mixed, undecided, known], ...].
+// Una nazione per richiesta e non tutto insieme: il file intero è di qualche
+// MB, la serie di un paese sono decine di KB. `since` (epoch ms) taglia la
+// coda vecchia lato server, così il client non scarica un mese per
+// disegnare un confronto di 24 ore.
+//
+// `countryIds` (elenco separato da virgole) serve al pannello ALLEANZA, che
+// somma i movimenti di tutte le nazioni membre: una richiesta sola invece di
+// una per nazione, perche' ogni richiesta rilegge e riparsa da zero l'intero
+// file di storico (qualche MB) — ventuno richieste in parallelo per un blocco
+// grande sarebbero ventuno parse. La risposta in quel caso e' un oggetto
+// { countryId: serie }, non un array: forma diversa apposta, cosi' un client
+// che chiede `countryId` (singolo) non riceve mai qualcosa di inatteso.
+app.get('/mu-playstyle-history', (req, res) => {
+  const { countryId, countryIds } = req.query;
+  const cache = readCache(MU_PLAYSTYLE_HISTORY_FILE, { fetchedAt: null, data: {} });
+  const since = req.query.since ? Number(req.query.since) : 0;
+  const seriesOf = id => (cache.data[id] || []).filter(row => row[0] >= since);
+
+  if (countryIds) {
+    const ids = String(countryIds).split(',').map(s => s.trim()).filter(Boolean).slice(0, MU_PLAYSTYLE_HISTORY_MAX_IDS);
+    const data = {};
+    for (const id of ids) data[id] = seriesOf(id);
+    return res.json({ fetchedAt: cache.fetchedAt, data });
+  }
+
+  if (!countryId) return res.json({ fetchedAt: cache.fetchedAt, data: [] });
+  res.json({ fetchedAt: cache.fetchedAt, countryId, data: seriesOf(countryId) });
+});
 
 app.get('/ticker', (req, res) => {
   const storico = readCache('ticker-history', []);

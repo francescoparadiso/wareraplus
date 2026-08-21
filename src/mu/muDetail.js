@@ -21,6 +21,7 @@
 import { MU_RANKING_TYPES, fetchMuDetail, fetchUsersLite } from './api.js';
 import { muT } from './i18n.js';
 import { isPinned, togglePin } from '../app/pins.js';
+import { countPlaystyles, playstyleBarHtml } from './playstyle.js';
 import { trackEvent } from '../shared/analytics.js';
 import { avatarImg, countryName, dominantCountry, escapeHtml, flagImg, fmtCompact, fmtDate, fmtFull, tierBadge } from './ui.js';
 
@@ -97,6 +98,8 @@ function paintHeader() {
         ${MU_RANKING_TYPES.map(type => statCard(type, m.rankings?.[type])).join('')}
       </section>
 
+      <section id="wp-mu-playstyle"></section>
+
       <section id="wp-mu-composition"></section>
 
       <section class="wp-mu-members">
@@ -141,6 +144,26 @@ function compositionFromUsers(users, total) {
   }
   const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([country, n]) => ({ country, n }));
   return { total, known: users.filter(u => u?.country).length, top };
+}
+
+/** Quanti membri giocano di guerra e quanti di economia. Calcolato dal vivo
+ *  sulle skill dei membri appena scaricati (vedi src/mu/playstyle.js): qui
+ *  il dato è completo, mentre quello dell'elenco viene dalla mappa del
+ *  server, che si riempie a scaglioni. */
+function paintPlaystyle(counts) {
+  const el = hostEl?.querySelector('#wp-mu-playstyle');
+  if (!el || !counts.known) return;
+  el.innerHTML = `
+    <h3 class="wp-mu-section-title">${escapeHtml(muT('playstyle'))} <span class="wp-mu-count">${counts.known}</span></h3>
+    ${playstyleBarHtml(counts, playstyleLabels())}`;
+}
+
+/** Etichette dei quattro gruppi, dal dizionario di questa vista. */
+export function playstyleLabels() {
+  return {
+    war: muT('psWar'), eco: muT('psEco'),
+    mixed: muT('psMixed'), undecided: muT('psUndecided'),
+  };
 }
 
 function paintComposition(comp) {
@@ -214,6 +237,7 @@ async function paintMembers(detail) {
   // directory: qui abbiamo la nazione di OGNI membro presente.
   const comp = compositionFromUsers(users, ids.length);
   paintComposition(comp);
+  paintPlaystyle(countPlaystyles(users));
   const badge = hostEl.querySelector('#wp-mu-head-defacto');
   if (badge) badge.innerHTML = deFactoBadge(dominantCountry({ ...currentMu, composition: comp }));
 

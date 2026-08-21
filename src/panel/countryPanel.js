@@ -119,6 +119,8 @@ function buildPanelHtml(nation) {
       <div class="wp-parliament-loading">${t('loading_parliament')}</div>
     </div>
 
+    <div id="wp-panel-playstyle"></div>
+
     <div class="wp-panel-grid">
       <div class="wp-stat"><div class="wp-stat-label">${t('population_label')}</div><div class="wp-stat-value">${fmt(pop)}</div></div>
       <div class="wp-stat"><div class="wp-stat-label">${t('wealth_label')}</div><div class="wp-stat-value">${fmt(wealth)}</div></div>
@@ -184,6 +186,109 @@ function render(nationId) {
   if (parliamentContainer) {
     renderParliamentChart(parliamentContainer, nationId);
   }
+
+  renderPlaystyle(nationId);
+}
+
+/* ── Stile di gioco dei cittadini (WarEra+) ──
+   Quanti giocano di guerra e quanti di economia, letto dalla
+   distribuzione dei loro punti abilità (vedi src/mu/playstyle.js per il
+   metodo e le soglie, verificate su 900 utenti).
+
+   ⚠️ È un CAMPIONE, non un censimento, ed è etichettato come tale: sono
+   i cittadini tesserati in una unità militare, gli unici di cui si
+   conoscano le skill. WarEra non espone l'elenco dei cittadini di un
+   paese, quindi non c'è modo di allargarlo — e il campione pende verso
+   la guerra, visto da dove è preso.
+
+   L'aggregato lo calcola il server di cache (endpoint
+   /mu-playstyle-by-country) riusando le stesse risposte user.getUserLite
+   che scarica già per la nazionalità dei membri: costo zero in chiamate.
+   Se il server non risponde, la sezione semplicemente non compare. */
+const PLAYSTYLE_DELTA_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+async function renderPlaystyle(nationId) {
+  const host = document.getElementById('wp-panel-playstyle');
+  if (!host) return;
+  const { fetchPlaystyleByCountry, fetchPlaystyleHistory } = await import('../mu/api.js');
+  const { playstyleDelta } = await import('../mu/playstyle.js');
+  const byCountry = await fetchPlaystyleByCountry();
+  // Il pannello può essere già passato a un'altra nazione nel frattempo.
+  if (!byCountry || currentNationId !== nationId) return;
+  const counts = byCountry[nationId];
+  if (!counts?.known) return;
+
+  await paintPlaystyle(host, counts, t('playstyle_note'));
+
+  // Il movimento nelle ultime 24 ore, in una seconda fetch: la fotografia
+  // deve comparire subito, la tendenza può arrivare un istante dopo.
+  const series = await fetchPlaystyleHistory(nationId, Date.now() - PLAYSTYLE_DELTA_WINDOW_MS);
+  if (currentNationId !== nationId) return;
+  paintPlaystyleDelta(playstyleDelta(series));
+}
+
+/* ── Stile di gioco di un'ALLEANZA (WarEra+) ──
+   Stessa lettura del pannello nazione, sommata su tutte le nazioni membre:
+   la domanda su un blocco è se sia una macchina da guerra o un cartello
+   economico, e la risposta sta nella somma, non in dieci barre da leggere
+   una per una.
+
+   La fotografia costa ZERO fetch: /mu-playstyle-by-country è già in memoria
+   dalla prima apertura di un pannello qualsiasi, contiene tutte le nazioni,
+   e qui si sommano solo le voci dei membri. La tendenza a 24 ore invece è
+   UNA richiesta per l'intero blocco (parametro `countryIds`), non una per
+   nazione — vedi fetchPlaystyleHistoryMany. */
+async function renderBlocPlaystyle(allianceId, memberIds) {
+  const host = document.getElementById('wp-panel-bloc-playstyle');
+  if (!host || !memberIds.length) return;
+  const { fetchPlaystyleByCountry, fetchPlaystyleHistoryMany } = await import('../mu/api.js');
+  const { sumPlaystyleCounts, sumPlaystyleDeltas } = await import('../mu/playstyle.js');
+  const byCountry = await fetchPlaystyleByCountry();
+  if (!byCountry || currentBlocId !== allianceId) return;
+
+  const counts = sumPlaystyleCounts(memberIds.map(id => byCountry[id]));
+  if (!counts.known) return;
+
+  await paintPlaystyle(host, counts, t('playstyle_bloc_note', { n: counts.countries, m: memberIds.length }));
+
+  const seriesByCountry = await fetchPlaystyleHistoryMany(memberIds, Date.now() - PLAYSTYLE_DELTA_WINDOW_MS);
+  if (currentBlocId !== allianceId) return;
+  paintPlaystyleDelta(sumPlaystyleDeltas(seriesByCountry));
+}
+
+/** Disegno comune a nazione e alleanza: titolo, barra, posto per la
+ *  tendenza, nota sul campione. L'id del contenitore della tendenza è unico
+ *  nel documento perché i due pannelli non sono mai aperti insieme (uno
+ *  sostituisce l'altro nello stesso contentEl). */
+async function paintPlaystyle(host, counts, note) {
+  const { playstyleBarHtml } = await import('../mu/playstyle.js');
+  const labels = {
+    war: t('ps_war'), eco: t('ps_eco'),
+    mixed: t('ps_mixed'), undecided: t('ps_undecided'),
+  };
+  host.innerHTML = `
+    <div class="wp-panel-section-title">${t('playstyle_label')} <span class="wp-panel-ps-count">${counts.known}</span></div>
+    ${playstyleBarHtml(counts, labels)}
+    <div id="wp-panel-ps-delta"></div>
+    <div class="wp-panel-ps-note">${note}</div>`;
+}
+
+function paintPlaystyleDelta(delta) {
+  if (!delta || (!delta.war && !delta.eco)) return; // niente da dire se non si è mosso niente
+  const deltaEl = document.getElementById('wp-panel-ps-delta');
+  if (!deltaEl) return;
+  // Il colore dice DI COSA si parla (rosso guerra, verde economia, come i
+  // segmenti della barra sopra), la freccia dice se sale o scende. Colorare
+  // per direzione farebbe uscire "+5 economia" in rosso.
+  const chip = (n, group, key) => {
+    if (!n) return '';
+    return `<span class="wp-panel-ps-delta-chip wp-panel-ps-chip-${group}">${n > 0 ? '▲' : '▼'} ${Math.abs(n)} ${t(key)}</span>`;
+  };
+  deltaEl.innerHTML = `
+    <div class="wp-panel-ps-delta">
+      <span class="wp-panel-ps-delta-label">${t('playstyle_delta_24h')}</span>
+      ${chip(delta.war, 'war', 'ps_war')}${chip(delta.eco, 'eco', 'ps_eco')}
+    </div>`;
 }
 
 /* ── PANNELLO BLOCCO (WarEra+) ──
@@ -233,6 +338,8 @@ function buildBlocPanelHtml(allianceId) {
       </div>
       ${pinStarHtml('alliance', allianceId)}
     </div>
+
+    <div id="wp-panel-bloc-playstyle"></div>
 
     <div class="wp-panel-grid">
       <div class="wp-stat"><div class="wp-stat-label">${t('population_label')}</div><div class="wp-stat-value">${fmt(totalPop)}</div></div>
@@ -339,6 +446,7 @@ function renderBlocPanel(allianceId) {
     .filter(Boolean)
     .sort((a, b) => (b?.rankings?.countryActivePopulation?.value || 0) - (a?.rankings?.countryActivePopulation?.value || 0));
 
+  renderBlocPlaystyle(allianceId, members.map(m => m._id));
   _renderBlocParliamentsQueued(members);
 }
 

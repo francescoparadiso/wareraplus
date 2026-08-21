@@ -14,7 +14,10 @@
       ricchezza, i colori raccontano la ricchezza. Tinta leggera (rgba a
       ~12%) più una barretta piena a sinistra — deve guidare l'occhio, non
       diventare il contenuto.
-   2. **Nazione in chiaro**, bandiera + nome, colonna sua.
+   2. **Nazione in chiaro**, bandiera + nome, colonna sua. Il filtro per
+      nazione tiene anche le unità che sono di quella nazione solo DE FACTO
+      (vedi matchesCountry): un'unità registrata in Italia ma composta da
+      cittadini del Liechtenstein compare in entrambi gli elenchi.
    3. **Composizione dei membri in numeri**: la colonna "Composizione"
       elenca quanti membri vengono da ogni nazione ("12 🇱🇹 · 8 🇩🇪 · +5"),
       in ordine decrescente. Quando la nazionalità prevalente è DIVERSA da
@@ -32,6 +35,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { muT } from './i18n.js';
+import { PLAYSTYLE_GROUPS } from './playstyle.js';
 import { avatarImg, countryName, dominantCountry, escapeHtml, flagImg, fmtCompact, tierOf } from './ui.js';
 
 const CHUNK = 60;
@@ -53,6 +57,10 @@ const SORTS = {
   name:    { get: m => m.name || '', text: true },
   country: { get: m => countryName(m.country), text: true },
   members: { get: m => m.memberCount ?? 0 },
+  // Ordina per QUOTA di membri in modalità guerra, non per numero assoluto:
+  // altrimenti in cima ci sarebbero solo le unità grandi, che è già quello
+  // che dice la colonna Membri.
+  playstyle: { get: m => (m.playstyle?.known ? m.playstyle.war / m.playstyle.known : -1) },
   // Ordinando per "Composizione" vengono prima le unità DE FACTO di
   // un'altra nazione (è la domanda che uno si fa cliccando quella
   // intestazione), e fra quelle prima le più numerose — non le più
@@ -89,10 +97,27 @@ function metricValue(m, id) {
   return m.rankings?.[id]?.value;
 }
 
+/** Il filtro per nazione tiene un'unità se è REGISTRATA lì oppure se è di
+ *  quella nazione DE FACTO — cioè se la nazionalità prevalente dei suoi
+ *  membri è quella. Non è un aut-aut: "Legio VI Ferrata" (registrata in
+ *  Italia, 25 membri su 25 del Liechtenstein) compare sotto entrambe, che
+ *  è come la vedono sia gli italiani sia i liechtensteinesi.
+ *
+ *  Stessa regola del marchio "de facto" in colonna (la nazione in cima a
+ *  `composition.top`), apposta: se una riga è marcata "de facto
+ *  Liechtenstein" ma poi filtrando per Liechtenstein sparisse, sarebbe una
+ *  contraddizione a schermo. */
+function matchesCountry(m, countryId) {
+  if (!countryId) return true;
+  if (m.country === countryId) return true;
+  const dom = dominantCountry(m);
+  return !!dom && dom.foreign && dom.country === countryId;
+}
+
 function sortedList() {
   const q = norm(query.trim());
   const arr = ctx.directory.filter(m => {
-    if (countryFilter && m.country !== countryFilter) return false;
+    if (!matchesCountry(m, countryFilter)) return false;
     if (q && !norm(m.name).includes(q)) return false;
     return true;
   }).slice(); // mai .sort() in place: `directory` è condivisa con classifiche e ricerca globale
@@ -117,9 +142,19 @@ export function renderMuList(host, context) {
   ctx = context;
   shown = CHUNK;
 
-  // Elenco nazioni per il filtro: solo quelle che hanno almeno un'unità.
-  const countryIds = [...new Set(ctx.directory.map(m => m.country).filter(Boolean))];
-  const countries = countryIds
+  // Elenco nazioni per il filtro: quelle che hanno almeno un'unità, contando
+  // anche le unità DE FACTO (vedi matchesCountry). Quattro nazioni —
+  // Sierra Leone, Mali, Belize, Bangladesh — non hanno nessuna MU registrata
+  // ma sono la nazionalità prevalente di qualcuna: senza questa unione non
+  // comparirebbero affatto nella tendina, e il loro elenco sarebbe
+  // irraggiungibile.
+  const countryIds = new Set();
+  for (const m of ctx.directory) {
+    if (m.country) countryIds.add(m.country);
+    const dom = dominantCountry(m);
+    if (dom?.foreign) countryIds.add(dom.country);
+  }
+  const countries = [...countryIds]
     .map(id => ({ id, name: countryName(id) }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -172,6 +207,7 @@ function headerHtml() {
       ${th('name', muT('sortName'), 'wp-mu-th-left')}
       ${th('country', muT('country'), 'wp-mu-th-left')}
       ${th('defacto', muT('colComposition'), 'wp-mu-th-left')}
+      ${th('playstyle', muT('colPlaystyle'), 'wp-mu-th-left')}
       ${th('members', muT('colMembers'), 'wp-mu-th-num')}
       ${METRICS.map(m => th(m.id, muT(m.short), 'wp-mu-th-num')).join('')}
     </div>`;
@@ -252,6 +288,33 @@ function compositionCell(m) {
   return `<span class="wp-mu-cell-comp${flag}" title="${escapeHtml(title)}">${chips.join('')}</span>`;
 }
 
+/** Quanti membri giocano di guerra, quanti di economia, quanti in mezzo —
+ *  in numeri, come la colonna Composizione accanto. Il conteggio arriva dal
+ *  server (mu.playstyle): qui non si possono classificare 1400 unità dal
+ *  vivo, servirebbero le skill di 16k utenti. Nella scheda della singola
+ *  unità lo stesso conto è invece fatto sul momento e completo.
+ *
+ *  "Indecisi" (nessun punto abilità speso) non ha un suo numero in riga: è
+ *  l'assenza di una scelta, occuperebbe spazio senza dire niente. Resta nel
+ *  tooltip e nella scheda. */
+function playstyleCell(m) {
+  const p = m.playstyle;
+  if (!p?.known) return '<span class="wp-mu-cell-empty">—</span>';
+  const title = PLAYSTYLE_GROUPS
+    .filter(g => p[g] > 0)
+    .map(g => `${p[g]} ${muT(PS_LABEL_KEY[g])}`)
+    .join(' · ') + (p.known < (m.memberCount ?? p.known) ? ` (${p.known}/${m.memberCount})` : '');
+  return `
+    <span class="wp-mu-cell-ps" title="${escapeHtml(title)}">
+      ${['war', 'eco', 'mixed'].map(g => `
+        <span class="wp-mu-ps-chip${p[g] ? '' : ' wp-mu-ps-zero'}" aria-label="${escapeHtml(muT(PS_LABEL_KEY[g]))}">
+          <span class="wp-ps-dot wp-ps-${g}"></span>${p[g]}
+        </span>`).join('')}
+    </span>`;
+}
+
+const PS_LABEL_KEY = { war: 'psWar', eco: 'psEco', mixed: 'psMixed', undecided: 'psUndecided' };
+
 function rowHtml(m, position) {
   // Il colore della riga segue la colonna su cui si ordina: se non è una
   // classifica (nome, membri, nazione…) si ricade sul tier dei danni
@@ -273,6 +336,7 @@ function rowHtml(m, position) {
         <span class="wp-mu-cell-country-name">${escapeHtml(countryName(m.country))}</span>
       </span>
       ${composition}
+      ${playstyleCell(m)}
       <span class="wp-mu-cell-num">${m.memberCount}</span>
       ${METRICS.map(metric => {
         const v = metricValue(m, metric.id);

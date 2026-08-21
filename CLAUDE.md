@@ -91,6 +91,9 @@ wareraPlus/
     │   │                          on-demand. La directory sta in MEMORIA per la
     │   │                          sessione (~550 KB), mai in localStorage.
     │   ├── i18n.js, ui.js       ← dizionario locale (9 lingue) e pezzi di UI comuni
+    │   ├── playstyle.js         ← classificatore guerra/economia dai punti abilità
+    │   │                          (gemello di classifyPlaystyle nel cache-server: se
+    │   │                          cambi soglie o elenchi di skill, cambiali in tutti e due)
     │   ├── muList.js            ← elenco a TABELLA (colonne ordinabili, righe tinte
     │   │                          per tier, colonna "Composizione" coi membri per
     │   │                          nazione + marchio "de facto"), blocchi da 60 righe
@@ -280,12 +283,14 @@ Fase 5 (proxy/cache server dedicato). Dettagli completi in `README.md`.
 Se l'utente chiede una di queste aree, leggi prima la sezione Roadmap del
 README per il piano già pensato.
 
-⚠️ Il pezzo server delle Unità Militari (`pollMuDirectory` + endpoint
-`/mu-directory` in `server/warera-cache-server.js`) **va ancora
-deployato** sul VPS. Finché non lo è: (1) il client prende 404 e ricade
-sulla paginazione diretta — funziona, ma ~4,5 s e 14 richieste per ogni
-utente invece di una; (2) la colonna "de facto" dell'elenco resta vuota,
-perché la composizione per nazionalità dei membri la calcola solo il
-server (nella scheda della singola unità invece si calcola dal vivo, e
-funziona già oggi). Dopo il deploy servono ~4 ore perché la mappa
-utente→nazione si riempia: vedi `server/README.md`.
+⚠️ **Il cache-server va rideployato a mano ad ogni modifica di
+`server/warera-cache-server.js`** (scp + `pm2 restart`, vedi
+`server/README.md`) — il push su main deploya solo il client su Vercel.
+Le funzionalità che dipendono dal server degradano da sole finché non lo
+fai: la directory MU ricade sulla paginazione diretta dal browser (~4,5 s
+e 14 richieste per utente invece di una), e le colonne "Composizione" e
+"Guerra / Eco" dell'elenco restano vuote, insieme alla sezione stile di
+gioco del pannello nazione. Nella scheda della singola unità gli stessi
+due dati sono invece calcolati dal vivo sui membri appena scaricati, e
+funzionano sempre. Dopo un deploy servono ~8 giri di poll (~4 ore) perché
+la mappa utente→nazione/stile si riempia.

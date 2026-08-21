@@ -49,6 +49,69 @@ il campo `known` dice su quanti membri è calcolata, e il client mostra le
 percentuali su quelli. La mappa viene potata ad ogni giro dei membri non
 più tesserati, quindi non cresce indefinitamente (~16k voci, ~700 KB).
 
+### Stile di gioco: guerra / economia (`/mu-playstyle-by-country`)
+
+Dalla **stessa** risposta `user.getUserLite` già scaricata per la nazionalità
+si ricava anche come gioca l'utente, guardando dove ha messo i punti abilità
+(`classifyPlaystyle`). Costo aggiuntivo in chiamate: zero.
+
+Il metodo, con le verifiche che lo sostengono, è documentato in
+`src/mu/playstyle.js` — in breve: contano solo i `level` delle skill (non
+`value`/`total`, che includono armi, equipaggiamento e basi che hanno tutti),
+un livello *n* costa `n(n+1)/2` punti (verificato contro `spentSkillPoints`
+su 900 utenti, 900 su 900), le skill neutre restano fuori, e le soglie 0,3 /
+0,7 vengono dalla distribuzione reale, che è bimodale.
+
+La mappa passa quindi da `[countryId, ts]` a `[countryId, ts, stile]`.
+**Migrazione automatica**: le voci a due elementi scritte dalla versione
+precedente vengono rimesse in coda di risoluzione con priorità, quindi dopo
+il deploy la mappa si aggiorna da sola in ~8 giri senza cancellare niente.
+
+Due uscite: il conteggio per unità (campo `playstyle` di ogni voce di
+`/mu-directory`) e l'aggregato per nazione (`/mu-playstyle-by-country`,
+qualche KB — sta in un endpoint suo perché il pannello nazione non deve
+scaricare 1 MB di directory per mostrare tre numeri).
+
+### Quando si ricontrolla un utente
+
+Non un TTL fisso, ma il regolamento del gioco (`gameConfig.getGameConfig()
+.user.resetSkillDaysCooldown = 7`, verificato dal vivo):
+
+- chi ha resettato le skill **meno di 7 giorni fa** non può averle
+  ricambiate: si salta, è una certezza, non una stima (~27% dei membri in
+  regime stazionario);
+- chi **può** aver cambiato (mai resettato, o cooldown scaduto) viene
+  ricontrollato entro `REFRESH_WINDOW_MS` = **2 ore**, a fette di
+  `pool / 4` per giro (pollMuDirectory gira ogni 30 min), i più in ritardo
+  per primi. Due ore e non un giorno perché quello che conta non è il
+  singolo utente — che può cambiare al massimo una volta a settimana — ma
+  l'aggregato per nazione, cioè accorgersi mentre sta succedendo che venti
+  persone hanno spostato le skill sulla guerra.
+
+`MU_USER_LOOKUP_BUDGET` (20.000) è solo un tetto di sicurezza per il cold
+start e le migrazioni di schema, non il regolatore normale. Misurato:
+~286 ms per chunk da 100 verso il Worker, quindi anche risolvere l'intera
+popolazione (16k membri, 162 chunk) sono ~46 s e ~210 richieste/min, sotto
+il limite di 500/min — e `pollMuDirectory` gira a :12/:42, minuti in cui
+nessun altro poll tocca il Worker.
+
+### Storico: `/mu-playstyle-history?countryId=…&since=…`
+
+Una nazione può avere battaglie ovunque e restare economica (l'Italia, con
+guerre in corso, ha comunque la maggioranza dei cittadini sull'economia):
+il "war mode" non si legge dalle guerre ma da dove la gente mette i punti
+abilità. Da qui lo storico, che risponde a "quanti sono passati alla
+guerra da ieri?".
+
+Costa **zero chiamate**: `playstyleByCountry()` gira già ad ogni poll sulla
+mappa in RAM, l'unica aggiunta è non buttare via il valore precedente. Si
+scrive una riga solo quando i numeri di quella nazione **cambiano**
+(delta encoding): salvare 48 fotografie identiche al giorno per 151 nazioni
+gonfierebbe il file senza aggiungere informazione. Formato compatto per
+nazione: `[ts, war, eco, mixed, undecided, known]`, ritenzione 30 giorni —
+ma l'ultimo campione di ogni nazione si tiene **sempre**, altrimenti una
+nazione ferma da più di un mese sparirebbe invece di risultare "ferma".
+
 ## Novità di questa versione (vedi commento in testa al file)
 
 - Fix: `pollBattles()` leggeva un campo (`regionId`) che non esiste su una

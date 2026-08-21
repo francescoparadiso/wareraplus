@@ -246,6 +246,25 @@ attivo.
   danni settimanali: **6 su 25 sono de facto di un'altra nazione** (es.
   "Only Mercs", registrata Guyana, 25 membri su 25 del Mali).
 
+  **Stile di gioco (guerra / economia / ibridi)**: quanti membri di
+  un'unità giocano di combattimento e quanti di impresa, letto da dove
+  hanno messo i punti abilità. Visibile in tre posti: colonna
+  "Guerra / Eco" nell'elenco, sezione dedicata nella scheda dell'unità
+  (calcolata dal vivo sui membri appena scaricati, quindi completa), e
+  pannello nazione — lì sui *cittadini tesserati in una unità militare*,
+  ed etichettato come tale: WarEra non espone l'elenco dei cittadini di un
+  paese, quindi è un campione, per giunta sbilanciato verso la guerra.
+
+  Il metodo è documentato in `src/mu/playstyle.js`; le tre cose che lo
+  rendono affidabile: contano solo i `level` delle skill (non `value` /
+  `total`, che includono armi, equipaggiamento e basi che hanno tutti —
+  `criticalDamages` vale 100 anche a livello 0), un livello *n* costa
+  `n(n+1)/2` punti (verificato contro `spentSkillPoints` su 900 utenti,
+  900 su 900), e le soglie 0,3 / 0,7 vengono dalla distribuzione reale,
+  che è bimodale: 682 su 900 stanno sopra 0,8 o sotto 0,2. Controprova su
+  misure indipendenti: sopra 0,7 i danni mediani sono 47,3M contro 20,1M,
+  sotto 0,3 la ricchezza mediana è 40.070 contro 25.560.
+
   Integrata anche nei Preferiti (terzo tipo di pin) e nella ricerca
   globale della barra menù (gruppo "Unità militari").
 - **Più dati sulle nazioni** nel pannello: storico, confronto tra nazioni,

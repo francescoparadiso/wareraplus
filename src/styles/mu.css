@@ -149,7 +149,8 @@ body.light-theme .wp-mu-avatar-ph { color: #7a8494; }
    Il contenitore scorre in orizzontale sotto una certa larghezza invece di
    comprimere le colonne fino a renderle illeggibili. */
 .wp-mu-table {
-  --wp-mu-cols: 36px minmax(140px, 1.4fr) minmax(110px, .95fr) minmax(150px, 1.15fr) 54px repeat(6, minmax(76px, .72fr));
+  /* #, nome, nazione, composizione, guerra/eco, membri, poi le sei classifiche */
+  --wp-mu-cols: 34px minmax(130px, 1.3fr) minmax(100px, .9fr) minmax(146px, 1.1fr) minmax(96px, .8fr) 50px repeat(6, minmax(74px, .7fr));
   overflow-x: auto;
 }
 .wp-mu-thead, .wp-mu-row {
@@ -157,7 +158,7 @@ body.light-theme .wp-mu-avatar-ph { color: #7a8494; }
   grid-template-columns: var(--wp-mu-cols);
   align-items: center;
   gap: 8px;
-  min-width: 1020px;
+  min-width: 1130px;
 }
 .wp-mu-thead {
   position: sticky;
@@ -264,6 +265,23 @@ body.light-theme .wp-mu-cell-country { color: #4a5261; }
 .wp-mu-chip strong { font-weight: 700; font-variant-numeric: tabular-nums; }
 .wp-mu-chip-rest { color: #6e7681; font-size: 11px; }
 body.light-theme .wp-mu-chip-rest { color: #79818f; }
+
+/* Colonna guerra/economia: tre conteggi con il pallino del gruppo. I
+   colori (.wp-ps-*) stanno in shell.css, condivisi col pannello nazione. */
+.wp-mu-cell-ps { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; }
+.wp-mu-ps-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+/* Gruppo a zero: resta al suo posto per non far ballare l'incolonnamento
+   da una riga all'altra, ma smette di chiedere attenzione. */
+.wp-mu-ps-zero { opacity: .3; font-weight: 400; }
 .wp-mu-cell-num {
   display: flex; align-items: baseline; justify-content: flex-end; gap: 5px;
   font-variant-numeric: tabular-nums;
@@ -511,10 +529,16 @@ body.light-theme .wp-mu-rank-country { color: #5b6473; }
   .wp-mu-rank-country { display: none; }
   .wp-mu-rank-pos { width: 30px; }
 
-  /* Su schermo stretto restano nome, nazione, "membri da", membri e danni
-     settimanali: le altre quattro classifiche sparirebbero comunque sotto
-     uno scorrimento orizzontale lunghissimo. Chi le vuole ha il tab
-     Classifiche e la scheda della singola unità. */
+  /* Su schermo stretto restano: #, nome, composizione, guerra/eco, membri,
+     danni settimanali. Cade la colonna NAZIONE, non la composizione: la
+     prima bandiera della composizione è quasi sempre la stessa nazione, e
+     quando non lo è (le "de facto") il caso interessante è proprio quello.
+     Le altre cinque classifiche restano fuori: chi le vuole ha il tab
+     Classifiche e la scheda della singola unità.
+
+     Attenzione all'ordine: con display:none la cella esce dal flusso della
+     griglia, quindi il template qui sotto descrive le colonne VISIBILI
+     nell'ordine in cui restano, non quelle originali. */
   /* minmax(0, …) e non minmax(96px, …): con un minimo in pixel le colonne
      non possono rimpicciolirsi sotto quella soglia e la riga sfora la
      larghezza dello schermo. I testi hanno già l'ellissi, quindi possono
@@ -524,13 +548,16 @@ body.light-theme .wp-mu-rank-country { color: #5b6473; }
        dentro (due conteggi + bandiere + "+N"), e con meno spazio il "+N"
        finiva tagliato. Il nome della nazione, che si accorcia, sta in
        quella accanto. */
-    --wp-mu-cols: 18px minmax(0, 1.05fr) minmax(0, .7fr) minmax(0, 1.4fr) 20px 58px;
+    --wp-mu-cols: 18px minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, .82fr) 20px 56px;
     overflow-x: visible;
   }
   .wp-mu-thead, .wp-mu-row { min-width: 0; gap: 4px; font-size: 12px; }
   .wp-mu-thead { padding: 0 4px 6px; }
   .wp-mu-row { padding: 7px 4px; }
-  .wp-mu-th:nth-child(n+7), .wp-mu-row > :nth-child(n+7) { display: none; }
+  .wp-mu-th:nth-child(3), .wp-mu-row > :nth-child(3),
+  .wp-mu-th:nth-child(n+8), .wp-mu-row > :nth-child(n+8) { display: none; }
+  .wp-mu-cell-ps { gap: 5px; }
+  .wp-mu-ps-chip { font-size: 11.5px; }
   .wp-mu-cell-country-name { font-size: 11px; }
   .wp-mu-defacto { padding: 1px 4px; }
   .wp-mu-defacto-label { display: none; } /* il bordo colorato basta a segnalarlo */

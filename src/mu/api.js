@@ -143,6 +143,78 @@ export function leanMu(m) {
   return out;
 }
 
+/** Scomposizione guerra/economia per NAZIONE, calcolata dal server sui
+ *  cittadini che militano in una unità militare (l'unico insieme di utenti
+ *  di cui si conoscano le skill: WarEra non espone l'elenco dei cittadini
+ *  di un paese). Qualche KB — sta in un endpoint separato apposta, così il
+ *  pannello nazione non deve scaricarsi l'intera directory MU per mostrare
+ *  tre conteggi.
+ *
+ *  Una sola fetch per sessione: chi chiama può farlo a ogni apertura del
+ *  pannello. Ritorna null se il server non risponde — è un di più, non deve
+ *  far fallire il pannello. */
+let _byCountry = null;
+let _byCountryPromise = null;
+export function fetchPlaystyleByCountry() {
+  if (_byCountry) return Promise.resolve(_byCountry);
+  if (_byCountryPromise) return _byCountryPromise;
+  _byCountryPromise = _fetchCacheJson('/mu-playstyle-by-country')
+    .then(json => {
+      if (!json?.data || typeof json.data !== 'object') throw new Error('forma inattesa');
+      _byCountry = json.data;
+      return _byCountry;
+    })
+    .catch(err => {
+      console.warn('WarEra+ mu: /mu-playstyle-by-country non disponibile:', err.message);
+      _byCountryPromise = null; // riprovabile alla prossima apertura
+      return null;
+    });
+  return _byCountryPromise;
+}
+
+/** Storico degli aggregati guerra/economia di UNA nazione:
+ *  [[ts, war, eco, mixed, undecided, known], ...] dal più vecchio al più
+ *  recente. Serve a dire "X cittadini sono passati alla guerra da ieri",
+ *  che è la domanda vera: una nazione può avere battaglie ovunque e restare
+ *  economica, quindi il "war mode" si legge da dove la gente mette i punti
+ *  abilità, non dalle guerre in corso.
+ *
+ *  `sinceMs` taglia lato server (il file intero è di qualche MB, la serie
+ *  di 24 ore sono pochi KB). Ritorna [] se il server non risponde: è un di
+ *  più, non deve far fallire il pannello. */
+export async function fetchPlaystyleHistory(countryId, sinceMs) {
+  try {
+    const qs = `countryId=${encodeURIComponent(countryId)}&since=${encodeURIComponent(sinceMs)}`;
+    const json = await _fetchCacheJson(`/mu-playstyle-history?${qs}`);
+    return Array.isArray(json?.data) ? json.data : [];
+  } catch (err) {
+    console.warn('WarEra+ mu: /mu-playstyle-history non disponibile:', err.message);
+    return [];
+  }
+}
+
+/** Come sopra ma per PIÙ nazioni in una richiesta sola: serve al pannello
+ *  alleanza, che somma i movimenti di tutti i membri. Una richiesta per
+ *  nazione costerebbe al server una rilettura completa del file di storico
+ *  ciascuna (vedi commento all'endpoint).
+ *
+ *  Ritorna { countryId: serie }. Un server vecchio, che il parametro
+ *  `countryIds` non lo conosce, risponde `data: []` — da cui l'oggetto
+ *  vuoto: il pannello mostra la fotografia senza la tendenza, come quando il
+ *  server non c'è affatto. */
+export async function fetchPlaystyleHistoryMany(countryIds, sinceMs) {
+  if (!countryIds?.length) return {};
+  try {
+    const qs = `countryIds=${encodeURIComponent(countryIds.join(','))}&since=${encodeURIComponent(sinceMs)}`;
+    const json = await _fetchCacheJson(`/mu-playstyle-history?${qs}`);
+    const data = json?.data;
+    return (data && !Array.isArray(data) && typeof data === 'object') ? data : {};
+  } catch (err) {
+    console.warn('WarEra+ mu: /mu-playstyle-history (multi) non disponibile:', err.message);
+    return {};
+  }
+}
+
 /** Dettaglio pieno di UNA unità (mu.getById). Verificato dal vivo: la
  *  risposta è identica all'item della directory più `members` (array di
  *  userId) e `roles` ({managers, commanders}) — cioè esattamente i campi
