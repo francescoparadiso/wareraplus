@@ -18,6 +18,15 @@ function flagImg(code, h = '14px') {
 
 /* ── State ── */
 let allStats = [], currentTab = 'factions', faction1Blocs = [], faction2Blocs = [];
+// Ordinamento della tabella riassuntiva delle alleanze (tab "Alliance
+// Overview"). Vive qui e non nel DOM perche' deve sopravvivere ai buildUI()
+// che ridisegnano tutto dopo un drag&drop.
+let tableSort = { key: 'totalDmg', dir: -1 };
+// Conteggi guerra/economia per nazione (/mu-playstyle-by-country del server
+// di cache). Scaricati una volta per sessione, poi la tabella si ridisegna.
+// null = non ancora arrivati (colonne con trattino), {} = server non
+// disponibile.
+let psByCountry = null;
 const manualAssign = new Map();       // nationId → target bloc name (original)
 const mergedBlocs = new Map();        // mergeId → { displayName: string, originals: [string] }
 const blocColors = new Map();         // blocName → color
@@ -136,6 +145,7 @@ export function renderBlocStats(stats) {
   injectStyles();
   if (!eventsAttached) { attachEvents(c); eventsAttached = true; }
   searchTracked = false;
+  ensurePlaystyleData();
   buildUI();
 }
 
@@ -269,6 +279,34 @@ function injectStyles() {
       .bs-slbl{font-size:11px;white-space:normal}
       .bs-vs{padding:8px;font-size:22px}}
 
+    /* Tabella riassuntiva alleanze (tutte le alleanze su una riga sola) */
+    .bs-tbl-wrap{overflow-x:auto;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(13,17,23,.6);margin-bottom:20px}
+    .bs-tbl{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
+    .bs-tbl th{position:sticky;top:0;background:rgba(13,17,23,.95);text-align:right;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8b949e;font-weight:600;cursor:pointer;user-select:none;border-bottom:1px solid rgba(255,255,255,.1)}
+    .bs-tbl th:hover{color:#58a6ff}
+    .bs-tbl th.sorted{color:#58a6ff}
+    .bs-tbl th.left,.bs-tbl td.left{text-align:left}
+    .bs-tbl td{padding:9px 12px;text-align:right;border-bottom:1px solid rgba(255,255,255,.05);font-variant-numeric:tabular-nums;color:#c9d1d9}
+    .bs-tbl tr:last-child td{border-bottom:none}
+    .bs-tbl tbody tr{cursor:pointer;transition:background .15s}
+    .bs-tbl tbody tr:hover{background:rgba(88,166,255,.08)}
+    .bs-tbl .bs-tbl-name{display:flex;align-items:center;gap:8px;font-weight:600;color:#e6edf3}
+    .bs-tbl .bs-tbl-swatch{width:8px;height:20px;border-radius:3px;flex-shrink:0}
+    .bs-tbl .bs-tbl-open{color:#8b949e;font-size:12px}
+    .bs-tbl .money{color:#3fb950}
+    .bs-tbl .dmg{color:#f0ad4e}
+    .bs-tbl .wk{color:#58a6ff}
+    .bs-tbl .war{color:#f85149}
+    .bs-tbl .eco{color:#3fb950}
+    .bs-tbl .hyb{color:#e3b341}
+    .bs-tbl-build{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+    .bs-tbl-bar{width:90px;height:7px;border-radius:4px;overflow:hidden;background:rgba(255,255,255,.1);display:flex;flex-shrink:0}
+    .bs-tbl-seg{height:100%}
+    .bs-tbl-seg.war{background:#f85149}.bs-tbl-seg.eco{background:#3fb950}
+    .bs-tbl-seg.mixed{background:#e3b341}.bs-tbl-seg.undecided{background:#6e7681}
+    .bs-tbl-known{color:#8b949e;font-size:12px;min-width:34px;text-align:right}
+    .bs-tbl-note{font-size:11px;color:#8b949e;padding:8px 12px;font-style:italic;border-top:1px solid rgba(255,255,255,.06)}
+
     /* ===== LIGHT THEME ===== */
     body.light-theme .bsw{color:#3e2f1c}
     body.light-theme .bs-tabs{border-bottom-color:rgba(0,0,0,.1)}
@@ -377,6 +415,15 @@ function injectStyles() {
     .bs-hbar-fill{height:100%;border-radius:5px;transition:width .4s ease}
     .bs-hbar-val{flex:0 0 auto;min-width:64px;text-align:right;font-weight:600;font-size:12.5px;color:#c9d1d9}
     body.light-theme .bs-hbar-label span:last-child{color:#3e2f1c}
+    body.light-theme .bs-tbl-wrap{background:rgba(240,230,210,.6);border-color:rgba(0,0,0,.1)}
+    body.light-theme .bs-tbl th{background:#f3ead9;color:#6b5a47;border-bottom-color:rgba(0,0,0,.1)}
+    body.light-theme .bs-tbl th:hover,body.light-theme .bs-tbl th.sorted{color:#8b5a2b}
+    body.light-theme .bs-tbl td{color:#3e2f1c;border-bottom-color:rgba(0,0,0,.06)}
+    body.light-theme .bs-tbl tbody tr:hover{background:rgba(139,90,43,.08)}
+    body.light-theme .bs-tbl .bs-tbl-name{color:#2e1f0c}
+    body.light-theme .bs-tbl .wk{color:#2f6fb5}
+    body.light-theme .bs-tbl-bar{background:rgba(0,0,0,.1)}
+    body.light-theme .bs-tbl-known,body.light-theme .bs-tbl-note{color:#6b5a47}
     body.light-theme .bs-hbar-track{background:rgba(0,0,0,.08)}
     body.light-theme .bs-hbar-val{color:#3e2f1c}
   `;
@@ -573,6 +620,7 @@ function renderFactions() {
     <div class="bs-sc"><div class="bs-sl">Total Wealth</div><div class="bs-sv" style="color:#3fb950">${fmt(globalMoney)}</div></div>
     <div class="bs-sc"><div class="bs-sl">Total Population</div><div class="bs-sv" style="color:#e6edf3">${fmt(globalPop)}</div></div>
   </div>
+  ${allianceTableHtml()}
   <div class="bs-dnd-tip">
     <span class="bs-dnd-ico">✋</span>
     <div class="bs-dnd-txt">
@@ -585,6 +633,146 @@ function renderFactions() {
   if (unaligned) html += blocCard(unaligned, true);
   html += '</div>';
   return html;
+}
+
+/* ── Tabella riassuntiva di TUTTE le alleanze (WarEra+) ──
+   Le schede qui sotto danno il dettaglio di una alleanza per volta; questa
+   tabella serve alla domanda opposta — come stanno le alleanze FRA loro —
+   che con dodici schede da scorrere non si legge. Stessi dati delle schede
+   (nessuna fetch in più: sono gli stessi `allStats` già calcolati), più le
+   colonne guerra/economia, che invece arrivano dal server di cache.
+
+   Le colonne derivate (ricchezza e danno settimanale per cittadino) esistono
+   perché i totali premiano sempre l'alleanza più popolosa: sono quelle che
+   dicono se un blocco piccolo è comunque intenso.
+
+   La tabella riflette merge e riassegnazioni fatte col drag&drop, perché
+   legge `allStats`, che viene ricalcolato ad ogni modifica. */
+const TABLE_COLS = [
+  { key: 'name',             label: 'Alliance', left: true },
+  { key: 'countryCount',     label: 'Nations' },
+  { key: 'totalMoney',       label: 'Wealth' },
+  { key: 'moneyPerCit',      label: 'Wealth/cit' },
+  { key: 'totalAbsoluteDmg', label: 'Total dmg' },
+  { key: 'totalDmg',         label: 'Weekly' },
+  { key: 'dpc',              label: 'Weekly/cit' },
+  { key: 'totalPop',         label: 'Pop' },
+  { key: 'avgDev',           label: 'Dev' },
+  { key: 'totalWars',        label: 'Wars' },
+  { key: 'psWar',            label: 'War' },
+  { key: 'psEco',            label: 'Eco' },
+  { key: 'psMixed',          label: 'Hyb' },
+  { key: 'psKnown',          label: 'Build' },
+];
+
+/** Somma i conteggi guerra/economia delle nazioni di un blocco. Ritorna null
+ *  finché i dati non sono arrivati (o se il server non risponde): le colonne
+ *  restano vuote invece di mostrare zeri, che si leggerebbero come "nessuno
+ *  gioca di guerra qui". */
+function blocPlaystyle(bloc) {
+  if (!psByCountry) return null;
+  const out = { war: 0, eco: 0, mixed: 0, undecided: 0, known: 0 };
+  for (const m of bloc.members) {
+    const c = psByCountry[m.id];
+    if (!c?.known) continue;
+    out.war += c.war || 0; out.eco += c.eco || 0;
+    out.mixed += c.mixed || 0; out.undecided += c.undecided || 0;
+    out.known += c.known;
+  }
+  return out.known ? out : null;
+}
+
+/** Riga della tabella: i valori già pronti sia per il disegno sia per
+ *  l'ordinamento, che deve confrontare numeri e non stringhe formattate. */
+function tableRowData(bloc) {
+  const ps = blocPlaystyle(bloc);
+  return {
+    bloc, ps,
+    name: bloc.name.toLowerCase(),
+    countryCount: bloc.countryCount,
+    totalMoney: bloc.totalMoney,
+    moneyPerCit: bloc.totalPop ? bloc.totalMoney / bloc.totalPop : 0,
+    totalAbsoluteDmg: bloc.totalAbsoluteDmg,
+    totalDmg: bloc.totalDmg,
+    dpc: bloc.dpc,
+    totalPop: bloc.totalPop,
+    avgDev: bloc.avgDev,
+    totalWars: bloc.totalWars,
+    psWar: ps ? ps.war : -1,
+    psEco: ps ? ps.eco : -1,
+    psMixed: ps ? ps.mixed : -1,
+    psKnown: ps ? ps.known : -1,
+  };
+}
+
+function allianceTableHtml() {
+  const rows = allStats.map(tableRowData);
+  const { key, dir } = tableSort;
+  rows.sort((a, b) => {
+    if (key === 'name') return dir * a.name.localeCompare(b.name);
+    // dir -1 = decrescente (piu' alto prima), 1 = crescente.
+    return dir * ((a[key] || 0) - (b[key] || 0));
+  });
+
+  const head = TABLE_COLS.map(col => `
+    <th class="${col.left ? 'left' : ''}${key === col.key ? ' sorted' : ''}" data-tsort="${col.key}">
+      ${col.label}${key === col.key ? (dir === -1 ? ' ▾' : ' ▴') : ''}
+    </th>`).join('');
+
+  const body = rows.map(r => {
+    const b = r.bloc, ps = r.ps;
+    const seg = g => (ps && ps[g] ? `<span class="bs-tbl-seg ${g}" style="width:${(ps[g] / ps.known) * 100}%"></span>` : '');
+    const build = ps
+      ? `<div class="bs-tbl-build">
+           <span class="bs-tbl-bar">${seg('war')}${seg('eco')}${seg('mixed')}${seg('undecided')}</span>
+           <span class="bs-tbl-known">${fmt(ps.known, 0, true)}</span>
+         </div>`
+      : '<span class="bs-tbl-known">—</span>';
+    const psCell = (v, cls) => `<td class="${cls}">${ps ? fmt(v, 0, true) : '—'}</td>`;
+    return `<tr data-tbl-bloc="${b.id}">
+      <td class="left"><span class="bs-tbl-name"><span class="bs-tbl-swatch" style="background:${b.color}"></span>${b.name}<span class="bs-tbl-open">↗</span></span></td>
+      <td>${b.countryCount}</td>
+      <td class="money">${fmt(b.totalMoney)}</td>
+      <td class="money">${fmt(r.moneyPerCit)}</td>
+      <td class="dmg">${fmt(b.totalAbsoluteDmg)}</td>
+      <td class="wk">${fmt(b.totalDmg)}</td>
+      <td class="wk">${fmt(b.dpc)}</td>
+      <td>${fmt(b.totalPop)}</td>
+      <td>${b.avgDev ? b.avgDev.toFixed(1) : '—'}</td>
+      <td>${b.totalWars}</td>
+      ${psCell(ps?.war, 'war')}${psCell(ps?.eco, 'eco')}${psCell(ps?.mixed, 'hyb')}
+      <td>${build}</td>
+    </tr>`;
+  }).join('');
+
+  const note = psByCountry
+    ? 'War / Eco / Hyb: citizens in a military unit, counted by where they spent their skill points.'
+    : 'War / Eco / Hyb: loading from the cache server…';
+
+  return `<div class="bs-tbl-wrap" id="bs-alliance-table">
+    <table class="bs-tbl">
+      <thead><tr>${head}</tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <div class="bs-tbl-note">${note}</div>
+  </div>`;
+}
+
+/** Una fetch per sessione, poi ridisegno della sola tabella: il resto del
+ *  pannello è già a schermo e ridisegnarlo tutto perderebbe lo scroll. */
+function ensurePlaystyleData() {
+  if (psByCountry) return;
+  import('../mu/api.js')
+    .then(m => m.fetchPlaystyleByCountry())
+    .then(data => {
+      psByCountry = data || {};
+      const host = document.getElementById('bs-alliance-table');
+      if (host) host.outerHTML = allianceTableHtml();
+    })
+    .catch(err => {
+      psByCountry = {};
+      console.warn('WarEra+ blocStats: stile di gioco non disponibile:', err.message);
+    });
 }
 
 function blocCard(bloc, isUnaligned) {
@@ -896,6 +1084,21 @@ function attachEvents(c) {
   c.addEventListener('click', e => {
     const tab = e.target.closest('.bs-tab');
     if (tab) { currentTab = tab.dataset.tab; buildUI(); return; }
+
+    const th = e.target.closest('.bs-tbl th[data-tsort]');
+    if (th) {
+      const k = th.dataset.tsort;
+      // Stessa colonna: inverte. Colonna nuova: dal più alto (dal primo in
+      // ordine alfabetico per il nome, che "più alto" non ce l'ha).
+      if (tableSort.key === k) tableSort.dir *= -1;
+      else tableSort = { key: k, dir: k === 'name' ? 1 : -1 };
+      const host = document.getElementById('bs-alliance-table');
+      if (host) host.outerHTML = allianceTableHtml();
+      return;
+    }
+
+    const tblRow = e.target.closest('.bs-tbl tr[data-tbl-bloc]');
+    if (tblRow) { showBlocPopup(tblRow.dataset.tblBloc); return; }
 
     const mergeBtn = e.target.closest('.bs-mergebtn');
     if (mergeBtn) {
