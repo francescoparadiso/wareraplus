@@ -15,6 +15,40 @@ deployarlo da qui — il deploy resta manuale sul VPS.
    `pm2 list` per controllare).
 3. Verifica: `curl https://ampsodrick.duckdns.org/warera-cache/health`.
 
+## Novità: directory unità militari (`/mu-directory`)
+
+`pollMuDirectory()` gira ogni 30 minuti (:12 e :42) e pagina a cursore
+`mu.getManyPaginated` via Worker — oggi 1379 unità, 14 pagine. Salva una
+versione ridotta (nome, nazione, regione, numero membri, avatar, le sei
+`rankings` mu*): 557 KB invece dei 2,0 MB grezzi, perché i ~16k userId dei
+membri sono i tre quarti del payload e non servono a una lista.
+
+Il DETTAGLIO di una singola unità non passa da qui: il client chiama
+`mu.getById` on-demand solo per l'unità che apre (i membri cambiano di
+continuo). Finché questo file non è deployato, `/mu-directory` risponde 404
+e il client ricade da solo sulla paginazione diretta — funziona, ma sono 14
+richieste per ogni utente invece di una.
+
+### Nazionalità "de facto" dei membri
+
+Sempre dentro `pollMuDirectory`: per ogni unità si conta da quali nazioni
+vengono i suoi membri, così il tool può segnalare le MU registrate sotto una
+nazione ma composte in maggioranza da cittadini di un'altra (verificato:
+6 delle prime 25 per danni settimanali).
+
+La nazione di un utente si sa solo da `user.getUserLite`, una chiamata per
+utente, ~4,3 KB l'una: risolvere tutti i 16k membri ad ogni giro sarebbe
+~65 MB ogni 30 minuti. Si tiene quindi la mappa persistente
+`mu-user-countries.json` (`userId → [countryId, timestamp]`) e ogni giro ne
+risolve al massimo `MU_USER_LOOKUP_BUDGET` = 2000 fra sconosciuti e più
+vecchi di 14 giorni.
+
+**Conseguenza al primo avvio dopo il deploy**: servono ~8 giri (≈4 ore)
+perché la mappa si riempia; nel frattempo la composizione esce parziale —
+il campo `known` dice su quanti membri è calcolata, e il client mostra le
+percentuali su quelli. La mappa viene potata ad ogni giro dei membri non
+più tesserati, quindi non cresce indefinitamente (~16k voci, ~700 KB).
+
 ## Novità di questa versione (vedi commento in testa al file)
 
 - Fix: `pollBattles()` leggeva un campo (`regionId`) che non esiste su una

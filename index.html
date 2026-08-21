@@ -342,6 +342,22 @@
     <div id="wp-news-root" style="display:none;"></div>
   </div>
 
+  <!-- ════════════════════════════════════════════════════════════
+       NUOVO — Overlay Unità Militari (src/mu/*)
+       Vista sotto "Approfondimenti": elenco/ricerca di tutte le unità
+       militari, scheda per singola unità (membri + statistiche) e le sei
+       classifiche mu*. Montata IN-PAGE dentro #wp-mu-root da
+       src/mu/main.js: initMuView(), aperta da src/app/muOverlay.js.
+       Stesso pattern degli overlay Political/Eco/News.
+       ════════════════════════════════════════════════════════════ -->
+  <div id="wp-mu-overlay" class="wp-political-overlay wp-mu-overlay" aria-hidden="true">
+    <div class="wp-political-topbar">
+      <button id="wp-mu-back-btn" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
+      <span class="wp-political-title">Military Units</span>
+    </div>
+    <div id="wp-mu-root" style="display:none;"></div>
+  </div>
+
   <!-- Ko-fi + pill autore (desktop): wrapper condiviso che li centra
        appaiati in basso — vedi shell.css #wp-bottom-credits e
        src/app/authorPill.js per l'arricchimento con la foto profilo

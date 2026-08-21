@@ -1,0 +1,543 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Esplora Unità Militari (src/mu/*) — stile
+   ------------------------------------------------------------------
+   Namespace `wp-mu-*`. Stessa estetica "dashboard militare" di
+   eco.css/menubar.css (#0d1117 / #161b22 / #21262d, bordi #30363d, testo
+   #e6edf3, secondario #8b949e), con la variante chiara sotto
+   body.light-theme come fanno gli altri fogli nuovi.
+
+   Caricato via import() da src/mu/main.js — non pesa sul boot. Non serve
+   scoping tipo #wp-political-root: i selettori wp-mu-* sono già unici e
+   il tutto vive dentro #wp-mu-root.
+
+   I colori dei tier (.wp-mu-tier-*) sono quelli del gioco: bronzo,
+   argento, oro, platino, diamante, master.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Come #wp-eco-root/#wp-news-root: un div (a differenza di un iframe) ha
+   bisogno che flex+overflow siano dichiarati qui, altrimenti il contenuto
+   sfora senza scorrere. */
+#wp-mu-root {
+  flex: 1;
+  width: 100%;
+  overflow-y: auto;
+  background: #0d1117;
+  color: #e6edf3;
+}
+body.light-theme #wp-mu-root { background: #f4f6fa; color: #1f2430; }
+
+.wp-mu-page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 22px 18px 90px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ── Testata + tab principali ─────────────────────────────── */
+.wp-mu-masthead { margin-bottom: 14px; }
+.wp-mu-title {
+  margin: 0;
+  font-size: clamp(22px, 3.4vw, 30px);
+  font-weight: 800;
+  letter-spacing: .01em;
+}
+.wp-mu-subtitle { margin-top: 4px; font-size: 12.5px; color: #8b949e; }
+body.light-theme .wp-mu-subtitle { color: #5b6473; }
+
+.wp-mu-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+.wp-mu-tab, .wp-mu-rank-tab {
+  padding: 7px 14px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #8b949e;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.wp-mu-tab:hover, .wp-mu-rank-tab:hover { border-color: #4b5563; color: #e6edf3; }
+.wp-mu-tab.active, .wp-mu-rank-tab.active { background: #21262d; border-color: #58a6ff; color: #e6edf3; }
+body.light-theme .wp-mu-tab,
+body.light-theme .wp-mu-rank-tab { background: #fff; border-color: #d5dae3; color: #5b6473; }
+body.light-theme .wp-mu-tab.active,
+body.light-theme .wp-mu-rank-tab.active { background: #e8f0fe; border-color: #2f6fed; color: #1f2430; }
+
+/* ── Barra strumenti (ricerca, filtri) ─────────────────────── */
+.wp-mu-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.wp-mu-search { position: relative; flex: 1 1 260px; min-width: 200px; }
+.wp-mu-search-icon {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  font-size: 13px; opacity: .6; pointer-events: none;
+}
+.wp-mu-search-input {
+  width: 100%;
+  padding: 9px 12px 9px 32px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #e6edf3;
+  font-size: 14px;
+}
+.wp-mu-search-input:focus { outline: none; border-color: #58a6ff; }
+body.light-theme .wp-mu-search-input { background: #fff; border-color: #d5dae3; color: #1f2430; }
+
+.wp-mu-field { display: flex; flex-direction: column; gap: 3px; }
+.wp-mu-field-label {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: #8b949e;
+}
+body.light-theme .wp-mu-field-label { color: #5b6473; }
+.wp-mu-select {
+  padding: 8px 10px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #e6edf3;
+  font-size: 13px;
+  max-width: 200px;
+}
+body.light-theme .wp-mu-select { background: #fff; border-color: #d5dae3; color: #1f2430; }
+
+.wp-mu-count { font-size: 12px; color: #8b949e; margin-left: auto; padding-bottom: 8px; }
+body.light-theme .wp-mu-count { color: #5b6473; }
+
+/* ── Avatar (segnaposto sotto, immagine sopra) ─────────────── */
+.wp-mu-avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px; height: 46px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #21262d, #30363d);
+}
+.wp-mu-avatar img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.wp-mu-avatar-ph { font-weight: 800; font-size: 17px; color: #8b949e; }
+.wp-mu-avatar-lg { width: 78px; height: 78px; border-radius: 14px; }
+.wp-mu-avatar-lg .wp-mu-avatar-ph { font-size: 30px; }
+.wp-mu-avatar-sm { width: 30px; height: 30px; border-radius: 8px; }
+.wp-mu-avatar-sm .wp-mu-avatar-ph { font-size: 13px; }
+body.light-theme .wp-mu-avatar { background: linear-gradient(135deg, #e3e8f0, #cfd6e2); }
+body.light-theme .wp-mu-avatar-ph { color: #7a8494; }
+
+.wp-mu-flag {
+  width: 17px; height: 12px;
+  object-fit: cover;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ── Elenco a tabella ──────────────────────────────────────────
+   Una griglia sola, ripetuta identica su intestazione e righe (variabile
+   --wp-mu-cols): così le colonne restano allineate senza usare <table>,
+   che non si sarebbe potuta far scorrere in orizzontale né collassare su
+   mobile con la stessa facilità.
+
+   Il contenitore scorre in orizzontale sotto una certa larghezza invece di
+   comprimere le colonne fino a renderle illeggibili. */
+.wp-mu-table {
+  --wp-mu-cols: 36px minmax(140px, 1.4fr) minmax(110px, .95fr) minmax(150px, 1.15fr) 54px repeat(6, minmax(76px, .72fr));
+  overflow-x: auto;
+}
+.wp-mu-thead, .wp-mu-row {
+  display: grid;
+  grid-template-columns: var(--wp-mu-cols);
+  align-items: center;
+  gap: 8px;
+  min-width: 1020px;
+}
+.wp-mu-thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0 8px 6px;
+  background: #0d1117;
+  border-bottom: 1px solid #30363d;
+}
+body.light-theme .wp-mu-thead { background: #f4f6fa; border-bottom-color: #d5dae3; }
+.wp-mu-th {
+  background: none;
+  border: none;
+  padding: 4px 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #8b949e;
+  text-align: left;
+  cursor: pointer;
+  line-height: 1.2;
+}
+.wp-mu-th-static { cursor: default; }
+.wp-mu-th-num { text-align: right; }
+.wp-mu-th:hover { color: #e6edf3; }
+.wp-mu-th.active { color: #58a6ff; }
+.wp-mu-th.active::after { content: ' ▾'; }
+body.light-theme .wp-mu-th { color: #5b6473; }
+body.light-theme .wp-mu-th:hover { color: #1f2430; }
+body.light-theme .wp-mu-th.active { color: #2f6fed; }
+
+.wp-mu-row {
+  padding: 7px 8px;
+  border-bottom: 1px solid #21262d;
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  font-size: 13px;
+}
+.wp-mu-row:hover, .wp-mu-row:focus-visible { outline: none; filter: brightness(1.35); }
+body.light-theme .wp-mu-row { border-bottom-color: #e3e8f0; }
+body.light-theme .wp-mu-row:hover, body.light-theme .wp-mu-row:focus-visible { filter: brightness(.97); }
+
+/* Tinte per tier: leggere, servono a far leggere il livello "a colpo
+   d'occhio" scorrendo la colonna, non a colorare la pagina. La barretta a
+   sinistra è a piena saturazione, il fondo no. */
+.wp-mu-tint-bronze   { background: rgba(176, 106, 59, .11); border-left-color: #b06a3b; }
+.wp-mu-tint-silver   { background: rgba(185, 194, 204, .10); border-left-color: #b9c2cc; }
+.wp-mu-tint-gold     { background: rgba(227, 179, 65, .12);  border-left-color: #e3b341; }
+.wp-mu-tint-platinum { background: rgba(159, 214, 210, .12); border-left-color: #9fd6d2; }
+.wp-mu-tint-diamond  { background: rgba(126, 200, 245, .12); border-left-color: #7ec8f5; }
+.wp-mu-tint-master   { background: rgba(208, 126, 245, .14); border-left-color: #d07ef5; }
+body.light-theme .wp-mu-tint-bronze   { background: rgba(176, 106, 59, .13); }
+body.light-theme .wp-mu-tint-silver   { background: rgba(140, 152, 166, .13); }
+body.light-theme .wp-mu-tint-gold     { background: rgba(227, 179, 65, .18); }
+body.light-theme .wp-mu-tint-platinum { background: rgba(109, 190, 184, .16); }
+body.light-theme .wp-mu-tint-diamond  { background: rgba(90, 178, 235, .15); }
+body.light-theme .wp-mu-tint-master   { background: rgba(190, 106, 232, .15); }
+
+.wp-mu-cell-pos { font-size: 12px; font-weight: 700; color: #6e7681; }
+.wp-mu-cell-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wp-mu-name-text {
+  font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wp-mu-cell-country {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  color: #8b949e;
+}
+body.light-theme .wp-mu-cell-country { color: #4a5261; }
+.wp-mu-cell-country-name {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 12.5px;
+}
+.wp-mu-share { font-size: 11px; font-weight: 700; opacity: .75; flex-shrink: 0; }
+.wp-mu-cell-empty { color: #4b5563; }
+
+/* Composizione in numeri: "12 🇱🇹 · 8 🇩🇪 · +5". Niente a capo — la riga
+   deve restare alta uguale a tutte le altre; quello che non ci sta è già
+   raccolto nel chip "+N". */
+.wp-mu-cell-comp {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  /* Stringe sul contenuto invece di riempire la colonna: altrimenti il
+     bordo del marchio "de facto" diventerebbe un rettangolo lungo tutta la
+     cella, che è molto più vistoso del dovuto. */
+  justify-self: start;
+  overflow: hidden;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+}
+.wp-mu-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1;
+}
+.wp-mu-chip strong { font-weight: 700; font-variant-numeric: tabular-nums; }
+.wp-mu-chip-rest { color: #6e7681; font-size: 11px; }
+body.light-theme .wp-mu-chip-rest { color: #79818f; }
+.wp-mu-cell-num {
+  display: flex; align-items: baseline; justify-content: flex-end; gap: 5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.wp-mu-cell-sorted { font-weight: 800; color: #58a6ff; }
+body.light-theme .wp-mu-cell-sorted { color: #2f6fed; }
+.wp-mu-cell-rank { font-size: 9.5px; font-weight: 700; opacity: .8; }
+.wp-mu-rank-bronze   { color: #c98a5e; }
+.wp-mu-rank-silver   { color: #b9c2cc; }
+.wp-mu-rank-gold     { color: #e3b341; }
+.wp-mu-rank-platinum { color: #9fd6d2; }
+.wp-mu-rank-diamond  { color: #7ec8f5; }
+.wp-mu-rank-master   { color: #d07ef5; }
+
+/* "de facto": la nazione prevalente fra i membri quando è diversa da
+   quella di registrazione. Marcata, non solo scritta: è il punto per cui
+   questa colonna esiste. */
+.wp-mu-defacto {
+  padding: 2px 7px;
+  border: 1px solid #d07ef5;
+  border-radius: 999px;
+  background: rgba(208, 126, 245, .12);
+  color: #e6edf3;
+}
+body.light-theme .wp-mu-defacto { color: #1f2430; background: rgba(190, 106, 232, .14); }
+/* Maggioranza solo RELATIVA (sotto il 50%): stessa lettura, ma il bordo
+   tratteggiato dice che è una prevalenza, non un dominio. */
+.wp-mu-defacto-weak { border-style: dashed; background: rgba(208, 126, 245, .07); }
+.wp-mu-defacto-label {
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em;
+  color: #d07ef5; font-weight: 800; flex-shrink: 0;
+}
+.wp-mu-defacto-head { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+
+/* ── Composizione per nazionalità (scheda) ─────────────────── */
+.wp-mu-comp-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #21262d;
+}
+body.light-theme .wp-mu-comp-bar { background: #dfe4ec; }
+.wp-mu-comp-seg { display: block; height: 100%; }
+.wp-mu-comp-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.wp-mu-comp-seg-0 { background: #58a6ff; }
+.wp-mu-comp-seg-1 { background: #3fb950; }
+.wp-mu-comp-seg-2 { background: #e3b341; }
+.wp-mu-comp-seg-3 { background: #d07ef5; }
+.wp-mu-comp-seg-4 { background: #f0883e; }
+.wp-mu-comp-seg-5 { background: #56d4dd; }
+.wp-mu-comp-seg-6 { background: #6e7681; }
+.wp-mu-comp-legend {
+  display: flex; flex-wrap: wrap; gap: 6px 16px;
+  margin-top: 9px;
+  font-size: 12px;
+}
+.wp-mu-comp-item { display: flex; align-items: center; gap: 6px; }
+
+/* ── Pastiglia posizione/tier ──────────────────────────────── */
+.wp-mu-tier {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #0d1117;
+  white-space: nowrap;
+}
+.wp-mu-tier-bronze   { background: #b06a3b; color: #fff; }
+.wp-mu-tier-silver   { background: #b9c2cc; }
+.wp-mu-tier-gold     { background: #e3b341; }
+.wp-mu-tier-platinum { background: #9fd6d2; }
+.wp-mu-tier-diamond  { background: #7ec8f5; }
+.wp-mu-tier-master   { background: #d07ef5; color: #fff; }
+.wp-mu-unranked { font-size: 11px; color: #6e7681; }
+
+/* ── Stato vuoto / "carica altre" ──────────────────────────── */
+.wp-mu-empty {
+  padding: 34px 12px;
+  text-align: center;
+  color: #8b949e;
+  font-size: 14px;
+}
+body.light-theme .wp-mu-empty { color: #5b6473; }
+.wp-mu-more-wrap { display: flex; justify-content: center; margin-top: 16px; }
+.wp-mu-more {
+  padding: 9px 20px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #e6edf3;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wp-mu-more:hover { border-color: #58a6ff; }
+body.light-theme .wp-mu-more { background: #fff; border-color: #d5dae3; color: #1f2430; }
+
+/* ── Scheda di dettaglio ───────────────────────────────────── */
+.wp-mu-back {
+  margin-bottom: 14px;
+  padding: 7px 13px;
+  background: transparent;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #8b949e;
+  font-size: 13px;
+  cursor: pointer;
+}
+.wp-mu-back:hover { border-color: #58a6ff; color: #e6edf3; }
+body.light-theme .wp-mu-back { border-color: #d5dae3; color: #5b6473; }
+
+.wp-mu-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #161b22 0%, #1a2130 100%);
+  border: 1px solid #30363d;
+  border-radius: 14px;
+}
+body.light-theme .wp-mu-head { background: #fff; border-color: #d5dae3; }
+.wp-mu-head-main { flex: 1; min-width: 0; }
+.wp-mu-head-name { margin: 0 0 5px; font-size: 22px; font-weight: 800; }
+.wp-mu-head-country { display: flex; align-items: center; gap: 7px; font-size: 13px; color: #8b949e; }
+.wp-mu-head-meta {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  margin-top: 8px; font-size: 12.5px; color: #8b949e;
+}
+body.light-theme .wp-mu-head-country,
+body.light-theme .wp-mu-head-meta { color: #5b6473; }
+.wp-mu-head-meta strong { color: #e6edf3; }
+body.light-theme .wp-mu-head-meta strong { color: #1f2430; }
+
+.wp-mu-pin {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  color: #4b5563;
+  cursor: pointer;
+  transition: color .15s, transform .15s;
+}
+.wp-mu-pin:hover { transform: scale(1.12); color: #8b949e; }
+.wp-mu-pin-on, .wp-mu-pin-on:hover { color: #e3b341; }
+
+.wp-mu-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+.wp-mu-statcard {
+  padding: 12px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 11px;
+}
+body.light-theme .wp-mu-statcard { background: #fff; border-color: #d5dae3; }
+.wp-mu-statcard-label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #8b949e;
+}
+body.light-theme .wp-mu-statcard-label { color: #5b6473; }
+.wp-mu-statcard-value { margin-top: 4px; font-size: 18px; font-weight: 800; }
+.wp-mu-statcard-rank { margin-top: 6px; }
+
+.wp-mu-section-title {
+  display: flex; align-items: center; gap: 8px;
+  margin: 22px 0 10px;
+  font-size: 15px; font-weight: 700;
+}
+.wp-mu-section-title .wp-mu-count { margin-left: 0; padding-bottom: 0; }
+
+.wp-mu-member-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+.wp-mu-member {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 11px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color .15s;
+}
+.wp-mu-member:hover { border-color: #58a6ff; }
+body.light-theme .wp-mu-member { background: #fff; border-color: #d5dae3; }
+.wp-mu-member-main { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.wp-mu-member-name {
+  font-size: 13.5px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wp-mu-member-sub {
+  font-size: 11px; color: #8b949e;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+body.light-theme .wp-mu-member-sub { color: #5b6473; }
+.wp-mu-member-dmg { font-size: 12.5px; font-weight: 700; color: #58a6ff; white-space: nowrap; }
+
+/* ── Classifiche ───────────────────────────────────────────── */
+.wp-mu-rank-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.wp-mu-rank-list { list-style: none; margin: 0; padding: 0; }
+.wp-mu-rank-row {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 12px;
+  border-bottom: 1px solid #21262d;
+  cursor: pointer;
+}
+.wp-mu-rank-row:hover { background: #161b22; }
+body.light-theme .wp-mu-rank-row { border-bottom-color: #e3e8f0; }
+body.light-theme .wp-mu-rank-row:hover { background: #eef2f8; }
+.wp-mu-rank-pos {
+  width: 38px; flex-shrink: 0;
+  font-size: 14px; font-weight: 800; color: #8b949e;
+  text-align: right;
+}
+.wp-mu-rank-name {
+  flex: 1; min-width: 0;
+  font-size: 14px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wp-mu-rank-country {
+  display: flex; align-items: center; gap: 6px;
+  width: 170px; flex-shrink: 0;
+  font-size: 12px; color: #8b949e;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+body.light-theme .wp-mu-rank-country { color: #5b6473; }
+.wp-mu-rank-value { font-size: 13px; font-weight: 700; white-space: nowrap; }
+
+/* ── Mobile ────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .wp-mu-page { padding: 16px 12px 90px; }
+  .wp-mu-toolbar { gap: 8px; }
+  .wp-mu-select { max-width: none; width: 100%; }
+  .wp-mu-field { flex: 1 1 140px; }
+  .wp-mu-count { margin-left: 0; padding-bottom: 0; }
+  .wp-mu-head { flex-wrap: wrap; }
+  .wp-mu-rank-country { display: none; }
+  .wp-mu-rank-pos { width: 30px; }
+
+  /* Su schermo stretto restano nome, nazione, "membri da", membri e danni
+     settimanali: le altre quattro classifiche sparirebbero comunque sotto
+     uno scorrimento orizzontale lunghissimo. Chi le vuole ha il tab
+     Classifiche e la scheda della singola unità. */
+  /* minmax(0, …) e non minmax(96px, …): con un minimo in pixel le colonne
+     non possono rimpicciolirsi sotto quella soglia e la riga sfora la
+     larghezza dello schermo. I testi hanno già l'ellissi, quindi possono
+     stringersi quanto serve. */
+  .wp-mu-table {
+    /* La composizione ha la fetta più larga: è la colonna con più roba
+       dentro (due conteggi + bandiere + "+N"), e con meno spazio il "+N"
+       finiva tagliato. Il nome della nazione, che si accorcia, sta in
+       quella accanto. */
+    --wp-mu-cols: 18px minmax(0, 1.05fr) minmax(0, .7fr) minmax(0, 1.4fr) 20px 58px;
+    overflow-x: visible;
+  }
+  .wp-mu-thead, .wp-mu-row { min-width: 0; gap: 4px; font-size: 12px; }
+  .wp-mu-thead { padding: 0 4px 6px; }
+  .wp-mu-row { padding: 7px 4px; }
+  .wp-mu-th:nth-child(n+7), .wp-mu-row > :nth-child(n+7) { display: none; }
+  .wp-mu-cell-country-name { font-size: 11px; }
+  .wp-mu-defacto { padding: 1px 4px; }
+  .wp-mu-defacto-label { display: none; } /* il bordo colorato basta a segnalarlo */
+  /* Su schermo stretto le nazionalità mostrate scendono a due: il taglio lo
+     decide compositionCell() in muList.js, non il CSS, perché il chip "+N"
+     deve contare davvero quelle nascoste. */
+  .wp-mu-cell-comp { gap: 4px; padding: 2px; }
+  .wp-mu-cell-rank { display: none; }
+  .wp-mu-avatar-sm { width: 22px; height: 22px; border-radius: 6px; }
+}

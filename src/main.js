@@ -27,6 +27,7 @@ import { initCountryPanel, selectNationInPanel } from './panel/countryPanel.js';
 import { initPoliticalOverlay } from './app/politicalOverlay.js';
 import { initEcoOverlay } from './app/ecoOverlay.js';
 import { initNewsOverlay } from './app/newsOverlay.js';
+import { initMuOverlay } from './app/muOverlay.js';
 import { initThemeSync } from './app/themeSync.js';
 import { initLangSync } from './app/langSync.js';
 import { initBattleToggle } from './app/battleToggle.js';
@@ -68,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initPoliticalOverlay();
   initEcoOverlay();
   initNewsOverlay();
+  initMuOverlay();
   applyTranslations();
   initLangButton();
 });

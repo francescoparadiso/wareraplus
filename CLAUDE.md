@@ -84,11 +84,25 @@ wareraPlus/
     │   ├── parliament.js, senate.js, congress.js, presidential.js, party.js,
     │   │   organizer.js, panels.js
     │   └── (nessun equivalente di embed.js — era dead code nell'originale, non portato)
+    ├── mu/                       ← NUOVO (Fase 3) — Esplora Unità Militari
+    │   ├── main.js              ← initMuView(container) + openMuDetail(muId)
+    │   ├── api.js               ← directory dal server di cache (/mu-directory) con
+    │   │                          fallback a paginazione diretta; dettaglio e membri
+    │   │                          on-demand. La directory sta in MEMORIA per la
+    │   │                          sessione (~550 KB), mai in localStorage.
+    │   ├── i18n.js, ui.js       ← dizionario locale (9 lingue) e pezzi di UI comuni
+    │   ├── muList.js            ← elenco a TABELLA (colonne ordinabili, righe tinte
+    │   │                          per tier, colonna "Composizione" coi membri per
+    │   │                          nazione + marchio "de facto"), blocchi da 60 righe
+    │   ├── muDetail.js          ← scheda unità: sei classifiche + composizione per
+    │   │                          nazionalità (calcolata dal vivo sui membri) + membri
+    │   └── ranking.js           ← classifiche, ordinate dalla directory (zero fetch)
     ├── panel/                   ← NUOVO
     │   ├── countryPanel.js      ← pannello laterale nazione
     │   ├── parliamentChart.js   ← grafico emiciclo nel pannello (nativo, indipendente da src/political/)
     │   └── panelResize.js       ← drag per ridimensionare il pannello
     ├── app/                     ← NUOVO — orchestrazione integrazione
+    │   ├── muOverlay.js        ← apre Esplora Unità Militari (import() dinamico di src/mu/main.js)
     │   ├── politicalOverlay.js ← apre Political in-page (import() dinamico di src/political/main.js)
     │   ├── themeSync.js        ← sincronizza tema (localStorage 'we_theme') con Political
     │   ├── battleToggle.js     ← bottone dedicato show/hide battaglie
@@ -258,8 +272,20 @@ Punti da sapere se tocchi `src/political/`:
 
 ## Roadmap (non iniziare senza richiesta esplicita)
 
-Fase 2 (fusione moduli ES per Political) **completata**. Restano: Fase 3
-(dati military units), Fase 4 (dashboard unificata mappa+pannello
-permanenti), Fase 5 (proxy/cache server dedicato). Dettagli completi in
-`README.md`. Se l'utente chiede una di queste aree, leggi prima la sezione
-Roadmap del README per il piano già pensato.
+Fase 2 (fusione moduli ES per Political) **completata**. Fase 3 —
+**Esplora Unità Militari (`src/mu/`) fatta**; resta l'altra metà della
+fase (più dati sulle nazioni nel pannello: storico, confronti, grafici).
+Restano poi Fase 4 (dashboard unificata mappa+pannello permanenti) e
+Fase 5 (proxy/cache server dedicato). Dettagli completi in `README.md`.
+Se l'utente chiede una di queste aree, leggi prima la sezione Roadmap del
+README per il piano già pensato.
+
+⚠️ Il pezzo server delle Unità Militari (`pollMuDirectory` + endpoint
+`/mu-directory` in `server/warera-cache-server.js`) **va ancora
+deployato** sul VPS. Finché non lo è: (1) il client prende 404 e ricade
+sulla paginazione diretta — funziona, ma ~4,5 s e 14 richieste per ogni
+utente invece di una; (2) la colonna "de facto" dell'elenco resta vuota,
+perché la composizione per nazionalità dei membri la calcola solo il
+server (nella scheda della singola unità invece si calcola dal vivo, e
+funziona già oggi). Dopo il deploy servono ~4 ore perché la mappa
+utente→nazione si riempia: vedi `server/README.md`.

@@ -196,10 +196,58 @@ cosa no rispetto al piano originale:
 nel repo come riferimento/rollback fisico, non più raggiunto da alcun path
 attivo.
 
-### Fase 3 — Dati aggiuntivi (come richiesto)
-- **Military units**: nuova sezione nel pannello nazione (o nuova tab),
-  nuovo modulo `src/military/` che consuma le procedure tRPC pertinenti
-  (da individuare/verificare contro l'API WarEra attuale).
+### Fase 3 — Dati aggiuntivi
+
+- ✅ **Esplora Unità Militari** (`src/mu/`, voce "Approfondimenti → Unità
+  Militari"). Realizzata come vista a sé in overlay, non come sezione del
+  pannello nazione: le unità sono ~1400 e la cosa più utile su di loro è
+  cercarle e confrontarle fra nazioni diverse, non leggerle una nazione
+  alla volta.
+
+  Cosa ha detto la verifica dal vivo contro le API reali, prima di
+  scrivere la UI (e cosa ne è cambiato rispetto al piano iniziale):
+
+  | Assunzione del piano | Verifica |
+  |---|---|
+  | paginazione da confermare | cursore, come `battle.getBattles` (`{items, nextCursor}`) — 1379 unità, 14 pagine da 100 |
+  | `mu.getById` per il dettaglio | restituisce **esattamente** l'item della lista: l'unico campo in più rispetto alla directory proiettata sono i membri |
+  | `ranking.getRanking` per le classifiche | **non serve**: ogni unità porta già le proprie `rankings` (i sei tipi mu*, con `value`/`rank`/`tier`) — le classifiche si ordinano dalla directory, zero chiamate |
+  | membri con nome/avatar | `members` è un array di soli userId → un batch `user.getUserLite` (max 25 membri visti) |
+  | livello/danni mensili dell'unità | `leveling.level` è 1 e `leveling.monthlyDamages` è 0 su **tutte** e 1379: campi che il gioco oggi non alimenta, tenuti in cache ma non mostrati |
+
+  Divisione server/client, come per Alleanze vs Partiti: la **directory**
+  è server-side (`pollMuDirectory`, ogni 30 min, endpoint `/mu-directory`,
+  proiezione a 557 KB → ~140 KB gzip contro i 2,0 MB grezzi), il
+  **dettaglio dei membri** è client-side on-demand (cambia di continuo, e
+  si apre solo l'unità che l'utente guarda davvero). Se il server di cache
+  non risponde, il client rifà lui la paginazione (~4,5 s misurati).
+
+  L'elenco è una **tabella**, non una griglia di card (richiesta esplicita:
+  con tre colonne di card si perdevano i dettagli). Ogni riga porta nome,
+  nazione, nazionalità prevalente dei membri, numero membri e tutte e sei
+  le classifiche con la propria posizione; le intestazioni sono cliccabili
+  per ordinare. Lo **sfondo della riga è tinto secondo il tier** (bronze →
+  master) della colonna su cui si sta ordinando, con una barretta piena a
+  sinistra.
+
+  **Composizione e nazionalità "de facto"**: la colonna "Composizione"
+  elenca in numeri quanti membri vengono da ogni nazione (`12 🇱🇹 · 8 🇩🇪 ·
+  +5`, tre nazionalità su desktop e due su mobile, il resto nel `+N`; il
+  tooltip ha l'elenco per esteso). Quando la nazionalità prevalente è
+  diversa da quella di registrazione la cella prende il marchio "de facto"
+  — tratteggiato se è maggioranza solo relativa. Ordinando per quella
+  colonna vengono prima le unità de facto straniere, dalle più numerose.
+  Il conteggio per nazione dei membri lo fa il server (`user.getUserLite` è l'unica fonte: una chiamata per
+  utente, ~4,3 KB — risolvere tutti i 16k membri ad ogni giro sarebbe
+  ~65 MB ogni 30 min, quindi c'è una mappa persistente `userId → nazione`
+  riempita al ritmo di 2000 per giro e rinfrescata ogni 14 giorni). Nella
+  scheda della singola unità la composizione è invece calcolata dal vivo
+  dai membri appena scaricati, ed è completa. Misurato sulle prime 25 per
+  danni settimanali: **6 su 25 sono de facto di un'altra nazione** (es.
+  "Only Mercs", registrata Guyana, 25 membri su 25 del Mali).
+
+  Integrata anche nei Preferiti (terzo tipo di pin) e nella ricerca
+  globale della barra menù (gruppo "Unità militari").
 - **Più dati sulle nazioni** nel pannello: storico, confronto tra nazioni,
   grafici — riusando `Chart.js` già presente lato Political.
 

@@ -442,6 +442,180 @@ async function pollBattles() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// UNITÀ MILITARI (pollMuDirectory) — solo la DIRECTORY, non i dettagli.
+//
+// Verificato dal vivo prima di scrivere questo blocco (mu.getManyPaginated,
+// mu.getById, ranking.getRanking sugli endpoint reali):
+//
+//   · paginazione a CURSORE come battle.getBattles ({items, nextCursor}),
+//     non a pagina come party.getManyPaginated. Oggi 1379 MU = 14 pagine
+//     da 100.
+//   · ogni item della lista è GIÀ l'oggetto completo: `mu.getById` non
+//     aggiunge un solo campo rispetto a quello che la lista restituisce.
+//     Comprese le `rankings` (muWeeklyDamages/muDamages/muTerrain/
+//     muWealth/muBounty/muReputation, ognuna {value, rank, tier}) — le
+//     classifiche del client si calcolano da qui, senza mai chiamare
+//     ranking.getRanking.
+//   · `members` è un array di userId (niente nome/avatar): il client li
+//     risolve con user.getUserLite quando apre UNA unità, non qui.
+//
+// PROIEZIONE: l'elenco grezzo pesa 2,0 MB (555 KB gzip) e i 16k userId dei
+// membri sono i tre quarti del peso — inutili in una lista che mostra solo
+// "quanti membri". Si scrive quindi una versione ridotta (557 KB, ~140 KB
+// gzip con la compressione già attiva su questo server): i campi che
+// servono a cercare, ordinare e disegnare le card, più le rankings.
+//
+// Il DETTAGLIO di una singola MU resta client-side on-demand (mu.getById
+// diretto, vedi src/mu/api.js): i membri entrano/escono di continuo, e
+// tenerne una copia server per ~1400 unità di cui l'utente ne apre due
+// sarebbe spreco di poll e di dato vecchio.
+// ═══════════════════════════════════════════════════════════════════════
+const MU_RANKING_TYPES = ['muWeeklyDamages', 'muDamages', 'muTerrain', 'muWealth', 'muBounty', 'muReputation'];
+
+async function fetchAllMus() {
+  const all = [];
+  let cursor;
+  let guard = 0;
+  do {
+    const input = { limit: 100, ...(cursor ? { cursor } : {}) };
+    const url = `${WORKER_API_BASE}/trpc/mu.getManyPaginated?input=${encodeURIComponent(JSON.stringify(input))}`;
+    const res = await fetch(url);
+    if (res.status === 429) { console.warn('mu.getManyPaginated: 429, mi fermo con quello che ho'); break; }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const items = data?.result?.data?.items || data?.items || [];
+    all.push(...items);
+    cursor = data?.result?.data?.nextCursor || data?.nextCursor || null;
+    guard++;
+  } while (cursor && guard < 100); // 14 pagine oggi: guard largo, le MU crescono
+  return all;
+}
+
+function leanMu(m) {
+  const out = {
+    _id: m._id,
+    name: m.name,
+    country: m.country,
+    region: m.region,
+    memberCount: Array.isArray(m.members) ? m.members.length : 0,
+    level: m.leveling?.level ?? 1,
+    monthlyDamages: m.leveling?.monthlyDamages ?? 0,
+    reputation: m.mercenaryReputation ?? 0,
+    createdAt: m.createdAt,
+  };
+  if (m.avatarUrl) out.avatarUrl = m.avatarUrl;
+  const rankings = {};
+  for (const type of MU_RANKING_TYPES) {
+    const r = m.rankings?.[type];
+    if (r) rankings[type] = { value: r.value, rank: r.rank, tier: r.tier };
+  }
+  if (Object.keys(rankings).length) out.rankings = rankings;
+  return out;
+}
+
+// ── Nazionalità "de facto" ────────────────────────────────────────────
+// Una MU è registrata sotto una nazione (campo `country`) ma i suoi membri
+// possono essere in maggioranza di un'altra: in quel caso, di fatto, è di
+// quell'altra. Per saperlo serve la nazione di OGNI membro, e l'unica fonte
+// è `user.getUserLite` — un utente per chiamata, ~4,3 KB di risposta a
+// testa, 16k membri in totale: risolverli tutti ad ogni giro sarebbe ~65 MB
+// ogni 30 minuti, fuori discussione.
+//
+// La nazione di un utente però cambia raramente: si tiene quindi una mappa
+// PERSISTENTE userId → [countryId, quando l'abbiamo chiesto]
+// (mu-user-countries.json) e ad ogni giro si risolvono solo gli id
+// sconosciuti o più vecchi di MU_USER_TTL_MS, al massimo
+// MU_USER_LOOKUP_BUDGET per volta. Primo riempimento: ~8 giri (4 ore) a
+// ~8,5 MB l'uno, poi a regime restano solo i membri nuovi — poche decine.
+// Finché la mappa è incompleta la composizione esce parziale, non
+// sbagliata: si riporta anche `known` (quanti membri sono stati risolti)
+// così il client sa quanto pesa il dato.
+//
+// La mappa viene potata ad ogni giro ai soli utenti che sono membri di
+// qualche MU adesso: senza potatura crescerebbe per sempre.
+const MU_USER_COUNTRIES_FILE = 'mu-user-countries';
+const MU_USER_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 giorni
+const MU_USER_LOOKUP_BUDGET = 2000;              // ~8,5 MB per giro
+
+/** Composizione per nazione dei membri: totale, quanti risolti, e le prime
+ *  CINQUE nazioni per numero di membri. Misurato sulle 60 MU di vertice: una
+ *  MU ha 1 nazionalità in mediana, 3 al 90° percentile, 6 al massimo — e le
+ *  prime tre coprono già il 99% dei membri. Cinque quindi non taglia nulla in
+ *  pratica, e costa byte solo sulle poche unità davvero eterogenee (per le
+ *  altre l'array contiene solo quello che c'è). Il client mostra comunque un
+ *  "+N" per il resto, calcolato da `known`. */
+function muComposition(members, userCountries) {
+  const counts = new Map();
+  let known = 0;
+  for (const id of members || []) {
+    const entry = userCountries[id];
+    if (!entry) continue;
+    known++;
+    counts.set(entry[0], (counts.get(entry[0]) || 0) + 1);
+  }
+  const top = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([country, n]) => ({ country, n }));
+  return { total: (members || []).length, known, top };
+}
+
+async function pollMuDirectory() {
+  try {
+    const mus = await fetchAllMus();
+    // Stesso principio di pollParties/pollElections: se un giro torna
+    // molto più corto del precedente è quasi sempre un 429 a metà
+    // paginazione, non lo scioglimento improvviso di metà delle unità —
+    // meglio tenere la directory precedente che pubblicarne una monca.
+    const prev = readCache('mu-directory', { data: [] }).data || [];
+    if (prev.length && mus.length < prev.length * 0.5) {
+      console.warn(`[poll] mu-directory: solo ${mus.length} MU contro ${prev.length} del giro precedente, tengo le vecchie`);
+      return;
+    }
+
+    const now = Date.now();
+    const userCountries = readCache(MU_USER_COUNTRIES_FILE, { data: {} }).data || {};
+
+    // Chi va (ri)chiesto: prima gli sconosciuti, poi i più vecchi del TTL.
+    const unknown = [];
+    const stale = [];
+    const currentMembers = new Set();
+    for (const m of mus) {
+      for (const id of m.members || []) {
+        currentMembers.add(id);
+        const entry = userCountries[id];
+        if (!entry) unknown.push(id);
+        else if (now - entry[1] > MU_USER_TTL_MS) stale.push(id);
+      }
+    }
+    const toResolve = [...new Set([...unknown, ...stale])].slice(0, MU_USER_LOOKUP_BUDGET);
+    if (toResolve.length) {
+      const users = await trpcBatch(toResolve.map(id => ['user.getUserLite', { userId: id }]), { useWorker: true });
+      toResolve.forEach((id, i) => {
+        const country = users[i]?.country;
+        if (country) userCountries[id] = [country, now];
+      });
+    }
+
+    // Potatura: via chi non è più membro di nessuna unità.
+    for (const id of Object.keys(userCountries)) {
+      if (!currentMembers.has(id)) delete userCountries[id];
+    }
+    writeCache(MU_USER_COUNTRIES_FILE, { fetchedAt: now, data: userCountries }, { compact: true });
+
+    const data = mus.map(m => {
+      const lean = leanMu(m);
+      lean.composition = muComposition(m.members, userCountries);
+      return lean;
+    });
+    writeCache('mu-directory', { fetchedAt: now, data }, { compact: true });
+
+    const resolved = Object.keys(userCountries).length;
+    console.log(`[poll] mu-directory aggiornato (${mus.length} MU, ${resolved}/${currentMembers.size} membri con nazione nota, ${toResolve.length} risolti in questo giro)`);
+  } catch (err) { console.error('[poll] mu-directory fallito:', err.message); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // ELEZIONI (pollElections) — stessa idea di pollParties: la lista per
 // nazione (discovery) va sempre riscritta, il DETTAGLIO di ogni elezione
 // invece si scarica una volta sola se è chiusa (immutabile per sempre),
@@ -1128,6 +1302,7 @@ cron.schedule('8,23,38,53 * * * *', pollDiplomacy);                    // ogni 1
 cron.schedule('1,4,7,10,13,16,19,22,25,28,31,34,37,40,43,46,49,52,55,58 * * * *', pollBattles); // ogni 3 min, :01
 cron.schedule('2,5,8,11,14,17,20,23,26,29,32,35,38,41,44,47,50,53,56,59 * * * *', pollElections); // ogni 3 min, :02
 cron.schedule('9,24,39,54 * * * *', pollGameEvents);                  // ogni 15 min, :09 (nota 6)
+cron.schedule('12,42 * * * *', pollMuDirectory);            // ogni 30 min, :12 (directory unità militari)
 // Bootstrap storico — DISATTIVATO (round 4): troppo lento (1 pagina/min,
 // poteva metterci ore/giorni) e comunque reso ridondante da
 // pollExternalHistory qui sotto, che sovrascrive region-history-keyframes/
@@ -1154,6 +1329,7 @@ cron.schedule('18 */6 * * *', pollCreditProfiles);          // ogni 6 ore, :18
   await pollBattles();
   await pollElections();
   await pollGameEvents();
+  await pollMuDirectory();
   // await pollBootstrapPage(); // disattivato, vedi nota sopra al cron.schedule commentato
   await pollExternalHistory(); // sync subito con spywarera invece di aspettare fino a 1h
   await pollCreditProfiles();
@@ -1192,6 +1368,8 @@ app.get('/election/:id', (req, res) => {
 app.get('/diplomacy', (req, res) => res.json(readCache('diplomacy', { fetchedAt: null, data: [] })));
 app.get('/battles', (req, res) => res.json(readCache('battles', { fetchedAt: null, data: [] })));
 app.get('/battle-regions', (req, res) => res.json(readCache('battle-regions', { fetchedAt: null, data: [] })));
+
+app.get('/mu-directory', (req, res) => res.json(readCache('mu-directory', { fetchedAt: null, data: [] })));
 
 app.get('/ticker', (req, res) => {
   const storico = readCache('ticker-history', []);
