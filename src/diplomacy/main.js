@@ -13,6 +13,7 @@ import { updateBattleMarkers } from './battleMarkers.js';
 import { loadRegions } from './regions.js';
 import { fetchCountriesViaCache, fetchMapDataViaCache, fetchAlliancesViaCache, fetchDiplomacyViaCache } from './cacheClient.js';
 import { trackEvent } from '../shared/analytics.js';
+import { loadModule } from '../shared/lazyModule.js';
 let battleMarkersTimer = null;
 
 // ── WarEra+ perf: pausa del polling marker battaglia ─────────────────
@@ -321,11 +322,42 @@ document.getElementById('mode-population').addEventListener('click', () => {
     import('../app/overlayChrome.js')
       .then(m => m.enterOverlay(document.getElementById('bloc-stats-page'), 'alliance'))
       .catch(() => {});
-    import('./blocStats.js').then(m => {
-      const stats = m.computeBlocStats();
-      m.renderBlocStats(stats);
-    });
+    // WarEra+ (additivo): il chunk di blocStats puo' non arrivare — deploy
+    // nuovo su Vercel mentre la scheda era aperta, i nomi dei chunk
+    // cambiano e il vecchio non esiste piu'. Prima l'errore veniva
+    // ingoiato dalla promise e la pagina restava vuota (solo lo sfondo a
+    // particelle). loadModule riprova e, se serve, ricarica una volta
+    // sola; qui si gestisce anche il caso "nemmeno la ricarica basta" e
+    // qualunque errore del rendering, con un messaggio invece del vuoto.
+    loadModule(() => import('./blocStats.js'), 'bloc-stats')
+      .then(m => {
+        const stats = m.computeBlocStats();
+        m.renderBlocStats(stats);
+      })
+      .catch(err => {
+        console.error('[bloc-stats] apertura fallita:', err);
+        showBlocStatsError();
+      });
   });
+
+  /** Messaggio con ritenta/ricarica al posto della pagina vuota. */
+  function showBlocStatsError() {
+    const host = document.getElementById('bloc-stats-content');
+    if (!host) return;
+    host.innerHTML = `
+      <div style="max-width:520px;margin:60px auto;padding:22px;border:1px solid #30363d;border-radius:12px;background:#161b22;text-align:center;">
+        <p style="margin:0 0 14px;color:#e6edf3;font-size:14px;">
+          Impossibile caricare le statistiche delle alleanze.
+        </p>
+        <p style="margin:0 0 18px;color:#8b949e;font-size:12.5px;">
+          Di solito succede quando l'app e' stata aggiornata mentre questa scheda era aperta.
+        </p>
+        <button id="bs-reload-btn" style="background:#0062ff;border:none;color:#fff;padding:9px 18px;border-radius:8px;cursor:pointer;font-weight:600;">
+          Ricarica
+        </button>
+      </div>`;
+    host.querySelector('#bs-reload-btn')?.addEventListener('click', () => location.reload());
+  }
 
   document.getElementById('bloc-stats-close').addEventListener('click', () => {
     document.getElementById('bloc-stats-page').style.display = 'none';

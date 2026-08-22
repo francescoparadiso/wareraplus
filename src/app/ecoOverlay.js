@@ -10,6 +10,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { trackEvent } from '../shared/analytics.js';
+import { loadModule } from '../shared/lazyModule.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
 
 let overlayEl, backBtn, rootEl;
@@ -36,7 +37,7 @@ export async function openEcoView() {
   // Dopo .open: a overlay nascosto il canvas misurerebbe 0x0.
   enterOverlay(overlayEl, 'eco');
 
-  const { initEcoView } = await import('../eco/main.js');
+  const { initEcoView } = await loadModule(() => import('../eco/main.js'), 'eco');
   initEcoView(rootEl);
 
   trackEvent('eco-open');

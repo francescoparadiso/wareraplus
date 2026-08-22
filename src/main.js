@@ -24,11 +24,12 @@ import { inject } from '@vercel/analytics';
 inject();
 
 import { initCountryPanel, selectNationInPanel } from './panel/countryPanel.js';
-import { initPoliticalOverlay } from './app/politicalOverlay.js';
-import { initEcoOverlay } from './app/ecoOverlay.js';
-import { initNewsOverlay } from './app/newsOverlay.js';
-import { initMuOverlay } from './app/muOverlay.js';
-import { initNationsOverlay } from './app/nationsOverlay.js';
+import { initPoliticalOverlay, openPoliticalView } from './app/politicalOverlay.js';
+import { initEcoOverlay, openEcoView } from './app/ecoOverlay.js';
+import { initNewsOverlay, openNewsView } from './app/newsOverlay.js';
+import { initMuOverlay, openMuView } from './app/muOverlay.js';
+import { initNationsOverlay, openNationsView } from './app/nationsOverlay.js';
+import { takeReloadIntent } from './shared/lazyModule.js';
 import { initThemeSync } from './app/themeSync.js';
 import { initLangSync } from './app/langSync.js';
 import { initBattleToggle } from './app/battleToggle.js';
@@ -98,4 +99,33 @@ window.addEventListener('wareraplus:diplomacy-ready', () => {
   initTimeMachine();
   initAuthorPill();
   handleIncomingDeepLink();
+  restoreAfterChunkReload();
 }, { once: true });
+
+/* ══════════════════════════════════════════════════════════════
+   Ripresa dopo una ricarica automatica
+   ------------------------------------------------------------------
+   Quando un `import()` di sezione fallisce due volte — tipicamente
+   perche' e' uscito un deploy nuovo mentre la scheda era aperta e i nomi
+   dei chunk sono cambiati — src/shared/lazyModule.js ricarica la pagina
+   per prendere l'index.html aggiornato. Senza questo pezzo l'utente si
+   ritroverebbe sulla mappa, chiedendosi perche' il clic non ha fatto
+   niente: qui si riapre la sezione che aveva chiesto.
+
+   `takeReloadIntent()` consuma il valore: vale una ricarica sola.
+   ══════════════════════════════════════════════════════════════ */
+function restoreAfterChunkReload() {
+  const intent = takeReloadIntent();
+  if (!intent) return;
+
+  const open = {
+    'bloc-stats': () => document.getElementById('bloc-stats-btn')?.click(),
+    political: () => openPoliticalView(),
+    eco: () => openEcoView(),
+    news: () => openNewsView(),
+    mu: () => openMuView(),
+    nations: () => openNationsView(),
+  }[intent];
+
+  if (open) open();
+}

@@ -10,6 +10,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { trackEvent } from '../shared/analytics.js';
+import { loadModule } from '../shared/lazyModule.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
 
 let overlayEl, backBtn, rootEl;
@@ -37,7 +38,7 @@ export async function openNewsView() {
   // Dopo .open: a overlay nascosto il canvas misurerebbe 0x0.
   enterOverlay(overlayEl, 'news');
 
-  const { initNewsView } = await import('./newsView.js');
+  const { initNewsView } = await loadModule(() => import('./newsView.js'), 'news');
   await initNewsView(rootEl);
 
   trackEvent('news-open');

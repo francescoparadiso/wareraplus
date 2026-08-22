@@ -9,6 +9,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { trackEvent } from '../shared/analytics.js';
+import { loadModule } from '../shared/lazyModule.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
 
 let overlayEl, backBtn, rootEl;
@@ -36,7 +37,7 @@ export async function openNationsView(countryId) {
   // sfondo della mappa, che resta montata sotto l'overlay.
   enterOverlay(overlayEl, 'nations');
 
-  const mod = await import('../nations/main.js');
+  const mod = await loadModule(() => import('../nations/main.js'), 'nations');
   if (countryId) mod.openNationDetail(countryId);
   await mod.initNationsView(rootEl);
 

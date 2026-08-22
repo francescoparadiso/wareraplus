@@ -36,6 +36,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { trackEvent } from '../shared/analytics.js';
+import { loadModule } from '../shared/lazyModule.js';
 import { pauseMapBackgroundWork, resumeMapBackgroundWork } from './mapIdle.js';
 
 let overlayEl, backBtn, titleEl;
@@ -80,7 +81,7 @@ export async function openPoliticalView(countryId, countryName = '', options = {
   // apertura reale (poi resta in cache del browser/module graph per le
   // aperture successive). initPoliticalView è idempotente: se già
   // montata, cambia nazione solo se diversa da quella corrente (Stage 8).
-  const { initPoliticalView, resumePoliticalRendering } = await import('../political/main.js');
+  const { initPoliticalView, resumePoliticalRendering } = await loadModule(() => import('../political/main.js'), 'political');
   await initPoliticalView(countryId, options);
   // WarEra+ perf: riavvia canvas/ticker se erano stati fermati da una
   // chiusura precedente (no-op alla primissima apertura — vedi

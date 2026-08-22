@@ -11,6 +11,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { trackEvent } from '../shared/analytics.js';
+import { loadModule } from '../shared/lazyModule.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
 
 let overlayEl, backBtn, rootEl;
@@ -40,7 +41,7 @@ export async function openMuView(muId) {
   // Dopo .open: a overlay nascosto il canvas misurerebbe 0x0.
   enterOverlay(overlayEl, 'mu');
 
-  const mod = await import('../mu/main.js');
+  const mod = await loadModule(() => import('../mu/main.js'), 'mu');
   if (muId) mod.openMuDetail(muId);
   await mod.initMuView(rootEl);
 
