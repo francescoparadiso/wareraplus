@@ -106,6 +106,34 @@ export function playstyleDelta(series) {
   };
 }
 
+/** Il travaso NETTO fra guerra ed economia dentro la finestra.
+ *
+ *  Un giocatore che passa all'economia lo fa quasi sempre venendo dalla
+ *  guerra: i due delta si muovono in direzioni opposte e la parte che si
+ *  corrisponde è gente che ha cambiato scuola, non gente entrata o uscita dal
+ *  campione. Quella parte è `min(|war|, |eco|)` — deliberatamente la stima
+ *  PIÙ PRUDENTE: se guerra fa +2 ed economia -7, cinque dei sette se ne sono
+ *  andati dal campione (o sono diventati ibridi), due soli sono passati di là.
+ *
+ *  Se i due delta hanno lo stesso segno non c'è stato travaso, solo il
+ *  campione che cresce o cala: ritorna null, e la riga non compare.
+ *
+ *  `base` (il `known` attuale) serve alla percentuale; senza, `pct` è null. */
+export function playstyleSwitch(delta, base) {
+  if (!delta) return null;
+  const { war, eco } = delta;
+  if (war === 0 || eco === 0) return null;
+  if ((war > 0) === (eco > 0)) return null; // stesso verso: campione, non travaso
+  const n = Math.min(Math.abs(war), Math.abs(eco));
+  if (!n) return null;
+  return {
+    n,
+    to: war > 0 ? 'war' : 'eco',
+    from: war > 0 ? 'eco' : 'war',
+    pct: base > 0 ? (n / base) * 100 : null,
+  };
+}
+
 /** Somma i conteggi di più nazioni (o unità): serve al pannello alleanza,
  *  dove la domanda è come gioca il blocco nel suo insieme. Le nazioni senza
  *  dato semplicemente non contribuiscono, e `countries` dice su quante il

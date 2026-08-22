@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { trackEvent } from '../shared/analytics.js';
+import { ensureDailyDamage, sumCountryDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
 
 /* ── Helpers ── */
 function fmt(n, d = 1, full = false) {
@@ -146,6 +147,7 @@ export function renderBlocStats(stats) {
   if (!eventsAttached) { attachEvents(c); eventsAttached = true; }
   searchTracked = false;
   ensurePlaystyleData();
+  ensureDailyDamageBand();
   buildUI();
 }
 
@@ -279,6 +281,29 @@ function injectStyles() {
       .bs-slbl{font-size:11px;white-space:normal}
       .bs-vs{padding:8px;font-size:22px}}
 
+    /* Fascia a ciambelle in cima ad Alliance Overview */
+    .bs-charts{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}
+    .bs-chart-card{background:rgba(13,17,23,.6);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:16px}
+    .bs-chart-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px}
+    .bs-chart-total{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+    .bs-chart-body{display:flex;align-items:center;gap:12px}
+    .bs-donut{width:104px;height:104px;flex-shrink:0}
+    .bs-donut-arc{transition:stroke-dasharray .3s}
+    .bs-donut-bg{stroke:rgba(255,255,255,.07)}
+    .bs-donut-mid{fill:#e6edf3;font-size:17px;font-weight:700;font-family:'Inter',-apple-system,sans-serif}
+    .bs-chart-legend{list-style:none;margin:0;padding:0;flex:1;min-width:0;font-size:11.5px;display:flex;flex-direction:column;gap:3px}
+    .bs-chart-legend li{display:flex;align-items:center;gap:6px;color:#c9d1d9}
+    .bs-chart-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+    .bs-chart-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bs-chart-pct{color:#8b949e;font-variant-numeric:tabular-nums}
+    .bs-chart-today{display:flex;align-items:baseline;gap:6px;margin:-4px 0 10px;font-size:12px;color:#8b949e}
+    .bs-chart-today b{color:#58a6ff;font-size:14px;font-variant-numeric:tabular-nums}
+    .bs-sum-mini{grid-template-columns:repeat(3,1fr)}
+    .bs-sum-mini .bs-sc{padding:12px 16px}
+    .bs-sum-mini .bs-sv{font-size:18px}
+    @media(max-width:1200px){.bs-charts{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:640px){.bs-charts{grid-template-columns:1fr}.bs-sum-mini{grid-template-columns:1fr}}
+
     /* Tabella riassuntiva alleanze (tutte le alleanze su una riga sola) */
     .bs-tbl-wrap{overflow-x:auto;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(13,17,23,.6);margin-bottom:20px}
     .bs-tbl{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
@@ -296,6 +321,7 @@ function injectStyles() {
     .bs-tbl .money{color:#3fb950}
     .bs-tbl .dmg{color:#f0ad4e}
     .bs-tbl .wk{color:#58a6ff}
+    .bs-tbl .today{color:#d29922;font-weight:600}
     .bs-tbl .war{color:#f85149}
     .bs-tbl .eco{color:#3fb950}
     .bs-tbl .hyb{color:#e3b341}
@@ -426,6 +452,12 @@ function injectStyles() {
     body.light-theme .bs-tbl-known,body.light-theme .bs-tbl-note{color:#6b5a47}
     body.light-theme .bs-hbar-track{background:rgba(0,0,0,.08)}
     body.light-theme .bs-hbar-val{color:#3e2f1c}
+    body.light-theme .bs-chart-card{background:rgba(240,230,210,.6);border-color:rgba(0,0,0,.1)}
+    body.light-theme .bs-donut-mid{fill:#3e2f1c}
+    body.light-theme .bs-donut-bg{stroke:rgba(0,0,0,.08)}
+    body.light-theme .bs-chart-legend li{color:#3e2f1c}
+    body.light-theme .bs-chart-pct,body.light-theme .bs-chart-today{color:#6b5a47}
+    body.light-theme .bs-chart-today b{color:#2f6fb5}
   `;
   document.head.appendChild(s);
 }
@@ -568,6 +600,19 @@ function showBlocPopup(blocId) {
   document.body.appendChild(popup);
 }
 
+/* Ordine dei tab. "Alliance Builder" (le schede trascinabili) è stato
+   staccato da "Alliance Overview" su richiesta dell'utente: la panoramica
+   ora risponde solo alla domanda "come stanno le alleanze fra loro"
+   (grafici + tabella), mentre riorganizzarle a mano è un'altra attività e
+   ha la sua pagina. Il drag&drop e il suo suggerimento restano identici,
+   solo spostati. */
+const TABS = {
+  factions: 'Alliance Overview',
+  builder: 'Alliance Builder',
+  faction1vs2: 'Faction 1 vs 2',
+  wars: 'Wars & Enemies',
+};
+
 /* ── UI Builder ── */
 function buildUI() {
   const c = document.getElementById('bloc-stats-content');
@@ -577,12 +622,11 @@ function buildUI() {
       <button class="bs-reset-btn" id="bs-reset-all">⟳ Reset all merges & assignments</button>
     </div>
     <div class="bs-tabs">
-      ${['factions', 'faction1vs2', 'wars'].map(t => `
-        <div class="bs-tab${currentTab === t ? ' active' : ''}" data-tab="${t}">
-          ${t === 'factions' ? 'Alliance Overview' : t === 'faction1vs2' ? 'Faction 1 vs 2' : 'Wars & Enemies'}
-        </div>`).join('')}
+      ${Object.entries(TABS).map(([t, label]) => `
+        <div class="bs-tab${currentTab === t ? ' active' : ''}" data-tab="${t}">${label}</div>`).join('')}
     </div>`;
-  if (currentTab === 'faction1vs2') html += render1vs1();
+  if (currentTab === 'builder') html += renderBuilder();
+  else if (currentTab === 'faction1vs2') html += render1vs1();
   else if (currentTab === 'wars') html += renderWars();
   else html += renderFactions();
   html += '</div>';
@@ -602,25 +646,26 @@ function buildUI() {
 
 /* ── Tabs Content ── */
 function renderFactions() {
-  const aligned = allStats.filter(b => !b.isUnaligned);
-  const unaligned = allStats.find(b => b.isUnaligned);
   const globalNations = allStats.reduce((sum, b) => sum + b.countryCount, 0);
-  const globalWeeklyDmg = allStats.reduce((sum, b) => sum + b.totalDmg, 0);
-  const globalTotalDmg = allStats.reduce((sum, b) => sum + b.totalAbsoluteDmg, 0);
-  const globalMoney = allStats.reduce((sum, b) => sum + b.totalMoney, 0);
-  const globalPop = allStats.reduce((sum, b) => sum + b.totalPop, 0);
   const globalWars = allStats.reduce((sum, b) => sum + b.totalWars, 0);
+  const unaligned = allStats.find(b => b.isUnaligned);
 
-  let html = `<div class="bs-sum">
+  return `
+  ${donutBandHtml()}
+  <div class="bs-sum bs-sum-mini">
     <div class="bs-sc"><div class="bs-sl">Nations</div><div class="bs-sv" style="color:#e6edf3">${fmt(globalNations, 0, true)}</div></div>
-    <div class="bs-sc"><div class="bs-sl">Weekly Damage</div><div class="bs-sv" style="color:#58a6ff">${fmt(globalWeeklyDmg)}</div></div>
-    <div class="bs-sc"><div class="bs-sl">Total Damage</div><div class="bs-sv" style="color:#f0ad4e">${fmt(globalTotalDmg)}</div></div>
     <div class="bs-sc"><div class="bs-sl">Active Wars</div><div class="bs-sv" style="color:#f85149">${fmt(globalWars, 0, true)}</div></div>
     <div class="bs-sc"><div class="bs-sl">Unaligned</div><div class="bs-sv" style="color:#8b949e">${unaligned?.countryCount || 0}</div></div>
-    <div class="bs-sc"><div class="bs-sl">Total Wealth</div><div class="bs-sv" style="color:#3fb950">${fmt(globalMoney)}</div></div>
-    <div class="bs-sc"><div class="bs-sl">Total Population</div><div class="bs-sv" style="color:#e6edf3">${fmt(globalPop)}</div></div>
   </div>
-  ${allianceTableHtml()}
+  ${allianceTableHtml()}`;
+}
+
+/* Le schede trascinabili, ora in un tab loro (vedi TABS). Identiche a prima:
+   stesso suggerimento sul drag&drop, stesse card, stesso ordine. */
+function renderBuilder() {
+  const aligned = allStats.filter(b => !b.isUnaligned);
+  const unaligned = allStats.find(b => b.isUnaligned);
+  let html = `
   <div class="bs-dnd-tip">
     <span class="bs-dnd-ico">✋</span>
     <div class="bs-dnd-txt">
@@ -633,6 +678,153 @@ function renderFactions() {
   if (unaligned) html += blocCard(unaligned, true);
   html += '</div>';
   return html;
+}
+
+/* ── Fascia a ciambelle (WarEra+) ──
+   I quattro totali che contano — danno settimanale, danno totale,
+   popolazione, ricchezza — erano numeri secchi: dicevano quanto, mai di chi.
+   Qui ognuno diventa una ciambella divisa per alleanza, che è la domanda
+   vera di questa pagina ("chi pesa quanto"), col totale al centro e la
+   legenda delle prime sei alleanze accanto.
+
+   Zero fetch: sono gli stessi `allStats` della tabella sotto, quindi la
+   fascia riflette anche merge e riassegnazioni fatte nel tab Builder.
+   Disegnata come SVG a mano (niente Chart.js) — sono quattro archi, e
+   questo file non ha mai avuto dipendenze. */
+const DONUT_TOP = 6;      // alleanze con voce propria in legenda
+const DONUT_OTHER = '#6e7681';
+
+const DONUT_CARDS = [
+  { key: 'totalDmg',         label: 'Weekly Damage',    color: '#58a6ff' },
+  { key: 'totalAbsoluteDmg', label: 'Total Damage',     color: '#f0ad4e' },
+  { key: 'totalPop',         label: 'Total Population', color: '#e6edf3' },
+  { key: 'totalMoney',       label: 'Total Wealth',     color: '#3fb950' },
+];
+
+function donutBandHtml() {
+  return `<div class="bs-charts">${DONUT_CARDS.map(donutCardHtml).join('')}</div>`;
+}
+
+function donutCardHtml({ key, label, color }) {
+  const slices = donutSlices(key);
+  const total = slices.reduce((s, x) => s + x.value, 0);
+  // Sotto il danno settimanale, quando il server di cache ha lo scatto delle
+  // 02:00, la quota maturata da inizio giornata (vedi todayDamageLine).
+  const extra = key === 'totalDmg' ? todayDamageLine(total) : '';
+  return `
+    <div class="bs-chart-card">
+      <div class="bs-chart-head">
+        <div class="bs-sl">${label}</div>
+        <div class="bs-chart-total" style="color:${color}">${fmt(total)}</div>
+      </div>
+      ${extra}
+      <div class="bs-chart-body">
+        ${donutSvg(slices, total)}
+        <ul class="bs-chart-legend">
+          ${slices.map(s => `
+            <li title="${escapeHtml(s.name)} · ${fmt(s.value)}">
+              <span class="bs-chart-dot" style="background:${s.color}"></span>
+              <span class="bs-chart-name">${escapeHtml(s.name)}</span>
+              <span class="bs-chart-pct">${total ? ((s.value / total) * 100).toFixed(1) : '0.0'}%</span>
+            </li>`).join('')}
+        </ul>
+      </div>
+    </div>`;
+}
+
+/** Prime DONUT_TOP alleanze per il valore chiesto, il resto accorpato in
+ *  "Other" — dodici fette da poche unità percentuali sarebbero illeggibili
+ *  sia nell'anello sia in legenda. Le fette a zero non entrano. */
+function donutSlices(key) {
+  const sorted = allStats
+    .map(b => ({ name: b.name, value: b[key] || 0, color: b.color }))
+    .filter(s => s.value > 0)
+    .sort((a, b) => b.value - a.value);
+  const head = sorted.slice(0, DONUT_TOP);
+  const rest = sorted.slice(DONUT_TOP);
+  if (rest.length) {
+    head.push({
+      name: `Other (${rest.length})`,
+      value: rest.reduce((s, x) => s + x.value, 0),
+      color: DONUT_OTHER,
+    });
+  }
+  return head;
+}
+
+/** Anello disegnato con un solo cerchio per fetta: raggio fisso, stroke
+ *  spesso, `stroke-dasharray` lungo quanto la fetta e `stroke-dashoffset`
+ *  che la fa partire dove finisce la precedente. Ruotato di -90° perché il
+ *  primo spicchio cominci dalle ore 12. */
+function donutSvg(slices, total) {
+  const R = 42, C = 2 * Math.PI * R;
+  let acc = 0;
+  const arcs = slices.map(s => {
+    const len = total ? (s.value / total) * C : 0;
+    const arc = `<circle class="bs-donut-arc" cx="60" cy="60" r="${R}" fill="none"
+      stroke="${s.color}" stroke-width="16"
+      stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}"
+      stroke-dashoffset="${(-acc).toFixed(2)}"><title>${escapeHtml(s.name)} · ${fmt(s.value)}</title></circle>`;
+    acc += len;
+    return arc;
+  }).join('');
+  return `
+    <svg class="bs-donut" viewBox="0 0 120 120" role="img" aria-label="Share by alliance">
+      <g transform="rotate(-90 60 60)">
+        <circle class="bs-donut-bg" cx="60" cy="60" r="${R}" fill="none" stroke-width="16"></circle>
+        ${arcs}
+      </g>
+      <text class="bs-donut-mid" x="60" y="64" text-anchor="middle">${fmt(total)}</text>
+    </svg>`;
+}
+
+/* ── Danno di oggi (WarEra+) ──
+   Il conto e i suoi casi limite stanno in src/shared/dailyDamage.js, che
+   serve anche pannello nazione, pannello alleanza e scheda unità militare:
+   qui c'è solo il disegno. Il totale si somma nazione per nazione (non per
+   differenza fra due totali) proprio perché il modulo condiviso sa già
+   escludere chi nello scatto non c'era. */
+let dailyBaseline = null;   // scatto già scaricato, o null
+let dailyPending = false;   // richiesta in volo: renderBlocStats può girare più volte
+
+function ensureDailyDamageBand() {
+  if (dailyBaseline || dailyPending) return;
+  dailyPending = true;
+  ensureDailyDamage()
+    .then(data => {
+      dailyPending = false;
+      if (!data) return;
+      dailyBaseline = data;
+      // Fascia e tabella si ridisegnano da sole (sono nel tab attivo solo
+      // su Alliance Overview, altrimenti il dato aspetta lì pronto).
+      // Ridisegnate separatamente per non perdere lo scroll della pagina.
+      const band = document.querySelector('.bs-charts');
+      if (band && currentTab === 'factions') band.outerHTML = donutBandHtml();
+      const table = document.getElementById('bs-alliance-table');
+      if (table) table.outerHTML = allianceTableHtml();
+    })
+    .catch(() => { dailyPending = false; /* niente riga "oggi", nient'altro cambia */ });
+}
+
+function todayDamageLine(weeklyTotal) {
+  if (!dailyBaseline) return '';
+  // Le nazioni qui sono la forma "member" di questo file ({id, dmg, ...}),
+  // non gli oggetti nazione di state: si adattano alla forma che il modulo
+  // condiviso si aspetta.
+  const nations = allStats.flatMap(b => b.members.map(m => ({
+    _id: m.id, rankings: { weeklyCountryDamages: { value: m.dmg } },
+  })));
+  const today = sumCountryDamageToday(nations);
+  if (!today) return '';
+  const pct = weeklyTotal ? ((today / weeklyTotal) * 100).toFixed(0) : null;
+  return `<div class="bs-chart-today">${dailyDamageLabel()} <b>${fmt(today)}</b>${pct ? `<span> · ${pct}% of the week</span>` : ''}</div>`;
+}
+
+// I nomi delle alleanze li scrivono i giocatori: testo, mai markup.
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
 }
 
 /* ── Tabella riassuntiva di TUTTE le alleanze (WarEra+) ──
@@ -655,6 +847,7 @@ const TABLE_COLS = [
   { key: 'moneyPerCit',      label: 'Wealth/cit' },
   { key: 'totalAbsoluteDmg', label: 'Total dmg' },
   { key: 'totalDmg',         label: 'Weekly' },
+  { key: 'dmgToday',         label: 'Today' },
   { key: 'dpc',              label: 'Weekly/cit' },
   { key: 'totalPop',         label: 'Pop' },
   { key: 'avgDev',           label: 'Dev' },
@@ -664,6 +857,16 @@ const TABLE_COLS = [
   { key: 'psMixed',          label: 'Hyb' },
   { key: 'psKnown',          label: 'Build' },
 ];
+
+/** Danno di oggi di un blocco: somma delle sue nazioni, con gli stessi casi
+ *  limite di tutto il resto (vedi src/shared/dailyDamage.js). null finché lo
+ *  scatto non è arrivato — la colonna mostra un trattino, non uno zero. */
+function blocDamageToday(bloc) {
+  if (!dailyBaseline) return null;
+  return sumCountryDamageToday(bloc.members.map(m => ({
+    _id: m.id, rankings: { weeklyCountryDamages: { value: m.dmg } },
+  })));
+}
 
 /** Somma i conteggi guerra/economia delle nazioni di un blocco. Ritorna null
  *  finché i dati non sono arrivati (o se il server non risponde): le colonne
@@ -694,6 +897,10 @@ function tableRowData(bloc) {
     moneyPerCit: bloc.totalPop ? bloc.totalMoney / bloc.totalPop : 0,
     totalAbsoluteDmg: bloc.totalAbsoluteDmg,
     totalDmg: bloc.totalDmg,
+    // -1 (non 0) quando lo scatto non c'è: ordinando per questa colonna le
+    // alleanze senza dato restano in fondo invece di mescolarsi a quelle
+    // che oggi non hanno davvero fatto danni.
+    dmgToday: blocDamageToday(bloc) ?? -1,
     dpc: bloc.dpc,
     totalPop: bloc.totalPop,
     avgDev: bloc.avgDev,
@@ -736,6 +943,7 @@ function allianceTableHtml() {
       <td class="money">${fmt(r.moneyPerCit)}</td>
       <td class="dmg">${fmt(b.totalAbsoluteDmg)}</td>
       <td class="wk">${fmt(b.totalDmg)}</td>
+      <td class="today">${r.dmgToday >= 0 ? fmt(r.dmgToday) : '—'}</td>
       <td class="wk">${fmt(b.dpc)}</td>
       <td>${fmt(b.totalPop)}</td>
       <td>${b.avgDev ? b.avgDev.toFixed(1) : '—'}</td>

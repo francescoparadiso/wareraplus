@@ -24,6 +24,10 @@ import { isPinned, togglePin } from '../app/pins.js';
 import { countPlaystyles, playstyleBarHtml } from './playstyle.js';
 import { trackEvent } from '../shared/analytics.js';
 import { avatarImg, countryName, dominantCountry, escapeHtml, flagImg, fmtCompact, fmtDate, fmtFull, tierBadge } from './ui.js';
+import { ensureDailyDamage, muDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
+// L'etichetta della finestra ("Oggi" / "Dalle HH:MM") vive nel dizionario
+// dello shell, non in quello locale della vista MU: si prende da lì.
+import { t as sharedT } from '../shared/i18n.js';
 
 const APP_BASE = 'https://app.warera.io';
 
@@ -96,6 +100,7 @@ function paintHeader() {
 
       <section class="wp-mu-stats-grid">
         ${MU_RANKING_TYPES.map(type => statCard(type, m.rankings?.[type])).join('')}
+        ${todayCardHtml()}
       </section>
 
       <section id="wp-mu-playstyle"></section>
@@ -115,6 +120,8 @@ function paintHeader() {
     e.currentTarget.title = muT(now ? 'unpin' : 'pin');
     e.currentTarget.setAttribute('aria-label', e.currentTarget.title);
   });
+
+  paintTodayCard(m);
 }
 
 /** Marchio "de facto": si mostra SOLO quando la nazione prevalente fra i
@@ -193,6 +200,41 @@ function paintComposition(comp) {
           <span class="wp-mu-share">${Math.round((seg.n / comp.known) * 100)}%</span>
         </span>`).join('')}
     </div>`;
+}
+
+/* ── Danno di oggi dell'unità (WarEra+) ──
+   WarEra dà solo il cumulato settimanale (muWeeklyDamages): il danno di
+   giornata si ricava dallo scatto che il server di cache prende al cambio
+   giorno di gioco — stesso meccanismo di nazioni e alleanze, vedi
+   src/shared/dailyDamage.js.
+
+   Come nel pannello nazione la casella nasce vuota e si riempie quando lo
+   scatto arriva: la scheda dell'unità è già tutta disponibile in memoria
+   dalla directory, non deve aspettare la rete per comparire. */
+function todayCardHtml() {
+  return `
+    <div class="wp-mu-statcard" id="wp-mu-today" hidden>
+      <div class="wp-mu-statcard-label" id="wp-mu-today-label"></div>
+      <div class="wp-mu-statcard-value" id="wp-mu-today-value">—</div>
+    </div>`;
+}
+
+function paintTodayCard(mu) {
+  ensureDailyDamage().then(baseline => {
+    if (!baseline) return;
+    const today = muDamageToday(mu);
+    if (today == null) return;   // unità nata dopo lo scatto: nessuna base
+    // Cercati DENTRO il contenitore della scheda, non nel documento: la
+    // vista può essere montata in più radici (ed è comunque l'unica corretta
+    // se nel frattempo se ne è aperta un'altra).
+    const box = hostEl?.querySelector('#wp-mu-today');
+    const label = hostEl?.querySelector('#wp-mu-today-label');
+    const value = hostEl?.querySelector('#wp-mu-today-value');
+    if (!box || !label || !value || currentMu?._id !== mu._id) return;
+    label.textContent = `🔥 ${dailyDamageLabel(sharedT)}`;
+    value.textContent = fmtFull(today);
+    box.hidden = false;
+  });
 }
 
 function statCard(type, ranking) {

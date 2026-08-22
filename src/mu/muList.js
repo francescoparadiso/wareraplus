@@ -37,6 +37,7 @@
 import { muT } from './i18n.js';
 import { PLAYSTYLE_GROUPS } from './playstyle.js';
 import { avatarImg, countryName, dominantCountry, escapeHtml, flagImg, fmtCompact, tierOf } from './ui.js';
+import { ensureDailyDamage, muDamageToday } from '../shared/dailyDamage.js';
 
 const CHUNK = 60;
 
@@ -74,6 +75,9 @@ const SORTS = {
       return d.foreign ? 1e6 + d.n : d.share;
     },
   },
+  // -1 (non 0) per chi non ha il dato: ordinando per "Oggi" le unità senza
+  // scatto restano in fondo invece di mescolarsi a chi oggi non ha colpito.
+  today: { get: m => muDamageToday(m) ?? -1 },
 };
 
 // Stato della vista. Vive qui e non in main.js perché è tutto e solo suo:
@@ -196,6 +200,9 @@ export function renderMuList(host, context) {
   });
 
   paint();
+  // La colonna "Oggi" arriva dal server di cache: quando lo scatto è pronto
+  // si ridisegna, senza far aspettare l'elenco (che è già tutto in memoria).
+  ensureDailyDamage().then(baseline => { if (baseline && hostEl === host) paint(); });
 }
 
 function headerHtml() {
@@ -209,7 +216,9 @@ function headerHtml() {
       ${th('defacto', muT('colComposition'), 'wp-mu-th-left')}
       ${th('playstyle', muT('colPlaystyle'), 'wp-mu-th-left')}
       ${th('members', muT('colMembers'), 'wp-mu-th-num')}
-      ${METRICS.map(m => th(m.id, muT(m.short), 'wp-mu-th-num')).join('')}
+      ${METRICS.map((m, i) => th(m.id, muT(m.short), 'wp-mu-th-num')
+          // "Oggi" sta subito dopo il settimanale, da cui è ricavata.
+          + (i === 0 ? th('today', muT('colToday'), 'wp-mu-th-num') : '')).join('')}
     </div>`;
 }
 
@@ -315,6 +324,21 @@ function playstyleCell(m) {
 
 const PS_LABEL_KEY = { war: 'psWar', eco: 'psEco', mixed: 'psMixed', undecided: 'psUndecided' };
 
+/* ── Colonna "Oggi" (WarEra+) ──
+   Il danno di giornata dell'unità, ricavato dallo scatto che il server di
+   cache prende al cambio giorno di gioco (vedi src/shared/dailyDamage.js):
+   accanto al settimanale dice se un'unità in cima alla classifica sta
+   ancora spingendo oggi o se il suo totale è l'eco di lunedì.
+
+   Finché lo scatto non è arrivato (o se il server non ce l'ha) la cella
+   resta un trattino, e l'elenco funziona come prima. */
+function todayCell(m) {
+  const v = muDamageToday(m);
+  return `<span class="wp-mu-cell-num${sortId === 'today' ? ' wp-mu-cell-sorted' : ''}">
+    ${v == null ? '<span class="wp-mu-cell-empty">—</span>' : escapeHtml(fmtCompact(v))}
+  </span>`;
+}
+
 function rowHtml(m, position) {
   // Il colore della riga segue la colonna su cui si ordina: se non è una
   // classifica (nome, membri, nazione…) si ricade sul tier dei danni
@@ -338,12 +362,12 @@ function rowHtml(m, position) {
       ${composition}
       ${playstyleCell(m)}
       <span class="wp-mu-cell-num">${m.memberCount}</span>
-      ${METRICS.map(metric => {
+      ${METRICS.map((metric, i) => {
         const v = metricValue(m, metric.id);
         const t = tierOf(m.rankings?.[metric.id]);
         return `<span class="wp-mu-cell-num${metric.id === sortId ? ' wp-mu-cell-sorted' : ''}">
           ${v == null ? '<span class="wp-mu-cell-empty">—</span>' : `${escapeHtml(fmtCompact(v))}<span class="wp-mu-cell-rank wp-mu-rank-${t}">#${m.rankings[metric.id].rank}</span>`}
-        </span>`;
+        </span>` + (i === 0 ? todayCell(m) : '');
       }).join('')}
     </div>`;
 }
