@@ -1330,6 +1330,8 @@ async function pollCitizens() {
    ripetute 3.500 volte): a chiavi estese la sola Serbia sarebbe ~700 KB.
    ═══════════════════════════════════════════════════════════════════════ */
 
+const PS_CODE = { w: 'war', e: 'eco', m: 'mixed', u: 'undecided' };
+
 function citizenStats(u) {
   return [
     u.username || null,
@@ -1965,7 +1967,10 @@ app.get('/country-citizens', (req, res) => {
       id,
       u: st[0], a: st[1], lv: st[2], mr: st[3],
       wk: st[4], dmg: st[5], w: st[6], b: st[7], atk: st[8], seen: st[9],
-      ps: entry[2]?.mode || null,
+      // classifyPlaystyle qui dentro ritorna il codice compatto ('w'/'e'/
+      // 'm'/'u', vedi muPlaystyle), non l'oggetto della gemella client:
+      // si espande al nome che il client usa.
+      ps: PS_CODE[entry[2]] || null,
     });
   }
   out.sort((a, b) => (b.wk || 0) - (a.wk || 0));
