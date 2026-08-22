@@ -30,6 +30,7 @@ import { state } from '../diplomacy/state.js';
 import { pauseShipAnimation as pauseShipsDark, resumeShipAnimation as resumeShipsDark } from '../diplomacy/oceanBackground.js';
 import { pauseShipAnimation as pauseShipsAntique, resumeShipAnimation as resumeShipsAntique } from '../diplomacy/antiqueTheme.js';
 import { pauseBattleMarkersPolling, resumeBattleMarkersPolling } from '../diplomacy/main.js';
+import { drawLabels, resizeLabelCanvas } from '../diplomacy/labels.js';
 
 let _depth = 0;
 
@@ -57,4 +58,19 @@ export function resumeMapBackgroundWork() {
     resumeShipsAntique();
   }
   resumeBattleMarkersPolling();
+
+  // BUG FIX (mobile): stessa causa del ridisegno su 'idle'/'visibilitychange'
+  // in labels.js — i nomi di nazioni e alleanze stanno su un canvas 2D a
+  // parte, ridisegnato solo quando la mappa fa 'render'. Sotto un overlay
+  // aperto a lungo non parte nessun render (i pallini nave sono in pausa
+  // proprio qui sopra) e il compositore, su telefono, butta via il buffer
+  // del canvas: alla chiusura dell'overlay la mappa ricompare senza nomi,
+  // finché non si fa pan/zoom. Un resize + ridisegno alla ripresa lo
+  // rimette a posto; il resize serve anche perché il viewport può essere
+  // cambiato sotto l'overlay (rotazione, barra URL del browser mobile).
+  if (state.map && !state.timeMachineActive) {
+    resizeLabelCanvas();
+    state.map.triggerRepaint();
+    drawLabels();
+  }
 }
