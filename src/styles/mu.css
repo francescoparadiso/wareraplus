@@ -108,38 +108,9 @@ body.light-theme .wp-mu-select { background: #fff; border-color: #d5dae3; color:
 .wp-mu-count { font-size: 12px; color: #8b949e; margin-left: auto; padding-bottom: 8px; }
 body.light-theme .wp-mu-count { color: #5b6473; }
 
-/* ── Avatar (segnaposto sotto, immagine sopra) ─────────────── */
-.wp-mu-avatar {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 46px; height: 46px;
-  flex-shrink: 0;
-  border-radius: 10px;
-  overflow: hidden;
-  background: linear-gradient(135deg, #21262d, #30363d);
-}
-.wp-mu-avatar img {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.wp-mu-avatar-ph { font-weight: 800; font-size: 17px; color: #8b949e; }
-.wp-mu-avatar-lg { width: 78px; height: 78px; border-radius: 14px; }
-.wp-mu-avatar-lg .wp-mu-avatar-ph { font-size: 30px; }
-.wp-mu-avatar-sm { width: 30px; height: 30px; border-radius: 8px; }
-.wp-mu-avatar-sm .wp-mu-avatar-ph { font-size: 13px; }
-body.light-theme .wp-mu-avatar { background: linear-gradient(135deg, #e3e8f0, #cfd6e2); }
-body.light-theme .wp-mu-avatar-ph { color: #7a8494; }
-
-.wp-mu-flag {
-  width: 17px; height: 12px;
-  object-fit: cover;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
+/* Avatar e bandiere: le regole base stanno in shell.css (sempre
+   caricato), perché lo stesso markup lo genera src/mu/ui.js anche per
+   viste che non caricano questo foglio — vedi la nota là. */
 
 /* ── Elenco a tabella ──────────────────────────────────────────
    Una griglia sola, ripetuta identica su intestazione e righe (variabile
@@ -558,7 +529,6 @@ body.light-theme .wp-mu-mt-row { border-bottom-color: #e3e7ee; }
   font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
   color: #8b949e;
 }
-.wp-mu-avatar-xs { width: 20px; height: 20px; flex-shrink: 0; }
 .wp-mu-mt-row .wk { color: #58a6ff; font-weight: 700; }
 .wp-mu-mt-row .money { color: #3fb950; }
 .wp-mu-mt-row .when { color: #8b949e; }

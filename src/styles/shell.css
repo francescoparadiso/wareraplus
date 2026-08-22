@@ -6,6 +6,56 @@
    ══════════════════════════════════════════════════════════════ */
 
 /* ══════════════════════════════════════════════════════════════
+   AVATAR E BANDIERE — atomi condivisi da tutte le viste
+   ------------------------------------------------------------------
+   `avatarImg()` e `flagImg()` vivono in src/mu/ui.js, ma il markup che
+   producono lo usano anche Statistiche nazioni e chiunque importi quelle
+   funzioni. Finché queste regole stavano in mu.css — caricato via
+   import() SOLO dalla vista Unità Militari — le stesse immagini fuori da
+   quella vista uscivano a dimensione naturale: nell'elenco cittadini di
+   una nazione gli avatar erano alti mezzo schermo (segnalato dall'utente
+   sul Portogallo).
+
+   Stanno quindi qui, in un foglio che è sempre caricato. Regola generale:
+   se un pezzo di markup è generato da un modulo condiviso, il suo stile
+   non può stare nel CSS di una singola vista.
+   ══════════════════════════════════════════════════════════════ */
+
+.wp-mu-avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px; height: 46px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #21262d, #30363d);
+}
+.wp-mu-avatar img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.wp-mu-avatar-ph { font-weight: 800; font-size: 17px; color: #8b949e; }
+.wp-mu-avatar-lg { width: 78px; height: 78px; border-radius: 14px; }
+.wp-mu-avatar-lg .wp-mu-avatar-ph { font-size: 30px; }
+.wp-mu-avatar-sm { width: 30px; height: 30px; border-radius: 8px; }
+.wp-mu-avatar-sm .wp-mu-avatar-ph { font-size: 13px; }
+.wp-mu-avatar-xs { width: 20px; height: 20px; border-radius: 6px; }
+.wp-mu-avatar-xs .wp-mu-avatar-ph { font-size: 10px; }
+body.light-theme .wp-mu-avatar { background: linear-gradient(135deg, #e3e8f0, #cfd6e2); }
+body.light-theme .wp-mu-avatar-ph { color: #7a8494; }
+
+.wp-mu-flag {
+  width: 17px; height: 12px;
+  object-fit: cover;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════
    BARRE DI SCORRIMENTO — regola globale dell'app
    ------------------------------------------------------------------
    Nessuna barra di sistema (grigia, con le frecce ai capi) da nessuna
