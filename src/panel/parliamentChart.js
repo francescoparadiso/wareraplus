@@ -25,7 +25,10 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { trpcBatch, hashColor, escapeHtml } from '../diplomacy/utils.js';
-import { fetchPartiesDetailViaCache, fetchElectionsForCountryViaCache, fetchElectionDetailViaCache } from '../diplomacy/cacheClient.js';
+import {
+  fetchPartiesDetailViaCache, fetchElectionsForCountryViaCache, fetchElectionDetailViaCache,
+  fetchElectionsForCountriesViaCache, fetchElectionDetailsViaCache, fetchUsersLiteViaCache,
+} from '../diplomacy/cacheClient.js';
 import { t } from '../shared/i18n.js';
 
 // Cache leggera per country: evita di rifare tutte le fetch se l'utente
@@ -117,11 +120,25 @@ async function fetchParliamentUserData(seatsResult) {
   const govUserIds = seatsResult.govRoleIds ? Object.values(seatsResult.govRoleIds).filter(Boolean) : [];
   const allUserIds = [...new Set([...candidateUserIds, ...govUserIds])];
   if (!allUserIds.length) return new Map();
+  return fetchSeatUsers(allUserIds);
+}
 
-  const results = await trpcBatch(allUserIds.map(id => ['user.getUserLite', { userId: id }]), { useWorker: true });
-  const userMap = new Map();
-  allUserIds.forEach((id, i) => { if (results[i]) userMap.set(id, results[i]); });
-  return userMap;
+/** Nome e avatar degli eletti: dal server di cache in una richiesta sola,
+ *  letta dalla sua mappa su disco, invece di sei batch al Worker che vanno
+ *  a interrogare WarEra dal vivo (di user.getUserLite qui servono solo
+ *  username e avatarUrl — vedi _mergeUserData). Se l'endpoint non c'è o
+ *  fallisce si torna alle chiamate dirette, cioè al comportamento di prima. */
+async function fetchSeatUsers(userIds) {
+  try {
+    const map = await fetchUsersLiteViaCache(userIds);
+    if (map.size) return map;
+    throw new Error('nessun utente risolto dalla cache');
+  } catch (err) {
+    const results = await trpcBatch(userIds.map(id => ['user.getUserLite', { userId: id }]), { useWorker: true });
+    const userMap = new Map();
+    userIds.forEach((id, i) => { if (results[i]) userMap.set(id, results[i]); });
+    return userMap;
+  }
 }
 
 /* Unisce i dati utente (fase 2) alla struttura seggi/governo (fase 1),
@@ -171,17 +188,33 @@ function _mergeUserData(seatsResult, userMap) {
    renderParliamentAvatars trovano i dati già pronti e non rifanno
    fetch. ── */
 
+/** Dettagli elezione del gruppo: una richiesta sola per quelli che il
+ *  server ha già in cache, poi le eventuali mancanti una per una (percorso
+ *  singolo, che ha il proprio fallback diretto a WarEra). Ritorna un array
+ *  nello STESSO ordine degli id passati, come faceva il Promise.all che
+ *  sostituisce. */
+async function fetchGroupElectionDetails(electionIds) {
+  if (!electionIds.length) return [];
+  const byId = await fetchElectionDetailsViaCache(electionIds);
+  return Promise.all(electionIds.map(id => (
+    byId[id] ? Promise.resolve(byId[id]) : fetchElectionDetailViaCache(id).catch(() => null)
+  )));
+}
+
 export async function fetchGroupSeatsData(countryIds) {
   const idsToFetch = countryIds.filter(id => !_cacheSeats.has(id));
   if (!idsToFetch.length) return;
 
-  // 1) elezioni di TUTTE le nazioni del gruppo — dalla cache Oracle, una
-  //    fetch per nazione ma verso il server di cache (non il Worker),
-  //    quindi nessun rischio 429: vedi cacheClient.js/
-  //    server/warera-cache-server.js:pollElections.
-  const electionsResults = await Promise.all(
-    idsToFetch.map(id => fetchElectionsForCountryViaCache(id).catch(() => []))
-  );
+  // 1) elezioni di TUTTE le nazioni del gruppo in UNA richiesta alla cache
+  //    Oracle (parametro countryIds). Prima era una richiesta per nazione:
+  //    nessun rischio 429 (è il nostro server, non il Worker) ma venti
+  //    round-trip per un blocco da venti, da cui l'attesa visibile prima
+  //    che comparissero i congressi. Se il server non conosce ancora
+  //    `countryIds` (deploy non fatto) si ricade sulle richieste singole,
+  //    cioè sul comportamento precedente.
+  const electionsResults = await fetchElectionsForCountriesViaCache(idsToFetch)
+    .then(byCountry => idsToFetch.map(id => byCountry[id] || []))
+    .catch(() => Promise.all(idsToFetch.map(id => fetchElectionsForCountryViaCache(id).catch(() => []))));
 
   const latestCongressByCountry = new Map(); // countryId -> election | null
   idsToFetch.forEach((id, i) => {
@@ -196,7 +229,7 @@ export async function fetchGroupSeatsData(countryIds) {
   //    resta su trpcBatch/Worker: nessun equivalente cache in questo progetto)
   const idsWithElection = idsToFetch.filter(id => latestCongressByCountry.get(id));
   const [electionDetails, govResults] = await Promise.all([
-    Promise.all(idsWithElection.map(id => fetchElectionDetailViaCache(latestCongressByCountry.get(id)._id).catch(() => null))),
+    fetchGroupElectionDetails(idsWithElection.map(id => latestCongressByCountry.get(id)._id)),
     trpcBatch(idsToFetch.map(id => ['government.getByCountryId', { countryId: id }]), { useWorker: true }),
   ]);
 
@@ -261,11 +294,7 @@ export async function fetchGroupUserData(countryIds) {
   });
 
   const idsArr = [...allUserIds];
-  const results = idsArr.length
-    ? await trpcBatch(idsArr.map(id => ['user.getUserLite', { userId: id }]), { useWorker: true })
-    : [];
-  const sharedUserMap = new Map();
-  idsArr.forEach((id, i) => { if (results[i]) sharedUserMap.set(id, results[i]); });
+  const sharedUserMap = idsArr.length ? await fetchSeatUsers(idsArr) : new Map();
 
   // Tutte le nazioni del gruppo condividono la STESSA mappa: contiene
   // l'unione degli id necessari a tutto il gruppo, ma i lookup per

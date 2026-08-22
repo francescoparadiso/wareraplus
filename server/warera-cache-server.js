@@ -1175,6 +1175,125 @@ function pollTickerEvents(countries, diplomacy) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// NOME + AVATAR DEI GIOCATORI (/users-lite)
+// -----------------------------------------------------------------------
+// I grafici parlamento mostrano faccia e nome di ogni eletto e di ogni
+// membro del governo. Il client li prendeva da `user.getUserLite`, una
+// chiamata per utente accorpata in batch da 50: per un blocco di venti
+// nazioni sono ~300 utenti, cioè sei richieste al Worker in fila, ognuna
+// che va a interrogare WarEra dal vivo. Il peso non è il problema (la
+// risposta è già leggera, ~170 byte a testa): è la LATENZA ripetuta.
+//
+// Qui il server tiene una mappa userId → [username, avatarUrl, ts] e la
+// serve in una richiesta sola, letta da disco. Gli utenti che non ha
+// ancora li chiede lui a WarEra (stesso trpcBatch degli altri poll, quindi
+// con retry e rate control) una volta sola: nome e avatar cambiano di
+// rado, da cui il TTL lungo. Misurato su 36 eletti: 191 ms dal Worker
+// contro 22 ms da qui a mappa piena (197 ms il primo giro, quello in cui
+// il server li scarica).
+// ═══════════════════════════════════════════════════════════════════════
+const USERS_LITE_FILE = 'users-lite';
+const USERS_LITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Tetto per richiesta: oltre non si va a chiedere a WarEra nello stesso
+// giro (si risponde con quello che c'è, il resto arriva alla prossima
+// apertura). Un blocco molto numeroso resta comunque sotto.
+const USERS_LITE_MAX_FETCH = 300;
+
+let _usersLite = null;   // { userId: [username, avatarUrl, ts] }
+function _loadUsersLite() {
+  if (!_usersLite) _usersLite = readCache(USERS_LITE_FILE, {});
+  return _usersLite;
+}
+
+async function resolveUsersLite(ids) {
+  const store = _loadUsersLite();
+  const now = Date.now();
+  const missing = ids.filter(id => {
+    const row = store[id];
+    return !row || (now - (row[2] || 0)) > USERS_LITE_TTL_MS;
+  }).slice(0, USERS_LITE_MAX_FETCH);
+
+  if (missing.length) {
+    try {
+      const results = await trpcBatch(missing.map(id => ['user.getUserLite', { userId: id }]), { useWorker: true });
+      missing.forEach((id, i) => {
+        const u = results[i];
+        if (u) store[id] = [u.username || null, u.avatarUrl || null, now];
+      });
+      writeCache(USERS_LITE_FILE, store, { compact: true });
+      console.log(`[users-lite] risolti ${missing.length} utenti (${Object.keys(store).length} in mappa)`);
+    } catch (err) {
+      console.error('[users-lite] risoluzione fallita:', err.message);
+    }
+  }
+
+  const out = {};
+  for (const id of ids) {
+    const row = store[id];
+    if (row) out[id] = { username: row[0], avatarUrl: row[1] };
+  }
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DANNO DI OGGI — scatto del danno settimanale al cambio giorno di gioco
+// -----------------------------------------------------------------------
+// WarEra espone per ogni nazione solo il danno SETTIMANALE cumulato
+// (rankings.weeklyCountryDamages) e quello di sempre: il danno "di oggi"
+// non esiste come dato. Però il giorno di gioco cambia alle 02:00 italiane
+// (indicazione dell'utente), quindi basta fotografare lì il cumulato
+// settimanale: da quel momento in poi
+//
+//     danno di oggi = settimanale ora − settimanale alle 02:00
+//
+// Lo scatto lo fa il server e non il browser perché deve esistere anche se
+// alle 02:00 non c'è nessuno col tool aperto — ed è uno solo per tutti,
+// non uno per dispositivo.
+//
+// Il cumulato settimanale si azzera al reset della settimana di gioco: in
+// quel giro la differenza verrebbe negativa. Il client la tratta come "il
+// contatore è ripartito" e mostra il valore corrente (vedi
+// todayDamageLine in src/diplomacy/blocStats.js) — qui si conserva solo il
+// numero grezzo, senza interpretarlo.
+// ═══════════════════════════════════════════════════════════════════════
+const DAILY_DAMAGE_FILE = 'daily-damage-baseline';
+const DAILY_DAMAGE_TZ = 'Europe/Rome';
+
+/** Fotografa il danno settimanale di ogni nazione E di ogni unità militare
+ *  dalle cache già aggiornate (nessuna chiamata a WarEra: pollCountries gira
+ *  ogni 10 minuti e pollMuDirectory ogni 30, quindi alle 02:00 i dati sono
+ *  al massimo di mezz'ora prima).
+ *
+ *  Le MU stanno nello stesso scatto e non in uno separato perché il
+ *  significato è identico e il momento deve essere lo stesso: due file
+ *  distinti scattati in istanti diversi renderebbero non confrontabili
+ *  "danno di oggi di una nazione" e "danno di oggi delle sue unità". */
+function snapshotDailyDamage() {
+  try {
+    // Stesso srotolamento degli altri poll: la cache countries conserva la
+    // risposta tRPC grezza, l'array sta sotto data.result.data.
+    const countriesCache = readCache('countries', null);
+    const countries = countriesCache?.data?.result?.data || countriesCache?.data || [];
+    if (!countries.length) { console.warn('[daily-damage] cache countries vuota, scatto saltato'); return; }
+    const byCountry = {};
+    for (const n of countries) {
+      const v = n?.rankings?.weeklyCountryDamages?.value;
+      if (typeof v === 'number') byCountry[n._id] = v;
+    }
+
+    const mus = readCache('mu-directory', { data: [] })?.data || [];
+    const byMu = {};
+    for (const m of mus) {
+      const v = m?.rankings?.muWeeklyDamages?.value;
+      if (typeof v === 'number') byMu[m._id] = v;
+    }
+
+    writeCache(DAILY_DAMAGE_FILE, { takenAt: Date.now(), tz: DAILY_DAMAGE_TZ, byCountry, byMu }, { compact: true });
+    console.log(`[daily-damage] scatto salvato: ${Object.keys(byCountry).length} nazioni, ${Object.keys(byMu).length} unità`);
+  } catch (err) { console.error('[daily-damage] scatto fallito:', err.message); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // STORICO OWNERSHIP REGIONI — backend della time machine
 // (vedi nota (3) in testa al file)
 // ═══════════════════════════════════════════════════════════════════════
@@ -1519,6 +1638,10 @@ cron.schedule('12,42 * * * *', pollMuDirectory);            // ogni 30 min, :12 
 // un requisito stretto (i due giri non si sovrappongono mai per orario).
 cron.schedule('25 * * * *', pollExternalHistory);
 cron.schedule('18 */6 * * *', pollCreditProfiles);          // ogni 6 ore, :18
+// Cambio giorno di gioco: 02:00 italiane, non UTC — da cui il fuso
+// esplicito (il server può stare ovunque). Minuto :01 per essere sicuri di
+// leggere il giro di pollCountries delle :00.
+cron.schedule('1 2 * * *', snapshotDailyDamage, { timezone: DAILY_DAMAGE_TZ });
 
 // Primo giro completo all'avvio (in ordine: countries prima, perché tutto
 // il resto dipende dalla cache delle nazioni), così non si parte a vuoto.
@@ -1536,6 +1659,11 @@ cron.schedule('18 */6 * * *', pollCreditProfiles);          // ogni 6 ore, :18
   // await pollBootstrapPage(); // disattivato, vedi nota sopra al cron.schedule commentato
   await pollExternalHistory(); // sync subito con spywarera invece di aspettare fino a 1h
   await pollCreditProfiles();
+  // Primissimo avvio: senza scatto il "danno di oggi" resterebbe muto fino
+  // alle 02:00 successive. Se ne fa uno subito — vale meno (parte da adesso,
+  // non dal cambio giorno), e infatti il client mostra l'ora dello scatto
+  // invece di dire "oggi" quando non è delle 02:00.
+  if (!readCache(DAILY_DAMAGE_FILE, null)) snapshotDailyDamage();
 })();
 
 // ---------------------------------------------------------------------------
@@ -1555,9 +1683,24 @@ app.get('/parties', (req, res) => {
 
 app.get('/parties-detail', (req, res) => res.json(readCache('parties-detail', { fetchedAt: null, data: [] })));
 
+// `countryId` = una nazione (risposta: array, forma storica).
+// `countryIds` = più nazioni in UNA richiesta (risposta: {countryId: array}).
+// La seconda serve al pannello alleanza, che disegna il parlamento di ogni
+// membro: una richiesta per nazione significava venti round-trip per un
+// blocco da venti, ed è la ragione per cui i congressi comparivano più
+// lentamente di quando la stessa fase passava da un solo batch tRPC.
+// Il file di cache è già tutto in memoria qui: servirne venti fette o una
+// costa lo stesso.
 app.get('/elections', (req, res) => {
-  const { countryId } = req.query;
+  const { countryId, countryIds } = req.query;
   const cache = readCache('elections-by-country', { fetchedAt: null, data: {} });
+  if (countryIds) {
+    const out = {};
+    for (const id of String(countryIds).split(',').map(s => s.trim()).filter(Boolean)) {
+      out[id] = cache.data[id] || [];
+    }
+    return res.json({ fetchedAt: cache.fetchedAt, data: out });
+  }
   const list = countryId ? (cache.data[countryId] || []) : [];
   res.json({ fetchedAt: cache.fetchedAt, data: list });
 });
@@ -1568,12 +1711,40 @@ app.get('/election/:id', (req, res) => {
   res.json(detail);
 });
 
+// Stessa ragione di `countryIds` qui sopra, per i DETTAGLI elezione: il
+// pannello alleanza ne chiede uno per nazione. Risposta {electionId: data},
+// con le elezioni mai viste dal server semplicemente assenti.
+app.get('/elections-detail', (req, res) => {
+  const ids = String(req.query.ids || '').split(',').map(s => s.trim()).filter(Boolean);
+  const out = {};
+  for (const id of ids) {
+    const detail = readElectionDetail(id);
+    if (detail?.data) out[id] = detail.data;
+  }
+  res.json({ data: out });
+});
+
+// Nome e avatar dei giocatori indicati — vedi resolveUsersLite.
+app.get('/users-lite', async (req, res) => {
+  const ids = String(req.query.ids || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (!ids.length) return res.json({ data: {} });
+  try {
+    res.json({ data: await resolveUsersLite(ids) });
+  } catch (err) {
+    console.error('[users-lite] richiesta fallita:', err.message);
+    res.json({ data: {} });
+  }
+});
+
 app.get('/diplomacy', (req, res) => res.json(readCache('diplomacy', { fetchedAt: null, data: [] })));
 app.get('/battles', (req, res) => res.json(readCache('battles', { fetchedAt: null, data: [] })));
 app.get('/battle-regions', (req, res) => res.json(readCache('battle-regions', { fetchedAt: null, data: [] })));
 
 app.get('/mu-directory', (req, res) => res.json(readCache('mu-directory', { fetchedAt: null, data: [] })));
 app.get('/mu-playstyle-by-country', (req, res) => res.json(readCache('mu-playstyle-by-country', { fetchedAt: null, data: {} })));
+// Scatto del danno settimanale al cambio giorno di gioco — vedi
+// snapshotDailyDamage. { takenAt, tz, byCountry: {countryId: danno} }
+app.get('/daily-damage', (req, res) => res.json(readCache(DAILY_DAMAGE_FILE, { takenAt: null, tz: DAILY_DAMAGE_TZ, byCountry: {}, byMu: {} })));
 
 // Storico di UNA nazione: [[ts, war, eco, mixed, undecided, known], ...].
 // Una nazione per richiesta e non tutto insieme: il file intero è di qualche

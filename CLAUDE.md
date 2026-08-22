@@ -293,4 +293,6 @@ e 14 richieste per utente invece di una), e le colonne "Composizione" e
 gioco del pannello nazione. Nella scheda della singola unità gli stessi
 due dati sono invece calcolati dal vivo sui membri appena scaricati, e
 funzionano sempre. Dopo un deploy servono ~8 giri di poll (~4 ore) perché
-la mappa utente→nazione/stile si riempia.
+la mappa utente→nazione/stile si riempia. Anche la riga "danno di oggi"
+nella fascia di Alliance Overview dipende dal server (`/daily-damage`,
+scatto alle 02:00 italiane): senza deploy semplicemente non compare.

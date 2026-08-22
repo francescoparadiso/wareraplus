@@ -261,6 +261,24 @@ export async function fetchElectionsForCountryViaCache(countryId) {
   }
 }
 
+/** Come sopra ma per PIÙ nazioni in una richiesta sola: la usa il pannello
+ *  alleanza, che disegna il parlamento di ogni membro. Con una richiesta per
+ *  nazione un blocco da venti faceva venti round-trip — è il motivo per cui
+ *  i congressi comparivano più lentamente di quando la stessa fase passava
+ *  da un solo batch tRPC.
+ *
+ *  Ritorna { countryId: [elezioni] }. Un server vecchio, che `countryIds`
+ *  non lo conosce, risponde con un array vuoto (ramo `countryId` mancante):
+ *  in quel caso si ricade sulle richieste singole, come prima. */
+export async function fetchElectionsForCountriesViaCache(countryIds) {
+  if (!countryIds?.length) return {};
+  const qs = `countryIds=${encodeURIComponent(countryIds.join(','))}`;
+  const json = await _fetchCacheJson(`/elections?${qs}`);
+  const data = json?.data;
+  if (!data || Array.isArray(data)) throw new Error('cache /elections: countryIds non supportato');
+  return data;
+}
+
 /** election.getElection — dettaglio pieno di una elezione (candidati,
  *  votes{}, votesCount, votesStartAt/votesEndAt). Chiusa → dato permanente
  *  dalla cache, mai una chiamata a WarEra. Candidatura/voto → l'ultimo dato
@@ -281,6 +299,49 @@ export async function fetchElectionDetailViaCache(electionId) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return (await res.json())?.result?.data ?? null;
   }
+}
+
+/** Dettagli di PIÙ elezioni in una richiesta (gemello di
+ *  fetchElectionsForCountriesViaCache, stesso motivo: un blocco da venti
+ *  nazioni chiedeva venti dettagli separati).
+ *
+ *  Ritorna { electionId: dettaglio } con dentro SOLO quelle che il server
+ *  ha già visto. Le mancanti le recupera il chiamante una per una col
+ *  percorso singolo, che ha il suo fallback diretto — così un server senza
+ *  questo endpoint (404 → oggetto vuoto) si comporta esattamente come
+ *  prima, solo senza il risparmio. */
+export async function fetchElectionDetailsViaCache(electionIds) {
+  if (!electionIds?.length) return {};
+  try {
+    const qs = `ids=${encodeURIComponent(electionIds.join(','))}`;
+    const json = await _fetchCacheJsonRaw(`/elections-detail?${qs}`);
+    return (json?.data && typeof json.data === 'object') ? json.data : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+/** Nome e avatar di più giocatori in una richiesta (server/warera-cache-server.js:
+ *  /users-lite). Sostituisce `user.getUserLite` chiamato per ogni utente e
+ *  accorpato in batch da 50: i ~300 eletti di un blocco erano sei richieste
+ *  al Worker in fila, ognuna che interroga WarEra dal vivo. Misurato su 36
+ *  eletti: 191 ms via Worker contro 22 ms da qui.
+ *
+ *  Ritorna Map(userId → { username, avatarUrl }) con dentro solo quelli che
+ *  il server ha saputo risolvere. Lancia se l'endpoint non c'è (deploy non
+ *  fatto): il chiamante ricade sulle chiamate dirette di prima.
+ *
+ *  Nessun timeout corto qui: la prima volta che un parlamento nuovo passa di
+ *  qui il server deve andare a chiedere gli utenti a WarEra, e con un tetto
+ *  di 300 può metterci qualche secondo. Dalle volte successive è immediato. */
+export async function fetchUsersLiteViaCache(userIds) {
+  if (!userIds?.length) return new Map();
+  const qs = `ids=${encodeURIComponent(userIds.join(','))}`;
+  const res = await fetch(`${WARERA_CACHE_BASE}/users-lite?${qs}`);
+  if (!res.ok) throw new Error(`cache /users-lite: HTTP ${res.status}`);
+  const json = await res.json();
+  if (!json?.data || typeof json.data !== 'object') throw new Error('cache /users-lite: forma inattesa');
+  return new Map(Object.entries(json.data));
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -327,6 +388,25 @@ export async function fetchTickerSummaryViaCache(sinceTs, windowTs) {
     throw new Error('cache /ticker/summary: forma inattesa');
   }
   return json;
+}
+
+/** Scatto del danno settimanale per nazione preso al cambio giorno di gioco
+ *  (02:00 italiane) dal server di cache — vedi snapshotDailyDamage in
+ *  server/warera-cache-server.js. Con questo il "danno di oggi", che WarEra
+ *  non espone, si ricava per differenza dal settimanale corrente.
+ *
+ *  Ritorna { takenAt, tz, byCountry } oppure null se il server non ce l'ha
+ *  (deploy non fatto, server giù): è un di più, chi chiama nasconde la riga
+ *  e non fallisce. */
+export async function fetchDailyDamageBaselineViaCache() {
+  try {
+    const json = await _fetchCacheJsonRaw('/daily-damage');
+    if (!json || typeof json.byCountry !== 'object' || !json.takenAt) return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /daily-damage non disponibile:', err.message);
+    return null;
+  }
 }
 
 // ══════════════════════════════════════════════════════════════

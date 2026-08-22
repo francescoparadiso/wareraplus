@@ -72,6 +72,29 @@ Due uscite: il conteggio per unità (campo `playstyle` di ogni voce di
 qualche KB — sta in un endpoint suo perché il pannello nazione non deve
 scaricare 1 MB di directory per mostrare tre numeri).
 
+### Danno di oggi (`/daily-damage`)
+
+WarEra pubblica il danno **settimanale** cumulato di ogni nazione, mai quello
+giornaliero. Il giorno di gioco però cambia alle **02:00 italiane**, quindi
+alle 02:01 `Europe/Rome` (fuso esplicito nel `cron.schedule`: il server può
+stare ovunque) `snapshotDailyDamage` fotografa il settimanale di tutte le
+nazioni dalla cache `countries` già aggiornata — zero chiamate a WarEra.
+
+Nello stesso scatto (stesso istante, altrimenti "danno di oggi" di una
+nazione e delle sue unità non sarebbero confrontabili) c'è anche il
+settimanale di ogni **unità militare**, preso dalla cache `mu-directory`:
+`byCountry` e `byMu`.
+
+Il client sottrae voce per voce (`src/shared/dailyDamage.js`, usato da
+pannello nazione, pannello alleanza/sfera, statistiche alleanze e scheda
+unità): differenze negative — reset settimanale del contatore — contano
+zero, e chi non ha voce nello scatto resta fuori invece di far entrare in
+"oggi" tutto il suo cumulato.
+
+Al primissimo avvio, se il file non esiste, se ne fa uno subito: vale meno
+(parte dall'avvio, non dal cambio giorno) e infatti il client scrive
+"Since HH:MM" invece di "Today" finché non passano le 02:00.
+
 ### Quando si ricontrolla un utente
 
 Non un TTL fisso, ma il regolamento del gioco (`gameConfig.getGameConfig()
