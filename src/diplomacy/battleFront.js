@@ -498,6 +498,11 @@ function renderOtherContributors(nations) {
   // nazioni che hanno davvero fatto danno, mai quelle presenti nel ranking
   // con zero.
   const all = (nations || []).filter(n => n.totalDamage > 0);
+  // Difesa in profondità: se un giro arriva senza nazioni (fetch fallita a
+  // monte, o battaglia appena aperta) NON si riscrive nulla — la sezione
+  // resta com'era invece di svuotarsi e ricomparire al giro dopo. Il fix a
+  // monte sta in battleHeatmap.js: buildNationRankingSafe.
+  if (!all.length) return;
   const defenderAll = all.filter(n => n.side === 'defender').sort((a, b) => b.totalDamage - a.totalDamage);
   const attackerAll = all.filter(n => n.side === 'attacker').sort((a, b) => b.totalDamage - a.totalDamage);
 

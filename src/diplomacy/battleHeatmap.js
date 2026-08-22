@@ -185,9 +185,29 @@ function buildNationRanking(attackerRanking, defenderRanking) {
   return processed;
 }
 
+/* `null` e "lista vuota" sono due cose diverse e vanno tenute distinte.
+   trpcBatch mette `null` al posto della singola procedura fallita (429
+   esaurito, item.error, 404) e lascia buone le altre: se si trattasse quel
+   null come "questo lato non ha fatto danno", basterebbe che UNO dei due
+   ranking non arrivasse per costruire un elenco monco — con i contributori
+   che sparivano e ricomparivano da soli al giro dopo (segnalato
+   dall'utente sulla sezione "All contributors"). Qui `null` resta null e
+   chi chiama decide. */
 function extractRankingItems(res) {
+  if (res == null) return null;                       // chiamata fallita
   const items = res?.items || (Array.isArray(res) ? res : []);
   return Array.isArray(items) ? items : [];
+}
+
+/** Elenco per nazione solo se ENTRAMBI i lati sono arrivati; altrimenti
+ *  array vuoto, che i chiamanti già sanno leggere come "giro fallito,
+ *  tieni l'ultimo dato buono" (vedi lastGoodNations in battleFront.js). */
+function buildNationRankingSafe(attackerRanking, defenderRanking, where) {
+  if (!attackerRanking || !defenderRanking) {
+    console.warn(`[${where}] ranking incompleto (attacker: ${attackerRanking ? 'ok' : 'ko'}, defender: ${defenderRanking ? 'ok' : 'ko'}): giro scartato`);
+    return [];
+  }
+  return buildNationRanking(attackerRanking, defenderRanking);
 }
 
 // battle.getLiveBattleData: dati "ufficiali" del round corrente (danni,
@@ -220,7 +240,7 @@ export async function fetchBattleWallData(battleId) {
     const [details, attackerRes, defenderRes, liveRes] = await trpcBatch(calls, { useWorker: true });
     const attackerRanking = extractRankingItems(attackerRes);
     const defenderRanking = extractRankingItems(defenderRes);
-    const nations = buildNationRanking(attackerRanking, defenderRanking);
+    const nations = buildNationRankingSafe(attackerRanking, defenderRanking, 'fetchBattleWallData');
     const live = extractLiveData(liveRes);
     return { details, nations, live };
   } catch (err) {
@@ -248,7 +268,7 @@ export async function fetchBattleWallPoll(battleId) {
     const [attackerRes, defenderRes, liveRes] = await trpcBatch(calls, { useWorker: true });
     const attackerRanking = extractRankingItems(attackerRes);
     const defenderRanking = extractRankingItems(defenderRes);
-    const nations = buildNationRanking(attackerRanking, defenderRanking);
+    const nations = buildNationRankingSafe(attackerRanking, defenderRanking, 'fetchBattleWallPoll');
     const live = extractLiveData(liveRes);
     return { nations, live };
   } catch (err) {
@@ -273,7 +293,7 @@ export async function fetchBattleRanking(battleId) {
     console.log('Attacker rankings:', attackerRanking);
     console.log('Defender rankings:', defenderRanking);
 
-    return buildNationRanking(attackerRanking, defenderRanking);
+    return buildNationRankingSafe(attackerRanking, defenderRanking, 'fetchBattleRanking');
   } catch (err) {
     console.error('fetchBattleRanking error:', err);
     return [];
@@ -293,7 +313,7 @@ export async function fetchBattleFullData(battleId) {
     const [details, attackerRes, defenderRes] = await trpcBatch(calls, { useWorker: true });
     const attackerRanking = extractRankingItems(attackerRes);
     const defenderRanking = extractRankingItems(defenderRes);
-    const nations = buildNationRanking(attackerRanking, defenderRanking);
+    const nations = buildNationRankingSafe(attackerRanking, defenderRanking, 'fetchBattleFullData');
     return { details, nations };
   } catch (err) {
     console.error('fetchBattleFullData error:', err);
