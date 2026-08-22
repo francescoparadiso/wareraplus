@@ -292,6 +292,21 @@ body.light-theme .wp-nat-cthead { background: var(--wp-ov-bg-light, #f4f6fa); }
   color: var(--wp-ov-text-dim, #8b949e);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.wp-nat-cth-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: inherit;
+}
+.wp-nat-cth-btn:hover { color: var(--wp-ov-text, #e6edf3); }
+.wp-nat-cth-btn.active { color: var(--wp-ov-accent, #39d0d8); }
+/* La freccia dice anche il VERSO, non solo quale colonna ordina. */
+.wp-nat-cth-btn.active[data-dir="-1"]::after { content: ' ▾'; }
+.wp-nat-cth-btn.active[data-dir="1"]::after { content: ' ▴'; }
+
 .wp-nat-crow {
   padding: 7px 8px;
   border-bottom: 1px solid #21262d;

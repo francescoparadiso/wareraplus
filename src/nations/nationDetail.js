@@ -30,14 +30,21 @@ import { t as sharedT } from '../shared/i18n.js';
 
 const APP_BASE = 'https://app.warera.io';
 
+/* Un solo elenco di criteri per il selettore E per le intestazioni
+   cliccabili della lista: due liste separate sarebbero divergenti al primo
+   campo aggiunto. `text: true` = ordinamento alfabetico crescente, tutto
+   il resto è numerico decrescente (il primo clic mostra sempre i più
+   grandi, che è quello che si cerca; il secondo inverte). */
 const CITIZEN_SORTS = [
   { key: 'wk',   label: 'weekly',   get: c => c.wk || 0 },
   { key: 'dmg',  label: 'total',    get: c => c.dmg || 0 },
   { key: 'w',    label: 'wealth',   get: c => c.w || 0 },
   { key: 'b',    label: 'bounty',   get: c => c.b || 0 },
   { key: 'lv',   label: 'level',    get: c => c.lv || 0 },
+  { key: 'mr',   label: 'mrank',    get: c => c.mr || 0 },
+  { key: 'atk',  label: 'atk',      get: c => c.atk || 0 },
   { key: 'seen', label: 'lastSeen', get: c => c.seen || 0 },
-  { key: 'u',    label: 'citizen',  get: c => c.u || '' },
+  { key: 'u',    label: 'citizen',  get: c => c.u || '', text: true },
 ];
 
 const VIEW_KEY = 'we_nat_citizen_view';
@@ -46,6 +53,7 @@ let _host = null;
 let _nation = null;
 let _citizens = null;      // { rows, total, known, partial }
 let _sort = 'wk';
+let _sortDir = -1;          // -1 = dal più grande, 1 = dal più piccolo
 let _view = (() => {
   try { return localStorage.getItem(VIEW_KEY) === 'cards' ? 'cards' : 'list'; }
   catch { return 'list'; }
@@ -96,6 +104,7 @@ export function renderNationDetail(host, nation, ctx) {
   host.querySelector('#wp-nat-back').addEventListener('click', () => ctx.onBack());
   host.querySelector('#wp-nat-citizen-sort').addEventListener('change', (e) => {
     _sort = e.target.value;
+    _sortDir = -1;
     renderCitizens();
   });
   host.querySelector('#wp-nat-citizen-view').addEventListener('click', (e) => {
@@ -200,28 +209,32 @@ function renderCitizens() {
     return;
   }
 
-  const s = CITIZEN_SORTS.find(o => o.key === _sort) || CITIZEN_SORTS[0];
-  const sorted = rows.slice().sort((a, b) => (s.key === 'u'
-    ? String(s.get(a)).localeCompare(String(s.get(b)), undefined, { sensitivity: 'base' })
-    : s.get(b) - s.get(a)));
+  const sorted = sortCitizens(rows);
 
   const notice = partial ? `<p class="wp-nat-notice">${escapeHtml(natT('citizensPartial'))}</p>` : '';
   listEl.innerHTML = notice + (_view === 'cards'
     ? `<div class="wp-nat-citizen-grid">${sorted.map(citizenCard).join('')}</div>`
     : citizenTable(sorted));
+
+  listEl.querySelectorAll('.wp-nat-cth-btn[data-sort]').forEach(btn => {
+    btn.addEventListener('click', () => sortByHeader(btn.dataset.sort));
+  });
 }
 
+// `sort` = chiave in CITIZEN_SORTS: le colonne che ce l'hanno diventano
+// intestazioni cliccabili. Lo stile di gioco non ne ha: è una categoria,
+// non una scala, e ordinarla direbbe solo "prima le rosse".
 const CITIZEN_COLS = [
-  { label: 'citizen' },
-  { label: 'level',    num: true, get: c => c.lv ?? '—' },
-  { label: 'mrank',    num: true, get: c => c.mr ?? '—' },
+  { label: 'citizen',  sort: 'u' },
+  { label: 'level',    num: true, sort: 'lv',   get: c => c.lv ?? '—' },
+  { label: 'mrank',    num: true, sort: 'mr',   get: c => c.mr ?? '—' },
   { label: 'playstyle', get: c => psPill(c) },
-  { label: 'weekly',   num: true, get: c => fmtCompact(c.wk || 0), cls: 'wk' },
-  { label: 'total',    num: true, get: c => fmtCompact(c.dmg || 0) },
-  { label: 'wealth',   num: true, get: c => fmtCompact(c.w || 0), cls: 'money' },
-  { label: 'bounty',   num: true, get: c => fmtCompact(c.b || 0) },
-  { label: 'atk',      num: true, get: c => (c.atk != null ? fmtCompact(c.atk) : '—') },
-  { label: 'lastSeen', num: true, get: c => (c.seen ? fmtRelative(new Date(c.seen).toISOString()) : '—'), cls: 'when' },
+  { label: 'weekly',   num: true, sort: 'wk',   get: c => fmtCompact(c.wk || 0), cls: 'wk' },
+  { label: 'total',    num: true, sort: 'dmg',  get: c => fmtCompact(c.dmg || 0) },
+  { label: 'wealth',   num: true, sort: 'w',    get: c => fmtCompact(c.w || 0), cls: 'money' },
+  { label: 'bounty',   num: true, sort: 'b',    get: c => fmtCompact(c.b || 0) },
+  { label: 'atk',      num: true, sort: 'atk',  get: c => (c.atk != null ? fmtCompact(c.atk) : '—') },
+  { label: 'lastSeen', num: true, sort: 'seen', get: c => (c.seen ? fmtRelative(new Date(c.seen).toISOString()) : '—'), cls: 'when' },
 ];
 
 function psPill(c) {
@@ -230,9 +243,32 @@ function psPill(c) {
   return `<span class="wp-nat-ps wp-nat-ps-${mode}">${escapeHtml(natT(mode === 'war' ? 'war' : mode === 'eco' ? 'eco' : mode === 'mixed' ? 'mixed' : 'undecided'))}</span>`;
 }
 
+function sortCitizens(rows) {
+  const s = CITIZEN_SORTS.find(o => o.key === _sort) || CITIZEN_SORTS[0];
+  // Il testo si legge in ordine alfabetico: per il nome il verso "naturale"
+  // (primo clic) è A→Z, per i numeri è dal più grande.
+  const dir = s.text ? -_sortDir : _sortDir;
+  return rows.slice().sort((a, b) => (s.text
+    ? String(s.get(a)).localeCompare(String(s.get(b)), undefined, { sensitivity: 'base' }) * dir
+    : (s.get(a) - s.get(b)) * dir));
+}
+
+/** Clic su un'intestazione: nuova colonna = si riparte dal verso
+ *  naturale, stessa colonna = si inverte. Il selettore resta sincronizzato,
+ *  così i due comandi non raccontano due ordinamenti diversi. */
+function sortByHeader(key) {
+  if (_sort === key) _sortDir = -_sortDir;
+  else { _sort = key; _sortDir = -1; }
+  const sel = _host?.querySelector('#wp-nat-citizen-sort');
+  if (sel) sel.value = _sort;
+  renderCitizens();
+}
+
 function citizenTable(rows) {
-  const head = CITIZEN_COLS.map(c => `
-    <span class="wp-nat-cth${c.num ? ' wp-nat-num' : ''}">${escapeHtml(natT(c.label))}</span>`).join('');
+  const head = CITIZEN_COLS.map(c => (c.sort
+    ? `<button type="button" class="wp-nat-cth wp-nat-cth-btn${c.num ? ' wp-nat-num' : ''}${c.sort === _sort ? ' active' : ''}"
+               data-sort="${c.sort}" data-dir="${_sortDir}">${escapeHtml(natT(c.label))}</button>`
+    : `<span class="wp-nat-cth${c.num ? ' wp-nat-num' : ''}">${escapeHtml(natT(c.label))}</span>`)).join('');
 
   const body = rows.map(c => `
     <a class="wp-nat-crow" href="${APP_BASE}/user/${encodeURIComponent(c.id)}" target="_blank" rel="noopener noreferrer">
