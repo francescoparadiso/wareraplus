@@ -25,6 +25,7 @@ import { t } from '../shared/i18n.js';
 import { trackEvent } from '../shared/analytics.js';
 import { isPinned, togglePin } from '../app/pins.js';
 import { ensureDailyDamage, sumCountryDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
+import { allianceDamageBonus, formatBonus } from '../shared/allianceBonus.js';
 
 // Stella di pin per l'intestazione del pannello (nazione o alleanza).
 function pinStarHtml(type, id) {
@@ -248,6 +249,54 @@ function paintDailyDamage(nations, stillCurrent) {
   });
 }
 
+/* ══════════════════════════════════════════════════════════════
+   Espansione territoriale (saldo regioni)
+   ------------------------------------------------------------------
+   `rankings.countryRegionDiff` arriva già dentro l'oggetto nazione di
+   country.getAllCountries, come gli altri rankings che il pannello legge:
+   nessuna fetch in più, nessuna dipendenza dal cache-server.
+
+   Semantica verificata contro region.getRegionsObject (campo `country`
+   contro `initialCountry`): è regioni attuali − regioni iniziali.
+   Combaciava su 178 nazioni su 180; le due differenze erano di 1 e si
+   riallineano al giro di aggiornamento successivo del ranking.
+
+   Il segno va mostrato sempre: "29" da solo non dice se quella nazione
+   ha conquistato o perso. Zero resta neutro, senza colore.
+   ══════════════════════════════════════════════════════════════ */
+function regionDiffStatHtml(v, rank) {
+  const label = t('expansion_label');
+  if (v == null) {
+    return `<div class="wp-stat"><div class="wp-stat-label">${label}</div><div class="wp-stat-value">—</div></div>`;
+  }
+  const cls = v > 0 ? ' up' : v < 0 ? ' down' : '';
+  const txt = v > 0 ? `+${v}` : String(v);
+  const title = rank ? ` title="#${rank}"` : '';
+  return `<div class="wp-stat"${title}><div class="wp-stat-label">${label}</div><div class="wp-stat-value${cls}">${txt}</div></div>`;
+}
+
+/** Espansione di un blocco: somma dei saldi regioni dei membri. Positiva =
+ *  l'alleanza ha guadagnato territorio da inizio partita. Nessun rank: le
+ *  classifiche di WarEra sono per nazione, non per blocco. */
+function blocRegionDiff(members) {
+  return members.reduce((s, n) => s + (n?.rankings?.countryRegionDiff?.value || 0), 0);
+}
+
+/** Bonus danno d'alleanza (vedi src/shared/allianceBonus.js per la regola e
+ *  la verifica contro la schermata di gioco). Il title riporta quota e
+ *  sviluppo core: senza quei due numeri il bonus da solo non si spiega. */
+function allianceBonusStatHtml(members) {
+  const label = t('alliance_bonus_label');
+  const b = allianceDamageBonus(members, state.nazioniGlobal);
+  if (!b) {
+    return `<div class="wp-stat"><div class="wp-stat-label">${label}</div><div class="wp-stat-value">—</div></div>`;
+  }
+  // Numeri interi e non formattati con fmt(): lo sviluppo core sta sulle
+  // migliaia, e "3.0K / 14.9K" perde proprio le cifre che spiegano la quota.
+  const title = `${b.share.toFixed(2)}% · core dev ${Math.round(b.core)} / ${Math.round(b.world)}`;
+  return `<div class="wp-stat" title="${title}"><div class="wp-stat-label">${label}</div><div class="wp-stat-value up">${formatBonus(b.bonus)}</div></div>`;
+}
+
 function buildPanelHtml(nation) {
   const code = getNationCode(nation._id, nation);
   const flagUrl = getFlagUrl(code);
@@ -308,6 +357,7 @@ function buildPanelHtml(nation) {
       ${citizensStatHtml()}
       ${dailyDamageStatHtml()}
       <div class="wp-stat"><div class="wp-stat-label">${t('development_label')}</div><div class="wp-stat-value">${dev != null ? dev.toFixed(1) : '—'}</div></div>
+      ${regionDiffStatHtml(nation?.rankings?.countryRegionDiff?.value, nation?.rankings?.countryRegionDiff?.rank)}
       <div class="wp-stat"><div class="wp-stat-label">${t('defensive_pacts_label')}</div><div class="wp-stat-value">${defensivePacts.length}</div></div>
       <div class="wp-stat"><div class="wp-stat-label">${t('active_wars_label')}</div><div class="wp-stat-value">${wars}</div></div>
     </div>
@@ -836,6 +886,7 @@ function buildBlocPanelHtml(allianceId) {
   // diverse (un blocco piccolo ma aggressivo può avere un valore più
   // alto di uno grande ma passivo).
   const damagePerPlayer = totalPop > 0 ? totalWeeklyDamage / totalPop : 0;
+  const totalRegionDiff = blocRegionDiff(members);
   const warTargets = getBlocWarTargets(allianceId);
   const defTargets = getBlocExternalDefensivePacts(allianceId);
   const { wars: warBlocs, allies: defactoAllies } = getBlocRelations(allianceId);
@@ -862,6 +913,8 @@ function buildBlocPanelHtml(allianceId) {
       ${citizensStatHtml()}
       ${dailyDamageStatHtml()}
       <div class="wp-stat"><div class="wp-stat-label">${t('damage_per_player_label')}</div><div class="wp-stat-value">${damagePerPlayer >= 1000 ? fmt(damagePerPlayer) : damagePerPlayer.toFixed(1)}</div></div>
+      ${regionDiffStatHtml(totalRegionDiff)}
+      ${allianceBonusStatHtml(members)}
       <div class="wp-stat"><div class="wp-stat-label">${t('active_wars_label')}</div><div class="wp-stat-value">${warTargets.length}</div></div>
       <div class="wp-stat"><div class="wp-stat-label">${t('defensive_pacts_label')}</div><div class="wp-stat-value">${defTargets.length}</div></div>
       <div class="wp-stat"><div class="wp-stat-label">🤝 ${t('defacto_allies_title')}</div><div class="wp-stat-value">${defactoAllies.length}</div></div>

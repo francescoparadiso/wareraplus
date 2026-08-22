@@ -36,6 +36,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { trackEvent } from '../shared/analytics.js';
+import { pauseMapBackgroundWork, resumeMapBackgroundWork } from './mapIdle.js';
 
 let overlayEl, backBtn, titleEl;
 
@@ -60,9 +61,20 @@ export function initPoliticalOverlay() {
  * @param {{ openSenate?: boolean, openParty?: boolean }} [options]
  */
 export async function openPoliticalView(countryId, countryName = '', options = {}) {
+  const wasOpen = isPoliticalViewOpen();
   titleEl.textContent = countryName ? `— ${countryName}` : '';
   overlayEl.classList.add('open');
   overlayEl.setAttribute('aria-hidden', 'false');
+
+  // WarEra+ perf: la mappa resta montata SOTTO l'overlay (fixed, inset 0 —
+  // mai display:none), quindi il suo lavoro periodico continuerebbe a
+  // girare invisibile: pallino nave delle rotte (un setData ogni 1500ms =
+  // un repaint WebGL + drawLabels) e polling marker battaglia ogni 30s.
+  // Vedi mapIdle.js.
+  // Guardia su wasOpen: riaprire su una nazione diversa mentre l'overlay
+  // è già aperto non deve contare due volte la pausa (mapIdle.js tiene un
+  // contatore: due pause e una sola resume lascerebbero la mappa ferma).
+  if (!wasOpen) pauseMapBackgroundWork();
 
   // Import dinamico: scarica il chunk Political solo qui, alla prima
   // apertura reale (poi resta in cache del browser/module graph per le
@@ -91,7 +103,11 @@ export function closePoliticalView() {
   // Guardia su wasOpen: closePoliticalView si può chiamare (Escape,
   // backBtn) anche quando l'overlay è già chiuso — non è una vera
   // "chiusura" da parte dell'utente, non ha senso contarla.
-  if (wasOpen) trackEvent('political-view-close');
+  // Simmetrico alla pausa in openPoliticalView: la mappa torna visibile.
+  if (wasOpen) {
+    trackEvent('political-view-close');
+    resumeMapBackgroundWork();
+  }
   // WarEra+ perf: Political resta montata (solo nascosta) per riaprirla
   // istantaneamente — ma i suoi loop continui (canvas particellare, ticker)
   // vanno fermati esplicitamente, altrimenti girerebbero per sempre in

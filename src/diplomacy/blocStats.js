@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { worldCoreDevelopment, bonusFromShare, formatBonus } from '../shared/allianceBonus.js';
 import { trackEvent } from '../shared/analytics.js';
 import { ensureDailyDamage, sumCountryDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
 
@@ -30,6 +31,13 @@ let tableSort = { key: 'totalDmg', dir: -1 };
 let psByCountry = null;
 const manualAssign = new Map();       // nationId → target bloc name (original)
 const mergedBlocs = new Map();        // mergeId → { displayName: string, originals: [string] }
+/* Alleanze inventate nel builder: nome → colore. Non esistono in gioco, non
+   hanno membri finché non ci si trascina dentro una nazione — e proprio per
+   questo vanno tenute qui: un blocco senza membri non comparirebbe mai da
+   solo in blocMembers, che si popola dalle nazioni. */
+const customBlocs = new Map();
+let customCounter = 0;
+const CUSTOM_COLORS = ['#58a6ff', '#f778ba', '#3fb950', '#e3b341', '#a371f7', '#f0883e'];
 const blocColors = new Map();         // blocName → color
 let mergeCounter = 0;
 let dragData = null;
@@ -39,6 +47,70 @@ let eventsAttached = false;
 // cioè al vero punto di ingresso "il pannello si apre da capo".
 let searchTracked = false;
 
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Il lavoro fatto nel builder sopravvive al reload
+   ------------------------------------------------------------------
+   Fusioni, riassegnazioni di nazioni e alleanze inventate vivevano solo
+   in memoria: bastava un F5 (o riaprire il tool il giorno dopo) per
+   perdere tutto. Qui le tre mappe vengono serializzate in localStorage e
+   rilette all'avvio del modulo — PRIMA che computeBlocStats() giri, che
+   è chi le legge per costruire i blocchi.
+
+   È una preferenza dell'utente, non un dato di gioco: sta in
+   localStorage senza scadenza e non passa mai dal server. La chiave è
+   versionata, così un cambio di formato non fa esplodere i salvataggi
+   vecchi — semplicemente li ignora.
+
+   Il salvataggio è agganciato a buildUI(), cioè all'unico punto da cui
+   passa OGNI modifica del builder (drag&drop, merge, split, nuova
+   alleanza, reset): niente chiamate sparse da ricordarsi di aggiungere
+   quando si aggiunge un'interazione nuova.
+   ══════════════════════════════════════════════════════════════ */
+const BUILDER_KEY = 'we_bloc_builder_v1';
+
+function persistBuilder() {
+  try {
+    const empty = !manualAssign.size && !mergedBlocs.size && !customBlocs.size;
+    if (empty) { localStorage.removeItem(BUILDER_KEY); return; }
+    localStorage.setItem(BUILDER_KEY, JSON.stringify({
+      manualAssign: [...manualAssign],
+      mergedBlocs: [...mergedBlocs],
+      customBlocs: [...customBlocs],
+      customCounter,
+      mergeCounter,
+    }));
+  } catch (e) {
+    // Quota piena o storage negato (navigazione privata): il builder
+    // continua a funzionare, semplicemente non si ricorda nulla.
+    console.warn('[blocStats] salvataggio builder non riuscito:', e?.message);
+  }
+}
+
+function restoreBuilder() {
+  let raw;
+  try { raw = localStorage.getItem(BUILDER_KEY); } catch { return; }
+  if (!raw) return;
+  try {
+    const d = JSON.parse(raw);
+    for (const [k, v] of d.manualAssign || []) manualAssign.set(k, v);
+    for (const [k, v] of d.mergedBlocs || []) {
+      // Scarta le voci malformate invece di propagarle dentro
+      // computeBlocStats, dove romperebbero il rendering.
+      if (v && Array.isArray(v.originals)) mergedBlocs.set(k, v);
+    }
+    for (const [k, v] of d.customBlocs || []) customBlocs.set(k, v);
+    customCounter = Number(d.customCounter) || 0;
+    mergeCounter = Number(d.mergeCounter) || 0;
+  } catch (e) {
+    console.warn('[blocStats] salvataggio builder illeggibile, ignorato:', e?.message);
+  }
+}
+
+// Al caricamento del modulo: computeBlocStats() può essere chiamata subito
+// dopo l'import (vedi il click su #bloc-stats-btn in main.js) e deve già
+// vedere le fusioni salvate.
+restoreBuilder();
+
 /* ── Compute Stats ── */
 export function computeBlocStats() {
   blocColors.clear();
@@ -47,6 +119,13 @@ export function computeBlocStats() {
 
   const blocMembers = new Map();
   state.externalBlocsInfo.forEach(b => blocMembers.set(b.name, new Set()));
+
+  // Le alleanze inventate entrano qui a mano, con un insieme vuoto: senza
+  // questo passaggio una nuova alleanza sparirebbe fino al primo membro.
+  for (const [name, color] of customBlocs) {
+    blocColors.set(name, color);
+    if (!blocMembers.has(name)) blocMembers.set(name, new Set());
+  }
 
   for (const [cid, color] of state.blocColorMap) {
     const bloc = state.externalBlocsInfo.find(x => x.color === color);
@@ -93,6 +172,17 @@ export function computeBlocStats() {
   return stats.sort((a, b) => b.totalDmg - a.totalDmg);
 }
 
+/* Saldo regioni: il segno va sempre scritto, "29" da solo non dice se
+   quella nazione ha conquistato o perso. null/undefined = dato assente. */
+function signed(v) {
+  if (v == null) return '—';
+  return v > 0 ? `+${v}` : String(v);
+}
+function regDiffColor(v) {
+  if (!v) return '#8b949e';
+  return v > 0 ? '#3fb950' : '#f85149';
+}
+
 function buildMember(cid) {
   const n = state.nationMap.get(cid);
   if (!n) return null;
@@ -105,21 +195,35 @@ function buildMember(cid) {
     dev:   n?.rankings?.countryDevelopment?.value || 0,
     bounty: n?.rankings?.countryBounty?.value || 0,
     dpc:   n?.rankings?.weeklyCountryDamagesPerCitizen?.value || 0,
+    // Saldo regioni (attuali - iniziali), gia' nell'oggetto nazione.
+    regDiff: n?.rankings?.countryRegionDiff?.value || 0,
+    // Sviluppo "core": base del bonus danno d'alleanza, diverso da `dev`
+    // (rankings.countryDevelopment) che e' lo sviluppo corrente.
+    core: n?.coreDevelopment || 0,
     wars:  n?.warsWith?.length || 0,
     sworn: n?.swornEnemies?.length || 0,
     allies:n?.allies?.length || 0,
   };
 }
 
+function blocDamageBonus(totalCore) {
+  const world = worldCoreDevelopment(state.nazioniGlobal);
+  if (!world) return null;
+  const share = (totalCore / world) * 100;
+  return { core: totalCore, world, share, bonus: bonusFromShare(share) };
+}
+
 function buildBlocStat(displayName, internalId, idSet, color, isMerged = false, isUnaligned = false) {
   let totalPop = 0, totalDmg = 0, totalMoney = 0, totalWars = 0, totalSworn = 0, totalAllies = 0, totalAbsoluteDmg = 0;
-  let totalBounty = 0, totalDev = 0;
+  let totalBounty = 0, totalDev = 0, totalRegDiff = 0, totalCore = 0;
   const members = [];
   idSet.forEach(cid => {
     const m = buildMember(cid); if (!m) return;
     totalPop += m.pop; totalDmg += m.dmg; totalMoney += m.money;
     totalWars += m.wars; totalSworn += m.sworn; totalAllies += m.allies;
     totalAbsoluteDmg += m.totalDmg; totalBounty += m.bounty; totalDev += m.dev;
+    totalRegDiff += m.regDiff;
+    totalCore += m.core;
     members.push(m);
   });
   const countryCount = members.length;
@@ -131,6 +235,15 @@ function buildBlocStat(displayName, internalId, idSet, color, isMerged = false, 
     countryCount,
     totalPop, totalDmg, totalMoney, totalWars, totalSworn, totalAllies, totalAbsoluteDmg,
     totalBounty, totalDev,
+    // Espansione netta del blocco: somma dei saldi regioni dei membri.
+    // Positiva = l'alleanza ha guadagnato territorio da inizio partita.
+    totalRegDiff,
+    totalCore,
+    // Bonus danno d'alleanza ricalcolato come in gioco (vedi
+    // src/shared/allianceBonus.js). Per i blocchi FUSI in Alliance Builder
+    // non e' un dato di gioco ma la simulazione del bonus che avrebbero
+    // una volta uniti — che e' esattamente la domanda del builder.
+    bonus: blocDamageBonus(totalCore),
     // Derivate: sviluppo medio e danno settimanale per cittadino dell'alleanza.
     avgDev: countryCount ? totalDev / countryCount : 0,
     dpc: totalPop ? totalDmg / totalPop : 0,
@@ -144,6 +257,7 @@ export function renderBlocStats(stats) {
   if (!stats.length) { c.innerHTML = '<p style="text-align:center;color:#8b949e;padding:40px;">No data.</p>'; return; }
   allStats = stats;
   injectStyles();
+  attachFitListener();
   if (!eventsAttached) { attachEvents(c); eventsAttached = true; }
   searchTracked = false;
   ensurePlaystyleData();
@@ -179,6 +293,11 @@ function injectStyles() {
     .bs-hdr:active{cursor:grabbing}
     .bs-stats-row{display:flex;flex-wrap:wrap;gap:8px;padding:10px 18px;border-bottom:1px solid rgba(255,255,255,.05)}
     .bs-chip{background:rgba(255,255,255,.05);border-radius:6px;padding:5px 10px;font-size:12px;display:flex;align-items:center;gap:5px;color:#c9d1d9}
+    .bs-chip.bonus{background:rgba(63,185,80,.15);color:#3fb950;font-weight:600}
+    .bs-builder-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+    .bs-newbtn{background:rgba(63,185,80,.15);border:1px solid rgba(63,185,80,.5);border-radius:8px;padding:8px 16px;color:#3fb950;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
+    .bs-newbtn:hover{background:rgba(63,185,80,.28);border-color:#3fb950}
+    .bs-builder-hint{font-size:12px;color:#8b949e}
     .bs-members{padding:12px 18px;display:flex;flex-wrap:wrap;gap:6px;max-height:180px;overflow-y:auto}
     .bs-members::-webkit-scrollbar{width:4px}
     .bs-members::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:2px}
@@ -201,6 +320,19 @@ function injectStyles() {
     .bs-merge-option:hover{background:rgba(88,166,255,.15);border-color:#58a6ff}
     .bs-merge-color{width:20px;height:20px;border-radius:20px;flex-shrink:0}
     .bs-merge-name{font-weight:500;color:#e6edf3}
+    .bs-add-tabs{display:flex;gap:8px;margin-bottom:12px}
+    .bs-add-tab{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:7px 10px;color:#8b949e;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+    .bs-add-tab:hover{color:#e6edf3;background:rgba(255,255,255,.08)}
+    .bs-add-tab.active{background:rgba(88,166,255,.15);border-color:#58a6ff;color:#58a6ff}
+    .bs-add-search{width:100%;box-sizing:border-box;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px 12px;color:#e6edf3;font-size:13px;margin-bottom:10px;outline:none}
+    .bs-add-search:focus{border-color:#58a6ff}
+    .bs-nation-list{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto;padding:2px}
+    .bs-nation-option{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;cursor:pointer;transition:all .15s}
+    .bs-nation-option:hover{background:rgba(88,166,255,.15);border-color:#58a6ff}
+    .bs-nation-option[hidden]{display:none}
+    .bs-nation-name{display:flex;align-items:center;gap:8px;font-size:13px;color:#e6edf3}
+    .bs-nation-from{font-size:11px;opacity:.85;white-space:nowrap}
+    .bs-add-empty{font-size:12px;color:#8b949e;padding:10px 2px}
     .bs-merge-close{position:absolute;top:12px;right:16px;cursor:pointer;color:#8b949e;font-size:20px}
     .bs-merge-close:hover{color:#fff}
 
@@ -305,7 +437,13 @@ function injectStyles() {
     @media(max-width:640px){.bs-charts{grid-template-columns:1fr}.bs-sum-mini{grid-template-columns:1fr}}
 
     /* Tabella riassuntiva alleanze (tutte le alleanze su una riga sola) */
-    .bs-tbl-wrap{overflow-x:auto;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(13,17,23,.6);margin-bottom:20px}
+    .bs-tbl-wrap{overflow:auto;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(13,17,23,.6);margin-bottom:20px}
+    /* Quando la tabella è l'ULTIMA cosa della pagina (tab Alliance Overview)
+       i margini di coda diventano vuoto sotto la barra di scorrimento
+       orizzontale, a fine pagina: il riquadro deve chiudere la schermata,
+       non galleggiare sopra 80px di sfondo. */
+    .bs-tbl-wrap:last-child{margin-bottom:0}
+    .bsw:has(> .bs-tbl-wrap:last-child){padding-bottom:12px}
     .bs-tbl{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
     .bs-tbl th{position:sticky;top:0;background:rgba(13,17,23,.95);text-align:right;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8b949e;font-weight:600;cursor:pointer;user-select:none;border-bottom:1px solid rgba(255,255,255,.1)}
     .bs-tbl th:hover{color:#58a6ff}
@@ -325,6 +463,8 @@ function injectStyles() {
     .bs-tbl .war{color:#f85149}
     .bs-tbl .eco{color:#3fb950}
     .bs-tbl .hyb{color:#e3b341}
+    .bs-tbl .gain{color:#3fb950}
+    .bs-tbl .loss{color:#f85149}
     .bs-tbl-build{display:flex;align-items:center;gap:8px;justify-content:flex-end}
     .bs-tbl-bar{width:90px;height:7px;border-radius:4px;overflow:hidden;background:rgba(255,255,255,.1);display:flex;flex-shrink:0}
     .bs-tbl-seg{height:100%}
@@ -448,6 +588,11 @@ function injectStyles() {
     body.light-theme .bs-tbl tbody tr:hover{background:rgba(139,90,43,.08)}
     body.light-theme .bs-tbl .bs-tbl-name{color:#2e1f0c}
     body.light-theme .bs-tbl .wk{color:#2f6fb5}
+    body.light-theme .bs-chip.bonus{background:rgba(47,125,58,.14);color:#2f7d3a}
+    body.light-theme .bs-newbtn{background:rgba(47,125,58,.12);border-color:rgba(47,125,58,.5);color:#2f7d3a}
+    body.light-theme .bs-builder-hint{color:#6b5a47}
+    body.light-theme .bs-tbl .gain{color:#2f7d3a}
+    body.light-theme .bs-tbl .loss{color:#c22b22}
     body.light-theme .bs-tbl-bar{background:rgba(0,0,0,.1)}
     body.light-theme .bs-tbl-known,body.light-theme .bs-tbl-note{color:#6b5a47}
     body.light-theme .bs-hbar-track{background:rgba(0,0,0,.08)}
@@ -476,6 +621,7 @@ function showPopup(nationId) {
   }
 
   const nationDmg = nation?.rankings?.weeklyCountryDamages?.value || 0;
+  const nationRegDiff = nation?.rankings?.countryRegionDiff?.value;
   const nationAbsDmg = nation?.rankings?.countryDamages?.value || 0;
   const pct = blocDmg > 0 ? (nationDmg / blocDmg * 100).toFixed(1) : '0.0';
   const pctAbs = blocAbsDmg > 0 ? (nationAbsDmg / blocAbsDmg * 100).toFixed(1) : '0.0';
@@ -505,6 +651,7 @@ function showPopup(nationId) {
       <div class="bs-popup-item">Active Wars <span style="color:#f85149">${nation.warsWith?.length || 0}</span></div>
       <div class="bs-popup-item">Allies <span style="color:#3fb950">${nation.allies?.length || 0}</span></div>
       <div class="bs-popup-item">Development <span>${nation.rankings?.countryDevelopment?.value?.toFixed(1) ?? '—'}</span></div>
+      <div class="bs-popup-item">Expansion <span style="color:${regDiffColor(nationRegDiff)}">${signed(nationRegDiff)}</span></div>
       <div class="bs-popup-percent"> ${pct}% of ${blocName} Weekly Damage · ${pctAbs}% Total Damage</div>
     </div>
   `;
@@ -568,6 +715,8 @@ function showBlocPopup(blocId) {
       <div class="bs-popup-item">Allies <span>${bloc.totalAllies}</span></div>
       <div class="bs-popup-item">Avg Dmg/Nation <span>${fmt(bloc.countryCount ? bloc.totalDmg / bloc.countryCount : 0)}</span></div>
       <div class="bs-popup-item">Avg Pop/Nation <span>${fmt(bloc.countryCount ? bloc.totalPop / bloc.countryCount : 0)}</span></div>
+      <div class="bs-popup-item">Damage Bonus <span style="color:#3fb950">${bloc.isUnaligned || !bloc.bonus ? '—' : formatBonus(bloc.bonus.bonus)}</span></div>
+      <div class="bs-popup-item">Core Dev Share <span>${bloc.isUnaligned || !bloc.bonus ? '—' : bloc.bonus.share.toFixed(2) + '%'}</span></div>
     </div>
     <div class="bs-breakdown-header">
       <span style="flex:1">Nation</span>
@@ -631,17 +780,63 @@ function buildUI() {
   else html += renderFactions();
   html += '</div>';
   c.innerHTML = html;
+  // Ogni modifica del builder passa da qui prima di ridisegnare.
+  persistBuilder();
+  fitAllianceTable();
   attachSearchEvent(c);
   const resetBtn = c.querySelector('#bs-reset-all');
   if (resetBtn) {
     resetBtn.onclick = () => {
       manualAssign.clear();
       mergedBlocs.clear();
+      customBlocs.clear();
+      customCounter = 0;
       mergeCounter = 0;
       allStats = computeBlocStats();
       buildUI();
     };
   }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — La tabella riassuntiva finisce dove finisce la finestra
+   ------------------------------------------------------------------
+   Prima il riquadro era alto quanto le sue righe: la barra di scorrimento
+   orizzontale (le colonne sono più larghe dello schermo) cadeva a metà
+   pagina, con un vuoto sotto fino al fondo. Qui il riquadro viene alzato
+   fino al bordo inferiore della finestra: la barra orizzontale sta
+   sull'ultima riga visibile, le righe in eccesso scorrono DENTRO il
+   riquadro (l'intestazione è già `position:sticky`, quindi resta) e la
+   pagina, che così sta esattamente in una schermata, non scorre più.
+
+   Sotto una certa altezza utile non ne vale la pena (finestre basse,
+   mobile): si lascia il comportamento naturale di prima, con la pagina
+   che scorre.
+   ══════════════════════════════════════════════════════════════ */
+const TBL_MIN_H = 320;    // px: sotto questa soglia si torna al flusso normale
+const TBL_BOTTOM_GAP = 12; // px di respiro sotto il riquadro
+
+function fitAllianceTable() {
+  const wrap = document.getElementById('bs-alliance-table');
+  if (!wrap) return;
+  wrap.style.maxHeight = '';
+  const top = wrap.getBoundingClientRect().top;   // già relativo alla finestra
+  const h = window.innerHeight - top - TBL_BOTTOM_GAP;
+  wrap.style.maxHeight = h >= TBL_MIN_H ? h + 'px' : '';
+}
+
+// Un solo listener per sessione: buildUI() ridisegna la tabella molte
+// volte (cambio tab, merge, riordino) ma il ridimensionamento della
+// finestra è un evento globale.
+let _fitListenerAttached = false;
+function attachFitListener() {
+  if (_fitListenerAttached) return;
+  _fitListenerAttached = true;
+  let raf = null;
+  window.addEventListener('resize', () => {
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(fitAllianceTable);
+  });
 }
 
 /* ── Tabs Content ── */
@@ -672,6 +867,10 @@ function renderBuilder() {
       <strong>Drag &amp; drop to reorganize alliances</strong>
       <span>Drag a nation from one alliance card to another, drop an <em>Unaligned</em> nation into any alliance, or drag an alliance's header onto another to merge them.</span>
     </div>
+  </div>
+  <div class="bs-builder-bar">
+    <button class="bs-newbtn" id="bs-new-alliance">＋ New alliance</button>
+    <span class="bs-builder-hint">Create an empty alliance, drag nations into it, and read its damage bonus straight from the card.</span>
   </div>
   <div class="bs-grid">`;
   for (const b of aligned) html += blocCard(b, false);
@@ -851,6 +1050,8 @@ const TABLE_COLS = [
   { key: 'dpc',              label: 'Weekly/cit' },
   { key: 'totalPop',         label: 'Pop' },
   { key: 'avgDev',           label: 'Dev' },
+  { key: 'totalRegDiff',     label: 'Regions' },
+  { key: 'dmgBonus',         label: 'Bonus' },
   { key: 'totalWars',        label: 'Wars' },
   { key: 'psWar',            label: 'War' },
   { key: 'psEco',            label: 'Eco' },
@@ -904,6 +1105,10 @@ function tableRowData(bloc) {
     dpc: bloc.dpc,
     totalPop: bloc.totalPop,
     avgDev: bloc.avgDev,
+    totalRegDiff: bloc.totalRegDiff,
+    // -1 per gli Unaligned: non sono un'alleanza, il bonus non esiste e
+    // ordinando per questa colonna restano in fondo invece di fingere 0.
+    dmgBonus: bloc.isUnaligned || !bloc.bonus ? -1 : bloc.bonus.bonus,
     totalWars: bloc.totalWars,
     psWar: ps ? ps.war : -1,
     psEco: ps ? ps.eco : -1,
@@ -947,6 +1152,8 @@ function allianceTableHtml() {
       <td class="wk">${fmt(b.dpc)}</td>
       <td>${fmt(b.totalPop)}</td>
       <td>${b.avgDev ? b.avgDev.toFixed(1) : '—'}</td>
+      <td class="${b.totalRegDiff > 0 ? 'gain' : b.totalRegDiff < 0 ? 'loss' : ''}">${signed(b.totalRegDiff)}</td>
+      <td class="${r.dmgBonus >= 0 ? 'gain' : ''}" title="${r.dmgBonus >= 0 ? b.bonus.share.toFixed(2) + '% of world core development' : ''}">${r.dmgBonus >= 0 ? formatBonus(r.dmgBonus) : '—'}</td>
       <td>${b.totalWars}</td>
       ${psCell(ps?.war, 'war')}${psCell(ps?.eco, 'eco')}${psCell(ps?.mixed, 'hyb')}
       <td>${build}</td>
@@ -983,16 +1190,62 @@ function ensurePlaystyleData() {
     });
 }
 
+/** Nome libero, chiesto con prompt(): il builder è già una pagina piena di
+ *  drag&drop, un form inline in più ruberebbe spazio alle card. Il nome deve
+ *  essere unico, altrimenti la nuova alleanza si fonderebbe silenziosamente
+ *  con una esistente (blocMembers è indicizzato per nome). */
+function createCustomBloc() {
+  const taken = new Set([
+    ...state.externalBlocsInfo.map(b => b.name),
+    ...customBlocs.keys(),
+    '🌐 Unaligned',
+  ]);
+  let suggested;
+  do { suggested = `New Alliance ${++customCounter}`; } while (taken.has(suggested));
+  const name = (prompt('Name of the new alliance:', suggested) || '').trim();
+  if (!name) return;
+  if (taken.has(name)) {
+    alert(`"${name}" already exists. Pick another name.`);
+    return;
+  }
+  customBlocs.set(name, CUSTOM_COLORS[customBlocs.size % CUSTOM_COLORS.length]);
+  allStats = computeBlocStats();
+  buildUI();
+}
+
+/** Cancella un'alleanza inventata e rimanda le sue nazioni da dove venivano
+ *  (togliere la riassegnazione manuale le fa ricadere sul blocco di
+ *  partenza, o su Unaligned se non ne avevano uno). */
+function deleteCustomBloc(name) {
+  if (!customBlocs.has(name)) return;
+  customBlocs.delete(name);
+  for (const [cid, target] of [...manualAssign]) {
+    if (target === name) manualAssign.delete(cid);
+  }
+  allStats = computeBlocStats();
+  buildUI();
+}
+
 function blocCard(bloc, isUnaligned) {
   const pills = bloc.members.map(m => `
     <div class="bs-pill" draggable="true" data-nid="${m.id}" title="Click for stats">
       ${flagImg(m.code)} ${m.name}
     </div>`).join('');
   const splitBtn = bloc.isMerged ? `<button class="bs-split-btn" data-split="${bloc.id}">✂ Split</button>` : '';
-  const mergeBtn = `<button class="bs-mergebtn" data-merge-src="${bloc.id}" title="Merge with another bloc">＋</button>`;
+  // Le alleanze inventate si possono cancellare: senza questo l'unico modo di
+  // tornare indietro sarebbe il reset globale, che butta via anche il resto.
+  const delBtn = customBlocs.has(bloc.name)
+    ? `<button class="bs-split-btn" data-delcustom="${bloc.name}" title="Delete this custom alliance">✕</button>`
+    : '';
+  // Bonus e quota di sviluppo core: sono ciò che decide quanto picchia
+  // l'alleanza, e nel builder servono PRIMA del click, mentre si trascina.
+  const bonusChips = bloc.bonus ? `
+      <div class="bs-chip bonus" title="Alliance damage bonus (see the alliance screen in game)">💥 ${formatBonus(bloc.bonus.bonus)}</div>
+      <div class="bs-chip" title="Share of world core development: ${Math.round(bloc.bonus.core)} / ${Math.round(bloc.bonus.world)}">📈 ${bloc.bonus.share.toFixed(2)}% core</div>` : '';
+  const mergeBtn = `<button class="bs-mergebtn" data-merge-src="${bloc.id}" title="Add a nation, or merge with another alliance">＋</button>`;
   return `<div class="bs-card${isUnaligned ? ' unaligned' : ''}" data-drop-bloc="${bloc.id}">
     <div class="bs-hdr" draggable="true" data-bloc-drag="${bloc.id}" data-bloc-id="${bloc.name}" style="background:linear-gradient(135deg,${bloc.color}30,${bloc.color}08);cursor:pointer" title="Click for bloc stats">
-      <span>${bloc.name}${splitBtn}</span>
+      <span>${bloc.name}${splitBtn}${delBtn}</span>
       <span style="font-size:13px;opacity:.8;display:flex;align-items:center;gap:6px">${bloc.countryCount} nations${mergeBtn}</span>
     </div>
     ${!isUnaligned ? `<div class="bs-stats-row">
@@ -1001,6 +1254,8 @@ function blocCard(bloc, isUnaligned) {
       <div class="bs-chip">👥 ${fmt(bloc.totalPop)}</div>
       <div class="bs-chip">💰 ${fmt(bloc.totalMoney)}</div>
       <div class="bs-chip">⚔️ ${bloc.totalWars} wars</div>
+      <div class="bs-chip" title="Regions gained or lost since the start">🗺️ ${signed(bloc.totalRegDiff)}</div>
+      ${bonusChips}
     </div>` : `<div class="bs-unaligned-hint">Drag nations onto an alliance bloc to assign them</div>`}
     <div class="bs-members">${pills || '<span style="color:#484f58;font-size:12px;">No members</span>'}</div>
   </div>`;
@@ -1207,10 +1462,28 @@ function renderWars() {
 }
 
 /* ── Merge Menu (visivo) ── */
-function showMergeMenu(srcBlocId, srcBlocName) {
+/** Menu del + sulla card di un blocco. Due modi di far crescere lo stesso
+ *  blocco, che prima erano uno solo: fondere un'altra alleanza (com'era) o
+ *  aggiungere UNA nazione (nuovo) — il drag&drop restava l'unico modo di
+ *  spostare una singola nazione, scomodo con 180 pillole sparse su venti
+ *  card e fuori portata su touch. */
+function showAddMenu(srcBlocId, srcBlocName) {
   document.querySelectorAll('.bs-merge-overlay').forEach(el => el.remove());
   const others = allStats.filter(b => b.id !== srcBlocId);
-  if (!others.length) return;
+  const srcBloc = allStats.find(b => b.id === srcBlocId);
+  const own = new Set((srcBloc?.members || []).map(m => m.id));
+  // Tutte le nazioni che NON stanno gia' qui dentro, con il blocco di
+  // provenienza scritto accanto: spostarne una e' una riassegnazione, e va
+  // vista come tale prima di cliccare.
+  const nations = [];
+  for (const b of allStats) {
+    for (const m of b.members) {
+      if (own.has(m.id)) continue;
+      nations.push({ ...m, from: b.name, fromColor: b.color });
+    }
+  }
+  nations.sort((a, b) => a.name.localeCompare(b.name));
+  if (!others.length && !nations.length) return;
 
   const overlay = document.createElement('div');
   overlay.className = 'bs-merge-overlay';
@@ -1218,14 +1491,31 @@ function showMergeMenu(srcBlocId, srcBlocName) {
   menu.className = 'bs-merge-menu';
   menu.innerHTML = `
     <div class="bs-merge-close">✕</div>
-    <h3>Merge "${srcBlocName}" with:</h3>
-    <div class="bs-merge-grid">
-      ${others.map(b => `
-        <div class="bs-merge-option" data-target-id="${b.id}">
-          <div class="bs-merge-color" style="background:${b.color}"></div>
-          <span class="bs-merge-name">${b.name}</span>
-        </div>
-      `).join('')}
+    <h3>Add to "${srcBlocName}"</h3>
+    <div class="bs-add-tabs">
+      <button class="bs-add-tab active" data-add-tab="nations">Nations (${nations.length})</button>
+      <button class="bs-add-tab" data-add-tab="blocs">Merge alliance (${others.length})</button>
+    </div>
+    <div class="bs-add-pane" data-add-pane="nations">
+      <input class="bs-add-search" id="bs-add-search" type="text" placeholder="Filter nations…" autocomplete="off">
+      <div class="bs-nation-list">
+        ${nations.map(n => `
+          <div class="bs-nation-option" data-nid="${n.id}" data-name="${n.name.toLowerCase()}">
+            <span class="bs-nation-name">${flagImg(n.code, '16px')} ${n.name}</span>
+            <span class="bs-nation-from" style="color:${n.fromColor}">${n.from}</span>
+          </div>
+        `).join('') || '<div class="bs-add-empty">Every nation is already here.</div>'}
+      </div>
+    </div>
+    <div class="bs-add-pane" data-add-pane="blocs" hidden>
+      <div class="bs-merge-grid">
+        ${others.map(b => `
+          <div class="bs-merge-option" data-target-id="${b.id}">
+            <div class="bs-merge-color" style="background:${b.color}"></div>
+            <span class="bs-merge-name">${b.name}</span>
+          </div>
+        `).join('') || '<div class="bs-add-empty">No other alliance to merge with.</div>'}
+      </div>
     </div>
   `;
   overlay.appendChild(menu);
@@ -1234,6 +1524,32 @@ function showMergeMenu(srcBlocId, srcBlocName) {
   const closeMenu = () => overlay.remove();
   menu.querySelector('.bs-merge-close').onclick = closeMenu;
   overlay.addEventListener('click', (e) => { if (e.target === overlay) closeMenu(); });
+
+  menu.querySelectorAll('.bs-add-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const which = tab.dataset.addTab;
+      menu.querySelectorAll('.bs-add-tab').forEach(t => t.classList.toggle('active', t === tab));
+      menu.querySelectorAll('.bs-add-pane').forEach(pane => { pane.hidden = pane.dataset.addPane !== which; });
+    });
+  });
+
+  const search = menu.querySelector('#bs-add-search');
+  if (search) {
+    search.addEventListener('input', () => {
+      const q = search.value.toLowerCase().trim();
+      menu.querySelectorAll('.bs-nation-option').forEach(opt => {
+        opt.hidden = q ? !opt.dataset.name.includes(q) : false;
+      });
+    });
+    search.focus();
+  }
+
+  menu.querySelectorAll('.bs-nation-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      addNationToBloc(opt.dataset.nid, srcBlocId);
+      closeMenu();
+    });
+  });
 
   menu.querySelectorAll('.bs-merge-option').forEach(opt => {
     opt.addEventListener('click', () => {
@@ -1255,6 +1571,21 @@ function showMergeMenu(srcBlocId, srcBlocName) {
       closeMenu();
     });
   });
+}
+
+/** Stessa logica del drop di una pillola su una card (vedi il listener
+ *  'drop'): su un blocco fuso vale il primo degli originali, e finire negli
+ *  Unaligned significa togliere la riassegnazione, non aggiungerne una. */
+function addNationToBloc(nationId, blocId) {
+  const bloc = allStats.find(b => b.id === blocId);
+  if (bloc?.isUnaligned) {
+    manualAssign.delete(nationId);
+  } else {
+    const target = mergedBlocs.has(blocId) ? mergedBlocs.get(blocId).originals[0] : blocId;
+    manualAssign.set(nationId, target);
+  }
+  allStats = computeBlocStats();
+  buildUI();
 }
 
 /* ── Search event ── */
@@ -1313,7 +1644,7 @@ function attachEvents(c) {
       e.stopPropagation();
       const srcId = mergeBtn.dataset.mergeSrc;
       const srcName = allStats.find(b => b.id === srcId)?.name || srcId;
-      showMergeMenu(srcId, srcName);
+      showAddMenu(srcId, srcName);
       return;
     }
 
@@ -1327,6 +1658,19 @@ function attachEvents(c) {
     if (pill && !pill.classList.contains('dragging')) {
       e.preventDefault();
       showPopup(pill.dataset.nid);
+      return;
+    }
+
+    const newAlliance = e.target.closest('#bs-new-alliance');
+    if (newAlliance) {
+      createCustomBloc();
+      return;
+    }
+
+    const delCustom = e.target.closest('[data-delcustom]');
+    if (delCustom) {
+      e.stopPropagation();
+      deleteCustomBloc(delCustom.dataset.delcustom);
       return;
     }
 

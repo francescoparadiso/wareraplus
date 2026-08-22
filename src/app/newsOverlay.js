@@ -10,6 +10,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { trackEvent } from '../shared/analytics.js';
+import { enterOverlay, leaveOverlay } from './overlayChrome.js';
 
 let overlayEl, backBtn, rootEl;
 
@@ -31,6 +32,11 @@ export async function openNewsView() {
   overlayEl.setAttribute('aria-hidden', 'false');
   rootEl.style.display = 'block';
 
+  // Sfondo a particelle nella tinta della sezione + pausa del lavoro
+  // di sfondo della mappa, che resta montata sotto l'overlay.
+  // Dopo .open: a overlay nascosto il canvas misurerebbe 0x0.
+  enterOverlay(overlayEl, 'news');
+
   const { initNewsView } = await import('./newsView.js');
   await initNewsView(rootEl);
 
@@ -41,6 +47,7 @@ export function closeNewsView() {
   if (!overlayEl) return;
   overlayEl.classList.remove('open');
   overlayEl.setAttribute('aria-hidden', 'true');
+  leaveOverlay(overlayEl);
 }
 
 export function isNewsViewOpen() {

@@ -15,6 +15,29 @@ import { fetchCountriesViaCache, fetchMapDataViaCache, fetchAlliancesViaCache, f
 import { trackEvent } from '../shared/analytics.js';
 let battleMarkersTimer = null;
 
+// ── WarEra+ perf: pausa del polling marker battaglia ─────────────────
+// Chiamate da src/app/mapIdle.js quando un overlay full-screen copre la
+// mappa: aggiornare marker che nessuno sta guardando è solo traffico di
+// rete e repaint sprecati. Additive, nessun effetto sul comportamento
+// esistente finché nessuno le chiama.
+let _battleMarkersPaused = false;
+
+export function pauseBattleMarkersPolling() {
+  if (!battleMarkersTimer) return;   // Diplomacy non ancora avviata
+  clearInterval(battleMarkersTimer);
+  battleMarkersTimer = null;
+  _battleMarkersPaused = true;
+}
+
+export function resumeBattleMarkersPolling() {
+  if (!_battleMarkersPaused || battleMarkersTimer) return;
+  _battleMarkersPaused = false;
+  // Giro immediato: i marker sono fermi ai dati di quando l'overlay si è
+  // aperto, aspettare altri 30s renderebbe visibile il buco.
+  updateBattleMarkers();
+  battleMarkersTimer = setInterval(updateBattleMarkers, 30000);
+}
+
 // ==================== CARICAMENTO DATI ====================
 // WarEra+: prova prima il server di cache (un solo poller condiviso da
 // tutti gli utenti, vedi cacheClient.js), ricade sulla chiamata diretta se
@@ -291,6 +314,13 @@ document.getElementById('mode-population').addEventListener('click', () => {
     document.getElementById('map').style.display = 'none';
     document.getElementById('bloc-stats-page').style.display = 'block';
     trackEvent('bloc-stats-open');
+    // ── WarEra+ (additivo): sfondo a particelle viola della sezione e
+    // pausa del lavoro di sfondo della mappa, come per gli altri overlay
+    // di "Approfondimenti". Import dinamico + catch: se il modulo manca,
+    // la pagina si apre esattamente come prima.
+    import('../app/overlayChrome.js')
+      .then(m => m.enterOverlay(document.getElementById('bloc-stats-page'), 'alliance'))
+      .catch(() => {});
     import('./blocStats.js').then(m => {
       const stats = m.computeBlocStats();
       m.renderBlocStats(stats);
@@ -301,6 +331,10 @@ document.getElementById('mode-population').addEventListener('click', () => {
     document.getElementById('bloc-stats-page').style.display = 'none';
     document.getElementById('map').style.display = 'block';
     trackEvent('bloc-stats-close');
+    // Simmetrica all'apertura: ferma le particelle e fa ripartire la mappa.
+    import('../app/overlayChrome.js')
+      .then(m => m.leaveOverlay(document.getElementById('bloc-stats-page')))
+      .catch(() => {});
   });
 // Toggle Active Battles
 document.getElementById('checkActiveBattles').addEventListener('change', function() {

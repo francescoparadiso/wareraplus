@@ -10,6 +10,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { trackEvent } from '../shared/analytics.js';
+import { enterOverlay, leaveOverlay } from './overlayChrome.js';
 
 let overlayEl, backBtn, rootEl;
 
@@ -30,6 +31,11 @@ export async function openEcoView() {
   overlayEl.setAttribute('aria-hidden', 'false');
   rootEl.style.display = 'block';
 
+  // Sfondo a particelle nella tinta della sezione + pausa del lavoro
+  // di sfondo della mappa, che resta montata sotto l'overlay.
+  // Dopo .open: a overlay nascosto il canvas misurerebbe 0x0.
+  enterOverlay(overlayEl, 'eco');
+
   const { initEcoView } = await import('../eco/main.js');
   initEcoView(rootEl);
 
@@ -39,6 +45,7 @@ export async function openEcoView() {
 export function closeEcoView() {
   overlayEl.classList.remove('open');
   overlayEl.setAttribute('aria-hidden', 'true');
+  leaveOverlay(overlayEl);
 }
 
 export function isEcoViewOpen() {

@@ -21,10 +21,11 @@
   flex: 1;
   width: 100%;
   overflow-y: auto;
-  background: #0d1117;
+  /* Trasparente: fondo sull'overlay (shell.css), particelle blu sotto. */
+  background: transparent;
   color: #e6edf3;
 }
-body.light-theme #wp-mu-root { background: #f4f6fa; color: #1f2430; }
+body.light-theme #wp-mu-root { color: #1f2430; }
 
 .wp-mu-page {
   max-width: 1180px;

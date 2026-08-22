@@ -264,6 +264,10 @@
   <!-- Bloc Statistics Page (nascosta di default) -->
   <div id="bloc-stats-page"
     style="display:none; position:fixed; inset:0; z-index:5000; background:#0d1117; overflow-y:auto; padding:20px; color:#e6edf3;">
+    <!-- Sfondo a particelle della sezione (viola): vedi
+         src/shared/particlesBackground.js e .wp-overlay-bg in shell.css.
+         Fixed, non absolute: questo contenitore scrolla, il fondo no. -->
+    <canvas class="wp-overlay-bg wp-overlay-bg-fixed" aria-hidden="true"></canvas>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
       <h1 style="font-size:24px;" data-i18n="bloc_statistics">Alliance Statistics</h1>
       <button id="bloc-stats-close" data-i18n="back_to_map"
@@ -319,6 +323,7 @@
        src/app/ecoOverlay.js. Stesso pattern dell'overlay Political.
        ════════════════════════════════════════════════════════════ -->
   <div id="wp-eco-overlay" class="wp-political-overlay wp-eco-overlay" aria-hidden="true">
+    <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
     <div class="wp-political-topbar">
       <button id="wp-eco-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
       <span class="wp-political-title">Ottimizzatore industriale</span>
@@ -335,6 +340,7 @@
        src/app/newsOverlay.js. Stesso pattern degli overlay Political/Eco.
        ════════════════════════════════════════════════════════════ -->
   <div id="wp-news-overlay" class="wp-political-overlay wp-news-overlay" aria-hidden="true">
+    <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
     <div class="wp-political-topbar">
       <button id="wp-news-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
       <span class="wp-political-title">News</span>
@@ -351,6 +357,7 @@
        Stesso pattern degli overlay Political/Eco/News.
        ════════════════════════════════════════════════════════════ -->
   <div id="wp-mu-overlay" class="wp-political-overlay wp-mu-overlay" aria-hidden="true">
+    <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
     <div class="wp-political-topbar">
       <button id="wp-mu-back-btn" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
       <span class="wp-political-title">Military Units</span>

@@ -107,10 +107,16 @@ wareraPlus/
     ├── app/                     ← NUOVO — orchestrazione integrazione
     │   ├── muOverlay.js        ← apre Esplora Unità Militari (import() dinamico di src/mu/main.js)
     │   ├── politicalOverlay.js ← apre Political in-page (import() dinamico di src/political/main.js)
+    │   ├── overlayChrome.js    ← chrome condiviso degli overlay Eco/MU/News: sfondo a
+    │   │                         particelle nella tinta della sezione + pausa mappa
+    │   ├── mapIdle.js          ← pausa/riprende il lavoro di sfondo della mappa (pallini
+    │   │                         nave, polling marker battaglia) mentre un overlay la copre
     │   ├── themeSync.js        ← sincronizza tema (localStorage 'we_theme') con Political
     │   ├── battleToggle.js     ← bottone dedicato show/hide battaglie
     │   └── blocLabelsToggle.js ← toggle nomi alleanze
     ├── shared/
+    │   ├── particlesBackground.js ← motore dello sfondo a particelle, condiviso da tutti
+    │   │                            le sezioni (Political oro, Eco verde, MU rosso, News blu, Alleanze viola)
     │   ├── i18n.js              ← traduzioni condivise dello shell (namespace diverso da src/political/i18n.js)
     │   └── trpcClient.js        ← NUOVO (Fase 2) client tRPC unificato: trpcBatchManual (stile
     │                              Diplomacy) + trpcCall (stile Political), cache namespaced

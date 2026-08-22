@@ -11,6 +11,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { trackEvent } from '../shared/analytics.js';
+import { enterOverlay, leaveOverlay } from './overlayChrome.js';
 
 let overlayEl, backBtn, rootEl;
 
@@ -34,6 +35,11 @@ export async function openMuView(muId) {
   overlayEl.setAttribute('aria-hidden', 'false');
   rootEl.style.display = 'block';
 
+  // Sfondo a particelle nella tinta della sezione + pausa del lavoro
+  // di sfondo della mappa, che resta montata sotto l'overlay.
+  // Dopo .open: a overlay nascosto il canvas misurerebbe 0x0.
+  enterOverlay(overlayEl, 'mu');
+
   const mod = await import('../mu/main.js');
   if (muId) mod.openMuDetail(muId);
   await mod.initMuView(rootEl);
@@ -45,6 +51,7 @@ export function closeMuView() {
   if (!overlayEl) return;
   overlayEl.classList.remove('open');
   overlayEl.setAttribute('aria-hidden', 'true');
+  leaveOverlay(overlayEl);
 }
 
 export function isMuViewOpen() {

@@ -5,6 +5,90 @@
    già usato pesantemente da entrambi i tool originali).
    ══════════════════════════════════════════════════════════════ */
 
+/* ══════════════════════════════════════════════════════════════
+   BARRE DI SCORRIMENTO — regola globale dell'app
+   ------------------------------------------------------------------
+   Nessuna barra di sistema (grigia, con le frecce ai capi) da nessuna
+   parte: stonava con tutto il resto, che è scuro, sottile e arrotondato.
+   Qui una sola dichiarazione per l'intero documento — vale per la pagina,
+   per i pannelli, per le tabelle e per qualunque contenitore futuro, così
+   non serve ridefinirla componente per componente.
+
+   Dentro le sezioni di "Approfondimenti" il cursore prende la tinta della
+   sezione (--wp-ov-accent), come il filo della topbar e il pallino del
+   titolo.
+
+   `scrollbar-*` copre Firefox, `::-webkit-scrollbar-*` copre
+   Chrome/Edge/Safari: servono entrambe, non sono intercambiabili.
+   I componenti che avevano già una barra su misura (menu di Diplomacy,
+   tooltip nazione, Political) restano come sono: hanno regole più
+   specifiche e sono già in tema.
+   ══════════════════════════════════════════════════════════════ */
+
+:root {
+  --wp-sb-thumb: rgba(139, 148, 158, 0.32);
+  --wp-sb-thumb-hover: rgba(139, 148, 158, 0.58);
+}
+body.light-theme {
+  --wp-sb-thumb: rgba(60, 70, 85, 0.26);
+  --wp-sb-thumb-hover: rgba(60, 70, 85, 0.5);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--wp-sb-thumb) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--wp-sb-thumb);
+  border-radius: 999px;
+  /* Bordo trasparente + background-clip: il cursore sembra più sottile
+     della traccia senza doverla rimpicciolire (che ridurrebbe l'area
+     cliccabile). */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--wp-sb-thumb-hover);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+/* Le due frecce ai capi della barra di sistema: via. */
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Cursore nella tinta della sezione. */
+.wp-political-overlay,
+#bloc-stats-page {
+  scrollbar-color: color-mix(in srgb, var(--wp-ov-accent) 45%, transparent) transparent;
+}
+.wp-political-overlay ::-webkit-scrollbar-thumb,
+#bloc-stats-page ::-webkit-scrollbar-thumb,
+.wp-political-overlay::-webkit-scrollbar-thumb,
+#bloc-stats-page::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--wp-ov-accent) 45%, transparent);
+  background-clip: padding-box;
+}
+.wp-political-overlay ::-webkit-scrollbar-thumb:hover,
+#bloc-stats-page ::-webkit-scrollbar-thumb:hover,
+.wp-political-overlay::-webkit-scrollbar-thumb:hover,
+#bloc-stats-page::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--wp-ov-accent) 75%, transparent);
+  background-clip: padding-box;
+}
+
 /* ── Selettore lingua (stesso stile visivo di #theme-toggle-btn) ── */
 .wp-lang-select {
   height: 38px;
@@ -498,6 +582,15 @@ body.light-theme .wp-panel-close {
 }
 body.light-theme .wp-stat-sub { color: #2f7d3a; }
 
+/* Saldo regioni della casella "Espansione": verde se la nazione ha
+   conquistato, rosso se ha perso. Le varianti light-theme sono necessarie
+   perché `body.light-theme .wp-stat-value` è più specifica di .up/.down
+   e altrimenti le ricoprirebbe entrambe di nero. */
+.wp-stat-value.up { color: #3fb950; }
+.wp-stat-value.down { color: #f85149; }
+body.light-theme .wp-stat-value.up { color: #2f7d3a; }
+body.light-theme .wp-stat-value.down { color: #c22b22; }
+
 body.light-theme .wp-stat {
   background: #f7f7f7;
   border-color: #e0e0e0;
@@ -508,14 +601,171 @@ body.light-theme .wp-panel-name {
   color: #1a1a1a;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   CHROME CONDIVISO DEGLI OVERLAY DI "APPROFONDIMENTI"
+   ------------------------------------------------------------------
+   Political, Ottimizzatore industriale, Unità Militari e News usano
+   tutti la stessa struttura (.wp-political-overlay > topbar + root):
+   qui vive la parte GRAFICA comune, e ogni sezione ne cambia solo la
+   tinta con --wp-ov-accent. Le sezioni restano riconoscibili dal
+   colore, non da chrome diverso.
+
+   Ogni overlay ha inoltre lo stesso sfondo animato a particelle
+   (src/shared/particlesBackground.js), nella propria tinta: nato in
+   Political, esteso alle altre sezioni per uniformarle. Il canvas è un
+   figlio dell'overlay (non del root) e sta sotto tutto — quindi i root
+   delle viste hanno lo sfondo TRASPARENTE (vedi eco.css/mu.css/news.css)
+   e il colore di fondo è dichiarato qui sull'overlay, altrimenti
+   coprirebbero le particelle.
+   ══════════════════════════════════════════════════════════════ */
+
+.wp-political-overlay {
+  --wp-ov-accent: #c5964a;          /* Political: oro (colore storico) */
+  --wp-ov-bg: #0d1117;
+  --wp-ov-bg-light: #f4f6fa;
+}
+.wp-eco-overlay  { --wp-ov-accent: #3fb950; }   /* Ottimizzatore: verde */
+.wp-mu-overlay   { --wp-ov-accent: #e5484d; }   /* Unità Militari: rosso */
+.wp-news-overlay {                               /* News: blu */
+  --wp-ov-accent: #58a6ff;
+  --wp-ov-bg-light: #ece3d2;                     /* carta di giornale */
+}
+
+/* Statistiche alleanze: non è un .wp-political-overlay (è la pagina
+   originale di Diplomacy, con gli stili inline nell'HTML), ma partecipa
+   alla stessa famiglia grafica — qui le servono solo le variabili e il
+   canvas, il resto del suo chrome resta il suo. */
+#bloc-stats-page {
+  --wp-ov-accent: #a371f7;                       /* viola */
+  /* Il padding inferiore inline (20px) sommato ai margini della tabella
+     lasciava una fascia vuota sotto la barra di scorrimento orizzontale
+     a fine pagina: il contenuto deve chiudere la schermata. !important
+     perché il valore di partenza è uno stile inline nell'HTML. */
+  padding-bottom: 8px !important;
+}
+
+.wp-overlay-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* Dove a scorrere è il contenitore stesso (Statistiche alleanze:
+   #bloc-stats-page ha overflow-y:auto inline) un canvas absolute
+   scorrerebbe via col contenuto: qui resta ancorato alla finestra. */
+.wp-overlay-bg-fixed {
+  position: fixed;
+}
+
+/* I figli di #bloc-stats-page non sono posizionati, quindi verrebbero
+   dipinti PRIMA del canvas (che è positioned) e finirebbero sotto le
+   particelle: vanno alzati esplicitamente. */
+#bloc-stats-page > div {
+  position: relative;
+  z-index: 1;
+}
+
+/* Topbar e contenuto sopra le particelle. */
+.wp-political-overlay > .wp-political-topbar,
+.wp-political-overlay > [id$="-root"] {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Token di superficie condivisi dalle sezioni ────────────────
+   Eco, Unità Militari e News erano nate ognuna con le proprie tinte di
+   card (#0f141b vs #161b22), i propri bordi e la propria idea di titolo.
+   Qui si dichiarano una volta sola; le regole qui sotto le applicano ai
+   selettori già esistenti delle tre viste (specificità più alta perché
+   scopate sull'overlay, quindi vincono su eco.css/mu.css caricati dopo
+   via import() senza doverli riscrivere riga per riga). */
+.wp-political-overlay {
+  --wp-ov-surface: #161b22;
+  --wp-ov-border: #30363d;
+  --wp-ov-radius: 12px;
+  --wp-ov-text: #e6edf3;
+  --wp-ov-text-dim: #8b949e;
+}
+body.light-theme .wp-political-overlay {
+  --wp-ov-surface: #ffffff;
+  --wp-ov-border: #d0d7de;
+  --wp-ov-text: #1f2430;
+  --wp-ov-text-dim: #5b6473;
+}
+
+/* Card/sezioni: stessa superficie, stesso bordo, stesso raggio. */
+.wp-political-overlay .wp-eco-section,
+.wp-political-overlay .wp-mu-statcard {
+  background: var(--wp-ov-surface);
+  border-color: var(--wp-ov-border);
+  border-radius: var(--wp-ov-radius);
+}
+
+/* Testata di sezione: stessa scala tipografica in Eco e Unità Militari.
+   News resta fuori di proposito — la sua testata è in serif da prima
+   pagina, è la sua identità, non una disomogeneità da correggere. */
+.wp-political-overlay .wp-eco-title,
+.wp-political-overlay .wp-mu-title {
+  font-size: clamp(22px, 3.4vw, 30px);
+  font-weight: 800;
+  letter-spacing: .01em;
+  margin: 0;
+  color: var(--wp-ov-text);
+}
+.wp-political-overlay .wp-eco-subtitle,
+.wp-political-overlay .wp-mu-subtitle {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--wp-ov-text-dim);
+}
+
+/* Pill/tab e stati attivi nella tinta della sezione invece che nel blu
+   o nel verde cablati nel foglio della singola vista. */
+.wp-political-overlay .wp-mu-tab.active,
+.wp-political-overlay .wp-mu-rank-tab.active {
+  border-color: var(--wp-ov-accent);
+}
+.wp-political-overlay .wp-mu-search-input:focus,
+.wp-political-overlay .wp-eco-input:focus,
+.wp-political-overlay .wp-eco-wage:focus {
+  outline: none;
+  border-color: var(--wp-ov-accent);
+}
+.wp-political-overlay .wp-mu-more:hover,
+.wp-political-overlay .wp-mu-back:hover,
+.wp-political-overlay .wp-mu-member:hover,
+.wp-political-overlay .wp-eco-credit:hover {
+  border-color: var(--wp-ov-accent);
+}
+
 /* ── OVERLAY POLITICAL VIEW ── */
 .wp-political-overlay {
   position: fixed;
   inset: 0;
   z-index: 6000;
-  background: #0d1117;
+  background: var(--wp-ov-bg, #0d1117);
   display: none;
   flex-direction: column;
+}
+
+/* Tema chiaro: prima solo News schiariva (sul proprio root), le altre
+   sezioni restavano scure dentro un'app chiara. Ora seguono tutte il
+   tema, ognuna con il proprio fondo (--wp-ov-bg-light). */
+body.light-theme .wp-political-overlay:not(#wp-political-overlay) {
+  background: var(--wp-ov-bg-light, #f4f6fa);
+}
+
+/* Political ha un interruttore di tema PROPRIO (data-theme sull'<html>,
+   src/political/config.js), tenuto in sincronia con quello dello shell da
+   src/app/themeSync.js ma non necessariamente uguale al primo avvio:
+   legare il suo fondo a body.light-theme darebbe una pagina chiara sotto
+   contenuti ancora scuri. Segue quindi il proprio attributo. */
+html[data-theme="light"] #wp-political-overlay {
+  background: var(--wp-ov-bg-light, #f4f6fa);
 }
 
 .wp-political-overlay.open {
@@ -530,6 +780,13 @@ body.light-theme .wp-panel-name {
   background: #161b22;
   border-bottom: 1px solid #30363d;
   flex-shrink: 0;
+  /* Filo nella tinta della sezione: unico elemento di chrome che cambia
+     colore fra una sezione e l'altra, insieme alle particelle. */
+  box-shadow: inset 0 -2px 0 -1px var(--wp-ov-accent, #30363d);
+}
+body.light-theme .wp-political-topbar {
+  background: #f6f8fa;
+  border-bottom-color: #d0d7de;
 }
 
 .wp-political-back {
@@ -546,13 +803,38 @@ body.light-theme .wp-panel-name {
 
 .wp-political-back:hover {
   background: #30363d;
+  border-color: var(--wp-ov-accent, #30363d);
+}
+body.light-theme .wp-political-back {
+  background: #ffffff;
+  border-color: #d0d7de;
+  color: #1f2430;
+}
+body.light-theme .wp-political-back:hover {
+  background: #eef1f5;
+  border-color: var(--wp-ov-accent, #d0d7de);
 }
 
 .wp-political-title {
   font-size: 13px;
   color: #8b949e;
   font-family: 'JetBrains Mono', monospace;
+  /* Pallino nella tinta della sezione prima del titolo: stessa
+     identificazione a colpo d'occhio della barra menù. */
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
+.wp-political-title::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--wp-ov-accent, #8b949e);
+  box-shadow: 0 0 8px var(--wp-ov-accent, transparent);
+  flex-shrink: 0;
+}
+body.light-theme .wp-political-title { color: #5b6473; }
 
 /* Fase 2 (Stage 9): sostituisce il vecchio <iframe class="wp-political-frame">
    — #wp-political-root è ora un div che riempie lo stesso spazio flex
@@ -562,6 +844,11 @@ body.light-theme .wp-panel-name {
   flex: 1;
   width: 100%;
   overflow-y: auto;
+  /* Political, a differenza di Eco/MU/News, ha il proprio fondo opaco
+     (political.css: #wp-political-root{background:var(--bg)}, caricato
+     dopo questo foglio) e il proprio canvas #bgCanvas DENTRO il root —
+     quindi qui non serve trasparenza: le sue particelle sono sopra il
+     suo fondo, non sotto. */
   background: #0d1117;
 }
 
