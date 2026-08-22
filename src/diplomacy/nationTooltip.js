@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { escapeHtml } from './utils.js';
+import { getBlocMemberIds } from './diplomacy.js';
 import * as topojson from 'topojson-client';
 
 // URL del tool esterno "PoliticalView". Se il formato del parametro cambia,
@@ -112,6 +113,106 @@ function getTooltipEl() {
     document.body.appendChild(el);
   }
   return el;
+}
+
+/** Posizionamento "pinnato": in basso al centro, largo quanto sta nella
+ *  viewport, scrollabile e cliccabile. Estratto da show() perché lo usa
+ *  anche il tooltip alleanza qui sotto — è la stessa scatola. */
+function _pinTooltip(tooltip) {
+  // Chiude il tooltip battaglia, che occupa la stessa area in basso al
+  // centro con z-index piu' alto e ruberebbe i click (es. il link
+  // "View Political Situation" apriva invece una battaglia).
+  import('./battleMarkers.js').then(m => m.hideBattleTooltip());
+  tooltip.style.zIndex = '9500';
+  tooltip.classList.add('pinned');
+  tooltip.style.left = '50%';
+  tooltip.style.top = 'auto';
+  tooltip.style.setProperty(
+    'bottom',
+    `calc(${window.innerWidth <= 768 ? '45px' : '55px'} + env(safe-area-inset-bottom, 0px))`,
+    'important'
+  );
+  tooltip.style.transform = 'translateX(-50%)';
+  // La classe CSS '.nation-tooltip' puo' avere una larghezza fissa pensata
+  // per desktop: su schermi stretti spingeva il box oltre il bordo della
+  // viewport (o lo tagliava), rompendo completamente il layout su mobile.
+  // Qui la larghezza viene sempre vincolata alla viewport reale, e in
+  // altezza si aggiunge scroll invece di traboccare fuori schermo quando
+  // il contenuto (specie con la sezione battle-heatmap) e' troppo alto
+  // per un telefono in orizzontale.
+  tooltip.style.setProperty('width', 'min(360px, calc(100vw - 24px))', 'important');
+  tooltip.style.setProperty('max-width', 'calc(100vw - 24px)', 'important');
+  tooltip.style.setProperty('box-sizing', 'border-box', 'important');
+  tooltip.style.setProperty('max-height', 'calc(100vh - 90px)', 'important');
+  tooltip.style.setProperty('overflow-y', 'auto', 'important');
+  tooltip.style.setProperty('-webkit-overflow-scrolling', 'touch', 'important');
+  // Pinnato: deve essere cliccabile (link "View Political Situation",
+  // bottone di chiusura implicito via click-fuori gestito altrove).
+  tooltip.style.pointerEvents = 'auto';
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TOOLTIP ALLEANZA (WarEra+)
+   ------------------------------------------------------------------
+   In modalità 'blocs' il click su una nazione seleziona il BLOCCO, non la
+   nazione: il tooltip nazione che compariva lì raccontava quindi una cosa
+   diversa da quella selezionata, e su mobile si sovrapponeva pure al
+   pannello alleanza a schermo intero (segnalato dall'utente: "rende tutto
+   molto confusionario").
+
+   Qui c'è il suo sostituto: stessa scatola, stessi riquadri, ma i numeri
+   sono quelli del blocco intero e l'unica azione è "Full Details", che apre
+   il pannello alleanza (non Political View: in questa vista la nazione
+   singola non c'entra).
+
+   Su desktop non serve: lì il pannello alleanza è una sidebar che si apre
+   da sola senza coprire la mappa, e ripetere gli stessi numeri in un
+   tooltip sarebbe rumore. Vedi initNationTooltip.
+   ══════════════════════════════════════════════════════════════ */
+export function showBlocTooltip(allianceId) {
+  const alliance = state.allianceMap?.get(allianceId);
+  if (!alliance) return;
+  const memberIds = getBlocMemberIds(allianceId);
+  const members = memberIds.map(id => state.nationMap.get(id)).filter(Boolean);
+
+  const tot = members.reduce((s, n) => ({
+    pop: s.pop + (n?.rankings?.countryActivePopulation?.value || 0),
+    wealth: s.wealth + (n?.rankings?.countryWealth?.value ?? n?.money ?? 0),
+    dmg: s.dmg + (n?.rankings?.weeklyCountryDamages?.value || 0),
+    wars: s.wars + (n?.warsWith?.length || 0),
+  }), { pop: 0, wealth: 0, dmg: 0, wars: 0 });
+  const dmgPerPlayer = tot.pop > 0 ? tot.dmg / tot.pop : 0;
+  const color = state.allianceColorMap?.get(allianceId) || '#8b949e';
+
+  const tooltip = getTooltipEl();
+  tooltip.innerHTML = `
+    <div class="nt-header">
+      ${alliance.avatarUrl
+        ? `<img class="nt-flag" src="${alliance.avatarUrl}" alt="" onerror="this.style.display='none'">`
+        : `<span class="nt-emoji">🛡️</span>`}
+      <span class="nt-name">${escapeHtml(alliance.name)}</span>
+      <span class="nt-bloc" style="background:${color}22;color:${color}">${members.length} nations</span>
+    </div>
+    <div class="nt-grid">
+      <div class="nt-item"><span class="nt-icon">👥</span><span class="nt-val">${fmt(tot.pop)}</span><span class="nt-lbl">pop.</span></div>
+      <div class="nt-item"><span class="nt-icon">💰</span><span class="nt-val">${fmt(tot.wealth)}</span><span class="nt-lbl">wealth</span></div>
+      <div class="nt-item"><span class="nt-icon">🔥</span><span class="nt-val">${fmt(tot.dmg)}</span><span class="nt-lbl">dmg/wk</span></div>
+      <div class="nt-item"><span class="nt-icon">⚔️</span><span class="nt-val">${fmt(dmgPerPlayer)}</span><span class="nt-lbl">dmg/player</span></div>
+      <div class="nt-item"><span class="nt-icon">🗡️</span><span class="nt-val">${tot.wars}</span><span class="nt-lbl">wars</span></div>
+    </div>
+    <div style="margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08);">
+      <button type="button" class="nt-bloc-details-btn" data-bloc-id="${escapeHtml(allianceId)}" style="
+        display:flex; align-items:center; justify-content:center; gap:6px;
+        width:100%; padding:7px 10px; border-radius:8px;
+        background:rgba(46,204,113,0.12); border:1px solid rgba(46,204,113,0.35);
+        color:#2ecc71; font-size:12px; font-weight:600; cursor:pointer;
+        box-sizing:border-box;">📋 Full Details</button>
+    </div>`;
+
+  currentId = null;   // non è una nazione: il toggle "riclicco = chiudi" vale per il blocco, gestito da map.js
+  isPinned = true;
+  _pinTooltip(tooltip);
+  requestAnimationFrame(() => tooltip.classList.add('visible'));
 }
 
 function buildContent(nation, code, blocInfo, isPinned) {
@@ -291,36 +392,7 @@ function show(nationId, x, y, pinned = false) {
   isPinned = pinned;
 
   if (pinned || isMobile) {
-    // Chiude il tooltip battaglia, che occupa la stessa area in basso al
-    // centro con z-index piu' alto e ruberebbe i click (es. il link
-    // "View Political Situation" apriva invece una battaglia).
-    import('./battleMarkers.js').then(m => m.hideBattleTooltip());
-    tooltip.style.zIndex = '9500';
-    tooltip.classList.add('pinned');
-    tooltip.style.left = '50%';
-    tooltip.style.top = 'auto';
-    tooltip.style.setProperty(
-      'bottom',
-      `calc(${window.innerWidth <= 768 ? '45px' : '55px'} + env(safe-area-inset-bottom, 0px))`,
-      'important'
-    );
-    tooltip.style.transform = 'translateX(-50%)';
-    // La classe CSS '.nation-tooltip' puo' avere una larghezza fissa pensata
-    // per desktop: su schermi stretti spingeva il box oltre il bordo della
-    // viewport (o lo tagliava), rompendo completamente il layout su mobile.
-    // Qui la larghezza viene sempre vincolata alla viewport reale, e in
-    // altezza si aggiunge scroll invece di traboccare fuori schermo quando
-    // il contenuto (specie con la sezione battle-heatmap) e' troppo alto
-    // per un telefono in orizzontale.
-    tooltip.style.setProperty('width', 'min(360px, calc(100vw - 24px))', 'important');
-    tooltip.style.setProperty('max-width', 'calc(100vw - 24px)', 'important');
-    tooltip.style.setProperty('box-sizing', 'border-box', 'important');
-    tooltip.style.setProperty('max-height', 'calc(100vh - 90px)', 'important');
-    tooltip.style.setProperty('overflow-y', 'auto', 'important');
-    tooltip.style.setProperty('-webkit-overflow-scrolling', 'touch', 'important');
-    // Pinnato: deve essere cliccabile (link "View Political Situation",
-    // bottone di chiusura implicito via click-fuori gestito altrove).
-    tooltip.style.pointerEvents = 'auto';
+    _pinTooltip(tooltip);
   } else {
     tooltip.style.zIndex = '';
     tooltip.classList.remove('pinned');
@@ -404,14 +476,20 @@ export function initNationTooltip(map) {
     // battaglia fisso in basso) — stesso principio già applicato
     // all'evidenziazione bordo hover in _setHoverBorder qui sopra, solo
     // che lì il guard mancava proprio su questo handler.
-    if (isPinned || hoverSuppressed || state.coloringMode === 'battleHeatmap') return;
+    // 'blocs': qui il click seleziona l'alleanza, non la nazione — il
+    // tooltip nazione parlerebbe di un'altra cosa rispetto a quella
+    // selezionata (vedi showBlocTooltip).
+    if (isPinned || hoverSuppressed || state.coloringMode === 'battleHeatmap' || state.coloringMode === 'blocs') return;
     clearTimeout(hoverTimer);
     const nid = _extractId(e);
     if (nid && nid !== currentId) show(nid, e.originalEvent.clientX, e.originalEvent.clientY);
   });
 
   map.on('mousemove', layerId, (e) => {
-    if (isPinned || hoverSuppressed || state.coloringMode === 'battleHeatmap') return;
+    // 'blocs': qui il click seleziona l'alleanza, non la nazione — il
+    // tooltip nazione parlerebbe di un'altra cosa rispetto a quella
+    // selezionata (vedi showBlocTooltip).
+    if (isPinned || hoverSuppressed || state.coloringMode === 'battleHeatmap' || state.coloringMode === 'blocs') return;
     const tooltip = document.getElementById('nation-tooltip');
     if (!tooltip?.classList.contains('visible')) return;
 
@@ -443,6 +521,12 @@ export function initNationTooltip(map) {
     // passata). Terzo listener indipendente sullo stesso layer/evento,
     // stesso motivo per cui va ripetuto invece di centralizzato.
     if (state.timeMachineActive) return;
+    // In modalità alleanze il tooltip nazione non compare affatto: al suo
+    // posto, su mobile, quello del blocco selezionato — che è quello che il
+    // click ha davvero selezionato. Su desktop nemmeno quello: lì il
+    // pannello alleanza si apre da solo come sidebar e direbbe le stesse
+    // cose (vedi map.js:_onRegionClick).
+    if (state.coloringMode === 'blocs') return;
     const nid = _extractId(e);
     if (!nid) return;
 
@@ -468,12 +552,16 @@ export function initNationTooltip(map) {
     // segue il suo comportamento originale (href + target="_blank").
     const politicalBtn = e.target.closest('.nt-political-btn');
     if (politicalBtn) {
+      // BUG FIX (segnalato dall'utente: "riporta in una nuova scheda al
+      // vecchio tool"): preventDefault stava DENTRO il .then() dell'import
+      // dinamico, cioè in un turno successivo — quando ci arrivava, il
+      // browser aveva già seguito l'href verso PoliticalView esterno. Va
+      // chiamato SUBITO, in modo sincrono, e l'href resta solo come
+      // fallback se l'overlay non è disponibile (import fallito).
+      e.preventDefault();
       import('../app/politicalOverlay.js')
-        .then(m => {
-          e.preventDefault();
-          m.openPoliticalView(politicalBtn.dataset.countryId, politicalBtn.dataset.countryName);
-        })
-        .catch(() => { /* fallback: lascia che il link apra la scheda esterna */ });
+        .then(m => m.openPoliticalView(politicalBtn.dataset.countryId, politicalBtn.dataset.countryName))
+        .catch(() => { window.open(politicalBtn.href, '_blank', 'noopener'); });
       return;
     }
     // WarEra+: bottone "Full Details" (solo mobile, vedi buildContent) —
@@ -481,6 +569,16 @@ export function initNationTooltip(map) {
     // automatico al click (countryPanel.js). Import dinamico per lo stesso
     // motivo del blocco sopra: nessuna dipendenza diretta da un modulo
     // "superiore" nella gerarchia shell da un file di Diplomacy invariato.
+    // Gemello del precedente per il tooltip alleanza: apre il pannello del
+    // blocco invece di quello della nazione.
+    const blocBtn = e.target.closest('.nt-bloc-details-btn');
+    if (blocBtn) {
+      import('../panel/countryPanel.js')
+        .then(m => m.selectBlocInPanel(blocBtn.dataset.blocId))
+        .catch(() => {});
+      hide();
+      return;
+    }
     const expandBtn = e.target.closest('.nt-expand-btn');
     if (expandBtn) {
       import('../panel/countryPanel.js')

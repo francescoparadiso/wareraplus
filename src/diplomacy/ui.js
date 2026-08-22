@@ -50,7 +50,20 @@ function _autoToggleLegend() {
   // Qui conta lo SPAZIO disponibile, non come lo si tocca: un desktop
   // touch resta un desktop. Solo la larghezza, quindi.
   const isMobile = window.innerWidth <= 768;
-  if (isMobile) return;
+  if (isMobile) {
+    // WarEra+ (segnalato dall'utente): su mobile la legenda non si apre mai
+    // da sola, in nessuna vista — si apre SOLO con la ℹ. Prima bastava
+    // averla aperta una volta perché restasse aperta cambiando vista, e su
+    // uno schermo stretto copriva la mappa. Cambiando vista quindi si
+    // chiude: il contenuto è già aggiornato, basta toccare la ℹ per
+    // rivederlo.
+    const viewKeyMobile = `${state.coloringMode}|${!!state.battleHeatmapData}|${!!state.selectedCountryId}`;
+    if (viewKeyMobile !== _lastLegendViewKey) {
+      _lastLegendViewKey = viewKeyMobile;
+      legendEl.classList.add('hidden');
+    }
+    return;
+  }
 
   // BUG FIX (segnalato dall'utente: "non si apre la legenda in automatico in
   // diplomacy mode"): la vista diplomacy CON una nazione selezionata ha una

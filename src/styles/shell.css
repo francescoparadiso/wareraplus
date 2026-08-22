@@ -557,9 +557,19 @@ body.light-theme .wp-panel-name {
 
 /* ── MOBILE ── */
 @media (max-width: 768px) {
+  /* BUG FIX (segnalato dall'utente: "non vedo la ✕"): il pannello partiva
+     da top:0 con z-index 2500, mentre la barra WarEra+ del mobile è fixed
+     a top:0, alta --wp-mbar-h e con z-index 7000. I primi ~52px del
+     pannello — cioè esattamente dove sta la ✕ (top:14px, 32px di lato) e
+     ora anche la barra "Indietro" — finivano SOTTO quella barra, invisibili
+     e non cliccabili. Il pannello parte quindi sotto la barra, e in fondo
+     lascia spazio alla tab bar inferiore, che gli copriva l'ultima riga. */
   .wp-panel {
     width: 100vw;
     border-left: none;
+    top: var(--wp-mbar-h, 52px);
+    height: calc(100vh - var(--wp-mbar-h, 52px));
+    padding-bottom: calc(var(--wp-mbottom-h, 58px) + 20px);
   }
 }
 
@@ -1857,3 +1867,267 @@ body.light-theme .wp-panel-ps-delta-label { color: #6b7280; }
 }
 .wp-panel-ps-chip-war { color: #f85149; }
 .wp-panel-ps-chip-eco { color: #3fb950; }
+/* Il travaso è la lettura principale della riga, i due delta sono il
+   dettaglio: bordo colorato per staccarlo, colore del testo dato dalla
+   destinazione (chip-war / chip-eco qui sopra). */
+.wp-panel-ps-chip-switch {
+  border: 1px solid currentColor;
+  background: transparent;
+}
+
+/* ── Barra "Indietro" in cima al pannello (WarEra+, solo mobile) ──
+   Sul telefono il pannello è a schermo intero: serve una via d'uscita
+   grande e nel posto dove la si cerca, non solo la ✕ da 32px in alto a
+   destra. Sticky, così resta raggiungibile anche a metà scroll. */
+.wp-panel-back { display: none; }
+@media (max-width: 768px) {
+  .wp-panel-back {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    position: sticky;
+    top: -20px;              /* compensa il padding del pannello */
+    z-index: 3;
+    width: calc(100% + 40px);
+    margin: -20px -20px 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #30363d;
+    background: rgba(13, 17, 23, 0.98);
+  }
+  .wp-panel-back-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 0;
+    border: none;
+    background: none;
+    color: #58a6ff;
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+  .wp-panel-back-close {
+    flex: 0 0 auto;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid #30363d;
+    background: #161b22;
+    color: #8b949e;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  /* La ✕ originale sta in posizione assoluta sotto la barra: su mobile
+     vive dentro la barra (.wp-panel-back-close), qui si toglie di mezzo. */
+  .wp-panel-close { display: none; }
+  .wp-panel-content { margin-top: 0; }
+  body.light-theme .wp-panel-back {
+    background: rgba(255, 255, 255, 0.98);
+    border-bottom-color: rgba(0, 0, 0, 0.12);
+  }
+  body.light-theme .wp-panel-back-btn { color: #2f6fb5; }
+  body.light-theme .wp-panel-back-close {
+    background: #f0f0f0;
+    border-color: #ccc;
+    color: #555;
+  }
+}
+
+/* ── Linguetta "Vedi dettagli" (WarEra+, solo mobile) ──
+   In vista sfere il pannello a schermo intero coprirebbe la mappa appena
+   colorata: si mostra questa barretta in basso, e il pannello si apre solo
+   se la si tocca. Sta sopra la barra inferiore mobile (che è alta ~56px) e
+   rispetta la safe area dei telefoni con notch. */
+.wp-panel-peek {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  z-index: 2400;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100vw - 24px);
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid #30363d;
+  background: rgba(13, 17, 23, 0.97);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  color: #e6edf3;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+}
+.wp-panel-peek[hidden] { display: none; }
+.wp-panel-peek-title {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wp-panel-peek-cta {
+  color: #58a6ff;
+  font-weight: 600;
+  white-space: nowrap;
+}
+body.light-theme .wp-panel-peek {
+  background: rgba(255, 255, 255, 0.97);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #1a1a1a;
+}
+body.light-theme .wp-panel-peek-cta { color: #2f6fb5; }
+
+/* ── Pannello sfera d'influenza (WarEra+) ──
+   Una riga per nazione: intestazione con bandiera, nome e quota di danno
+   della sfera; sotto, i numeri in fila. La riga della potenza è marcata
+   da una barretta laterale, così si distingue a colpo d'occhio dai proxy
+   senza doverla mettere in un riquadro a parte. */
+.wp-sphere-row {
+  padding: 7px 8px;
+  border-radius: 8px;
+  border: 1px solid #21262d;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.wp-sphere-row:hover {
+  background: rgba(88, 166, 255, .08);
+  border-color: #58a6ff;
+}
+.wp-sphere-row.primary {
+  border-left: 3px solid #58a6ff;
+}
+.wp-sphere-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e6edf3;
+}
+.wp-sphere-flag {
+  width: 16px;
+  height: auto;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.wp-sphere-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wp-sphere-share {
+  font-size: 11px;
+  font-weight: 700;
+  color: #58a6ff;
+  font-variant-numeric: tabular-nums;
+}
+.wp-sphere-row-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: #8b949e;
+  font-variant-numeric: tabular-nums;
+}
+/* Riepilogo di tutte le sfere: un blocco per sfera, potenza in evidenza e
+   proxy come pastiglie sotto — compatti perché sono un indice, non una
+   scheda (i numeri per nazione stanno nel pannello della singola sfera). */
+.wp-sphere-back {
+  background: none;
+  border: none;
+  color: #58a6ff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 0 8px;
+}
+.wp-sphere-back:hover { text-decoration: underline; }
+.wp-panel-hint {
+  font-size: 11.5px;
+  color: #8b949e;
+  margin-bottom: 10px;
+}
+/* Le sfere non sono un dato del gioco ma una raccolta fatta dai giocatori:
+   va detto sopra l'elenco, non in fondo — chi legge i numeri deve sapere
+   da dove vengono prima di fidarsene. */
+.wp-sphere-disclaimer {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #d29922;
+  background: rgba(210, 153, 34, .1);
+  border: 1px solid rgba(210, 153, 34, .3);
+  border-radius: 8px;
+  padding: 7px 9px;
+  margin-bottom: 10px;
+}
+.wp-sphere-group {
+  border: 1px solid #21262d;
+  border-left: 3px solid #58a6ff;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.wp-sphere-group:hover {
+  background: rgba(88, 166, 255, .07);
+  border-color: #58a6ff;
+}
+.wp-sphere-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e6edf3;
+  cursor: pointer;
+}
+.wp-sphere-group-head:hover .wp-sphere-name { color: #58a6ff; }
+.wp-sphere-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.wp-sphere-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid #21262d;
+  background: rgba(139, 148, 158, .1);
+  color: #c9d1d9;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.wp-sphere-chip:hover { border-color: #58a6ff; color: #58a6ff; }
+.wp-sphere-chip-flag {
+  width: 12px;
+  height: auto;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+body.light-theme .wp-sphere-back { color: #2f6fb5; }
+body.light-theme .wp-panel-hint { color: #6b5a47; }
+body.light-theme .wp-sphere-group { border-color: #e0e0e0; }
+body.light-theme .wp-sphere-group:hover { background: rgba(139, 90, 43, .08); border-color: #8b5a2b; }
+body.light-theme .wp-sphere-disclaimer { color: #8a6100; background: rgba(210, 153, 34, .14); border-color: rgba(138, 97, 0, .3); }
+body.light-theme .wp-sphere-group-head { color: #1a1a1a; }
+body.light-theme .wp-sphere-chip { border-color: #e0e0e0; color: #3e2f1c; background: rgba(0, 0, 0, .04); }
+body.light-theme .wp-sphere-chip:hover, body.light-theme .wp-sphere-group-head:hover .wp-sphere-name { border-color: #8b5a2b; color: #8b5a2b; }
+body.light-theme .wp-sphere-row { border-color: #e0e0e0; }
+body.light-theme .wp-sphere-row:hover { background: rgba(139, 90, 43, .1); border-color: #8b5a2b; }
+body.light-theme .wp-sphere-row.primary { border-left-color: #8b5a2b; }
+body.light-theme .wp-sphere-row-head { color: #1a1a1a; }
+body.light-theme .wp-sphere-share { color: #2f6fb5; }
+body.light-theme .wp-sphere-row-stats { color: #6b5a47; }

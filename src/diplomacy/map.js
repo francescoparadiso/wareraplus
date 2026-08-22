@@ -413,6 +413,16 @@ state.map.on('click', (e) => {
       renderMap();
       import('../panel/countryPanel.js').then(m => m.selectBlocInPanel(null));
     }
+  } else if (state.coloringMode === 'sphereOfInfluence') {
+    // Click sul mare: si RISALE al riepilogo invece di chiudere tutto — in
+    // questa modalità il pannello è la vista, chiuderlo lascerebbe una mappa
+    // colorata senza la legenda che la spiega. Per chiudere c'è la ✕.
+    const features = state.map.queryRenderedFeatures(e.point, { layers: [LYR_FILL] });
+    if (!features.length) {
+      import('../panel/countryPanel.js').then(m => {
+        if (m.getCurrentSphereId()) m.renderSphereOverviewPanel();
+      });
+    }
   } else if (state.coloringMode === 'diplomacy' && state.selectedCountryId) {
     // Stesso principio del ramo blocs sopra, ma per la selezione nazione
     // "normale": _onRegionClick (bound solo a LYR_FILL) toggla la selezione
@@ -635,11 +645,47 @@ function _onRegionClick(e) {
     // WarEra+: mostra/nasconde il pannello blocco nella colonna a destra
     // (import dinamico verso src/panel/, coerente con altri collegamenti
     // cross-modulo già presenti nel progetto, es. nationTooltip.js).
-    import('../panel/countryPanel.js').then(m => m.selectBlocInPanel(state.selectedBlocId));
+    //
+    // Su MOBILE il pannello è a schermo intero e coprirebbe la mappa appena
+    // colorata per alleanze: lì si apre invece il tooltip del blocco
+    // (nationTooltip.js: showBlocTooltip), che ha gli stessi numeri e un
+    // "Full Details" per aprire il pannello quando lo si vuole davvero.
+    // Stessa scelta già fatta per il pannello nazione.
+    const isMobile = window.innerWidth <= 768;
+    if (isMobile) {
+      import('./nationTooltip.js').then(m => {
+        if (state.selectedBlocId) m.showBlocTooltip(state.selectedBlocId);
+        else m.hide();
+      });
+      import('../panel/countryPanel.js').then(m => { if (!state.selectedBlocId) m.selectBlocInPanel(null); });
+    } else {
+      import('../panel/countryPanel.js').then(m => m.selectBlocInPanel(state.selectedBlocId));
+    }
     if (state.selectedBlocId) {
       const alliance = state.allianceMap.get(state.selectedBlocId);
       if (alliance) trackEvent('bloc-click', { bloc: alliance.name, via: 'map' });
     }
+    return;
+  }
+
+  // WarEra+: in modalità 'sphere' il click apre la SFERA a cui appartiene la
+  // nazione cliccata (la potenza se si clicca lei, la sua potenza di
+  // riferimento se si clicca un proxy) nello stesso pannello a destra usato
+  // da nazione e blocco. Stesso schema del ramo 'blocs' qui sopra: la
+  // selezione nazione della mappa non viene toccata, cambia solo il pannello.
+  if (state.coloringMode === 'sphereOfInfluence') {
+    import('../panel/countryPanel.js').then(m => {
+      const sphereId = m.getSphereOf(cId);
+      // Riclicco della stessa sfera, o nazione fuori da ogni sfera: si
+      // risale al riepilogo, che è il livello sopra.
+      if (!sphereId || m.getCurrentSphereId() === sphereId) {
+        m.renderSphereOverviewPanel();
+        return;
+      }
+      m.selectSphereInPanel(sphereId);
+      const primary = state.nationMap.get(sphereId);
+      if (primary) trackEvent('sphere-click', { sphere: primary.name, via: 'map' });
+    });
     return;
   }
 
@@ -1083,6 +1129,15 @@ export function setColoringMode(mode) {
     clearBlocFlash();
     import('../panel/countryPanel.js').then(m => m.selectBlocInPanel(null));
   }
+
+  // WarEra+: entrando in vista Sphere il pannello si apre da solo sul
+  // riepilogo di TUTTE le sfere (la domanda iniziale è quali sfere ci
+  // sono, non com'è fatta una in particolare); uscendo, il pannello sfera
+  // — riepilogo o dettaglio — si chiude, com'è già per il focus blocco.
+  import('../panel/countryPanel.js').then(m => {
+    if (mode === 'sphereOfInfluence') m.renderSphereOverviewPanel();
+    else if (m.getCurrentSphereId() || m.isSphereOverviewOpen()) m.selectSphereInPanel(null);
+  });
 
   // battleHeatmap non ha un pulsante nella barra: senza questo, tutti i
   // pulsanti restano spenti e la UI sembra "senza modalita'". Marchiamo la

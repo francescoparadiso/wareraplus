@@ -230,11 +230,18 @@ function setupSubviewWatch() {
   const pol = document.getElementById('wp-political-overlay');
   const eco = document.getElementById('wp-eco-overlay');
   const mu = document.getElementById('wp-mu-overlay');
+  // News mancava qui (segnalato dall'utente): la sua topbar "← Torna alla
+  // mappa" è nascosta da menubar.css come per le altre sotto-viste, ma senza
+  // questo osservatore il body non prendeva mai .wp-subview-open, quindi non
+  // compariva nemmeno il bottone Indietro della barra — la vista restava
+  // senza alcuna via d'uscita se non Esc.
+  const news = document.getElementById('wp-news-overlay');
   const stats = document.getElementById('bloc-stats-page');
-  const update = () => document.body.classList.toggle('wp-subview-open', isPoliticalOpen() || isEcoViewOpen() || isMuViewOpen() || isStatsOpen());
+  const update = () => document.body.classList.toggle('wp-subview-open', isPoliticalOpen() || isEcoViewOpen() || isMuViewOpen() || isNewsViewOpen() || isStatsOpen());
   if (pol) new MutationObserver(update).observe(pol, { attributes: true, attributeFilter: ['class'] });
   if (eco) new MutationObserver(update).observe(eco, { attributes: true, attributeFilter: ['class'] });
   if (mu) new MutationObserver(update).observe(mu, { attributes: true, attributeFilter: ['class'] });
+  if (news) new MutationObserver(update).observe(news, { attributes: true, attributeFilter: ['class'] });
   if (stats) new MutationObserver(update).observe(stats, { attributes: true, attributeFilter: ['style'] });
   update();
 }
