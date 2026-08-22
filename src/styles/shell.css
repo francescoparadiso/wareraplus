@@ -488,6 +488,16 @@ body.light-theme .wp-panel-close {
   color: #555;
 }
 
+/* Riga secondaria di una casella statistica: oggi la usa solo "Cittadini"
+   per i nuovi registrati di giornata. */
+.wp-stat-sub {
+  margin-top: 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #3fb950;
+}
+body.light-theme .wp-stat-sub { color: #2f7d3a; }
+
 body.light-theme .wp-stat {
   background: #f7f7f7;
   border-color: #e0e0e0;

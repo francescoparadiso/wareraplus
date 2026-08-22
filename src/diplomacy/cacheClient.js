@@ -324,8 +324,10 @@ export async function fetchElectionDetailsViaCache(electionIds) {
 /** Nome e avatar di più giocatori in una richiesta (server/warera-cache-server.js:
  *  /users-lite). Sostituisce `user.getUserLite` chiamato per ogni utente e
  *  accorpato in batch da 50: i ~300 eletti di un blocco erano sei richieste
- *  al Worker in fila, ognuna che interroga WarEra dal vivo. Misurato su 36
- *  eletti: 191 ms via Worker contro 22 ms da qui.
+ *  al Worker, ognuna che interroga WarEra dal vivo, e ogni utente arriva
+ *  intero (~3,8 KB: skill, ranking, statistiche) per due campi che servono.
+ *  Misurato su 36 eletti: 191 KB in 343 ms via Worker contro 5,4 KB in
+ *  79 ms da qui.
  *
  *  Ritorna Map(userId → { username, avatarUrl }) con dentro solo quelli che
  *  il server ha saputo risolvere. Lancia se l'endpoint non c'è (deploy non
@@ -342,6 +344,33 @@ export async function fetchUsersLiteViaCache(userIds) {
   const json = await res.json();
   if (!json?.data || typeof json.data !== 'object') throw new Error('cache /users-lite: forma inattesa');
   return new Map(Object.entries(json.data));
+}
+
+/** Censimento cittadini per nazione (server/warera-cache-server.js:
+ *  pollCitizens, che pagina user.getUsersByCountry per tutte le nazioni).
+ *  È il numero di cittadini di ADESSO — cosa diversa dalla popolazione
+ *  ATTIVA di `rankings.countryActivePopulation`, che è quella che il gioco
+ *  mette in classifica: misurato, gli iscritti sono ~1,07 volte gli attivi.
+ *
+ *  Ritorna { countryId: { n, new24h, new7d } }, o null se il server non ha
+ *  l'endpoint: chi chiama nasconde il dato invece di fallire. */
+let _citizens = null;
+let _citizensPromise = null;
+export function fetchCitizensViaCache() {
+  if (_citizens) return Promise.resolve(_citizens);
+  if (_citizensPromise) return _citizensPromise;
+  _citizensPromise = _fetchCacheJsonRaw('/citizens')
+    .then(json => {
+      if (!json?.data || typeof json.data !== 'object') throw new Error('forma inattesa');
+      _citizens = json.data;
+      return _citizens;
+    })
+    .catch(err => {
+      console.warn('WarEra+ cache: /citizens non disponibile:', err.message);
+      _citizensPromise = null; // riprovabile alla prossima apertura
+      return null;
+    });
+  return _citizensPromise;
 }
 
 // ══════════════════════════════════════════════════════════════

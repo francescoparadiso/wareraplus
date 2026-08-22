@@ -180,6 +180,49 @@ function getNationCode(nationId, nation) {
    pronto, non deve aspettare una richiesta di rete per comparire. Se il
    server non ha il dato, la casella resta nascosta e il pannello è quello
    di prima. */
+/* ── Cittadini (WarEra+) ──
+   La casella "popolazione" mostra `rankings.countryActivePopulation`, cioè
+   gli ATTIVI: è il numero che il gioco mette in classifica, non quanti
+   cittadini ha davvero il paese. Il censimento del server
+   (server/warera-cache-server.js: pollCitizens, che pagina
+   user.getUsersByCountry) dà quello vero — misurato, gli iscritti sono
+   ~1,07 volte gli attivi — più quanti si sono registrati oggi.
+
+   Come per il danno di oggi la casella nasce vuota e si riempie quando la
+   risposta arriva: il resto del pannello viene da `state` ed è già pronto. */
+function citizensStatHtml() {
+  return `<div class="wp-stat" id="wp-stat-citizens" hidden>
+    <div class="wp-stat-label">${t('citizens_label')}</div>
+    <div class="wp-stat-value" id="wp-stat-citizens-value">—</div>
+    <div class="wp-stat-sub" id="wp-stat-citizens-new"></div>
+  </div>`;
+}
+
+/** Riempie la casella sommando le nazioni date (una sola per il pannello
+ *  nazione, tutti i membri per alleanza e sfera). */
+function paintCitizens(nationIds, stillCurrent) {
+  import('../diplomacy/cacheClient.js')
+    .then(m => m.fetchCitizensViaCache())
+    .then(byCountry => {
+      if (!byCountry || !stillCurrent()) return;
+      let n = 0, today = 0, found = 0;
+      for (const id of nationIds) {
+        const row = byCountry[id];
+        if (!row) continue;
+        found++; n += row.n || 0; today += row.new24h || 0;
+      }
+      if (!found) return;
+      const box = document.getElementById('wp-stat-citizens');
+      const value = document.getElementById('wp-stat-citizens-value');
+      const sub = document.getElementById('wp-stat-citizens-new');
+      if (!box || !value) return;
+      value.textContent = fmt(n);
+      if (sub) sub.textContent = today ? t('citizens_new_today', { n: today }) : '';
+      box.hidden = false;
+    })
+    .catch(() => { /* niente casella cittadini, nient'altro cambia */ });
+}
+
 function dailyDamageStatHtml() {
   return `<div class="wp-stat" id="wp-stat-today" hidden>
     <div class="wp-stat-label">🔥 <span id="wp-stat-today-label"></span></div>
@@ -262,6 +305,7 @@ function buildPanelHtml(nation) {
       <div class="wp-stat"><div class="wp-stat-label">${t('population_label')}</div><div class="wp-stat-value">${fmt(pop)}</div></div>
       <div class="wp-stat"><div class="wp-stat-label">${t('wealth_label')}</div><div class="wp-stat-value">${fmt(wealth)}</div></div>
       <div class="wp-stat"><div class="wp-stat-label">${t('weekly_damage_label')}</div><div class="wp-stat-value">${fmt(dmg)}</div></div>
+      ${citizensStatHtml()}
       ${dailyDamageStatHtml()}
       <div class="wp-stat"><div class="wp-stat-label">${t('development_label')}</div><div class="wp-stat-value">${dev != null ? dev.toFixed(1) : '—'}</div></div>
       <div class="wp-stat"><div class="wp-stat-label">${t('defensive_pacts_label')}</div><div class="wp-stat-value">${defensivePacts.length}</div></div>
@@ -328,6 +372,7 @@ function render(nationId) {
 
   renderPlaystyle(nationId);
   paintDailyDamage([nation], () => currentNationId === nationId);
+  paintCitizens([nationId], () => currentNationId === nationId);
 }
 
 /* ── Stile di gioco dei cittadini (WarEra+) ──
@@ -358,7 +403,12 @@ async function renderPlaystyle(nationId) {
   const counts = byCountry[nationId];
   if (!counts?.known) return;
 
-  await paintPlaystyle(host, counts, t('playstyle_note'));
+  // La nota dice la copertura VERA: quanti cittadini hanno skill note su
+  // quanti ne ha il paese (censimento del server, campo `total`). Prima
+  // diceva "sui cittadini tesserati in una unità militare", che era il modo
+  // di dire "non lo sappiamo per tutti" quando l'unico insieme misurabile
+  // erano i tesserati.
+  await paintPlaystyle(host, counts, t('playstyle_note', { n: counts.known, m: counts.total ?? counts.known }));
 
   // Il movimento nelle ultime 24 ore, in una seconda fetch: la fotografia
   // deve comparire subito, la tendenza può arrivare un istante dopo.
@@ -555,6 +605,7 @@ function buildSpherePanelHtml(primaryId) {
       <div class="wp-stat"><div class="wp-stat-label">${t('population_label')}</div><div class="wp-stat-value">${fmt(tot.pop)}</div></div>
       <div class="wp-stat"><div class="wp-stat-label">${t('wealth_label')}</div><div class="wp-stat-value">${fmt(tot.wealth)}</div></div>
       <div class="wp-stat"><div class="wp-stat-label">${t('weekly_damage_label')}</div><div class="wp-stat-value">${fmt(tot.dmg)}</div></div>
+      ${citizensStatHtml()}
       ${dailyDamageStatHtml()}
       <div class="wp-stat"><div class="wp-stat-label">${t('damage_per_player_label')}</div><div class="wp-stat-value">${dmgPerPlayer >= 1000 ? fmt(dmgPerPlayer) : dmgPerPlayer.toFixed(1)}</div></div>
       <div class="wp-stat"><div class="wp-stat-label">${t('active_wars_label')}</div><div class="wp-stat-value">${tot.wars}</div></div>
@@ -606,6 +657,7 @@ function renderSpherePanel(primaryId) {
   const info = state.sphereInfo.find(s => s.primaryId === primaryId);
   const sphereNations = [primaryId, ...(info?.proxyIds || [])].map(id => state.nationMap.get(id)).filter(Boolean);
   paintDailyDamage(sphereNations, () => currentSphereId === primaryId);
+  paintCitizens(sphereNations.map(n => n._id), () => currentSphereId === primaryId);
 }
 
 /* ── Riepilogo di TUTTE le sfere (WarEra+) ──
@@ -807,6 +859,7 @@ function buildBlocPanelHtml(allianceId) {
       <div class="wp-stat"><div class="wp-stat-label">${t('population_label')}</div><div class="wp-stat-value">${fmt(totalPop)}</div></div>
       <div class="wp-stat"><div class="wp-stat-label">${t('wealth_label')}</div><div class="wp-stat-value">${fmt(totalWealth)}</div></div>
       <div class="wp-stat"><div class="wp-stat-label">${t('weekly_damage_label')}</div><div class="wp-stat-value">${fmt(totalWeeklyDamage)}</div></div>
+      ${citizensStatHtml()}
       ${dailyDamageStatHtml()}
       <div class="wp-stat"><div class="wp-stat-label">${t('damage_per_player_label')}</div><div class="wp-stat-value">${damagePerPlayer >= 1000 ? fmt(damagePerPlayer) : damagePerPlayer.toFixed(1)}</div></div>
       <div class="wp-stat"><div class="wp-stat-label">${t('active_wars_label')}</div><div class="wp-stat-value">${warTargets.length}</div></div>
@@ -912,6 +965,7 @@ function renderBlocPanel(allianceId) {
 
   renderBlocPlaystyle(allianceId, members.map(m => m._id));
   paintDailyDamage(members, () => currentBlocId === allianceId);
+  paintCitizens(members.map(m => m._id), () => currentBlocId === allianceId);
   _renderBlocParliamentsQueued(members);
 }
 

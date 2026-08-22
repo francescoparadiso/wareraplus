@@ -72,6 +72,53 @@ Due uscite: il conteggio per unità (campo `playstyle` di ogni voce di
 qualche KB — sta in un endpoint suo perché il pannello nazione non deve
 scaricare 1 MB di directory per mostrare tre numeri).
 
+### Censimento cittadini (`/citizens`)
+
+`user.getUsersByCountry` elenca **tutti** i cittadini di una nazione (solo
+`_id` e `createdAt`, 100 per pagina, a cursore). Non e' un campione: e'
+l'elenco vero. Misurato dal vivo — Italia 430 cittadini contro i 401 di
+`rankings.countryActivePopulation`, e su 14 nazioni il rapporto sta stabile
+a 1,07: la classifica conta gli **attivi**, questo conta gli **iscritti**.
+
+`pollCitizens` (ogni ora, :36) chiede la pagina successiva di tutte le
+nazioni che ne hanno ancora una, in batch da 100 procedure: il censimento
+completo del mondo sono **13 richieste, 1,3 MB, 4 secondi** (16.784
+cittadini in 180 nazioni, 12 giri). Endpoint `/citizens` → per nazione
+`{ n, new24h, new7d }` (gli elenchi di userId restano sul server).
+
+Cosa cambia a valle:
+
+- **utente → nazione arriva gratis**: prima la si scopriva spendendo una
+  `user.getUserLite` per ogni membro di unita' militare, con ~4 ore di
+  riscaldamento dopo ogni deploy. Ora il censimento la porta al primo giro,
+  ed e' anche piu' corretta: chi cambiava paese restava contato nel vecchio
+  (misurato: una nazione al 104% dei suoi cittadini reali).
+- **stile di gioco sul censimento**: `playstyleByCountry` itera sui
+  cittadini censiti, non piu' sui soli tesserati, e ogni voce porta `total`
+  = cittadini della nazione. Il client mostra la copertura vera ("430 su
+  430") al posto della formula "sui cittadini tesserati in una unita'
+  militare". Copertura misurata dopo il primo giro: **100%**.
+- la coda di risoluzione skill copre ora cittadini censiti + membri MU
+  (~19k voci): stesso ordine di grandezza di prima, non lavoro in piu'.
+
+### Nome e avatar dei giocatori (`/users-lite`)
+
+I grafici parlamento mostrano faccia e nome di ogni eletto e di ogni membro
+del governo. Il client li prendeva da `user.getUserLite`, una chiamata per
+utente accorpata in batch da 50: per un blocco di venti nazioni sono ~300
+utenti in sei richieste al Worker, e ogni utente arriva **intero** (~3,8 KB:
+skill, ranking, statistiche) per i due campi che servono.
+
+`resolveUsersLite` tiene una mappa `userId → [username, avatarUrl, ts]` con
+TTL 7 giorni (nome e avatar cambiano di rado) e la serve in una richiesta
+sola; gli utenti mancanti li scarica il server, con un tetto di 300 per
+richiesta. Misurato su 36 eletti: **191 KB in 343 ms** dal Worker contro
+**5,4 KB in 79 ms** da qui.
+
+Insieme a `/elections?countryIds=` e `/elections-detail?ids=` (stessa
+ragione: una richiesta per l'intero blocco invece di una per nazione), il
+parlamento di un blocco da 12 nazioni è passato da ~27 richieste HTTP a 5.
+
 ### Danno di oggi (`/daily-damage`)
 
 WarEra pubblica il danno **settimanale** cumulato di ogni nazione, mai quello

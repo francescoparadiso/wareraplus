@@ -696,17 +696,43 @@ function appendPlaystyleHistory(byCountry, now) {
   return changed;
 }
 
-function playstyleByCountry(userCountries) {
+function playstyleByCountry(userCountries, censusMap, counts) {
   const byCountry = {};
+  const row = (country) => byCountry[country]
+    || (byCountry[country] = { war: 0, eco: 0, mixed: 0, undecided: 0, known: 0, total: counts?.[country] ?? null });
+
+  // Con il censimento la nazione di un utente è quella di ADESSO (vedi
+  // pollCitizens): si conta lì, non dove lo aveva visto l'ultima
+  // risoluzione delle skill — che può essere di ore prima, e chi ha
+  // cambiato paese restava contato nel vecchio (misurato: una nazione al
+  // 104% dei suoi cittadini reali). `total` dice su quanti cittadini è
+  // calcolata la fotografia, così il client mostra la copertura vera
+  // invece di una formula sul campione.
+  if (censusMap?.size) {
+    for (const [userId, country] of censusMap) {
+      const r = row(country);
+      const mode = userCountries[userId]?.[2];
+      if (!mode) continue;             // cittadino censito ma skill non ancora note
+      r.known++;
+      if (mode === 'w') r.war++;
+      else if (mode === 'e') r.eco++;
+      else if (mode === 'm') r.mixed++;
+      else r.undecided++;
+    }
+    return byCountry;
+  }
+
+  // Censimento non ancora disponibile (primo avvio): comportamento
+  // precedente, sui soli utenti di cui conosciamo nazione e stile.
   for (const entry of Object.values(userCountries)) {
     const [country, , mode] = entry;
     if (!country || !mode) continue;
-    const row = byCountry[country] || (byCountry[country] = { war: 0, eco: 0, mixed: 0, undecided: 0, known: 0 });
-    row.known++;
-    if (mode === 'w') row.war++;
-    else if (mode === 'e') row.eco++;
-    else if (mode === 'm') row.mixed++;
-    else row.undecided++;
+    const r = row(country);
+    r.known++;
+    if (mode === 'w') r.war++;
+    else if (mode === 'e') r.eco++;
+    else if (mode === 'm') r.mixed++;
+    else r.undecided++;
   }
   return byCountry;
 }
@@ -751,6 +777,17 @@ async function pollMuDirectory() {
     const now = Date.now();
     const userCountries = readCache(MU_USER_COUNTRIES_FILE, { data: {} }).data || {};
 
+    // Censimento (pollCitizens): nazione di ADESSO per ogni cittadino. Dove
+    // c'è, vince sulla nazione memorizzata insieme alle skill, che è vecchia
+    // quanto l'ultima risoluzione di quell'utente. Le voci nuove nascono qui
+    // con la nazione già giusta e restano in attesa solo delle skill.
+    const censusMap = citizenCountryMap();
+    for (const [userId, country] of censusMap) {
+      const entry = userCountries[userId];
+      if (entry) entry[0] = country;
+      else userCountries[userId] = [country, 0, null, null]; // ts 0 = skill mai risolte, priorità massima
+    }
+
     // Chi va (ri)chiesto, in ordine di priorità:
     //   1) chi non conosciamo affatto (nuovo membro) — sempre, subito;
     //   2) chi è in mappa da prima che salvassimo lastSkillsResetAt (voci a
@@ -768,15 +805,20 @@ async function pollMuDirectory() {
     const eligibleDue = []; // [id, ultimo controllo] — "liberi" e scaduto il giorno
     const currentMembers = new Set();
     for (const m of mus) {
-      for (const id of m.members || []) {
-        currentMembers.add(id);
-        const entry = userCountries[id];
-        if (!entry || entry.length < 4) { unknown.push(id); continue; }
-        const lastReset = entry[3];
-        const locked = lastReset && (now - Date.parse(lastReset)) < RESET_COOLDOWN_MS;
-        if (locked) continue; // bloccato dal cooldown: non può essere cambiato, si salta
-        if (now - entry[1] >= REFRESH_WINDOW_MS) eligibleDue.push([id, entry[1]]);
-      }
+      for (const id of m.members || []) currentMembers.add(id);
+    }
+    // La coda copre i membri di unità E tutti i cittadini censiti: lo stile
+    // di gioco per nazione ora si calcola sul censimento, quindi servono le
+    // skill di chiunque, non solo di chi è tesserato. È lo stesso ordine di
+    // grandezza (~15k cittadini contro ~16k membri), non lavoro in più.
+    const candidates = new Set([...currentMembers, ...censusMap.keys()]);
+    for (const id of candidates) {
+      const entry = userCountries[id];
+      if (!entry || entry.length < 4 || !entry[2]) { unknown.push(id); continue; }
+      const lastReset = entry[3];
+      const locked = lastReset && (now - Date.parse(lastReset)) < RESET_COOLDOWN_MS;
+      if (locked) continue; // bloccato dal cooldown: non può essere cambiato, si salta
+      if (now - entry[1] >= REFRESH_WINDOW_MS) eligibleDue.push([id, entry[1]]);
     }
     eligibleDue.sort((a, b) => a[1] - b[1]); // i più in ritardo prima
     const windowShare = Math.max(50, Math.ceil(eligibleDue.length / REFRESH_CYCLES_PER_WINDOW));
@@ -791,9 +833,11 @@ async function pollMuDirectory() {
       });
     }
 
-    // Potatura: via chi non è più membro di nessuna unità.
+    // Potatura: via chi non è né cittadino censito né membro di un'unità
+    // (account cancellati, o membri usciti quando il censimento non c'è
+    // ancora — nel qual caso vale il criterio di prima).
     for (const id of Object.keys(userCountries)) {
-      if (!currentMembers.has(id)) delete userCountries[id];
+      if (!currentMembers.has(id) && !censusMap.has(id)) delete userCountries[id];
     }
     writeCache(MU_USER_COUNTRIES_FILE, { fetchedAt: now, data: userCountries }, { compact: true });
 
@@ -808,13 +852,15 @@ async function pollMuDirectory() {
     // Aggregato per nazione: 165 nazioni per quattro numeri, qualche KB —
     // sta in un file suo perché il pannello nazione non deve scaricarsi
     // l'intera directory (~1 MB) per mostrare tre conteggi.
-    const byCountry = playstyleByCountry(userCountries);
+    const byCountry = playstyleByCountry(userCountries, censusMap, citizenCounts());
     writeCache('mu-playstyle-by-country', { fetchedAt: now, data: byCountry });
     const historyChanged = appendPlaystyleHistory(byCountry, now);
 
-    const resolved = Object.keys(userCountries).length;
-    const styled = Object.values(userCountries).filter(e => e.length >= 3).length;
-    console.log(`[poll] mu-directory aggiornato (${mus.length} MU, ${resolved}/${currentMembers.size} membri con nazione nota, ${styled} con stile di gioco, ${eligibleDue.length} liberi in attesa di refresh (presi ${dueBatch.length}/${windowShare} di quota per giro), ${toResolve.length} risolti in questo giro, ${historyChanged} nazioni con storico aggiornato)`);
+    // La mappa copre ora cittadini censiti + membri di unità (l'unione),
+    // quindi il totale non si confronta più coi soli membri MU.
+    const tracked = Object.keys(userCountries).length;
+    const styled = Object.values(userCountries).filter(e => e[2]).length;
+    console.log(`[poll] mu-directory aggiornato (${mus.length} MU, ${tracked} utenti seguiti — ${currentMembers.size} membri MU + ${censusMap.size} cittadini censiti, ${styled} con stile di gioco noto, ${eligibleDue.length} in attesa di refresh (presi ${dueBatch.length}/${windowShare} di quota per giro), ${toResolve.length} risolti in questo giro, ${historyChanged} nazioni con storico aggiornato)`);
   } catch (err) { console.error('[poll] mu-directory fallito:', err.message); }
 }
 
@@ -1175,22 +1221,129 @@ function pollTickerEvents(countries, diplomacy) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// CENSIMENTO CITTADINI (/citizens)
+// -----------------------------------------------------------------------
+// `user.getUsersByCountry` elenca TUTTI i cittadini di una nazione (solo
+// _id e createdAt, 100 per pagina, a cursore): non un campione, l'elenco
+// vero. Verificato dal vivo: 430 cittadini per l'Italia contro i 401 di
+// `rankings.countryActivePopulation`, e su 14 nazioni il rapporto sta
+// stabile a 1,07 — la classifica conta gli ATTIVI, questo conta gli
+// iscritti.
+//
+// Serve a tre cose:
+//   1) il numero di cittadini di adesso, che prima non esisteva come dato
+//      (c'era solo la popolazione attiva della classifica);
+//   2) la mappa utente → nazione, che finora si ricavava spendendo una
+//      `user.getUserLite` per ogni membro di unità militare: da qui arriva
+//      gratis, quindi tutto il budget di lookup resta per le skill e la
+//      composizione delle MU non ha più bisogno di ~4 ore di riscaldamento
+//      dopo un deploy. È anche più CORRETTA: chi cambia nazione restava
+//      contato dove stava (misurato: Paesi Bassi al 104% dei suoi
+//      cittadini reali);
+//   3) lo stile di gioco per nazione calcolato sul censimento, con la
+//      copertura vera esposta al client (`known` su `total`) invece della
+//      formula "sui cittadini tesserati in una unità militare".
+//
+// Costo: le prime pagine di tutte le nazioni stanno in due richieste batch
+// (100 procedure l'una), poi un giro per ogni pagina in più delle nazioni
+// grandi — una dozzina di richieste in tutto, non 180.
+// ═══════════════════════════════════════════════════════════════════════
+const CITIZENS_FILE = 'citizens-by-country';
+const CITIZENS_PAGE = 100;          // massimo accettato da user.getUsersByCountry
+const CITIZENS_MAX_ROUNDS = 40;     // guardia: 4000 cittadini per nazione
+
+async function pollCitizens() {
+  try {
+    const countriesCache = readCache('countries', null);
+    const countries = countriesCache?.data?.result?.data || countriesCache?.data || [];
+    if (!countries.length) { console.log('[poll] citizens: nessuna nazione in cache ancora, salto'); return; }
+
+    const now = Date.now();
+    const idsByCountry = new Map(countries.map(c => [c._id, []]));
+    const newestByCountry = new Map();   // countryId -> [createdAt...] (solo recenti, per i "nuovi")
+    // Ogni giro chiede la pagina successiva di TUTTE le nazioni che ne hanno
+    // ancora una: le nazioni piccole finiscono al primo, le grandi tirano
+    // avanti da sole senza far aspettare le altre.
+    let pending = countries.map(c => ({ id: c._id, cursor: null }));
+    let round = 0;
+    while (pending.length && round < CITIZENS_MAX_ROUNDS) {
+      round++;
+      const calls = pending.map(p => ['user.getUsersByCountry', {
+        countryId: p.id, limit: CITIZENS_PAGE, ...(p.cursor ? { cursor: p.cursor } : {}),
+      }]);
+      const results = await trpcBatch(calls, { useWorker: true });
+      const next = [];
+      results.forEach((res, i) => {
+        const p = pending[i];
+        if (!res?.items) return;          // pagina fallita: la nazione resta con quel che ha
+        const list = idsByCountry.get(p.id);
+        if (!newestByCountry.has(p.id)) newestByCountry.set(p.id, []);
+        const recent = newestByCountry.get(p.id);
+        for (const u of res.items) {
+          list.push(u._id);
+          if (u.createdAt) recent.push(u.createdAt);
+        }
+        if (res.nextCursor) next.push({ id: p.id, cursor: res.nextCursor });
+      });
+      pending = next;
+    }
+
+    const DAY = 24 * 60 * 60 * 1000;
+    const data = {};
+    let total = 0;
+    for (const [countryId, ids] of idsByCountry) {
+      const dates = newestByCountry.get(countryId) || [];
+      let new24h = 0, new7d = 0;
+      for (const d of dates) {
+        const age = now - Date.parse(d);
+        if (age <= DAY) new24h++;
+        if (age <= 7 * DAY) new7d++;
+      }
+      data[countryId] = { n: ids.length, ids, new24h, new7d };
+      total += ids.length;
+    }
+    writeCache(CITIZENS_FILE, { fetchedAt: now, data }, { compact: true });
+    console.log(`[poll] citizens aggiornato: ${total} cittadini in ${idsByCountry.size} nazioni, ${round} giri`);
+  } catch (err) { console.error('[poll] citizens fallito:', err.message); }
+}
+
+/** Mappa userId → countryId dal censimento (autorevole: è la nazione di
+ *  adesso). Vuota finché il primo giro non è passato. */
+function citizenCountryMap() {
+  const cache = readCache(CITIZENS_FILE, { data: {} });
+  const map = new Map();
+  for (const [countryId, row] of Object.entries(cache.data || {})) {
+    for (const id of row.ids || []) map.set(id, countryId);
+  }
+  return map;
+}
+
+/** Quanti cittadini ha ogni nazione, dal censimento. */
+function citizenCounts() {
+  const cache = readCache(CITIZENS_FILE, { data: {} });
+  const out = {};
+  for (const [countryId, row] of Object.entries(cache.data || {})) out[countryId] = row.n || 0;
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // NOME + AVATAR DEI GIOCATORI (/users-lite)
 // -----------------------------------------------------------------------
 // I grafici parlamento mostrano faccia e nome di ogni eletto e di ogni
 // membro del governo. Il client li prendeva da `user.getUserLite`, una
 // chiamata per utente accorpata in batch da 50: per un blocco di venti
-// nazioni sono ~300 utenti, cioè sei richieste al Worker in fila, ognuna
-// che va a interrogare WarEra dal vivo. Il peso non è il problema (la
-// risposta è già leggera, ~170 byte a testa): è la LATENZA ripetuta.
+// nazioni sono ~300 utenti in sei richieste al Worker, ognuna che
+// interroga WarEra dal vivo. E `user.getUserLite` risponde con TUTTO
+// l'utente (skill, ranking, statistiche: ~3,8 KB a testa) mentre qui
+// servono due campi.
 //
 // Qui il server tiene una mappa userId → [username, avatarUrl, ts] e la
 // serve in una richiesta sola, letta da disco. Gli utenti che non ha
 // ancora li chiede lui a WarEra (stesso trpcBatch degli altri poll, quindi
 // con retry e rate control) una volta sola: nome e avatar cambiano di
-// rado, da cui il TTL lungo. Misurato su 36 eletti: 191 ms dal Worker
-// contro 22 ms da qui a mappa piena (197 ms il primo giro, quello in cui
-// il server li scarica).
+// rado, da cui il TTL lungo. Misurato su 36 eletti: 191 KB in 343 ms dal
+// Worker contro 5,4 KB in 79 ms da qui (il primo giro, quello in cui il
+// server li scarica, costa ~200 ms).
 // ═══════════════════════════════════════════════════════════════════════
 const USERS_LITE_FILE = 'users-lite';
 const USERS_LITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -1625,6 +1778,7 @@ cron.schedule('1,4,7,10,13,16,19,22,25,28,31,34,37,40,43,46,49,52,55,58 * * * *'
 cron.schedule('2,5,8,11,14,17,20,23,26,29,32,35,38,41,44,47,50,53,56,59 * * * *', pollElections); // ogni 3 min, :02
 cron.schedule('9,24,39,54 * * * *', pollGameEvents);                  // ogni 15 min, :09 (nota 6)
 cron.schedule('12,42 * * * *', pollMuDirectory);            // ogni 30 min, :12 (directory unità militari)
+cron.schedule('36 * * * *', pollCitizens);                  // ogni ora, :36 (censimento cittadini)
 // Bootstrap storico — DISATTIVATO (round 4): troppo lento (1 pagina/min,
 // poteva metterci ore/giorni) e comunque reso ridondante da
 // pollExternalHistory qui sotto, che sovrascrive region-history-keyframes/
@@ -1647,6 +1801,7 @@ cron.schedule('1 2 * * *', snapshotDailyDamage, { timezone: DAILY_DAMAGE_TZ });
 // il resto dipende dalla cache delle nazioni), così non si parte a vuoto.
 (async () => {
   await pollCountries();
+  await pollCitizens();   // dipende da countries; deve girare PRIMA di pollMuDirectory
   await pollMap();
   await pollRegionsObject();
   await pollAlliances();
@@ -1734,6 +1889,19 @@ app.get('/users-lite', async (req, res) => {
     console.error('[users-lite] richiesta fallita:', err.message);
     res.json({ data: {} });
   }
+});
+
+// Quanti cittadini ha ogni nazione ADESSO (censimento, vedi pollCitizens),
+// piu' quanti si sono registrati nelle ultime 24 ore e negli ultimi 7 giorni.
+// Gli elenchi di userId restano sul server: al client servono i conteggi.
+app.get('/citizens', (req, res) => {
+  const cache = readCache(CITIZENS_FILE, { fetchedAt: null, data: {} });
+  const out = {};
+  for (const [countryId, row] of Object.entries(cache.data || {})) {
+    if (req.query.countryId && req.query.countryId !== countryId) continue;
+    out[countryId] = { n: row.n || 0, new24h: row.new24h || 0, new7d: row.new7d || 0 };
+  }
+  res.json({ fetchedAt: cache.fetchedAt, data: out });
 });
 
 app.get('/diplomacy', (req, res) => res.json(readCache('diplomacy', { fetchedAt: null, data: [] })));

@@ -140,12 +140,16 @@ export function playstyleSwitch(delta, base) {
  *  totale è costruito — un blocco di 20 nazioni con dati per 12 va detto,
  *  non nascosto dietro una barra che sembra completa. */
 export function sumPlaystyleCounts(list) {
-  const out = { war: 0, eco: 0, mixed: 0, undecided: 0, known: 0, countries: 0 };
+  const out = { war: 0, eco: 0, mixed: 0, undecided: 0, known: 0, countries: 0, total: 0 };
   for (const c of list) {
     if (!c?.known) continue;
     out.countries++;
     for (const g of PLAYSTYLE_GROUPS) out[g] += c[g] || 0;
     out.known += c.known;
+    // `total` = cittadini censiti della nazione (server: pollCitizens).
+    // Manca sui server vecchi: in quel caso si ripiega su `known`, così la
+    // somma resta un numero sensato invece di zero.
+    out.total += (c.total ?? c.known);
   }
   return out;
 }
