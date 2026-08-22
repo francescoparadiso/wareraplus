@@ -460,20 +460,171 @@ body.light-theme .wp-mu-statcard-label { color: #5b6473; }
 }
 .wp-mu-section-title .wp-mu-count { margin-left: 0; padding-bottom: 0; }
 
+/* Scheda membro "ricca": intestazione (avatar, nome, bandiera, stile di
+   gioco) più una griglia di statistiche. I dati arrivano tutti dalla
+   stessa user.getUserLite che la scheda faceva già — vedi memberCard()
+   in src/mu/muDetail.js. */
 .wp-mu-member-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
 }
 .wp-mu-member {
-  display: flex; align-items: center; gap: 10px;
-  padding: 9px 11px;
+  display: flex; flex-direction: column; gap: 9px;
+  padding: 11px 12px;
   background: #161b22;
   border: 1px solid #30363d;
   border-radius: 10px;
   text-decoration: none;
   color: inherit;
   transition: border-color .15s;
+}
+.wp-mu-member-top { display: flex; align-items: center; gap: 10px; }
+.wp-mu-member-nick { overflow: hidden; text-overflow: ellipsis; }
+
+/* Strumenti della sezione membri: ordinamento + scelta della vista. */
+.wp-mu-member-tools { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+/* Segmentato Lista / Card. */
+.wp-mu-viewswitch { display: inline-flex; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+.wp-mu-viewswitch button {
+  padding: 5px 12px;
+  background: #161b22;
+  border: none;
+  color: #8b949e;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.wp-mu-viewswitch button + button { border-left: 1px solid #30363d; }
+.wp-mu-viewswitch button:hover { color: #e6edf3; }
+.wp-mu-viewswitch button.active { background: #21262d; color: #e6edf3; }
+body.light-theme .wp-mu-viewswitch { border-color: #d5dae3; }
+body.light-theme .wp-mu-viewswitch button { background: #fff; color: #5b6473; }
+body.light-theme .wp-mu-viewswitch button + button { border-left-color: #d5dae3; }
+body.light-theme .wp-mu-viewswitch button.active { background: #eef1f5; color: #1f2430; }
+
+/* ── Vista LISTA dei membri ──
+   Griglia a colonne fisse come l'elenco unità, ma con le sue colonne:
+   scorre in orizzontale su schermi stretti invece di comprimersi
+   illeggibile. */
+.wp-mu-mtable-wrap { overflow-x: auto; }
+.wp-mu-mtable { --wp-mu-mcols: minmax(190px, 1.6fr) 52px 60px 92px repeat(7, minmax(78px, .8fr)); min-width: 1080px; }
+.wp-mu-mt-head, .wp-mu-mt-row {
+  display: grid;
+  grid-template-columns: var(--wp-mu-mcols);
+  align-items: center;
+  gap: 8px;
+}
+.wp-mu-mt-head {
+  position: sticky; top: 0; z-index: 2;
+  padding: 0 8px 6px;
+  background: #0d1117;
+  border-bottom: 1px solid #30363d;
+}
+body.light-theme .wp-mu-mt-head { background: #f4f6fa; border-bottom-color: #d5dae3; }
+.wp-mu-mt-th {
+  background: none; border: none; padding: 4px 0;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: #8b949e; cursor: pointer; text-align: left;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wp-mu-mt-th:hover { color: #e6edf3; }
+.wp-mu-mt-th.active { color: #58a6ff; }
+.wp-mu-mt-th.active::after { content: ' ▾'; }
+.wp-mu-mt-th.wp-mu-mt-static { cursor: default; }
+body.light-theme .wp-mu-mt-th { color: #5b6473; }
+body.light-theme .wp-mu-mt-th.active { color: #2f6fed; }
+
+.wp-mu-mt-row {
+  padding: 7px 8px;
+  border-bottom: 1px solid #21262d;
+  font-size: 13px;
+  text-decoration: none;
+  color: inherit;
+}
+.wp-mu-mt-row:hover { background: rgba(88, 166, 255, .07); }
+body.light-theme .wp-mu-mt-row { border-bottom-color: #e3e7ee; }
+.wp-mu-mt-row > span {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.wp-mu-mt-num { text-align: right; }
+.wp-mu-mt-name { display: flex; align-items: center; gap: 7px; font-weight: 600; }
+.wp-mu-mt-role {
+  flex-shrink: 0;
+  padding: 1px 6px; border-radius: 999px;
+  background: rgba(139, 148, 158, .14);
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: #8b949e;
+}
+.wp-mu-avatar-xs { width: 20px; height: 20px; flex-shrink: 0; }
+.wp-mu-mt-row .wk { color: #58a6ff; font-weight: 700; }
+.wp-mu-mt-row .money { color: #3fb950; }
+.wp-mu-mt-row .when { color: #8b949e; }
+body.light-theme .wp-mu-mt-row .when { color: #5b6473; }
+.wp-mu-mt-row .wp-mu-ps-pill { justify-self: start; }
+
+/* Selettore di ordinamento accanto al titolo della sezione. */
+.wp-mu-member-sort {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 500; color: #8b949e;
+}
+body.light-theme .wp-mu-member-sort { color: #5b6473; }
+.wp-mu-member-sort select {
+  padding: 5px 8px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 7px;
+  color: #e6edf3;
+  font-size: 12px;
+  cursor: pointer;
+}
+body.light-theme .wp-mu-member-sort select { background: #fff; border-color: #d5dae3; color: #1f2430; }
+
+/* Pastiglia dello stile di gioco (stessi colori della barra guerra/eco). */
+.wp-mu-ps-pill {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em;
+  border: 1px solid transparent;
+}
+.wp-mu-ps-war { color: #f85149; background: rgba(248, 81, 73, .12); border-color: rgba(248, 81, 73, .35); }
+.wp-mu-ps-eco { color: #3fb950; background: rgba(63, 185, 80, .12); border-color: rgba(63, 185, 80, .35); }
+.wp-mu-ps-mixed { color: #e3b341; background: rgba(227, 179, 65, .12); border-color: rgba(227, 179, 65, .35); }
+.wp-mu-ps-undecided { color: #8b949e; background: rgba(139, 148, 158, .1); border-color: rgba(139, 148, 158, .3); }
+
+/* Griglia delle statistiche del singolo membro. */
+.wp-mu-member-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
+  gap: 6px 10px;
+  padding-top: 8px;
+  border-top: 1px solid #21262d;
+}
+body.light-theme .wp-mu-member-stats { border-top-color: #e3e7ee; }
+.wp-mu-mcell { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.wp-mu-mcell-k {
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em;
+  color: #8b949e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+body.light-theme .wp-mu-mcell-k { color: #5b6473; }
+.wp-mu-mcell-v {
+  font-size: 12.5px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wp-mu-mcell-v.wk { color: #58a6ff; }
+.wp-mu-mcell-v.money { color: #3fb950; }
+.wp-mu-mcell-v.when { font-weight: 600; color: #8b949e; }
+body.light-theme .wp-mu-mcell-v.when { color: #5b6473; }
+.wp-mu-mcell-v .wp-mu-tier { font-size: 9px; padding: 1px 5px; vertical-align: middle; }
+
+@media (max-width: 640px) {
+  .wp-mu-member-grid { grid-template-columns: 1fr; }
 }
 .wp-mu-member:hover { border-color: #58a6ff; }
 body.light-theme .wp-mu-member { background: #fff; border-color: #d5dae3; }

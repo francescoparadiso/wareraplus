@@ -829,7 +829,13 @@ async function pollMuDirectory() {
       const users = await trpcBatch(toResolve.map(id => ['user.getUserLite', { userId: id }]), { useWorker: true });
       toResolve.forEach((id, i) => {
         const u = users[i];
-        if (u?.country) userCountries[id] = [u.country, now, classifyPlaystyle(u), u.dates?.lastSkillsResetAt || null];
+        // Quinto elemento (aggiunto dopo): la fotografia statistica del
+        // cittadino, per l'elenco cittadini di Statistiche nazioni
+        // (/country-citizens). getUserLite la porta GIA' con se' — prima
+        // veniva scartata e restavano solo nazione e stile di gioco.
+        // In coda all'array apposta: [0..3] restano quello che erano,
+        // nessun consumatore esistente da aggiornare.
+        if (u?.country) userCountries[id] = [u.country, now, classifyPlaystyle(u), u.dates?.lastSkillsResetAt || null, citizenStats(u)];
       });
     }
 
@@ -1305,6 +1311,38 @@ async function pollCitizens() {
     writeCache(CITIZENS_FILE, { fetchedAt: now, data }, { compact: true });
     console.log(`[poll] citizens aggiornato: ${total} cittadini in ${idsByCountry.size} nazioni, ${round} giri`);
   } catch (err) { console.error('[poll] citizens fallito:', err.message); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ELENCO CITTADINI CON STATISTICHE (/country-citizens)
+   -----------------------------------------------------------------------
+   La vista "Statistiche nazioni" del client vuole i cittadini di una
+   nazione con i loro numeri. Dal browser sarebbe impossibile: il gioco
+   espone solo gli id (user.getUsersByCountry) e poi una chiamata per
+   utente — 3.500 richieste per le nazioni grandi.
+
+   Qui invece non costa nulla di nuovo: pollMuDirectory risolve GIA'
+   user.getUserLite per tutti i cittadini censiti (gli serve per lo stile
+   di gioco), quindi basta tenere da parte anche i numeri che quella
+   risposta contiene. L'endpoint li rilegge e li unisce al censimento.
+
+   Compatto di proposito (array di valori, non oggetti con chiavi
+   ripetute 3.500 volte): a chiavi estese la sola Serbia sarebbe ~700 KB.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function citizenStats(u) {
+  return [
+    u.username || null,
+    u.avatarUrl || null,
+    u.leveling?.level ?? null,
+    u.militaryRank ?? null,
+    u.rankings?.weeklyUserDamages?.value ?? 0,
+    u.rankings?.userDamages?.value ?? u.stats?.damagesCount ?? 0,
+    u.rankings?.userWealth?.value ?? 0,
+    u.rankings?.userBounty?.value ?? 0,
+    u.skills?.attack?.total ?? null,
+    Date.parse(u.dates?.lastConnectionAt) || null,
+  ];
 }
 
 /** Mappa userId → countryId dal censimento (autorevole: è la nazione di
@@ -1902,6 +1940,41 @@ app.get('/citizens', (req, res) => {
     out[countryId] = { n: row.n || 0, new24h: row.new24h || 0, new7d: row.new7d || 0 };
   }
   res.json({ fetchedAt: cache.fetchedAt, data: out });
+});
+
+// Cittadini di UNA nazione con le loro statistiche (vedi citizenStats).
+// `limit` taglia l'elenco ai piu' forti per danno settimanale: il client
+// non ha bisogno di 3.500 righe tutte insieme, e la risposta resta sotto
+// il centinaio di KB.
+app.get('/country-citizens', (req, res) => {
+  const countryId = String(req.query.countryId || '');
+  if (!countryId) return res.status(400).json({ error: 'countryId mancante' });
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 500, 1), 5000);
+
+  const census = readCache(CITIZENS_FILE, { fetchedAt: null, data: {} });
+  const row = census.data?.[countryId];
+  if (!row) return res.json({ fetchedAt: census.fetchedAt, total: 0, known: 0, data: [] });
+
+  const userCountries = readCache(MU_USER_COUNTRIES_FILE, { data: {} }).data || {};
+  const out = [];
+  for (const id of row.ids || []) {
+    const entry = userCountries[id];
+    const st = entry?.[4];
+    if (!st) continue;              // skill/stat non ancora risolte per questo utente
+    out.push({
+      id,
+      u: st[0], a: st[1], lv: st[2], mr: st[3],
+      wk: st[4], dmg: st[5], w: st[6], b: st[7], atk: st[8], seen: st[9],
+      ps: entry[2]?.mode || null,
+    });
+  }
+  out.sort((a, b) => (b.wk || 0) - (a.wk || 0));
+  res.json({
+    fetchedAt: census.fetchedAt,
+    total: row.n || (row.ids?.length ?? 0),
+    known: out.length,
+    data: out.slice(0, limit),
+  });
 });
 
 app.get('/diplomacy', (req, res) => res.json(readCache('diplomacy', { fetchedAt: null, data: [] })));

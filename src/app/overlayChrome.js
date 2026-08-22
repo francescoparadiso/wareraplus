@@ -40,6 +40,9 @@ export const OVERLAY_TINTS = {
   // viola → rosa
   alliance: { rgbDark: '163,113,247', rgbDark2: '247,120,186',
               rgbLight: '110,66,193', rgbLight2: '183,52,124' },
+  // ciano → verde acqua
+  nations:  { rgbDark: '57,208,216',  rgbDark2: '63,185,80',
+              rgbLight: '17,138,144', rgbLight2: '26,127,55' },
 };
 
 const _stoppers = new WeakMap();

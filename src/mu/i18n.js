@@ -30,7 +30,7 @@ const MU_DICT = {
     pin: 'Pin to favorites', unpin: 'Remove from favorites', updated: 'Updated at',
     colWeekly: "Weekly dmg", colToday: "Today", colTotal: "Total dmg", colTerrain: "Territory", colWealth: "Wealth", colBounty: "Bounty", colRep: "Reputation", colMembers: "Members", colComposition: "Composition", others: "others", composition: "Member nationalities", registeredIn: "Registered in", deFacto: "de facto", unknownCountry: "unknown",
     playstyle: "Playstyle", colPlaystyle: "War / Eco", psWar: "war", psEco: "economy", psMixed: "hybrid", psUndecided: "no points spent",
-    detailError: 'Could not load this unit', country: 'Country',
+    detailError: 'Could not load this unit', country: 'Country', memberSortBy: 'Sort members', lastSeen: 'Last seen', mrank: 'Military rank', atk: 'Attack', crit: 'Crit', viewList: 'List', viewCards: 'Cards', member: 'Member',
   },
   it: {
     title: 'Unità Militari', subtitle: 'unità', tabList: 'Elenco', tabRanking: 'Classifiche',
@@ -47,7 +47,7 @@ const MU_DICT = {
     pin: 'Aggiungi ai preferiti', unpin: 'Rimuovi dai preferiti', updated: 'Aggiornato alle',
     colWeekly: "Danni sett.", colToday: "Oggi", colTotal: "Danni tot.", colTerrain: "Territorio", colWealth: "Ricchezza", colBounty: "Taglie", colRep: "Reputazione", colMembers: "Membri", colComposition: "Composizione", others: "altri", composition: "Nazionalità dei membri", registeredIn: "Registrata in", deFacto: "de facto", unknownCountry: "sconosciuta",
     playstyle: "Stile di gioco", colPlaystyle: "Guerra / Eco", psWar: "guerra", psEco: "economia", psMixed: "ibridi", psUndecided: "senza punti spesi",
-    detailError: 'Impossibile caricare questa unità', country: 'Nazione',
+    detailError: 'Impossibile caricare questa unità', country: 'Nazione', memberSortBy: 'Ordina membri', lastSeen: 'Ultimo accesso', mrank: 'Grado militare', atk: 'Attacco', crit: 'Critico', viewList: 'Lista', viewCards: 'Card', member: 'Membro',
   },
   es: {
     title: 'Unidades Militares', subtitle: 'unidades', tabList: 'Listado', tabRanking: 'Clasificaciones',
@@ -64,7 +64,7 @@ const MU_DICT = {
     pin: 'Añadir a favoritos', unpin: 'Quitar de favoritos', updated: 'Actualizado a las',
     colWeekly: "Daño sem.", colToday: "Hoy", colTotal: "Daño total", colTerrain: "Territorio", colWealth: "Riqueza", colBounty: "Recompensas", colRep: "Reputación", colMembers: "Miembros", colComposition: "Composición", others: "otros", composition: "Nacionalidades de los miembros", registeredIn: "Registrada en", deFacto: "de facto", unknownCountry: "desconocida",
     playstyle: "Estilo de juego", colPlaystyle: "Guerra / Eco", psWar: "guerra", psEco: "economía", psMixed: "híbridos", psUndecided: "sin puntos gastados",
-    detailError: 'No se pudo cargar esta unidad', country: 'Nación',
+    detailError: 'No se pudo cargar esta unidad', country: 'Nación', memberSortBy: 'Ordenar miembros', lastSeen: 'Última conexión', mrank: 'Rango militar', atk: 'Ataque', crit: 'Crítico', viewList: 'Lista', viewCards: 'Tarjetas', member: 'Miembro',
   },
   de: {
     title: 'Militäreinheiten', subtitle: 'Einheiten', tabList: 'Verzeichnis', tabRanking: 'Ranglisten',
@@ -81,7 +81,7 @@ const MU_DICT = {
     pin: 'Zu Favoriten', unpin: 'Aus Favoriten entfernen', updated: 'Aktualisiert um',
     colWeekly: "Wöch. Schaden", colToday: "Heute", colTotal: "Ges. Schaden", colTerrain: "Territorium", colWealth: "Vermögen", colBounty: "Kopfgeld", colRep: "Ruf", colMembers: "Mitglieder", colComposition: "Zusammensetzung", others: "andere", composition: "Nationalitäten der Mitglieder", registeredIn: "Registriert in", deFacto: "de facto", unknownCountry: "unbekannt",
     playstyle: "Spielstil", colPlaystyle: "Krieg / Wirt.", psWar: "Krieg", psEco: "Wirtschaft", psMixed: "gemischt", psUndecided: "keine Punkte vergeben",
-    detailError: 'Diese Einheit konnte nicht geladen werden', country: 'Nation',
+    detailError: 'Diese Einheit konnte nicht geladen werden', country: 'Nation', memberSortBy: 'Mitglieder sortieren', lastSeen: 'Zuletzt online', mrank: 'Militärrang', atk: 'Angriff', crit: 'Krit', viewList: 'Liste', viewCards: 'Karten', member: 'Mitglied',
   },
   fr: {
     title: 'Unités Militaires', subtitle: 'unités', tabList: 'Annuaire', tabRanking: 'Classements',
@@ -98,7 +98,7 @@ const MU_DICT = {
     pin: 'Ajouter aux favoris', unpin: 'Retirer des favoris', updated: 'Mis à jour à',
     colWeekly: "Dégâts hebdo.", colToday: "Auj.", colTotal: "Dégâts totaux", colTerrain: "Territoire", colWealth: "Richesse", colBounty: "Primes", colRep: "Réputation", colMembers: "Membres", colComposition: "Composition", others: "autres", composition: "Nationalités des membres", registeredIn: "Enregistrée en", deFacto: "de facto", unknownCountry: "inconnue",
     playstyle: "Style de jeu", colPlaystyle: "Guerre / Éco", psWar: "guerre", psEco: "économie", psMixed: "hybrides", psUndecided: "aucun point dépensé",
-    detailError: 'Impossible de charger cette unité', country: 'Nation',
+    detailError: 'Impossible de charger cette unité', country: 'Nation', memberSortBy: 'Trier les membres', lastSeen: 'Dernière connexion', mrank: 'Rang militaire', atk: 'Attaque', crit: 'Critique', viewList: 'Liste', viewCards: 'Cartes', member: 'Membre',
   },
   nl: {
     title: 'Militaire Eenheden', subtitle: 'eenheden', tabList: 'Overzicht', tabRanking: 'Ranglijsten',
@@ -115,7 +115,7 @@ const MU_DICT = {
     pin: 'Aan favorieten toevoegen', unpin: 'Uit favorieten verwijderen', updated: 'Bijgewerkt om',
     colWeekly: "Wekel. schade", colToday: "Vandaag", colTotal: "Totale schade", colTerrain: "Territorium", colWealth: "Rijkdom", colBounty: "Premies", colRep: "Reputatie", colMembers: "Leden", colComposition: "Samenstelling", others: "overige", composition: "Nationaliteiten van de leden", registeredIn: "Geregistreerd in", deFacto: "de facto", unknownCountry: "onbekend",
     playstyle: "Speelstijl", colPlaystyle: "Oorlog / Eco", psWar: "oorlog", psEco: "economie", psMixed: "hybride", psUndecided: "geen punten besteed",
-    detailError: 'Kon deze eenheid niet laden', country: 'Natie',
+    detailError: 'Kon deze eenheid niet laden', country: 'Natie', memberSortBy: 'Leden sorteren', lastSeen: 'Laatst gezien', mrank: 'Militaire rang', atk: 'Aanval', crit: 'Kritiek', viewList: 'Lijst', viewCards: 'Kaarten', member: 'Lid',
   },
   sv: {
     title: 'Militära Enheter', subtitle: 'enheter', tabList: 'Katalog', tabRanking: 'Topplistor',
@@ -132,7 +132,7 @@ const MU_DICT = {
     pin: 'Lägg till favoriter', unpin: 'Ta bort från favoriter', updated: 'Uppdaterad kl.',
     colWeekly: "Veckoskada", colToday: "Idag", colTotal: "Total skada", colTerrain: "Territorium", colWealth: "Förmögenhet", colBounty: "Dusörer", colRep: "Rykte", colMembers: "Medlemmar", colComposition: "Sammansättning", others: "övriga", composition: "Medlemmarnas nationaliteter", registeredIn: "Registrerad i", deFacto: "de facto", unknownCountry: "okänd",
     playstyle: "Spelstil", colPlaystyle: "Krig / Eko", psWar: "krig", psEco: "ekonomi", psMixed: "hybrider", psUndecided: "inga poäng spenderade",
-    detailError: 'Kunde inte ladda enheten', country: 'Nation',
+    detailError: 'Kunde inte ladda enheten', country: 'Nation', memberSortBy: 'Sortera medlemmar', lastSeen: 'Senast sedd', mrank: 'Militär rang', atk: 'Attack', crit: 'Krit', viewList: 'Lista', viewCards: 'Kort', member: 'Medlem',
   },
   pt: {
     title: 'Unidades Militares', subtitle: 'unidades', tabList: 'Diretório', tabRanking: 'Classificações',
@@ -149,7 +149,7 @@ const MU_DICT = {
     pin: 'Adicionar aos favoritos', unpin: 'Remover dos favoritos', updated: 'Atualizado às',
     colWeekly: "Dano sem.", colToday: "Hoje", colTotal: "Dano total", colTerrain: "Território", colWealth: "Riqueza", colBounty: "Recompensas", colRep: "Reputação", colMembers: "Membros", colComposition: "Composição", others: "outros", composition: "Nacionalidades dos membros", registeredIn: "Registada em", deFacto: "de facto", unknownCountry: "desconhecida",
     playstyle: "Estilo de jogo", colPlaystyle: "Guerra / Eco", psWar: "guerra", psEco: "economia", psMixed: "híbridos", psUndecided: "sem pontos gastos",
-    detailError: 'Não foi possível carregar esta unidade', country: 'Nação',
+    detailError: 'Não foi possível carregar esta unidade', country: 'Nação', memberSortBy: 'Ordenar membros', lastSeen: 'Última ligação', mrank: 'Patente militar', atk: 'Ataque', crit: 'Crítico', viewList: 'Lista', viewCards: 'Cartões', member: 'Membro',
   },
   ar: {
     title: 'الوحدات العسكرية', subtitle: 'وحدات', tabList: 'الدليل', tabRanking: 'التصنيفات',
@@ -166,7 +166,7 @@ const MU_DICT = {
     pin: 'إضافة إلى المفضلة', unpin: 'إزالة من المفضلة', updated: 'آخر تحديث',
     colWeekly: "الضرر الأسبوعي", colToday: "اليوم", colTotal: "الضرر الإجمالي", colTerrain: "الأراضي", colWealth: "الثروة", colBounty: "المكافآت", colRep: "السمعة", colMembers: "الأعضاء", colComposition: "التركيبة", others: "أخرى", composition: "جنسيات الأعضاء", registeredIn: "مسجَّلة في", deFacto: "بحكم الواقع", unknownCountry: "غير معروفة",
     playstyle: "أسلوب اللعب", colPlaystyle: "حرب / اقتصاد", psWar: "حرب", psEco: "اقتصاد", psMixed: "مختلط", psUndecided: "بلا نقاط مُنفقة",
-    detailError: 'تعذّر تحميل هذه الوحدة', country: 'الدولة',
+    detailError: 'تعذّر تحميل هذه الوحدة', country: 'الدولة', memberSortBy: 'ترتيب الأعضاء', lastSeen: 'آخر ظهور', mrank: 'الرتبة العسكرية', atk: 'الهجوم', crit: 'حرج', viewList: 'قائمة', viewCards: 'بطاقات', member: 'عضو',
   },
 };
 

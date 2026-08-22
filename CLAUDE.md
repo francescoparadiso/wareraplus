@@ -100,6 +100,16 @@ wareraPlus/
     │   ├── muDetail.js          ← scheda unità: sei classifiche + composizione per
     │   │                          nazionalità (calcolata dal vivo sui membri) + membri
     │   └── ranking.js           ← classifiche, ordinate dalla directory (zero fetch)
+    ├── nations/                  ← NUOVO — Statistiche nazioni
+    │   ├── main.js              ← initNationsView(container) + openNationDetail(countryId);
+    │   │                          tab panoramica / 1 vs 2 / grafici + scheda nazione
+    │   ├── api.js               ← nazioni da state.nazioniGlobal (zero fetch) e elenco
+    │   │                          cittadini dal cache-server (/country-citizens), con
+    │   │                          fallback diretto LIMITATO a 150 utenti se il server manca
+    │   ├── metrics.js           ← le metriche in un posto solo (panoramica, 1vs2 e scheda
+    │   │                          leggono le stesse definizioni)
+    │   ├── charts.js            ← ciambelle/barre in SVG scritto a mano, niente Chart.js
+    │   ├── nationList.js, nationCompare.js, nationDetail.js, i18n.js (9 lingue)
     ├── panel/                   ← NUOVO
     │   ├── countryPanel.js      ← pannello laterale nazione
     │   ├── parliamentChart.js   ← grafico emiciclo nel pannello (nativo, indipendente da src/political/)
@@ -107,6 +117,7 @@ wareraPlus/
     ├── app/                     ← NUOVO — orchestrazione integrazione
     │   ├── muOverlay.js        ← apre Esplora Unità Militari (import() dinamico di src/mu/main.js)
     │   ├── politicalOverlay.js ← apre Political in-page (import() dinamico di src/political/main.js)
+    │   ├── nationsOverlay.js   ← apre Statistiche nazioni (import() dinamico di src/nations/main.js)
     │   ├── overlayChrome.js    ← chrome condiviso degli overlay Eco/MU/News: sfondo a
     │   │                         particelle nella tinta della sezione + pausa mappa
     │   ├── mapIdle.js          ← pausa/riprende il lavoro di sfondo della mappa (pallini
@@ -299,6 +310,9 @@ e 14 richieste per utente invece di una), e le colonne "Composizione" e
 gioco del pannello nazione. Nella scheda della singola unità gli stessi
 due dati sono invece calcolati dal vivo sui membri appena scaricati, e
 funzionano sempre. Dopo un deploy servono ~8 giri di poll (~4 ore) perché
-la mappa utente→nazione/stile si riempia. Anche la riga "danno di oggi"
+la mappa utente→nazione/stile si riempia. L'elenco cittadini di Statistiche nazioni dipende dallo stesso server
+(`/country-citizens`, endpoint aggiunto insieme alla vista): senza deploy
+ricade su una risoluzione diretta dal browser limitata a 150 cittadini per
+nazione, dichiarata in chiaro nell'interfaccia. Anche la riga "danno di oggi"
 nella fascia di Alliance Overview dipende dal server (`/daily-damage`,
 scatto alle 02:00 italiane): senza deploy semplicemente non compare.

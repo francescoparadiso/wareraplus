@@ -365,6 +365,24 @@
     <div id="wp-mu-root" style="display:none;"></div>
   </div>
 
+  <!-- ════════════════════════════════════════════════════════════
+       NUOVO — Overlay Statistiche nazioni (src/nations/*)
+       Vista sotto "Approfondimenti": panoramica di tutte le nazioni,
+       confronto 1 vs 2 fra schieramenti, grafici, e scheda della singola
+       nazione con statistiche, grafici ed elenco cittadini. Montata
+       IN-PAGE dentro #wp-nations-root da src/nations/main.js:
+       initNationsView(), aperta da src/app/nationsOverlay.js. Stesso
+       pattern degli overlay Political/Eco/News/Unità Militari.
+       ════════════════════════════════════════════════════════════ -->
+  <div id="wp-nations-overlay" class="wp-political-overlay wp-nations-overlay" aria-hidden="true">
+    <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
+    <div class="wp-political-topbar">
+      <button id="wp-nations-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
+      <span class="wp-political-title">Nation stats</span>
+    </div>
+    <div id="wp-nations-root" style="display:none;"></div>
+  </div>
+
   <!-- Ko-fi + pill autore (desktop): wrapper condiviso che li centra
        appaiati in basso — vedi shell.css #wp-bottom-credits e
        src/app/authorPill.js per l'arricchimento con la foto profilo

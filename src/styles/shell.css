@@ -626,6 +626,7 @@ body.light-theme .wp-panel-name {
 }
 .wp-eco-overlay  { --wp-ov-accent: #3fb950; }   /* Ottimizzatore: verde */
 .wp-mu-overlay   { --wp-ov-accent: #e5484d; }   /* Unità Militari: rosso */
+.wp-nations-overlay { --wp-ov-accent: #39d0d8; } /* Statistiche nazioni: ciano */
 .wp-news-overlay {                               /* News: blu */
   --wp-ov-accent: #58a6ff;
   --wp-ov-bg-light: #ece3d2;                     /* carta di giornale */

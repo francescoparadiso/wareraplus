@@ -21,9 +21,9 @@
 import { MU_RANKING_TYPES, fetchMuDetail, fetchUsersLite } from './api.js';
 import { muT } from './i18n.js';
 import { isPinned, togglePin } from '../app/pins.js';
-import { countPlaystyles, playstyleBarHtml } from './playstyle.js';
+import { classifyPlaystyle, countPlaystyles, playstyleBarHtml } from './playstyle.js';
 import { trackEvent } from '../shared/analytics.js';
-import { avatarImg, countryName, dominantCountry, escapeHtml, flagImg, fmtCompact, fmtDate, fmtFull, tierBadge } from './ui.js';
+import { avatarImg, countryName, dominantCountry, escapeHtml, flagImg, fmtCompact, fmtDate, fmtFull, fmtRelative, tierBadge } from './ui.js';
 import { ensureDailyDamage, muDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
 // L'etichetta della finestra ("Oggi" / "Dalle HH:MM") vive nel dizionario
 // dello shell, non in quello locale della vista MU: si prende da lì.
@@ -48,6 +48,9 @@ export function renderMuDetail(host, muId, context) {
   hostEl = host;
   ctx = context;
   currentMu = ctx.directory.find(m => m._id === muId) || null;
+  // Unità nuova: i membri della precedente non c'entrano più. L'ordinamento
+  // scelto invece resta, è una preferenza di lettura.
+  _members = [];
 
   if (!currentMu) {
     // Unità creata dopo l'ultimo poll del server (la directory si aggiorna
@@ -108,10 +111,48 @@ function paintHeader() {
       <section id="wp-mu-composition"></section>
 
       <section class="wp-mu-members">
-        <h3 class="wp-mu-section-title">${escapeHtml(muT('memberList'))} <span class="wp-mu-count" id="wp-mu-member-count"></span></h3>
+        <h3 class="wp-mu-section-title">
+          ${escapeHtml(muT('memberList'))} <span class="wp-mu-count" id="wp-mu-member-count"></span>
+          <div class="wp-mu-member-tools">
+            <label class="wp-mu-member-sort">
+              <span>${escapeHtml(muT('memberSortBy'))}</span>
+              <select id="wp-mu-member-sort">
+                ${MEMBER_SORTS.map(o => `<option value="${o.key}">${escapeHtml(muT(o.label))}</option>`).join('')}
+              </select>
+            </label>
+            <div class="wp-mu-viewswitch" id="wp-mu-member-view" role="group">
+              <button type="button" data-view="list" class="${_memberView === 'list' ? 'active' : ''}">${escapeHtml(muT('viewList'))}</button>
+              <button type="button" data-view="cards" class="${_memberView === 'cards' ? 'active' : ''}">${escapeHtml(muT('viewCards'))}</button>
+            </div>
+          </div>
+        </h3>
         <div id="wp-mu-member-list"><div class="wp-mu-empty">${escapeHtml(muT('membersLoading'))}</div></div>
       </section>
     </div>`;
+
+  const sortSel = hostEl.querySelector('#wp-mu-member-sort');
+  if (sortSel) {
+    sortSel.value = _memberSort;
+    sortSel.addEventListener('change', (e) => {
+      _memberSort = e.target.value;
+      // Riordino in posto: i membri sono già in memoria, nessuna fetch.
+      renderMemberList();
+      trackEvent('mu-member-sort', { key: _memberSort });
+    });
+  }
+
+  const viewSwitch = hostEl.querySelector('#wp-mu-member-view');
+  if (viewSwitch) {
+    viewSwitch.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-view]');
+      if (!btn || btn.dataset.view === _memberView) return;
+      _memberView = btn.dataset.view;
+      try { localStorage.setItem(MEMBER_VIEW_KEY, _memberView); } catch { /* storage negato: la vista resta per la sessione */ }
+      viewSwitch.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.view === _memberView));
+      renderMemberList();
+      trackEvent('mu-member-view', { view: _memberView });
+    });
+  }
 
   hostEl.querySelector('#wp-mu-back').addEventListener('click', () => ctx.onBack());
   hostEl.querySelector('#wp-mu-pin').addEventListener('click', (e) => {
@@ -259,6 +300,58 @@ async function loadMembers(muId) {
   }
 }
 
+/* ══════════════════════════════════════════════════════════════
+   I MEMBRI, per esteso
+   ------------------------------------------------------------------
+   La riga per membro mostrava nome, livello e danno settimanale, e basta.
+   Ma `user.getUserLite` — la chiamata che la scheda fa GIÀ per ogni
+   membro — porta con sé molto altro: nazione, grado militare, tutte le
+   classifiche utente, le skill (da cui lo stile di gioco), ricchezza,
+   taglia e l'ultimo accesso. Nessuna di queste informazioni costa una
+   richiesta in più: erano solo scartate.
+
+   Quindi la scheda del membro ora è una card con la sua griglia di
+   statistiche, e l'elenco si può riordinare (chi picchia, chi è ricco,
+   chi è ancora attivo) senza rifetchare nulla: `_members` resta in
+   memoria e si riordina in posto.
+   ══════════════════════════════════════════════════════════════ */
+
+const MEMBER_SORTS = [
+  { key: 'weekly',   label: 'colWeekly', get: u => u.rankings?.weeklyUserDamages?.value ?? 0 },
+  { key: 'total',    label: 'colTotal',  get: u => u.rankings?.userDamages?.value ?? u.stats?.damagesCount ?? 0 },
+  { key: 'level',    label: 'level',     get: u => u.leveling?.level ?? 0 },
+  { key: 'wealth',   label: 'colWealth', get: u => u.rankings?.userWealth?.value ?? 0 },
+  { key: 'bounty',   label: 'colBounty', get: u => u.rankings?.userBounty?.value ?? 0 },
+  { key: 'lastSeen', label: 'lastSeen',  get: u => Date.parse(u.dates?.lastConnectionAt) || 0 },
+  // Il nome è l'unico criterio crescente e alfabetico: gestito a parte
+  // in sortMembers(), gli altri sono tutti "dal più grande al più piccolo".
+  { key: 'name',     label: 'sortName',  get: u => u.username || '' },
+];
+
+let _members = [];        // utenti dell'unità aperta, già scaricati
+let _memberSort = 'weekly';
+/* Due viste sugli stessi dati: LISTA (predefinita) per confrontare molti
+   membri riga per riga, CARD per leggerne uno alla volta con più respiro.
+   Nessuna delle due rifetcha nulla: sono due disegni di `_members`.
+   La scelta è una preferenza di lettura, quindi sopravvive alla sessione. */
+const MEMBER_VIEW_KEY = 'we_mu_member_view';
+let _memberView = (() => {
+  try { return localStorage.getItem(MEMBER_VIEW_KEY) === 'cards' ? 'cards' : 'list'; }
+  catch { return 'list'; }
+})();
+let _memberRoles = { owner: null, commanders: new Set(), managers: new Set() };
+
+function sortMembers(users) {
+  const s = MEMBER_SORTS.find(o => o.key === _memberSort) || MEMBER_SORTS[0];
+  const arr = users.slice();
+  if (s.key === 'name') {
+    arr.sort((a, b) => String(s.get(a)).localeCompare(String(s.get(b)), undefined, { sensitivity: 'base' }));
+  } else {
+    arr.sort((a, b) => s.get(b) - s.get(a));
+  }
+  return arr;
+}
+
 async function paintMembers(detail) {
   const listEl = hostEl?.querySelector('#wp-mu-member-list');
   if (!listEl) return;
@@ -283,26 +376,144 @@ async function paintMembers(detail) {
   const badge = hostEl.querySelector('#wp-mu-head-defacto');
   if (badge) badge.innerHTML = deFactoBadge(dominantCountry({ ...currentMu, composition: comp }));
 
-  const managers = new Set(detail.roles?.managers || []);
-  const commanders = new Set(detail.roles?.commanders || []);
-  const owner = detail.user;
+  _members = users;
+  _memberRoles = {
+    owner: detail.user,
+    commanders: new Set(detail.roles?.commanders || []),
+    managers: new Set(detail.roles?.managers || []),
+  };
+  renderMemberList();
+}
 
-  users.sort((a, b) => (b.rankings?.weeklyUserDamages?.value ?? 0) - (a.rankings?.weeklyUserDamages?.value ?? 0));
+/** Ridisegna SOLO l'elenco (nessuna fetch): usata sia al primo disegno sia
+ *  a ogni cambio di ordinamento. */
+function renderMemberList() {
+  const listEl = hostEl?.querySelector('#wp-mu-member-list');
+  if (!listEl) return;
+  const rows = sortMembers(_members);
+  listEl.innerHTML = _memberView === 'cards'
+    ? `<div class="wp-mu-member-grid">${rows.map(memberCard).join('')}</div>`
+    : memberTableHtml(rows);
+  if (_memberView === 'list') attachMemberTableSort(listEl);
+}
 
-  listEl.innerHTML = `<div class="wp-mu-member-grid">${users.map(u => {
-    const roles = [];
-    if (u._id === owner) roles.push(muT('owner'));
-    if (commanders.has(u._id)) roles.push(muT('commander'));
-    if (managers.has(u._id)) roles.push(muT('manager'));
-    const weekly = u.rankings?.weeklyUserDamages?.value;
+/* ── Vista LISTA ──────────────────────
+   Una riga per membro, colonne ordinabili cliccando l'intestazione (le
+   stesse chiavi del selettore: un solo criterio di verità per
+   l'ordinamento, vedi MEMBER_SORTS). Tabella a sé e non quella
+   dell'elenco unità: le colonne sono altre. */
+const MEMBER_COLS = [
+  { key: 'name',     label: 'member',    cls: 'wp-mu-mt-name' },
+  { key: 'level',    label: 'level',     num: true },
+  { key: null,       label: 'mrank',     num: true, get: u => u.militaryRank ?? '—' },
+  { key: null,       label: 'playstyle', get: u => psPill(u) },
+  { key: 'weekly',   label: 'colWeekly', num: true, get: u => fmtCompact(u.rankings?.weeklyUserDamages?.value ?? 0), cls: 'wk' },
+  { key: 'total',    label: 'colTotal',  num: true, get: u => fmtCompact(u.rankings?.userDamages?.value ?? u.stats?.damagesCount ?? 0) },
+  { key: 'wealth',   label: 'colWealth', num: true, get: u => fmtCompact(u.rankings?.userWealth?.value ?? 0), cls: 'money' },
+  { key: 'bounty',   label: 'colBounty', num: true, get: u => fmtCompact(u.rankings?.userBounty?.value ?? 0) },
+  { key: null,       label: 'atk',       num: true, get: u => fmtCompact(u.skills?.attack?.total ?? 0) },
+  { key: null,       label: 'crit',      num: true, get: u => `${fmtCompact(u.skills?.criticalChance?.total ?? 0)}%` },
+  { key: 'lastSeen', label: 'lastSeen',  num: true, get: u => fmtRelative(u.dates?.lastConnectionAt), cls: 'when' },
+];
+
+function psPill(u) {
+  const ps = classifyPlaystyle(u);
+  const label = { war: 'psWar', eco: 'psEco', mixed: 'psMixed', undecided: 'psUndecided' }[ps.mode];
+  return `<span class="wp-mu-ps-pill wp-mu-ps-${ps.mode}">${escapeHtml(muT(label))}</span>`;
+}
+
+function memberTableHtml(rows) {
+  const head = MEMBER_COLS.map(c => `
+    <button type="button" class="wp-mu-mt-th${c.num ? ' wp-mu-mt-num' : ''}${c.key ? '' : ' wp-mu-mt-static'}${c.key && c.key === _memberSort ? ' active' : ''}"
+            ${c.key ? `data-sort="${c.key}"` : 'disabled'}>${escapeHtml(muT(c.label))}</button>`).join('');
+
+  const body = rows.map(u => {
+    const roles = memberRoles(u);
     return `
-      <a class="wp-mu-member" href="${APP_BASE}/user/${encodeURIComponent(u._id)}" target="_blank" rel="noopener noreferrer">
+      <a class="wp-mu-mt-row" href="${APP_BASE}/user/${encodeURIComponent(u._id)}" target="_blank" rel="noopener noreferrer">
+        <span class="wp-mu-mt-name">
+          ${avatarImg(u.avatarUrl, u.username, 'wp-mu-avatar wp-mu-avatar-xs')}
+          ${flagImg(u.country)}
+          <span class="wp-mu-member-nick">${escapeHtml(u.username)}</span>
+          ${roles.length ? `<span class="wp-mu-mt-role">${escapeHtml(roles[0])}</span>` : ''}
+        </span>
+        <span class="wp-mu-mt-num">${u.leveling?.level ?? '—'}</span>
+        ${MEMBER_COLS.slice(2).map(c => `<span class="${c.num ? 'wp-mu-mt-num ' : ''}${c.cls || ''}">${c.get(u)}</span>`).join('')}
+      </a>`;
+  }).join('');
+
+  return `<div class="wp-mu-mtable-wrap"><div class="wp-mu-mtable">
+    <div class="wp-mu-mt-head">${head}</div>
+    ${body}
+  </div></div>`;
+}
+
+function memberRoles(u) {
+  const { owner, commanders, managers } = _memberRoles;
+  const roles = [];
+  if (u._id === owner) roles.push(muT('owner'));
+  if (commanders.has(u._id)) roles.push(muT('commander'));
+  if (managers.has(u._id)) roles.push(muT('manager'));
+  return roles;
+}
+
+function attachMemberTableSort(listEl) {
+  listEl.querySelectorAll('.wp-mu-mt-th[data-sort]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _memberSort = btn.dataset.sort;
+      const sel = hostEl?.querySelector('#wp-mu-member-sort');
+      if (sel) sel.value = _memberSort;
+      renderMemberList();
+      trackEvent('mu-member-sort', { key: _memberSort, from: 'header' });
+    });
+  });
+}
+
+function memberCard(u) {
+  const roles = memberRoles(u);
+
+  const weekly = u.rankings?.weeklyUserDamages;
+  const total = u.rankings?.userDamages?.value ?? u.stats?.damagesCount;
+  const wealth = u.rankings?.userWealth?.value;
+  const bounty = u.rankings?.userBounty?.value;
+  // Le skill in scheda sono i TOTALI (con arma ed equipaggiamento): qui
+  // interessa quanto picchia davvero, non come ha speso i punti — quello
+  // lo dice già la pastiglia dello stile di gioco.
+  const atk = u.skills?.attack?.total;
+  const crit = u.skills?.criticalChance?.total;
+  const ps = classifyPlaystyle(u);
+  const psLabel = { war: 'psWar', eco: 'psEco', mixed: 'psMixed', undecided: 'psUndecided' }[ps.mode];
+  const lastSeen = u.dates?.lastConnectionAt;
+
+  const cell = (label, value, cls = '') => `
+    <div class="wp-mu-mcell">
+      <span class="wp-mu-mcell-k">${escapeHtml(label)}</span>
+      <span class="wp-mu-mcell-v ${cls}">${value}</span>
+    </div>`;
+
+  return `
+    <a class="wp-mu-member" href="${APP_BASE}/user/${encodeURIComponent(u._id)}" target="_blank" rel="noopener noreferrer">
+      <div class="wp-mu-member-top">
         ${avatarImg(u.avatarUrl, u.username, 'wp-mu-avatar wp-mu-avatar-sm')}
         <div class="wp-mu-member-main">
-          <span class="wp-mu-member-name">${escapeHtml(u.username)}</span>
-          <span class="wp-mu-member-sub">${escapeHtml(muT('level'))} ${u.leveling?.level ?? '—'}${roles.length ? ` · ${escapeHtml(roles.join(' · '))}` : ''}</span>
+          <span class="wp-mu-member-name">
+            ${flagImg(u.country)}<span class="wp-mu-member-nick">${escapeHtml(u.username)}</span>
+          </span>
+          <span class="wp-mu-member-sub">
+            ${escapeHtml(muT('level'))} ${u.leveling?.level ?? '—'}${u.leveling?.prestigeLevel ? ` ⭐${u.leveling.prestigeLevel}` : ''}
+            · ${escapeHtml(muT('mrank'))} ${u.militaryRank ?? '—'}${roles.length ? ` · ${escapeHtml(roles.join(' · '))}` : ''}
+          </span>
         </div>
-        <span class="wp-mu-member-dmg">${weekly != null ? escapeHtml(fmtCompact(weekly)) : '—'}</span>
-      </a>`;
-  }).join('')}</div>`;
+        ${psLabel ? `<span class="wp-mu-ps-pill wp-mu-ps-${ps.mode}">${escapeHtml(muT(psLabel))}</span>` : ''}
+      </div>
+      <div class="wp-mu-member-stats">
+        ${cell(muT('colWeekly'), `${weekly?.value != null ? escapeHtml(fmtCompact(weekly.value)) : '—'} ${tierBadge(weekly)}`, 'wk')}
+        ${cell(muT('colTotal'), total != null ? escapeHtml(fmtCompact(total)) : '—')}
+        ${cell(muT('colWealth'), wealth != null ? escapeHtml(fmtCompact(wealth)) : '—', 'money')}
+        ${cell(muT('colBounty'), bounty != null ? escapeHtml(fmtCompact(bounty)) : '—')}
+        ${cell(muT('atk'), atk != null ? escapeHtml(fmtCompact(atk)) : '—')}
+        ${cell(muT('crit'), crit != null ? `${escapeHtml(fmtCompact(crit))}%` : '—')}
+        ${cell(muT('lastSeen'), escapeHtml(fmtRelative(lastSeen)), 'when')}
+      </div>
+    </a>`;
 }

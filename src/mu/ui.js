@@ -94,6 +94,28 @@ export function fmtDate(iso) {
   });
 }
 
+/** "2 ore fa", "3 giorni fa" — per l'ultimo accesso di un giocatore, dove
+ *  la data esatta dice molto meno della distanza da adesso (chi è attivo
+ *  e chi no). Intl.RelativeTimeFormat parla già tutte le lingue dello
+ *  shell, quindi non serve una voce di dizionario per unità di tempo. */
+const REL_UNITS = [
+  ['year', 31536000], ['month', 2592000], ['day', 86400],
+  ['hour', 3600], ['minute', 60],
+];
+
+export function fmtRelative(iso) {
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return '—';
+  const diffSec = Math.round((ts - Date.now()) / 1000);
+  const abs = Math.abs(diffSec);
+  const lang = document.documentElement.lang || undefined;
+  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: 'auto', style: 'narrow' });
+  for (const [unit, secs] of REL_UNITS) {
+    if (abs >= secs) return rtf.format(Math.round(diffSec / secs), unit);
+  }
+  return rtf.format(0, 'minute');
+}
+
 /** Pastiglia con la POSIZIONE, colorata secondo il tier. Per i posti dove
  *  la posizione non è già scritta altrove (card dell'elenco, schede). */
 export function tierBadge(ranking) {

@@ -28,6 +28,7 @@ import { initPoliticalOverlay } from './app/politicalOverlay.js';
 import { initEcoOverlay } from './app/ecoOverlay.js';
 import { initNewsOverlay } from './app/newsOverlay.js';
 import { initMuOverlay } from './app/muOverlay.js';
+import { initNationsOverlay } from './app/nationsOverlay.js';
 import { initThemeSync } from './app/themeSync.js';
 import { initLangSync } from './app/langSync.js';
 import { initBattleToggle } from './app/battleToggle.js';
@@ -70,6 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initEcoOverlay();
   initNewsOverlay();
   initMuOverlay();
+  initNationsOverlay();
   applyTranslations();
   initLangButton();
 });
