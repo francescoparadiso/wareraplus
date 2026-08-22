@@ -33,6 +33,12 @@ let sort = { key: 'weekly', dir: -1 };
 let search = '';
 let searchFocused = false;
 const sides = new Map();              // countryId → 'a' | 'b' (confronto 1vs2)
+// Confronto 1vs2: una ricerca PER SCHIERAMENTO (i due elenchi sono
+// indipendenti) e il lato la cui casella ha il cursore, per rimetterglielo
+// dopo il render.
+let searchA = '';
+let searchB = '';
+let searchFocusedSide = null;         // 'a' | 'b' | null
 let langBound = false;
 
 export async function initNationsView(container) {
@@ -119,19 +125,28 @@ function render() {
     });
   } else if (tab === 'compare') {
     renderNationCompare(body, {
-      nations, sides, search, searchFocused,
-      onCycle: (countryId) => {
-        // Un clic: schieramento A. Due: B. Tre: fuori. Stessa meccanica del
-        // Faction 1vs2 di Statistiche alleanze.
-        const cur = sides.get(countryId);
-        if (!cur) sides.set(countryId, 'a');
-        else if (cur === 'a') sides.set(countryId, 'b');
-        else sides.delete(countryId);
-        searchFocused = false;
+      nations, sides, searchA, searchB, searchFocusedSide,
+      // Un elenco per schieramento (vedi nationCompare.js): il lato lo
+      // decide l'elenco su cui si clicca, non il numero di clic. Stessa
+      // nazione ricliccata nel proprio elenco = fuori; cliccata
+      // nell'elenco dell'altro schieramento = spostata lì.
+      onPick: (countryId, side) => {
+        if (sides.get(countryId) === side) sides.delete(countryId);
+        else sides.set(countryId, side);
+        searchFocusedSide = null;
+        render();
+      },
+      onRemove: (countryId) => {
+        sides.delete(countryId);
+        searchFocusedSide = null;
         render();
       },
       onResetSides: () => { sides.clear(); render(); },
-      onSearch: (v) => { search = v; searchFocused = true; render(); },
+      onSearch: (side, v) => {
+        if (side === 'a') searchA = v; else searchB = v;
+        searchFocusedSide = side;
+        render();
+      },
     });
   } else {
     renderCharts(body, nations);

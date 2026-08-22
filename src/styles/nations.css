@@ -166,11 +166,47 @@ body.light-theme .wp-nat-row { border-bottom-color: #e3e7ee; }
 .wp-nat-vs-fill-a { background: #58a6ff; }
 .wp-nat-vs-fill-b { background: #f0883e; }
 
+/* Due elenchi affiancati, uno per schieramento (vedi nationCompare.js:
+   erano un elenco solo a selezione ciclica, che mandava in A anche la
+   nazione destinata a B). Ognuno con la sua ricerca e la sua griglia
+   scorrevole: a schermo stretto vanno in colonna. */
+.wp-nat-pickers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.wp-nat-picker {
+  min-width: 0;
+  padding: 12px;
+  background: var(--wp-ov-surface, #161b22);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: var(--wp-ov-radius, 12px);
+}
+.wp-nat-picker-a { border-left: 3px solid #58a6ff; }
+.wp-nat-picker-b { border-left: 3px solid #f0883e; }
+.wp-nat-picker h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--wp-ov-text-dim, #8b949e);
+}
+.wp-nat-picker .wp-nat-search { max-width: none; width: 100%; }
+
 .wp-nat-picker-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 6px;
   margin-top: 10px;
+  /* L'elenco completo delle nazioni è lungo: sta dentro la sua colonna e
+     scorre, così i due schieramenti restano appaiati invece di far
+     scorrere tutta la pagina per arrivare al secondo. */
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+  .wp-nat-pickers { grid-template-columns: 1fr; }
 }
 .wp-nat-pick {
   display: flex; align-items: center; gap: 8px;

@@ -18,6 +18,8 @@ export const CHOKEPOINTS = {
   capeOfGoodHope: [18.4, -34.4],
   bering: [-169.5, 65.6],
   capeHorn: [-67.3, -55.9],
+  northSea: [3.0, 56.5],   // Mare del Nord, al largo dello Jutland
+  northCape: [25.8, 71.2], // Capo Nord (Norvegia), soglia del Mare di Barents
 };
 
 // Rotte come sequenze di tappe (chokepoint + waypoint intermedi in mare
@@ -36,6 +38,16 @@ export const ROUTES = [
   [CHOKEPOINTS.capeOfGoodHope, [10, -20], CHOKEPOINTS.panamaAtlantic],
   [CHOKEPOINTS.capeOfGoodHope, [0, -44], [-35, -51], CHOKEPOINTS.capeHorn], // rotta oceano australe ("Roaring Forties"), storica rotta a vela
   [CHOKEPOINTS.hormuz, [55, 5], [45, -20], CHOKEPOINTS.capeOfGoodHope], // rotta petrolifera intorno all'Africa (alternativa a Suez)
+  // Rotta artica (Passaggio a Nord-Est / "Northern Sea Route"): risale
+  // l'Atlantico fino al Mare del Nord, doppia Capo Nord e costeggia la
+  // Siberia sopra il circolo polare fino allo Stretto di Bering. Le tappe
+  // sono fitte apposta: `multiStopPath` incurva ogni segmento (bow
+  // proporzionale alla sua lunghezza), e con tappe rade la curva
+  // scavallerebbe oltre l'80° parallelo o rientrerebbe sulla costa.
+  // L'ultimo salto 175° -> -169.5° attraversa l'antimeridiano ed è
+  // gestito da unwrapLngPath come le altre rotte pacifiche.
+  [CHOKEPOINTS.gibraltar, [-9.8, 42], [-6, 47.5], [1.6, 50.5], CHOKEPOINTS.northSea],
+  [CHOKEPOINTS.northSea, [3, 62], [8.5, 66.5], [15, 70.5], CHOKEPOINTS.northCape, [45, 73.5], [75, 76.5], [105, 77], [140, 75.5], [175, 71], [-173, 68.6], CHOKEPOINTS.bering],
 ];
 
 // ==================== PRNG seedato (mulberry32) ====================
@@ -155,6 +167,10 @@ export function makeRunner(map, sourceId, sampledPaths, { intervalMs, speedRange
         pathIdx,
         speed: speedRange[0] + rnd() * (speedRange[1] - speedRange[0]),
         progress: rnd(),
+        // Carico fisso per tutta la vita del corridore: il tooltip deve
+        // dire la stessa cosa ad ogni passaggio del mouse, non cambiare
+        // merce ad ogni tick dell'animazione.
+        cargo: Math.floor(rnd() * CARGO_COUNT),
       });
     }
   });
@@ -170,10 +186,35 @@ export function makeRunner(map, sourceId, sampledPaths, { intervalMs, speedRange
       r.progress = (r.progress + r.speed * 0.01) % 1;
       const coords = sampledPaths[r.pathIdx];
       const idx = Math.min(coords.length - 1, Math.floor(r.progress * coords.length));
-      const props = withBearing ? { bearing: bearingAt(coords, idx) } : {};
+      // routeIdx/cargo: due numeri per feature, letti solo dal tooltip
+      // (shipTooltip.js) quando il mouse ci passa sopra. Costo per tick
+      // trascurabile — nessuna stringa costruita qui.
+      const props = { routeIdx: r.pathIdx, cargo: r.cargo };
+      if (withBearing) props.bearing = bearingAt(coords, idx);
       return { type: 'Feature', properties: props, geometry: { type: 'Point', coordinates: coords[idx] } };
     });
     src.setData({ type: 'FeatureCollection', features: feats });
   }, intervalMs);
   return () => clearInterval(timer);
 }
+
+// ==================== ETICHETTE DELLE ROTTE (per il tooltip nave) ====================
+// Da/A di ogni rotta, ricavati per identità di riferimento: ROUTES cita
+// direttamente gli array dentro CHOKEPOINTS, quindi il confronto `===`
+// ritrova la chiave senza dover riconfrontare coordinate. Calcolato una
+// volta sola all'import — se un giorno ROUTES cambia, questo la segue da
+// solo. Le tappe intermedie sono waypoint anonimi in mare aperto: non
+// hanno un nome da mostrare, quindi restano null (il tooltip in quel caso
+// non si apre, vedi shipTooltip.js).
+const _CHOKE_BY_REF = new Map(Object.entries(CHOKEPOINTS).map(([k, v]) => [v, k]));
+
+export const ROUTE_ENDPOINTS = ROUTES.map(stops => ({
+  from: _CHOKE_BY_REF.get(stops[0]) || null,
+  to: _CHOKE_BY_REF.get(stops[stops.length - 1]) || null,
+}));
+
+// Merci trasportate: puramente decorative, assegnate una volta per
+// "corridore" alla creazione (seed fisso, quindi la stessa nave porta
+// sempre lo stesso carico per tutta la sessione). Il tooltip traduce
+// l'indice, qui non c'è testo — vedi shipTooltip.js.
+export const CARGO_COUNT = 8;

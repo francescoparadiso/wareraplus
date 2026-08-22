@@ -29,6 +29,7 @@ import { initEcoOverlay, openEcoView } from './app/ecoOverlay.js';
 import { initNewsOverlay, openNewsView } from './app/newsOverlay.js';
 import { initMuOverlay, openMuView } from './app/muOverlay.js';
 import { initNationsOverlay, openNationsView } from './app/nationsOverlay.js';
+import { initGuideOverlay } from './app/guideOverlay.js';
 import { takeReloadIntent } from './shared/lazyModule.js';
 import { initThemeSync } from './app/themeSync.js';
 import { initLangSync } from './app/langSync.js';
@@ -73,6 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initNewsOverlay();
   initMuOverlay();
   initNationsOverlay();
+  initGuideOverlay();
   applyTranslations();
   initLangButton();
 });

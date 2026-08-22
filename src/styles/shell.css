@@ -677,6 +677,7 @@ body.light-theme .wp-panel-name {
 .wp-eco-overlay  { --wp-ov-accent: #3fb950; }   /* Ottimizzatore: verde */
 .wp-mu-overlay   { --wp-ov-accent: #e5484d; }   /* Unità Militari: rosso */
 .wp-nations-overlay { --wp-ov-accent: #39d0d8; } /* Statistiche nazioni: ciano */
+.wp-guide-overlay { --wp-ov-accent: #d29922; }   /* Guida: ambra */
 .wp-news-overlay {                               /* News: blu */
   --wp-ov-accent: #58a6ff;
   --wp-ov-bg-light: #ece3d2;                     /* carta di giornale */
@@ -2479,3 +2480,34 @@ body.light-theme .wp-sphere-row.primary { border-left-color: #8b5a2b; }
 body.light-theme .wp-sphere-row-head { color: #1a1a1a; }
 body.light-theme .wp-sphere-share { color: #2f6fb5; }
 body.light-theme .wp-sphere-row-stats { color: #6b5a47; }
+
+/* ══ Tooltip dei pallini "nave" sulle rotte marittime (shipTooltip.js) ══
+   Puramente ornamentale: mai cliccabile (pointer-events:none, altrimenti
+   ruberebbe l'hover ai layer nazione sotto) e posizionato via transform,
+   così muoverlo non forza un reflow. */
+.wp-ship-tip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9400;
+  max-width: 260px;
+  padding: 5px 9px;
+  border-radius: 7px;
+  border: 1px solid rgba(143, 232, 255, .35);
+  background: rgba(8, 22, 32, .92);
+  color: #cfefff;
+  font-size: 11.5px;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .12s ease;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
+}
+.wp-ship-tip.visible { opacity: 1; }
+body.light-theme .wp-ship-tip {
+  border-color: rgba(139, 90, 43, .45);
+  background: rgba(247, 240, 224, .96);
+  color: #3e2f1c;
+  box-shadow: 0 4px 14px rgba(90, 65, 30, .28);
+}

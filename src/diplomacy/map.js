@@ -19,6 +19,7 @@ import { buildWeeklyDamageColorExpression } from './weeklyDamage.js';
 import { buildSphereColorExpression } from './sphereOfInfluence.js';
 import { buildBattleHeatmapColorExpression } from './battleHeatmap.js';
 import { initNationTooltip } from './nationTooltip.js';
+import { initShipTooltip } from './shipTooltip.js';
 import { hide as hideTooltip } from './nationTooltip.js';
 import { initOceanBackground, applyOceanTheme } from './oceanBackground.js';
 import { initAntiqueTheme, applyAntiqueTheme } from './antiqueTheme.js';
@@ -388,6 +389,9 @@ export async function setupMapLayers() {
   initLabelCanvas();
   preloadAllFlags();
   initNationTooltip(state.map);
+  // Tooltip scherzoso sui pallini nave delle rotte (ornamentale, si
+  // auto-disattiva su touch e durante pan/zoom — vedi shipTooltip.js).
+  initShipTooltip(state.map);
 state.map.on('click', (e) => {
   // Se siamo in battleHeatmap
   if (state.coloringMode === 'battleHeatmap') {

@@ -40,6 +40,9 @@ export const OVERLAY_TINTS = {
   // viola → rosa
   alliance: { rgbDark: '163,113,247', rgbDark2: '247,120,186',
               rgbLight: '110,66,193', rgbLight2: '183,52,124' },
+  // ambra → oro pallido (Guida: tinta propria, distinta dall'oro di Political)
+  guide:    { rgbDark: '210,153,34',  rgbDark2: '240,136,62',
+              rgbLight: '154,103,0',  rgbLight2: '181,96,25' },
   // ciano → verde acqua
   nations:  { rgbDark: '57,208,216',  rgbDark2: '63,185,80',
               rgbLight: '17,138,144', rgbLight2: '26,127,55' },

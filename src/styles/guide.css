@@ -1,0 +1,148 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Guida "Come si usa" (src/guide/main.js)
+   ------------------------------------------------------------------
+   Namespace `wp-guide-*`, caricato via import() dal modulo della vista
+   quindi non pesa sul boot. Come eco.css/news.css non serve scoping
+   tipo #wp-political-root: i selettori sono già unici.
+
+   Il fondo resta TRASPARENTE (il colore lo mette l'overlay in
+   shell.css) altrimenti coprirebbe le particelle della sezione. Le
+   schede prendono il colore della sezione da --wp-ov-accent, la stessa
+   variabile che tinge topbar e scrollbar: se un giorno cambia la tinta
+   della guida, non c'è niente da cambiare qui.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Come #wp-news-root: un div ha bisogno che flex+overflow siano
+   dichiarati qui, altrimenti sfora senza scorrere. */
+#wp-guide-root {
+  flex: 1;
+  width: 100%;
+  overflow-y: auto;
+  background: transparent;
+  color: #e6edf3;
+}
+
+.wp-guide {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 26px 20px 90px;
+}
+
+/* ── Testata ───────────────────────────────────────────────── */
+.wp-guide-head { text-align: center; margin-bottom: 26px; }
+.wp-guide-title {
+  margin: 0 0 10px;
+  font-size: clamp(22px, 4vw, 32px);
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--wp-ov-accent, #e6edf3);
+}
+.wp-guide-intro {
+  margin: 0 auto;
+  max-width: 62ch;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #a9b4c0;
+}
+
+/* ── Griglia delle schede ──────────────────────────────────── */
+.wp-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.wp-guide-card {
+  border: 1px solid #21262d;
+  border-radius: 12px;
+  padding: 14px 16px 12px;
+  /* Semi-trasparente di proposito: le particelle della sezione devono
+     restare percepibili sotto le schede, come nelle altre viste. */
+  background: rgba(13, 17, 23, 0.62);
+  transition: border-color .15s ease, transform .15s ease;
+}
+.wp-guide-card:hover {
+  border-color: var(--wp-ov-accent, #30363d);
+  transform: translateY(-1px);
+}
+
+.wp-guide-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.wp-guide-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--wp-ov-accent, #8b949e);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.wp-guide-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #e6edf3;
+}
+
+.wp-guide-points {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+.wp-guide-points li {
+  position: relative;
+  padding-left: 14px;
+  margin-bottom: 7px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #a9b4c0;
+}
+.wp-guide-points li:last-child { margin-bottom: 0; }
+.wp-guide-points li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--wp-ov-accent, #8b949e);
+  opacity: 0.75;
+}
+
+/* ── Nota finale ───────────────────────────────────────────── */
+.wp-guide-tip {
+  max-width: 74ch;
+  margin: 22px auto 0;
+  padding: 12px 14px;
+  border: 1px solid #21262d;
+  border-left: 3px solid var(--wp-ov-accent, #30363d);
+  border-radius: 8px;
+  background: rgba(13, 17, 23, 0.62);
+  font-size: 13px;
+  line-height: 1.55;
+  color: #a9b4c0;
+}
+
+/* ── Tema chiaro ───────────────────────────────────────────── */
+body.light-theme #wp-guide-root { color: #1a1a1a; }
+body.light-theme .wp-guide-intro,
+body.light-theme .wp-guide-points li,
+body.light-theme .wp-guide-tip { color: #4a5560; }
+body.light-theme .wp-guide-card,
+body.light-theme .wp-guide-tip {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: #d8dee6;
+}
+body.light-theme .wp-guide-tip { border-left-color: var(--wp-ov-accent, #d8dee6); }
+body.light-theme .wp-guide-card-title { color: #1a1a1a; }
+
+@media (max-width: 768px) {
+  .wp-guide { padding: 18px 14px 80px; }
+  .wp-guide-grid { grid-template-columns: 1fr; }
+}

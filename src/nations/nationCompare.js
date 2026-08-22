@@ -6,8 +6,18 @@
    domanda pratica prima di una guerra ("noi due contro loro tre, come
    siamo messi?").
 
-   Stessa meccanica di selezione dell'originale: un clic mette la nazione
-   nello schieramento A, il secondo la sposta in B, il terzo la toglie.
+   SELEZIONE — DUE ELENCHI, UNO PER SCHIERAMENTO (richiesta esplicita
+   dell'utente). Prima c'era un elenco solo con selezione a ciclo (un
+   clic = A, due = B, tre = via), ereditata dal Faction 1vs2 delle
+   alleanze: chi voleva mettere la seconda nazione in B la vedeva finire
+   in A, perché il "due clic" è un'informazione che sta solo nella
+   scritta di istruzioni. Ora ogni schieramento ha la SUA casella di
+   ricerca e la sua griglia: si aggiunge dove si intende aggiungere, e
+   basta. Un clic su una nazione già nel proprio schieramento la toglie;
+   su una nazione dell'altro schieramento la SPOSTA (nessuna nazione può
+   stare da entrambe le parti, altrimenti il confronto non vorrebbe dire
+   niente).
+
    Le metriche sommate sono quelle di metrics.js — tasse e malcontento
    restano fuori, sommarli non vorrebbe dire niente (sono percentuali di
    cose diverse); si mostra invece la media.
@@ -46,6 +56,33 @@ export function renderNationCompare(host, ctx) {
       ${flagImg(n._id)}<span>${escapeHtml(n.name)}</span><span class="wp-nat-chip-x">✕</span>
     </button>`;
 
+  // Un elenco per schieramento. Le nazioni già schierate restano visibili
+  // (marcate con la tinta del lato in cui stanno): servono per togliere o
+  // spostare senza doverle cercare fra i chip.
+  const pickerHtml = (side) => {
+    const query = (side === 'a' ? ctx.searchA : ctx.searchB) || '';
+    const q = query.toLowerCase();
+    const items = nations
+      .filter(n => !q || n.name?.toLowerCase().includes(q))
+      .slice()
+      .sort((x, y) => metricValue(y, 'weekly') - metricValue(x, 'weekly'))
+      .map(n => {
+        const cur = sides.get(n._id);
+        return `
+          <button type="button" class="wp-nat-pick${cur ? ` wp-nat-pick-${cur}` : ''}" data-country="${escapeHtml(n._id)}" data-side="${side}">
+            ${flagImg(n._id)}<span class="wp-nat-pick-name">${escapeHtml(n.name)}</span>
+            <span class="wp-nat-pick-val">${escapeHtml(fmtCompact(metricValue(n, 'weekly')))}</span>
+          </button>`;
+      }).join('');
+    return `
+      <div class="wp-nat-picker wp-nat-picker-${side}">
+        <h4>${escapeHtml(natT(side === 'a' ? 'sideA' : 'sideB'))}</h4>
+        <input type="search" id="wp-nat-pick-search-${side}" class="wp-nat-search" data-side="${side}"
+               placeholder="${escapeHtml(natT('search'))}" value="${escapeHtml(query)}">
+        <div class="wp-nat-picker-grid">${items}</div>
+      </div>`;
+  };
+
   host.innerHTML = `
     <p class="wp-nat-hint">${escapeHtml(natT('pickSide'))}</p>
 
@@ -63,32 +100,31 @@ export function renderNationCompare(host, ctx) {
 
     ${(a.length || b.length) ? `<ul class="wp-nat-vs">${rows}</ul>` : ''}
 
-    <div class="wp-nat-picker">
-      <input type="search" id="wp-nat-pick-search" class="wp-nat-search" placeholder="${escapeHtml(natT('search'))}" value="${escapeHtml(ctx.search || '')}">
-      <div class="wp-nat-picker-grid">
-        ${nations
-          .filter(n => !ctx.search || n.name?.toLowerCase().includes(ctx.search.toLowerCase()))
-          .slice()
-          .sort((x, y) => metricValue(y, 'weekly') - metricValue(x, 'weekly'))
-          .map(n => `
-            <button type="button" class="wp-nat-pick${sides.has(n._id) ? ` wp-nat-pick-${sides.get(n._id)}` : ''}" data-country="${escapeHtml(n._id)}">
-              ${flagImg(n._id)}<span class="wp-nat-pick-name">${escapeHtml(n.name)}</span>
-              <span class="wp-nat-pick-val">${escapeHtml(fmtCompact(metricValue(n, 'weekly')))}</span>
-            </button>`).join('')}
-      </div>
+    <div class="wp-nat-pickers">
+      ${pickerHtml('a')}
+      ${pickerHtml('b')}
     </div>`;
 
-  host.querySelectorAll('.wp-nat-pick, .wp-nat-chip').forEach(el => {
-    el.addEventListener('click', () => ctx.onCycle(el.dataset.country));
+  // Griglia: il lato è quello dell'elenco su cui si è cliccato.
+  host.querySelectorAll('.wp-nat-pick').forEach(el => {
+    el.addEventListener('click', () => ctx.onPick(el.dataset.country, el.dataset.side));
+  });
+  // Chip già schierato: il clic (o la ✕) lo toglie e basta.
+  host.querySelectorAll('.wp-nat-chip').forEach(el => {
+    el.addEventListener('click', () => ctx.onRemove(el.dataset.country));
   });
   host.querySelector('#wp-nat-reset')?.addEventListener('click', () => ctx.onResetSides());
 
-  const searchEl = host.querySelector('#wp-nat-pick-search');
-  if (searchEl) {
-    searchEl.addEventListener('input', (e) => ctx.onSearch(e.target.value));
-    if (ctx.searchFocused) {
+  ['a', 'b'].forEach(side => {
+    const searchEl = host.querySelector(`#wp-nat-pick-search-${side}`);
+    if (!searchEl) return;
+    searchEl.addEventListener('input', (e) => ctx.onSearch(side, e.target.value));
+    // Rifocalizza solo la casella su cui si stava scrivendo: il render
+    // ricostruisce l'HTML, e senza questo il cursore uscirebbe dal campo
+    // ad ogni lettera (stesso trattamento dell'elenco panoramica).
+    if (ctx.searchFocusedSide === side) {
       searchEl.focus();
       searchEl.setSelectionRange(searchEl.value.length, searchEl.value.length);
     }
-  }
+  });
 }
