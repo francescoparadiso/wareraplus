@@ -313,6 +313,15 @@ funzionano sempre. Dopo un deploy servono ~8 giri di poll (~4 ore) perché
 la mappa utente→nazione/stile si riempia. L'elenco cittadini di Statistiche nazioni dipende dallo stesso server
 (`/country-citizens`, endpoint aggiunto insieme alla vista): senza deploy
 ricade su una risoluzione diretta dal browser limitata a 150 cittadini per
-nazione, dichiarata in chiaro nell'interfaccia. Anche la riga "danno di oggi"
+nazione, dichiarata in chiaro nell'interfaccia. Le tre viste mappa storiche aggiunte dopo (Regioni contese,
+Storico bellico, Guerra vs Commercio) degradano ognuna a modo suo:
+"Regioni contese" se `/region-history/contested` manca si conta i
+passaggi di mano da sola nel browser sugli eventi grezzi (~112 KB gzip,
+una volta per sessione), quindi funziona comunque; "Guerra vs Commercio"
+usa `/mu-playstyle-by-country`, che esiste già da prima; "Storico
+bellico" è l'unica che senza deploy resta vuota — il totale danno per
+regione si calcola solo sulle battaglie del bootstrap, che stanno solo
+sul VPS (`/region-history/war-intensity`), e la legenda lo dice in chiaro.
+Anche la riga "danno di oggi"
 nella fascia di Alliance Overview dipende dal server (`/daily-damage`,
 scatto alle 02:00 italiane): senza deploy semplicemente non compare.

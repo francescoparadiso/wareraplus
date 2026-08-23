@@ -553,6 +553,57 @@ export async function fetchRegionHistoryEventsViaCache(sinceTs, untilTs) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════
+// HEATMAP STORICHE PER REGIONE (viste "Regioni contese" e "Intensità
+// bellica") — vedi src/diplomacy/contestedHeatmap.js e warIntensityHeatmap.js
+// ══════════════════════════════════════════════════════════════
+
+/** {regionId: quante volte ha cambiato padrone}. Il server lo pre-calcola
+ *  (/region-history/contested, poche centinaia di righe); se non risponde —
+ *  o se non è ancora stato aggiornato con quell'endpoint — lo si conta qui
+ *  dallo stesso storico che usa la time machine: ~112 KB gzip di eventi,
+ *  UNA volta per sessione, con lo stesso fallback esterno di
+ *  fetchRegionHistoryEventsViaCache. Vale la fetch in più: la vista
+ *  funziona lo stesso invece di restare grigia in attesa di un deploy. */
+let _contestedPromise = null;
+export function fetchContestedRegionsViaCache() {
+  if (_contestedPromise) return _contestedPromise;
+  _contestedPromise = (async () => {
+    try {
+      const json = await _fetchCacheJsonRaw('/region-history/contested');
+      if (!json?.data || typeof json.data !== 'object') throw new Error('forma inattesa');
+      return json.data;
+    } catch (err) {
+      console.warn('[contested] endpoint del server non disponibile, conteggio lato client:', err.message);
+      const events = await fetchRegionHistoryEventsViaCache(0, Date.now());
+      const counts = {};
+      for (const e of events) {
+        if (!e?.regionId) continue;
+        counts[e.regionId] = (counts[e.regionId] || 0) + 1;
+      }
+      return counts;
+    }
+  })();
+  _contestedPromise.catch(() => { _contestedPromise = null; }); // riprovabile
+  return _contestedPromise;
+}
+
+/** {regionId: danno totale storico}. Nessun fallback possibile: il calcolo
+ *  vive sulle battaglie risolte del bootstrap, che stanno SOLO sul server di
+ *  cache. Rilancia se l'endpoint non c'è — il chiamante mostra la nota
+ *  "serve il server aggiornato" invece di una mappa muta. */
+let _warIntensityPromise = null;
+export function fetchWarIntensityViaCache() {
+  if (_warIntensityPromise) return _warIntensityPromise;
+  _warIntensityPromise = (async () => {
+    const json = await _fetchCacheJsonRaw('/region-history/war-intensity');
+    if (!json?.data || typeof json.data !== 'object') throw new Error('cache /region-history/war-intensity: forma inattesa');
+    return json.data;
+  })();
+  _warIntensityPromise.catch(() => { _warIntensityPromise = null; });
+  return _warIntensityPromise;
+}
+
 // WarEra+: "crediti" statici del tool (userId fisso) — vedi
 // server/warera-cache-server.js:pollCreditProfiles (poll ogni 6 ore, un
 // solo batch per tutti). Prima ognuno chiamava il Worker separatamente da

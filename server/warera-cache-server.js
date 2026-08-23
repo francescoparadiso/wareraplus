@@ -1547,6 +1547,7 @@ function updateRegionHistory(regionsObj) {
   if (changes.length) {
     events = [...events, ...changes]; // MAI troncato: vedi nota (3), il passato non pesa quasi nulla su disco
     writeCache(REGION_EVENTS_FILE, events);
+    recomputeContestCounts();
     console.log(`[region-history] +${changes.length} trasferimenti regione registrati`);
   }
 
@@ -1592,6 +1593,60 @@ const BOOTSTRAP_RAW_FILE = 'bootstrap-raw-battles';
 // mai nextCursor:null) — a 1 pagina/minuto sono comunque ~14 giorni prima
 // di fermarsi, non un limite che ci si aspetta di toccare davvero.
 const BOOTSTRAP_MAX_PAGES = 20000;
+
+// ═══════════════════════════════════════════════════════════════════════
+// AGGREGATI PER SINGOLA REGIONE (heatmap "Regioni contese" e "Intensità
+// bellica storica" del client, src/diplomacy/contestedHeatmap.js e
+// warIntensityHeatmap.js). Entrambi derivano da dati che sono GIÀ qui:
+// nessuna nuova chiamata alle API WarEra, solo due letture di file.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** {regionId: quante volte ha cambiato padrone}. Ricalcolato ad ogni
+ *  riscrittura di REGION_EVENTS_FILE — il file è scritto in tre punti
+ *  (updateRegionHistory, pollExternalHistory, _finalizeBootstrap) e la
+ *  chiamata sta accanto a ciascuno, invece di duplicare il conteggio.
+ *  Il client sa comunque contarseli da solo dagli eventi grezzi se questo
+ *  endpoint non c'è (server non ancora aggiornato): qui si risparmiano
+ *  ~112 KB gzip di download per ogni utente, non si abilita la vista. */
+function recomputeContestCounts() {
+  const events = readCache(REGION_EVENTS_FILE, []);
+  const counts = {};
+  for (const e of events) {
+    if (!e || !e.regionId) continue;
+    counts[e.regionId] = (counts[e.regionId] || 0) + 1;
+  }
+  writeCache('region-contest-counts', { fetchedAt: Date.now(), data: counts });
+}
+
+/** {regionId: danno totale di tutte le battaglie risolte lì}. Campi
+ *  verificati dal vivo su battle.getBattles(isActive:false):
+ *  `attacker.damages` / `defender.damages` (totali di battaglia) e
+ *  `defender.region` come teatro dello scontro — gli stessi che
+ *  _resolveBattleOutcome già usa per region/country.
+ *
+ *  Calcolato UNA VOLTA su un dataset fermo (il poll del bootstrap è
+ *  disattivato di proposito nello scheduler): un cron periodico
+ *  rimacinerebbe 15.000 battaglie per ottenere ogni volta lo stesso
+ *  numero. Gira dopo il finalize del bootstrap e, per i server già
+ *  finalizzati prima di questa aggiunta, una volta all'avvio se il file
+ *  non esiste ancora. */
+function computeHistoricalWarIntensity() {
+  const battles = readCache(BOOTSTRAP_RAW_FILE, []);
+  if (!battles.length) {
+    console.log('[compute] war intensity: nessuna battaglia nel bootstrap, salto');
+    return;
+  }
+  const intensity = {};
+  for (const b of battles) {
+    const regionId = b.defender?.region ?? b.attacker?.region ?? null;
+    if (!regionId) continue;
+    const dmg = (b.attacker?.damages || 0) + (b.defender?.damages || 0);
+    if (!dmg) continue;
+    intensity[regionId] = (intensity[regionId] || 0) + dmg;
+  }
+  writeCache('region-war-intensity', { fetchedAt: Date.now(), data: intensity });
+  console.log(`[compute] war intensity: ${Object.keys(intensity).length} regioni su ${battles.length} battaglie risolte`);
+}
 
 async function _fetchResolvedBattlesPage(cursor) {
   const input = { isActive: false, limit: 100, ...(cursor ? { cursor } : {}) };
@@ -1677,6 +1732,8 @@ function _finalizeBootstrap(rawBattles) {
       { ts: Date.now(), regions }, // stato finale ricostruito, ancoraggio comodo per le query più recenti
     ]);
     writeCache(REGION_EVENTS_FILE, events);
+    recomputeContestCounts();
+    computeHistoricalWarIntensity();
 
     console.log(
       `[bootstrap] FINALIZE completato: ${rawBattles.length} battaglie risolte, ` +
@@ -1789,6 +1846,7 @@ async function pollExternalHistory() {
 
   writeCache(REGION_KEYFRAMES_FILE, [{ ts: GENESIS_TS, regions: external.initialOwnership }]);
   writeCache(REGION_EVENTS_FILE, mergedEvents);
+  recomputeContestCounts();
   writeCache(EXTERNAL_HISTORY_STATUS_FILE, {
     fetchedAt: Date.now(),
     generatedAt: external.generatedAt,
@@ -1859,6 +1917,13 @@ cron.schedule('1 2 * * *', snapshotDailyDamage, { timezone: DAILY_DAMAGE_TZ });
   // non dal cambio giorno), e infatti il client mostra l'ora dello scatto
   // invece di dire "oggi" quando non è delle 02:00.
   if (!readCache(DAILY_DAMAGE_FILE, null)) snapshotDailyDamage();
+
+  // Aggregati per regione: il conteggio delle contese si riallinea da solo
+  // al prossimo evento, ma su un server già avviato da tempo il prossimo
+  // evento può essere fra ore — meglio averli subito. L'intensità bellica
+  // gira su un dataset fermo: una volta sola, se non è già stata calcolata.
+  if (!readCache('region-contest-counts', null)) recomputeContestCounts();
+  if (!readCache('region-war-intensity', null)) computeHistoricalWarIntensity();
 })();
 
 // ---------------------------------------------------------------------------
@@ -2131,6 +2196,10 @@ app.get('/region-history/at', (req, res) => {
   const result = _reconstructRegionsAt(keyframes, events, ts);
   res.json({ requestedTs: ts, baseTs: result.ts, regions: result.regions });
 });
+
+app.get('/region-history/contested', (req, res) => res.json(readCache('region-contest-counts', { fetchedAt: null, data: {} })));
+
+app.get('/region-history/war-intensity', (req, res) => res.json(readCache('region-war-intensity', { fetchedAt: null, data: {} })));
 
 app.get('/region-history/events', (req, res) => {
   const since = req.query.since ? Number(req.query.since) : 0;

@@ -129,6 +129,16 @@
           <div id="mode-population" class="mode-btn" data-i18n="mode_population">👥 Pop.</div>
         </div>
 
+        <!-- Terza riga (WarEra+): heatmap storiche. Le prime due colorano la
+             SINGOLA REGIONE (regionId), non la nazione — vedi
+             src/diplomacy/contestedHeatmap.js e warIntensityHeatmap.js. -->
+        <div class="mode-toggle-group mode-toggle-row" style="margin-top:4px;">
+          <div class="mode-slider mode-slider-third" id="mode-slider-third"></div>
+          <div id="mode-contested" class="mode-btn" data-i18n="mode_contested">🎌 Contested</div>
+          <div id="mode-warIntensity" class="mode-btn" data-i18n="mode_war_intensity">💥 War Hist.</div>
+          <div id="mode-playstyle" class="mode-btn" data-i18n="mode_playstyle">⚖️ War/Trade</div>
+        </div>
+
         <label class="switch-container">
           <span class="switch-label" data-i18n="switch_active_battles">⚔️ Active Battles</span>
           <div class="switch"><input type="checkbox" id="checkActiveBattles" checked /><span class="slider"></span></div>

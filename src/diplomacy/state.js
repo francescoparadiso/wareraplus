@@ -34,6 +34,13 @@ export const state = {
   diplomacyData: new Map(),
   centroids: new Map(),
   battleHeatmapData: null,
+  // WarEra+ heatmap storiche: caricate su richiesta alla prima attivazione
+  // della relativa vista, poi tenute qui per la sessione (dati che cambiano
+  // lentamente, non vale un refetch ad ogni cambio di modalità).
+  contestedCounts: null,      // {regionId: passaggi di mano}
+  warIntensityData: null,     // {regionId: danno storico totale}
+  warIntensityError: null,    // messaggio se il server non espone l'endpoint
+  nationPlaystyle: null,      // {countryId: {war, eco, mixed, undecided, known, total}}
   regionData: null,
   regionCache: new Map(), // regionId → { position: [lng,lat], name: string }
   // Indici O(1) per evitare le scansioni lineari (nazioniGlobal.find /

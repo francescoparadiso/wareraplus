@@ -281,6 +281,69 @@ document.getElementById('mode-population').addEventListener('click', () => {
   trackEvent('view-mode-change', { mode: 'population' });
   setColoringMode('population');
 });
+
+// ══ Terza riga (WarEra+): heatmap storiche ════════════════════════════
+// I dati non stanno in memoria come popolazione/danni (che arrivano con
+// country.getAllCountries): si caricano alla PRIMA attivazione della vista
+// e restano in state per la sessione. La modalita' si attiva subito, con la
+// mappa neutra e la legenda che dice "sto caricando", invece di lasciare il
+// bottone premuto senza risposta finche' la fetch non torna.
+function _dimOtherSliders() {
+  const sliderTop = document.getElementById('mode-slider');
+  const sliderBottom = document.getElementById('mode-slider-bottom');
+  if (sliderTop) sliderTop.style.opacity = '0.3';
+  if (sliderBottom) sliderBottom.style.opacity = '0.3';
+}
+
+document.getElementById('mode-contested')?.addEventListener('click', async () => {
+  _dimOtherSliders();
+  trackEvent('view-mode-change', { mode: 'contested' });
+  setColoringMode('contested');
+  if (state.contestedCounts) return;
+  try {
+    const { fetchContestedRegionsViaCache } = await import('./cacheClient.js');
+    state.contestedCounts = await fetchContestedRegionsViaCache();
+    if (state.coloringMode === 'contested') renderMap();
+  } catch (err) {
+    console.warn('[contested] dati non disponibili:', err.message);
+  }
+});
+
+document.getElementById('mode-warIntensity')?.addEventListener('click', async () => {
+  _dimOtherSliders();
+  trackEvent('view-mode-change', { mode: 'warIntensity' });
+  setColoringMode('warIntensity');
+  if (state.warIntensityData) return;
+  try {
+    const { fetchWarIntensityViaCache } = await import('./cacheClient.js');
+    state.warIntensityData = await fetchWarIntensityViaCache();
+    state.warIntensityError = null;
+    if (state.coloringMode === 'warIntensity') renderMap();
+  } catch (err) {
+    // Unica delle tre senza alcun ripiego lato client: il totale storico
+    // per regione esiste solo sul server di cache (battaglie del bootstrap).
+    console.warn('[warIntensity] endpoint non disponibile:', err.message);
+    state.warIntensityError = 'Historical battle data not available yet (cache server not updated).';
+    if (state.coloringMode === 'warIntensity') renderMap();
+  }
+});
+
+document.getElementById('mode-playstyle')?.addEventListener('click', async () => {
+  _dimOtherSliders();
+  trackEvent('view-mode-change', { mode: 'playstyle' });
+  setColoringMode('playstyle');
+  if (state.nationPlaystyle) return;
+  try {
+    // Stesso endpoint gia' usato dal pannello nazione e da Statistiche
+    // alleanze: se una delle due l'ha gia' chiesto in questa sessione la
+    // risposta e' gia' in memoria dentro src/mu/api.js, zero fetch.
+    const { fetchPlaystyleByCountry } = await import('../mu/api.js');
+    state.nationPlaystyle = await fetchPlaystyleByCountry();
+    if (state.coloringMode === 'playstyle') renderMap();
+  } catch (err) {
+    console.warn('[playstyle] dati non disponibili:', err.message);
+  }
+});
   document.getElementById('checkLabels').addEventListener('change', () => { if (state.map) state.map.triggerRepaint(); });
   document.getElementById('checkExcludeExternalNaps').addEventListener('change', function () {
     trackEvent('toggle-exclude-external-naps', { checked: this.checked });

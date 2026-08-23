@@ -6,6 +6,9 @@ import { fmtNumber } from './utils.js'; // Aggiunto per formattare i numeri nell
 import { escapeHtml } from './utils.js';
 import { t } from '../shared/i18n.js';
 import { trackEvent } from '../shared/analytics.js';
+import { getContestedStats, contestedLegendGradient } from './contestedHeatmap.js';
+import { getWarIntensityStats, warIntensityLegendGradient } from './warIntensityHeatmap.js';
+import { getPlaystyleStats, playstyleLegendGradient } from './playstyleHeatmap.js';
 
 function _fmtDmg(n) {
   if (!n) return '0';
@@ -159,6 +162,83 @@ export function updateDynamicLegend() {
         <span style="font-size:10px; color:${sub};">${fmtNumber(max)}</span>
       </div>
       <div class="legend-note">Low = blue · High = red</div>
+    `;
+    return;
+  }
+
+  // ══ Heatmap storiche per REGIONE (contese / intensità bellica) e
+  //    playstyle nazionale — legende a gradiente, compatte come le altre.
+  if (state.coloringMode === 'contested') {
+    const sub = THEMES[state.theme].TEXT_SECONDARY;
+    const stats = getContestedStats(state.contestedCounts || {});
+    if (!stats.regions) {
+      box.innerHTML = `
+        <div class="legend-section-title">Contested Regions</div>
+        <div class="legend-note">Loading ownership history…</div>`;
+      return;
+    }
+    box.innerHTML = `
+      <div class="legend-section-title">Contested Regions</div>
+      <div class="legend-scale" style="margin:4px 0;">
+        <div style="width:100%;height:14px;background:${contestedLegendGradient()};border-radius:3px;"></div>
+      </div>
+      <div class="legend-item" style="justify-content:space-between; padding:0 4px;">
+        <span style="font-size:10px; color:${sub};">calm</span>
+        <span style="font-size:10px; color:${sub};">up to ${fmtNumber(stats.max)}×</span>
+      </div>
+      <div class="legend-note">Times the region changed hands, ranked (median ${fmtNumber(stats.median)}) · ${fmtNumber(stats.regions)} regions, ${fmtNumber(stats.total)} transfers since day one</div>
+    `;
+    return;
+  }
+
+  if (state.coloringMode === 'warIntensity') {
+    const sub = THEMES[state.theme].TEXT_SECONDARY;
+    if (state.warIntensityError) {
+      box.innerHTML = `
+        <div class="legend-section-title">War Intensity</div>
+        <div class="legend-note">${escapeHtml(state.warIntensityError)}</div>`;
+      return;
+    }
+    const stats = getWarIntensityStats(state.warIntensityData || {});
+    if (!stats.regions) {
+      box.innerHTML = `
+        <div class="legend-section-title">War Intensity</div>
+        <div class="legend-note">Loading battle history…</div>`;
+      return;
+    }
+    box.innerHTML = `
+      <div class="legend-section-title">War Intensity</div>
+      <div class="legend-scale" style="margin:4px 0;">
+        <div style="width:100%;height:14px;background:${warIntensityLegendGradient()};border-radius:3px;"></div>
+      </div>
+      <div class="legend-item" style="justify-content:space-between; padding:0 4px;">
+        <span style="font-size:10px; color:${sub};">quiet</span>
+        <span style="font-size:10px; color:${sub};">up to ${fmtNumber(stats.max)}</span>
+      </div>
+      <div class="legend-note">Total damage of all resolved battles fought in the region, ranked (median ${fmtNumber(stats.median)}) · snapshot, not live</div>
+    `;
+    return;
+  }
+
+  if (state.coloringMode === 'playstyle') {
+    const sub = THEMES[state.theme].TEXT_SECONDARY;
+    const stats = getPlaystyleStats(state.nationPlaystyle || {});
+    if (!stats.colored) {
+      box.innerHTML = `
+        <div class="legend-section-title">War vs Trade</div>
+        <div class="legend-note">No playstyle data available</div>`;
+      return;
+    }
+    box.innerHTML = `
+      <div class="legend-section-title">War vs Trade</div>
+      <div class="legend-scale" style="margin:4px 0;">
+        <div style="width:100%;height:14px;background:${playstyleLegendGradient()};border-radius:3px;"></div>
+      </div>
+      <div class="legend-item" style="justify-content:space-between; padding:0 4px;">
+        <span style="font-size:10px; color:${sub};">Trade</span>
+        <span style="font-size:10px; color:${sub};">War</span>
+      </div>
+      <div class="legend-note">Skill points of citizens in military units · ${stats.warLeaning} war-leaning, ${stats.balanced} balanced, ${stats.ecoLeaning} trade-leaning · ${stats.skipped} nations without a large enough sample</div>
     `;
     return;
   }
@@ -572,4 +652,7 @@ export function syncUIToState() {
   document.getElementById('mode-blocs').classList.toggle('active', state.coloringMode === 'blocs');
   document.getElementById('mode-weeklyDamage')?.classList.toggle('active', state.coloringMode === 'weeklyDamage');
   document.getElementById('mode-sphereOfInfluence')?.classList.toggle('active', state.coloringMode === 'sphereOfInfluence');
+  document.getElementById('mode-contested')?.classList.toggle('active', state.coloringMode === 'contested');
+  document.getElementById('mode-warIntensity')?.classList.toggle('active', state.coloringMode === 'warIntensity');
+  document.getElementById('mode-playstyle')?.classList.toggle('active', state.coloringMode === 'playstyle');
 }

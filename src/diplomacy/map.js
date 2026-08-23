@@ -15,6 +15,9 @@ import {
 import { initLabelCanvas, preloadAllFlags, buildOriginalLabels, loadFlagImage, invalidateLabelCache } from './labels.js';
 import { updateDynamicLegend, updateStats, updateSelectedDisplay } from './ui.js';
 import { buildPopulationColorExpression, buildPopulationTextExpression } from './population.js';
+import { buildContestedColorExpression } from './contestedHeatmap.js';
+import { buildWarIntensityColorExpression } from './warIntensityHeatmap.js';
+import { buildPlaystyleColorExpression } from './playstyleHeatmap.js';
 import { buildWeeklyDamageColorExpression } from './weeklyDamage.js';
 import { buildSphereColorExpression } from './sphereOfInfluence.js';
 import { buildBattleHeatmapColorExpression } from './battleHeatmap.js';
@@ -541,6 +544,14 @@ export function renderMap() {
     } else {
       fillExpr = state.mapSource === 'actual' ? buildBlocColorExpression() : buildOriginalBlocColorExpression();
     }
+  } else if (state.coloringMode === 'contested') {
+    // Per REGIONE, non per nazione: il conteggio non dipende da chi la
+    // possiede oggi, quindi vale identico in vista Attuale e Originale.
+    fillExpr = buildContestedColorExpression(state.contestedCounts || {});
+  } else if (state.coloringMode === 'warIntensity') {
+    fillExpr = buildWarIntensityColorExpression(state.warIntensityData || {});
+  } else if (state.coloringMode === 'playstyle') {
+    fillExpr = buildPlaystyleColorExpression(state.nationPlaystyle || {}, state.mapSource === 'original');
   } else if (state.coloringMode === 'battleHeatmap') {
     fillExpr = buildBattleHeatmapColorExpression(state.mapSource === 'original');
   } else if (state.mapSource === 'actual') {
@@ -1158,6 +1169,12 @@ export function setColoringMode(mode) {
   // Aggiorna i pulsanti della seconda riga
   document.getElementById('mode-weeklyDamage').classList.toggle('active', mode === 'weeklyDamage');
   document.getElementById('mode-population').classList.toggle('active', mode === 'population');
+
+  // Terza riga (WarEra+): heatmap storiche
+  document.getElementById('mode-contested')?.classList.toggle('active', mode === 'contested');
+  document.getElementById('mode-warIntensity')?.classList.toggle('active', mode === 'warIntensity');
+  document.getElementById('mode-playstyle')?.classList.toggle('active', mode === 'playstyle');
+  const isThirdRow = mode === 'contested' || mode === 'warIntensity' || mode === 'playstyle';
   
   // Slider prima riga (3 pulsanti: diplomacy, blocs, sphere)
   const sliderTop = document.getElementById('mode-slider');
@@ -1168,8 +1185,8 @@ export function setColoringMode(mode) {
       blocs: isMobile ? 'calc(33.33% + 0.5px)' : 'calc(33.33% + 0.6px)',
       sphereOfInfluence: isMobile ? 'calc(66.66% + 0.5px)' : 'calc(66.66% + 0.6px)'
     };
-    // Per i modi della seconda riga, nascondi lo slider o mettilo in una posizione neutra
-    if (mode === 'weeklyDamage' || mode === 'population') {
+    // Per i modi delle altre righe, nascondi lo slider o mettilo in una posizione neutra
+    if (mode === 'weeklyDamage' || mode === 'population' || isThirdRow) {
       sliderTop.style.opacity = '0.3';
     } else {
       sliderTop.style.opacity = '1';
@@ -1200,6 +1217,27 @@ export function setColoringMode(mode) {
       state._lastBottomMode = mode;
     }
   }
-  
+
+  // Slider terza riga (3 pulsanti: contested, warIntensity, playstyle) —
+  // stessa meccanica delle due righe sopra: acceso solo quando la modalita'
+  // attiva e' una delle sue, altrimenti resta smorzato dov'era.
+  const sliderThird = document.getElementById('mode-slider-third');
+  if (sliderThird) {
+    const isMobile = window.innerWidth <= 768;
+    const positions = {
+      contested: isMobile ? '2px' : '3px',
+      warIntensity: isMobile ? 'calc(33.33% + 0.5px)' : 'calc(33.33% + 0.6px)',
+      playstyle: isMobile ? 'calc(66.66% + 0.5px)' : 'calc(66.66% + 0.6px)',
+    };
+    if (isThirdRow) {
+      sliderThird.style.opacity = '1';
+      sliderThird.style.left = positions[mode] || '3px';
+      state._lastThirdMode = mode;
+    } else {
+      sliderThird.style.opacity = '0.3';
+      if (state._lastThirdMode) sliderThird.style.left = positions[state._lastThirdMode] || '3px';
+    }
+  }
+
   renderMap();
 }
