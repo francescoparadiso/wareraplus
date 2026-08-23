@@ -1,7 +1,9 @@
 import { state } from './state.js';
 import { COLORS } from './config.js';
 
-function getPopulationColor(population, min, max) {
+// export: usata anche da legendOverview.js per tingere le righe della
+// classifica con la stessa tinta che la nazione ha sulla mappa.
+export function getPopulationColor(population, min, max) {
   if (max === min) return COLORS.DEFAULT_LAND;
   const t = Math.max(0, Math.min(1, (population - min) / (max - min)));
   const r = 255;

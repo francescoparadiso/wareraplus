@@ -1150,8 +1150,14 @@ export function setColoringMode(mode) {
   // sono, non com'è fatta una in particolare); uscendo, il pannello sfera
   // — riepilogo o dettaglio — si chiude, com'è già per il focus blocco.
   import('../panel/countryPanel.js').then(m => {
-    if (mode === 'sphereOfInfluence') m.renderSphereOverviewPanel();
-    else if (m.getCurrentSphereId() || m.isSphereOverviewOpen()) m.selectSphereInPanel(null);
+    if (mode === 'sphereOfInfluence') { m.renderSphereOverviewPanel(); return; }
+    if (m.getCurrentSphereId() || m.isSphereOverviewOpen()) m.selectSphereInPanel(null);
+    // WarEra+: stesso patto per le altre viste con riepilogo (alleanze,
+    // popolazione, danni, contese, storico bellico, guerra vs eco) —
+    // entrando si apre l'elenco della vista, uscendo si chiude. Vedi
+    // src/panel/viewOverview.js.
+    if (m.hasViewOverviewMode(mode)) m.renderViewOverviewPanel(mode);
+    else if (m.isViewOverviewOpen()) m.closePanel();
   });
 
   // battleHeatmap non ha un pulsante nella barra: senza questo, tutti i

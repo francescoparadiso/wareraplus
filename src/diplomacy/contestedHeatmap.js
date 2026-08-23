@@ -73,6 +73,20 @@ export function buildContestedColorExpression(counts) {
   return expr;
 }
 
+/** Classifica delle regioni più contese, colorata con la stessa scala
+ *  percentile della mappa (non una tinta inventata per la legenda: la
+ *  riga dell'elenco e il territorio hanno lo stesso colore).
+ *  @returns {{regionId:string, value:number, color:string}[]} */
+export function contestedRankedList(counts, limit = 8) {
+  const entries = Object.entries(counts || {}).filter(([, c]) => c > 0);
+  if (!entries.length) return [];
+  const scale = makePercentileScale(entries.map(([, c]) => c));
+  return entries
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([regionId, value]) => ({ regionId, value, color: colorAt(scale(value)) }));
+}
+
 /** Gradiente CSS della legenda, costruito dagli stessi colori della mappa
  *  (non ricopiati a mano: se cambia getContestColor cambia anche qui). */
 export function contestedLegendGradient() {

@@ -225,20 +225,20 @@ export function updateDynamicLegend() {
     const stats = getPlaystyleStats(state.nationPlaystyle || {});
     if (!stats.colored) {
       box.innerHTML = `
-        <div class="legend-section-title">War vs Trade</div>
+        <div class="legend-section-title">War vs Eco</div>
         <div class="legend-note">No playstyle data available</div>`;
       return;
     }
     box.innerHTML = `
-      <div class="legend-section-title">War vs Trade</div>
+      <div class="legend-section-title">War vs Eco</div>
       <div class="legend-scale" style="margin:4px 0;">
         <div style="width:100%;height:14px;background:${playstyleLegendGradient()};border-radius:3px;"></div>
       </div>
       <div class="legend-item" style="justify-content:space-between; padding:0 4px;">
-        <span style="font-size:10px; color:${sub};">Trade</span>
+        <span style="font-size:10px; color:${sub};">Eco</span>
         <span style="font-size:10px; color:${sub};">War</span>
       </div>
-      <div class="legend-note">Skill points of citizens in military units · ${stats.warLeaning} war-leaning, ${stats.balanced} balanced, ${stats.ecoLeaning} trade-leaning · ${stats.skipped} nations without a large enough sample</div>
+      <div class="legend-note">Skill points of citizens in military units · ${stats.warLeaning} war-leaning, ${stats.balanced} balanced, ${stats.ecoLeaning} eco-leaning · ${stats.skipped} nations without a large enough sample</div>
     `;
     return;
   }

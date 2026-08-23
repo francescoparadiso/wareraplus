@@ -2473,6 +2473,141 @@ body.light-theme .wp-sphere-group:hover { background: rgba(139, 90, 43, .08); bo
 body.light-theme .wp-sphere-disclaimer { color: #8a6100; background: rgba(210, 153, 34, .14); border-color: rgba(138, 97, 0, .3); }
 body.light-theme .wp-sphere-group-head { color: #1a1a1a; }
 body.light-theme .wp-sphere-chip { border-color: #e0e0e0; color: #3e2f1c; background: rgba(0, 0, 0, .04); }
+
+/* ── Riepilogo della vista nel pannello (WarEra+, src/panel/viewOverview.js) ──
+   Una riga per voce di classifica: posizione, bandiera (o pallino nel colore
+   dell'alleanza), nome, valore, e sotto la barretta proporzionale. La barra
+   c'e' perche' una colonna di numeri non dice al volo se il primo stacca
+   tutti o se sono appaiati; il suo colore e' lo stesso che la voce ha sulla
+   mappa, cosi' l'elenco e la mappa si leggono insieme. */
+.wp-vo-about {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #8b949e;
+  background: rgba(88, 166, 255, .06);
+  border: 1px solid rgba(88, 166, 255, .18);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+}
+.wp-vo-grid { margin-bottom: 14px; }
+.wp-vo-row {
+  display: grid;
+  /* Colonna in coda per il chevron: c'e' solo quando la riga apre qualcosa
+     (allora l'elemento e' un <button>, vedi viewOverview.js: rowHtml), e su
+     telefono e' l'unico segnale che la riga si puo' toccare. */
+  grid-template-columns: 18px auto 1fr auto auto;
+  grid-template-areas:
+    "rank icon name value go"
+    "sub  sub  sub  sub   sub"
+    "bar  bar  bar  bar   bar";
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  background: none;
+  color: inherit;
+  align-items: center;
+  gap: 2px 6px;
+  padding: 6px 7px;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  margin-bottom: 5px;
+  transition: background .15s, border-color .15s;
+}
+.wp-vo-row[data-nation-id],
+.wp-vo-row[data-bloc-id] { cursor: pointer; }
+.wp-vo-row[data-nation-id]:hover,
+.wp-vo-row[data-bloc-id]:hover {
+  background: rgba(88, 166, 255, .08);
+  border-color: #58a6ff;
+}
+.wp-vo-rank {
+  grid-area: rank;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #6e7681;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.wp-vo-flag {
+  grid-area: icon;
+  width: 16px;
+  height: auto;
+  border-radius: 2px;
+}
+.wp-vo-dot {
+  grid-area: icon;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.wp-vo-name {
+  grid-area: name;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #e6edf3;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wp-vo-value {
+  grid-area: value;
+  font-size: 12px;
+  font-weight: 700;
+  color: #c9d1d9;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Il sotto-testo (quota, campione, proprietario) sta sulla sua riga, sotto
+   al nome: cosi' non ruba larghezza al nome, che e' il pezzo che si cerca
+   per primo, e resta leggibile anche con nomi lunghi. */
+.wp-vo-sub {
+  grid-area: sub;
+  justify-self: start;
+  font-size: 10.5px;
+  color: #8b949e;
+  white-space: nowrap;
+}
+.wp-vo-bar {
+  grid-area: bar;
+  justify-self: stretch;
+  align-self: end;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(139, 148, 158, .16);
+  overflow: hidden;
+  margin-top: 3px;
+}
+.wp-vo-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+}
+.wp-vo-go {
+  grid-area: go;
+  font-size: 15px;
+  line-height: 1;
+  color: #6e7681;
+  padding-left: 2px;
+}
+.wp-vo-row:hover .wp-vo-go { color: #58a6ff; }
+
+.wp-vo-more {
+  font-size: 11px;
+  color: #6e7681;
+  padding: 6px 2px 0;
+}
+body.light-theme .wp-vo-row { border-color: #e0e0e0; }
+body.light-theme .wp-vo-row[data-nation-id]:hover,
+body.light-theme .wp-vo-row[data-bloc-id]:hover { background: rgba(139, 90, 43, .08); border-color: #8b5a2b; }
+body.light-theme .wp-vo-name { color: #1a1a1a; }
+body.light-theme .wp-vo-go { color: #8b5a2b; }
+body.light-theme .wp-vo-value { color: #3e2f1c; }
+body.light-theme .wp-vo-sub,
+body.light-theme .wp-vo-about { color: #5c5347; }
+body.light-theme .wp-vo-about { background: rgba(139, 90, 43, .06); border-color: rgba(139, 90, 43, .2); }
 body.light-theme .wp-sphere-chip:hover, body.light-theme .wp-sphere-group-head:hover .wp-sphere-name { border-color: #8b5a2b; color: #8b5a2b; }
 body.light-theme .wp-sphere-row { border-color: #e0e0e0; }
 body.light-theme .wp-sphere-row:hover { background: rgba(139, 90, 43, .1); border-color: #8b5a2b; }

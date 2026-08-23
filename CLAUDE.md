@@ -111,7 +111,15 @@ wareraPlus/
     │   ├── charts.js            ← ciambelle/barre in SVG scritto a mano, niente Chart.js
     │   ├── nationList.js, nationCompare.js, nationDetail.js, i18n.js (9 lingue)
     ├── panel/                   ← NUOVO
-    │   ├── countryPanel.js      ← pannello laterale nazione
+    │   ├── countryPanel.js      ← pannello laterale nazione (+ riepilogo sfere e viste)
+    │   ├── viewOverview.js      ← contenuto del riepilogo che si apre entrando in una
+    │   │                          vista mappa (alleanze, popolazione, danni sett.,
+    │   │                          regioni contese, storico bellico, guerra vs eco):
+    │   │                          classifica + descrizione per le viste non ovvie.
+    │   │                          Solo markup/dati — apertura, linguetta mobile e
+    │   │                          click stanno in countryPanel.js
+    │   ├── nationFlag.js        ← bandiera/codice ISO di una nazione, condivisi dai
+    │   │                          due pannelli (erano privati in countryPanel.js)
     │   ├── parliamentChart.js   ← grafico emiciclo nel pannello (nativo, indipendente da src/political/)
     │   └── panelResize.js       ← drag per ridimensionare il pannello
     ├── app/                     ← NUOVO — orchestrazione integrazione
@@ -313,7 +321,13 @@ funzionano sempre. Dopo un deploy servono ~8 giri di poll (~4 ore) perché
 la mappa utente→nazione/stile si riempia. L'elenco cittadini di Statistiche nazioni dipende dallo stesso server
 (`/country-citizens`, endpoint aggiunto insieme alla vista): senza deploy
 ricade su una risoluzione diretta dal browser limitata a 150 cittadini per
-nazione, dichiarata in chiaro nell'interfaccia. Le tre viste mappa storiche aggiunte dopo (Regioni contese,
+nazione, dichiarata in chiaro nell'interfaccia. Ogni vista con riepilogo apre il pannello da sola su desktop e resta
+dietro la linguetta "Vedi dettagli" su mobile — stessa regola del
+riepilogo sfere, vedi `src/panel/viewOverview.js`. La vista un tempo
+chiamata "Guerra vs Commercio" si chiama "Guerra vs Eco": misura la
+build economica dei giocatori, non il commercio.
+
+Le tre viste mappa storiche aggiunte dopo (Regioni contese,
 Storico bellico, Guerra vs Commercio) degradano ognuna a modo suo:
 "Regioni contese" se `/region-history/contested` manca si conta i
 passaggi di mano da sola nel browser sugli eventi grezzi (~112 KB gzip,

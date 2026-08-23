@@ -26,6 +26,10 @@ import { trackEvent } from '../shared/analytics.js';
 import { isPinned, togglePin } from '../app/pins.js';
 import { ensureDailyDamage, sumCountryDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
 import { allianceDamageBonus, formatBonus } from '../shared/allianceBonus.js';
+// getFlagUrl/getNationCode vivevano qui: spostate in nationFlag.js perche'
+// le usa anche viewOverview.js (import circolare, altrimenti).
+import { getFlagUrl, getNationCode } from './nationFlag.js';
+import { buildViewOverviewHtml, hasViewOverview } from './viewOverview.js';
 
 // Stella di pin per l'intestazione del pannello (nazione o alleanza).
 function pinStarHtml(type, id) {
@@ -129,6 +133,13 @@ function ensureBackBar() {
   backLabelEl.className = 'wp-panel-back-btn';
   backLabelEl.addEventListener('click', () => {
     if (currentSphereId) { renderSphereOverviewPanel(); return; }
+    // Stessa risalita di un livello per le altre viste: dal dettaglio di
+    // una nazione/alleanza si torna al riepilogo della vista che si stava
+    // guardando, non alla mappa nuda.
+    if (overviewOrigin && (currentNationId || currentBlocId)) {
+      renderViewOverviewPanel(overviewOrigin);
+      return;
+    }
     trackEvent('nation-panel-close', { via: 'mobile-back' });
     closePanel();
   });
@@ -151,7 +162,10 @@ function ensureBackBar() {
 function updateBackBar() {
   if (!backLabelEl) return;
   // back_to_map porta già la freccia dentro la traduzione, sphere_all_label no.
-  backLabelEl.textContent = currentSphereId ? `← ${t('sphere_all_label')}` : t('back_to_map');
+  const upToOverview = overviewOrigin && (currentNationId || currentBlocId);
+  backLabelEl.textContent = currentSphereId ? `← ${t('sphere_all_label')}`
+    : upToOverview ? `← ${t('vo_back_to_overview')}`
+    : t('back_to_map');
 }
 
 function fmt(n) {
@@ -159,16 +173,6 @@ function fmt(n) {
   return fmtNumber(n);
 }
 
-function getFlagUrl(code) {
-  return code ? `https://media.warera.io/images/flags/${code}.svg?v=16` : null;
-}
-
-function getNationCode(nationId, nation) {
-  const isOriginal = state.mapSource === 'original';
-  const srcData = isOriginal ? state.originalLabelsData : state.labelsData;
-  const label = srcData?.find(l => l.properties?.countryId === nationId);
-  return label?.properties?.countryCode?.toLowerCase() || nation.code?.toLowerCase() || '';
-}
 
 /* ── Danno di oggi nel pannello (WarEra+) ──
    Il cumulato settimanale dice quanto si è picchiato in una settimana, ma
@@ -385,10 +389,12 @@ function render(nationId) {
   currentBlocId = null;
   currentSphereId = null;
   sphereOverviewOpen = false;
-  contentEl.innerHTML = buildPanelHtml(nation);
+  currentOverviewMode = null;
+  contentEl.innerHTML = overviewBackHtml() + buildPanelHtml(nation);
   hidePanelPeek();   // si arriva qui da una scelta esplicita: niente linguetta
   openPanelNow();
   wirePinStar();
+  wireOverviewBack();
 
   // WarEra+: le tre scorciatoie in cima al pannello aprono Political View
   // direttamente sulla vista giusta (vedi initPoliticalView in
@@ -569,6 +575,16 @@ function formatSwitchPct(pct) {
    Dati: solo `state` (sphereInfo/sphereMap li ha già riempiti
    src/diplomacy/sphereOfInfluence.js dal CSV) — zero fetch.
    ══════════════════════════════════════════════════════════════ */
+// WarEra+: modalità di cui il pannello sta mostrando il riepilogo
+// (viewOverview.js), oppure null. Vale per le viste elencate in
+// OVERVIEW_MODES; le sfere hanno il loro riepilogo dedicato, più vecchio.
+let currentOverviewMode = null;
+// Da quale riepilogo si e' scesi al dettaglio (nazione o alleanza). Diverso
+// da currentOverviewMode, che dice cosa il pannello sta mostrando ADESSO:
+// questo sopravvive alla discesa, ed e' quello che alimenta il bottone
+// "torna al riepilogo" — su desktop dentro il pannello (come fa da sempre
+// il dettaglio sfera con #wp-sphere-back), non solo nella barra mobile.
+let overviewOrigin = null;
 let currentSphereId = null;
 let sphereOverviewOpen = false;   // il riepilogo di TUTTE le sfere è quello aperto
 
@@ -678,6 +694,8 @@ function renderSpherePanel(primaryId) {
   currentNationId = null;
   currentBlocId = null;
   sphereOverviewOpen = false;
+  currentOverviewMode = null;
+  overviewOrigin = null;
   contentEl.innerHTML = buildSpherePanelHtml(primaryId);
   // Su mobile il pannello resta chiuso dietro alla linguetta: la mappa
   // colorata per sfere è proprio quello che si sta guardando.
@@ -800,6 +818,8 @@ export function renderSphereOverviewPanel() {
   currentNationId = null;
   currentBlocId = null;
   sphereOverviewOpen = true;
+  currentOverviewMode = null;
+  overviewOrigin = null;
   contentEl.innerHTML = buildSphereOverviewHtml();
   if (isMobileView() && !panelEl.classList.contains('open')) {
     showPanelPeek(t('sphere_all_label'));
@@ -821,6 +841,90 @@ export function renderSphereOverviewPanel() {
 
 export function isSphereOverviewOpen() {
   return sphereOverviewOpen;
+}
+
+/* ── Riepilogo della vista corrente (WarEra+) ──
+   Fratello di renderSphereOverviewPanel: stessa idea (entrando in una
+   vista il pannello dice subito COSA si sta guardando, non aspetta un
+   click), estesa alle altre viste della mappa — alleanze, popolazione,
+   danni settimanali, regioni contese, storico bellico, guerra vs eco.
+   Il contenuto sta in viewOverview.js; qui c'è solo il pannello.
+
+   Su desktop si apre da solo, su mobile resta dietro la linguetta "Vedi
+   dettagli" — identico al riepilogo sfere, e per lo stesso motivo: su
+   telefono il pannello copre la mappa, che è quello che si è appena
+   chiesto di vedere. */
+function overviewBackHtml() {
+  if (!overviewOrigin) return '';
+  return `<button class="wp-sphere-back" id="wp-vo-back">← ${escapeHtml(t('vo_back_to_overview'))}</button>`;
+}
+
+function wireOverviewBack() {
+  const btn = document.getElementById('wp-vo-back');
+  if (btn) btn.addEventListener('click', () => renderViewOverviewPanel(overviewOrigin));
+}
+
+export function renderViewOverviewPanel(mode) {
+  if (!contentEl || !hasViewOverview(mode)) return;
+  const html = buildViewOverviewHtml(mode);
+  if (!html) return;
+
+  currentOverviewMode = mode;
+  overviewOrigin = mode;
+  currentNationId = null;
+  currentBlocId = null;
+  currentSphereId = null;
+  sphereOverviewOpen = false;
+  contentEl.innerHTML = html;
+
+  if (isMobileView() && !panelEl.classList.contains('open')) {
+    showPanelPeek(contentEl.querySelector('.wp-panel-name')?.textContent || '');
+  } else {
+    openPanelNow();
+  }
+  updateBackBar();
+
+  contentEl.querySelectorAll('.wp-vo-row[data-nation-id]').forEach(el => {
+    el.addEventListener('click', () => {
+      trackEvent('view-overview-click', { mode, target: 'nation' });
+      render(el.dataset.nationId);
+    });
+  });
+
+  // Una riga alleanza fa esattamente quello che fa il click sulla voce
+  // corrispondente in legenda: mette a fuoco il blocco sulla mappa (con
+  // il flash di conferma) e apre il suo pannello.
+  contentEl.querySelectorAll('.wp-vo-row[data-bloc-id]').forEach(el => {
+    el.addEventListener('click', () => {
+      const blocId = el.dataset.blocId;
+      state.selectedBlocId = blocId;
+      import('../diplomacy/map.js').then(m => {
+        m.renderMap();
+        m.flashBlocOnMap(blocId);
+      });
+      trackEvent('bloc-click', { bloc: state.allianceMap.get(blocId)?.name, via: 'view-overview' });
+      renderBlocPanel(blocId);
+    });
+  });
+}
+
+/** Ridisegna il riepilogo se è quello aperto e riguarda questa vista —
+ *  serve alle tre viste storiche, che aprono il pannello PRIMA che la
+ *  fetch dei loro dati sia tornata (vedi diplomacy/main.js). */
+export function refreshViewOverviewPanel(mode) {
+  if (!currentOverviewMode) return;
+  if (mode && mode !== currentOverviewMode) return;
+  renderViewOverviewPanel(currentOverviewMode);
+}
+
+/** Ri-esportata dal pannello cosi' chi la usa (map.js) non deve conoscere
+ *  anche viewOverview.js: il pannello resta l'unico interlocutore. */
+export function hasViewOverviewMode(mode) {
+  return hasViewOverview(mode);
+}
+
+export function isViewOverviewOpen() {
+  return currentOverviewMode !== null;
 }
 
 /** Stile di gioco dell'intera sfera: stessa lettura del pannello alleanza
@@ -1003,9 +1107,11 @@ function renderBlocPanel(allianceId) {
   currentNationId = null;
   currentSphereId = null;
   sphereOverviewOpen = false;
-  contentEl.innerHTML = buildBlocPanelHtml(allianceId);
+  currentOverviewMode = null;
+  contentEl.innerHTML = overviewBackHtml() + buildBlocPanelHtml(allianceId);
   hidePanelPeek();
   openPanelNow();
+  wireOverviewBack();
   wirePinStar();
 
   // Stesso ordine (popolazione decrescente) usato per costruire l'HTML
@@ -1026,6 +1132,11 @@ function renderBlocPanel(allianceId) {
 export function selectBlocInPanel(allianceId) {
   if (allianceId) {
     renderBlocPanel(allianceId);
+  } else if (state.coloringMode === 'blocs') {
+    // Deselezionare un blocco restando in vista alleanze non e' "chiudi il
+    // pannello" ma "torna all'elenco": il livello sopra esiste, da quando
+    // la vista ha un riepilogo suo (viewOverview.js).
+    renderViewOverviewPanel('blocs');
   } else {
     closePanel();
   }
@@ -1040,6 +1151,8 @@ export function closePanel() {
   currentBlocId = null;
   currentSphereId = null;
   sphereOverviewOpen = false;
+  currentOverviewMode = null;
+  overviewOrigin = null;
   _blocQueueToken++; // interrompe qualunque coda di caricamento parlamenti in corso
 }
 
@@ -1074,6 +1187,7 @@ export function initCountryPanel() {
     else if (currentBlocId) renderBlocPanel(currentBlocId);
     else if (currentSphereId) renderSpherePanel(currentSphereId);
     else if (sphereOverviewOpen) renderSphereOverviewPanel();
+    else if (currentOverviewMode) renderViewOverviewPanel(currentOverviewMode);
   });
 
   // Ri-renderizza SOLO i grafici parlamento (non l'intero pannello, che

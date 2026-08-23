@@ -25,9 +25,9 @@ export const GUIDE_DICT = {
       map: {
         t: "The map",
         b: [
-          "Click a nation to open its side panel. The Map views menu changes the colouring: Diplomacy, Alliances, Sphere of influence, Weekly damage, Population.",
-          "The Battles button shows and hides the active fronts, with markers and a heat map.",
-          "Sea routes and ocean decorations are ornamental — hover a moving ship to see what it is carrying.",
+          "Click a nation to open its side panel. The Map views menu changes the colouring: Diplomacy, Alliances, Sphere of influence, Weekly damage, Population, Contested regions, War history, War vs Eco.",
+          "Entering a view the panel opens on its summary: the ranking of what you are looking at, and for the less obvious views what the colour is actually counting. On mobile it waits behind the “See details” tab.",
+          "The Battles button shows and hides the active fronts, with markers and a heat map. Sea routes are ornamental — hover a moving ship to see what it is carrying.",
         ],
       },
       panel: {
@@ -35,7 +35,7 @@ export const GUIDE_DICT = {
         b: [
           "Opens on click and only uses data already downloaded for the map: no extra waiting.",
           "Regions, alliances and NAPs, parliament hemicycle and the war/economy playstyle of the citizens.",
-          "Expand opens Politics on that nation; drag the panel edge to make it wider.",
+          "From a summary row you go down to a nation or an alliance, and back up with “← Overview”. Expand opens Politics; drag the panel edge to make it wider.",
         ],
       },
       politics: {
@@ -113,9 +113,9 @@ export const GUIDE_DICT = {
       map: {
         t: "La mappa",
         b: [
-          "Clicca una nazione per aprire il suo pannello laterale. Il menù Viste mappa cambia la colorazione: Diplomazia, Alleanze, Sfera d'influenza, Danni settimanali, Popolazione.",
-          "Il bottone Battaglie mostra e nasconde i fronti attivi, con marker e mappa di calore.",
-          "Rotte navali e decorazioni del mare sono ornamentali — passa il mouse su una nave in movimento per sapere cosa trasporta.",
+          "Clicca una nazione per aprire il suo pannello laterale. Il menù Viste mappa cambia la colorazione: Diplomazia, Alleanze, Sfera d'influenza, Danni settimanali, Popolazione, Regioni contese, Storico bellico, Guerra vs Eco.",
+          "Entrando in una vista il pannello si apre sul riepilogo: la classifica di quello che stai guardando e, per le viste meno ovvie, cosa sta contando davvero il colore. Su mobile aspetta dietro la linguetta “Vedi dettagli”.",
+          "Il bottone Battaglie mostra e nasconde i fronti attivi, con marker e mappa di calore. Le rotte navali sono ornamentali — passa il mouse su una nave per sapere cosa trasporta.",
         ],
       },
       panel: {
@@ -123,7 +123,7 @@ export const GUIDE_DICT = {
         b: [
           "Si apre al click e usa solo dati già scaricati per la mappa: nessuna attesa in più.",
           "Regioni, alleanze e NAP, emiciclo del parlamento e stile di gioco (guerra/economia) dei cittadini.",
-          "Espandi apre Politica su quella nazione; trascina il bordo del pannello per allargarlo.",
+          "Da una riga del riepilogo scendi su una nazione o un'alleanza, e risali con “← Riepilogo”. Espandi apre Politica; trascina il bordo del pannello per allargarlo.",
         ],
       },
       politics: {
@@ -201,17 +201,17 @@ export const GUIDE_DICT = {
       map: {
         t: "El mapa",
         b: [
-          "Haz clic en una nación para abrir su panel lateral. El menú Vistas cambia el coloreado: Diplomacia, Alianzas, Esfera de influencia, Daño semanal, Población.",
-          "El botón Batallas muestra y oculta los frentes activos, con marcadores y mapa de calor.",
-          "Las rutas marítimas y los adornos del mar son decorativos: pasa el ratón sobre un barco para ver qué transporta.",
+          "Haz clic en una nación para abrir su panel lateral. El menú Vistas cambia el coloreado: Diplomacia, Alianzas, Esfera de influencia, Daño semanal, Población, Regiones disputadas, Histórico bélico, Guerra vs Eco.",
+          "Al entrar en una vista el panel se abre en su resumen: la clasificación de lo que estás mirando y, en las vistas menos obvias, qué está contando el color. En móvil espera detrás de la pestaña “Ver detalles”.",
+          "El botón Batallas muestra y oculta los frentes activos, con marcadores y mapa de calor. Las rutas marítimas son ornamentales — pasa el ratón sobre un barco para ver qué lleva.",
         ],
       },
       panel: {
         t: "Panel de nación",
         b: [
-          "Se abre al hacer clic y usa solo datos ya descargados para el mapa: sin esperas adicionales.",
+          "Se abre al hacer clic y solo usa datos ya descargados para el mapa: sin esperas extra.",
           "Regiones, alianzas y NAP, hemiciclo del parlamento y estilo de juego (guerra/economía) de los ciudadanos.",
-          "Ampliar abre Política sobre esa nación; arrastra el borde del panel para ensancharlo.",
+          "Desde una fila del resumen bajas a una nación o una alianza, y vuelves con “← Resumen”. Expandir abre Política; arrastra el borde del panel para ensancharlo.",
         ],
       },
       politics: {
@@ -289,17 +289,17 @@ export const GUIDE_DICT = {
       map: {
         t: "Die Karte",
         b: [
-          "Klicke eine Nation an, um ihr Seitenpanel zu öffnen. Das Menü Ansichten ändert die Einfärbung: Diplomatie, Bündnisse, Einflusssphäre, Wöchentlicher Schaden, Bevölkerung.",
-          "Der Schaltknopf Schlachten blendet die aktiven Fronten ein und aus, mit Markern und Heatmap.",
-          "Seerouten und Meeresdeko sind rein schmückend — fahre mit der Maus über ein fahrendes Schiff, um zu sehen, was es geladen hat.",
+          "Klicke eine Nation an, um ihr Seitenpanel zu öffnen. Das Menü Ansichten ändert die Einfärbung: Diplomatie, Bündnisse, Sphäre, Wöchentlicher Schaden, Bevölkerung, Umkämpfte Regionen, Kriegsgeschichte, Krieg vs Eco.",
+          "Beim Betreten einer Ansicht öffnet das Panel ihre Übersicht: die Rangliste dessen, was du siehst, und bei den weniger offensichtlichen Ansichten, was die Farbe wirklich zählt. Auf dem Handy wartet sie hinter dem Reiter „Details ansehen“.",
+          "Die Schaltfläche Schlachten blendet die aktiven Fronten ein und aus, mit Markern und Heatmap. Seerouten sind Zierde — fahre über ein Schiff, um seine Ladung zu sehen.",
         ],
       },
       panel: {
         t: "Nationspanel",
         b: [
-          "Öffnet sich per Klick und nutzt nur Daten, die für die Karte ohnehin geladen wurden: kein zusätzliches Warten.",
+          "Öffnet sich per Klick und nutzt nur Daten, die für die Karte schon geladen sind: kein zusätzliches Warten.",
           "Regionen, Bündnisse und NAPs, Parlamentshalbkreis und Spielstil (Krieg/Wirtschaft) der Bürger.",
-          "Erweitern öffnet Politik für diese Nation; ziehe den Panelrand, um es breiter zu machen.",
+          "Aus einer Übersichtszeile geht es hinunter zu einer Nation oder einem Bündnis und mit „← Übersicht“ wieder hinauf. Erweitern öffnet Politik; zieh den Panelrand, um es zu verbreitern.",
         ],
       },
       politics: {
@@ -377,17 +377,17 @@ export const GUIDE_DICT = {
       map: {
         t: "La carte",
         b: [
-          "Cliquez sur une nation pour ouvrir son panneau latéral. Le menu Vues change la coloration : Diplomatie, Alliances, Sphère d'influence, Dégâts hebdomadaires, Population.",
-          "Le bouton Batailles affiche et masque les fronts actifs, avec marqueurs et carte de chaleur.",
-          "Les routes maritimes et les décors de la mer sont ornementaux : survolez un navire en mouvement pour voir sa cargaison.",
+          "Clique sur une nation pour ouvrir son panneau latéral. Le menu Vues change la coloration : Diplomatie, Alliances, Sphère d'influence, Dégâts hebdomadaires, Population, Régions disputées, Historique de guerre, Guerre vs Éco.",
+          "En entrant dans une vue, le panneau s'ouvre sur son résumé : le classement de ce que tu regardes et, pour les vues les moins évidentes, ce que la couleur compte vraiment. Sur mobile il attend derrière l'onglet « Voir les détails ».",
+          "Le bouton Batailles affiche et masque les fronts actifs, avec marqueurs et carte de chaleur. Les routes maritimes sont ornementales — survole un navire pour voir sa cargaison.",
         ],
       },
       panel: {
         t: "Panneau nation",
         b: [
-          "S'ouvre au clic et n'utilise que des données déjà chargées pour la carte : aucune attente supplémentaire.",
+          "S'ouvre au clic et n'utilise que des données déjà téléchargées pour la carte : aucune attente en plus.",
           "Régions, alliances et NAP, hémicycle du parlement et style de jeu (guerre/économie) des citoyens.",
-          "Développer ouvre Politique sur cette nation ; tirez le bord du panneau pour l'élargir.",
+          "Depuis une ligne du résumé tu descends sur une nation ou une alliance, et tu remontes avec « ← Vue d'ensemble ». Étendre ouvre Politique ; tire le bord du panneau pour l'élargir.",
         ],
       },
       politics: {
@@ -465,17 +465,17 @@ export const GUIDE_DICT = {
       map: {
         t: "De kaart",
         b: [
-          "Klik op een natie om haar zijpaneel te openen. Het menu Weergaven wijzigt de kleuring: Diplomatie, Bondgenootschappen, Invloedssfeer, Wekelijkse schade, Bevolking.",
-          "De knop Veldslagen toont en verbergt de actieve fronten, met markers en heatmap.",
-          "Zeeroutes en zeeversiering zijn puur decoratief — beweeg over een varend schip om te zien wat het vervoert.",
+          "Klik op een natie om haar zijpaneel te openen. Het menu Weergaven verandert de kleuring: Diplomatie, Bondgenootschappen, Invloedssfeer, Wekelijkse schade, Bevolking, Betwiste regio’s, Oorlogsgeschiedenis, Oorlog vs Eco.",
+          "Bij het openen van een weergave toont het paneel meteen het overzicht: de ranglijst van wat je bekijkt en, bij de minder voor de hand liggende weergaven, wat de kleur echt telt. Op mobiel wacht het achter het tabje “Bekijk details”.",
+          "De knop Veldslagen toont en verbergt de actieve fronten, met markers en een heatmap. Zeeroutes zijn versiering — beweeg over een schip om de lading te zien.",
         ],
       },
       panel: {
         t: "Natiepaneel",
         b: [
-          "Opent bij een klik en gebruikt alleen data die de kaart al heeft opgehaald: geen extra wachttijd.",
-          "Regio's, bondgenootschappen en NAP's, parlementshalfrond en speelstijl (oorlog/economie) van de burgers.",
-          "Uitklappen opent Politiek voor die natie; sleep de rand van het paneel om het breder te maken.",
+          "Opent bij een klik en gebruikt alleen gegevens die al voor de kaart zijn opgehaald: geen extra wachttijd.",
+          "Regio’s, allianties en NAP’s, halfrond van het parlement en speelstijl (oorlog/economie) van de burgers.",
+          "Vanuit een rij in het overzicht ga je naar een natie of alliantie, en met “← Overzicht” weer terug. Uitklappen opent Politiek; sleep de rand van het paneel om het breder te maken.",
         ],
       },
       politics: {
@@ -553,17 +553,17 @@ export const GUIDE_DICT = {
       map: {
         t: "Kartan",
         b: [
-          "Klicka på en nation för att öppna dess sidopanel. Menyn Vyer byter färgläggning: Diplomati, Allianser, Sfär, Veckoskada, Befolkning.",
-          "Knappen Strider visar och döljer de aktiva fronterna, med markörer och värmekarta.",
-          "Sjörutter och havsdekor är rent utsmyckning — hovra över ett fartyg i rörelse för att se vad det fraktar.",
+          "Klicka på en nation för att öppna dess sidopanel. Menyn Vyer byter färgläggning: Diplomati, Allianser, Sfär, Veckoskada, Befolkning, Omstridda regioner, Krigshistorik, Krig vs Eco.",
+          "När du går in i en vy öppnas panelen på dess översikt: rankningen för det du tittar på och, för de mindre självklara vyerna, vad färgen faktiskt räknar. På mobil väntar den bakom fliken ”Visa detaljer”.",
+          "Knappen Strider visar och döljer de aktiva fronterna, med markörer och värmekarta. Sjörutter är dekoration — håll musen över ett fartyg för att se lasten.",
         ],
       },
       panel: {
         t: "Nationspanel",
         b: [
-          "Öppnas vid klick och använder bara data som kartan redan hämtat: ingen extra väntan.",
+          "Öppnas vid klick och använder bara data som redan hämtats för kartan: ingen extra väntan.",
           "Regioner, allianser och NAP, parlamentets halvcirkel och medborgarnas spelstil (krig/ekonomi).",
-          "Expandera öppnar Politik för den nationen; dra i panelkanten för att göra den bredare.",
+          "Från en rad i översikten går du ner till en nation eller allians, och tillbaka med ”← Översikt”. Expandera öppnar Politik; dra i panelkanten för att göra den bredare.",
         ],
       },
       politics: {
@@ -641,17 +641,17 @@ export const GUIDE_DICT = {
       map: {
         t: "O mapa",
         b: [
-          "Clique numa nação para abrir o painel lateral. O menu Vistas muda a coloração: Diplomacia, Alianças, Esfera de influência, Dano semanal, População.",
-          "O botão Batalhas mostra e esconde as frentes ativas, com marcadores e mapa de calor.",
-          "As rotas marítimas e os enfeites do mar são ornamentais — passe o rato sobre um navio em movimento para ver o que transporta.",
+          "Clica numa nação para abrir o seu painel lateral. O menu Vistas muda a coloração: Diplomacia, Alianças, Esfera de influência, Dano semanal, População, Regiões disputadas, Histórico bélico, Guerra vs Eco.",
+          "Ao entrar numa vista o painel abre no resumo: a classificação do que estás a ver e, nas vistas menos óbvias, o que a cor está mesmo a contar. No telemóvel espera atrás do separador “Ver detalhes”.",
+          "O botão Batalhas mostra e esconde as frentes ativas, com marcadores e mapa de calor. As rotas marítimas são ornamentais — passa o rato sobre um navio para ver o que transporta.",
         ],
       },
       panel: {
         t: "Painel da nação",
         b: [
-          "Abre ao clicar e usa apenas dados já descarregados para o mapa: sem espera adicional.",
+          "Abre ao clique e usa apenas dados já descarregados para o mapa: sem espera extra.",
           "Regiões, alianças e NAP, hemiciclo do parlamento e estilo de jogo (guerra/economia) dos cidadãos.",
-          "Expandir abre a Política dessa nação; arraste a borda do painel para o alargar.",
+          "A partir de uma linha do resumo desces a uma nação ou aliança, e voltas com “← Resumo”. Expandir abre Política; arrasta a borda do painel para o alargar.",
         ],
       },
       politics: {
@@ -729,17 +729,17 @@ export const GUIDE_DICT = {
       map: {
         t: "الخريطة",
         b: [
-          "انقر على دولة لفتح لوحتها الجانبية. قائمة العروض تغيّر التلوين: الدبلوماسية، التحالفات، النطاق، الضرر الأسبوعي، السكان.",
-          "زر المعارك يُظهر الجبهات النشطة ويخفيها، مع العلامات وخريطة الحرارة.",
-          "الطرق البحرية وزخارف البحر للزينة فقط — مرّر المؤشر فوق سفينة متحركة لترى ما تنقله.",
+          "اضغط على دولة لفتح لوحتها الجانبية. قائمة العروض تغيّر التلوين: الدبلوماسية، التحالفات، النطاق، الضرر الأسبوعي، السكان، المناطق المتنازع عليها، تاريخ الحرب، حرب مقابل اقتصاد.",
+          "عند دخول أي عرض تفتح اللوحة على ملخّصه: ترتيب ما تنظر إليه، وفي العروض الأقل وضوحاً ما يقيسه اللون فعلاً. على الهاتف تنتظر خلف لسان “عرض التفاصيل”.",
+          "زرّ المعارك يُظهر ويُخفي الجبهات النشطة، مع علامات وخريطة حرارية. الطرق البحرية زخرفية — مرّر المؤشر فوق سفينة لترى حمولتها.",
         ],
       },
       panel: {
         t: "لوحة الدولة",
         b: [
-          "تُفتح بالنقر وتستخدم بيانات سبق تنزيلها للخريطة: بلا انتظار إضافي.",
-          "الأقاليم والتحالفات واتفاقيات عدم الاعتداء، ونصف دائرة البرلمان، وأسلوب لعب المواطنين (حرب/اقتصاد).",
-          "زر التوسيع يفتح السياسة لتلك الدولة؛ اسحب حافة اللوحة لتوسيعها.",
+          "تُفتح بالضغط وتستخدم فقط بيانات مُحمّلة مسبقاً للخريطة: دون انتظار إضافي.",
+          "المناطق والتحالفات واتفاقات عدم الاعتداء، وقوس البرلمان، وأسلوب لعب المواطنين (حرب/اقتصاد).",
+          "من صف في الملخّص تنزل إلى دولة أو تحالف، وتعود بـ “← نظرة عامة”. زرّ التوسيع يفتح السياسة؛ اسحب حافة اللوحة لتوسيعها.",
         ],
       },
       politics: {

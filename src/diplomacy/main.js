@@ -288,6 +288,13 @@ document.getElementById('mode-population').addEventListener('click', () => {
 // e restano in state per la sessione. La modalita' si attiva subito, con la
 // mappa neutra e la legenda che dice "sto caricando", invece di lasciare il
 // bottone premuto senza risposta finche' la fetch non torna.
+// Il pannello riassuntivo di queste tre viste (src/panel/viewOverview.js)
+// si apre PRIMA che la loro fetch sia tornata — mostra "sto caricando" e va
+// ridisegnato quando il dato atterra, come gia' si fa con la mappa.
+function _refreshOverview(mode) {
+  import('../panel/countryPanel.js').then(m => m.refreshViewOverviewPanel(mode));
+}
+
 function _dimOtherSliders() {
   const sliderTop = document.getElementById('mode-slider');
   const sliderBottom = document.getElementById('mode-slider-bottom');
@@ -303,7 +310,7 @@ document.getElementById('mode-contested')?.addEventListener('click', async () =>
   try {
     const { fetchContestedRegionsViaCache } = await import('./cacheClient.js');
     state.contestedCounts = await fetchContestedRegionsViaCache();
-    if (state.coloringMode === 'contested') renderMap();
+    if (state.coloringMode === 'contested') { renderMap(); _refreshOverview('contested'); }
   } catch (err) {
     console.warn('[contested] dati non disponibili:', err.message);
   }
@@ -318,13 +325,13 @@ document.getElementById('mode-warIntensity')?.addEventListener('click', async ()
     const { fetchWarIntensityViaCache } = await import('./cacheClient.js');
     state.warIntensityData = await fetchWarIntensityViaCache();
     state.warIntensityError = null;
-    if (state.coloringMode === 'warIntensity') renderMap();
+    if (state.coloringMode === 'warIntensity') { renderMap(); _refreshOverview('warIntensity'); }
   } catch (err) {
     // Unica delle tre senza alcun ripiego lato client: il totale storico
     // per regione esiste solo sul server di cache (battaglie del bootstrap).
     console.warn('[warIntensity] endpoint non disponibile:', err.message);
     state.warIntensityError = 'Historical battle data not available yet (cache server not updated).';
-    if (state.coloringMode === 'warIntensity') renderMap();
+    if (state.coloringMode === 'warIntensity') { renderMap(); _refreshOverview('warIntensity'); }
   }
 });
 
@@ -339,7 +346,7 @@ document.getElementById('mode-playstyle')?.addEventListener('click', async () =>
     // risposta e' gia' in memoria dentro src/mu/api.js, zero fetch.
     const { fetchPlaystyleByCountry } = await import('../mu/api.js');
     state.nationPlaystyle = await fetchPlaystyleByCountry();
-    if (state.coloringMode === 'playstyle') renderMap();
+    if (state.coloringMode === 'playstyle') { renderMap(); _refreshOverview('playstyle'); }
   } catch (err) {
     console.warn('[playstyle] dati non disponibili:', err.message);
   }

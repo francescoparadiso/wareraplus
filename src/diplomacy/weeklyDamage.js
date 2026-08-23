@@ -1,7 +1,9 @@
 import { state } from './state.js';
 import { COLORS } from './config.js';
 
-function getDamageColor(value, min, max) {
+// export: vedi nota gemella in population.js — le righe dell'elenco in
+// legenda usano la stessa tinta della mappa.
+export function getDamageColor(value, min, max) {
   if (max === min) return COLORS.DEFAULT_LAND;
   const t = Math.max(0, Math.min(1, (value - min) / (max - min)));
   const r = Math.round(69 + (215 - 69) * t);

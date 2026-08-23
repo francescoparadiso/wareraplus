@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════
-   WarEra+ — Heatmap "Guerrafondaie vs commerciali"
+   WarEra+ — Heatmap "Guerra vs Eco" (guerrafondaie vs economiche)
    ------------------------------------------------------------------
    Torna alla granularità PER NAZIONE (match su countryId /
    initialCountryId, come population.js): il dato è un aggregato di
@@ -14,6 +14,10 @@
    solo _id e createdAt). Il limite è dichiarato in legenda invece di
    essere nascosto: nazioni con pochi membri MU noti hanno una barra
    fragile, e sotto MIN_SAMPLE non vengono colorate affatto.
+
+   NB: "eco" qui vuol dire BUILD ECONOMICA del giocatore (punti abilità
+   spesi in produzione), non commercio/mercato — da cui il nome della vista,
+   corretto da "Guerra vs Commercio" a "Guerra vs Eco".
 
    Scala BIPOLARE (rosso guerra ↔ verde economia) invece che sequenziale:
    qui lo zero non è "poco", è "in equilibrio".
@@ -35,7 +39,7 @@ export function playstyleBalance(entry) {
   return ((war + mixed / 2) - (eco + mixed / 2)) / known;
 }
 
-function getBalanceColor(balance) {
+export function getBalanceColor(balance) {
   const t = Math.max(-1, Math.min(1, balance));
   if (t >= 0) {
     // equilibrio (grigio caldo) → rosso guerra

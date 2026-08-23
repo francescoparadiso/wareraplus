@@ -73,6 +73,19 @@ export function buildWarIntensityColorExpression(intensity) {
   return expr;
 }
 
+/** Gemella di contestedRankedList: le regioni con più danno storico
+ *  accumulato, con il colore che hanno sulla mappa.
+ *  @returns {{regionId:string, value:number, color:string}[]} */
+export function warIntensityRankedList(intensity, limit = 8) {
+  const entries = Object.entries(intensity || {}).filter(([, v]) => v > 0);
+  if (!entries.length) return [];
+  const scale = makePercentileScale(entries.map(([, v]) => v));
+  return entries
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([regionId, value]) => ({ regionId, value, color: colorAt(scale(value)) }));
+}
+
 export function warIntensityLegendGradient() {
   const stops = [0, 0.25, 0.5, 0.75, 1].map(colorAt);
   return `linear-gradient(to right, ${stops.join(', ')})`;
