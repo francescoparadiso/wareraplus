@@ -2,18 +2,26 @@
 
 Non fa parte del build di `wareraPlus` (Vite/Vercel) — gira su un VPS separato
 (vedi CLAUDE.md/memoria di progetto per l'infrastruttura: nginx + pm2 +
-`ampsodrick.duckdns.org/warera-cache/`). Tenuto qui solo per versionarlo
+`warera-oracle.duckdns.org/warera-cache/`). Tenuto qui solo per versionarlo
 insieme al client che lo consuma (`src/diplomacy/cacheClient.js`), non per
 deployarlo da qui — il deploy resta manuale sul VPS.
 
 ## Deploy di un aggiornamento
+
+Host attuale: `ubuntu@79.72.45.17` (`warera-oracle.duckdns.org`), chiave e
+appunti in `warEra/serverOracle/`. In pratica:
+
+```bash
+scp -i ssh-key-2026-08-18.key server/warera-cache-server.js ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
+ssh -i ssh-key-2026-08-18.key ubuntu@79.72.45.17 "pm2 restart warera-cache"
+```
 
 1. Copia `warera-cache-server.js` sul VPS, nella cartella dove già gira
    (sovrascrive il file esistente — la cartella `cache/` con i dati salvati
    NON va toccata, resta dov'è).
 2. `pm2 restart warera-cache-server` (o il nome che hai dato al processo —
    `pm2 list` per controllare).
-3. Verifica: `curl https://ampsodrick.duckdns.org/warera-cache/health`.
+3. Verifica: `curl https://warera-oracle.duckdns.org/warera-cache/health`.
 
 ## Novità: directory unità militari (`/mu-directory`)
 
@@ -217,7 +225,7 @@ Parte da solo al deploy, nessun comando da lanciare. Per controllare a che
 punto è:
 
 ```bash
-curl https://ampsodrick.duckdns.org/warera-cache/bootstrap-status
+curl https://warera-oracle.duckdns.org/warera-cache/bootstrap-status
 ```
 
 Risponde `{ cursor, done, finalized, pagesFetched, battlesFetched }` —
@@ -241,7 +249,7 @@ esterno noto (il "ponte" per il ritardo fra un loro poll e il prossimo). Se
 il fetch fallisce non tocca nulla — resta l'ultimo stato buono.
 
 ```bash
-curl https://ampsodrick.duckdns.org/warera-cache/region-history/external-status
+curl https://warera-oracle.duckdns.org/warera-cache/region-history/external-status
 ```
 
 Risponde `{ fetchedAt, generatedAt, externalEventsCount, externalLastTs, bridgeEventsCount }`.
@@ -276,6 +284,6 @@ continua a funzionare, ma resta sul percorso vecchio e pesante (ricade su
   che cresce di più e viene riletto e riscritto ad ogni poll.
 
 ```bash
-curl -s "https://ampsodrick.duckdns.org/warera-cache/ticker/summary?since=$(( ($(date +%s) - 172800) * 1000 ))&windows=$(( ($(date +%s) - 86400) * 1000 ))" | head -c 300
+curl -s "https://warera-oracle.duckdns.org/warera-cache/ticker/summary?since=$(( ($(date +%s) - 172800) * 1000 ))&windows=$(( ($(date +%s) - 86400) * 1000 ))" | head -c 300
 ```
 
