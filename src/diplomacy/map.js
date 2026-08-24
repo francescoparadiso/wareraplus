@@ -1,6 +1,7 @@
 // map.js
 import maplibregl from 'maplibre-gl';
 import * as topojson from 'topojson-client';
+import { buildBorderFeatures, buildInnerBorderColorExpression, buildRelationBorderColorExpression } from './borderStyle.js';
 import { state } from './state.js';
 import { COLORS, LAYER_IDS, THEMES } from './config.js';
 import {
@@ -18,6 +19,7 @@ import { buildPopulationColorExpression, buildPopulationTextExpression } from '.
 import { buildContestedColorExpression } from './contestedHeatmap.js';
 import { buildWarIntensityColorExpression } from './warIntensityHeatmap.js';
 import { buildPlaystyleColorExpression } from './playstyleHeatmap.js';
+import { buildPlaystyleTrendColorExpression } from './playstyleTrendHeatmap.js';
 import { buildWeeklyDamageColorExpression } from './weeklyDamage.js';
 import { buildSphereColorExpression } from './sphereOfInfluence.js';
 import { buildBattleHeatmapColorExpression } from './battleHeatmap.js';
@@ -35,7 +37,7 @@ import { trackEvent } from '../shared/analytics.js';
 // "niente più CDN" del resto del progetto e con il precache PWA.
 import antarcticaGeoJSON from './data/antarctica.geo.json';
 
-const { SRC_REGIONS, SRC_BORDERS, SRC_DIPLOMACY_DUAL_BORDER, SRC_BATTLE_REGION, LYR_FILL, LYR_OUTLINE, LYR_COAST, LYR_BORDER, LYR_MULTI_BLOC, LYR_DIPLOMACY_DUAL, LYR_BATTLE_REGION, LYR_BATTLE_REGION_FILL, LYR_BLOC_FLASH, LYR_HEATMAP_FADE, LYR_ANTARCTICA, LYR_ANTARCTICA_COAST } = LAYER_IDS;
+const { SRC_REGIONS, SRC_BORDERS, SRC_DIPLOMACY_DUAL_BORDER, SRC_BATTLE_REGION, SRC_BORDER_STYLED, LYR_FILL, LYR_OUTLINE, LYR_COAST, LYR_BORDER, LYR_MULTI_BLOC, LYR_DIPLOMACY_DUAL, LYR_BORDER_CASING, LYR_REGION_INNER, LYR_BORDER_RELATION, LYR_BATTLE_REGION, LYR_BATTLE_REGION_FILL, LYR_BLOC_FLASH, LYR_HEATMAP_FADE, LYR_ANTARCTICA, LYR_ANTARCTICA_COAST } = LAYER_IDS;
 
 // ==================== INIT MAPPA ====================
 export function initMap() {
@@ -206,6 +208,11 @@ export async function setupMapLayers() {
       ],
     },
   });
+
+  // WarEra+ — confini "come nel gioco": stessa geometria delle mesh qui
+  // sopra, ma spezzata in feature con addosso countryId / pairKey, così
+  // ogni tratto può avere il suo colore (vedi borderStyle.js).
+  _addOrUpdateSource(SRC_BORDER_STYLED, { type: 'geojson', data: buildBorderFeatures(topoData) });
 
   if (!state.map.getLayer(LYR_FILL)) {
     state.map.addLayer({ id: LYR_FILL, type: 'fill', source: SRC_REGIONS, paint: { 'fill-color': COLORS.NEUTRAL_UNSELECTED, 'fill-opacity': 0.9 } });
@@ -389,6 +396,53 @@ export async function setupMapLayers() {
   if (!state.map.getLayer(LYR_OUTLINE)) state.map.addLayer({ id: LYR_OUTLINE, type: 'line', source: SRC_BORDERS, filter: ['==', ['get', 'kind'], 'region'], paint: { 'line-color': '#000000', 'line-width': 0.4, 'line-opacity': 1 } });
   if (state.map.getLayer(LYR_OUTLINE) && state.map.getLayer(LYR_BORDER)) state.map.moveLayer(LYR_OUTLINE, LYR_BORDER);
 
+  // WarEra+ — i due layer "stile gioco". Sostituiscono LYR_OUTLINE e
+  // LYR_BORDER quando sono accesi (vedi _applyGameBorderStyle in renderMap):
+  // stessi tratti, ma colorati per nazione / per relazione.
+  // Ordine: interni SOTTO, confini nazionali SOPRA — al contrario di quello
+  // che fa la moveLayer qui sopra sulla coppia vecchia, dove il tratto nero
+  // sottile stava sopra a tutto.
+  if (!state.map.getLayer(LYR_REGION_INNER)) {
+    state.map.addLayer({
+      id: LYR_REGION_INNER, type: 'line', source: SRC_BORDER_STYLED,
+      filter: ['==', ['get', 'kind'], 'inner'],
+      layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color': '#ffffff',
+        'line-width': ['interpolate', ['linear'], ['zoom'], 2, 0.7, 5, 1.4, 8, 2.2],
+        'line-opacity': 0.9,
+      },
+    });
+  }
+  // Casing nero SOTTO al confine nazionale: nel gioco ogni confine è una
+  // riga nera spessa con sopra una riga colorata più sottile — è quello che
+  // stacca il confine dal riempimento delle due nazioni, che spesso hanno
+  // tinte vicine. Layer separato perché MapLibre non ha un 'line-casing'.
+  if (!state.map.getLayer(LYR_BORDER_CASING)) {
+    state.map.addLayer({
+      id: LYR_BORDER_CASING, type: 'line', source: SRC_BORDER_STYLED,
+      filter: ['==', ['get', 'kind'], 'pair'],
+      layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color': '#05070d',
+        'line-width': ['interpolate', ['linear'], ['zoom'], 2, 2.0, 5, 3.6, 8, 5.6],
+        'line-opacity': 0.9,
+      },
+    });
+  }
+  if (!state.map.getLayer(LYR_BORDER_RELATION)) {
+    state.map.addLayer({
+      id: LYR_BORDER_RELATION, type: 'line', source: SRC_BORDER_STYLED,
+      filter: ['==', ['get', 'kind'], 'pair'],
+      layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color': '#ffffff',
+        'line-width': ['interpolate', ['linear'], ['zoom'], 2, 0.9, 5, 1.8, 8, 3.0],
+        'line-opacity': 1,
+      },
+    });
+  }
+
   initLabelCanvas();
   preloadAllFlags();
   initNationTooltip(state.map);
@@ -471,8 +525,21 @@ export function renderMap() {
   // la prima volta ora, in prova — se non convince: `_setLayerVisibility(
   // LYR_COAST, true)` più `line-width: 1.0` in setupMapLayers per tornare
   // esattamente a come era (coastline bianca + confini sottili 1.2px).
-  _setLayerVisibility(LYR_BORDER, state.mapSource === 'actual');
-  _setLayerVisibility('original-borders-line', state.mapSource === 'original');
+  // WarEra+: stile bordi "come nel gioco". Attivo solo sulla mappa ATTUALE e
+  // solo nelle modalità in cui il colore del riempimento è già "identità
+  // della nazione" (diplomazia, alleanze, sfere): nelle viste a scala di
+  // colore (popolazione, danni, regioni contese, storico bellico, guerra vs
+  // eco, heatmap battaglie) un confine colorato per relazione litiga con la
+  // scala e la rende illeggibile, quindi lì restano i bordi neutri di prima.
+  // WarEra+: valgono in ENTRAMBE le sorgenti mappa. La vista Originale
+  // aveva ancora i bordi bianchi uniformi di prima — stessa vista, due
+  // stili diversi a seconda dell'interruttore Attuale/Originale, che non
+  // ha senso. I confini di inizio partita sono già stati classificati
+  // insieme agli altri (borderStyle.js), cambia solo il filtro dei layer.
+  const gameBorders = ['diplomacy', 'blocs', 'sphereOfInfluence'].includes(state.coloringMode);
+
+  _setLayerVisibility(LYR_BORDER, state.mapSource === 'actual' && !gameBorders);
+  _setLayerVisibility('original-borders-line', state.mapSource === 'original' && !gameBorders);
   _setLayerVisibility(LYR_COAST, false);
 
   const multiIds = [...state.multiBlocMap.keys()];
@@ -551,7 +618,12 @@ export function renderMap() {
   } else if (state.coloringMode === 'warIntensity') {
     fillExpr = buildWarIntensityColorExpression(state.warIntensityData || {});
   } else if (state.coloringMode === 'playstyle') {
-    fillExpr = buildPlaystyleColorExpression(state.nationPlaystyle || {}, state.mapSource === 'original');
+    // WarEra+: la stessa vista ha due letture, scambiate dal toggle nel
+    // riepilogo del pannello (viewOverview.js) — la fotografia di adesso
+    // oppure quanto si è mosso ogni paese negli ultimi 7 giorni.
+    fillExpr = state.playstyleTrendMode
+      ? buildPlaystyleTrendColorExpression(state.playstyleTrend, state.mapSource === 'original')
+      : buildPlaystyleColorExpression(state.nationPlaystyle || {}, state.mapSource === 'original');
   } else if (state.coloringMode === 'battleHeatmap') {
     fillExpr = buildBattleHeatmapColorExpression(state.mapSource === 'original');
   } else if (state.mapSource === 'actual') {
@@ -562,10 +634,18 @@ export function renderMap() {
     fillExpr = buildOriginalColorExpression(directWars, directAllies, enemyAllies);
   }
 
+  // WarEra+ — in vista Alleanze le campiture NON vengono spente: i colori
+  // delle alleanze restano pieni come quelli della vista Diplomazia (la
+  // tavolozza la decide alliances.js, così mappa, legenda e pannello
+  // mostrano lo stesso colore). Spegnerle qui le rendeva fangose.
   if (state.map.getLayer(LYR_FILL)) {
     state.map.setPaintProperty(LYR_FILL, 'fill-color', fillExpr);
     state.map.setPaintProperty(LYR_FILL, 'fill-opacity', 0.9);
   }
+
+  // WarEra+: i confini "stile gioco" si agganciano al riempimento appena
+  // deciso — quindi va chiamata QUI, dopo fillExpr, non prima.
+  _applyGameBorderStyle(gameBorders, fillExpr);
 
   // WarEra+ perf: qui c'era una ricostruzione di centinaia di Feature
   // (_buildLabelsWithPopulation) ri-pubblicate su SRC_LABELS nelle modalità
@@ -574,6 +654,15 @@ export function renderMap() {
   // passate da tempo al canvas 2D di labels.js) — era lavoro sprecato che
   // per giunta risvegliava il render loop ad ogni renderMap.
   if (state.labelCanvas) state.map.triggerRepaint();
+
+  // WarEra+: è questo il renderMap che porta i dati della vista rimandata
+  // (vedi _holdFadeUntilData) — ora la dissolvenza può partire, dai colori
+  // della vista precedente a quelli appena dipinti.
+  if (_fadePendingMode && state.coloringMode === _fadePendingMode && _viewDataReady(_fadePendingMode)) {
+    _fadePendingMode = null;
+    clearTimeout(_fadePendingTimer);
+    startHeatmapFadeIn(600);
+  }
 }
 
 // ==================== PRIVATE ====================
@@ -584,6 +673,65 @@ function _addOrUpdateSource(id, config) {
 
 function _setLayerVisibility(id, visible) {
   if (state.map.getLayer(id)) state.map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+}
+
+// WarEra+ — accende i due layer "stile gioco" (confini interni nella tinta
+// della nazione, confini nazionali per relazione) e spegne il tratto nero
+// uniforme delle regioni, o viceversa. Le due expression si ricostruiscono
+// ad ogni render perché dipendono da tema, colori nazione e diplomazia, che
+// cambiano; sono due 'match' da qualche centinaio di casi, costo trascurabile.
+function _applyGameBorderStyle(on, fillExpr) {
+  if (!state.map.getLayer(LYR_REGION_INNER) || !state.map.getLayer(LYR_BORDER_RELATION)) return;
+  _setLayerVisibility(LYR_REGION_INNER, on);
+  _setLayerVisibility(LYR_BORDER_CASING, on);
+  _setLayerVisibility(LYR_BORDER_RELATION, on);
+  _setLayerVisibility(LYR_OUTLINE, !on);
+  if (!on) { _applyHeatBorderStyle(); return; }
+
+  // Stessa sorgente, due gruppi di feature: confini di oggi o di inizio
+  // partita (vedi buildBorderFeatures). Si cambia solo il filtro.
+  const original = state.mapSource === 'original';
+  const innerKind = original ? 'inner-orig' : 'inner';
+  const pairKind = original ? 'pair-orig' : 'pair';
+  state.map.setFilter(LYR_REGION_INNER, ['==', ['get', 'kind'], innerKind]);
+  state.map.setFilter(LYR_BORDER_CASING, ['==', ['get', 'kind'], pairKind]);
+  state.map.setFilter(LYR_BORDER_RELATION, ['==', ['get', 'kind'], pairKind]);
+
+  // Confini interni: sempre la tinta del riempimento sotto, schiarita — così
+  // in vista Alleanze seguono il colore dell'alleanza, non più quello della
+  // diplomazia.
+  state.map.setPaintProperty(LYR_REGION_INNER, 'line-color', buildInnerBorderColorExpression(fillExpr));
+
+  // Confini nazionali: a piena intensità solo in diplomazia, dove il colore
+  // della relazione È l'informazione della vista. In Alleanze e Sfere il
+  // riempimento dice già altro, quindi la relazione resta leggibile ma
+  // spenta, per non litigare con le campiture.
+  const muted = state.coloringMode !== 'diplomacy';
+  state.map.setPaintProperty(LYR_BORDER_RELATION, 'line-color', buildRelationBorderColorExpression({ muted, original }));
+  state.map.setPaintProperty(LYR_BORDER_CASING, 'line-opacity', muted ? 0.6 : 0.9);
+}
+
+// WarEra+ — bordi delle viste a scala di colore (popolazione, danni,
+// regioni contese, storico bellico, guerra vs eco, heatmap battaglie).
+// Erano bianchi: su una heatmap il bianco è il valore più luminoso della
+// scena, quindi la griglia dei confini catturava l'occhio prima delle
+// campiture, e sui gialli/aranci chiari si confondeva col riempimento.
+// Ora sono quasi neri: separano le nazioni senza competere con la scala,
+// che resta l'unica cosa colorata della mappa. I confini di regione
+// (LYR_OUTLINE) restano dello stesso nero ma più sottili e smorzati, così
+// la gerarchia nazione/regione si legge lo stesso.
+function _applyHeatBorderStyle() {
+  const map = state.map;
+  if (!map?.getLayer(LYR_BORDER)) return;
+  const dark = state.theme !== 'light';
+  const line = dark ? '#080b11' : '#1d1710';
+  map.setPaintProperty(LYR_BORDER, 'line-color', line);
+  map.setPaintProperty(LYR_BORDER, 'line-width', ['interpolate', ['linear'], ['zoom'], 2, 1.2, 5, 2.0, 8, 3.0]);
+  map.setPaintProperty(LYR_BORDER, 'line-opacity', 0.9);
+  if (map.getLayer(LYR_OUTLINE)) {
+    map.setPaintProperty(LYR_OUTLINE, 'line-color', line);
+    map.setPaintProperty(LYR_OUTLINE, 'line-opacity', 0.45);
+  }
 }
 
 // Prima questa funzione faceva JSON.parse(JSON.stringify(topoData)) su tutto
@@ -948,6 +1096,44 @@ export function flashBlocOnMap(allianceId) {
 let _heatmapFadeRAF = null;
 let _heatmapFadeFromExpr = null;
 
+/* WarEra+ — dissolvenza RIMANDATA per le viste che caricano i dati dopo.
+   Regioni contese, storico bellico e guerra vs eco fanno il fetch DOPO il
+   cambio vista: al click la mappa veniva dipinta con la scala vuota, quindi
+   la dissolvenza mostrava un passaggio verso il grigio ("si spengono invece
+   di accendersi") e i dati veri comparivano poi di scatto.
+   Qui la dissolvenza aspetta: finché i dati non ci sono la mappa continua a
+   mostrare i colori della vista PRECEDENTE, e il fade parte al primo
+   renderMap che ha i dati in mano. */
+let _fadePendingMode = null;
+let _fadePendingTimer = null;
+
+function _viewDataReady(mode) {
+  if (mode === 'contested')    return !!state.contestedCounts;
+  if (mode === 'warIntensity') return !!(state.warIntensityData || state.warIntensityError);
+  if (mode === 'playstyle')    return !!state.nationPlaystyle;
+  return true;
+}
+
+function _holdFadeUntilData(mode) {
+  const map = state.map;
+  if (!map?.getLayer(LYR_HEATMAP_FADE) || !_heatmapFadeFromExpr) return;
+  // Rimette sotto i colori di prima nello stesso task del renderMap che ha
+  // appena dipinto la scala vuota: l'occhio non vede il passaggio.
+  map.setPaintProperty(LYR_FILL, 'fill-color', _heatmapFadeFromExpr);
+  map.setPaintProperty(LYR_HEATMAP_FADE, 'fill-opacity', 0);
+  _fadePendingMode = mode;
+  clearTimeout(_fadePendingTimer);
+  // Rete di sicurezza: se il fetch fallisce senza lasciare traccia in state
+  // (i due catch che si limitano a un console.warn), dopo 8s si mostra
+  // comunque la vista com'è invece di restare appesi su quella vecchia.
+  _fadePendingTimer = setTimeout(() => {
+    if (_fadePendingMode !== mode || state.coloringMode !== mode) return;
+    _fadePendingMode = null;
+    renderMap();
+    startHeatmapFadeIn(600);
+  }, 8000);
+}
+
 export function captureHeatmapFadeFrom() {
   if (!state.map?.getLayer(LYR_HEATMAP_FADE) || !state.map.getLayer(LYR_FILL)) return false;
   if (_heatmapFadeRAF) { cancelAnimationFrame(_heatmapFadeRAF); _heatmapFadeRAF = null; }
@@ -1130,6 +1316,23 @@ export function applyTheme() {
 // map.js - sostituisci la funzione setColoringMode
 
 export function setColoringMode(mode) {
+  // WarEra+ — dissolvenza in ingresso su OGNI cambio vista. Il meccanismo è
+  // quello nato per la heatmap battaglie (vedi il blocco in fondo al file):
+  // il colore di LYR_FILL è data-driven, e MapLibre sulle proprietà
+  // data-driven salta la transizione e applica il valore finale di colpo —
+  // per questo le viste comparivano di scatto. Si incrociano due immagini
+  // invece di interpolare un colore: i colori nuovi vanno sul velo, che
+  // sale da 0, mentre sotto restano i vecchi fino a fine corsa.
+  // Solo su cambio REALE di vista: un setColoringMode sulla modalità già
+  // attiva (succede dai riepiloghi del pannello) non deve far lampeggiare
+  // nulla.
+  const fading = mode !== state.coloringMode && captureHeatmapFadeFrom();
+  // Il toggle "variazione 7 giorni" appartiene alla vista Guerra vs Eco:
+  // uscendo si torna alla fotografia, così rientrando non si trova una
+  // lettura diversa da quella che la legenda annuncia.
+  if (mode !== 'playstyle') state.playstyleTrendMode = false;
+  _fadePendingMode = null;
+  clearTimeout(_fadePendingTimer);
   state.coloringMode = mode;
   // WarEra+: il focus su un blocco ha senso solo restando in modalità
   // 'blocs' — se si cambia modalità (anche rientrando dopo), si riparte
@@ -1246,4 +1449,9 @@ export function setColoringMode(mode) {
   }
 
   renderMap();
+  // 600ms invece dei 750 della heatmap: qui si cambia vista spesso, una
+  // dissolvenza più corta resta morbida senza far aspettare.
+  if (!fading) return;
+  if (_viewDataReady(mode)) startHeatmapFadeIn(600);
+  else _holdFadeUntilData(mode);
 }

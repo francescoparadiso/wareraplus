@@ -29,6 +29,8 @@
    sopravvive alla ricarica (che è il punto) ma non alla sessione.
    ══════════════════════════════════════════════════════════════ */
 
+import { beginModuleLoading } from './loadingScreen.js';
+
 const RELOAD_GUARD_KEY = 'we_chunk_reload_at';
 const RELOAD_GUARD_MS = 60_000;
 /** Cosa l'utente stava aprendo quando è scattata la ricarica: chi fa il
@@ -60,6 +62,20 @@ function markReload(intent) {
  * @returns {Promise<any>} il modulo, oppure rilancia l'errore
  */
 export async function loadModule(loader, intent = '') {
+  // Schermata di attesa (shared/loadingScreen.js): agganciata QUI e non
+  // ai singoli chiamanti così vale per tutte le sezioni in un colpo solo,
+  // compresa Statistiche alleanze che non passa da un overlay. Il
+  // contatore interno la fa convivere con l'attesa più larga che i
+  // chiamanti aprono attorno all'init della vista, senza sfarfallii.
+  const endLoading = beginModuleLoading(intent);
+  try {
+    return await _loadModule(loader, intent);
+  } finally {
+    endLoading();
+  }
+}
+
+async function _loadModule(loader, intent) {
   try {
     return await loader();
   } catch (err) {

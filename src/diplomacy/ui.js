@@ -9,6 +9,7 @@ import { trackEvent } from '../shared/analytics.js';
 import { getContestedStats, contestedLegendGradient } from './contestedHeatmap.js';
 import { getWarIntensityStats, warIntensityLegendGradient } from './warIntensityHeatmap.js';
 import { getPlaystyleStats, playstyleLegendGradient } from './playstyleHeatmap.js';
+import { getTrendStats, trendLegendGradient } from './playstyleTrendHeatmap.js';
 
 function _fmtDmg(n) {
   if (!n) return '0';
@@ -222,6 +223,35 @@ export function updateDynamicLegend() {
 
   if (state.coloringMode === 'playstyle') {
     const sub = THEMES[state.theme].TEXT_SECONDARY;
+
+    // WarEra+: stessa vista, due letture — la fotografia di adesso o la
+    // variazione a 7 giorni, scambiate dal toggle nel riepilogo del
+    // pannello. La legenda deve dire quale delle due si sta guardando.
+    if (state.playstyleTrendMode) {
+      const trend = getTrendStats(state.playstyleTrend);
+      // Il titolo segue lo slider del riepilogo: "ieri" o "N giorni fa".
+      const askedDays = state.playstyleTrendDays || 7;
+      const vsLabel = askedDays === 1 ? 'vs yesterday' : `vs ${askedDays} days ago`;
+      if (!trend.covered) {
+        box.innerHTML = `
+          <div class="legend-section-title">War vs Eco · ${vsLabel}</div>
+          <div class="legend-note">${state.playstyleTrendError || 'Loading playstyle history…'}</div>`;
+        return;
+      }
+      box.innerHTML = `
+        <div class="legend-section-title">War vs Eco · ${vsLabel}</div>
+        <div class="legend-scale" style="margin:4px 0;">
+          <div style="width:100%;height:14px;background:${trendLegendGradient()};border-radius:3px;"></div>
+        </div>
+        <div class="legend-item" style="justify-content:space-between; padding:0 4px;">
+          <span style="font-size:10px; color:${sub};">Toward eco</span>
+          <span style="font-size:10px; color:${sub};">Toward war</span>
+        </div>
+        <div class="legend-note">Change of the war/eco balance ${vsLabel} (history covers ${trend.spanDays}d) · ${trend.toWar} moving to war, ${trend.still} steady, ${trend.toEco} moving to eco · ${trend.covered} nations with enough history</div>
+      `;
+      return;
+    }
+
     const stats = getPlaystyleStats(state.nationPlaystyle || {});
     if (!stats.colored) {
       box.innerHTML = `
@@ -238,7 +268,7 @@ export function updateDynamicLegend() {
         <span style="font-size:10px; color:${sub};">Eco</span>
         <span style="font-size:10px; color:${sub};">War</span>
       </div>
-      <div class="legend-note">Skill points of citizens in military units · ${stats.warLeaning} war-leaning, ${stats.balanced} balanced, ${stats.ecoLeaning} eco-leaning · ${stats.skipped} nations without a large enough sample</div>
+      <div class="legend-note">Skill points of citizens in military units, compared to the world average (${Math.round(((stats.world + 1) / 2) * 100)}% war) · small samples pulled toward that average · ${stats.warLeaning} war-leaning, ${stats.balanced} balanced, ${stats.ecoLeaning} eco-leaning · ${stats.skipped} nations without a large enough sample</div>
     `;
     return;
   }

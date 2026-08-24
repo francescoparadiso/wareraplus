@@ -329,8 +329,19 @@ document.getElementById('mode-warIntensity')?.addEventListener('click', async ()
   } catch (err) {
     // Unica delle tre senza alcun ripiego lato client: il totale storico
     // per regione esiste solo sul server di cache (battaglie del bootstrap).
-    console.warn('[warIntensity] endpoint non disponibile:', err.message);
-    state.warIntensityError = 'Historical battle data not available yet (cache server not updated).';
+    console.warn('[warIntensity] dati non disponibili:', err.message);
+    // Il messaggio diceva SEMPRE "cache server not updated", cioè la
+    // diagnosi sbagliata in due casi su tre: l'endpoint c'è da tempo, e
+    // quello che di solito fallisce è la RAGGIUNGIBILITÀ del server —
+    // un HTTP 404 (endpoint davvero assente) e un timeout/interruttore
+    // aperto (VPS lento o giù, vedi il circuit breaker in cacheClient.js)
+    // producevano la stessa frase, mandando a caccia del bug sbagliato.
+    // Ora dicono cose diverse, e il caso transitorio invita a riprovare
+    // invece di far credere che manchi un deploy.
+    const missing = /HTTP 404/.test(err.message || '');
+    state.warIntensityError = missing
+      ? 'Historical battle data not available yet (cache server not updated).'
+      : 'Cache server unreachable right now — reopen this view to retry.';
     if (state.coloringMode === 'warIntensity') { renderMap(); _refreshOverview('warIntensity'); }
   }
 });

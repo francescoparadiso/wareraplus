@@ -215,6 +215,22 @@ export async function fetchPlaystyleHistoryMany(countryIds, sinceMs) {
   }
 }
 
+/** Storico di TUTTE le nazioni, per la vista mappa "Variazione 7 giorni".
+ *  L'endpoint accetta al massimo 60 id per richiesta (limite del server,
+ *  MU_PLAYSTYLE_HISTORY_MAX_IDS), quindi si spezza in blocchi: con ~180
+ *  nazioni sono 3 richieste invece di 180. I blocchi vanno in parallelo,
+ *  il server legge lo stesso file una volta per richiesta.
+ *
+ *  Ritorna { countryId: serie }, vuoto se il server non risponde: chi
+ *  chiama mostra la vista senza dati invece di fallire. */
+export async function fetchPlaystyleHistoryAll(countryIds, sinceMs, chunkSize = 60) {
+  if (!countryIds?.length) return {};
+  const chunks = [];
+  for (let i = 0; i < countryIds.length; i += chunkSize) chunks.push(countryIds.slice(i, i + chunkSize));
+  const results = await Promise.all(chunks.map(ids => fetchPlaystyleHistoryMany(ids, sinceMs)));
+  return Object.assign({}, ...results);
+}
+
 /** Dettaglio pieno di UNA unità (mu.getById). Verificato dal vivo: la
  *  risposta è identica all'item della directory più `members` (array di
  *  userId) e `roles` ({managers, commanders}) — cioè esattamente i campi

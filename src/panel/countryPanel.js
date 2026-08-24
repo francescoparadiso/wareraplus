@@ -29,7 +29,7 @@ import { allianceDamageBonus, formatBonus } from '../shared/allianceBonus.js';
 // getFlagUrl/getNationCode vivevano qui: spostate in nationFlag.js perche'
 // le usa anche viewOverview.js (import circolare, altrimenti).
 import { getFlagUrl, getNationCode } from './nationFlag.js';
-import { buildViewOverviewHtml, hasViewOverview } from './viewOverview.js';
+import { buildViewOverviewHtml, hasViewOverview, trendDaysLabel } from './viewOverview.js';
 
 // Stella di pin per l'intestazione del pannello (nazione o alleanza).
 function pinStarHtml(type, id) {
@@ -891,6 +891,44 @@ export function renderViewOverviewPanel(mode) {
     });
   });
 
+  // WarEra+ — toggle "fotografia / variazione 7 giorni" della vista Guerra
+  // vs Eco: cambia insieme la mappa e questo riepilogo, perché sono due
+  // letture dello stesso dato, non due viste.
+  contentEl.querySelectorAll('[data-vo-playstyle-mode]').forEach(el => {
+    el.addEventListener('click', () => {
+      const wantTrend = el.dataset.voPlaystyleMode === 'trend';
+      if (wantTrend === !!state.playstyleTrendMode) return;
+      state.playstyleTrendMode = wantTrend;
+      trackEvent('playstyle-trend-toggle', { on: wantTrend });
+      import('../diplomacy/map.js').then(m => m.renderMap());
+      renderViewOverviewPanel('playstyle');
+      // Lo storico si scarica solo se qualcuno guarda davvero la variazione:
+      // sono tre richieste al server di cache, inutili per chi resta sulla
+      // fotografia.
+      if (wantTrend && !state.playstyleHistory) loadPlaystyleTrend();
+    });
+  });
+
+  // Slider dei giorni: l'estremo destro del confronto resta adesso, questo
+  // sposta quello sinistro fra ieri e una settimana fa. Nessuna fetch — lo
+  // storico in memoria copre già sette giorni, si ri-affetta e basta.
+  const daysRange = contentEl.querySelector('#wp-vo-days');
+  if (daysRange) {
+    // Durante il trascinamento si aggiorna solo l'etichetta: ridisegnare il
+    // pannello ad ogni pixel toglierebbe il focus allo slider stesso.
+    daysRange.addEventListener('input', () => {
+      const label = contentEl.querySelector('#wp-vo-days-label');
+      if (label) label.textContent = trendDaysLabel(Number(daysRange.value));
+    });
+    daysRange.addEventListener('change', () => {
+      const days = Number(daysRange.value);
+      if (!days || days === state.playstyleTrendDays) return;
+      state.playstyleTrendDays = days;
+      trackEvent('playstyle-trend-days', { days });
+      rebuildPlaystyleTrend();
+    });
+  }
+
   // Una riga alleanza fa esattamente quello che fa il click sulla voce
   // corrispondente in legenda: mette a fuoco il blocco sulla mappa (con
   // il flash di conferma) e apre il suo pannello.
@@ -906,6 +944,41 @@ export function renderViewOverviewPanel(mode) {
       renderBlocPanel(blocId);
     });
   });
+}
+
+/** Scarica lo storico guerra/eco e costruisce la scala della variazione.
+ *  Sta qui e non in diplomacy/main.js perché non è più una vista con un
+ *  pulsante suo: parte dal toggle del riepilogo, cioè da questo pannello. */
+async function loadPlaystyleTrend() {
+  try {
+    const { fetchPlaystyleByCountry, fetchPlaystyleHistoryAll } = await import('../mu/api.js');
+    const { TREND_WINDOW_MS } = await import('../diplomacy/playstyleTrendHeatmap.js');
+    const byCountry = await fetchPlaystyleByCountry();
+    if (byCountry) state.nationPlaystyle = byCountry;
+    // Si scaricano SEMPRE sette giorni, qualunque sia la posizione dello
+    // slider: è la finestra massima, e averla tutta in memoria rende ogni
+    // spostamento successivo istantaneo e gratis.
+    state.playstyleHistory = await fetchPlaystyleHistoryAll(Object.keys(byCountry || {}), Date.now() - TREND_WINDOW_MS);
+  } catch (err) {
+    console.warn('[playstyle-trend] storico non disponibile:', err.message);
+    state.playstyleHistory = {};
+  }
+  await rebuildPlaystyleTrend();
+}
+
+/** Ricostruisce la scala dallo storico già in memoria — è quello che fa lo
+ *  slider dei giorni. */
+async function rebuildPlaystyleTrend() {
+  const { buildTrendScale } = await import('../diplomacy/playstyleTrendHeatmap.js');
+  const trend = buildTrendScale(state.playstyleHistory || {}, state.nationPlaystyle, state.playstyleTrendDays || 7);
+  state.playstyleTrend = trend;
+  state.playstyleTrendError = trend.rows.length ? null
+    : 'Playstyle history not available yet (cache server not updated).';
+
+  if (state.coloringMode !== 'playstyle' || !state.playstyleTrendMode) return;
+  const m = await import('../diplomacy/map.js');
+  m.renderMap();
+  refreshViewOverviewPanel('playstyle');
 }
 
 /** Ridisegna il riepilogo se è quello aperto e riguarda questa vista —

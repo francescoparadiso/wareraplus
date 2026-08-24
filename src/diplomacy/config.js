@@ -127,6 +127,7 @@ export const LAYER_IDS = {
   // SRC_LABELS ('labels-src') rimossa: sorgente senza alcun layer che la
   // leggesse (le etichette sono disegnate sul canvas 2D di labels.js).
   SRC_DIPLOMACY_DUAL_BORDER: 'diplomacy-dual-border-src',
+  SRC_BORDER_STYLED: 'border-styled-src', // WarEra+: confini con proprietà per segmento (vedi borderStyle.js)
   SRC_BATTLE_REGION: 'battle-region-src', // WarEra+: contorno della regione della battaglia selezionata
   LYR_FILL: 'regions-fill',
   LYR_OUTLINE: 'regions-outline',
@@ -134,6 +135,9 @@ export const LAYER_IDS = {
   LYR_BORDER: 'borders-line',
   LYR_MULTI_BLOC: 'multi-bloc-pattern',
   LYR_DIPLOMACY_DUAL: 'diplomacy-dual-pattern',
+  LYR_BORDER_CASING: 'borders-casing-line',    // WarEra+: bordo nero sotto al confine colorato (come nel gioco)
+  LYR_REGION_INNER: 'regions-inner-line',      // WarEra+: confini interni nella tinta della nazione
+  LYR_BORDER_RELATION: 'borders-relation-line', // WarEra+: confini nazionali colorati per relazione
   LYR_BATTLE_REGION: 'battle-region-outline',
   LYR_BATTLE_REGION_FILL: 'battle-region-fill', // WarEra+: riempimento dell'intera regione, non solo contorno
   LYR_BLOC_FLASH: 'bloc-flash-highlight', // WarEra+: effetto "blink" al click su un'alleanza nella legenda

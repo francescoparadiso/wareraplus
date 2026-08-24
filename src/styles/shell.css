@@ -1453,9 +1453,38 @@ body.light-theme .wp-tm-credit strong { color: #9c6b1f; }
   align-items: center;
   gap: 10px;
 }
+/* Su mobile i due pill NON galleggiano più sulla mappa: la barra
+   inferiore (.wp-mmb-bottombar, alta 58px e a z-index 7000) li copriva
+   del tutto. mobileMenuBar.js sposta il wrapper in fondo al drawer ☰ e
+   aggiunge questa classe — da lì in poi è un blocco in flusso, non un
+   elemento fisso. */
+#wp-bottom-credits.wp-credits-in-drawer {
+  position: static;
+  transform: none;
+  z-index: auto;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+/* Dentro al drawer la pill autore torna visibile anche sotto i 769px:
+   lì lo spazio c'è, ed è il posto in cui il credit autore viveva già su
+   mobile (vedi la regola display:none più sotto, che vale solo finché il
+   wrapper sta sulla mappa). */
 @media (max-width: 768px) {
   #wp-bottom-credits { bottom: 10px; }
+  #wp-bottom-credits.wp-credits-in-drawer .wp-author-pill { display: flex; }
 }
+
+/* Fascia dei crediti in fondo al drawer mobile: separata dagli accordion
+   da un filo, con un po' d'aria sotto per la safe area dei telefoni col
+   notch. */
+.wp-mmb-credits {
+  margin-top: auto;
+  padding: 14px 12px calc(14px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid #21262d;
+  display: flex;
+  justify-content: center;
+}
+body.light-theme .wp-mmb-credits { border-top-color: #e0d8c8; }
 
 /* Stessa "taglia" del Ko-fi adiacente (richiesto dall'utente esplicitamente:
    "la dimensione deve essere quella del kofi") — misurato dal vivo:
@@ -2490,6 +2519,67 @@ body.light-theme .wp-sphere-chip { border-color: #e0e0e0; color: #3e2f1c; backgr
   padding: 8px 10px;
   margin-bottom: 12px;
 }
+/* Passi del conto della vista "Variazione 7 giorni": è l'unica vista che
+   misura un movimento, e senza sapere come è fatto il conto un "+55 punti"
+   non dice niente. Numerata perché sono passi in sequenza, non un elenco. */
+/* Toggle fotografia / variazione della vista Guerra vs Eco: due letture
+   dello stesso dato, quindi un interruttore a due segmenti e non due voci
+   di menu separate. */
+.wp-vo-toggle {
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 12px;
+}
+.wp-vo-toggle-btn {
+  flex: 1;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #8b949e;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.wp-vo-toggle-btn:hover { color: #e6edf3; }
+.wp-vo-toggle-btn.on { background: rgba(88, 166, 255, .16); color: #58a6ff; }
+body.light-theme .wp-vo-toggle { background: rgba(139, 90, 43, .05); border-color: #d8cdb8; }
+body.light-theme .wp-vo-toggle-btn { color: #5c5347; }
+body.light-theme .wp-vo-toggle-btn:hover { color: #1a1a1a; }
+body.light-theme .wp-vo-toggle-btn.on { background: rgba(139, 90, 43, .16); color: #8b5a2b; }
+
+/* Slider dei giorni della variazione: da ieri a settimana scorsa, con
+   l'etichetta viva in mezzo ai due estremi. */
+.wp-vo-days { margin: 0 0 12px; }
+.wp-vo-days-range {
+  width: 100%;
+  accent-color: #58a6ff;
+  cursor: pointer;
+}
+.wp-vo-days-ends {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 10.5px;
+  color: #8b949e;
+  margin-top: 2px;
+}
+.wp-vo-days-label { color: #58a6ff; font-weight: 600; font-size: 11px; }
+body.light-theme .wp-vo-days-range { accent-color: #8b5a2b; }
+body.light-theme .wp-vo-days-ends { color: #5c5347; }
+body.light-theme .wp-vo-days-label { color: #8b5a2b; }
+
+.wp-vo-how {
+  margin: 0;
+  padding-left: 18px;
+}
+.wp-vo-how li { margin: 4px 0; }
+
 .wp-vo-grid { margin-bottom: 14px; }
 .wp-vo-row {
   display: grid;
@@ -2616,6 +2706,59 @@ body.light-theme .wp-sphere-row-head { color: #1a1a1a; }
 body.light-theme .wp-sphere-share { color: #2f6fb5; }
 body.light-theme .wp-sphere-row-stats { color: #6b5a47; }
 
+/* ══ Schermata di attesa delle sezioni (shared/loadingScreen.js) ══
+   Sopra gli overlay (.wp-political-overlay & co. stanno a 6000) ma sotto
+   il tooltip nave e l'overlay di boot: copre la sezione che si sta
+   aprendo mentre il suo chunk scende e le sue fetch tornano. Il fondo è
+   lo stesso token della sezione, così la schermata non è un lampo di un
+   altro colore ma la sezione stessa "non ancora disegnata". */
+.wp-modload {
+  position: fixed;
+  inset: 0;
+  z-index: 6500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--wp-ov-bg, #0d1117);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .18s ease, visibility 0s linear .18s;
+}
+.wp-modload.visible {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity .18s ease, visibility 0s;
+}
+body.light-theme .wp-modload { background: var(--wp-ov-bg-light, #f4f6fa); }
+
+.wp-modload-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+/* Anello semplice: un bordo quasi trasparente con UN solo lato nella
+   tinta della sezione, ruotato. Niente SVG, niente immagini. */
+.wp-modload-ring {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--wp-modload-accent, #58a6ff) 22%, transparent);
+  border-top-color: var(--wp-modload-accent, #58a6ff);
+  animation: wp-modload-spin .85s linear infinite;
+}
+.wp-modload-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--wp-modload-accent, #58a6ff);
+}
+@keyframes wp-modload-spin { to { transform: rotate(360deg); } }
+/* Chi ha chiesto meno animazioni vede l'anello fermo, non un lampeggio. */
+@media (prefers-reduced-motion: reduce) {
+  .wp-modload-ring { animation: none; }
+}
+
 /* ══ Tooltip dei pallini "nave" sulle rotte marittime (shipTooltip.js) ══
    Puramente ornamentale: mai cliccabile (pointer-events:none, altrimenti
    ruberebbe l'hover ai layer nazione sotto) e posizionato via transform,
@@ -2633,7 +2776,7 @@ body.light-theme .wp-sphere-row-stats { color: #6b5a47; }
   color: #cfefff;
   font-size: 11.5px;
   line-height: 1.35;
-  white-space: nowrap;
+  white-space: normal;
   pointer-events: none;
   opacity: 0;
   transition: opacity .12s ease;

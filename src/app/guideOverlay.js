@@ -10,6 +10,7 @@
 
 import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
+import { withModuleLoading } from '../shared/loadingScreen.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
 
 let overlayEl, backBtn, rootEl;
@@ -34,8 +35,10 @@ export async function openGuideView() {
 
   enterOverlay(overlayEl, 'guide');
 
-  const mod = await loadModule(() => import('../guide/main.js'), 'guide');
-  mod.initGuideView(rootEl);
+  await withModuleLoading('guide', async () => {
+    const mod = await loadModule(() => import('../guide/main.js'), 'guide');
+    mod.initGuideView(rootEl);
+  });
 
   trackEvent('guide-view-open');
 }

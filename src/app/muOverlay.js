@@ -12,6 +12,7 @@
 
 import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
+import { withModuleLoading } from '../shared/loadingScreen.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
 
 let overlayEl, backBtn, rootEl;
@@ -41,9 +42,13 @@ export async function openMuView(muId) {
   // Dopo .open: a overlay nascosto il canvas misurerebbe 0x0.
   enterOverlay(overlayEl, 'mu');
 
-  const mod = await loadModule(() => import('../mu/main.js'), 'mu');
-  if (muId) mod.openMuDetail(muId);
-  await mod.initMuView(rootEl);
+  // Schermata di attesa su chunk + directory (shared/loadingScreen.js):
+  // la prima apertura scarica ~550 KB di elenco unità, non è istantanea.
+  await withModuleLoading('mu', async () => {
+    const mod = await loadModule(() => import('../mu/main.js'), 'mu');
+    if (muId) mod.openMuDetail(muId);
+    await mod.initMuView(rootEl);
+  });
 
   trackEvent('mu-open', { deepLink: !!muId });
 }

@@ -22,14 +22,20 @@
 
 import { COLORS } from './config.js';
 
-/** Grigio → ambra → rosso scuro: volutamente diversa sia dalla scala di
- *  "regioni contese" (grigio→rosso acceso) sia dalla battle heatmap live. */
+/** Verde (poco danno) → arancio → rosso scuro (molto danno). Stessa logica
+ *  di "regioni contese" — tre capi separano più regioni di due — ma con
+ *  arrivo più cupo e passaggio dall'arancio invece che dal giallo, così le
+ *  due viste restano distinguibili l'una dall'altra a colpo d'occhio. */
 function colorAt(t) {
   const u = Math.max(0, Math.min(1, t));
-  const r = Math.round(110 + 145 * u);
-  const g = Math.round(115 + 55 * (1 - Math.abs(u - 0.5) * 2) - 60 * u);
-  const b = Math.round(125 - 115 * u);
-  return `rgb(${r},${Math.max(0, g)},${Math.max(0, b)})`;
+  const lerp = (a, b, k) => Math.round(a + (b - a) * k);
+  // verde 42,140,72 → arancio 224,138,30 → rosso scuro 150,20,20
+  if (u < 0.5) {
+    const k = u / 0.5;
+    return `rgb(${lerp(42, 224, k)},${lerp(140, 138, k)},${lerp(72, 30, k)})`;
+  }
+  const k = (u - 0.5) / 0.5;
+  return `rgb(${lerp(224, 150, k)},${lerp(138, 20, k)},${lerp(30, 20, k)})`;
 }
 
 /** Percentile, come in contestedHeatmap.js: fra la regione più martoriata e

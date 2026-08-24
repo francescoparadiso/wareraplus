@@ -33,6 +33,11 @@ export const state = {
   sphereInfo: [],
   diplomacyData: new Map(),
   centroids: new Map(),
+  // WarEra+ (borderStyle.js): coppie di nazioni CONFINANTI, ricavate in una
+  // passata sugli archi del topology. Solo per queste serve calcolare una
+  // relazione da dipingere sul confine.
+  borderPairs: [], // [{ key: 'idA|idB', a, b }] — vista ATTUALE
+  borderPairsOriginal: [], // le stesse coppie sui confini di inizio partita (vista ORIGINALE)
   battleHeatmapData: null,
   // WarEra+ heatmap storiche: caricate su richiesta alla prima attivazione
   // della relativa vista, poi tenute qui per la sessione (dati che cambiano
@@ -41,6 +46,11 @@ export const state = {
   warIntensityData: null,     // {regionId: danno storico totale}
   warIntensityError: null,    // messaggio se il server non espone l'endpoint
   nationPlaystyle: null,      // {countryId: {war, eco, mixed, undecided, known, total}}
+  playstyleTrend: null,       // scala della variante "variazione 7 giorni" (playstyleTrendHeatmap.js)
+  playstyleTrendMode: false,  // toggle nel riepilogo: fotografia (false) o variazione nel tempo (true)
+  playstyleTrendDays: 7,      // quanti giorni indietro guarda la variazione (slider del riepilogo, 1-7)
+  playstyleHistory: null,     // storico grezzo per nazione, scaricato una volta e ri-affettato dallo slider
+  playstyleTrendError: null,  // messaggio se lo storico non è disponibile
   regionData: null,
   regionCache: new Map(), // regionId → { position: [lng,lat], name: string }
   // Indici O(1) per evitare le scansioni lineari (nazioniGlobal.find /

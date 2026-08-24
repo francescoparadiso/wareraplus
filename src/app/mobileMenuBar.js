@@ -183,7 +183,7 @@ let lastSelectedCountryId = null;
 // ══════════════════════════════════════════════════════════════
 // Costruzione
 // ══════════════════════════════════════════════════════════════
-let topbar, drawer, drawerScrim, bottombar, drawerTopRow, settingsBody, favoritesBody;
+let topbar, drawer, drawerScrim, bottombar, drawerTopRow, settingsBody, favoritesBody, drawerCredits;
 let hamburgerBtn, initialized = false;
 
 export function initMobileMenuBar() {
@@ -303,6 +303,20 @@ function buildDrawer() {
   drawer.appendChild(buildInsightsAccordion());
   drawer.appendChild(buildSettingsAccordion());
   drawer.appendChild(buildFavoritesAccordion());
+
+  // WarEra+ fix (segnalato dall'utente: "non si vede più la pill del
+  // donate e del created by"). #wp-bottom-credits è fixed a bottom:10px
+  // con z-index 3000, ma la barra inferiore mobile è alta 58px e sta a
+  // z-index 7000: su telefono i due pill finivano ESATTAMENTE sotto la
+  // barra, invisibili. Non si possono semplicemente alzare — sopra la
+  // barra passa già la linguetta "Vedi dettagli" (bottom:64px), che ora
+  // compare su ogni vista mappa, e su 375px non c'è spazio per due
+  // strisce fluttuanti sovrapposte alla mappa.
+  // Vanno quindi qui, in fondo al drawer ☰ e FUORI dagli accordion (si
+  // vedono aprendo il menù, senza dover espandere nulla) — la stessa
+  // casa che il credit autore aveva già su mobile, solo non sepolta.
+  drawerCredits = el('div', 'wp-mmb-credits');
+  drawer.appendChild(drawerCredits);
 }
 let drawerOpen = false;
 function toggleDrawer() { drawerOpen ? closeDrawer() : openDrawer(); }
@@ -820,21 +834,34 @@ function enterMobile() {
     const topControls = document.getElementById('wp-top-controls');
     const napManual = document.getElementById('napInput')?.closest('.menu-section');
     const napExternal = document.getElementById('externalNapToggle')?.closest('.menu-section');
-    const authorCredit = document.getElementById('wp-author-credit');
+    const bottomCredits = document.getElementById('wp-bottom-credits');
     relocatedEls = [];
     if (topControls && drawerTopRow) { relocate(topControls, drawerTopRow); relocatedEls.push(topControls); }
     if (napManual && settingsBody) { relocate(napManual, settingsBody); relocatedEls.push(napManual); }
     if (napExternal && settingsBody) { relocate(napExternal, settingsBody); relocatedEls.push(napExternal); }
-    // Credit autore (richiesto dall'utente): stesso <a> di index.html
-    // (#hamburger-menu su desktop lo rilocca in settingsPanel — vedi
-    // desktopMenuBar.js:enterDesktop), qui in fondo alla sezione
-    // Impostazioni del drawer — un solo elemento, due destinazioni.
-    if (authorCredit && settingsBody) { relocate(authorCredit, settingsBody); relocatedEls.push(authorCredit); }
+    // Ko-fi + pill autore: dal fondo dello schermo (dove la barra
+    // inferiore li copriva, vedi buildDrawer) al fondo del drawer. Si
+    // sposta il WRAPPER, non i due pill separatamente, così restano
+    // appaiati come su desktop. La classe dice al CSS che ora è un
+    // blocco in flusso e non più un elemento fisso sulla mappa — ed è
+    // anche ciò che riaccende la pill autore, nascosta sotto i 769px
+    // finché galleggiava sulla mappa (vedi shell.css .wp-author-pill).
+    // #wp-author-credit (la riga di testo dentro Impostazioni) NON viene
+    // più rilocato qui: sarebbe lo stesso credito due volte nello stesso
+    // drawer, e la pill è la versione ricca (avatar + link).
+    if (bottomCredits && drawerCredits) {
+      relocate(bottomCredits, drawerCredits);
+      bottomCredits.classList.add('wp-credits-in-drawer');
+      relocatedEls.push(bottomCredits);
+    }
   });
 }
 function exitMobile() {
   closeDrawer();
   closeSearchOverlay();
+  // La classe va tolta PRIMA del ritorno a casa: tornando su desktop i
+  // due pill devono ridiventare l'elemento fisso centrato in basso.
+  document.getElementById('wp-bottom-credits')?.classList.remove('wp-credits-in-drawer');
   relocatedEls.forEach(restoreHome);
   relocatedEls = [];
 }

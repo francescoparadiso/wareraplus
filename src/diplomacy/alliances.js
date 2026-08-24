@@ -6,14 +6,30 @@ import { buildMultiBlocPatternExpression } from './patterns.js';
 import { hashColor } from './utils.js';   // aggiungi in cima
 
 
+// WarEra+: la tabella copriva 6 scheme su 12 in uso. Gli scoperti (blue,
+// cyan, purple, yellow, sand...) cadevano sul fallback ad hash dell'ID, cioè
+// una tinta casuale: ATLAS, che in gioco è BLU, usciva verde chiaro. Ogni
+// scheme visto sulle alleanze reali ha ora il suo colore.
 const SCHEME_COLORS = {
   violet: '#8b5cf6',
+  purple: '#7c3aed',
   pink: '#ec4899',
   amber: '#ffbf00',
+  yellow: '#eab308',
+  sand: '#d2b48c',
+  orange: '#f97316',
   red: '#d60606',
   green: '#0d652d',
+  lime: '#84cc16',
+  teal: '#14b8a6',
+  cyan: '#06b6d4',
+  blue: '#1d4ed8',
   lightblue: '#007cb1',
-  // aggiungi altri scheme man mano che compaiono
+  brown: '#92400e',
+  grey: '#6b7280',
+  gray: '#6b7280',
+  white: '#e5e7eb',
+  black: '#374151',
 };
 
 // Converte RGB in HSL
@@ -37,6 +53,50 @@ function rgbToHsl(r, g, b) {
     h /= 6;
   }
   return [h * 360, s, l];
+}
+
+// WarEra+ — normalizza qualunque colore CSS (#rrggbb, nome, hsl(...)) a
+// #rrggbb, con lo stesso trucco del canvas già usato da shiftColor.
+function toHex(colorHexOrName) {
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.fillStyle = colorHexOrName;
+  return ctx.fillStyle;
+}
+
+// WarEra+ — colore finale di un'alleanza. Tinta e saturazione restano quelle
+// dello scheme (colori "digitali", pieni, come la vista Diplomazia: una
+// versione pastello è stata provata e scartata — smorzava troppo). L'unica
+// correzione è sulla luminosità, e solo per le alleanze che hanno dovuto
+// ruotare tinta: vanno più scure, così il colore "preso in prestito" non
+// compete con quello di chi ha l'originale.
+function finalAllianceColor(color, extraDark = 0) {
+  const hex = toHex(color);
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const [h, s, l] = rgbToHsl(r, g, b);
+  // Stessa FASCIA DI LUMINOSITÀ dei colori nazione della vista Diplomazia,
+  // misurata sui dati veri: 180 nazioni stanno fra 0.15 e 0.32 (mediana
+  // 0.20), mentre gli scheme d'alleanza grezzi arrivavano a 0.60 — per
+  // questo lo stesso rosso sembrava molto più acceso in Alleanze che in
+  // Diplomazia. La luminosità viene quindi compressa in [0.16, 0.32].
+  // La SATURAZIONE resta alta (tetto 0.85): il colore deve restare pieno e
+  // "digitale", il pastello è stato provato e scartato.
+  const s2 = Math.min(s, 0.85);
+  const l2 = Math.max(0.15, Math.min(0.32, 0.16 + l * 0.24 - extraDark));
+  return `hsl(${Math.round(h)}, ${Math.round(s2 * 100)}%, ${Math.round(l2 * 100)}%)`;
+}
+
+// Tinta di un colore già in hsl(...) (quello che ritorna finalAllianceColor).
+function hueOf(hslString) {
+  const m = /^hsl\(\s*(-?\d+(?:\.\d+)?)/i.exec(String(hslString));
+  return m ? ((parseFloat(m[1]) % 360) + 360) % 360 : 0;
+}
+
+// Distanza fra due tinte sul cerchio: 350° e 10° distano 20, non 340.
+function hueDistance(a, b) {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
 }
 
 // Shifta il hue di un colore (esadecimale o nome CSS)
@@ -117,19 +177,37 @@ export function processAlliancesData(alliances) {
   for (const ally of alliances) state.allianceMap.set(ally._id, ally);
 
   // 1. Mappa allianceId -> colore
+  //
+  // WarEra+: due alleanze con lo stesso scheme non possono avere lo stesso
+  // colore, quindi la seconda viene ruotata di tinta. Prima vinceva chi
+  // arrivava prima nella risposta dell'API: Troublemakers (5 nazioni) si
+  // prendeva il rosso e The Inglourious Basterds (24 nazioni, rossa in
+  // gioco) finiva arancione. Ora il colore originale va alle alleanze più
+  // GRANDI: si ordina per numero di nazioni prima di assegnare, e la
+  // rotazione tocca alle piccole, che si notano meno. `alliances` non viene
+  // mutato (è l'array condiviso): si ordina una copia.
   state.allianceColorMap.clear();
-const usedColors = new Set();
-for (const ally of alliances) {
-  let baseColor = getBaseAllianceColor(ally);
-  let color = baseColor;
-  let shift = 30;
-  while (usedColors.has(color)) {
-    color = shiftColor(baseColor, shift);
-    shift += 30;
+  const usedHues = [];
+  const bySize = alliances
+    .slice()
+    .sort((a, b) => (b.memberCountries?.length || 0) - (a.memberCountries?.length || 0));
+  for (const ally of bySize) {
+    const baseColor = getBaseAllianceColor(ally);
+    let shift = 0;
+    let color = finalAllianceColor(baseColor);
+    let hue = hueOf(color);
+    // Due scheme diversi possono essere quasi la stessa tinta (amber #ffbf00
+    // e yellow #eab308 stanno entrambi intorno ai 45°: B.E.E.R e Custodes
+    // Aeterni risultavano indistinguibili sulla mappa). Si ruota finché la
+    // tinta non dista almeno 14° da tutte quelle già assegnate.
+    for (let attempt = 0; attempt < 12 && usedHues.some(h => hueDistance(h, hue) < 14); attempt++) {
+      shift += 30;
+      color = finalAllianceColor(shiftColor(baseColor, shift), 0.04);
+      hue = hueOf(color);
+    }
+    usedHues.push(hue);
+    state.allianceColorMap.set(ally._id, color);
   }
-  usedColors.add(color);
-  state.allianceColorMap.set(ally._id, color);
-}
 
   // 2. Costruisci nationAlliancesMap (paese -> Set di allianceId)
   state.nationAlliancesMap.clear();

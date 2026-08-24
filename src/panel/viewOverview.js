@@ -42,7 +42,8 @@ import { getPopulationColor } from '../diplomacy/population.js';
 import { getDamageColor } from '../diplomacy/weeklyDamage.js';
 import { contestedRankedList, getContestedStats } from '../diplomacy/contestedHeatmap.js';
 import { warIntensityRankedList, getWarIntensityStats } from '../diplomacy/warIntensityHeatmap.js';
-import { playstyleBalance, getBalanceColor, getPlaystyleStats } from '../diplomacy/playstyleHeatmap.js';
+import { buildPlaystyleScale, getBalanceColor, getPlaystyleStats } from '../diplomacy/playstyleHeatmap.js';
+import { getTrendColor, getTrendStats } from '../diplomacy/playstyleTrendHeatmap.js';
 
 /** Le viste che hanno un riepilogo. Chi chiama usa questo elenco per
  *  decidere se aprire il pannello: tenerlo qui evita che countryPanel.js
@@ -252,19 +253,28 @@ function regionRankingHtml({ title, about, ranked, stats, valueLabel, unavailabl
 function playstyleHtml() {
   const title = t('vo_playstyle_title');
   const about = t('vo_playstyle_about');
-  const byCountry = state.nationPlaystyle;
-  if (!byCountry) return headerHtml(title) + aboutHtml(about) + emptyHtml(t('vo_loading'));
+  const trendOn = !!state.playstyleTrendMode;
+  const head = headerHtml(title) + aboutHtml(about) + playstyleToggleHtml(trendOn);
 
+  // Seconda lettura della stessa vista: la variazione a 7 giorni. Il toggle
+  // resta in cima, così si torna indietro da dove si è partiti.
+  if (trendOn) return head + playstyleTrendBodyHtml();
+
+  const byCountry = state.nationPlaystyle;
+  if (!byCountry) return head + emptyHtml(t('vo_loading'));
+
+  // Stessa scala della mappa (shrinkage + distanza dalla media mondiale,
+  // vedi playstyleHeatmap.js): l'elenco deve ordinare e colorare come il
+  // territorio, non con la percentuale grezza che la mappa non usa più.
+  const scale = buildPlaystyleScale(byCountry);
   const rows = [];
-  for (const [countryId, entry] of Object.entries(byCountry)) {
-    const balance = playstyleBalance(entry);
-    if (balance == null) continue;
-    const nation = state.nationMap.get(countryId);
+  for (const r of scale.all) {
+    const nation = state.nationMap.get(r.countryId);
     if (!nation) continue;
-    const known = (entry.war || 0) + (entry.eco || 0) + (entry.mixed || 0);
-    rows.push({ countryId, nation, balance, entry, known });
+    const entry = byCountry[r.countryId];
+    rows.push({ countryId: r.countryId, nation, balance: r.z, entry, known: r.known });
   }
-  if (!rows.length) return headerHtml(title) + aboutHtml(about) + emptyHtml(t('vo_no_data'));
+  if (!rows.length) return head + emptyHtml(t('vo_no_data'));
 
   rows.sort((a, b) => b.balance - a.balance);
   const stats = getPlaystyleStats(byCountry);
@@ -289,8 +299,7 @@ function playstyleHtml() {
   const war = rows.slice(0, TOP_PLAYSTYLE);
   const eco = rows.slice().reverse().slice(0, TOP_PLAYSTYLE).filter(r => !war.includes(r));
 
-  return headerHtml(title, stats.colored)
-    + aboutHtml(about)
+  return head
     + statsHtml([
       { label: t('vo_stat_war_leaning'), value: stats.warLeaning },
       { label: t('vo_stat_balanced'), value: stats.balanced },
@@ -300,6 +309,94 @@ function playstyleHtml() {
     + `<div class="wp-panel-section-title">${escapeHtml(t('vo_most_war'))}</div>`
     + war.map(row).join('')
     + (eco.length ? `<div class="wp-panel-section-title">${escapeHtml(t('vo_most_eco'))}</div>` + eco.map(row).join('') : '');
+}
+
+/* ── Variazione 7 giorni ──
+   Non è una vista a parte: è la seconda lettura della STESSA vista Guerra
+   vs Eco, scambiata dal toggle qui sotto. La mappa cambia insieme al
+   riepilogo (state.playstyleTrendMode, letto da map.js e dalla legenda).
+
+   Solo in questa lettura compare la spiegazione del conto: com'è fatta la
+   heatmap non è ovvio (percentile, campione, attenuazione), mentre "sette
+   giorni fa contro oggi" si capisce da sé. */
+function playstyleToggleHtml(trendOn) {
+  const btn = (mode, label, on) =>
+    `<button type="button" class="wp-vo-toggle-btn${on ? ' on' : ''}" data-vo-playstyle-mode="${mode}">${escapeHtml(label)}</button>`;
+  return `<div class="wp-vo-toggle">`
+    + btn('now', t('vo_trend_toggle_now'), !trendOn)
+    + btn('trend', t('vo_trend_toggle_shift'), trendOn)
+    + `</div>`;
+}
+
+function howHtml(lines) {
+  return `<div class="wp-vo-about"><ol class="wp-vo-how">`
+    + lines.map(l => `<li>${escapeHtml(l)}</li>`).join('')
+    + `</ol></div>`;
+}
+
+/** Slider dei giorni: l'estremo destro del confronto è sempre adesso,
+ *  questo sposta quello sinistro. Da 1 (ieri) a 7 (settimana scorsa). */
+function trendDaysSliderHtml(days) {
+  return `
+    <div class="wp-vo-days">
+      <input type="range" min="1" max="7" step="1" value="${days}" id="wp-vo-days" class="wp-vo-days-range">
+      <div class="wp-vo-days-ends">
+        <span>${escapeHtml(t('vo_trend_end_yesterday'))}</span>
+        <span id="wp-vo-days-label" class="wp-vo-days-label">${escapeHtml(trendDaysLabel(days))}</span>
+        <span>${escapeHtml(t('vo_trend_end_week'))}</span>
+      </div>
+    </div>`;
+}
+
+export function trendDaysLabel(days) {
+  return days === 1 ? t('vo_trend_vs_yesterday') : t('vo_trend_vs_days', { n: days });
+}
+
+function playstyleTrendBodyHtml() {
+  const trend = state.playstyleTrend;
+  const days = state.playstyleTrendDays || 7;
+  const head = trendDaysSliderHtml(days)
+    + howHtml([t('vo_trend_how_1'), t('vo_trend_how_2'), t('vo_trend_how_3'), t('vo_trend_how_4')]);
+  if (!trend) return head + emptyHtml(t('vo_loading'));
+
+  const stats = getTrendStats(trend);
+  if (!stats.covered) return head + emptyHtml(state.playstyleTrendError || t('vo_no_data'));
+
+  const rows = trend.rows
+    .map(r => ({ r, nation: state.nationMap.get(r.countryId) }))
+    .filter(x => x.nation)
+    .sort((a, b) => b.r.delta - a.r.delta);
+
+  const row = ({ r, nation }, i) => {
+    // I punti sono la differenza fra i due equilibri per 100: leggibile
+    // ("+18 punti") e indipendente dalla dimensione del campione.
+    const pts = Math.round(r.delta * 100);
+    const pctNow = Math.round(((r.balNow + 1) / 2) * 100);
+    return rowHtml({
+      rank: i + 1,
+      icon: flagImgHtml(r.countryId, nation, 'wp-vo-flag'),
+      name: nation.name || '—',
+      value: `${pts > 0 ? '+' : ''}${pts} ${t('vo_trend_points')}`,
+      sub: t('vo_trend_sub', { war: pctNow, n: r.knownNow }),
+      share: Math.abs(r.z),
+      color: getTrendColor(r.z),
+      dataset: ` data-nation-id="${r.countryId}"`,
+    });
+  };
+
+  const toWar = rows.slice(0, TOP_PLAYSTYLE);
+  const toEco = rows.slice().reverse().slice(0, TOP_PLAYSTYLE).filter(x => !toWar.includes(x));
+
+  return head
+    + statsHtml([
+      { label: t('vo_trend_stat_to_war'), value: stats.toWar },
+      { label: t('vo_trend_stat_steady'), value: stats.still },
+      { label: t('vo_trend_stat_to_eco'), value: stats.toEco },
+      { label: t('vo_trend_stat_days'), value: stats.spanDays },
+    ])
+    + `<div class="wp-panel-section-title">${escapeHtml(t('vo_trend_most_war'))}</div>`
+    + toWar.map(row).join('')
+    + (toEco.length ? `<div class="wp-panel-section-title">${escapeHtml(t('vo_trend_most_eco'))}</div>` + toEco.map(row).join('') : '');
 }
 
 // ══════════════════ INGRESSO ══════════════════

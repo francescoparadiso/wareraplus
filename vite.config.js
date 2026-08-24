@@ -6,6 +6,11 @@ export default defineConfig({
   // vecchio Diplomacy View che era su GitHub Pages con base '/repo-name/').
   base: '/',
 
+  // Porta del dev server presa da PORT quando c'e' (l'ambiente di sviluppo
+  // puo' assegnarne una diversa se la 5173 e' gia' occupata da un'altra
+  // istanza); default invariato a 5173.
+  server: { port: Number(process.env.PORT) || 5173 },
+
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',

@@ -51,10 +51,13 @@ let _lastField = null;
 function _setHoverBorder(map, nid) {
   const src = map.getSource(SRC_HOVER_BORDER);
   if (!src) return;
-  // Solo nella vista diplomatica di default: le altre modalità (blocs,
-  // sfera, danni settimanali, popolazione, heatmap battaglie) hanno già
-  // le loro logiche di colore/evidenziazione, non ci sovrapponiamo.
-  if (state.coloringMode !== 'diplomacy' || !nid) {
+  // WarEra+: prima l'evidenziazione era limitata alla sola vista
+  // diplomatica ("le altre modalità hanno già le loro logiche di colore").
+  // Vale in TUTTE le viste, su richiesta: il contorno bianco al passaggio
+  // del mouse serve a capire dove finisce una nazione, e nelle viste a
+  // scala di colore (popolazione, danni, alleanze) serve anzi di più,
+  // perché lì nazioni vicine possono avere la stessa identica tinta.
+  if (!nid) {
     if (_lastNid !== null) { _lastNid = null; src.setData(EMPTY_FC); }
     return;
   }

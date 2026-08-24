@@ -19,12 +19,21 @@
 
 import { COLORS } from './config.js';
 
-/** Grigio neutro → rosso acceso. Scala volutamente diversa da quella di
- *  weeklyDamage (blu→rosso) e della battle heatmap: sono tutte "calde" e
- *  affiancate nella stessa barra delle viste, devono restare distinguibili. */
+/** Verde (poco conteso) → giallo → rosso (molto conteso). Prima era
+ *  grigio→rosso: con due soli capi la metà bassa della scala restava un
+ *  grigio quasi uniforme e le regioni tranquille non si distinguevano fra
+ *  loro. Passando per il giallo la stessa gamma di valori occupa due salti
+ *  di tinta invece di uno, quindi separa molte più regioni. */
 function colorAt(t) {
   const u = Math.max(0, Math.min(1, t));
-  return `rgb(${Math.round(120 + 135 * u)},${Math.round(125 - 95 * u)},${Math.round(135 - 105 * u)})`;
+  const lerp = (a, b, k) => Math.round(a + (b - a) * k);
+  // verde 31,157,79 → giallo 230,193,31 → rosso 200,40,35
+  if (u < 0.5) {
+    const k = u / 0.5;
+    return `rgb(${lerp(31, 230, k)},${lerp(157, 193, k)},${lerp(79, 31, k)})`;
+  }
+  const k = (u - 0.5) / 0.5;
+  return `rgb(${lerp(230, 200, k)},${lerp(193, 40, k)},${lerp(31, 35, k)})`;
 }
 
 /** Posizione PERCENTILE invece del rapporto sul massimo. Verificato sul

@@ -37,6 +37,7 @@
 
 import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
+import { withModuleLoading } from '../shared/loadingScreen.js';
 import { pauseMapBackgroundWork, resumeMapBackgroundWork } from './mapIdle.js';
 
 let overlayEl, backBtn, titleEl;
@@ -81,12 +82,18 @@ export async function openPoliticalView(countryId, countryName = '', options = {
   // apertura reale (poi resta in cache del browser/module graph per le
   // aperture successive). initPoliticalView è idempotente: se già
   // montata, cambia nazione solo se diversa da quella corrente (Stage 8).
-  const { initPoliticalView, resumePoliticalRendering } = await loadModule(() => import('../political/main.js'), 'political');
-  await initPoliticalView(countryId, options);
-  // WarEra+ perf: riavvia canvas/ticker se erano stati fermati da una
-  // chiusura precedente (no-op alla primissima apertura — vedi
-  // resumePoliticalRendering in political/main.js).
-  resumePoliticalRendering();
+  // La schermata di attesa copre ENTRAMBE le fasi (chunk + dati): qui è
+  // la seconda a pesare — initPoliticalView non torna finché elezioni e
+  // parlamento non sono arrivati, ed è il punto in cui l'overlay restava
+  // vuoto abbastanza a lungo da sembrare bloccato.
+  await withModuleLoading('political', async () => {
+    const { initPoliticalView, resumePoliticalRendering } = await loadModule(() => import('../political/main.js'), 'political');
+    await initPoliticalView(countryId, options);
+    // WarEra+ perf: riavvia canvas/ticker se erano stati fermati da una
+    // chiusura precedente (no-op alla primissima apertura — vedi
+    // resumePoliticalRendering in political/main.js).
+    resumePoliticalRendering();
+  });
 
   trackEvent('wareraplus-expand-political', {
     countryId,
