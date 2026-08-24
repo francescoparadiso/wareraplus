@@ -26,6 +26,25 @@ export const WARERA_CACHE_BASE = 'https://warera-oracle.duckdns.org/warera-cache
 // utils.js, opzione { useWorker: true }), non per tutte le chiamate.
 export const WORKER_API_BASE = 'https://politicalview-proxy.fra-paradiso2.workers.dev';
 
+// WarEra+ — proxy tRPC sul server di cache, al posto del Worker Cloudflare.
+// Il piano gratuito del Worker ha un tetto di 100.000 richieste al giorno,
+// superato per la prima volta il 2026-08-24. Il tetto conta le richieste,
+// quindi sale col numero di utenti: e' un limite strutturale, non un picco.
+// Il VPS espone la stessa identica route (server/warera-cache-server.js:
+// app.use('/trpc')) e non ha quel tetto.
+//
+// NON e' un rimpiazzo secco: shared/trpcProxy.js prova PRIMA questa base e
+// ricade sul Worker se non risponde, con lo stesso principio del resto del
+// progetto — il VPS e' un'ottimizzazione, mai un nuovo punto di fallimento.
+// Il Worker resta deployato e funzionante.
+//
+// INTERRUTTORE DI RITORNO: mettere questa costante a stringa vuota fa
+// tornare tutto sul Worker esattamente come prima, senza toccare altro.
+// Senza `/trpc` finale, esattamente come WORKER_API_BASE: sono i chiamanti a
+// comporre `${base}/trpc/<procedure>` (utils.js, trpcClient.js), e la route
+// sul VPS e' montata su /trpc apposta per specchiare il Worker.
+export const TRPC_PROXY_BASE = WARERA_CACHE_BASE;
+
 // WarEra+: base per l'Ottimizzatore industriale (src/eco/*). Alcuni endpoint
 // economici sono TOKEN-GATED (worker.getWorkers,
 // transaction.getPaginatedTransactions,

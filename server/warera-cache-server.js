@@ -142,7 +142,14 @@ const CREDIT_PROFILES = {
 };
 
 app.use(cors({
-  origin: '*' // TODO: restringere all'URL vero del tool una volta online
+  origin: '*', // TODO: restringere all'URL vero del tool una volta online
+  // WarEra+: senza `maxAge` il browser rifa il preflight OPTIONS ogni pochi
+  // secondi, e con la route proxy /trpc (che riceve anche POST, quindi
+  // preflightati) sarebbe una richiesta in piu' per ogni chiamata. Il Worker
+  // Cloudflare che questa route sostituisce dichiara 86400: stesso valore,
+  // cosi' ogni browser lo paga una volta al giorno e non di piu'.
+  maxAge: 86400,
+  allowedHeaders: ['Content-Type'],
 }));
 
 // ---------------------------------------------------------------------------
@@ -2222,7 +2229,153 @@ app.get('/region-history/external-status', (req, res) => {
 
 app.get('/credit-profiles', (req, res) => res.json(readCache('credit-profiles', { fetchedAt: null, data: {} })));
 
-app.get('/health', (req, res) => res.json({ status: 'ok', now: Date.now() }));
+// ═══════════════════════════════════════════════════════════════════════
+// PROXY tRPC — sostituisce il Worker Cloudflare per le chiamate del CLIENT
+// ═══════════════════════════════════════════════════════════════════════
+// Perche' esiste: il Worker Cloudflare (politicalview-proxy) e' un
+// passthrough verso api2.warera.io che aggiunge `X-API-Key` server-side,
+// e il piano gratuito ha un tetto di 100.000 richieste al giorno. Il tool
+// lo ha superato per la prima volta il 2026-08-24. Il tetto conta le
+// richieste, quindi cresce col numero di utenti: e' un limite strutturale,
+// non un picco da smussare.
+//
+// Questa route fa ESATTAMENTE quello che fa il Worker — stesso upstream
+// (api2, non api6: e' quello che il Worker usa), stesso header, stesso
+// passthrough di status e body — ma su un server che non ha quel tetto.
+// Il client la preferisce e ricade sul Worker se non risponde
+// (src/diplomacy/config.js: TRPC_PROXY_BASE), quindi il Worker resta
+// deployato come rete di sicurezza: se questo VPS cade, si torna al
+// comportamento precedente invece di rompersi. Stessa regola di tutto il
+// resto di questo file (vedi cacheClient.js).
+//
+// NB il token NON e' nel codice: si legge da `WARERA_API_TOKEN`
+// nell'ambiente di pm2 (equivalente del secret Cloudflare). Senza, la
+// route funziona lo stesso ma senza key: rate limit di WarEra a 100/min
+// invece di 500 e 401 sui tre endpoint token-gated dell'Ottimizzatore
+// industriale. `/health` dice se e' caricato — mai il valore.
+//
+// Da montare PRIMA di /health e dopo gli altri endpoint: il path e'
+// /trpc/* per specchiare quello del Worker, cosi' lato client basta
+// cambiare la base URL e nient'altro.
+const TRPC_UPSTREAM = 'https://api2.warera.io/trpc';
+const PROXY_TIMEOUT_MS = 25000;
+const WARERA_API_TOKEN = process.env.WARERA_API_TOKEN || '';
+
+// Freno per IP: qui non c'e' Cloudflare davanti a fermare gli abusi, e
+// questa route e' un proxy pubblico verso un'API con la NOSTRA key (stessa
+// esposizione che ha oggi il Worker, non una nuova — ma li' c'era uno
+// scudo). Il tetto e' volutamente alto: un utente vero, col muro battaglia
+// aperto e i marker sulla mappa, sta sotto le ~60 richieste/minuto, e piu'
+// utenti possono condividere lo stesso IP (NAT domestico, scuola, mobile).
+// Serve solo a fermare uno script impazzito, non a fare da rate limit fine:
+// quello vero lo fa WarEra col suo 500/min sul token.
+const PROXY_RATE_WINDOW_MS = 60 * 1000;
+const PROXY_RATE_MAX = 1200;
+const _proxyHits = new Map(); // ip -> { count, windowStart }
+
+function _proxyRateExceeded(ip) {
+  const now = Date.now();
+  const rec = _proxyHits.get(ip);
+  if (!rec || now - rec.windowStart >= PROXY_RATE_WINDOW_MS) {
+    _proxyHits.set(ip, { count: 1, windowStart: now });
+    return false;
+  }
+  rec.count++;
+  return rec.count > PROXY_RATE_MAX;
+}
+
+// La mappa cresce con gli IP visti: ripulita ogni 5 minuti dalle finestre
+// scadute, altrimenti e' un leak lento su un processo che sta su per mesi.
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, rec] of _proxyHits) {
+    if (now - rec.windowStart >= PROXY_RATE_WINDOW_MS) _proxyHits.delete(ip);
+  }
+}, 5 * 60 * 1000).unref?.();
+
+async function _trpcProxy(req, res) {
+  const ip = req.headers['x-real-ip'] || req.ip || 'sconosciuto';
+  if (_proxyRateExceeded(ip)) {
+    res.status(429).set('Retry-After', '60').send('Too many requests');
+    return;
+  }
+
+  // nginx toglie /warera-cache, il mount app.use('/trpc') toglie /trpc:
+  // qui req.path e' gia' '/battle.getBattles', da appendere all'upstream.
+  const suffix = req.path;
+  const search = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+  const target = TRPC_UPSTREAM + suffix + search;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
+  try {
+    const headers = {
+      // `identity`: stesso accorgimento del Worker — con la compressione
+      // attiva i body di errore di WarEra tornavano corrotti.
+      'Accept-Encoding': 'identity',
+    };
+    if (WARERA_API_TOKEN) headers['X-API-Key'] = WARERA_API_TOKEN;
+
+    const init = { method: req.method, headers, signal: controller.signal };
+    if (req.method === 'POST') {
+      headers['Content-Type'] = req.headers['content-type'] || 'application/json';
+      init.body = await _readRawBody(req);
+    }
+
+    const upstream = await fetch(target, init);
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    res.status(upstream.status);
+    res.set('Content-Type', upstream.headers.get('content-type') || 'application/json');
+    // Il 429 di WarEra deve arrivare al client COME 429, con il suo
+    // Retry-After: e' su quello che trpcBatch calcola il backoff.
+    const retryAfter = upstream.headers.get('retry-after');
+    if (retryAfter) res.set('Retry-After', retryAfter);
+
+    // Stesso criterio del middleware gzip in testa al file (che intercetta
+    // solo res.json, non res.send: qui il body e' gia' un Buffer grezzo).
+    const wantsGzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
+    if (!wantsGzip || buf.length < GZIP_MIN_BYTES) return res.send(buf);
+    zlib.gzip(buf, (err, gz) => {
+      if (err) return res.send(buf);
+      res.set('Content-Encoding', 'gzip');
+      res.set('Vary', 'Accept-Encoding');
+      res.send(gz);
+    });
+  } catch (err) {
+    // 502, non 500: il client deve distinguere "il proxy non ce l'ha fatta"
+    // (-> ricadi sul Worker) da un errore applicativo.
+    console.error('[proxy] fallito:', req.path.slice(0, 120), '-', err.message);
+    if (!res.headersSent) res.status(502).send('Proxy error: ' + err.message);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Body grezzo della richiesta: qui non c'e' express.json() (voluto — il
+ *  proxy deve inoltrare i byte esatti che ha ricevuto, non un JSON
+ *  ri-serializzato). */
+function _readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+// `app.use` e non `app.get('/trpc/*')`: qui gira Express 5, dove i wildcard
+// devono essere nominati (`/trpc/*splat`) e la vecchia forma fa fallire
+// l'avvio. Montato su prefisso funziona in entrambe le versioni, e dentro
+// l'handler `req.path` e' gia' la parte DOPO /trpc.
+app.use('/trpc', _trpcProxy);
+
+app.get('/health', (req, res) => res.json({
+  status: 'ok',
+  now: Date.now(),
+  // Solo se c'e', mai il valore: serve a verificare dopo un deploy che
+  // pm2 abbia davvero l'env var, senza doverla stampare.
+  trpcProxy: { ready: true, apiKey: WARERA_API_TOKEN ? 'caricata' : 'MANCANTE' },
+}));
 
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`Cache server WarEra+ in ascolto su http://127.0.0.1:${PORT}`);

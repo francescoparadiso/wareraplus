@@ -1,4 +1,5 @@
 import { API_BASE_URL, WORKER_API_BASE } from './config.js';
+import { fetchWithProxyChain } from '../shared/trpcProxy.js';
 import { state } from './state.js';
 import { trackThrottled } from '../shared/analytics.js';
 
@@ -52,8 +53,11 @@ export async function trpcBatch(calls, { useWorker = false, _attempt = 1 } = {})
     const procedureNames = calls.map(([proc]) => proc).join(',');
     const batchInput = {};
     calls.forEach(([, params], idx) => { batchInput[idx] = params || {}; });
-    const url = `${base}/trpc/${procedureNames}?batch=1&input=${encodeURIComponent(JSON.stringify(batchInput))}`;
-    const res = await fetch(url);
+    const suffix = `/trpc/${procedureNames}?batch=1&input=${encodeURIComponent(JSON.stringify(batchInput))}`;
+    // WarEra+: le chiamate "da Worker" provano prima il proxy sul VPS e
+    // ricadono sul Worker se non risponde (shared/trpcProxy.js). Le chiamate
+    // dirette ad api6 non passano di qui: chainFor le lascia com'erano.
+    const res = await fetchWithProxyChain(base, b => `${b}${suffix}`, u => fetch(u));
 
     if (res.status === 429) {
       if (_attempt <= MAX_RETRY_ATTEMPTS) {

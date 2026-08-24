@@ -64,8 +64,18 @@ npm run preview   # testa la build in locale
   (`api6.warera.io`), `WORKER_API_BASE` (Worker Cloudflare, nasconde la API
   key — usato da Political e, come `ECO_PROXY_BASE`, dagli endpoint
   token-gated dell'Ottimizzatore), `WARERA_CACHE_BASE` (server di cache su
-  VPS, vedi sotto), `CACHE_API_BASE_URL` (`gateway.warerastats.io`, di terzi).
-  Nessuna variabile d'ambiente richiesta lato client.
+  VPS, vedi sotto), `CACHE_API_BASE_URL` (`gateway.warerastats.io`, di terzi),
+  `TRPC_PROXY_BASE` (= `WARERA_CACHE_BASE`: il VPS espone la stessa route
+  `/trpc/*` del Worker, vedi sotto). Nessuna variabile d'ambiente richiesta
+  lato client.
+- **Le chiamate `{ useWorker: true }` NON vanno più dritte al Worker**:
+  passano da `src/shared/trpcProxy.js`, che prova prima `TRPC_PROXY_BASE`
+  (VPS) e ricade sul Worker se non risponde, con cooldown di 2 minuti per non
+  ripagare il tentativo fallito ad ogni chiamata. Motivo: il piano gratuito
+  del Worker ha un tetto di 100.000 richieste/giorno, superato il
+  2026-08-24, e il tetto sale col numero di utenti. Il Worker resta
+  deployato come rete di sicurezza — non rimuoverlo. Per tornare indietro
+  basta mettere `TRPC_PROXY_BASE` a stringa vuota.
 
 ## Struttura del progetto
 
@@ -303,6 +313,16 @@ serve a ridurre i 429. Espone fra gli altri: `/mu-directory`,
 `/daily-damage`, `/ticker` + `/ticker/summary`, `/region-history/{at,range,
 events,contested,war-intensity}`, `/alliances`, `/battles`, `/elections`,
 `/parties`, `/users-lite`, `/credit-profiles`, `/health`.
+
+Espone inoltre **`/trpc/*`**: un proxy passthrough verso `api2.warera.io`
+che aggiunge `X-API-Key` server-side, cioè esattamente quello che fa il
+Worker Cloudflare, ma senza il tetto di 100k richieste/giorno. La key si
+legge da `WARERA_API_TOKEN` nell'ambiente di pm2, **non** dal codice:
+`/health` riporta `trpcProxy.apiKey` = `caricata` / `MANCANTE` (mai il
+valore). Senza key la route funziona lo stesso ma WarEra limita a 100/min e
+risponde 401 sui tre endpoint token-gated dell'Ottimizzatore — quindi dopo
+un redeploy che perde l'env var il sintomo è "Ottimizzatore in stato setup".
+Lato client ci arriva `src/shared/trpcProxy.js` (vedi sopra).
 
 Regola di progetto in `src/diplomacy/cacheClient.js`: **ogni** funzione ha un
 fallback se il VPS non risponde — il server è un'ottimizzazione, mai un nuovo

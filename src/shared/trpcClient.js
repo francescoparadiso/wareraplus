@@ -45,6 +45,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { API_BASE_URL, WORKER_API_BASE } from '../diplomacy/config.js';
+import { fetchWithProxyChain } from './trpcProxy.js';
 import { trackThrottled } from './analytics.js';
 
 const MAX_BATCH = 50;
@@ -131,8 +132,9 @@ export async function trpcBatchManual(calls, { useWorker = false, baseUrl, worke
     const procedureNames = calls.map(([proc]) => proc).join(',');
     const batchInput = {};
     calls.forEach(([, params], idx) => { batchInput[idx] = params || {}; });
-    const url = `${base}/trpc/${procedureNames}?batch=1&input=${encodeURIComponent(JSON.stringify(batchInput))}`;
-    const res = await fetch(url);
+    const suffix = `/trpc/${procedureNames}?batch=1&input=${encodeURIComponent(JSON.stringify(batchInput))}`;
+    // WarEra+ (vedi shared/trpcProxy.js): VPS prima, Worker come rete.
+    const res = await fetchWithProxyChain(base, b => `${b}${suffix}`, u => fetch(u));
 
     if (res.status === 429) {
       if (_attempt <= MANUAL_MAX_RETRY_ATTEMPTS) {
@@ -206,15 +208,19 @@ async function _sendAutoBatch(chunk, q, attempt = 1) {
   const procs = chunk.map(c => c.proc).join(',');
   const body = {};
   chunk.forEach((c, idx) => { body[idx] = c.params; });
-  const url = `${base}/trpc/${procs}?batch=1`;
+  const suffix = `/trpc/${procs}?batch=1`;
+  const payload = JSON.stringify(body);
 
   let res;
   try {
-    res = await _fetchWithTimeout(url, {
+    // WarEra+ (vedi shared/trpcProxy.js): VPS prima, Worker come rete. Il
+    // body e' una stringa gia' pronta, quindi rispedirlo sulla seconda base
+    // non costa una ri-serializzazione.
+    res = await fetchWithProxyChain(base, b => `${b}${suffix}`, u => _fetchWithTimeout(u, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+      body: payload,
+    }));
   } catch (networkErr) {
     return _fallbackToSingleCalls(chunk, base, networkErr);
   }
@@ -281,8 +287,11 @@ async function _fallbackToSingleCalls(chunk, base, cause) {
 }
 
 async function _sendSingle(base, proc, params) {
-  const url = `${base}/trpc/${proc}?input=${encodeURIComponent(JSON.stringify(params))}`;
-  const res = await _fetchWithTimeout(url);
+  const suffix = `/trpc/${proc}?input=${encodeURIComponent(JSON.stringify(params))}`;
+  // WarEra+ (vedi shared/trpcProxy.js): anche il fallback a chiamate singole
+  // passa dalla catena. Se il proxy e' gia' in cooldown, chainFor ritorna
+  // solo il Worker e questo e' un normale fetch, come prima.
+  const res = await fetchWithProxyChain(base, b => `${b}${suffix}`, u => _fetchWithTimeout(u));
   if (!res.ok) throw new Error(`HTTP ${res.status} → ${proc}`);
   const json = await res.json();
   if (json && json.result) return json.result.data;
