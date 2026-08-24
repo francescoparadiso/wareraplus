@@ -2,28 +2,41 @@
 
 Guida di contesto per Claude Code su questo repository. Per la storia completa
 delle decisioni architetturali e la roadmap dettagliata, vedi `README.md`
-(molto più esteso di questo file — leggilo se serve capire il "perché", non
+(più esteso di questo file — leggilo se serve capire il "perché", non
 solo il "cosa").
 
 ## Cos'è questo progetto
 
-WarEra+ unisce due tool esistenti del gioco WarEra in un'unica app:
+WarEra+ è nato per unire due tool esistenti del gioco WarEra in un'unica app,
+ed è poi cresciuto ben oltre quei due:
 
-- **Diplomacy View** — mappa strategica interattiva (MapLibre GL): alleanze,
-  guerre, NAP, sfere d'influenza, battaglie live, statistiche. Portata qui
-  **praticamente 1:1**, era già scritta a moduli ES con Vite.
-- **Political View** — elezioni presidenziali/congresso, partiti, senato.
-  **Convertita a moduli ES in `src/political/` (Fase 2, completata)**: gira
-  in-page dentro `#wp-political-root`, montata via `import()` dinamico alla
-  prima apertura (code-split, non appesantisce il caricamento iniziale).
-  L'originale a script globali resta in `public/political/` come
-  riferimento/rollback fisico, **non più raggiunto da alcun path attivo**
-  dell'app (niente più iframe).
+- **Diplomacy View** (esistente) — mappa strategica interattiva (MapLibre GL):
+  alleanze, guerre, NAP, sfere d'influenza, battaglie live, statistiche.
+  Portata qui **quasi 1:1**, era già scritta a moduli ES con Vite. È la vista
+  principale dell'app; sopra a quella base sono state innestate parecchie
+  aggiunte WarEra+ (vedi "Modifiche al codice Diplomacy" più sotto).
+- **Political View** (esistente) — elezioni presidenziali/congresso, partiti,
+  senato. **Convertita a moduli ES in `src/political/` (Fase 2, completata)**:
+  gira in-page dentro `#wp-political-root`, montata via `import()` dinamico
+  alla prima apertura (code-split). L'originale a script globali resta in
+  `public/political/` come riferimento/rollback fisico, **non più raggiunto da
+  alcun path attivo** dell'app (niente più iframe).
+- **WarEra Eco Optimizer di ArgusIA** (esistente, di terzi) — bot Discord
+  portato a moduli ES in `src/eco/` come "Ottimizzatore industriale". Stessa
+  logica (Competenze / Posizione / Lavoratori), più una sezione Assunzioni
+  nuova e una veste grafica al posto degli embed Discord.
+  ⚠️ **L'attribuzione ad ArgusIA (card in cima alla vista) non va rimossa.**
 
-La mappa (Diplomacy) è la vista principale. Un pannello laterale nazione
-(NUOVO, `src/panel/countryPanel.js`) fa da ponte: si apre cliccando una
-nazione, mostra dati già in memoria (zero fetch aggiuntive), e un bottone
-"Espandi" apre Political View in-page nello stesso overlay.
+Tutto il resto è **nuovo di WarEra+**: pannello nazione, Unità Militari,
+Statistiche nazioni, News + ticker, Time machine, Guida, barre menù,
+preferiti, PWA, server di cache, temi mappa, viste mappa aggiuntive.
+
+La mappa è la vista principale. Un pannello laterale nazione
+(`src/panel/countryPanel.js`) fa da ponte: si apre cliccando una nazione,
+mostra dati già in memoria (zero fetch aggiuntive), e un bottone "Espandi"
+apre Political View in-page nello stesso overlay. Le sezioni pesanti stanno
+sotto "Approfondimenti" nelle barre menù, ognuna in overlay con `import()`
+dinamico.
 
 ## Stack & comandi
 
@@ -38,17 +51,21 @@ npm run preview   # testa la build in locale
   vedi `vercel.json`).
 - **Dipendenze runtime**: `maplibre-gl`, `topojson-client`, più (dalla Fase 2)
   `chart.js`, `d3`, `tom-select`, `sortablejs` — tutte in `package.json`,
-  importate da `src/political/*` come moduli npm (niente più CDN). Il vecchio
+  importate da `src/political/*` come moduli npm (niente più CDN). Analytics:
+  `@vercel/analytics` (`inject()` in `src/main.js`) + Umami (tag in
+  `index.html`, wrapper in `src/shared/analytics.js`). Il vecchio
   `public/political/` (invariato, non più caricato) usa ancora i propri CDN
   interni ma non è più raggiunto da nessun path attivo.
-- **PWA**: `vite-plugin-pwa` (Workbox). Precache completo (incluso il chunk
-  Political, ora parte del bundle principale via code-splitting). Runtime
-  caching differenziato per API tRPC (network-first, 10 min TTL),
-  immagini/bandiere (cache-first, 30gg), CSV esterni (stale-while-revalidate).
+- **PWA**: `vite-plugin-pwa` (Workbox). Precache completo. Runtime caching
+  differenziato per API tRPC (network-first, 10 min TTL), immagini/bandiere
+  (cache-first, 30gg), CSV esterni (stale-while-revalidate).
   Config in `vite.config.js`.
-- Nessuna variabile d'ambiente richiesta: le chiamate vanno agli endpoint
-  pubblici WarEra (`api2/4/6.warera.io`) e a un Worker Cloudflare esistente
-  che nasconde la propria API key server-side per Political View.
+- **Endpoint** (tutti in `src/diplomacy/config.js`): `API_BASE_URL`
+  (`api6.warera.io`), `WORKER_API_BASE` (Worker Cloudflare, nasconde la API
+  key — usato da Political e, come `ECO_PROXY_BASE`, dagli endpoint
+  token-gated dell'Ottimizzatore), `WARERA_CACHE_BASE` (server di cache su
+  VPS, vedi sotto), `CACHE_API_BASE_URL` (`gateway.warerastats.io`, di terzi).
+  Nessuna variabile d'ambiente richiesta lato client.
 
 ## Struttura del progetto
 
@@ -57,6 +74,10 @@ wareraPlus/
 ├── index.html                  ← shell principale (markup Diplomacy + pannello + overlay)
 ├── vite.config.js              ← build + PWA
 ├── vercel.json
+├── server/
+│   ├── warera-cache-server.js  ← server di cache su VPS (Node, pm2) — poll periodico
+│   │                              delle API WarEra al posto dei browser utente
+│   └── README.md               ← deploy a mano (scp + pm2 restart), vedi ⚠️ in fondo
 ├── public/
 │   ├── icons/
 │   └── political/              ← Political View ORIGINALE (script globali), NON PIÙ USATO
@@ -64,19 +85,33 @@ wareraPlus/
 │       ├── config.js, api.js, main.js, ...       rollback fisico (Fase 2). Vedi src/political/
 │       └── parties_<countryId>.csv               per la versione attiva a moduli ES.
 └── src/
-    ├── main.js                 ← entry point: importa diplomacy/main.js, poi inizializza
-    │                              i componenti NUOVI dopo l'evento 'wareraplus:diplomacy-ready'
-    ├── diplomacy/               ← Diplomacy View, quasi invariato (moduli ES)
+    ├── main.js                 ← entry point: importa diplomacy/main.js, inizializza i
+    │                              componenti NUOVI, gestisce i deep-link ?country= e ?tm=
+    ├── diplomacy/               ← Diplomacy View (moduli ES) + aggiunte WarEra+
     │   ├── main.js              ← init(), refreshData(), event listener della UI
     │   ├── state.js             ← unico oggetto state condiviso (mutato in place)
-    │   ├── config.js            ← API_BASE_URL, WORKER_API_BASE, COLORS, THEMES, LAYER_IDS
+    │   ├── config.js            ← API_BASE_URL, WORKER_API_BASE, WARERA_CACHE_BASE,
+    │   │                          ECO_PROXY_BASE, COLORS, THEMES, LAYER_IDS
     │   ├── map.js                ← MapLibre: layer, sorgenti, rendering
     │   ├── ui.js, diplomacy.js, labels.js, patterns.js
     │   ├── alliances.js, naps.js, sphereOfInfluence.js, blocs.js (dead, vedi sotto)
     │   ├── battleMarkers.js, battleHeatmap.js, battleFront.js, battleFront/
     │   ├── dualBadges.js, blocStats.js, weeklyDamage.js, population.js,
     │   │   regions.js, nationTooltip.js, utils.js
-    ├── political/               ← NUOVO (Fase 2) — Political View a moduli ES, attiva a runtime
+    │   ├── cacheClient.js       ← NUOVO — client del server di cache: OGNI funzione ha
+    │   │                          fallback se il VPS non risponde (mai un nuovo SPOF)
+    │   ├── contestedHeatmap.js, warIntensityHeatmap.js, playstyleHeatmap.js,
+    │   │   playstyleTrendHeatmap.js  ← NUOVE viste mappa (regioni contese, storico
+    │   │                                bellico, guerra vs eco, trend stile di gioco)
+    │   ├── borderStyle.js       ← NUOVO — bordi come nella mappa del gioco: interni nella
+    │   │                          tinta della nazione, nazionali colorati per relazione
+    │   ├── oceanRoutes.js       ← NUOVO — geometria condivisa delle rotte marittime
+    │   ├── oceanBackground.js   ← NUOVO — rotte animate, tema scuro
+    │   ├── antiqueTheme.js      ← NUOVO — estetica "mappa antica", tema chiaro
+    │   ├── darkFleetTheme.js    ← NUOVO — easter egg illustrati, tema scuro
+    │   ├── oceanImages.js, shipTooltip.js  ← icone delle illustrazioni + tooltip navi
+    │   └── data/antarctica.geo.json
+    ├── political/               ← Political View a moduli ES, attiva a runtime (Fase 2)
     │   ├── main.js              ← orchestratore: initPoliticalView(countryId, {openSenate})
     │   ├── config.js            ← stato condiviso (export let + setter), tema, cache TTL
     │   ├── api.js               ← localFetch, adapter su shared/trpcClient.js
@@ -84,7 +119,7 @@ wareraPlus/
     │   ├── parliament.js, senate.js, congress.js, presidential.js, party.js,
     │   │   organizer.js, panels.js
     │   └── (nessun equivalente di embed.js — era dead code nell'originale, non portato)
-    ├── mu/                       ← NUOVO (Fase 3) — Esplora Unità Militari
+    ├── mu/                       ← NUOVO — Esplora Unità Militari
     │   ├── main.js              ← initMuView(container) + openMuDetail(muId)
     │   ├── api.js               ← directory dal server di cache (/mu-directory) con
     │   │                          fallback a paginazione diretta; dettaglio e membri
@@ -110,6 +145,16 @@ wareraPlus/
     │   │                          leggono le stesse definizioni)
     │   ├── charts.js            ← ciambelle/barre in SVG scritto a mano, niente Chart.js
     │   ├── nationList.js, nationCompare.js, nationDetail.js, i18n.js (9 lingue)
+    ├── eco/                      ← NUOVO — Ottimizzatore industriale (port del bot Discord
+    │   │                            "WarEra Eco Optimizer" di ArgusIA — attribuzione
+    │   │                            obbligatoria in cima alla vista)
+    │   ├── main.js              ← orchestratore + rendering (era bot.py + embeds.py)
+    │   ├── api.js               ← ecoCall via ECO_PROXY_BASE (Worker), dati di gioco
+    │   ├── gameData.js, resolve.js, account.js, wage.js
+    │   └── skills.js, positioning.js, workers.js, hiring.js  ← logica pura (hiring = nuova)
+    ├── guide/                    ← NUOVO — Guida "Come si usa": SOLO testo statico
+    │   ├── main.js                  (zero fetch, zero stato) + i18n.js a 9 lingue.
+    │   └── i18n.js                  È la vista più leggera dell'app, deve restarlo.
     ├── panel/                   ← NUOVO
     │   ├── countryPanel.js      ← pannello laterale nazione (+ riepilogo sfere e viste)
     │   ├── viewOverview.js      ← contenuto del riepilogo che si apre entrando in una
@@ -123,30 +168,68 @@ wareraPlus/
     │   ├── parliamentChart.js   ← grafico emiciclo nel pannello (nativo, indipendente da src/political/)
     │   └── panelResize.js       ← drag per ridimensionare il pannello
     ├── app/                     ← NUOVO — orchestrazione integrazione
-    │   ├── muOverlay.js        ← apre Esplora Unità Militari (import() dinamico di src/mu/main.js)
     │   ├── politicalOverlay.js ← apre Political in-page (import() dinamico di src/political/main.js)
-    │   ├── nationsOverlay.js   ← apre Statistiche nazioni (import() dinamico di src/nations/main.js)
-    │   ├── overlayChrome.js    ← chrome condiviso degli overlay Eco/MU/News: sfondo a
-    │   │                         particelle nella tinta della sezione + pausa mappa
+    │   ├── muOverlay.js        ← apre Esplora Unità Militari
+    │   ├── nationsOverlay.js   ← apre Statistiche nazioni
+    │   ├── ecoOverlay.js       ← apre l'Ottimizzatore industriale
+    │   ├── newsOverlay.js      ← apre la vista News
+    │   ├── guideOverlay.js     ← apre la Guida "Come si usa"
+    │   ├── newsTicker.js       ← ticker in cima alla mappa: battaglie, elezioni, nuove
+    │   │                         guerre, sworn enemy, popolazione, tesoro. Le ultime
+    │   │                         quattro arrivano già pronte dal server (/ticker), non
+    │   │                         più da snapshot in localStorage. Tetto per categoria
+    │   │                         (CAT_CAP) così una sola non monopolizza il ticker.
+    │   ├── newsView.js         ← vista "News": lo STESSO materiale del ticker, completo,
+    │   │                         fermo e raggruppato per categoria. Zero fetch nuove —
+    │   │                         riusa getNewsGroups() del ticker.
+    │   ├── timeMachine.js      ← ownership storica delle regioni a uno slider temporale
+    │   │                         (dati dal server: keyframe + replay lato VPS). Scope
+    │   │                         volutamente ridotto: solo ownership + nome + bandiera.
+    │   │                         Deep-link ?tm=<epoch ms>.
+    │   ├── timeMachineMap.js   ← SECONDA mappa MapLibre dedicata e alleggerita (3 layer)
+    │   │                         usata dalla time machine; la principale viene nascosta,
+    │   │                         non toccata. timeMachine.js tiene tutta la logica.
+    │   ├── desktopMenuBar.js   ← barra menù desktop (Viste mappa / Approfondimenti /
+    │   │                         Impostazioni, ricerca ⌘K, Preferiti)
+    │   ├── mobileMenuBar.js    ← equivalente mobile (drawer)
+    │   ├── pins.js             ← store dei Preferiti (nazioni/alleanze/unità), localStorage
+    │   ├── overlayChrome.js    ← chrome condiviso degli overlay: sfondo a particelle nella
+    │   │                         tinta della sezione + pausa mappa
     │   ├── mapIdle.js          ← pausa/riprende il lavoro di sfondo della mappa (pallini
     │   │                         nave, polling marker battaglia) mentre un overlay la copre
     │   ├── themeSync.js        ← sincronizza tema (localStorage 'we_theme') con Political
+    │   ├── langSync.js         ← stessa cosa per la LINGUA (era un bug reale: Political
+    │   │                         restava in inglese dopo un cambio lingua nello shell)
     │   ├── battleToggle.js     ← bottone dedicato show/hide battaglie
-    │   └── blocLabelsToggle.js ← toggle nomi alleanze
+    │   ├── blocLabelsToggle.js ← toggle nomi alleanze
+    │   └── authorPill.js       ← pill autore accanto al bottone Ko-fi
     ├── shared/
-    │   ├── particlesBackground.js ← motore dello sfondo a particelle, condiviso da tutti
-    │   │                            le sezioni (Political oro, Eco verde, MU rosso, News blu, Alleanze viola)
-    │   ├── i18n.js              ← traduzioni condivise dello shell (namespace diverso da src/political/i18n.js)
-    │   └── trpcClient.js        ← NUOVO (Fase 2) client tRPC unificato: trpcBatchManual (stile
-    │                              Diplomacy) + trpcCall (stile Political), cache namespaced
-    │                              we_<namespace>_*. src/diplomacy/utils.js:trpcBatch NON tocca
-    │                              questo file (resta la sua implementazione locale, invariata).
+    │   ├── particlesBackground.js ← motore dello sfondo a particelle, condiviso da tutte
+    │   │                            le sezioni (Political oro, Eco verde, MU rosso,
+    │   │                            News blu, Alleanze viola)
+    │   ├── loadingScreen.js    ← schermata di attesa comune fra il clic e il primo pixel
+    │   │                          di contenuto delle sezioni caricate a richiesta
+    │   ├── lazyModule.js       ← import() dinamico con rete di sicurezza (in produzione
+    │   │                          un chunk può sparire dopo un deploy: retry/reload)
+    │   ├── i18n.js             ← traduzioni condivise dello shell, 9 lingue
+    │   │                          (namespace diverso da src/political/i18n.js)
+    │   ├── countries.js        ← getAllCountries() legge state.nazioniGlobal (sola lettura)
+    │   ├── allianceBonus.js    ← ricalcola il bonus danno d'alleanza (l'API non lo espone)
+    │   ├── dailyDamage.js      ← "danno di oggi" per nazioni/alleanze/unità, dalla
+    │   │                          differenza fra due snapshot del cumulato settimanale
+    │   ├── analytics.js        ← wrapper su Umami (trackEvent)
+    │   └── trpcClient.js       ← client tRPC unificato: trpcBatchManual (stile Diplomacy)
+    │                              + trpcCall (stile Political), cache namespaced
+    │                              we_<namespace>_*. src/diplomacy/utils.js:trpcBatch NON
+    │                              tocca questo file (resta la sua implementazione locale).
     └── styles/
         ├── diplomacy.css       ← CSS Diplomacy estratto (era inline nell'HTML originale)
-        ├── shell.css           ← NUOVO, namespace `wp-*`
-        └── political.css       ← NUOVO (Fase 2) — da public/political/style.css, OGNI selettore
-                                   scopato sotto #wp-political-root (necessario: c'era una
-                                   collisione reale con .panel, già usata dalla shell)
+        ├── shell.css           ← namespace `wp-*`
+        ├── political.css       ← da public/political/style.css, OGNI selettore scopato
+        │                          sotto #wp-political-root (c'era una collisione reale
+        │                          con .panel, già usata dalla shell)
+        └── menubar.css, mobile-menubar.css, mu.css, nations.css, news.css,
+            eco.css, guide.css
 ```
 
 ⚠️ **Attenzione ai nomi duplicati tra le due varianti di Political**:
@@ -159,7 +242,8 @@ collegati: modifiche vanno fatte in `src/political/`, non in
 `public/political/` (che resta com'era, invariata). Specifica sempre il path
 completo quando chiedi modifiche — "modifica config.js" da solo è ambiguo tra
 tre file (`src/diplomacy/config.js`, `src/political/config.js`,
-`public/political/config.js`).
+`public/political/config.js`), e `main.js`/`api.js`/`i18n.js` esistono in
+ancora più copie (`src/mu/`, `src/nations/`, `src/eco/`, `src/guide/`).
 
 ## Come comunicano Diplomacy, lo shell e Political (in-page dalla Fase 2)
 
@@ -169,7 +253,9 @@ al posto del confine cross-document. Resta un solo meccanismo cross-cutting:
 
 1. **Eventi custom su `window`** (cross-script, stesso documento) — es.
    `wareraplus:diplomacy-ready` (emesso da `diplomacy/main.js` a fine
-   `refreshData()`), `wareraplus:langchange` (shell), `wareraplus:panel-resized`.
+   `refreshData()`), `wareraplus:langchange` (shell, a cui si riagganciano
+   tutte le viste per ritradursi a overlay già aperto),
+   `wareraplus:panel-resized`, `wareraplus:pins-changed` (Preferiti).
    Anche `wareraplus:elections-ready`/`wareraplus:open-senate`
    (`src/political/congress.js`) sopravvivono per ora invariati (Stage 7 della
    Fase 2 li ha preservati com'erano) benché non serva più attraversare un
@@ -183,15 +269,20 @@ al posto del confine cross-document. Resta un solo meccanismo cross-cutting:
    dava per scontati via hoisting globale.
 3. **`localStorage` condiviso** (stessa origin) — es. `we_theme`, letto da
    Political al boot (`src/political/config.js: initTheme()`, chiamata da
-   `initPoliticalView()`). Per l'aggiornamento *live* (`src/app/themeSync.js`)
-   si chiama direttamente `applyTheme(...)` importata da
-   `src/political/config.js` via `import()` dinamico — niente più
-   `contentWindow`, stesso documento.
+   `initPoliticalView()`). Per l'aggiornamento *live* di tema e lingua
+   (`src/app/themeSync.js`, `src/app/langSync.js`) si chiamano direttamente
+   le funzioni importate da `src/political/config.js` via `import()`
+   dinamico — niente più `contentWindow`, stesso documento.
 
-## Le uniche due modifiche al codice Diplomacy esistente
+## Modifiche al codice Diplomacy esistente
 
-Tutto il resto di `src/diplomacy/` è copiato senza toccare una riga. Solo due
-aggiunte, entrambe additive con fallback:
+All'inizio le aggiunte erano solo due; oggi non è più così — parecchi moduli
+Diplomacy portano innesti WarEra+ (cercali col commento `WarEra+`, presente in
+`main.js`, `map.js`, `ui.js`, `config.js`, `utils.js`, `nationTooltip.js`,
+`labels.js`, `battleMarkers.js`…), più una decina di file nuovi nella stessa
+cartella (heatmap delle viste nuove, bordi, oceano/temi, cacheClient).
+
+Le due aggiunte storiche restano il modello da seguire:
 
 1. `src/diplomacy/main.js` — riga finale di `refreshData()` che spara
    `wareraplus:diplomacy-ready`.
@@ -199,47 +290,23 @@ aggiunte, entrambe additive con fallback:
    prova ad aprire l'overlay in-app; se il modulo non è disponibile, ricade
    sul comportamento originale (link `target="_blank"`).
 
-Se devi modificare `src/diplomacy/*`, preserva questo principio: cambiamenti
-additivi con fallback, non riscritture del comportamento esistente.
+**Il principio vale ancora**: quando tocchi `src/diplomacy/*`, fai cambiamenti
+**additivi con fallback** e marcali con un commento `WarEra+` che spiega
+perché — non riscritture del comportamento esistente.
 
-## Fase 2 — completata (Political View a moduli ES, in-page)
+## Il server di cache (`server/warera-cache-server.js`)
 
-Political View era ~300KB di script interdipendenti scritti per girare come
-script-tag globali dentro un iframe. La conversione a moduli ES (`src/political/`)
-è stata completata in 10 stage incrementali (Stage 0-9, ognuno con verifica
-dal vivo contro le API reali prima di procedere al successivo — piano e
-storico completo in `README.md`, sezione Roadmap → "Fase 2 (completata)").
-Punti da sapere se tocchi `src/political/`:
+Node su VPS esterno (`WARERA_CACHE_BASE`), gestito con pm2. Polla le API
+WarEra una volta per tutti invece di lasciare che lo faccia ogni browser —
+serve a ridurre i 429. Espone fra gli altri: `/mu-directory`,
+`/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
+`/daily-damage`, `/ticker` + `/ticker/summary`, `/region-history/{at,range,
+events,contested,war-intensity}`, `/alliances`, `/battles`, `/elections`,
+`/parties`, `/users-lite`, `/credit-profiles`, `/health`.
 
-- **CSS scoping obbligatorio**: `src/styles/political.css` ha OGNI selettore
-  prefissato con `#wp-political-root` (script postcss, non a mano — 708
-  regole). Verificato dal vivo che uno scoping parziale (solo `:root`/reset/
-  `body`) romperebbe silenziosamente lo stile della legenda della mappa
-  (`.panel`, classe condivisa con Political). Se aggiungi CSS nuovo a questo
-  file, scopalo allo stesso modo — non c'è più l'isolamento naturale
-  dell'iframe.
-- **Stato condiviso cross-modulo**: `src/political/config.js` espone
-  `export let` + funzioni setter (es. `setCurrentCountryId`) per ogni
-  variabile che un tempo era una `let`/`const` globale riassegnabile da più
-  file — un `import` ES è un binding live ma **read-only**, riassegnarlo
-  direttamente lancia `TypeError`.
-- **Dipendenze forward** (moduli che si servono a vicenda, es. senate.js →
-  congress.js → main.js) risolte con setter di dependency-injection
-  (`setCongressDeps`, `setSenateDeps`, ecc.), chiamati una sola volta da
-  `initPoliticalView()`.
-- `public/political/` **non è stato cancellato** — resta come riferimento/
-  rollback fisico, ma non è più raggiunto da alcun path attivo dell'app.
-- **Toast non unificato**: Political usa ancora `alert()`/`setStatus()`
-  inline (non `showToast` di Diplomacy) — deciso esplicitamente come
-  follow-up separato a basso rischio, non fatto durante il cutover.
-- **Fetch `country.getAllCountries` condivisa** (follow-up alla Fase 2):
-  `src/shared/countries.js: getAllCountries()` legge `state.nazioniGlobal`
-  di Diplomacy (sola lettura) invece di rifare la stessa fetch via Worker —
-  usata da tutti i punti di `src/political/*` che prima chiamavano
-  `localFetch('/countries', ...)`. Fallback a fetch diretta solo se
-  Diplomacy non ha ancora i dati (raro). Non mutare mai l'array ritornato
-  in-place (`.sort()` ecc.) — è condiviso con Diplomacy, usa `.slice()`
-  prima.
+Regola di progetto in `src/diplomacy/cacheClient.js`: **ogni** funzione ha un
+fallback se il VPS non risponde — il server è un'ottimizzazione, mai un nuovo
+punto di fallimento. Vedi il ⚠️ in fondo per cosa degrada e come.
 
 ## Pattern da conoscere prima di toccare le chiamate API
 
@@ -253,13 +320,19 @@ Punti da sapere se tocchi `src/political/`:
   per Diplomacy, auto-batch-POST-429+5xx per Political) sono **deliberatamente
   diverse**, esposte come modalità distinte di `trpcClient.js`
   (`trpcBatchManual` vs `trpcCall`) — non unificarle silenziosamente.
+- **Prima di aggiungere una fetch, guarda se il dato c'è già**: `state` di
+  Diplomacy (`state.nazioniGlobal`, `state.mapDataGlobal`, `state.labelsData`,
+  `state.nationBaseColorMap`) copre gran parte dei casi a costo zero — è quello
+  che fanno `shared/countries.js`, `nations/api.js`, `timeMachineMap.js`.
 - **`useWorker: true`** instrada attraverso il Worker Cloudflare
   (`WORKER_API_BASE`, limite 500/min invece di 100) — usato SOLO per
-  battaglie ed elezioni/parlamenti/Political, non per tutte le chiamate.
+  battaglie ed elezioni/parlamenti/Political, e per gli endpoint token-gated
+  dell'Ottimizzatore (`ECO_PROXY_BASE`), non per tutte le chiamate.
 - **Cache**: `localStorage`-based con TTL, chiave prefissata `we_<namespace>_`
   (`we_pol_*` per Political via `trpcClient.js`; Diplomacy non ha mai avuto
   cache). `cacheClear(namespace)` pulisce solo il proprio namespace di
-  default.
+  default. Dati grossi (directory MU, ~550 KB) stanno in MEMORIA per la
+  sessione, mai in localStorage.
 
 ## Cose note, non bug da "scoprire" di nuovo
 
@@ -272,6 +345,9 @@ Punti da sapere se tocchi `src/political/`:
   `blocs.js`, `patterns.js`, `population.js`, `naps.js` — LF nel resto).
   Non normalizzare "a sorpresa" in un commit non richiesto, genera diff
   giganti fuori tema.
+- **Toast non unificato**: Political usa ancora `alert()`/`setStatus()`
+  inline invece di `showToast` di Diplomacy — follow-up separato a basso
+  rischio, deciso esplicitamente e non fatto durante il cutover.
 
 ## Convenzioni di stile osservate nel codice
 
@@ -286,27 +362,34 @@ Punti da sapere se tocchi `src/political/`:
 - Stato applicativo Diplomacy centralizzato nell'oggetto singolo `state`
   (`src/diplomacy/state.js`), mutato in place — non introdurre un secondo
   store parallelo.
+- **i18n a 9 lingue** (EN/IT/ES/DE/FR/NL/SV/PT/AR) ovunque. Le etichette
+  usate da una sola vista stanno in un dizionario LOCALE a quella vista
+  (`src/mu/i18n.js`, `src/nations/i18n.js`, `src/guide/i18n.js`, le costanti
+  `*_DICT` nelle barre menù e in `newsView.js`); solo quelle davvero
+  condivise dallo shell vanno in `src/shared/i18n.js`.
+- **Niente barre di scorrimento di sistema**: mai le native grigie — regola
+  globale in `shell.css`, cursore nella tinta della sezione.
 
-## Cose da verificare al primo avvio reale in questa sessione
-
-(dal README — validale se stai debuggando qualcosa che coinvolge queste aree)
+## Cose da verificare se stai debuggando in queste aree
 
 - `country.getAllCountries` e `map.getMapData` rispondono come atteso da
   `API_BASE_URL` (`https://api6.warera.io`) in `src/diplomacy/config.js`.
 - Il Worker Cloudflare (`politicalview-proxy...workers.dev`, usato sia da
   `public/political/config.js` sia da `src/diplomacy/config.js` come
   `WORKER_API_BASE`) accetta richieste dal dominio Vercel attuale (CORS).
+- Il server di cache risponde (`/health`) — se no, tutto deve degradare, non
+  rompersi.
 - Comportamento del pannello nazione sotto i 768px (`shell.css`).
 
 ## Roadmap (non iniziare senza richiesta esplicita)
 
-Fase 2 (fusione moduli ES per Political) **completata**. Fase 3 —
-**Esplora Unità Militari (`src/mu/`) fatta**; resta l'altra metà della
-fase (più dati sulle nazioni nel pannello: storico, confronti, grafici).
-Restano poi Fase 4 (dashboard unificata mappa+pannello permanenti) e
-Fase 5 (proxy/cache server dedicato). Dettagli completi in `README.md`.
-Se l'utente chiede una di queste aree, leggi prima la sezione Roadmap del
-README per il piano già pensato.
+Fase 2 (fusione moduli ES per Political) **completata**. Fase 3 **completata**
+(Esplora Unità Militari + Statistiche nazioni con storico, confronti e
+grafici). Fase 5 (proxy/cache dedicato) è di fatto **realizzata** con
+`server/warera-cache-server.js`, anche se le chiamate dirette non sono state
+sostituite tutte: il server affianca gli endpoint WarEra, non li rimpiazza.
+Resta aperta la Fase 4 (dashboard unificata mappa+pannello permanenti,
+non più overlay a tutto schermo). Dettagli in `README.md`.
 
 ⚠️ **Il cache-server va rideployato a mano ad ogni modifica di
 `server/warera-cache-server.js`** (scp + `pm2 restart`, vedi
@@ -318,24 +401,24 @@ e 14 richieste per utente invece di una), e le colonne "Composizione" e
 gioco del pannello nazione. Nella scheda della singola unità gli stessi
 due dati sono invece calcolati dal vivo sui membri appena scaricati, e
 funzionano sempre. Dopo un deploy servono ~8 giri di poll (~4 ore) perché
-la mappa utente→nazione/stile si riempia. L'elenco cittadini di Statistiche nazioni dipende dallo stesso server
-(`/country-citizens`, endpoint aggiunto insieme alla vista): senza deploy
+la mappa utente→nazione/stile si riempia. L'elenco cittadini di Statistiche
+nazioni dipende dallo stesso server (`/country-citizens`): senza deploy
 ricade su una risoluzione diretta dal browser limitata a 150 cittadini per
-nazione, dichiarata in chiaro nell'interfaccia. Ogni vista con riepilogo apre il pannello da sola su desktop e resta
-dietro la linguetta "Vedi dettagli" su mobile — stessa regola del
-riepilogo sfere, vedi `src/panel/viewOverview.js`. La vista un tempo
-chiamata "Guerra vs Commercio" si chiama "Guerra vs Eco": misura la
-build economica dei giocatori, non il commercio.
+nazione, dichiarata in chiaro nell'interfaccia. Ogni vista con riepilogo apre
+il pannello da sola su desktop e resta dietro la linguetta "Vedi dettagli" su
+mobile — stessa regola del riepilogo sfere, vedi `src/panel/viewOverview.js`.
+La vista un tempo chiamata "Guerra vs Commercio" si chiama "Guerra vs Eco":
+misura la build economica dei giocatori, non il commercio.
 
-Le tre viste mappa storiche aggiunte dopo (Regioni contese,
-Storico bellico, Guerra vs Commercio) degradano ognuna a modo suo:
-"Regioni contese" se `/region-history/contested` manca si conta i
-passaggi di mano da sola nel browser sugli eventi grezzi (~112 KB gzip,
-una volta per sessione), quindi funziona comunque; "Guerra vs Commercio"
-usa `/mu-playstyle-by-country`, che esiste già da prima; "Storico
-bellico" è l'unica che senza deploy resta vuota — il totale danno per
-regione si calcola solo sulle battaglie del bootstrap, che stanno solo
+Le viste mappa storiche degradano ognuna a modo suo: "Regioni contese", se
+`/region-history/contested` manca, si conta i passaggi di mano da sola nel
+browser sugli eventi grezzi (~112 KB gzip, una volta per sessione), quindi
+funziona comunque; "Guerra vs Eco" usa `/mu-playstyle-by-country`;
+"Storico bellico" è l'unica che senza deploy resta vuota — il totale danno
+per regione si calcola solo sulle battaglie del bootstrap, che stanno solo
 sul VPS (`/region-history/war-intensity`), e la legenda lo dice in chiaro.
-Anche la riga "danno di oggi"
-nella fascia di Alliance Overview dipende dal server (`/daily-damage`,
-scatto alle 02:00 italiane): senza deploy semplicemente non compare.
+Anche la riga "danno di oggi" nella fascia di Alliance Overview dipende dal
+server (`/daily-damage`, scatto alle 02:00 italiane): senza deploy
+semplicemente non compare. Le ultime quattro categorie del ticker (guerre,
+sworn enemy, popolazione, tesoro) arrivano da `/ticker`: senza server il
+ticker resta alle sole battaglie ed elezioni, che sono fetch live.
