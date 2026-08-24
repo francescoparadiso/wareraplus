@@ -256,23 +256,40 @@ export async function fetchBattleWallData(battleId) {
   }
 }
 
-// Chiamata di poll (ogni secondo mentre l'overlay è aperto): ranking
-// attacker/defender + dati live del round, in UN SOLO POST.
-export async function fetchBattleWallPoll(battleId) {
+// Chiamata di poll (mentre l'overlay è aperto): dati live del round, più le
+// due classifiche SOLO quando servono davvero.
+//
+// WarEra+ (riduzione richieste): `battleRanking.getRanking` cambia soltanto
+// allo scatto del tick del round — ogni ~2 minuti, quando vengono assegnati i
+// punti. Misurato campionando a 250/500 ms su battaglie attive: il ranking si
+// muove 1 volta ogni ~120 s, mentre `attackerDamages`/`defenderDamages` del
+// live cambiano in continuo (~1 volta al secondo, a eventi). Chiedere le due
+// classifiche ad ogni poll significava ~80 richieste per ogni cambiamento
+// reale, ed erano anche la parte pesante del payload (limit: 100, per due
+// lati). Chi chiama decide quando servono guardando `round.nextTickAt`, che
+// arriva gratis dentro il live — vedi battleFront.js: _scheduleNextRanking.
+export async function fetchBattleWallPoll(battleId, { includeRanking = true } = {}) {
+  const rankingCalls = [
+    ['battleRanking.getRanking', { battleId, type: 'country', side: 'attacker', dataType: 'damage', limit: 100 }],
+    ['battleRanking.getRanking', { battleId, type: 'country', side: 'defender', dataType: 'damage', limit: 100 }],
+  ];
   try {
-    const calls = [
-      ['battleRanking.getRanking', { battleId, type: 'country', side: 'attacker', dataType: 'damage', limit: 100 }],
-      ['battleRanking.getRanking', { battleId, type: 'country', side: 'defender', dataType: 'damage', limit: 100 }],
-      ['battle.getLiveBattleData', { battleId }],
-    ];
-    const [attackerRes, defenderRes, liveRes] = await trpcBatch(calls, { useWorker: true });
-    const attackerRanking = extractRankingItems(attackerRes);
-    const defenderRanking = extractRankingItems(defenderRes);
+    // Il live resta SEMPRE nello stesso POST batch delle classifiche quando
+    // ci sono entrambi: fuori dal tick il batch ha una sola procedura, quindi
+    // il ranking non costa nemmeno una richiesta HTTP in più.
+    const calls = includeRanking
+      ? [...rankingCalls, ['battle.getLiveBattleData', { battleId }]]
+      : [['battle.getLiveBattleData', { battleId }]];
+    const res = await trpcBatch(calls, { useWorker: true });
+    const live = extractLiveData(res[res.length - 1]);
+    if (!includeRanking) return { nations: null, live };
+    const attackerRanking = extractRankingItems(res[0]);
+    const defenderRanking = extractRankingItems(res[1]);
     const nations = buildNationRankingSafe(attackerRanking, defenderRanking, 'fetchBattleWallPoll');
-    const live = extractLiveData(liveRes);
     return { nations, live };
   } catch (err) {
     console.error('fetchBattleWallPoll error:', err);
+    if (!includeRanking) return { nations: null, live: null };
     const nations = await fetchBattleRanking(battleId);
     return { nations, live: null };
   }

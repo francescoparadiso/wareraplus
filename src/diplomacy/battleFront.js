@@ -38,6 +38,27 @@ import { pushDamageSample, updateMomentum, getLastMomentum, getMomentumAt, reset
 const POLL_MS = 1500;
 const POLL_MAX_MS = 20000;
 const POLL_FAIL_LIMIT = 4;
+
+/* ── WarEra+ — le classifiche si scaricano al tick, non ad ogni poll ──────
+   `battleRanking.getRanking` (le righe per nazione del muro) cambia SOLO
+   quando scatta il tick del round e vengono assegnati i punti: ogni ~2
+   minuti esatti. I danni del round invece si aggiornano in continuo, a
+   eventi. Misurato campionando a 250/500/1000 ms su battaglie attive:
+
+     · nextTickAt avanza di 119,84 s — il tick e' a 2 minuti fissi;
+     · il ranking cambia nello stesso istante in cui avanza nextTickAt,
+       ma il dato nuovo compare ~3,4 s DOPO l'orario dichiarato, e si
+       assesta su due letture consecutive (prima un lato, poi l'altro);
+     · fra un tick e l'altro e' byte-per-byte identico.
+
+   Chiedendolo ad ogni poll erano ~80 richieste per ogni cambiamento reale.
+   Ora il poll ordinario scarica il solo live — che contiene `nextTickAt`,
+   quindi l'orario del prossimo tick arriva gratis — e le classifiche si
+   accodano allo stesso batch solo sul primo poll dopo il tick. Nessuna
+   richiesta HTTP in piu': cambia solo quante procedure porta il batch.
+   ───────────────────────────────────────────────────────────────────── */
+const RANKING_TICK_LAG_MS = 5000;      // margine sui 3,4 s misurati
+const RANKING_FALLBACK_MS = 20000;     // se nextTickAt manca o e' incoerente
 const IS_MOBILE = typeof window !== 'undefined' && Math.min(window.innerWidth, window.innerHeight) <= 760;
 const FX_POOL_SIZE = IS_MOBILE ? 3 : 5;
 const FX_MAX_VOLLEY = IS_MOBILE ? 2 : 3;
@@ -77,6 +98,10 @@ let currentBattleId = null;
 let pollTimer = null, heartbeatTimer = null, pageHidden = false;
 let pollFailCount = 0;
 let lastGoodNations = null;
+// WarEra+ (vedi RANKING_TICK_LAG_MS in testa al file): istante prima del
+// quale il ranking e' certamente fermo, e id del round su cui e' calcolato.
+let rankingDueAt = 0;
+let rankingRoundId = null;
 let prevTotalDef = null, prevTotalAtk = null, lastPollTime = 0, lastUpdateTs = 0;
 let lastFrontPct = 50;
 let sideFlagUrl = { defender: '', attacker: '' };
@@ -540,20 +565,64 @@ function renderOtherContributors(nations) {
 }
 
 // ==================== FETCH + STATO BATTAGLIA ====================
+/* Decide quando rifare le classifiche e riprogramma il prossimo giro.
+   Chiamata SOLO dopo averle effettivamente scaricate: fra un tick e l'altro
+   la scadenza non va ricalcolata, altrimenti l'avanzamento di `nextTickAt`
+   osservato a meta' strada sposterebbe in avanti una fetch gia' dovuta. */
+function _scheduleNextRanking(live) {
+  const round = live?.round || null;
+  const roundId = round?.roundId || null;
+
+  // Round nuovo: le classifiche ripartono da zero, vanno riprese subito.
+  if (roundId && rankingRoundId && roundId !== rankingRoundId) {
+    rankingRoundId = roundId;
+    rankingDueAt = 0;
+    return;
+  }
+  if (roundId) rankingRoundId = roundId;
+
+  const next = round?.nextTickAt ? new Date(round.nextTickAt).getTime() : NaN;
+  rankingDueAt = Number.isFinite(next) ? next + RANKING_TICK_LAG_MS : 0;
+  // `nextTickAt` gia' passato (tick appena scattato, payload non ancora
+  // aggiornato) o assente: non fissare una scadenza nel passato, che
+  // farebbe rifare le classifiche ad ogni poll. Riprova fra poco: al giro
+  // dopo l'orario nuovo c'e', e la scadenza si assesta da sola.
+  if (rankingDueAt <= Date.now()) rankingDueAt = Date.now() + RANKING_FALLBACK_MS;
+}
+
 async function refreshBattleData(battleId, isInitial) {
   let nations, live, details;
+  // WarEra+: fuori dalla finestra del tick si scarica il solo live. Saltarle
+  // presuppone pero' di avere gia' delle classifiche da riusare: se la fetch
+  // iniziale e' andata storta non ce ne sono, e il poll deve richiederle a
+  // prescindere dal tick (altrimenti il muro resta senza righe fino al tick
+  // successivo, fino a due minuti dopo).
+  const haveBaseline = !!(lastGoodNations && lastGoodNations.length);
+  const withRanking = isInitial || !haveBaseline || Date.now() >= rankingDueAt;
   if (isInitial) {
     const res = await fetchBattleWallData(battleId);
     nations = res.nations; live = res.live; details = res.details;
   } else {
-    const res = await fetchBattleWallPoll(battleId);
-    nations = res.nations; live = res.live;
+    const res = await fetchBattleWallPoll(battleId, { includeRanking: withRanking });
+    // Senza classifiche nuove restano buone quelle di prima: per definizione
+    // non sono cambiate, non e' un dato vecchio ripiegato per errore.
+    nations = withRanking ? res.nations : lastGoodNations;
+    live = res.live;
   }
   if (currentBattleId !== battleId) return;
 
   if (isInitial) applyTitle(details);
 
-  if (!nations || !nations.length) {
+  // Solo se il live e' arrivato: e' lui a portare `nextTickAt`. Senza, la
+  // scadenza resta scaduta e il giro dopo ritenta subito, invece di
+  // rimandare di RANKING_FALLBACK_MS per un problema di rete.
+  if (withRanking && live) _scheduleNextRanking(live);
+
+  // Un poll senza classifiche e' riuscito se e' arrivato il live: giudicarlo
+  // su `nations` (che qui e' una copia di quelle vecchie) direbbe sempre "ok"
+  // anche con la rete giu', e il muro non passerebbe mai in stato errore.
+  const pollFailed = withRanking ? !(nations && nations.length) : !live;
+  if (pollFailed) {
     pollFailCount++;
     if (lastGoodNations && lastGoodNations.length) {
       nations = lastGoodNations;
@@ -651,6 +720,7 @@ export async function mountBattleFront(host, battleId) {
   resetMomentum();
   prevTotalDef = null; prevTotalAtk = null; lastPollTime = 0; lastUpdateTs = 0;
   pollFailCount = 0; lastGoodNations = null;
+  rankingDueAt = 0; rankingRoundId = null;   // WarEra+: battaglia nuova, tick da riscoprire
   sideName = { defender: 'Defenders', attacker: 'Attackers' };
   sideFlagUrl = { defender: '', attacker: '' };
   currentBattleId = battleId;
