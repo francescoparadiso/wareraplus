@@ -196,9 +196,23 @@ function _mergeUserData(seatsResult, userMap) {
 async function fetchGroupElectionDetails(electionIds) {
   if (!electionIds.length) return [];
   const byId = await fetchElectionDetailsViaCache(electionIds);
-  return Promise.all(electionIds.map(id => (
-    byId[id] ? Promise.resolve(byId[id]) : fetchElectionDetailViaCache(id).catch(() => null)
-  )));
+
+  // WarEra+ (riduzione richieste al Worker): le mancanti erano una
+  // fetchElectionDetailViaCache a testa, e quando il server di cache non le
+  // ha ancora viste ognuna ricade da sola sul Worker — è il path
+  // `election.getElection` singolo che si vede nelle statistiche Cloudflare.
+  // Un batch solo per tutte quelle che mancano; il percorso singolo resta
+  // per il caso in cui anche il batch fallisca.
+  const missing = electionIds.filter(id => !byId[id]);
+  if (missing.length) {
+    const fetched = await trpcBatch(
+      missing.map(id => ['election.getElection', { electionId: id }]),
+      { useWorker: true },
+    ).catch(() => []);
+    missing.forEach((id, i) => { if (fetched[i]) byId[id] = fetched[i]; });
+  }
+
+  return electionIds.map(id => byId[id] || null);
 }
 
 export async function fetchGroupSeatsData(countryIds) {
@@ -210,11 +224,19 @@ export async function fetchGroupSeatsData(countryIds) {
   //    nessun rischio 429 (è il nostro server, non il Worker) ma venti
   //    round-trip per un blocco da venti, da cui l'attesa visibile prima
   //    che comparissero i congressi. Se il server non conosce ancora
-  //    `countryIds` (deploy non fatto) si ricade sulle richieste singole,
-  //    cioè sul comportamento precedente.
+  //    `countryIds` (deploy non fatto) si ricade sul batch tRPC qui sotto.
+  // WarEra+ (riduzione richieste al Worker): il fallback era una richiesta
+  // PER NAZIONE, ognuna col proprio fallback singolo al Worker — un blocco
+  // da trenta col VPS momentaneamente giù erano trenta richieste Worker
+  // tutte insieme. Ora è un batch tRPC solo (MAX_BATCH=50), stessa forma di
+  // risultato. Gemello di _fetchElectionsByCountry in political/ticker.js.
   const electionsResults = await fetchElectionsForCountriesViaCache(idsToFetch)
     .then(byCountry => idsToFetch.map(id => byCountry[id] || []))
-    .catch(() => Promise.all(idsToFetch.map(id => fetchElectionsForCountryViaCache(id).catch(() => []))));
+    .catch(() => trpcBatch(
+      idsToFetch.map(id => ['election.getElections', { countryId: id }]),
+      { useWorker: true },
+    ))
+    .catch(() => idsToFetch.map(() => []));
 
   const latestCongressByCountry = new Map(); // countryId -> election | null
   idsToFetch.forEach((id, i) => {

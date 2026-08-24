@@ -10,12 +10,34 @@
 
 import { localFetch } from './api.js';
 import { getAllCountries } from '../shared/countries.js';
+import { fetchElectionsForCountriesViaCache } from '../diplomacy/cacheClient.js';
+import { trpcBatch } from '../diplomacy/utils.js';
 
 let _tickerMessages = [];
 let _tickerPos = 0;
 let _tickerSpeed = 0.55;
 let _tickerRunning = false;
 let _tickerUnitWidth = 0;
+
+/* ── WarEra+ (riduzione richieste al Worker Cloudflare) ──────────────
+   Il giro dati del ticker era la singola voce piu' costosa di tutto il
+   tool: ~120 `election.getElections` (una per nazione) ogni 5 minuti, con
+   TTL di cache a 3 minuti — cioe' SEMPRE un miss completo — e il timer
+   che continuava a girare anche a overlay Political chiuso. Sul contatore
+   Cloudflare erano ~38k richieste/giorno, oltre un terzo del totale.
+   Tre correzioni, qui sotto e in _fetchElectionsByCountry:
+     · una richiesta sola per tutte le nazioni (endpoint di gruppo);
+     · TTL > intervallo, cosi' il giro successivo puo' davvero riusare;
+     · timer fermato con l'overlay (vedi pauseTicker/resumeTicker).
+   ─────────────────────────────────────────────────────────────────── */
+const TICKER_REFRESH_MS = 6 * 60 * 1000;
+// Sopra TICKER_REFRESH_MS di proposito: i dettagli elezione di fase 3
+// devono poter essere riusati dal giro seguente invece di scadere pochi
+// istanti prima. Restano comunque nell'ordine dei minuti: i numeri del
+// ticker non inseguono il secondo.
+const TICKER_DETAIL_TTL_MS = 7 * 60 * 1000;
+let _tickerDataTimer = null;
+let _lastTickerFetchAt = 0;
 
 export function toUTCTimestamp(dateStr) {
   if (!dateStr) return null;
@@ -59,7 +81,44 @@ function _rebuildTickerContent() {
 }
 
 /* ── DATA FETCH ── */
+
+/** Come `localFetch('/elections', {countryId})` ma per TUTTE le nazioni
+ *  insieme. Ritorna un array di liste elezioni nello stesso ordine di
+ *  `countryIds` (lista vuota per le nazioni senza dati), cioe' la stessa
+ *  forma che il `Promise.all` per-nazione produceva prima.
+ *
+ *  Due livelli, entrambi gia' esistenti altrove nel progetto:
+ *   1. `/elections?countryIds=...` del server di cache — una richiesta per
+ *      tutte le nazioni. E' lo stesso endpoint che usa il pannello
+ *      alleanza (cacheClient.js: fetchElectionsForCountriesViaCache).
+ *   2. se il server non risponde o non conosce `countryIds` (deploy vecchio),
+ *      batch tRPC via Worker: con MAX_BATCH=50 sono 3 richieste per ~120
+ *      nazioni invece di 120. Il fallback per-nazione di prima non era
+ *      batchato, quindi un singolo momento di indisponibilita' del VPS si
+ *      traduceva in ~120 richieste al Worker tutte insieme — la ragione
+ *      per cui il path "singolo" dominava le statistiche Cloudflare. */
+async function _fetchElectionsByCountry(countryIds) {
+  try {
+    const byCountry = await fetchElectionsForCountriesViaCache(countryIds);
+    return countryIds.map(id => byCountry[id] || []);
+  } catch (_) {
+    // Server di cache non disponibile / senza supporto `countryIds`: sotto.
+  }
+  try {
+    const raw = await trpcBatch(
+      countryIds.map(id => ['election.getElections', { countryId: id }]),
+      { useWorker: true },
+    );
+    return raw.map(r => (
+      Array.isArray(r) ? r : (r?.items || r?.docs || r?.results || r?.data || [])
+    ));
+  } catch (_) {
+    return countryIds.map(() => []);
+  }
+}
+
 async function fetchAllElectionsOnce() {
+  _lastTickerFetchAt = Date.now();
   try {
     // Fase 2 follow-up: elenco condiviso con Diplomacy (src/shared/countries.js)
     // invece di una fetch dedicata ogni 5 minuti (era { useCache: false }).
@@ -76,14 +135,15 @@ async function fetchAllElectionsOnce() {
 
     const now = Date.now();
 
-    // ── Fase 1: elezioni per ogni paese, tutte in parallelo (stesso microtask → un unico batch) ──
-    const perCountry = await Promise.all(
-      allCountries.map(country =>
-        localFetch('/elections', { countryId: country._id }, { useCache: true, ttl: 3 * 60 * 1000 })
-          .then(data => ({ country, elections: data?.items || [] }))
-          .catch(() => ({ country, elections: [] }))
-      )
-    );
+    // ── Fase 1: elezioni di TUTTE le nazioni in una richiesta sola ──
+    // Era una localFetch per nazione (~120) ad ogni giro, con TTL 3 min
+    // sotto l'intervallo di 5 min: mai un riuso, sempre 120 richieste.
+    // Vedi _fetchElectionsByCountry e il blocco WarEra+ in testa al file.
+    const electionsByIndex = await _fetchElectionsByCountry(allCountries.map(c => c._id));
+    const perCountry = allCountries.map((country, i) => ({
+      country,
+      elections: electionsByIndex[i] || [],
+    }));
 
     // ── Fase 2: individua le elezioni "upcoming" o "live" che richiedono un dettaglio ──
     const relevant = [];
@@ -102,7 +162,7 @@ async function fetchAllElectionsOnce() {
     // ── Fase 3: dettagli di tutte le elezioni rilevanti, in parallelo (un unico batch) ──
     const details = await Promise.all(
       relevant.map(r =>
-        localFetch('/election', { id: r.e._id }, { useCache: true, ttl: now >= r.start ? 2 * 60 * 1000 : 5 * 60 * 1000 })
+        localFetch('/election', { id: r.e._id }, { useCache: true, ttl: TICKER_DETAIL_TTL_MS })
           .catch(() => null)
       )
     );
@@ -150,11 +210,34 @@ async function fetchAllElectionsOnce() {
    main.js:pausePoliticalRendering/resumePoliticalRendering quando
    l'overlay Political viene chiuso/riaperto, così il loop non gira più
    per sempre in background dopo la prima apertura. */
-export function pauseTicker() { _tickerRunning = false; }
+export function pauseTicker() {
+  _tickerRunning = false;
+  // WarEra+: prima si fermava SOLO l'animazione. Il timer dati continuava a
+  // girare per tutta la sessione dopo la prima apertura di Political — un
+  // giro completo di elezioni ogni 5 minuti sotto la mappa, per un ticker
+  // che nessuno stava guardando. E' la meta' del problema descritto in
+  // testa al file: l'altra meta' e' quante richieste costa un giro.
+  if (_tickerDataTimer) {
+    clearInterval(_tickerDataTimer);
+    _tickerDataTimer = null;
+  }
+}
+
 export function resumeTicker() {
-  if (_tickerRunning) return;
-  _tickerRunning = true;
-  requestAnimationFrame(_tickerLoop);
+  if (!_tickerRunning) {
+    _tickerRunning = true;
+    requestAnimationFrame(_tickerLoop);
+  }
+  _startTickerData();
+}
+
+/** Avvia il giro dati periodico, con un giro immediato solo se quello che
+ *  abbiamo in pancia e' piu' vecchio dell'intervallo — riaprire Political
+ *  due volte di fila non deve rifare tutto da capo la seconda. */
+function _startTickerData() {
+  if (_tickerDataTimer) return;
+  if (Date.now() - _lastTickerFetchAt >= TICKER_REFRESH_MS) fetchAllElectionsOnce();
+  _tickerDataTimer = setInterval(fetchAllElectionsOnce, TICKER_REFRESH_MS);
 }
 
 /* ── INIT ── */
@@ -182,8 +265,10 @@ export function startTicker() {
   requestAnimationFrame(_tickerLoop);
 
   // Fetch data (updates content without touching position)
+  // WarEra+: il timer vive in _startTickerData, cosi' pauseTicker lo puo'
+  // fermare davvero quando l'overlay Political si chiude.
   fetchAllElectionsOnce();
-  setInterval(fetchAllElectionsOnce, 5 * 60 * 1000);
+  _startTickerData();
 }
 
 // legacy compat
