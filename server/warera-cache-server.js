@@ -118,6 +118,10 @@ const cron = require('node-cron');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+// WarEra+ radar dei proxy: il segnale che il browser non può calcolarsi da
+// solo (la lingua di chi governa, una user.getUserById per ogni membro di
+// governo). Modulo a sé, non tocca nessun poll esistente.
+const { initProxyIndex, pollProxyIndex, readProxyIndex } = require('./proxyIndex');
 
 const app = express();
 const PORT = 3001;
@@ -202,6 +206,20 @@ function writeCache(name, data, { compact = false } = {}) {
   const json = compact ? JSON.stringify(data) : JSON.stringify(data, null, 2);
   fs.writeFileSync(path.join(CACHE_DIR, `${name}.json`), json);
 }
+
+// Il radar riceve gli attrezzi del server invece di duplicarli: trpcBatch
+// porta con sé retry, chunking e rate control già tarati. Va dopo la
+// definizione di readCache/writeCache e prima di qualunque poll.
+// `apiToken`/`trpcUpstream` sono per il solo segnale finanziamento: le
+// transazioni vogliono la chiave, e non basta quella del Worker (401).
+// Vengono passate per riferimento tardivo perché WARERA_API_TOKEN e
+// TRPC_UPSTREAM sono dichiarati più in basso, insieme alla route /trpc.
+initProxyIndex({
+  trpcBatch: (...args) => trpcBatch(...args),
+  readCache, writeCache,
+  get apiToken() { return WARERA_API_TOKEN; },
+  get trpcUpstream() { return TRPC_UPSTREAM; },
+});
 
 // ---------------------------------------------------------------------------
 // trpcBatch: stessa identica logica del tool (src/diplomacy/utils.js),
@@ -1897,6 +1915,7 @@ cron.schedule('36 * * * *', pollCitizens);                  // ogni ora, :36 (ce
 // un requisito stretto (i due giri non si sovrappongono mai per orario).
 cron.schedule('25 * * * *', pollExternalHistory);
 cron.schedule('18 */6 * * *', pollCreditProfiles);          // ogni 6 ore, :18
+cron.schedule('45 */6 * * *', pollProxyIndex);               // ogni 6 ore, :45 (radar dei proxy)
 // Cambio giorno di gioco: 02:00 italiane, non UTC — da cui il fuso
 // esplicito (il server può stare ovunque). Minuto :01 per essere sicuri di
 // leggere il giro di pollCountries delle :00.
@@ -1929,6 +1948,12 @@ cron.schedule('1 2 * * *', snapshotDailyDamage, { timezone: DAILY_DAMAGE_TZ });
   // al prossimo evento, ma su un server già avviato da tempo il prossimo
   // evento può essere fra ore — meglio averli subito. L'intensità bellica
   // gira su un dataset fermo: una volta sola, se non è già stata calcolata.
+  // Radar dei proxy: al primo avvio in assoluto costa ~50 richieste (deve
+  // risolvere la lingua di tutti i membri di governo). Ai riavvii successivi
+  // l'indice c'è già e ci pensa il cron, così un pm2 restart non paga quel
+  // conto ogni volta.
+  if (!readCache('proxy-index', null)) pollProxyIndex();
+
   if (!readCache('region-contest-counts', null)) recomputeContestCounts();
   if (!readCache('region-war-intensity', null)) computeHistoricalWarIntensity();
 })();
@@ -2228,6 +2253,12 @@ app.get('/region-history/external-status', (req, res) => {
 });
 
 app.get('/credit-profiles', (req, res) => res.json(readCache('credit-profiles', { fetchedAt: null, data: {} })));
+
+// Radar dei proxy: punteggio completo per nazione, con le evidenze che lo
+// compongono. Il client lo innesta su quello che ha calcolato da solo
+// (src/proxy/radar.js: applyServerIndex) e se questo non risponde resta il
+// suo — degrada, non si rompe.
+app.get('/proxy-index', (req, res) => res.json(readProxyIndex()));
 
 // ═══════════════════════════════════════════════════════════════════════
 // PROXY tRPC — sostituisce il Worker Cloudflare per le chiamate del CLIENT

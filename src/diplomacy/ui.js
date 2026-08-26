@@ -10,6 +10,7 @@ import { getContestedStats, contestedLegendGradient } from './contestedHeatmap.j
 import { getWarIntensityStats, warIntensityLegendGradient } from './warIntensityHeatmap.js';
 import { getPlaystyleStats, playstyleLegendGradient } from './playstyleHeatmap.js';
 import { getTrendStats, trendLegendGradient } from './playstyleTrendHeatmap.js';
+import { mergedSphereGroups } from '../proxy/radar.js';
 
 function _fmtDmg(n) {
   if (!n) return '0';
@@ -275,14 +276,22 @@ export function updateDynamicLegend() {
 
   if (state.coloringMode === 'sphereOfInfluence') {
     let html = '';
-    state.sphereInfo.forEach(info => {
-      const color = state.nationBaseColorMap.get(info.primaryId) || COLORS.DEFAULT_LAND;
+    // WarEra+: la legenda deve descrivere quello che la mappa sta davvero
+    // disegnando, cioè CSV + rilevamenti sopra soglia (o tutti, col toggle) —
+    // non il solo CSV. Ogni riga distingue le due provenienze.
+    mergedSphereGroups({ forMap: true }).forEach(group => {
+      const color = state.nationBaseColorMap.get(group.primaryId) || COLORS.DEFAULT_LAND;
+      const fromCsv = group.proxies.filter(p => p.source === 'csv').length;
+      const detected = group.proxies.length - fromCsv;
+      const parts = [];
+      if (fromCsv) parts.push(`${fromCsv} listed`);
+      if (detected) parts.push(`${detected} detected`);
       html += `
         <div class="legend-item">
           <div class="legend-bar" style="background:${color};"></div>
           <div class="legend-info">
-            <div class="legend-name">${escapeHtml(info.primaryName)}</div>
-            <div class="legend-desc">${info.proxyIds.length} proxy nation${info.proxyIds.length === 1 ? '' : 's'}</div>
+            <div class="legend-name">${escapeHtml(group.primaryName)}</div>
+            <div class="legend-desc">${parts.join(' · ')}</div>
           </div>
         </div>`;
     });

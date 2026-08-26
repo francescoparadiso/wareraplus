@@ -11,17 +11,64 @@ deployarlo da qui — il deploy resta manuale sul VPS.
 Host attuale: `ubuntu@79.72.45.17` (`warera-oracle.duckdns.org`), chiave e
 appunti in `warEra/serverOracle/`. In pratica:
 
+Entrambi i comandi si lanciano **dal PC, dalla root del repo**
+(`warEra/wareraPlus/`) — non da dentro una sessione ssh sul VPS, dove la
+cartella `server/` non esiste. La chiave sta una cartella più in su, in
+`warEra/serverOracle/`, da cui il `../` nel percorso.
+
 ```bash
-scp -i ssh-key-2026-08-18.key server/warera-cache-server.js ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
-ssh -i ssh-key-2026-08-18.key ubuntu@79.72.45.17 "pm2 restart warera-cache"
+scp -i ../serverOracle/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/languages.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
 ```
 
-1. Copia `warera-cache-server.js` sul VPS, nella cartella dove già gira
+Prima di riavviare conviene un controllo: il `require('./proxyIndex')` sta in
+cima al file, quindi un file mancante uccide il processo al caricamento e pm2
+lo riavvia in loop.
+
+```bash
+ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && ls -la proxyIndex.js languages.js package.json && node --check warera-cache-server.js && echo PREFLIGHT-OK"
+```
+
+Solo se stampa `PREFLIGHT-OK`:
+
+```bash
+ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "pm2 restart warera-cache && sleep 20 && pm2 logs warera-cache --lines 40 --nostream"
+```
+
+⚠️ **Da agosto 2026 i file da copiare sono quattro, non uno.**
+`warera-cache-server.js` fa `require('./proxyIndex')` (radar dei proxy), che a
+sua volta richiede `./languages`: se copi solo il primo, il processo non parte
+proprio. `package.json` dichiara `"type": "commonjs"` — sul VPS non serviva
+finché la cartella era senza package.json, ma copiarlo mette al riparo dal
+caso in cui qualcosa ne crei uno.
+
+1. Copia i file sul VPS, nella cartella dove già gira
    (sovrascrive il file esistente — la cartella `cache/` con i dati salvati
    NON va toccata, resta dov'è).
 2. `pm2 restart warera-cache-server` (o il nome che hai dato al processo —
    `pm2 list` per controllare).
 3. Verifica: `curl https://warera-oracle.duckdns.org/warera-cache/health`.
+
+## Radar dei proxy (`/proxy-index`)
+
+`pollProxyIndex()` gira ogni 6 ore (:45) e calcola, per ogni nazione, quale
+altra nazione la controlla e con che sicurezza. Il client ha già un suo
+punteggio (`src/proxy/radar.js`) su tre segnali pubblici; qui se ne aggiunge
+il più forte, **la lingua di chi governa**, che dal browser costerebbe una
+`user.getUserById` per ogni membro di governo (~1.600 chiamate).
+
+Costo: due richieste per i governi (`government.getByCountryId` in batch da
+100) più le lingue ancora sconosciute, in batch da **35** — non 100:
+verificato dal vivo che 100 `user.getUserById` in un solo GET batch superano
+la lunghezza massima dell'URL e tornano **HTTP 414**. La mappa
+utente→lingua è persistente (`cache/user-locales.json`, TTL 30 giorni),
+quindi il primo giro dopo il deploy costa ~50 richieste e i successivi quasi
+niente: le elezioni rinnovano circa 1,4 volti per nazione a tornata.
+
+Il primo giro parte all'avvio **solo se l'indice non esiste ancora**, così un
+`pm2 restart` non ripaga quel conto ogni volta.
+
+Se questo endpoint non risponde il client non se ne accorge: ricalcola in
+proprio i tre segnali che sa fare e mostra quelli (misurato: 145 ms).
 
 ## Novità: directory unità militari (`/mu-directory`)
 

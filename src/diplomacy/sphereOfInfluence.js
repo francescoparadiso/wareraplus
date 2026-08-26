@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { parseCSV, showToast } from './utils.js';
 import { EXTERNAL_SPHERE_URL, COLORS } from './config.js';
+import { mergedSphereGroups } from '../proxy/radar.js';
 import { renderMap } from './map.js';
 import { updateDynamicLegend } from './ui.js';
 import { trackEvent } from '../shared/analytics.js';
@@ -91,10 +92,17 @@ export function buildSphereColorExpression(isOriginal = false) {
   const prop = isOriginal ? 'initialCountryId' : 'countryId';
   const colorMap = new Map();
 
-  for (const info of state.sphereInfo) {
-    const color = _getPrimaryColor(info.primaryId);
-    colorMap.set(info.primaryId, color);
-    info.proxyIds.forEach(proxyId => colorMap.set(proxyId, color));
+  // WarEra+: alle sfere del CSV si sommano quelle del radar (src/proxy/
+  // radar.js). Sulla mappa entrano solo i rilevamenti dati per sicuri
+  // almeno al 75% — sotto quella soglia si vedono nell'elenco del pannello
+  // con la loro percentuale, e sulla mappa solo se l'utente accende il
+  // toggle "anche i rilevamenti incerti". Il CSV si disegna sempre.
+  // Se il radar non ha ancora finito (o non è disponibile), mergedSphereGroups
+  // restituisce esattamente le sfere del CSV: comportamento originale intatto.
+  for (const group of mergedSphereGroups({ forMap: true })) {
+    const color = _getPrimaryColor(group.primaryId);
+    colorMap.set(group.primaryId, color);
+    group.proxies.forEach(proxy => colorMap.set(proxy.id, color));
   }
 
   if (!colorMap.size) return COLORS.DEFAULT_LAND;

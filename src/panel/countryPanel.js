@@ -30,6 +30,8 @@ import { allianceDamageBonus, formatBonus } from '../shared/allianceBonus.js';
 // le usa anche viewOverview.js (import circolare, altrimenti).
 import { getFlagUrl, getNationCode } from './nationFlag.js';
 import { buildViewOverviewHtml, hasViewOverview, trendDaysLabel } from './viewOverview.js';
+// WarEra+ radar dei proxy: le sfere mostrate non sono più solo quelle del CSV.
+import { mergedSphereGroups, proxiesOfPrimary, patronOf, runRadar, isRadarReady, MAP_THRESHOLD } from '../proxy/radar.js';
 
 // Stella di pin per l'intestazione del pannello (nazione o alleanza).
 function pinStarHtml(type, id) {
@@ -601,19 +603,43 @@ function sphereStats(nation) {
  *  altrimenti la potenza di cui è proxy. null se sta fuori da ogni sfera. */
 export function getSphereOf(nationId) {
   if (state.spherePrimaries.has(nationId)) return nationId;
-  return state.sphereMap.get(nationId) || null;
+  // WarEra+: patronOf guarda prima il CSV e poi il radar, così cliccare un
+  // proxy soltanto RILEVATO apre comunque la sfera del suo patrono.
+  return patronOf(nationId);
+}
+
+/* ── Marchio di provenienza di una riga (WarEra+) ──
+   Ogni proxy nell'elenco dice da dove salta fuori: CSV se è nel file
+   compilato a mano, altrimenti la sicurezza del radar. Le due cose non si
+   mescolano mai in un unico numero — una è una fonte, l'altra una stima.
+   `conflictWith` compare quando il radar contraddice il CSV: è il modo in
+   cui una riga vecchia si fa notare. */
+function proxyBadgeHtml(proxy) {
+  if (proxy.source === 'csv') {
+    const conflict = proxy.conflictWith
+      ? ` <span class="wp-proxy-conflict" title="${escapeHtml(t('radar_conflict_title').replace('{patron}', state.nationMap.get(proxy.conflictWith)?.name || '?'))}">≠</span>`
+      : '';
+    return `<span class="wp-proxy-badge csv" title="${escapeHtml(t('radar_csv_title'))}">${t('radar_csv_badge')}</span>${conflict}`;
+  }
+  const pct = Math.round(proxy.p * 100);
+  const weak = proxy.p < MAP_THRESHOLD ? ' weak' : '';
+  return `<span class="wp-proxy-badge radar${weak}" title="${escapeHtml(t('radar_detected_title'))}">${pct}%</span>`;
 }
 
 function buildSpherePanelHtml(primaryId) {
-  const info = state.sphereInfo.find(s => s.primaryId === primaryId);
   const primary = state.nationMap.get(primaryId);
-  if (!info || !primary) return `<div class="wp-panel-empty">Sphere not found.</div>`;
+  // WarEra+: i proxy non arrivano più da state.sphereInfo ma dalla fusione
+  // CSV + radar, così una potenza che il CSV non conosce affatto (Egitto,
+  // Indonesia, Finlandia nei dati di oggi) ha comunque la sua scheda.
+  const entries = proxiesOfPrimary(primaryId)
+    .map(meta => ({ meta, nation: state.nationMap.get(meta.id) }))
+    .filter(e => e.nation)
+    .sort((a, b) => sphereStats(b.nation).pop - sphereStats(a.nation).pop);
+  if (!primary || !entries.length) return `<div class="wp-panel-empty">Sphere not found.</div>`;
 
   const color = state.nationBaseColorMap.get(primaryId) || '#888888';
-  const proxies = info.proxyIds
-    .map(id => state.nationMap.get(id))
-    .filter(Boolean)
-    .sort((a, b) => sphereStats(b).pop - sphereStats(a).pop);
+  const proxies = entries.map(e => e.nation);
+  const metaById = new Map(entries.map(e => [e.nation._id, e.meta]));
 
   // Il totale include la potenza: la domanda su una sfera è quanto pesa
   // tutta insieme, non quanto pesano i satelliti da soli. Il peso dei soli
@@ -641,6 +667,7 @@ function buildSpherePanelHtml(primaryId) {
         <div class="wp-sphere-row-head">
           ${flag ? `<img class="wp-sphere-flag" src="${flag}" alt="" onerror="this.style.display='none'">` : ''}
           <span class="wp-sphere-name">${escapeHtml(nation.name)}</span>
+          ${isPrimary ? '' : proxyBadgeHtml(metaById.get(nation._id) || { source: 'csv' })}
           <span class="wp-sphere-share">${share.toFixed(0)}%</span>
         </div>
         <div class="wp-sphere-row-stats">
@@ -689,7 +716,8 @@ function buildSpherePanelHtml(primaryId) {
 }
 
 function renderSpherePanel(primaryId) {
-  if (!state.sphereInfo.some(s => s.primaryId === primaryId)) return;
+  // WarEra+: vale anche per le potenze che esistono solo grazie al radar.
+  if (!mergedSphereGroups().some(g => g.primaryId === primaryId)) return;
   currentSphereId = primaryId;
   currentNationId = null;
   currentBlocId = null;
@@ -754,29 +782,62 @@ function sphereDisclaimerHtml() {
 }
 
 function buildSphereOverviewHtml() {
-  if (!state.sphereInfo.length) {
+  // WarEra+: l'elenco è la fusione CSV + radar. Il conteggio dei rilevati
+  // serve al testo del toggle, che deve dire quanti ne sta nascondendo.
+  const groups = mergedSphereGroups();
+  if (!groups.length) {
     return `<div class="wp-panel-empty">${t('sphere_none')}</div>`;
   }
 
-  const spheres = state.sphereInfo.map(info => {
-    const primary = state.nationMap.get(info.primaryId);
-    const proxies = info.proxyIds.map(id => state.nationMap.get(id)).filter(Boolean);
-    const tot = [primary, ...proxies].filter(Boolean).reduce((s, n) => {
+  const spheres = groups.map(group => {
+    const primary = state.nationMap.get(group.primaryId);
+    const entries = group.proxies
+      .map(meta => ({ meta, nation: state.nationMap.get(meta.id) }))
+      .filter(e => e.nation);
+    const tot = [primary, ...entries.map(e => e.nation)].filter(Boolean).reduce((s, n) => {
       const x = sphereStats(n);
       return { pop: s.pop + x.pop, dmg: s.dmg + x.dmg };
     }, { pop: 0, dmg: 0 });
-    return { info, primary, proxies, tot };
-  }).filter(s => s.primary).sort((a, b) => b.tot.dmg - a.tot.dmg);
+    return { group, primary, entries, tot };
+  }).filter(s => s.primary && s.entries.length).sort((a, b) => b.tot.dmg - a.tot.dmg);
 
-  const chip = (nation) => {
+  const detected = spheres.flatMap(s => s.entries).filter(e => e.meta.source === 'radar');
+  const hiddenOnMap = detected.filter(e => e.meta.p < MAP_THRESHOLD).length;
+
+  const chip = ({ nation, meta }) => {
     const code = getNationCode(nation._id, nation);
     const flag = getFlagUrl(code);
+    const weak = meta.source === 'radar' && meta.p < MAP_THRESHOLD ? ' weak' : '';
     return `
-      <button class="wp-sphere-chip" data-sphere-open="${nation._id}" title="${escapeHtml(nation.name)}">
+      <button class="wp-sphere-chip${weak}" data-sphere-open="${nation._id}" title="${escapeHtml(nation.name)}">
         ${flag ? `<img class="wp-sphere-chip-flag" src="${flag}" alt="" onerror="this.style.display='none'">` : ''}
         <span>${escapeHtml(nation.name)}</span>
+        ${proxyBadgeHtml(meta)}
       </button>`;
   };
+
+  // Il toggle sta QUI, in testa all'elenco che governa: la stessa schermata
+  // in cui si leggono le percentuali è quella da cui si decide quali far
+  // vedere sulla mappa. Compare solo se c'è davvero qualcosa da mostrare in
+  // più, e finché il radar sta calcolando dice che sta calcolando.
+  const radarControlHtml = !isRadarReady()
+    ? `<div class="wp-radar-bar loading">${t('radar_loading')}</div>`
+    : (detected.length
+      ? `<label class="wp-radar-bar${state.showAllDetectedProxies ? ' on' : ''}">
+           <span class="wp-radar-bar-text">
+             <span class="wp-radar-bar-title"><span class="wp-radar-dot"></span>${t('radar_show_uncertain')}</span>
+             <span class="wp-radar-bar-sub">${(state.showAllDetectedProxies
+               ? t('radar_show_uncertain_hint_on')
+               : t('radar_show_uncertain_hint'))
+               .replace('{hidden}', hiddenOnMap)
+               .replace('{total}', detected.length)}</span>
+           </span>
+           <span class="switch">
+             <input type="checkbox" id="wp-checkAllDetected" ${state.showAllDetectedProxies ? 'checked' : ''}>
+             <span class="slider"></span>
+           </span>
+         </label>`
+      : '');
 
   return `
     <div class="wp-panel-header">
@@ -787,9 +848,11 @@ function buildSphereOverviewHtml() {
     </div>
     <div class="wp-panel-hint">${t('sphere_overview_hint')}</div>
     <div class="wp-sphere-disclaimer">⚠️ ${sphereDisclaimerHtml()}</div>
+    ${radarControlHtml}
 
-    ${spheres.map(({ info, primary, proxies, tot }) => {
-      const color = state.nationBaseColorMap.get(info.primaryId) || '#888888';
+    ${spheres.map(({ group, primary, entries, tot }) => {
+      const color = state.nationBaseColorMap.get(group.primaryId) || '#888888';
+      const proxies = entries;
       const code = getNationCode(primary._id, primary);
       const flag = getFlagUrl(code);
       // Cliccabile TUTTO il riquadro, non solo i nomi: il bersaglio grosso è
@@ -836,6 +899,44 @@ export function renderSphereOverviewPanel() {
         renderSpherePanel(sphereId);
       }
     });
+  });
+
+  wireRadarControl();
+
+  // WarEra+: il radar si calcola la prima volta che si entra in vista Sphere
+  // (una fetch della directory MU per sessione, condivisa con la vista Unità
+  // Militari). Finché non è pronto la vista mostra il solo CSV, esattamente
+  // com'era prima; quando finisce, pannello, mappa e legenda si ridisegnano.
+  if (!isRadarReady()) {
+    runRadar().then(detections => {
+      if (!detections?.size) return;
+      if (sphereOverviewOpen) renderSphereOverviewPanel();
+      else if (currentSphereId) renderSpherePanel(currentSphereId);
+      repaintSphereMap();
+    });
+  }
+}
+
+/** Ridisegna mappa e legenda dopo un cambiamento del radar o del toggle.
+ *  Import dinamico: map.js importa a sua volta questo modulo, e un import
+ *  statico incrociato chiuderebbe il cerchio. */
+function repaintSphereMap() {
+  if (state.coloringMode !== 'sphereOfInfluence') return;
+  Promise.all([import('../diplomacy/map.js'), import('../diplomacy/ui.js')])
+    .then(([map, ui]) => { map.renderMap(); ui.updateDynamicLegend(); })
+    .catch(() => {});
+}
+
+function wireRadarControl() {
+  const checkbox = document.getElementById('wp-checkAllDetected');
+  if (!checkbox) return;
+  checkbox.addEventListener('change', () => {
+    state.showAllDetectedProxies = checkbox.checked;
+    trackEvent('proxy-radar-toggle', { showAll: checkbox.checked });
+    repaintSphereMap();
+    // Ridisegna anche l'elenco: cambia il conteggio dei nascosti nel
+    // sottotitolo del toggle, e le pastiglie deboli cambiano stato.
+    if (sphereOverviewOpen) renderSphereOverviewPanel();
   });
 }
 

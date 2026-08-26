@@ -6,6 +6,11 @@ export const state = {
   selectedCountryId: null,
   selectedBlocId: null, // WarEra+: alleanza attualmente in focus in modalità 'blocs'
   showBlocLabels: true, // WarEra+: toggle per nascondere i nomi delle alleanze sulla mappa
+  // WarEra+: in vista Sphere la mappa colora i proxy del CSV più quelli che
+  // il radar (src/proxy/radar.js) dà per sicuri almeno al 75%. Con questo a
+  // true colora anche i rilevamenti sotto soglia. Non persiste: ogni
+  // apertura riparte dalla vista prudente.
+  showAllDetectedProxies: false,
   blocFocusColorMap: new Map(), // WarEra+: colori calcolati per il blocco in focus, condivisi tra mappa ed etichette
   customNaps: [],
   nationBaseColorMap: new Map(),

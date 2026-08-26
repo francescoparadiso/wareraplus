@@ -1,0 +1,6 @@
+{
+  "name": "warera-cache-server",
+  "private": true,
+  "type": "commonjs",
+  "description": "Il server di cache è CommonJS (require/module.exports), il resto del repo no: package.json alla radice dichiara \"type\": \"module\" e senza questo file Node tratterebbe anche server/*.js come moduli ES. Sul VPS funziona comunque perché la cartella di deploy non ha un package.json e Node ricade su CommonJS — qui serve a far girare e testare gli stessi file dentro il repo."
+}

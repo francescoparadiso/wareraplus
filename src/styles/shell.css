@@ -2503,6 +2503,118 @@ body.light-theme .wp-sphere-disclaimer { color: #8a6100; background: rgba(210, 1
 body.light-theme .wp-sphere-group-head { color: #1a1a1a; }
 body.light-theme .wp-sphere-chip { border-color: #e0e0e0; color: #3e2f1c; background: rgba(0, 0, 0, .04); }
 
+/* ── Radar dei proxy (WarEra+, src/proxy/radar.js) ──
+   Due provenienze, due letture a colpo d'occhio: il CSV è una FONTE (blu
+   come il resto della vista, nessuna incertezza da comunicare), il radar è
+   una STIMA (verde, con la sua percentuale). I rilevamenti sotto la soglia
+   del 75% — quelli che sulla mappa non entrano finché non si accende il
+   toggle — sono gli stessi elementi smorzati, non elementi diversi: si deve
+   vedere che sono la stessa cosa più debole. */
+.wp-proxy-badge {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+.wp-proxy-badge.csv { background: rgba(88, 166, 255, .16); color: #58a6ff; }
+.wp-proxy-badge.radar { background: rgba(63, 185, 80, .16); color: #3fb950; }
+.wp-proxy-badge.radar.weak { background: rgba(139, 148, 158, .14); color: #8b949e; }
+.wp-sphere-chip.weak { opacity: .62; border-style: dashed; }
+.wp-proxy-conflict {
+  color: #d29922;
+  font-weight: 700;
+  font-size: 11px;
+  cursor: help;
+}
+body.light-theme .wp-proxy-badge.csv { background: rgba(47, 111, 181, .14); color: #2f6fb5; }
+body.light-theme .wp-proxy-badge.radar { background: rgba(31, 122, 51, .14); color: #1f7a33; }
+body.light-theme .wp-proxy-badge.radar.weak { background: rgba(0, 0, 0, .06); color: #6b5a47; }
+body.light-theme .wp-proxy-conflict { color: #8a6100; }
+
+/* Il comando che decide cosa finisce sulla mappa sta in testa all'elenco
+   che governa, non nelle impostazioni generali: si legge la percentuale e
+   si decide lì. L'interruttore è lo STESSO componente .switch/.slider dei
+   toggle di Diplomacy (src/styles/diplomacy.css) — stesso oggetto, stesso
+   gesto: qui si riusa il markup, non si ridisegna un secondo interruttore. */
+.wp-radar-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
+  margin-bottom: 10px;
+  border: 1px solid #21262d;
+  background: linear-gradient(180deg, rgba(139, 148, 158, .07), rgba(139, 148, 158, .03));
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color .2s, background .2s;
+}
+.wp-radar-bar:hover { border-color: #30363d; }
+.wp-radar-bar.on {
+  border-color: rgba(63, 185, 80, .45);
+  background: linear-gradient(180deg, rgba(63, 185, 80, .12), rgba(63, 185, 80, .04));
+}
+.wp-radar-bar.loading {
+  justify-content: flex-start;
+  color: #8b949e;
+  font-size: 11px;
+  cursor: default;
+}
+.wp-radar-bar-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.wp-radar-bar-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c9d1d9;
+}
+.wp-radar-bar.on .wp-radar-bar-title { color: #e6edf3; }
+.wp-radar-bar-sub { font-size: 10px; line-height: 1.4; color: #8b949e; }
+
+/* Il pallino verde è il marchio del radar: lo stesso verde delle pastiglie
+   percentuale, così si capisce a colpo d'occhio di quali righe parla
+   l'interruttore. Pulsa solo quando è acceso, e mai se l'utente ha chiesto
+   meno animazioni. */
+.wp-radar-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3fb950;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 0 rgba(63, 185, 80, .55);
+}
+.wp-radar-bar.on .wp-radar-dot { animation: wp-radar-ping 2.4s ease-out infinite; }
+@keyframes wp-radar-ping {
+  0%   { box-shadow: 0 0 0 0 rgba(63, 185, 80, .5); }
+  70%  { box-shadow: 0 0 0 7px rgba(63, 185, 80, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(63, 185, 80, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wp-radar-bar.on .wp-radar-dot { animation: none; }
+}
+
+/* L'interruttore verde quando acceso: il blu del tool resta ai toggle
+   generali della mappa, questo appartiene al radar. */
+.wp-radar-bar .switch { width: 36px; height: 20px; }
+.wp-radar-bar .slider::before { height: 14px; width: 14px; }
+.wp-radar-bar input:checked + .slider { background: #3fb950; border-color: #3fb950; }
+.wp-radar-bar input:checked + .slider::before { transform: translateX(16px); }
+
+body.light-theme .wp-radar-bar { border-color: #e0e0e0; background: rgba(0, 0, 0, .03); }
+body.light-theme .wp-radar-bar:hover { border-color: #c9bda9; }
+body.light-theme .wp-radar-bar.on { border-color: rgba(31, 122, 51, .4); background: rgba(31, 122, 51, .08); }
+body.light-theme .wp-radar-bar-title { color: #1a1a1a; }
+body.light-theme .wp-radar-bar-sub { color: #6b5a47; }
+body.light-theme .wp-radar-dot { background: #1f7a33; }
+body.light-theme .wp-radar-bar input:checked + .slider { background: #1f7a33; border-color: #1f7a33; }
+
 /* ── Riepilogo della vista nel pannello (WarEra+, src/panel/viewOverview.js) ──
    Una riga per voce di classifica: posizione, bandiera (o pallino nel colore
    dell'alleanza), nome, valore, e sotto la barretta proporzionale. La barra
