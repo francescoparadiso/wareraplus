@@ -559,7 +559,12 @@ function scoreCountry(ctx, nation) {
   // ricevuto un bonifico solo da 200 risulterebbe finanziata al 100% da
   // chiunque gliel'abbia mandato, che è rumore travestito da certezza.
   const money = ctx.funding?.get(nation._id);
-  const fundingScored = evidence.some(e => e.key === 'radar_ev_funding');
+  // Deve essere il finanziamento del patrono VINCENTE, non di un candidato
+  // qualsiasi: `evidence` a questo punto contiene ancora le voci di tutti i
+  // pretendenti. Il Kuwait lo ha mostrato — il finanziamento aveva spinto
+  // l'Irlanda, ha vinto la Germania, e la riga risultava "circolare" quando
+  // invece quel controllo era indipendente eccome (e dava torto al modello).
+  const fundingScored = evidence.some(e => e.key === 'radar_ev_funding' && e.patronId === patronId);
   return {
     countryId: nation._id,
     patronId,
