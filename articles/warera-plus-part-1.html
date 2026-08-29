@@ -1,0 +1,249 @@
+<!--
+  ══════════════════════════════════════════════════════════════
+  WarEra+ — Announcement article, PART 1 of 2 ("What you see")
+  ------------------------------------------------------------------
+  Paste-ready HTML. Every image is a placeholder: replace the src
+  with your uploaded image URL, or drop the <figure> block and insert
+  the picture with the editor's own button. The suggested screenshot
+  is written above each one as a comment.
+  ══════════════════════════════════════════════════════════════
+-->
+
+<article>
+
+  <h1>WarEra+ is here — Part 1: the map you were missing</h1>
+
+  <p>
+    Hey, it's me again — <strong>frappa10</strong>, the guy behind the tools you might already
+    know. Sorry for going quiet for a while — I wasn't gone, I was just heads-down building the
+    thing I'm about to show you, and it turned out to be a much bigger job than I expected. Worth
+    it, though. Let's get into it.
+  </p>
+
+  <p>
+    Today <strong>WarEra+</strong> goes live:
+    <a href="https://wareraplus.vercel.app/"><strong>wareraplus.vercel.app</strong></a>. Free,
+    no login, no ads, works on your phone.
+  </p>
+
+  <p>
+    Some of you already used two separate tools of mine — a strategic map and a political view.
+    They worked fine, but you had to keep two tabs open and they had no idea the other one even
+    existed. My original plan was just to glue them together. Then I kept finding one more thing
+    worth adding, and one more, and… well, here we are. It's not two tools stapled together
+    anymore. It's one app, built around the map, with everything else just a click away from it.
+  </p>
+
+  <p>
+    There's genuinely a lot to show you, so I split this into two posts.
+    <strong>This one is the map itself</strong> — what you look at, what's new to see. <strong>Part
+    2 is everything you can dig into</strong> — politics, nations, alliances, military units, the
+    economy tool. Grab a coffee, this is the fun part.
+  </p>
+
+  <!-- IMAGE: hero shot — the whole app on the diplomacy view, dark theme, panel open -->
+  <figure>
+    <img src="IMAGE_1" alt="WarEra+ main map view">
+    <figcaption>The map is the app now. Everything else opens on top of it.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>Eight ways to look at the same world</h2>
+
+  <p>
+    The <strong>Map views</strong> menu repaints the world depending on what you actually want
+    to know. Some of these existed before, some are brand new:
+  </p>
+
+  <ul>
+    <li><strong>Diplomacy</strong> — wars, sworn enemies, NAPs, who's with whom.</li>
+    <li><strong>Alliances</strong> — the blocs, with their names right on the map.</li>
+    <li><strong>Sphere of influence</strong> — how far each power's reach actually goes.</li>
+    <li><strong>Weekly damage</strong> — who's really fighting, not who just talks about it.</li>
+    <li><strong>Population</strong> — where the players are.</li>
+    <li><strong>Contested regions</strong> <em>(new!)</em> — how many times each region has
+      flipped hands. Basically a heat map of "this place just won't stay quiet."</li>
+    <li><strong>War history</strong> <em>(new!)</em> — total damage ever dealt over each region,
+      all-time. Where the war has actually happened, not just where it's happening now.</li>
+    <li><strong>War vs Eco</strong> <em>(new!)</em> — whether a country's players lean into
+      combat or into business, based on where they actually put their skill points.</li>
+  </ul>
+
+  <!-- IMAGE: 2x2 grid or carousel of four different map views (diplomacy / contested / war history / war vs eco) -->
+  <figure>
+    <img src="IMAGE_2" alt="Four different map views side by side">
+    <figcaption>Same world, four completely different stories.</figcaption>
+  </figure>
+
+  <p>
+    That last one I want to brag about a little, because it would've been very easy to make up a
+    number that sounds smart and means nothing. I didn't want that, so it only counts skill
+    levels people have actually paid points for — nothing else. And it turns out the split is
+    real: players commit hard to one side or the other, rarely both. The "war" crowd deals more
+    than twice the damage of everyone else (median), the "eco" crowd sits on well over a third
+    more wealth. So the colours you see aren't a vibe, they're backed by numbers.
+  </p>
+
+  <h3>Walk into a view, get the leaderboard for free</h3>
+
+  <p>
+    Colour tells you the shape of something, not the order. So now, whenever you switch to a
+    view, the side panel opens on its own little summary: the ranking of exactly what you're
+    looking at, plus — for the views that aren't obvious at a glance — a plain sentence telling
+    you what the colour is actually counting. On mobile it politely waits behind a "See details"
+    tab instead of covering your screen.
+  </p>
+
+  <!-- IMAGE: panel open on a view summary (e.g. contested regions ranking) -->
+  <figure>
+    <img src="IMAGE_3" alt="View summary in the side panel">
+    <figcaption>Every view now comes with its own leaderboard, automatically.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>Fronts, borders, and a bit of sea life</h2>
+
+  <p>
+    The <strong>Battles</strong> button shows and hides the active fronts, with live markers plus
+    a heat map of where the fighting is thickest. Turn it off when you just want a clean map to
+    stare at; it stays off until you flip it back.
+  </p>
+
+  <p>
+    I also rebuilt the borders to actually match the game's own style. Internal borders are now
+    a lighter shade of the nation's own colour instead of the same flat black line for everyone,
+    and national borders are coloured by the <em>relationship</em> between the two neighbours —
+    war, sworn enemy, alliance, defensive pact, NAP. You can read a tense frontier just by
+    looking at it, no clicking required.
+  </p>
+
+  <!-- IMAGE: close-up of a contested frontier showing relationship-coloured borders + battle markers -->
+  <figure>
+    <img src="IMAGE_4" alt="Relationship-coloured borders and battle markers">
+    <figcaption>Now the border itself tells you the relationship.</figcaption>
+  </figure>
+
+  <p>
+    And then there's the sea — which on every version of this map was just a big blue nothing.
+    Not anymore: there are trade routes running between real maritime chokepoints, with little
+    ships actually sailing along them. Purely decorative, zero gameplay impact, but hover one and
+    it'll tell you what it's hauling. On the light theme the whole map turns into an antique
+    parchment chart, complete with a few illustrated surprises hidden around; the dark theme has
+    its own little fleet tucked away too. Go find them, I had way too much fun putting those in.
+  </p>
+
+  <!-- IMAGE: side-by-side of light "antique map" theme and dark theme, ideally with a ship tooltip open -->
+  <figure>
+    <img src="IMAGE_5" alt="Antique light theme and dark theme">
+    <figcaption>Light theme: antique chart. Dark theme: bring a fleet.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>The news, without having to go hunting for it</h2>
+
+  <p>
+    There's a ticker running above the map now with what's happening in real time: ongoing
+    battles, elections opening or about to, wars just declared, sworn enemies swapped,
+    populations and treasuries on the move. Each category is capped so a busy war week doesn't
+    just shove everything else off the strip.
+  </p>
+
+  <p>
+    But a ticker only gives you a taste, and it keeps scrolling whether you caught it or not. So
+    there's also a full <strong>News</strong> section: the whole edition, standing still, grouped
+    by category, with a search box and a little counter of what's happened since you were last
+    online.
+  </p>
+
+  <!-- IMAGE: the News section, "The WarEra Times" masthead visible -->
+  <figure>
+    <img src="IMAGE_6" alt="The News section">
+    <figcaption>Everything the ticker only gave you a glimpse of.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>The time machine</h2>
+
+  <p>
+    Okay, this is genuinely my favourite thing I've ever built for this project. There's a slider
+    at the bottom of the screen that rewinds the entire world. Drag it back and the map redraws
+    with borders exactly as they were at that moment. Watch an empire grow, or a front collapse,
+    in a few seconds. You can hit play and just watch it unfold, and you can copy a link that
+    opens the map at that exact instant for anyone you send it to.
+  </p>
+
+  <p>
+    One thing I deliberately kept out: it only shows you <strong>who owned what</strong>, nothing
+    else. Historical population, wealth, development — none of that was ever recorded anywhere,
+    so slapping today's numbers on a map from last month would look like history while actually
+    being fiction. Ownership is real and verifiable. Everything else I left out on purpose.
+  </p>
+
+  <p>
+    None of this would exist without <strong>@Wettrix</strong>, who handed me the historical data
+    this whole feature is rebuilt from. Seriously, thank you — this one's half yours.
+  </p>
+
+  <!-- IMAGE: time machine open, slider at the bottom, an older world state on screen -->
+  <figure>
+    <img src="IMAGE_7" alt="The time machine">
+    <figcaption>The same world, a while back.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>Click a country</h2>
+
+  <p>
+    Last thing for this part, and it's the bridge into the next one. Click any nation and a side
+    panel slides open with its regions, its alliances and NAPs, its parliament drawn as a proper
+    hemicycle, and the war/economy split of its citizens. It opens instantly, because it only
+    uses data the map already loaded — nothing new is fetched, nothing spins, nothing waits.
+  </p>
+
+  <p>
+    From there you can drop down into an alliance, climb back up, drag the panel wider if you
+    want more room, or hit <strong>Expand</strong> — which is exactly where Part 2 picks up.
+  </p>
+
+  <!-- IMAGE: nation panel open with parliament hemicycle and playstyle section visible -->
+  <figure>
+    <img src="IMAGE_8" alt="The nation panel">
+    <figcaption>Everything about a country, with zero waiting.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>Go poke at it</h2>
+
+  <p>
+    <a href="https://wareraplus.vercel.app/"><strong>wareraplus.vercel.app</strong></a> — no
+    login, nothing to install (though you can install it as an app if you want it on your home
+    screen), works fine on your phone. Nine languages, light and dark theme, and if you'd rather
+    read a summary than this whole post there's a "How to use" page built right in.
+  </p>
+
+  <p>
+    <strong>Part 2 is coming next</strong> and it's all about the numbers: politics and
+    elections, nation statistics and head-to-head comparisons, alliance leaderboards, the full
+    military unit directory (including a genuinely surprising bit about which units are only
+    <em>nominally</em> from the country they're registered in), and the industrial optimizer
+    built by <a href="https://app.warera.io/user/69cc14d4efc3f3f4291e93a9">ArgusIA</a>.
+  </p>
+
+  <p>
+    Bugs, feedback, "it would be cool if…" — all of it welcome, just find me in game
+    (<a href="https://app.warera.io/user/69d2ed249f38d300d59a2af1">frappa10</a>).
+  </p>
+
+  <!-- Replace the placeholders below with the actual tags of your testers -->
+  <p>
+    <em>And a real thank you to @tester1, @tester2, @tester3 for testing this thing, breaking it
+    on purpose, and telling me exactly what was wrong before any of you got to see it.</em>
+  </p>
+
+</article>

@@ -1,0 +1,249 @@
+<!--
+  ══════════════════════════════════════════════════════════════
+  WarEra+ — Announcement article, PART 2 of 2 ("The numbers")
+  ------------------------------------------------------------------
+  Paste-ready HTML. Every image is a placeholder: replace the src
+  with your uploaded image URL, or drop the <figure> block and insert
+  the picture with the editor's own button. The suggested screenshot
+  is written above each one as a comment.
+  ══════════════════════════════════════════════════════════════
+-->
+
+<article>
+
+  <h1>WarEra+ is here — Part 2: the numbers</h1>
+
+  <p>
+    Before anything else — thank you. Part 1 got over 230 upvotes, 30 comments and more than 2,600
+    views, and I genuinely didn't expect that. Reading every single comment took a while, but it
+    was worth it — seeing people actually excited about this, not just polite, is the reason I'm
+    sitting down to write Part 2 instead of just quietly shipping it. So: thank you, all of you.
+  </p>
+
+  <p>
+    Back again — <strong>frappa10</strong> here. Hope Part 1 was fun, because this one's the part
+    I was actually the most nervous about shipping. Repainting a map is one thing; it's pretty,
+    people like it, low risk. But this second half is where WarEra+ stops being "a nicer map" and
+    starts being a tool you can actually pull numbers out of — and numbers are the kind of thing
+    people notice immediately when they're wrong. So I spent a stupid amount of time double- and
+    triple-checking everything you're about to read.
+  </p>
+
+  <p>
+    If you missed Part 1: go catch up first, it covers the map itself — the eight views, the
+    relationship-coloured borders, the news ticker, the time machine, and the nation panel that
+    opens when you click a country. This post picks up right where that panel left off. Because
+    a panel is nice for a quick look, but eventually you want more than a quick look — you want
+    to sort every nation by wealth, or see exactly which military units are secretly run by a
+    different country than the one they registered in, or figure out where your own skill points
+    are actually going to waste. That's what lives behind the <strong>Insights</strong> menu, and
+    it's honestly where most of the actual work went into this update. The map is what gets the
+    screenshots; this is what gets people staying.
+  </p>
+
+  <p>
+    Six sections, all opening right on top of the map so you never lose your place, all sharing
+    your theme, your language, your favourites. Let's go through them one by one.
+  </p>
+
+  <!-- IMAGE: the Insights menu open, showing all the sections -->
+  <figure>
+    <img src="IMAGE_1" alt="The Insights menu">
+    <figcaption>One menu, six sections, no new tabs to keep track of.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>Politics</h2>
+
+  <p>
+    The political view now lives <em>inside</em> the app instead of off in its own tab.
+    Presidential and congress elections, parties, senate, parliament — for whatever nation you
+    pick, switch instantly from the selector at the top, or jump in with one click straight from
+    the nation panel on the map. Same tool you already knew, just no longer homeless — it shares
+    your theme and your language with the rest of the app now too.
+  </p>
+
+  <!-- IMAGE: politics view open over the map (congress or presidential elections) -->
+  <figure>
+    <img src="IMAGE_2" alt="The politics section">
+    <figcaption>Elections, parties and senate, one click away from the map.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>Nation stats</h2>
+
+  <p>
+    A full table of every nation with sortable columns — pick whatever you care about, get the
+    ranking instantly. There's a <strong>1 vs 2</strong> tab that puts two countries side by side
+    on the exact same measures, which is genuinely the fastest way to settle an argument about
+    who's actually bigger, richer, or scarier. And every nation gets its own card with charts and
+    its full citizen list.
+  </p>
+
+  <!-- IMAGE: nation stats overview table + the 1 vs 2 comparison -->
+  <figure>
+    <img src="IMAGE_3" alt="Nation statistics and head to head comparison">
+    <figcaption>Sort by anything. Then just put two side by side.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>Alliance stats</h2>
+
+  <p>
+    Leaderboards for the blocs: territory, damage, population, wealth — plus a little band up
+    top showing <strong>today's damage</strong>, not just the weekly total the game gives you.
+    The game only ever publishes a running weekly number, so I work out the daily figure by
+    snapshotting that total right when the game day flips and taking the difference. From here
+    you can jump into any single alliance and its member list.
+  </p>
+
+  <!-- IMAGE: alliance leaderboard with the "today's damage" band visible -->
+  <figure>
+    <img src="IMAGE_4" alt="Alliance statistics">
+    <figcaption>The weekly total hides who actually fought <em>today</em>. Now you can see it.</figcaption>
+  </figure>
+
+  <p>
+    And then there's the tab I should've led with: the <strong>Alliance Builder</strong>. It's a
+    sandbox — drag a nation from one alliance's card straight into another's, drag two alliance
+    headers together to merge them, or hit "New alliance" to create an empty one from scratch and
+    start dropping nations into it. Nothing here touches the actual game. What it does do is
+    recalculate the damage bonus live, right on the card, for whatever hypothetical arrangement
+    you just built — so if your alliance is arguing about merging with another one, or splitting
+    off a chunk of members into their own bloc, you can actually see the number before anyone
+    commits to anything. Your layout is saved automatically, so a refresh won't undo an hour of
+    dragging things around.
+  </p>
+
+  <!-- IMAGE: Alliance Builder tab, mid drag-and-drop, with the recalculated bonus visible on a card -->
+  <figure>
+    <img src="IMAGE_4B" alt="The Alliance Builder">
+    <figcaption>Merge, split, build from scratch — see the bonus before you commit to anything.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>Military Units — and who they really belong to</h2>
+
+  <p>
+    Every unit in the game — around 1400 of them — in one sortable table: name, country, member
+    count, and all six leaderboards with each unit's exact position in every one. Rows are tinted
+    by tier so the top of any ranking jumps out at a glance. Open any unit and you get its six
+    leaderboards, its full member list, and its composition.
+  </p>
+
+  <p>
+    That composition bit is honestly my favourite discovery in the whole tool. It counts how many
+    members actually come from each nation — and when a unit's real majority isn't the country it
+    registered in, it gets flagged <strong>de facto</strong>. Turns out this isn't some rare edge
+    case: checking the top 25 units by weekly damage, <strong>6 of them are de facto foreign</strong>.
+    One is registered in Guyana and has 25 members out of 25 from Mali. Not a typo.
+  </p>
+
+  <p>
+    The same table also has a <strong>War / Eco</strong> column: how many of a unit's members
+    play for combat versus business, based on where they put their skill points — same measure
+    behind the "War vs Eco" map view from Part 1.
+  </p>
+
+  <!-- IMAGE: MU directory table, tier-tinted rows, composition column with a "de facto" mark -->
+  <figure>
+    <img src="IMAGE_5" alt="Military unit directory">
+    <figcaption>Registered in one country, actually run by another.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>Industrial Optimizer</h2>
+
+  <p>
+    Full honesty: this one isn't mine.
+    <a href="https://app.warera.io/user/69cc14d4efc3f3f4291e93a9"><strong>ArgusIA</strong></a>
+    built an economy optimizer as a Discord bot, and it was good enough that instead of trying to
+    build a worse version of it myself, I just asked to bring it inside WarEra+. It works out
+    where it's actually worth it for you to work and produce, based on your own skills, your
+    position, and market prices — with sections for Skills, Position, Workers, plus a brand new
+    Hiring section I added on top.
+  </p>
+
+  <p>
+    Full credit sits right at the top of the section in the tool, and it's staying there. Thanks
+    ArgusIA, seriously.
+  </p>
+
+  <!-- IMAGE: the industrial optimizer with results for a player -->
+  <figure>
+    <img src="IMAGE_6" alt="The industrial optimizer">
+    <figcaption>ArgusIA's optimizer, now without ever leaving the map.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>The little things that add up</h2>
+
+  <ul>
+    <li><strong>Search</strong> — one box for nations, alliances and units. ⌘K on desktop.</li>
+    <li><strong>Favourites</strong> — star anything, it stays one click away forever.</li>
+    <li><strong>Nine languages</strong> — EN, IT, ES, DE, FR, NL, SV, PT, AR, everywhere, switch
+      even while a section is already open.</li>
+    <li><strong>Two themes</strong> — dark, or the antique parchment map from Part 1.</li>
+    <li><strong>Installable</strong> — add it to your home screen, it opens like a real app, and
+      it'll still show you what it already knows even if your connection drops.</li>
+    <li><strong>"How to use"</strong> — a page inside the tool covering all of this in three
+      bullets per section, for whenever you forget where something is.</li>
+  </ul>
+
+  <!-- IMAGE: the search box open with mixed results (nations / alliances / units), or the favourites dropdown -->
+  <figure>
+    <img src="IMAGE_7" alt="Global search and favourites">
+    <figcaption>One search box for basically everything in the game.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>One nerdy paragraph, I promise it's short</h2>
+
+  <p>
+    A lot of what you just read would normally mean every single visitor's browser hammering the
+    game's API for the exact same info, over and over. It doesn't work that way here — a small
+    server of mine does that work once and shares the result with everyone, which is why the unit
+    directory or the historical map open in a second instead of a minute, and why using this tool
+    doesn't pile extra load onto the game every time someone opens it. If that server ever goes
+    down, everything just falls back to loading directly — slower, but nothing breaks. That's the
+    whole nerdy part, I promise. Back to the good stuff.
+  </p>
+
+  <hr>
+
+  <h2>Thanks, now go try it</h2>
+
+  <p>
+    <a href="https://wareraplus.vercel.app/"><strong>wareraplus.vercel.app</strong></a> — free,
+    no login, works on your phone.
+  </p>
+
+  <p>
+    People who actually made this better than what I could've done alone:
+  </p>
+
+  <ul>
+    <li><a href="https://app.warera.io/user/69cc14d4efc3f3f4291e93a9"><strong>ArgusIA</strong></a>
+      — for the industrial optimizer, and for letting me bring it in.</li>
+    <li><strong>@Wettrix</strong> — for the historical data behind the time machine, which
+      flat-out wouldn't exist otherwise.</li>
+    <!-- Replace the placeholders below with the actual tags of your testers -->
+    <li><strong>@tester1, @tester2, @tester3</strong> — for testing this thing, breaking it on
+      purpose, and telling me exactly what was wrong before any of you got to see it.</li>
+  </ul>
+
+  <p>
+    Bugs, ideas, complaints — all welcome, find me in game:
+    <a href="https://app.warera.io/user/69d2ed249f38d300d59a2af1">frappa10</a>. And if you landed
+    here first, go back and read <strong>Part 1</strong> — the map itself is honestly the best
+    part of all this.
+  </p>
+
+</article>

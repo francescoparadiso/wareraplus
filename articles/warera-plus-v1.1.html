@@ -1,0 +1,427 @@
+<!--
+  ══════════════════════════════════════════════════════════════
+  WarEra+ — Update article, v1.1 ("Tomorrow's world, two days early")
+  ------------------------------------------------------------------
+  Paste-ready HTML. Every image is a placeholder: replace the src
+  with your uploaded image URL, or drop the <figure> block and insert
+  the picture with the editor's own button. The suggested screenshot
+  is written above each one as a comment.
+  ══════════════════════════════════════════════════════════════
+-->
+
+<article>
+
+  <h1>WarEra+ v1.1 — tomorrow's world, two days early</h1>
+
+  <p>
+    Still me, <strong>frappa10</strong>. Busy week, this one: in case you missed it, I'm
+    <strong>running for the Italian presidency</strong> — what I'd do with it belongs in the
+    campaign, not in this post. The only campaign-related thing that belongs here is that it
+    <em>didn't</em> stop the tool: it's been a handful of days since <strong>v1</strong> shipped
+    and we're already at <strong>v1.1</strong>.
+  </p>
+
+  <!-- Replace with the real Part 2 numbers (upvotes / comments / views) -->
+  <p>
+    And thank you again — Part 2 went much better than I expected, and like last time I read every
+    comment. A good chunk of what you're about to see came straight out of them: this isn't a
+    launch, it's what happened afterwards.
+  </p>
+
+  <p>
+    There's a thread running through almost everything in this round, and I only noticed it at the
+    end: it's all stuff that's <em>already in the game</em>, that the game just doesn't show you. A
+    bonus it never tells you the value of. A party whose ideology quietly changes how much your
+    country produces. A penalty that's about to land and nobody has looked at yet. Things that were
+    sitting right there in the data, waiting for someone to put them on a screen. A market that
+    tells you the price of everything and never what it pays you to make it.
+  </p>
+
+  <!-- IMAGE: hero — the new Production bonus view full screen, panel open -->
+  <figure>
+    <img src="IMAGE_1" alt="WarEra+ on the new Production bonus view">
+    <figcaption>Same map as always. One more question it answers.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>A ninth view: Production bonus</h2>
+
+  <p>
+    The <strong>Views</strong> menu had eight entries. Now it has nine.
+  </p>
+
+  <p>
+    Almost everything in WarEra is earned with people: population, damage, wealth, development. The
+    production bonus isn't — that one is earned with <strong>territory</strong>. Two countries with
+    the exact same population produce differently if one of them is sitting on coal and the other
+    isn't. That felt like precisely the kind of thing that deserves a map of its own: where the
+    world's mineral wealth actually is.
+  </p>
+
+  <p>
+    The world repaints on the bonus, with the percentage written right on top of every nation. But
+    "+25%" on its own doesn't say much, because it hides two completely different situations: five
+    <em>different</em> resources, or one single resource across five regions. You lose the second
+    one all at once if that area falls. So underneath each nation, in the summary, you get icons for
+    which resources they actually are — coal, uranium, diamonds, rare earths, gold, lithium — and
+    the legend also tells you how many regions in the <em>world</em> carry each of the six, so you
+    can tell at a glance which one is rare and which isn't.
+  </p>
+
+  <p>
+    And there are the <strong>timed deposits</strong>: the other production bonus, and the only one
+    that expires. Each with a bar showing how much life it has left, so you can see immediately
+    which ones are about to run out.
+  </p>
+
+  <!-- IMAGE: the Production bonus summary panel — leaderboard with resource icons under each nation, and the deposits section with the bars -->
+  <figure>
+    <img src="IMAGE_2" alt="The production bonus summary in the panel">
+    <figcaption>Not just how much. Also what it's made of, and how long it lasts.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>The ruling party changes how much your country produces</h2>
+
+  <p>
+    This is my favourite of the round, and it has been written in the game all along — just on
+    the wrong side.
+  </p>
+
+  <p>
+    Every party in WarEra has four ethics axes — <strong>militarism, isolationism, imperialism,
+    industrialism</strong> — each at −2, 0 or +2, and what they do is written on the party page:
+    known stuff, anyone who plays knows it. The catch is that it's written on the <em>party</em>
+    side, while the question you ask looking at the map is on the <em>nation</em> side: who governs
+    Serbia, and does Serbia therefore have that +30% or not? To answer it you had to know who's in
+    power, open that party's page and read its ethics. For a hundred and eighty nations.
+  </p>
+
+  <p>
+    So I crossed them myself, and checked it against the companies' real bonuses: the
+    <strong>+30% on the nation's specialized item</strong> only lands where the ruling party has
+    industrialism at <strong>+2</strong>. Ukraine, Iraq, Indonesia, Venezuela: they have it, and
+    they get the 30. Serbia has a specialized item too — but industrialism 0, so it gets nothing.
+    And digging further, across 70 sampled nations: all nine of the ones at industrialism −2 don't
+    have a specialized item <em>at all</em>, and all seven of the ones at +2 do.
+  </p>
+
+  <p>
+    So the nation panel now tells you, without making you tour a hundred and eighty party pages:
+    who governs, which ethics they bring with them, and what that's worth in production. Honesty as
+    always — the link between the ethics value and the real bonus is something I worked out by
+    sampling the numbers, not an official table: if the game ever added in-between values it would
+    need re-measuring, and that's exactly why the tool labels that bonus as an estimate whenever it
+    isn't read straight off a company's bonus.
+  </p>
+
+  <!-- IMAGE: nation panel with the ethics section open (ruling party, the four ethics pills, the bonus) -->
+  <figure>
+    <img src="IMAGE_3" alt="Ruling party ethics in the nation panel">
+    <figcaption>Whoever governs doesn't just change the laws. They change the factories.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>And now: what to produce, and where</h2>
+
+  <p>
+    This is the big one this round, and it came out of a chat conversation. The
+    <strong>Industrial Optimizer</strong> fixes the companies you <em>already</em> have: skills,
+    relocations, workers. But if you still have to open a company — or you're thinking about
+    reconfiguring one — that view is no help: it tells you how to play the hand you're holding, not
+    which hand is worth holding. "I can't see the info if I need to open a new one and decide what
+    to produce", word for word. Fair point.
+  </p>
+
+  <p>
+    So here's <strong>Production yields</strong>, a new entry under Insights. It opens and shows,
+    with no username to type in: this isn't about your companies, it's about the market.
+  </p>
+
+  <p>
+    One row for each of the twenty producible resources, ranked by the only question that really
+    matters: <strong>what does a production point pay</strong>. The row carries the sell price, the
+    input cost, the production points, the best region in the world for that resource with its
+    bonus, that country's tax, and the resulting yield.
+  </p>
+
+  <p>
+    <em>yield per point = (sell price − input cost) ÷ production points × (1 + bonus)</em>
+  </p>
+
+  <p>
+    The first thing it told me, I wasn't expecting: <strong>the market is arbitraged tight</strong>.
+    Between the best-paying resource and the worst there's barely 15%. There is no golden resource
+    — there's the right <em>combination</em> of resource, regional bonus and taxation. And taxes
+    run from 2% to 45%: they swing the outcome more than switching resource does. Which is exactly
+    the column nobody looks at, because nobody ever puts it in front of them.
+  </p>
+
+  <p>
+    Two switches change what the numbers mean, so they sit in plain sight in the toolbar instead of
+    hiding in a menu: <strong>reference price</strong> (the market average) or
+    <strong>executable price</strong> — I sell into the best buy order and buy from the best sell
+    order, which is harsher and truer — and <strong>net of market tax</strong>. On executable
+    prices a small △ shows up on the rows where the best price only covers a handful of units: a
+    price that holds for twelve units isn't a price.
+  </p>
+
+  <p>
+    Click a row and you get the <strong>five best regions</strong> for that resource, each with the
+    bonus broken down — deposit, ethics, strategic resources, specialization — and, above all,
+    <strong>when the deposit expires</strong>, which is the number that actually decides whether
+    moving is worth it.
+  </p>
+
+  <!-- IMAGE: the Production yields table full screen, sorted by yield/pp -->
+  <figure>
+    <img src="IMAGE_8" alt="The Production yields view">
+    <figcaption>Twenty resources, one question: what does a production point pay.</figcaption>
+  </figure>
+
+  <h3>And the wage: the exact point where an employee stops paying off</h3>
+
+  <p>
+    The same table carries the <strong>break-even wage</strong>: the wage above which every point
+    your employee produces costs you more than it makes. Below it you earn, above it you lose, and
+    it's written out resource by resource instead of left to your gut.
+  </p>
+
+  <p>
+    Type in the wage you have in mind and the table tells you <strong>what's left for you</strong>
+    and <strong>what actually reaches the worker's pocket</strong> each day — that one net of their
+    country's income tax. And there's the <strong>loyalty bonus</strong> slider: every day spent
+    with the same employer is worth one more percentage point of production, up to ten. Drag it and
+    watch the yield climb day by day, plus the total earned across those days — which isn't one
+    day's earnings times ten, because on day one you're still at zero loyalty.
+  </p>
+
+  <p>
+    One detail the game states in a single line and that's worth a lot: <strong>loyalty never
+    enters the salary</strong>. It raises your yield, not their pay. You can see it in the table —
+    move the slider and your columns climb while the worker's column stays put.
+  </p>
+
+  <!-- IMAGE: expanded row with the five regions + the loyalty-days slider in the toolbar -->
+  <figure>
+    <img src="IMAGE_9" alt="The five best regions and the loyalty slider">
+    <figcaption>Ten days of loyalty is +10% production. They don't pay for it — you collect it.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>The alliance bonus is about to become a penalty</h2>
+
+  <p>
+    From <strong>1 September 2026</strong> the alliance damage bonus curve changes. For some
+    alliances the number goes <strong>negative</strong>: not "less bonus" — an actual penalty.
+  </p>
+
+  <p>
+    WarEra+ shows you the new numbers <strong>starting today</strong>. Not in two days, not when
+    it happens: from now on, everywhere in the app, every alliance bonus is computed with the curve
+    that goes live on 1 September. The tool says so out loud too — the curve tooltip spells out
+    that those numbers only reach the game on the 1st, so if you compare with the alliance screen
+    you know why they differ. And where the number goes negative, <em>you can see it</em>: explicit
+    sign and red, in the panel and in the tables. A −12% painted green reads like a gain, and that
+    was exactly the risk.
+  </p>
+
+  <p>
+    I did it on purpose, and on purpose now: if the bonuses change for everyone on 1 September,
+    the useful moment to look at them is <em>before</em>. Alliance leaders can use the
+    <strong>Alliance Builder</strong> from today to <strong>test tomorrow's world</strong>: merge,
+    split, move nations around, and the builder recalculates all of it with the new curve. You've
+    got two days to act on what you find, instead of discovering after the fact that your bloc
+    landed in penalty territory.
+  </p>
+
+  <!-- IMAGE: alliance table/panel with at least one clearly visible negative bonus in red -->
+  <figure>
+    <img src="IMAGE_4" alt="A negative alliance bonus">
+    <figcaption>Better to find out now than on 1 September.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>The Alliance Builder grew a lot</h2>
+
+  <p>
+    In Part 2 you could drag a nation from one alliance to another, merge two blocs and build one
+    from scratch. After that I got an avalanche of "what if I could also…", and most of them were
+    fair asks:
+  </p>
+
+  <ul>
+    <li><strong>Pin</strong> the alliances you care about, so they stay at the top instead of making
+      you hunt for them every time.</li>
+    <li><strong>Delete</strong> an alliance: its members drop back into the Unaligned pile on their
+      own, which is the whole point of deleting it.</li>
+    <li><strong>Unmerge</strong> a merge you made by mistake, without rebuilding everything.</li>
+    <li><strong>Remove a nation</strong> with an ✕, instead of dragging it all the way down the
+      page.</li>
+    <li><strong>Multi-select</strong>, to move half a bloc in one go.</li>
+    <li>And a <strong>table</strong>, for people who prefer rows to cards — same numbers, same
+      actions.</li>
+    <li><strong>Sort it your way</strong>: name, number of nations, share of world core
+      development, bonus, weekly damage, total damage, population, wealth, wars.</li>
+  </ul>
+
+  <p>
+    That last one sounds trivial and was the most irritating thing in there: everything used to be
+    ordered by damage, which moves at every battle tick — so the alliance you were working on slid
+    away on its own while you were still dropping nations into it. Now you choose, and if you
+    choose the name nothing moves at all. The sort drives the cards <em>and</em> the table, and
+    while I was in there the table gained the two columns it was missing, total damage and wealth:
+    sorting by a number you can't see is a joke.
+  </p>
+
+  <p>
+    It all still saves itself, so a refresh won't wipe out an hour of dragging flags around.
+  </p>
+
+  <!-- IMAGE: Alliance Builder with a pinned alliance at the top and a multi-selection in progress -->
+  <figure>
+    <img src="IMAGE_5" alt="The updated Alliance Builder">
+    <figcaption>Pin, delete, unmerge, select in groups. And none of it touches the real game.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>Not how many players, but how far along they are</h2>
+
+  <p>
+    A nation's page already told you how many of its players are on war and how many on economy —
+    the donut at the top. What it didn't tell you is <em>where in their growth</em> they are. And a
+    nation with 200 economists all under level 10 and one with 200 economists past level 40 have
+    exactly the same donut, and are not remotely the same country.
+  </p>
+
+  <p>
+    Now the two cross: one column per level band, and inside each column the split between war,
+    economy, hybrids and people who haven't spent their points yet. You can drop down to individual
+    levels, switch to percentages, and turn groups off by clicking the legend — turning off "no
+    points spent" is almost always the first thing you want to do, because at low levels they're the
+    majority and they flatten everything else. And you can throw other nations into the same chart
+    to compare.
+  </p>
+
+  <p>
+    Same round, one small thing that was missing: anyone who has prestiged now has a
+    <strong>star</strong> next to their name. It genuinely mattered, because prestige resets your
+    level — without that star, a player who started over just looks small.
+  </p>
+
+  <p>
+    And now prestige has a <strong>sortable column of its own</strong>: prestiged players first,
+    highest level down, then everyone else counting down from 50. It's the fastest way I know to
+    see who in a nation has already been round once. In the same pass I dropped the <em>Attack</em>
+    column, which nobody was reading and which was stealing room from the rest.
+  </p>
+
+  <!-- IMAGE: levels × playstyle chart on the nation page, with the legend and maybe two nations compared -->
+  <figure>
+    <img src="IMAGE_6" alt="Levels crossed with playstyle">
+    <figcaption>Same donut, two completely different countries.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>Spheres of influence now draw themselves</h2>
+
+  <p>
+    Small confession about Part 1: the <strong>Sphere of influence</strong> view was, in large part,
+    a list I maintained by hand, built by asking around in game. Reliable, but incomplete by
+    construction and perfectly capable of ageing without anyone noticing.
+  </p>
+
+  <p>
+    Now, next to those rows, there are <strong>computed</strong> ones, each with its own confidence
+    percentage — and a hand-written row the data contradicts carries a mark, instead of sitting
+    there forever because nobody looked at it again.
+  </p>
+
+  <p>
+    The good part of the problem is that <strong>a proxy erases the very field that would identify
+    it</strong>: whoever moves to Slovenia <em>is</em> Slovenian as far as the API is concerned. So
+    you don't observe control, you observe residues — where the citizens' units are registered,
+    which unit the government is enlisted in, what language it speaks, who funds the treasury. None
+    of them proves anything alone: they only count combined, and the panel shows you the evidence
+    behind the number, not just the number.
+  </p>
+
+  <p>
+    Only what clears <strong>75%</strong> makes it onto the map, and I measured that threshold
+    against a source the model never sees — migration clusters derived from citizenship history by
+    an outside analysis: above 75%, agreement on the patron is 10 out of 10. So the limit isn't
+    accuracy, it's coverage: of the 24 documented pairs it finds ten, and the missing ones are the
+    consolidated proxies, where the people who migrated have built local military units by now.
+  </p>
+
+  <hr>
+
+  <h2>Elections: the whole history, not the last five</h2>
+
+  <p>
+    In the <strong>Politics</strong> section, a nation's election history stopped at ten entries:
+    five presidential and five congress. That wasn't a design choice — it's simply how many the game
+    handed over, and I never noticed because at a glance it looked like plenty.
+  </p>
+
+  <p>
+    Now it's <strong>all of them</strong>, from day one. That's 33 elections for Italy, 42 for the
+    United States, going back to May 2025. The presidential turnout chart covers the nation's entire
+    history instead of five points. The congress seats chart starts in March 2026, which is when
+    parties were born: before that everyone was an independent, and a chart that draws one line per
+    party would have had nothing to draw.
+  </p>
+
+  <!-- IMAGE: Politics section — the election selector open with the long history, and the seats chart -->
+  <figure>
+    <img src="IMAGE_7" alt="The full election history">
+    <figcaption>From five elections to a nation's whole history.</figcaption>
+  </figure>
+
+  <hr>
+
+  <h2>And a couple of things that were simply broken</h2>
+
+  <p>
+    I always promise honesty, so:
+  </p>
+
+  <ul>
+    <li><strong>The light theme in the Politics section never existed.</strong> The button was
+      there, you clicked it, and nothing happened: about a hundred style rules were pointing at the
+      wrong place, from day one. It works now — and there's only one switch, the app's own in the
+      top right. Politics had a second one fighting with it, and I removed it.</li>
+    <li><strong>The ticker dates.</strong> "22 ago 14:31" with the interface in English reads as "22
+      <em>ago</em>" — a player pointed it out, and they were completely right. It's now "22/08
+      14:31", which isn't ambiguous in any of the nine languages.</li>
+    <li><strong>The nation panel</strong> sometimes opened before the app had finished mounting and
+      left a piece half-done. You almost never saw it, but it happened on every single startup.</li>
+  </ul>
+
+  <hr>
+
+  <h2>Thanks, now go try it</h2>
+
+  <p>
+    <a href="https://wareraplus.vercel.app/"><strong>wareraplus.vercel.app</strong></a> — free, no
+    login, works on your phone. If you haven't opened it yet, <strong>Part 1</strong> is the map and
+    <strong>Part 2</strong> is everything you can dig into: this update mostly makes sense after
+    those two.
+  </p>
+
+  <!-- Replace the placeholders below with the actual tags of the people who reported things -->
+  <p>
+    Thanks to <strong>@reporter1</strong> and <strong>@reporter2</strong>, who wrote to me instead
+    of shrugging and closing the tab: half of this post exists because of them. Bugs, ideas,
+    complaints — always welcome, find me in game:
+    <a href="https://app.warera.io/user/69d2ed249f38d300d59a2af1">frappa10</a>.
+  </p>
+
+</article>
