@@ -39,6 +39,11 @@ export const METRICS = [
   { key: 'unrest',  label: 'unrest',      get: n => unrestPct(n), fmt: v => `${v.toFixed(1)}%`, higherIsBetter: false },
   { key: 'perCit',  label: 'perCitizen',  get: n => num(n.rankings?.weeklyCountryDamagesPerCitizen?.value), fmt: fmtCompact },
   { key: 'bounty',  label: 'bounty',      get: n => num(n.rankings?.countryBounty?.value), fmt: fmtCompact },
+  // Bonus produzione dalle risorse strategiche: il gioco lo espone già in
+  // due posti nella stessa risposta — `strategicResources.bonuses.
+  // productionPercent` e la classifica `countryProductionBonus`. Si legge
+  // il primo e si ricade sul secondo, che è lo stesso numero.
+  { key: 'prod',    label: 'production',  get: n => num(n.strategicResources?.bonuses?.productionPercent ?? n.rankings?.countryProductionBonus?.value), fmt: v => `+${v.toFixed(0)}%` },
 ];
 
 function unrestPct(n) {

@@ -24,6 +24,7 @@ import { METRICS } from './metrics.js';
 import { fetchCountryCitizens } from './api.js';
 import { barsHtml, donutHtml } from './charts.js';
 import { classifyPlaystyle } from '../mu/playstyle.js';
+import { renderLevelPlaystyle } from './levelPlaystyle.js';
 import { avatarImg, escapeHtml, flagImg, fmtCompact, fmtRelative } from '../mu/ui.js';
 import { countryDamageToday, dailyDamageLabel, ensureDailyDamage } from '../shared/dailyDamage.js';
 import { t as sharedT } from '../shared/i18n.js';
@@ -34,15 +35,25 @@ const APP_BASE = 'https://app.warera.io';
    cliccabili della lista: due liste separate sarebbero divergenti al primo
    campo aggiunto. `text: true` = ordinamento alfabetico crescente, tutto
    il resto è numerico decrescente (il primo clic mostra sempre i più
-   grandi, che è quello che si cerca; il secondo inverte). */
+   grandi, che è quello che si cerca; il secondo inverte).
+
+   `then` è il criterio di pareggio, nello stesso verso del criterio
+   principale. Serve al prestigio,
+   che è quasi sempre 0 o 1: senza, l'elenco sarebbe due blocchi ordinati a
+   caso dentro. Il pareggio si rompe sul LIVELLO, non sul danno — chi ha
+   prestigiato riparte da zero e ricomincia a salire, quindi "prestigio più
+   livello" è la misura di quanta strada ha fatto in tutto; sotto, i non
+   prestigiati scendono dal 50 in giù. */
 const CITIZEN_SORTS = [
   { key: 'wk',   label: 'weekly',   get: c => c.wk || 0 },
   { key: 'dmg',  label: 'total',    get: c => c.dmg || 0 },
   { key: 'w',    label: 'wealth',   get: c => c.w || 0 },
   { key: 'b',    label: 'bounty',   get: c => c.b || 0 },
   { key: 'lv',   label: 'level',    get: c => c.lv || 0 },
+  // Prestigio: la colonna ★ della lista (vedi CITIZEN_COLS). A parità —
+  // cioè quasi sempre, il prestigio è 0 o 1 — decide il livello.
+  { key: 'pr',   label: 'prestigeShort', get: c => Number(c.pr) || 0, then: c => c.lv || 0 },
   { key: 'mr',   label: 'mrank',    get: c => c.mr || 0 },
-  { key: 'atk',  label: 'atk',      get: c => c.atk || 0 },
   { key: 'seen', label: 'lastSeen', get: c => c.seen || 0 },
   { key: 'u',    label: 'citizen',  get: c => c.u || '', text: true },
 ];
@@ -80,6 +91,8 @@ export function renderNationDetail(host, nation, ctx) {
     </section>
 
     <section class="wp-nat-charts" id="wp-nat-charts"></section>
+
+    <section class="wp-nat-lv" id="wp-nat-levels"></section>
 
     <section class="wp-nat-citizens">
       <h3 class="wp-nat-section-title">
@@ -128,6 +141,7 @@ function statCard(nation, m) {
     pop: 'countryActivePopulation', weekly: 'weeklyCountryDamages', total: 'countryDamages',
     wealth: 'countryWealth', dev: 'countryDevelopment', regions: 'countryRegionDiff',
     perCit: 'weeklyCountryDamagesPerCitizen', bounty: 'countryBounty',
+    prod: 'countryProductionBonus',
   }[m.key];
   const rank = rankKey ? nation.rankings?.[rankKey]?.rank : null;
 
@@ -156,6 +170,7 @@ async function loadCitizens(nation) {
   if (_nation?._id !== nation._id) return;   // nazione cambiata nel frattempo
   _citizens = data;
   paintCharts();
+  paintLevels(nation);
   renderCitizens();
 }
 
@@ -192,6 +207,32 @@ function paintCharts() {
   el.innerHTML = styleDonut + topBars;
 }
 
+/* Livelli × stile di gioco: stessa materia della ciambella qui sopra,
+   incrociata con il livello. Vive in un modulo suo (comandi, confronto fra
+   nazioni, storia sua) — qui si passa solo quello che è già stato
+   scaricato. Vedi src/nations/levelPlaystyle.js. */
+function paintLevels(nation) {
+  const el = _host?.querySelector('#wp-nat-levels');
+  if (!el || !_citizens) return;
+  renderLevelPlaystyle(el, nation, _citizens);
+}
+
+/* Età del dato. Il server risolve i cittadini a fette (vedi
+   REFRESH_WINDOW_MS nel cache-server): righe diverse sono state scattate in
+   momenti diversi, e finché una riga non viene riscattata i suoi numeri
+   restano quelli di allora — compreso il danno settimanale, che il gioco
+   azzera ogni settimana. Si dichiara quindi la MEDIANA dell'età, con
+   l'estremo più vecchio nel tooltip: nascondere questa differenza fa
+   sembrare "sbagliata" una classifica che è solo vecchia. */
+function freshnessHtml(rows) {
+  const stamps = rows.map(r => r.ts).filter(Boolean).sort((a, b) => a - b);
+  if (!stamps.length) return '';
+  const median = stamps[Math.floor(stamps.length / 2)];
+  const oldest = stamps[0];
+  const title = `${natT('oldestRow')} ${fmtRelative(new Date(oldest).toISOString())}`;
+  return ` <span class="wp-nat-fresh" title="${escapeHtml(title)}">· ${escapeHtml(natT('updated'))} ${escapeHtml(fmtRelative(new Date(median).toISOString()))}</span>`;
+}
+
 function renderCitizens() {
   const listEl = _host?.querySelector('#wp-nat-citizen-list');
   const countEl = _host?.querySelector('#wp-nat-citizen-count');
@@ -199,9 +240,10 @@ function renderCitizens() {
 
   const { rows, total, known, partial } = _citizens;
   if (countEl) {
-    countEl.textContent = total
+    const base = total
       ? `${known} ${natT('citizensKnown')} ${natT('of')} ${total}`
       : String(rows.length);
+    countEl.innerHTML = `${escapeHtml(base)}${freshnessHtml(rows)}`;
   }
 
   if (!rows.length) {
@@ -227,15 +269,35 @@ function renderCitizens() {
 const CITIZEN_COLS = [
   { label: 'citizen',  sort: 'u' },
   { label: 'level',    num: true, sort: 'lv',   get: c => c.lv ?? '—' },
+  // Colonna del prestigio: la stellina esce dal nome e viene qui, cosi' ha
+  // un'intestazione cliccabile come le altre e non compare due volte sulla
+  // stessa riga. Nelle CARD, che non hanno colonne, resta accanto al nome.
+  { label: 'prestigeShort', head: '★', titleKey: 'prestige', num: true, sort: 'pr', get: c => prestigeStar(c) || '—' },
   { label: 'mrank',    num: true, sort: 'mr',   get: c => c.mr ?? '—' },
   { label: 'playstyle', get: c => psPill(c) },
   { label: 'weekly',   num: true, sort: 'wk',   get: c => fmtCompact(c.wk || 0), cls: 'wk' },
   { label: 'total',    num: true, sort: 'dmg',  get: c => fmtCompact(c.dmg || 0) },
   { label: 'wealth',   num: true, sort: 'w',    get: c => fmtCompact(c.w || 0), cls: 'money' },
   { label: 'bounty',   num: true, sort: 'b',    get: c => fmtCompact(c.b || 0) },
-  { label: 'atk',      num: true, sort: 'atk',  get: c => (c.atk != null ? fmtCompact(c.atk) : '—') },
   { label: 'lastSeen', num: true, sort: 'seen', get: c => (c.seen ? fmtRelative(new Date(c.seen).toISOString()) : '—'), cls: 'when' },
 ];
+
+/* Prestigio: una stellina viola accanto al nome. Serve perché il prestigio
+   AZZERA il livello — un livello 29 che ha già fatto un giro completo e un
+   livello 29 appena arrivato hanno lo stesso numero in colonna e non sono la
+   stessa persona. Il livello del prestigio è nel titolo (oggi è sempre 1,
+   ma il campo è un contatore e prima o poi qualcuno farà il secondo).
+
+   Vuoto quando il dato non c'è: `pr` arriva null dalle righe risolte dal
+   server prima che questo campo esistesse (vedi citizenStats nel
+   cache-server), e "nessuna stellina" è la lettura giusta anche lì —
+   sbagliata solo per le poche ore che servono al refresh. */
+function prestigeStar(c) {
+  const n = Number(c.pr) || 0;
+  if (n <= 0) return '';
+  const label = n > 1 ? `${natT('prestige')} ×${n}` : natT('prestige');
+  return `<span class="wp-nat-prestige" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">★${n > 1 ? n : ''}</span>`;
+}
 
 function psPill(c) {
   const mode = c.ps || (c.skills ? classifyPlaystyle(c).mode : null);
@@ -248,9 +310,15 @@ function sortCitizens(rows) {
   // Il testo si legge in ordine alfabetico: per il nome il verso "naturale"
   // (primo clic) è A→Z, per i numeri è dal più grande.
   const dir = s.text ? -_sortDir : _sortDir;
-  return rows.slice().sort((a, b) => (s.text
-    ? String(s.get(a)).localeCompare(String(s.get(b)), undefined, { sensitivity: 'base' }) * dir
-    : (s.get(a) - s.get(b)) * dir));
+  return rows.slice().sort((a, b) => {
+    const r = s.text
+      ? String(s.get(a)).localeCompare(String(s.get(b)), undefined, { sensitivity: 'base' }) * dir
+      : (s.get(a) - s.get(b)) * dir;
+    if (r || !s.then) return r;
+    // Il pareggio segue lo stesso verso del criterio principale, altrimenti
+    // invertendo la colonna la seconda chiave resterebbe girata al contrario.
+    return ((s.then(a) || 0) - (s.then(b) || 0)) * dir;
+  });
 }
 
 /** Clic su un'intestazione: nuova colonna = si riparte dal verso
@@ -265,13 +333,20 @@ function sortByHeader(key) {
 }
 
 function citizenTable(rows) {
-  const head = CITIZEN_COLS.map(c => (c.sort
-    ? `<button type="button" class="wp-nat-cth wp-nat-cth-btn${c.num ? ' wp-nat-num' : ''}${c.sort === _sort ? ' active' : ''}"
-               data-sort="${c.sort}" data-dir="${_sortDir}">${escapeHtml(natT(c.label))}</button>`
-    : `<span class="wp-nat-cth${c.num ? ' wp-nat-num' : ''}">${escapeHtml(natT(c.label))}</span>`)).join('');
+  // `head` = intestazione corta al posto dell'etichetta per esteso (oggi solo
+  // il prestigio), `titleKey` = spiegazione nel tooltip di quella colonna.
+  const head = CITIZEN_COLS.map(c => {
+    const txt = c.head || escapeHtml(natT(c.label));
+    const ttl = c.titleKey ? ` title="${escapeHtml(natT(c.titleKey))}"` : '';
+    return c.sort
+      ? `<button type="button" class="wp-nat-cth wp-nat-cth-btn${c.num ? ' wp-nat-num' : ''}${c.sort === _sort ? ' active' : ''}"
+               data-sort="${c.sort}" data-dir="${_sortDir}"${ttl}>${txt}</button>`
+      : `<span class="wp-nat-cth${c.num ? ' wp-nat-num' : ''}"${ttl}>${txt}</span>`;
+  }).join('');
 
   const body = rows.map(c => `
-    <a class="wp-nat-crow" href="${APP_BASE}/user/${encodeURIComponent(c.id)}" target="_blank" rel="noopener noreferrer">
+    <a class="wp-nat-crow" href="${APP_BASE}/user/${encodeURIComponent(c.id)}" target="_blank" rel="noopener noreferrer"
+       ${c.ts ? `title="${escapeHtml(`${natT('updated')} ${fmtRelative(new Date(c.ts).toISOString())}`)}"` : ''}>
       <span class="wp-nat-cname">
         ${avatarImg(c.a, c.u || '', 'wp-mu-avatar wp-mu-avatar-xs')}
         <span class="wp-nat-cnick">${escapeHtml(c.u || '—')}</span>
@@ -297,7 +372,7 @@ function citizenCard(c) {
       <div class="wp-nat-ccard-top">
         ${avatarImg(c.a, c.u || '', 'wp-mu-avatar wp-mu-avatar-sm')}
         <div class="wp-nat-ccard-main">
-          <span class="wp-nat-cnick">${escapeHtml(c.u || '—')}</span>
+          <span class="wp-nat-ccard-name"><span class="wp-nat-cnick">${escapeHtml(c.u || '—')}</span>${prestigeStar(c)}</span>
           <span class="wp-nat-ccard-sub">${escapeHtml(natT('level'))} ${c.lv ?? '—'} · ${escapeHtml(natT('mrank'))} ${c.mr ?? '—'}</span>
         </div>
         ${psPill(c)}
@@ -307,7 +382,6 @@ function citizenCard(c) {
         ${cell(natT('total'), escapeHtml(fmtCompact(c.dmg || 0)))}
         ${cell(natT('wealth'), escapeHtml(fmtCompact(c.w || 0)), 'money')}
         ${cell(natT('bounty'), escapeHtml(fmtCompact(c.b || 0)))}
-        ${cell(natT('atk'), c.atk != null ? escapeHtml(fmtCompact(c.atk)) : '—')}
         ${cell(natT('lastSeen'), c.seen ? escapeHtml(fmtRelative(new Date(c.seen).toISOString())) : '—', 'when')}
       </div>
     </a>`;

@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { worldCoreDevelopment, bonusFromShare, formatBonus } from '../shared/allianceBonus.js';
+import { worldCoreDevelopment, bonusFromShare, formatBonus, isPenalty, curveTooltip } from '../shared/allianceBonus.js';
 import { trackEvent } from '../shared/analytics.js';
 import { ensureDailyDamage, sumCountryDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
 
@@ -30,6 +30,13 @@ let tableSort = { key: 'totalDmg', dir: -1 };
 // disponibile.
 let psByCountry = null;
 const manualAssign = new Map();       // nationId → target bloc name (original)
+/* Nazioni tolte a mano dalla loro alleanza. Serve una lista a parte perché
+   togliere la riassegnazione manuale non basta: l'appartenenza di una
+   nazione a un'alleanza VERA arriva da state.blocColorMap, quindi al primo
+   ricalcolo la nazione rientrerebbe da dove l'hai tolta. Chi sta qui non
+   entra in nessun blocco e finisce fra gli Unaligned — da lì si trascina
+   dove si vuole, e riassegnarla la toglie da questa lista. */
+const removedNations = new Set();
 const mergedBlocs = new Map();        // mergeId → { displayName: string, originals: [string] }
 /* Alleanze inventate nel builder: nome → colore. Non esistono in gioco, non
    hanno membri finché non ci si trascina dentro una nazione — e proprio per
@@ -37,6 +44,101 @@ const mergedBlocs = new Map();        // mergeId → { displayName: string, orig
    solo in blocMembers, che si popola dalle nazioni. */
 const customBlocs = new Map();
 let customCounter = 0;
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Alleanze cancellate e vista del builder
+   ------------------------------------------------------------------
+   `dissolvedBlocs` tiene i nomi delle alleanze cancellate DENTRO il
+   builder. Le alleanze vere arrivano da state.blocColorMap, che e' dato
+   di gioco condiviso con la mappa e non va toccato: cancellarne una qui
+   vuol dire saltarla in computeBlocStats, cosi' i suoi membri ricadono
+   negli Unaligned. Il nome resta elencato con un ↩ accanto, altrimenti
+   l'unico modo di tornare indietro sarebbe il reset globale, che butta
+   via anche tutto il resto del lavoro.
+
+   `builderView` e' la vista scelta: 'cards' (le schede trascinabili) o
+   'table' (una riga per alleanza, ordinabile). La tabella non e' una
+   vista di sola lettura — le pastiglie nazione sono le stesse e ogni
+   riga e' un bersaglio del drop, che e' il punto del builder.
+   ══════════════════════════════════════════════════════════════ */
+const dissolvedBlocs = new Set();
+let builderView = 'cards';
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Un ordinamento solo, per schede e tabella
+   ------------------------------------------------------------------
+   `builderSort` ordinava solo la tabella; le schede erano inchiodate al
+   danno settimanale, cioe' al numero che cambia ad OGNI tick di
+   battaglia: l'alleanza su cui stavi lavorando scivolava via da sola,
+   senza che tu avessi toccato nulla. Ora le due viste leggono la stessa
+   chiave, scelta dal selettore nella barra del builder (e dalle
+   intestazioni della tabella, che restano cliccabili e tengono il
+   selettore sincronizzato).
+
+   Il default e' la quota di sviluppo core: e' il numero che si muove di
+   meno fra quelli disponibili, quindi l'elenco sta fermo mentre si
+   trascina. Chi vuole un ordine che non si muove affatto ha il nome — e
+   le appuntature (📌) restano sopra qualunque ordinamento.
+
+   `text: true` = confronto alfabetico crescente al primo colpo; tutto il
+   resto e' numerico decrescente. `get` puo' tornare null (il bonus non
+   esiste per gli Unaligned): quelli finiscono in coda, mai in mezzo ai
+   numeri veri.
+   ══════════════════════════════════════════════════════════════ */
+let builderSort = { key: 'share', dir: -1 };
+const BUILDER_SORTS = [
+  { key: 'name',    label: 'Name',              get: b => b.name.toLowerCase(), text: true },
+  { key: 'count',   label: 'Nations',           get: b => b.countryCount },
+  { key: 'share',   label: '% world core',      get: b => (b.bonus ? b.bonus.share : null) },
+  { key: 'bonus',   label: 'Damage bonus',      get: b => (b.isUnaligned || !b.bonus ? null : b.bonus.bonus) },
+  { key: 'dmg',     label: 'Weekly damage',     get: b => b.totalDmg },
+  { key: 'totdmg',  label: 'Total damage',      get: b => b.totalAbsoluteDmg },
+  { key: 'pop',     label: 'Population',        get: b => b.totalPop },
+  { key: 'money',   label: 'Wealth',            get: b => b.totalMoney },
+  { key: 'dpc',     label: 'Wk damage/citizen', get: b => b.dpc },
+  { key: 'wars',    label: 'Wars',              get: b => b.totalWars },
+  { key: 'regdiff', label: 'Regions +/-',       get: b => b.totalRegDiff },
+];
+
+function builderSortDef(key = builderSort.key) {
+  return BUILDER_SORTS.find(x => x.key === key) || BUILDER_SORTS.find(x => x.key === 'share');
+}
+
+function sortValue(bloc, key) {
+  return builderSortDef(key).get(bloc);
+}
+
+/* L'ordinamento in vigore, applicato a un elenco di alleanze. Non tocca
+   `allStats` (che resta nell'ordine di calcolo): torna sempre una copia. */
+function sortBlocs(rows) {
+  const s = builderSortDef();
+  const dir = builderSort.dir;
+  return rows.slice().sort((x, y) => {
+    if (s.text) return dir * String(s.get(x)).localeCompare(String(s.get(y)), undefined, { sensitivity: 'base' });
+    const a = s.get(x) == null ? -Infinity : s.get(x);
+    const c = s.get(y) == null ? -Infinity : s.get(y);
+    return a === c ? 0 : dir * (a - c);
+  });
+}
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Alleanze appuntate
+   ------------------------------------------------------------------
+   Il builder si legge SEMPRE ordinato per un numero (le schede per danno
+   settimanale, la tabella per la colonna scelta), e i numeri cambiano ad
+   ogni pastiglia trascinata: l'alleanza su cui stai lavorando scivola via
+   proprio mentre la stai riempiendo, e il drop successivo va cercato di
+   nuovo scorrendo. Chi e' appuntato viene portato in cima e li' RESTA,
+   qualunque cosa facciano i suoi numeri.
+
+   Solo l'ordine cambia: nessun calcolo, nessun totale, nessuna
+   classifica dipendono da questo insieme — e' un fatto di lettura.
+   Fra gli appuntati l'ordinamento in vigore vale ancora, cosi' due
+   alleanze appuntate restano confrontabili fra loro.
+
+   La chiave e' `bloc.id` come per tutte le altre azioni del builder
+   (drop, fusione, cancellazione), non il nome: sulle fusioni il nome
+   e' composto e cambia, l'id no. Sciogliere una fusione fa quindi
+   cadere il suo pin, ed e' giusto: quell'alleanza li' non esiste piu'.
+   ══════════════════════════════════════════════════════════════ */
+const pinnedBlocs = new Set();
 const CUSTOM_COLORS = ['#58a6ff', '#f778ba', '#3fb950', '#e3b341', '#a371f7', '#f0883e'];
 const blocColors = new Map();         // blocName → color
 let mergeCounter = 0;
@@ -70,12 +172,20 @@ const BUILDER_KEY = 'we_bloc_builder_v1';
 
 function persistBuilder() {
   try {
-    const empty = !manualAssign.size && !mergedBlocs.size && !customBlocs.size;
+    const empty = !manualAssign.size && !mergedBlocs.size && !customBlocs.size
+      && !dissolvedBlocs.size && !removedNations.size && !pinnedBlocs.size
+      && builderView === 'cards'
+      && builderSort.key === 'share' && builderSort.dir === -1;
     if (empty) { localStorage.removeItem(BUILDER_KEY); return; }
     localStorage.setItem(BUILDER_KEY, JSON.stringify({
       manualAssign: [...manualAssign],
       mergedBlocs: [...mergedBlocs],
       customBlocs: [...customBlocs],
+      dissolvedBlocs: [...dissolvedBlocs],
+      removedNations: [...removedNations],
+      pinnedBlocs: [...pinnedBlocs],
+      builderView,
+      builderSort,
       customCounter,
       mergeCounter,
     }));
@@ -99,6 +209,15 @@ function restoreBuilder() {
       if (v && Array.isArray(v.originals)) mergedBlocs.set(k, v);
     }
     for (const [k, v] of d.customBlocs || []) customBlocs.set(k, v);
+    for (const n of d.dissolvedBlocs || []) dissolvedBlocs.add(n);
+    for (const id of d.removedNations || []) removedNations.add(id);
+    for (const id of d.pinnedBlocs || []) pinnedBlocs.add(id);
+    if (d.builderView === 'table' || d.builderView === 'cards') builderView = d.builderView;
+    // Chiave sconosciuta (salvataggio scritto da una versione con altri
+    // criteri): si ignora e resta il default, invece di ordinare per nulla.
+    if (d.builderSort && BUILDER_SORTS.some(x => x.key === d.builderSort.key)) {
+      builderSort = { key: d.builderSort.key, dir: d.builderSort.dir === 1 ? 1 : -1 };
+    }
     customCounter = Number(d.customCounter) || 0;
     mergeCounter = Number(d.mergeCounter) || 0;
   } catch (e) {
@@ -118,7 +237,12 @@ export function computeBlocStats() {
   blocColors.set('🌐 Unaligned', '#484f58');
 
   const blocMembers = new Map();
-  state.externalBlocsInfo.forEach(b => blocMembers.set(b.name, new Set()));
+  // Le alleanze cancellate nel builder non entrano: senza la loro voce in
+  // blocMembers i membri non finiscono in alignedIds e ricadono da soli
+  // negli Unaligned, che e' esattamente il senso di "cancellala".
+  state.externalBlocsInfo.forEach(b => {
+    if (!dissolvedBlocs.has(b.name)) blocMembers.set(b.name, new Set());
+  });
 
   // Le alleanze inventate entrano qui a mano, con un insieme vuoto: senza
   // questo passaggio una nuova alleanza sparirebbe fino al primo membro.
@@ -129,12 +253,15 @@ export function computeBlocStats() {
 
   for (const [cid, color] of state.blocColorMap) {
     const bloc = state.externalBlocsInfo.find(x => x.color === color);
-    if (bloc && !manualAssign.has(cid)) {
+    if (bloc && !dissolvedBlocs.has(bloc.name) && !removedNations.has(cid) && !manualAssign.has(cid)) {
       blocMembers.get(bloc.name).add(cid);
     }
   }
 
   for (const [cid, bname] of manualAssign) {
+    // Una riassegnazione verso un'alleanza cancellata non deve farla
+    // resuscitare: la nazione resta senza blocco, cioe' Unaligned.
+    if (dissolvedBlocs.has(bname)) continue;
     if (!blocMembers.has(bname)) blocMembers.set(bname, new Set());
     blocMembers.get(bname).add(cid);
   }
@@ -167,6 +294,27 @@ export function computeBlocStats() {
     const displayName = (bname === 'unaligned') ? '🌐 Unaligned' : bname;
     const isUnaligned = (bname === 'unaligned');
     stats.push(buildBlocStat(displayName, bname, ids, blocColors.get(displayName) || '#555', false, isUnaligned));
+  }
+
+  // Potatura delle appuntature rimaste orfane. Un'alleanza appuntata può
+  // sparire in quattro modi (cancellata, fusa dentro un'altra, una fusione
+  // sciolta, un'alleanza inventata rimossa) e inseguire ognuno di quei punti
+  // sarebbe una lista da tenere allineata a mano: si guarda invece qui, che
+  // è l'unico posto dove l'elenco vero viene ricostruito. Senza, l'id morto
+  // resterebbe in localStorage per sempre — e i contatori delle fusioni si
+  // azzerano al reset, quindi un giorno potrebbe tornare a combaciare con
+  // un'alleanza diversa e appuntarla da sola.
+  //
+  // ⚠️ SOLO a mondo caricato. `stats` contiene sempre almeno gli Unaligned,
+  // quindi non è vuota nemmeno quando l'elenco delle alleanze non è (ancora)
+  // arrivato — e in quel caso potare vorrebbe dire cancellare TUTTE le
+  // appuntature dell'utente per un CSV che non ha risposto, senza modo di
+  // tornare indietro. Visto succedere in prova. Un id morto che sopravvive
+  // un giro in più non fa danno: non combacia con niente e nessuno lo legge.
+  const aligned = stats.filter(b => !b.isUnaligned);
+  if (aligned.length) {
+    const live = new Set(aligned.map(b => b.id));
+    for (const id of pinnedBlocs) if (!live.has(id)) pinnedBlocs.delete(id);
   }
 
   return stats.sort((a, b) => b.totalDmg - a.totalDmg);
@@ -294,10 +442,58 @@ function injectStyles() {
     .bs-stats-row{display:flex;flex-wrap:wrap;gap:8px;padding:10px 18px;border-bottom:1px solid rgba(255,255,255,.05)}
     .bs-chip{background:rgba(255,255,255,.05);border-radius:6px;padding:5px 10px;font-size:12px;display:flex;align-items:center;gap:5px;color:#c9d1d9}
     .bs-chip.bonus{background:rgba(63,185,80,.15);color:#3fb950;font-weight:600}
+    /* Bonus negativo (curva dal 1 settembre 2026): stessa pastiglia, colore
+       della perdita — verde su un -12% si leggerebbe come un guadagno. */
+    .bs-chip.bonus.neg{background:rgba(248,81,73,.15);color:#f85149}
     .bs-builder-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
     .bs-newbtn{background:rgba(63,185,80,.15);border:1px solid rgba(63,185,80,.5);border-radius:8px;padding:8px 16px;color:#3fb950;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
     .bs-newbtn:hover{background:rgba(63,185,80,.28);border-color:#3fb950}
     .bs-builder-hint{font-size:12px;color:#8b949e}
+    .bs-view-toggle{display:flex;border:1px solid rgba(255,255,255,.12);border-radius:8px;overflow:hidden}
+    .bs-viewbtn{background:transparent;border:0;color:#8b949e;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+    .bs-viewbtn:hover{color:#c9d1d9;background:rgba(255,255,255,.05)}
+    .bs-viewbtn.active{background:rgba(88,166,255,.18);color:#58a6ff}
+    /* Selettore d'ordinamento: stessa altezza e stesso peso dei bottoni
+       vista, con cui divide la barra. */
+    .bs-sortbar{display:flex;align-items:center;gap:6px}
+    .bs-sortsel{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:#c9d1d9;font-size:12px;font-weight:600;padding:7px 10px;cursor:pointer}
+    .bs-sortsel:hover{border-color:rgba(255,255,255,.28)}
+    .bs-sortsel:focus{outline:none;border-color:#58a6ff}
+    .bs-sortsel option{background:#161b22;color:#c9d1d9}
+    .bs-dirbtn{display:flex;align-items:center;justify-content:center;height:32px;min-width:34px;padding:0 10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:#8b949e;font-size:14px;line-height:1;cursor:pointer}
+    .bs-dirbtn:hover{color:#c9d1d9;border-color:rgba(255,255,255,.28)}
+    /* Alleanze cancellate: restano elencate qui, altrimenti l'unico modo di
+       tornare indietro sarebbe il reset globale. */
+    .bs-restore-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;width:100%}
+    .bs-restorebtn{background:rgba(255,255,255,.05);border:1px dashed rgba(255,255,255,.2);border-radius:14px;padding:3px 10px;font-size:11px;color:#8b949e;cursor:pointer}
+    .bs-restorebtn:hover{color:#3fb950;border-color:#3fb950}
+    .bs-split-btn.danger:hover{color:#f85149;border-color:#f85149}
+    /* Appuntatura: spenta è quasi invisibile (su venti alleanze venti puntine
+       accese sarebbero rumore), accesa è ambra piena. Il filtro grayscale
+       serve perché 📌 è un'emoji a colori: senza, "spenta" resta comunque
+       rossa e sembra già attiva. */
+    .bs-pin-btn{background:transparent;border:0;padding:0 4px 0 0;font-size:12px;line-height:1;cursor:pointer;opacity:.35;filter:grayscale(1);transition:opacity .15s,filter .15s}
+    .bs-hdr:hover .bs-pin-btn,.bs-btbl tr:hover .bs-pin-btn{opacity:.7}
+    .bs-pin-btn.on,.bs-hdr:hover .bs-pin-btn.on,.bs-btbl tr:hover .bs-pin-btn.on{opacity:1;filter:none}
+    /* La scheda/riga appuntata si riconosce senza dover cercare la puntina:
+       un bordo ambra, lo stesso colore del bottone acceso. */
+    .bs-card.pinned{box-shadow:inset 0 0 0 1px rgba(227,179,65,.55)}
+    .bs-btbl tr.pinned{background:rgba(227,179,65,.06)}
+    .bs-btbl tr.pinned .bs-tbl-name{box-shadow:inset 2px 0 0 #e3b341;padding-left:6px}
+    /* Tabella del builder: stesse righe della panoramica, ma la cella dei
+       membri va a capo (le pastiglie sono il bersaglio del drag) e le colonne
+       senza ordinamento non devono fingere di averlo. */
+    .bs-btbl th:not([data-bsort]){cursor:default}
+    .bs-btbl th:not([data-bsort]):hover{color:#8b949e}
+    .bs-btbl td{vertical-align:top}
+    .bs-btbl .bs-btbl-members{white-space:normal;min-width:320px}
+    .bs-btbl .bs-btbl-members .bs-pill{display:inline-flex;margin:0 4px 4px 0}
+    .bs-btbl .bs-tbl-name{cursor:grab}
+    .bs-btbl tr.unaligned .bs-tbl-name{cursor:pointer;opacity:.85}
+    .bs-btbl tr.drag-over{background:rgba(88,166,255,.16);outline:1px solid #58a6ff;outline-offset:-1px}
+    .bs-btbl-empty{color:#484f58;font-size:12px}
+    .bs-btbl-actions{white-space:nowrap}
+    .bs-btbl-actions .bs-split-btn{margin-left:4px}
     .bs-members{padding:12px 18px;display:flex;flex-wrap:wrap;gap:6px;max-height:180px;overflow-y:auto}
     .bs-members::-webkit-scrollbar{width:4px}
     .bs-members::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:2px}
@@ -305,6 +501,15 @@ function injectStyles() {
     .bs-pill:hover{background:rgba(88,166,255,.2);border-color:#58a6ff}
     .bs-pill[draggable="true"]{cursor:grab}
     .bs-pill[draggable="true"]:hover{border-color:#58a6ff;background:rgba(88,166,255,.1)}
+    /* Peso della singola nazione sullo sviluppo core mondiale: e' il numero
+       che dice se trascinarla dentro fa scattare il decadimento del bonus. */
+    .bs-pill-core{font-size:11px;color:#8b949e;background:rgba(255,255,255,.07);border-radius:10px;padding:1px 6px;font-variant-numeric:tabular-nums}
+    /* Toglie la nazione dall'alleanza. Tenue finché non si passa sopra la
+       pastiglia: su una card con venti nazioni venti ✕ accese sarebbero
+       rumore, ma devono restare visibili (anche senza mouse, su tocco). */
+    .bs-pill-x{background:transparent;border:0;padding:0 0 0 2px;font-size:11px;line-height:1;color:#8b949e;opacity:.5;cursor:pointer}
+    .bs-pill:hover .bs-pill-x{opacity:1}
+    .bs-pill-x:hover{color:#f85149}
     .bs-split-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:4px 10px;font-size:11px;color:#e6edf3;cursor:pointer;margin-left:8px}
     .bs-split-btn:hover{background:rgba(255,255,255,.2)}
     .bs-mergebtn{background:rgba(88,166,255,.15);border:1px solid rgba(88,166,255,.4);border-radius:6px;padding:2px 8px;font-size:14px;color:#58a6ff;cursor:pointer;line-height:1;transition:all .2s}
@@ -331,6 +536,17 @@ function injectStyles() {
     .bs-nation-option:hover{background:rgba(88,166,255,.15);border-color:#58a6ff}
     .bs-nation-option[hidden]{display:none}
     .bs-nation-name{display:flex;align-items:center;gap:8px;font-size:13px;color:#e6edf3}
+    /* Selezione multipla: la casella dice che il click segna e non sposta —
+       lo spostamento avviene alla conferma, in blocco. */
+    .bs-nation-box{width:14px;height:14px;border:1px solid rgba(255,255,255,.25);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+    .bs-nation-option.selected{background:rgba(88,166,255,.16);border-color:#58a6ff}
+    .bs-nation-option.selected .bs-nation-box{background:#58a6ff;border-color:#58a6ff;color:#0d1117}
+    .bs-nation-option.selected .bs-nation-box::after{content:"✓"}
+    .bs-add-actions{display:flex;align-items:center;gap:8px;padding-top:10px;margin-top:10px;border-top:1px solid rgba(255,255,255,.08)}
+    .bs-add-count{font-size:12px;color:#8b949e;margin-right:auto}
+    .bs-add-plain{background:transparent;border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:6px 12px;font-size:12px;color:#8b949e;cursor:pointer}
+    .bs-add-plain:hover{color:#c9d1d9;border-color:rgba(255,255,255,.35)}
+    #bs-add-confirm:disabled{opacity:.45;cursor:not-allowed}
     .bs-nation-from{font-size:11px;opacity:.85;white-space:nowrap}
     .bs-add-empty{font-size:12px;color:#8b949e;padding:10px 2px}
     .bs-merge-close{position:absolute;top:12px;right:16px;cursor:pointer;color:#8b949e;font-size:20px}
@@ -491,6 +707,7 @@ function injectStyles() {
     body.light-theme .bs-members::-webkit-scrollbar-thumb{background:rgba(0,0,0,.2)}
     body.light-theme .bs-pill{background:rgba(0,0,0,.05);border-color:rgba(0,0,0,.08);color:#3e2f1c}
     body.light-theme .bs-pill:hover{background:rgba(139,90,43,.15);border-color:#8b5a2b}
+    body.light-theme .bs-pill-core{color:#6b5a47;background:rgba(0,0,0,.06)}
     body.light-theme .bs-split-btn{background:rgba(0,0,0,.1);border-color:rgba(0,0,0,.2);color:#3e2f1c}
     body.light-theme .bs-split-btn:hover{background:rgba(0,0,0,.2)}
     body.light-theme .bs-mergebtn{background:rgba(139,90,43,.15);border-color:rgba(139,90,43,.4);color:#8b5a2b}
@@ -589,8 +806,26 @@ function injectStyles() {
     body.light-theme .bs-tbl .bs-tbl-name{color:#2e1f0c}
     body.light-theme .bs-tbl .wk{color:#2f6fb5}
     body.light-theme .bs-chip.bonus{background:rgba(47,125,58,.14);color:#2f7d3a}
+    body.light-theme .bs-chip.bonus.neg{background:rgba(194,43,34,.14);color:#c22b22}
     body.light-theme .bs-newbtn{background:rgba(47,125,58,.12);border-color:rgba(47,125,58,.5);color:#2f7d3a}
     body.light-theme .bs-builder-hint{color:#6b5a47}
+    body.light-theme .bs-view-toggle{border-color:rgba(0,0,0,.15)}
+    body.light-theme .bs-viewbtn{color:#6b5a47}
+    body.light-theme .bs-viewbtn.active{background:rgba(139,90,43,.16);color:#8b5a2b}
+    body.light-theme .bs-sortsel,body.light-theme .bs-dirbtn{background:rgba(0,0,0,.03);border-color:rgba(0,0,0,.15);color:#3e2f1c}
+    body.light-theme .bs-sortsel option{background:#fdfaf5;color:#3e2f1c}
+    body.light-theme .bs-sortsel:hover,body.light-theme .bs-dirbtn:hover{border-color:#8b5a2b;color:#8b5a2b}
+    body.light-theme .bs-restorebtn{background:rgba(0,0,0,.04);border-color:rgba(0,0,0,.2);color:#6b5a47}
+    body.light-theme .bs-nation-box{border-color:rgba(0,0,0,.25)}
+    body.light-theme .bs-nation-option.selected{background:rgba(139,90,43,.14);border-color:#8b5a2b}
+    body.light-theme .bs-nation-option.selected .bs-nation-box{background:#8b5a2b;border-color:#8b5a2b;color:#fff}
+    body.light-theme .bs-add-count,body.light-theme .bs-add-plain{color:#6b5a47}
+    body.light-theme .bs-add-plain{border-color:rgba(0,0,0,.15)}
+    body.light-theme .bs-btbl tr.drag-over{background:rgba(139,90,43,.14);outline-color:#8b5a2b}
+    body.light-theme .bs-card.pinned{box-shadow:inset 0 0 0 1px rgba(155,115,45,.6)}
+    body.light-theme .bs-btbl tr.pinned{background:rgba(155,115,45,.08)}
+    body.light-theme .bs-btbl tr.pinned .bs-tbl-name{box-shadow:inset 2px 0 0 #9b732d}
+    body.light-theme .bs-btbl-empty{color:#9b8b76}
     body.light-theme .bs-tbl .gain{color:#2f7d3a}
     body.light-theme .bs-tbl .loss{color:#c22b22}
     body.light-theme .bs-tbl-bar{background:rgba(0,0,0,.1)}
@@ -715,7 +950,7 @@ function showBlocPopup(blocId) {
       <div class="bs-popup-item">Allies <span>${bloc.totalAllies}</span></div>
       <div class="bs-popup-item">Avg Dmg/Nation <span>${fmt(bloc.countryCount ? bloc.totalDmg / bloc.countryCount : 0)}</span></div>
       <div class="bs-popup-item">Avg Pop/Nation <span>${fmt(bloc.countryCount ? bloc.totalPop / bloc.countryCount : 0)}</span></div>
-      <div class="bs-popup-item">Damage Bonus <span style="color:#3fb950">${bloc.isUnaligned || !bloc.bonus ? '—' : formatBonus(bloc.bonus.bonus)}</span></div>
+      <div class="bs-popup-item" title="${bloc.isUnaligned || !bloc.bonus ? '' : curveTooltip()}">Damage Bonus <span style="color:${isPenalty(bloc.bonus?.bonus) ? '#f85149' : '#3fb950'}">${bloc.isUnaligned || !bloc.bonus ? '—' : formatBonus(bloc.bonus.bonus)}</span></div>
       <div class="bs-popup-item">Core Dev Share <span>${bloc.isUnaligned || !bloc.bonus ? '—' : bloc.bonus.share.toFixed(2) + '%'}</span></div>
     </div>
     <div class="bs-breakdown-header">
@@ -790,6 +1025,9 @@ function buildUI() {
       manualAssign.clear();
       mergedBlocs.clear();
       customBlocs.clear();
+      dissolvedBlocs.clear();
+      removedNations.clear();
+      pinnedBlocs.clear();
       customCounter = 0;
       mergeCounter = 0;
       allStats = computeBlocStats();
@@ -817,12 +1055,17 @@ const TBL_MIN_H = 320;    // px: sotto questa soglia si torna al flusso normale
 const TBL_BOTTOM_GAP = 12; // px di respiro sotto il riquadro
 
 function fitAllianceTable() {
-  const wrap = document.getElementById('bs-alliance-table');
-  if (!wrap) return;
-  wrap.style.maxHeight = '';
-  const top = wrap.getBoundingClientRect().top;   // già relativo alla finestra
-  const h = window.innerHeight - top - TBL_BOTTOM_GAP;
-  wrap.style.maxHeight = h >= TBL_MIN_H ? h + 'px' : '';
+  // Due tabelle, stessa regola: la panoramica e quella del builder non sono
+  // mai a schermo insieme, ma cercarle entrambe evita di dover ricordare
+  // quale tab e' aperto.
+  for (const id of ['bs-alliance-table', 'bs-builder-table']) {
+    const wrap = document.getElementById(id);
+    if (!wrap) continue;
+    wrap.style.maxHeight = '';
+    const top = wrap.getBoundingClientRect().top;   // già relativo alla finestra
+    const h = window.innerHeight - top - TBL_BOTTOM_GAP;
+    wrap.style.maxHeight = h >= TBL_MIN_H ? h + 'px' : '';
+  }
 }
 
 // Un solo listener per sessione: buildUI() ridisegna la tabella molte
@@ -855,28 +1098,162 @@ function renderFactions() {
   ${allianceTableHtml()}`;
 }
 
-/* Le schede trascinabili, ora in un tab loro (vedi TABS). Identiche a prima:
-   stesso suggerimento sul drag&drop, stesse card, stesso ordine. */
+/* Le schede trascinabili, ora in un tab loro (vedi TABS). Il suggerimento sul
+   drag&drop e la barra degli strumenti valgono per tutte e due le viste; sotto
+   cambia solo il corpo, schede o tabella. */
 function renderBuilder() {
-  const aligned = allStats.filter(b => !b.isUnaligned);
-  const unaligned = allStats.find(b => b.isUnaligned);
-  let html = `
+  const dissolved = [...dissolvedBlocs].map(name => `
+    <button class="bs-restorebtn" data-restore="${name}" title="Bring this alliance back into the builder">↩ ${name}</button>`).join('');
+  return `
   <div class="bs-dnd-tip">
     <span class="bs-dnd-ico">✋</span>
     <div class="bs-dnd-txt">
       <strong>Drag &amp; drop to reorganize alliances</strong>
-      <span>Drag a nation from one alliance card to another, drop an <em>Unaligned</em> nation into any alliance, or drag an alliance's header onto another to merge them.</span>
+      <span>Drag a nation from one alliance to another, drop an <em>Unaligned</em> nation into any alliance, or drag an alliance's name onto another to merge them. The ✕ on a nation takes it out of its alliance. Cards and table accept the same drags. Choose how to sort them in the toolbar — by name they never move at all — and hit 📌 to keep an alliance on top whatever its numbers do.</span>
     </div>
   </div>
   <div class="bs-builder-bar">
     <button class="bs-newbtn" id="bs-new-alliance">＋ New alliance</button>
-    <span class="bs-builder-hint">Create an empty alliance, drag nations into it, and read its damage bonus straight from the card.</span>
+    <div class="bs-view-toggle">
+      <button class="bs-viewbtn${builderView === 'cards' ? ' active' : ''}" data-bview="cards">▦ Cards</button>
+      <button class="bs-viewbtn${builderView === 'table' ? ' active' : ''}" data-bview="table">☰ Table</button>
+    </div>
+    <div class="bs-sortbar">
+      <span class="bs-builder-hint">Sort by</span>
+      <select class="bs-sortsel" id="bs-builder-sort" title="Same order for cards and table">
+        ${BUILDER_SORTS.map(s => `<option value="${s.key}"${s.key === builderSort.key ? ' selected' : ''}>${s.label}</option>`).join('')}
+      </select>
+      <button class="bs-dirbtn" id="bs-builder-dir" title="Reverse the order">${builderSort.dir === -1 ? '▾' : '▴'}</button>
+    </div>
+    <span class="bs-builder-hint">Create an empty alliance, drag nations into it, and read its damage bonus straight from the card. ${curveTooltip()}</span>
+    ${dissolved ? `<div class="bs-restore-bar"><span class="bs-builder-hint">Deleted:</span>${dissolved}</div>` : ''}
   </div>
-  <div class="bs-grid">`;
+  ${builderView === 'table' ? builderTableHtml() : builderCardsHtml()}`;
+}
+
+/* Gli appuntati davanti, il resto nell'ordine che aveva. `sort` in JS è
+   stabile per specifica, quindi fra pari (due appuntati, o due non) l'ordine
+   di partenza — per danno nelle schede, per la colonna scelta in tabella —
+   sopravvive intatto: si sposta il gruppo, non si rimescola dentro. */
+function pinnedFirst(rows, idOf = b => b.id) {
+  if (!pinnedBlocs.size) return rows;
+  return rows.slice().sort((a, b) => (pinnedBlocs.has(idOf(b)) ? 1 : 0) - (pinnedBlocs.has(idOf(a)) ? 1 : 0));
+}
+
+function builderCardsHtml() {
+  const aligned = pinnedFirst(sortBlocs(allStats.filter(b => !b.isUnaligned)));
+  const unaligned = allStats.find(b => b.isUnaligned);
+  let html = '<div class="bs-grid">';
   for (const b of aligned) html += blocCard(b, false);
+  // Gli Unaligned restano in fondo comunque: non sono un'alleanza, sono il
+  // magazzino da cui si pesca, e il posto fisso è parte di come si usa.
   if (unaligned) html += blocCard(unaligned, true);
-  html += '</div>';
-  return html;
+  return html + '</div>';
+}
+
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Il builder anche in tabella
+   ------------------------------------------------------------------
+   Le schede sono comode da trascinare ma larghe: con una ventina di
+   alleanze, confrontarne due significa scorrere. Qui le stesse alleanze
+   stanno una per riga, ordinabili per colonna, e ogni riga RESTA un
+   bersaglio del drop — le pastiglie nazione sono le identiche `.bs-pill`
+   delle schede (stessa classe, stessi data-attribute), quindi i listener
+   delegati di attachEvents valgono per tutte e due le viste senza un
+   secondo percorso di codice da tenere allineato.
+   ══════════════════════════════════════════════════════════════ */
+const BUILDER_COLS = [
+  { key: 'name',    label: 'Alliance', left: true },
+  { key: 'count',   label: 'Nations' },
+  { key: 'share',   label: '% core' },
+  { key: 'bonus',   label: 'Bonus' },
+  { key: 'dmg',     label: 'Wk Dmg' },
+  { key: 'totdmg',  label: 'Tot Dmg' },
+  { key: 'pop',     label: 'Pop' },
+  { key: 'money',   label: 'Wealth' },
+  { key: 'wars',    label: 'Wars' },
+  { key: 'members', label: 'Nations — drag them between rows', left: true, nosort: true },
+  { key: 'actions', label: '', nosort: true },
+];
+
+function builderTableHtml() {
+  const world = allStats.find(b => b.bonus)?.bonus.world || worldCoreDevelopment(state.nazioniGlobal);
+  const { key, dir } = builderSort;
+  // Gli appuntati salgono in cima DOPO l'ordinamento, che resta valido fra
+  // loro e fra gli altri: vedi pinnedFirst. Le colonne sono le stesse chiavi
+  // di BUILDER_SORTS, quindi intestazioni e selettore non possono divergere.
+  const ordered = pinnedFirst(sortBlocs(allStats), b => b.id);
+  const head = BUILDER_COLS.map(col => `
+    <th class="${col.left ? 'left' : ''}${key === col.key ? ' sorted' : ''}"${col.nosort ? '' : ` data-bsort="${col.key}"`}>
+      ${col.label}${key === col.key ? (dir === -1 ? ' ▾' : ' ▴') : ''}
+    </th>`).join('');
+  const body = ordered.map(b => {
+    // Gli Unaligned non sono un'alleanza: niente bonus (null), e in coda
+    // quando si ordina per quella colonna.
+    const bonusVal = sortValue(b, 'bonus');
+    const pills = b.members.map(m => nationPill(m, world, !b.isUnaligned)).join('')
+      || '<span class="bs-btbl-empty">No members — drop a nation here</span>';
+    const rowCls = [b.isUnaligned ? 'unaligned' : '', pinnedBlocs.has(b.id) ? 'pinned' : ''].filter(Boolean).join(' ');
+    return `<tr data-drop-bloc="${b.id}"${rowCls ? ` class="${rowCls}"` : ''}>
+      <td class="left"><span class="bs-tbl-name"${b.isUnaligned ? '' : ` draggable="true" data-bloc-drag="${b.id}"`} data-bloc-id="${b.name}" title="Click for alliance stats${b.isUnaligned ? '' : ', drag onto another alliance to merge'}"><span class="bs-tbl-swatch" style="background:${b.color}"></span>${b.name}</span></td>
+      <td>${b.countryCount}</td>
+      <td title="${b.bonus ? Math.round(b.bonus.core) + ' / ' + Math.round(b.bonus.world) + ' of world core development' : ''}">${b.bonus ? b.bonus.share.toFixed(2) + '%' : '—'}</td>
+      <td class="${bonusVal == null ? '' : isPenalty(bonusVal) ? 'loss' : 'gain'}" title="${bonusVal == null ? '' : curveTooltip()}">${formatBonus(bonusVal)}</td>
+      <td class="wk">${fmt(b.totalDmg)}</td>
+      <td>${fmt(b.totalAbsoluteDmg)}</td>
+      <td>${fmt(b.totalPop)}</td>
+      <td class="money">${fmt(b.totalMoney)}</td>
+      <td>${b.totalWars}</td>
+      <td class="left bs-btbl-members">${pills}</td>
+      <td class="bs-btbl-actions">${builderActionsHtml(b)}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="bs-tbl-wrap" id="bs-builder-table">
+    <table class="bs-tbl bs-btbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
+  </div>`;
+}
+
+/** Gli stessi bottoni dell'intestazione di una scheda, in una cella:
+ *  aggiungi nazioni, sciogli una fusione, cancella l'alleanza. */
+function builderActionsHtml(bloc) {
+  if (bloc.isUnaligned) return '';
+  const split = bloc.isMerged
+    ? `<button class="bs-split-btn" data-split="${bloc.id}" title="Split this merge">✂</button>`
+    : '';
+  return `${pinBtnHtml(bloc)}<button class="bs-mergebtn" data-merge-src="${bloc.id}" title="Add nations, or merge with another alliance">＋</button>${split}<button class="bs-split-btn danger" data-dissolve="${bloc.id}" title="Delete this alliance from the builder">✕</button>`;
+}
+
+/** Il bottone dell'appuntatura, identico nelle due viste — è lo stesso
+ *  data-attribute, quindi lo raccoglie lo stesso listener delegato. */
+function pinBtnHtml(bloc) {
+  const on = pinnedBlocs.has(bloc.id);
+  const title = on
+    ? 'Unpin: this alliance goes back to following the sort order'
+    : 'Pin to the top: it stays there while you drag nations around and the numbers change';
+  // draggable="false": il bottone vive dentro l'intestazione trascinabile
+  // della scheda, e senza questo premerlo e muovere di un pixel inizia il
+  // drag della fusione invece di contare come clic.
+  return `<button class="bs-pin-btn${on ? ' on' : ''}" draggable="false" data-pin="${bloc.id}" title="${title}" aria-pressed="${on}">📌</button>`;
+}
+
+/** Pastiglia nazione del builder, con quanto pesa quella nazione sullo
+ *  sviluppo core mondiale. Una sola definizione per schede e tabella: è
+ *  anche il pezzo che il drag&drop afferra, quindi due copie che divergono
+ *  sarebbero due comportamenti diversi nella stessa pagina.
+ *  La ✕ toglie la nazione dall'alleanza senza doverla trascinare fino agli
+ *  Unaligned — sugli Unaligned stessi non compare, non c'è niente da cui
+ *  toglierla. */
+function nationPill(m, world, removable = true) {
+  const share = world
+    ? `<span class="bs-pill-core" title="core dev ${Math.round(m.core)} / ${Math.round(world)} of the world">${((m.core / world) * 100).toFixed(2)}%</span>`
+    : '';
+  const x = removable
+    ? `<button class="bs-pill-x" data-remove-nation="${m.id}" title="Remove ${m.name} from this alliance">✕</button>`
+    : '';
+  return `
+    <div class="bs-pill" draggable="true" data-nid="${m.id}" title="Click for stats">
+      ${flagImg(m.code)} ${m.name}${share}${x}
+    </div>`;
 }
 
 /* ── Fascia a ciambelle (WarEra+) ──
@@ -1106,9 +1483,11 @@ function tableRowData(bloc) {
     totalPop: bloc.totalPop,
     avgDev: bloc.avgDev,
     totalRegDiff: bloc.totalRegDiff,
-    // -1 per gli Unaligned: non sono un'alleanza, il bonus non esiste e
-    // ordinando per questa colonna restano in fondo invece di fingere 0.
-    dmgBonus: bloc.isUnaligned || !bloc.bonus ? -1 : bloc.bonus.bonus,
+    // null (non -1) per gli Unaligned: non sono un'alleanza, il bonus non
+    // esiste. Dal ribilanciamento del 1 settembre 2026 il bonus puo' essere
+    // negativo per davvero, quindi -1 non e' piu' una sentinella valida:
+    // l'ordinamento tratta null come -Infinity e lo lascia in fondo.
+    dmgBonus: bloc.isUnaligned || !bloc.bonus ? null : bloc.bonus.bonus,
     totalWars: bloc.totalWars,
     psWar: ps ? ps.war : -1,
     psEco: ps ? ps.eco : -1,
@@ -1123,7 +1502,12 @@ function allianceTableHtml() {
   rows.sort((a, b) => {
     if (key === 'name') return dir * a.name.localeCompare(b.name);
     // dir -1 = decrescente (piu' alto prima), 1 = crescente.
-    return dir * ((a[key] || 0) - (b[key] || 0));
+    // null = dato assente: in coda quando si ordina dal piu alto, e mai
+    // negativo vero (il bonus d'alleanza ora puo' esserlo).
+    const av = a[key] == null ? -Infinity : (a[key] || 0);
+    const bv = b[key] == null ? -Infinity : (b[key] || 0);
+    if (av === bv) return 0;
+    return dir * (av - bv);
   });
 
   const head = TABLE_COLS.map(col => `
@@ -1153,7 +1537,7 @@ function allianceTableHtml() {
       <td>${fmt(b.totalPop)}</td>
       <td>${b.avgDev ? b.avgDev.toFixed(1) : '—'}</td>
       <td class="${b.totalRegDiff > 0 ? 'gain' : b.totalRegDiff < 0 ? 'loss' : ''}">${signed(b.totalRegDiff)}</td>
-      <td class="${r.dmgBonus >= 0 ? 'gain' : ''}" title="${r.dmgBonus >= 0 ? b.bonus.share.toFixed(2) + '% of world core development' : ''}">${r.dmgBonus >= 0 ? formatBonus(r.dmgBonus) : '—'}</td>
+      <td class="${r.dmgBonus == null ? '' : isPenalty(r.dmgBonus) ? 'loss' : 'gain'}" title="${r.dmgBonus == null ? '' : b.bonus.share.toFixed(2) + '% of world core development. ' + curveTooltip()}">${formatBonus(r.dmgBonus)}</td>
       <td>${b.totalWars}</td>
       ${psCell(ps?.war, 'war')}${psCell(ps?.eco, 'eco')}${psCell(ps?.mixed, 'hyb')}
       <td>${build}</td>
@@ -1213,39 +1597,73 @@ function createCustomBloc() {
   buildUI();
 }
 
-/** Cancella un'alleanza inventata e rimanda le sue nazioni da dove venivano
- *  (togliere la riassegnazione manuale le fa ricadere sul blocco di
- *  partenza, o su Unaligned se non ne avevano uno). */
-function deleteCustomBloc(name) {
-  if (!customBlocs.has(name)) return;
-  customBlocs.delete(name);
-  for (const [cid, target] of [...manualAssign]) {
-    if (target === name) manualAssign.delete(cid);
+/** Cancella un'alleanza DAL BUILDER: i suoi membri tornano Unaligned.
+ *  Un'alleanza vera non si può togliere da state.blocColorMap (è dato di
+ *  gioco, lo legge anche la mappa), quindi il nome finisce in dissolvedBlocs
+ *  e computeBlocStats la salta; una inventata sparisce e basta. In tutti e
+ *  due i casi vanno cancellate le riassegnazioni che puntavano lì, altrimenti
+ *  al primo ricalcolo l'alleanza si ricostruirebbe da sola.
+ *  Cancellare una fusione cancella le alleanze che la compongono: la fusione
+ *  non è un contenitore in più, è quelle alleanze viste insieme. */
+function dissolveBloc(blocId) {
+  const bloc = allStats.find(b => b.id === blocId);
+  if (!bloc || bloc.isUnaligned) return;
+  if (bloc.countryCount && !confirm(`Delete "${bloc.name}" from the builder?\n\nIts ${bloc.countryCount} nations go back to Unaligned. You can bring it back from the "Deleted" list in the toolbar.`)) return;
+  const expand = name => mergedBlocs.has(name) ? mergedBlocs.get(name).originals.flatMap(expand) : [name];
+  const names = mergedBlocs.has(blocId) ? expand(blocId) : [bloc.name];
+  mergedBlocs.delete(blocId);
+  for (const name of names) {
+    customBlocs.delete(name);
+    if (state.externalBlocsInfo.some(b => b.name === name)) dissolvedBlocs.add(name);
+    for (const [cid, target] of [...manualAssign]) {
+      if (target === name) manualAssign.delete(cid);
+    }
   }
   allStats = computeBlocStats();
   buildUI();
 }
 
+/** Appunta o libera un'alleanza. Tocca SOLO l'ordine di lettura, quindi non
+ *  serve ricalcolare le statistiche: si ridisegna e basta. */
+function togglePinnedBloc(blocId) {
+  if (!pinnedBlocs.delete(blocId)) pinnedBlocs.add(blocId);
+  buildUI();   // salva da sé: buildUI chiama persistBuilder prima di ridisegnare
+}
+
+/** Rimette in gioco un'alleanza vera cancellata: i membri che nel frattempo
+ *  non sono stati riassegnati tornano dentro da soli, perché la loro
+ *  appartenenza non è mai stata cancellata, solo ignorata. */
+function restoreBloc(name) {
+  if (!dissolvedBlocs.delete(name)) return;
+  allStats = computeBlocStats();
+  buildUI();
+}
+
 function blocCard(bloc, isUnaligned) {
-  const pills = bloc.members.map(m => `
-    <div class="bs-pill" draggable="true" data-nid="${m.id}" title="Click for stats">
-      ${flagImg(m.code)} ${m.name}
-    </div>`).join('');
+  // WarEra+ — quanto pesa OGNI nazione sulla quota di sviluppo core mondiale.
+  // Nel builder e' il dato che manca prima del drag: il totale del blocco si
+  // legge solo a nazione gia' spostata, mentre la domanda ("questa quanto mi
+  // avvicina alla soglia oltre cui il bonus decade?") viene prima. Il totale
+  // mondiale e' gia' in bloc.bonus, il ricalcolo e' solo una rete di sicurezza.
+  const world = bloc.bonus?.world || worldCoreDevelopment(state.nazioniGlobal);
+  const pills = bloc.members.map(m => nationPill(m, world, !isUnaligned)).join('');
   const splitBtn = bloc.isMerged ? `<button class="bs-split-btn" data-split="${bloc.id}">✂ Split</button>` : '';
-  // Le alleanze inventate si possono cancellare: senza questo l'unico modo di
-  // tornare indietro sarebbe il reset globale, che butta via anche il resto.
-  const delBtn = customBlocs.has(bloc.name)
-    ? `<button class="bs-split-btn" data-delcustom="${bloc.name}" title="Delete this custom alliance">✕</button>`
-    : '';
+  // Ogni alleanza si può cancellare dal builder, non più solo quelle
+  // inventate: quelle vere tornano indietro dall'elenco "Deleted" nella barra
+  // degli strumenti, senza passare dal reset globale (vedi dissolveBloc).
+  const delBtn = isUnaligned
+    ? ''
+    : `<button class="bs-split-btn danger" data-dissolve="${bloc.id}" title="Delete this alliance from the builder">✕</button>`;
   // Bonus e quota di sviluppo core: sono ciò che decide quanto picchia
   // l'alleanza, e nel builder servono PRIMA del click, mentre si trascina.
   const bonusChips = bloc.bonus ? `
-      <div class="bs-chip bonus" title="Alliance damage bonus (see the alliance screen in game)">💥 ${formatBonus(bloc.bonus.bonus)}</div>
+      <div class="bs-chip bonus${isPenalty(bloc.bonus.bonus) ? ' neg' : ''}" title="Alliance damage bonus (see the alliance screen in game). ${curveTooltip()}">${isPenalty(bloc.bonus.bonus) ? '⚠️' : '💥'} ${formatBonus(bloc.bonus.bonus)}</div>
       <div class="bs-chip" title="Share of world core development: ${Math.round(bloc.bonus.core)} / ${Math.round(bloc.bonus.world)}">📈 ${bloc.bonus.share.toFixed(2)}% core</div>` : '';
   const mergeBtn = `<button class="bs-mergebtn" data-merge-src="${bloc.id}" title="Add a nation, or merge with another alliance">＋</button>`;
-  return `<div class="bs-card${isUnaligned ? ' unaligned' : ''}" data-drop-bloc="${bloc.id}">
+  const pinBtn = isUnaligned ? '' : pinBtnHtml(bloc);
+  return `<div class="bs-card${isUnaligned ? ' unaligned' : ''}${pinnedBlocs.has(bloc.id) ? ' pinned' : ''}" data-drop-bloc="${bloc.id}">
     <div class="bs-hdr" draggable="true" data-bloc-drag="${bloc.id}" data-bloc-id="${bloc.name}" style="background:linear-gradient(135deg,${bloc.color}30,${bloc.color}08);cursor:pointer" title="Click for bloc stats">
-      <span>${bloc.name}${splitBtn}${delBtn}</span>
+      <span>${pinBtn}${bloc.name}${splitBtn}${delBtn}</span>
       <span style="font-size:13px;opacity:.8;display:flex;align-items:center;gap:6px">${bloc.countryCount} nations${mergeBtn}</span>
     </div>
     ${!isUnaligned ? `<div class="bs-stats-row">
@@ -1501,10 +1919,16 @@ function showAddMenu(srcBlocId, srcBlocName) {
       <div class="bs-nation-list">
         ${nations.map(n => `
           <div class="bs-nation-option" data-nid="${n.id}" data-name="${n.name.toLowerCase()}">
-            <span class="bs-nation-name">${flagImg(n.code, '16px')} ${n.name}</span>
+            <span class="bs-nation-name"><span class="bs-nation-box"></span>${flagImg(n.code, '16px')} ${n.name}</span>
             <span class="bs-nation-from" style="color:${n.fromColor}">${n.from}</span>
           </div>
         `).join('') || '<div class="bs-add-empty">Every nation is already here.</div>'}
+      </div>
+      <div class="bs-add-actions">
+        <span class="bs-add-count" id="bs-add-count">None selected</span>
+        <button class="bs-add-plain" id="bs-add-all">Select shown</button>
+        <button class="bs-add-plain" id="bs-add-none">Clear</button>
+        <button class="bs-newbtn" id="bs-add-confirm" disabled>Add selected</button>
       </div>
     </div>
     <div class="bs-add-pane" data-add-pane="blocs" hidden>
@@ -1544,12 +1968,47 @@ function showAddMenu(srcBlocId, srcBlocName) {
     search.focus();
   }
 
+  /* Selezione multipla: un click segna, non sposta. Spostare subito
+     obbligava a riaprire il menu per ogni nazione, e a rileggere ogni volta
+     un elenco che si accorcia sotto le dita. Il trasferimento avviene una
+     volta sola, alla conferma: un solo computeBlocStats e un solo ridisegno
+     anche per venti nazioni. */
+  const selected = new Set();
+  const countEl = menu.querySelector('#bs-add-count');
+  const confirmBtn = menu.querySelector('#bs-add-confirm');
+  const syncSelection = () => {
+    if (!countEl || !confirmBtn) return;
+    countEl.textContent = selected.size ? `${selected.size} selected` : 'None selected';
+    confirmBtn.disabled = !selected.size;
+    confirmBtn.textContent = selected.size > 1 ? `Add ${selected.size} nations` : 'Add selected';
+  };
+  const toggleOption = (opt, force) => {
+    const on = force == null ? !selected.has(opt.dataset.nid) : force;
+    if (on) selected.add(opt.dataset.nid); else selected.delete(opt.dataset.nid);
+    opt.classList.toggle('selected', on);
+  };
+  const confirmAdd = () => {
+    if (!selected.size) return;
+    addNationsToBloc([...selected], srcBlocId);
+    closeMenu();
+  };
+
   menu.querySelectorAll('.bs-nation-option').forEach(opt => {
-    opt.addEventListener('click', () => {
-      addNationToBloc(opt.dataset.nid, srcBlocId);
-      closeMenu();
-    });
+    opt.addEventListener('click', () => { toggleOption(opt); syncSelection(); });
   });
+  // "Select shown" lavora sul filtro attivo: con la ricerca è il modo di
+  // spostare in blocco tutte le nazioni di un'alleanza sola.
+  menu.querySelector('#bs-add-all')?.addEventListener('click', () => {
+    menu.querySelectorAll('.bs-nation-option').forEach(opt => { if (!opt.hidden) toggleOption(opt, true); });
+    syncSelection();
+  });
+  menu.querySelector('#bs-add-none')?.addEventListener('click', () => {
+    menu.querySelectorAll('.bs-nation-option').forEach(opt => toggleOption(opt, false));
+    syncSelection();
+  });
+  confirmBtn?.addEventListener('click', confirmAdd);
+  search?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmAdd(); });
+  syncSelection();
 
   menu.querySelectorAll('.bs-merge-option').forEach(opt => {
     opt.addEventListener('click', () => {
@@ -1575,15 +2034,35 @@ function showAddMenu(srcBlocId, srcBlocName) {
 
 /** Stessa logica del drop di una pillola su una card (vedi il listener
  *  'drop'): su un blocco fuso vale il primo degli originali, e finire negli
- *  Unaligned significa togliere la riassegnazione, non aggiungerne una. */
-function addNationToBloc(nationId, blocId) {
+ *  Unaligned significa togliere la riassegnazione, non aggiungerne una.
+ *  Prende una LISTA perché il menu permette la selezione multipla: ricalcolo
+ *  e ridisegno una volta sola in fondo, non una per nazione. */
+function addNationsToBloc(nationIds, blocId) {
   const bloc = allStats.find(b => b.id === blocId);
-  if (bloc?.isUnaligned) {
-    manualAssign.delete(nationId);
-  } else {
-    const target = mergedBlocs.has(blocId) ? mergedBlocs.get(blocId).originals[0] : blocId;
-    manualAssign.set(nationId, target);
+  const target = mergedBlocs.has(blocId) ? mergedBlocs.get(blocId).originals[0] : blocId;
+  for (const nationId of nationIds) {
+    if (bloc?.isUnaligned) {
+      removeNation(nationId);
+    } else {
+      removedNations.delete(nationId);
+      manualAssign.set(nationId, target);
+    }
   }
+  allStats = computeBlocStats();
+  buildUI();
+}
+
+/** Toglie una nazione dalla sua alleanza: finisce fra gli Unaligned, da dove
+ *  si può rimettere dove si vuole. Non basta cancellare la riassegnazione
+ *  manuale — quella riporterebbe la nazione nell'alleanza vera di partenza —
+ *  quindi l'id entra anche in removedNations. */
+function removeNation(nationId) {
+  manualAssign.delete(nationId);
+  removedNations.add(nationId);
+}
+
+function removeNationFromBloc(nationId) {
+  removeNation(nationId);
   allStats = computeBlocStats();
   buildUI();
 }
@@ -1648,9 +2127,28 @@ function attachEvents(c) {
       return;
     }
 
+    // PRIMA di hdrClick: nelle schede la 📌 sta dentro l'intestazione, che al
+    // clic aprirebbe le statistiche del blocco. Stesso motivo per cui qui
+    // sotto l'intestazione si esclude ✂/✕ e il ＋.
+    const pin = e.target.closest('[data-pin]');
+    if (pin) {
+      e.stopPropagation();
+      togglePinnedBloc(pin.dataset.pin);
+      return;
+    }
+
     const hdrClick = e.target.closest('[data-bloc-id]');
-    if (hdrClick && !e.target.closest('.bs-split-btn') && !e.target.closest('.bs-pill') && !e.target.closest('.bs-mergebtn')) {
+    if (hdrClick && !e.target.closest('.bs-split-btn') && !e.target.closest('.bs-pill')
+        && !e.target.closest('.bs-mergebtn') && !e.target.closest('.bs-pin-btn')) {
       showBlocPopup(hdrClick.dataset.blocId);
+      return;
+    }
+
+    // Prima del click sulla pastiglia, che apre la scheda della nazione.
+    const removeNation = e.target.closest('[data-remove-nation]');
+    if (removeNation) {
+      e.stopPropagation();
+      removeNationFromBloc(removeNation.dataset.removeNation);
       return;
     }
 
@@ -1667,10 +2165,43 @@ function attachEvents(c) {
       return;
     }
 
-    const delCustom = e.target.closest('[data-delcustom]');
-    if (delCustom) {
+    const dissolve = e.target.closest('[data-dissolve]');
+    if (dissolve) {
       e.stopPropagation();
-      deleteCustomBloc(delCustom.dataset.delcustom);
+      dissolveBloc(dissolve.dataset.dissolve);
+      return;
+    }
+
+    const restore = e.target.closest('[data-restore]');
+    if (restore) {
+      e.stopPropagation();
+      restoreBloc(restore.dataset.restore);
+      return;
+    }
+
+    // Verso dell'ordinamento: il criterio sta nel <select> qui accanto
+    // (gestito da 'change', in fondo a questa funzione).
+    if (e.target.closest('#bs-builder-dir')) {
+      builderSort = { ...builderSort, dir: builderSort.dir * -1 };
+      buildUI();
+      return;
+    }
+
+    const viewBtn = e.target.closest('[data-bview]');
+    if (viewBtn) {
+      builderView = viewBtn.dataset.bview;
+      buildUI();
+      return;
+    }
+
+    // Intestazioni della tabella del builder: ordinamento proprio, separato da
+    // quello della panoramica (data-tsort), che ha colonne diverse.
+    const bth = e.target.closest('.bs-btbl th[data-bsort]');
+    if (bth) {
+      const k = bth.dataset.bsort;
+      if (builderSort.key === k) builderSort.dir *= -1;
+      else builderSort = { key: k, dir: k === 'name' ? 1 : -1 };
+      buildUI();
       return;
     }
 
@@ -1729,16 +2260,30 @@ function attachEvents(c) {
     }
   });
 
+  /* Il criterio d'ordinamento e' un <select>: il click delegato non basta,
+     serve 'change'. Cambiare criterio riparte dal verso naturale (A→Z per il
+     nome, dal piu' grande per i numeri), come il primo clic su una colonna. */
+  c.addEventListener('change', e => {
+    const sel = e.target.closest('#bs-builder-sort');
+    if (!sel) return;
+    const def = builderSortDef(sel.value);
+    builderSort = { key: def.key, dir: def.text ? 1 : -1 };
+    buildUI();
+  });
+
   c.addEventListener('dragstart', e => {
     const pill = e.target.closest('.bs-pill');
-    const hdr = e.target.closest('.bs-hdr');
+    // Nella tabella il "manico" dell'alleanza è la cella del nome, nelle
+    // schede l'intestazione: si guarda l'attributo invece della classe, così
+    // le due viste restano un percorso solo.
+    const hdr = e.target.closest('[data-bloc-drag]');
     if (pill) {
       dragData = { type: 'nation', id: pill.dataset.nid };
       e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
       pill.style.opacity = '.4';
       e.stopPropagation();
     } else if (hdr && hdr.dataset.blocDrag) {
-      const card = hdr.closest('.bs-card');
+      const card = hdr.closest('.bs-card') || hdr.closest('tr');
       if (card) {
         dragData = { type: 'bloc', id: hdr.dataset.blocDrag };
         e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
@@ -1749,7 +2294,8 @@ function attachEvents(c) {
 
   c.addEventListener('dragend', e => {
     document.querySelectorAll('.bs-pill, .bs-card').forEach(el => el.style.opacity = '');
-    document.querySelectorAll('.bs-card').forEach(el => el.classList.remove('dragging', 'drag-over'));
+    // [data-drop-bloc] copre sia le schede sia le righe della tabella.
+    document.querySelectorAll('.bs-card, [data-drop-bloc]').forEach(el => el.classList.remove('dragging', 'drag-over'));
     dragData = null;
   });
 
@@ -1773,8 +2319,12 @@ function attachEvents(c) {
     if (dragData.type === 'nation') {
       let resolvedTarget = target;
       if (target === 'unaligned') {
-        manualAssign.delete(dragData.id);
+        // Trascinare una nazione sugli Unaligned ora la toglie davvero
+        // dall'alleanza: prima cancellava solo la riassegnazione manuale, e
+        // una nazione di un'alleanza vera ci rientrava al primo ricalcolo.
+        removeNation(dragData.id);
       } else {
+        removedNations.delete(dragData.id);
         if (mergedBlocs.has(target)) resolvedTarget = mergedBlocs.get(target).originals[0];
         manualAssign.set(dragData.id, resolvedTarget);
       }

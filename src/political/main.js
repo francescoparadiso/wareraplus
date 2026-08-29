@@ -47,7 +47,7 @@ import {
   lastElectedParties,
   seatsChart, membersChart, allPartiesChart, timelineChart, votesChart,
   currentIsLatestPresidential,
-  initTheme, toggleTheme,
+  initTheme, repaintAfterTheme,
 } from './config.js';
 import { localFetch } from './api.js';
 import { cacheClear } from '../shared/trpcClient.js';
@@ -268,10 +268,6 @@ function _wireEventListeners() {
   _listenersWired = true;
 
   document.getElementById('partyViewBtn')?.addEventListener('click', () => showPartyView({ loadPartiesForSelector, loadPartyDetails }));
-  document.getElementById('themeToggle')?.addEventListener('click', () => toggleTheme({
-    loadElection, renderAllPartiesChart, loadPresidentialElection, safeDestroy,
-    lastAllParties: _liveLastAllParties(), lastPresData,
-  }));
 
   /* Re-render charts when a collapsed panel is opened */
   document.querySelectorAll('details.panel').forEach(details => {
@@ -448,4 +444,16 @@ export function resumePoliticalRendering() {
   if (!_mounted) return;
   if (!_stopBackgroundCanvas) _stopBackgroundCanvas = initBackgroundCanvas();
   resumeTicker();
+}
+
+/* WarEra+ — il tema lo cambia lo shell (unico interruttore, in alto a
+   destra): src/app/themeSync.js scrive il tema con applyTheme() e poi
+   chiama questa, che ridisegna i grafici a schermo nei colori nuovi.
+   Prima lo faceva il bottone tema interno di Political, rimosso perché
+   duplicato — e per giunta senza effetto, vedi il ⚠️ in political.css. */
+export function repaintForTheme() {
+  repaintAfterTheme({
+    loadElection, renderAllPartiesChart, loadPresidentialElection, safeDestroy,
+    lastAllParties: _liveLastAllParties(), lastPresData,
+  });
 }

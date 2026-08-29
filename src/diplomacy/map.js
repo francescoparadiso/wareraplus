@@ -18,6 +18,7 @@ import { updateDynamicLegend, updateStats, updateSelectedDisplay } from './ui.js
 import { buildPopulationColorExpression, buildPopulationTextExpression } from './population.js';
 import { buildContestedColorExpression } from './contestedHeatmap.js';
 import { buildWarIntensityColorExpression } from './warIntensityHeatmap.js';
+import { buildProductionColorExpression } from './productionHeatmap.js';
 import { buildPlaystyleColorExpression } from './playstyleHeatmap.js';
 import { buildPlaystyleTrendColorExpression } from './playstyleTrendHeatmap.js';
 import { buildWeeklyDamageColorExpression } from './weeklyDamage.js';
@@ -615,6 +616,10 @@ export function renderMap() {
     // Per REGIONE, non per nazione: il conteggio non dipende da chi la
     // possiede oggi, quindi vale identico in vista Attuale e Originale.
     fillExpr = buildContestedColorExpression(state.contestedCounts || {});
+  } else if (state.coloringMode === 'production') {
+    // WarEra+: bonus produzione da risorse strategiche. Per nazione, dal
+    // dato già in memoria — vedi productionHeatmap.js.
+    fillExpr = buildProductionColorExpression(state.mapSource === 'original');
   } else if (state.coloringMode === 'warIntensity') {
     fillExpr = buildWarIntensityColorExpression(state.warIntensityData || {});
   } else if (state.coloringMode === 'playstyle') {
@@ -1378,6 +1383,7 @@ export function setColoringMode(mode) {
   // Aggiorna i pulsanti della seconda riga
   document.getElementById('mode-weeklyDamage').classList.toggle('active', mode === 'weeklyDamage');
   document.getElementById('mode-population').classList.toggle('active', mode === 'population');
+  document.getElementById('mode-production')?.classList.toggle('active', mode === 'production');
 
   // Terza riga (WarEra+): heatmap storiche
   document.getElementById('mode-contested')?.classList.toggle('active', mode === 'contested');
@@ -1395,7 +1401,7 @@ export function setColoringMode(mode) {
       sphereOfInfluence: isMobile ? 'calc(66.66% + 0.5px)' : 'calc(66.66% + 0.6px)'
     };
     // Per i modi delle altre righe, nascondi lo slider o mettilo in una posizione neutra
-    if (mode === 'weeklyDamage' || mode === 'population' || isThirdRow) {
+    if (mode === 'weeklyDamage' || mode === 'population' || mode === 'production' || isThirdRow) {
       sliderTop.style.opacity = '0.3';
     } else {
       sliderTop.style.opacity = '1';
@@ -1403,27 +1409,28 @@ export function setColoringMode(mode) {
     }
   }
   
-  // Slider seconda riga (2 pulsanti: weeklyDamage, population)
+  // Slider seconda riga (3 pulsanti: weeklyDamage, population, production —
+  // il terzo aggiunto con la vista Bonus produzione, da cui le posizioni a
+  // terzi al posto delle metà di prima)
   const sliderBottom = document.getElementById('mode-slider-bottom');
   if (sliderBottom) {
     const isMobile = window.innerWidth <= 768;
     const positions = {
       weeklyDamage: isMobile ? '2px' : '3px',
-      population: isMobile ? 'calc(50% + 0.5px)' : 'calc(50% + 0.6px)'
+      population: isMobile ? 'calc(33.33% + 0.5px)' : 'calc(33.33% + 0.6px)',
+      production: isMobile ? 'calc(66.66% + 0.5px)' : 'calc(66.66% + 0.6px)',
     };
-    if (mode === 'weeklyDamage' || mode === 'population') {
+    const isBottomRow = mode === 'weeklyDamage' || mode === 'population' || mode === 'production';
+    if (isBottomRow) {
       sliderBottom.style.opacity = '1';
       sliderBottom.style.left = positions[mode] || '3px';
+      state._lastBottomMode = mode;
     } else {
       sliderBottom.style.opacity = '0.3';
       // Rimani nella posizione precedente o nascondi
       if (state._lastBottomMode) {
         sliderBottom.style.left = positions[state._lastBottomMode] || '3px';
       }
-    }
-    // Salva l'ultimo modo della seconda riga
-    if (mode === 'weeklyDamage' || mode === 'population') {
-      state._lastBottomMode = mode;
     }
   }
 

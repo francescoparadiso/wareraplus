@@ -244,16 +244,26 @@ export async function fetchPartiesDetailViaCache(partyIds) {
 // secondo. Fallback diretto al Worker se il server di cache non risponde,
 // stesso schema di fetchPartiesForCountryViaCache/fetchPartiesDetailViaCache.
 
-/** election.getElections per una nazione — array grezzo (solo
- *  _id/type/createdAt per item, il resto sta nel dettaglio), stessa forma
- *  attesa da ENDPOINT_MAP['/elections'] in political/api.js (json.items). */
+/** election.getElections per una nazione — array grezzo, stessa forma
+ *  attesa da ENDPOINT_MAP['/elections'] in political/api.js (json.items).
+ *
+ *  WarEra+: `limit` sul fallback diretto. Senza, l'API ne restituisce 10
+ *  e basta (5 presidenziali + 5 congressuali) ed era il motivo per cui
+ *  Political mostrava solo le ultime dieci elezioni: 100 è il massimo che
+ *  accetta (200 → "Number must be less than or equal to 100") e copre
+ *  tutta la storia del gioco. Il ramo del server di cache non ha bisogno
+ *  del parametro: è il server a tenere lo storico completo, unendo ad ogni
+ *  giro quello che già ha (vedi mergeElectionLists nel cache-server). */
+export const ELECTIONS_API_MAX_LIMIT = 100;
+
 export async function fetchElectionsForCountryViaCache(countryId) {
   try {
     const json = await _fetchCacheJson(`/elections?countryId=${encodeURIComponent(countryId)}`);
     if (!Array.isArray(json.data)) throw new Error('cache /elections: forma inattesa');
     return json.data;
   } catch (err) {
-    const url = `${WORKER_API_BASE}/trpc/election.getElections?input=${encodeURIComponent(JSON.stringify({ countryId }))}`;
+    const input = JSON.stringify({ countryId, limit: ELECTIONS_API_MAX_LIMIT });
+    const url = `${WORKER_API_BASE}/trpc/election.getElections?input=${encodeURIComponent(input)}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const raw = (await res.json())?.result?.data;

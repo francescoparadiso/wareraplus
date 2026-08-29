@@ -5,35 +5,92 @@
    dell'alleanza ("Bonus danno dall'alleanza"), che l'API non espone
    come campo: va ricalcolato dai dati che abbiamo già in memoria.
 
-   Regola del gioco (testo in-game):
-     - il bonus dipende dalla QUOTA di sviluppo dell'alleanza sul totale
-       mondiale;
-     - fino al 15% di quota il bonus è pieno: +10%;
-     - oltre soglia cala di 0.5 punti per ogni punto percentuale di
-       quota in eccesso.
+   Regola del gioco: il bonus dipende dalla QUOTA di sviluppo core
+   dell'alleanza sul totale mondiale. Fino a una soglia il bonus è
+   pieno, oltre soglia cala di N punti per ogni punto percentuale di
+   quota in eccesso, fino a un pavimento.
 
    Lo sviluppo usato è `coreDevelopment` (lo sviluppo "core"), NON
    `currentDevelopment` né `rankings.countryDevelopment`: i tre campi
    hanno lo stesso totale mondiale ma valori diversi per nazione, e solo
-   il core riproduce i numeri della schermata di gioco. Verificato su
-   Olive Union: 3007.30 / 14932.33 = 20.14% di quota, bonus 7.43%,
-   identico al +7.43% mostrato in gioco.
+   il core riproduce i numeri della schermata di gioco. Verificato sulla
+   curva pre-ribilanciamento, su Olive Union: 3007.30 / 14932.33 =
+   20.14% di quota, bonus 7.43%, identico al +7.43% mostrato in gioco.
 
    Nessuna fetch: `coreDevelopment` sta già dentro l'oggetto nazione di
    country.getAllCountries, quindi in `state.nazioniGlobal`.
+
+   ── RIBILANCIAMENTO DEL 1 SETTEMBRE 2026 ──────────────────────────
+   Il gioco cambia la curva: bonus pieno più alto (+20%), soglia più
+   bassa (10%), decadimento otto volte più ripido (-4 punti) e
+   pavimento NEGATIVO (-20%). Un'alleanza troppo grande da ora è
+   penalizzata, non solo non premiata: il bonus può essere < 0, e ogni
+   punto della UI che lo mostra deve saperlo (segno, colore, sentinelle
+   di ordinamento — vedi src/diplomacy/blocStats.js).
+
+   Come si attiva, e perché così:
+     - la curva nuova è attiva SUBITO, anche in produzione e anche prima
+       del 1 settembre (SHOW_REBALANCE_EARLY). Scelta deliberata: il
+       senso del tool qui è far vedere ai leader d'alleanza il mondo di
+       dopo il ribilanciamento mentre c'è ancora tempo per decidere una
+       fusione o una scissione. Mostrare fino all'ultimo giorno numeri
+       che stanno per non valere più sarebbe stato il contrario.
+     - REBALANCE_AT resta la data VERA del cambio in gioco, e serve
+       ancora: finché non è passata, il tooltip della curva lo dice in
+       chiaro, altrimenti chi confronta col gioco vedrebbe due numeri
+       diversi senza capire perché.
+   Per tornare al comportamento "commuta da sola alla data" basta
+   mettere SHOW_REBALANCE_EARLY a false.
+
+   Nota su un pezzo che NON sta qui: il gioco taglia il bonus danno
+   TOTALE a -100% (sommato ai malus esistenti, un bonus d'alleanza
+   negativo produrrebbe altrimenti danno negativo). WarEra+ non somma
+   mai i bonus fra loro — mostra solo quello d'alleanza — quindi non
+   c'è nulla da tagliare in questo modulo.
    ══════════════════════════════════════════════════════════════ */
 
-/** Bonus pieno, in punti percentuali di danno. */
-export const FULL_BONUS = 10;
-/** Quota di sviluppo mondiale (in %) fino alla quale il bonus resta pieno. */
-export const SHARE_THRESHOLD = 15;
-/** Punti di bonus persi per ogni punto percentuale di quota oltre soglia. */
-export const DECAY_PER_POINT = 0.5;
-/** Pavimento del bonus: confermato a 0 dall’utente che legge il gioco (il
- *  testo della schermata era troncato, "fino a …"). Conta solo sopra il 35%
- *  di quota (10 − 0.5 × 20), che oggi nessuna alleanza raggiunge — ci si
- *  arriva solo simulando fusioni in Alliance Builder. */
-export const BONUS_FLOOR = 0;
+/** Curva in vigore fino al 31 agosto 2026 incluso. */
+export const RULES_LEGACY = Object.freeze({
+  id: 'legacy',
+  fullBonus: 10,       // punti percentuali di danno a quota bassa
+  shareThreshold: 15,  // % di sviluppo mondiale entro cui il bonus è pieno
+  decayPerPoint: 0.5,  // punti persi per ogni punto di quota oltre soglia
+  floor: 0,            // pavimento del bonus
+});
+
+/** Curva dal 1 settembre 2026. */
+export const RULES_REBALANCE = Object.freeze({
+  id: '2026-09',
+  fullBonus: 20,
+  shareThreshold: 10,
+  decayPerPoint: 4,
+  floor: -20,
+});
+
+/** 1 settembre 2026, 00:00 ora di Parigi (CEST = UTC+2). */
+export const REBALANCE_AT = Date.parse('2026-09-01T00:00:00+02:00');
+
+/* import.meta.env esiste solo dentro il bundle Vite: il try tiene il
+   modulo utilizzabile anche fuori (test in Node, script isolati). */
+const IS_DEV = (() => {
+  try { return !!import.meta.env?.DEV; } catch { return false; }
+})();
+
+/** Mostra la curva nuova già da ora, prima che il gioco la applichi.
+ *  Vedi il blocco in testa al file: è il punto di questa funzione. */
+export const SHOW_REBALANCE_EARLY = true;
+
+/** La curva da usare adesso. */
+export function currentRules(now = Date.now()) {
+  if (IS_DEV || SHOW_REBALANCE_EARLY) return RULES_REBALANCE;
+  return now >= REBALANCE_AT ? RULES_REBALANCE : RULES_LEGACY;
+}
+
+/** true finché il gioco NON ha ancora applicato il ribilanciamento: i
+ *  numeri mostrati sono quelli di dopo, e va detto. */
+export function isShowingFutureCurve(now = Date.now()) {
+  return currentRules(now).id === RULES_REBALANCE.id && now < REBALANCE_AT;
+}
 
 /** Sviluppo core mondiale: somma su TUTTE le nazioni, non solo quelle
  *  alleate (il denominatore della quota è il mondo intero). */
@@ -51,10 +108,10 @@ export function coreDevelopmentOf(members) {
 }
 
 /** Bonus a partire dalla quota già calcolata, in percentuale (es. 20.14). */
-export function bonusFromShare(sharePct) {
+export function bonusFromShare(sharePct, rules = currentRules()) {
   if (!Number.isFinite(sharePct)) return null;
-  const excess = Math.max(0, sharePct - SHARE_THRESHOLD);
-  return Math.max(BONUS_FLOOR, FULL_BONUS - DECAY_PER_POINT * excess);
+  const excess = Math.max(0, sharePct - rules.shareThreshold);
+  return Math.max(rules.floor, rules.fullBonus - rules.decayPerPoint * excess);
 }
 
 /**
@@ -72,8 +129,29 @@ export function allianceDamageBonus(members, allNations) {
   return { core, world, share, bonus: bonusFromShare(share) };
 }
 
-/** "+7.43%" — il segno serve: è sempre un guadagno, e va letto come tale. */
+/** "+7.43%" / "-12.00%". Il segno serve: dal ribilanciamento il bonus
+ *  può essere una penalità, e "+-12%" sarebbe illeggibile. */
 export function formatBonus(bonus) {
   if (bonus == null) return '—';
-  return `+${bonus.toFixed(2)}%`;
+  return `${bonus >= 0 ? '+' : ''}${bonus.toFixed(2)}%`;
+}
+
+/** true se il valore è una penalità: chi disegna decide segno e colore
+ *  da qui invece di ripetere il confronto con 0 in ogni vista. */
+export function isPenalty(bonus) {
+  return typeof bonus === 'number' && bonus < 0;
+}
+
+/** Testo che spiega la curva in vigore. Cambia da solo insieme alla
+ *  curva: la spiegazione non deve poter restare indietro rispetto ai
+ *  numeri che accompagna. */
+export function curveTooltip(rules = currentRules()) {
+  const dec = `${rules.decayPerPoint} pt${rules.decayPerPoint === 1 ? '' : 's'}`;
+  const curve = `+${rules.fullBonus}% up to ${rules.shareThreshold}% of world core development, `
+    + `then -${dec} per extra point, floored at ${rules.floor}%.`;
+  // Prima del 1 settembre questi numeri NON sono ancora quelli della
+  // schermata di gioco: dirlo evita di far sembrare il tool sbagliato.
+  return isShowingFutureCurve()
+    ? `${curve} New curve — live in game from 1 September 2026, shown here already.`
+    : curve;
 }

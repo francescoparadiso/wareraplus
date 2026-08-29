@@ -134,7 +134,10 @@ export async function trpcBatchManual(calls, { useWorker = false, baseUrl, worke
     calls.forEach(([, params], idx) => { batchInput[idx] = params || {}; });
     const suffix = `/trpc/${procedureNames}?batch=1&input=${encodeURIComponent(JSON.stringify(batchInput))}`;
     // WarEra+ (vedi shared/trpcProxy.js): VPS prima, Worker come rete.
-    const res = await fetchWithProxyChain(base, b => `${b}${suffix}`, u => fetch(u));
+    // _fetchWithTimeout e non `fetch` nuda: questa modalita' era rimasta
+    // indietro rispetto alle altre due di questo stesso file, che il tetto
+    // d'attesa ce l'hanno gia' — vedi il commento sopra _fetchWithTimeout.
+    const res = await fetchWithProxyChain(base, b => `${b}${suffix}`, u => _fetchWithTimeout(u));
 
     if (res.status === 429) {
       if (_attempt <= MANUAL_MAX_RETRY_ATTEMPTS) {

@@ -555,18 +555,16 @@ function leanMu(m) {
 // la nazione: vedi classifyPlaystyle. Non costa quindi una sola chiamata in
 // più — è il motivo per cui sta qui dentro e non in un poll suo.
 //
-// QUANDO ricontrollare un utente — non un TTL fisso, ma il regolamento vero
-// del gioco (verificato dal vivo: gameConfig.getGameConfig().user.
-// resetSkillDaysCooldown = 7): chi ha resettato le skill meno di 7 giorni fa
-// NON PUÒ averle ricambiate, è una certezza del gioco, non una stima —
-// va saltato del tutto finché il cooldown non scade (BLOCCATO). Chi invece
-// può aver cambiato (mai resettato, o cooldown scaduto) non ha nessuna
-// scadenza nota da sfruttare: bisogna ricontrollarlo, ma non tutti insieme
-// in un solo giro — il pool "libero" è tipicamente il 60-70% dei membri
-// (misurato dal vivo: 65,7% su un campione di 300), scaricarlo intero
-// farebbe un picco invece di un flusso. Si ricontrolla quindi a fette,
-// i più in ritardo prima (`windowShare` più sotto), completando il giro
-// del pool ogni REFRESH_WINDOW_MS.
+// QUANDO ricontrollare un utente: tutti entro REFRESH_WINDOW_MS, a fette,
+// i più in ritardo prima (`windowShare` più sotto) — scaricare l'intero
+// pool in un giro solo farebbe un picco invece di un flusso.
+//
+// Qui c'era una scorciatoia, tolta il 2026-08-27: il gioco impone 7 giorni
+// di cooldown fra due reset delle skill (gameConfig.getGameConfig().user.
+// resetSkillDaysCooldown = 7), quindi chi ha resettato da poco NON PUÒ aver
+// cambiato stile e si saltava del tutto. Vero per lo stile, falso per il
+// resto: la stessa voce porta anche le statistiche del cittadino, che
+// cambiano ogni ora. Vedi il ⚠️ dentro pollMuDirectory.
 //
 // Ancora incompleta, la composizione esce parziale, non sbagliata: si
 // riporta anche `known` (quanti membri sono stati risolti) così il client
@@ -575,11 +573,8 @@ function leanMu(m) {
 // La mappa viene potata ad ogni giro ai soli utenti che sono membri di
 // qualche MU adesso: senza potatura crescerebbe per sempre.
 const MU_USER_COUNTRIES_FILE = 'mu-user-countries';
-const RESET_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;   // gameConfig.user.resetSkillDaysCooldown
-// Ogni utente "libero" (mai resettato, o oltre il cooldown) viene
-// ricontrollato entro questa finestra. Due ore, non un giorno: quello che
-// interessa non è il singolo utente — che per regolamento può cambiare al
-// massimo una volta ogni 7 giorni — ma l'AGGREGATO per nazione, cioè
+// Ogni utente viene ricontrollato entro questa finestra. Due ore, non un
+// giorno: quello che interessa non è solo l'AGGREGATO per nazione, cioè
 // accorgersi che venti persone hanno spostato le skill sulla guerra mentre
 // sta succedendo, non il giorno dopo. Con 24h, chi apriva il tool alle 16
 // poteva vedere ancora la fotografia delle 15 del giorno prima.
@@ -819,15 +814,25 @@ async function pollMuDirectory() {
     //      meno di 4 elementi, da una versione precedente di questo file)
     //      — trattato come "dovuto subito", è la migrazione automatica
     //      della mappa dopo il deploy, senza cancellarla;
-    //   3) chi è "libero" (mai resettato, o oltre il cooldown di 7 giorni)
-    //      ed è passato più di un giorno dall'ultimo controllo — ma solo
-    //      una FETTA per giro (dailyShare), i più in ritardo prima, per
-    //      spalmare il refresh giornaliero sui 48 giri del giorno invece
-    //      di scaricarlo tutto in un colpo.
-    // Chi è ancora dentro il cooldown non entra proprio in lista: è
-    // CERTO che non sia cambiato, controllarlo sarebbe puro spreco.
+    //   3) chiunque altro sia scaduto (REFRESH_WINDOW_MS) — ma solo una
+    //      FETTA per giro (windowShare), i più in ritardo prima, per
+    //      spalmare il refresh sui giri della finestra invece di
+    //      scaricarlo tutto in un colpo.
+    //
+    // ⚠️ Il cooldown di 7 giorni sul reset delle skill NON salta più
+    // nessuno. Saltava, e aveva senso finché la voce conteneva solo lo
+    // stile di gioco: chi ha resettato da meno di 7 giorni non PUÒ averlo
+    // cambiato. Ma da quando la stessa voce porta anche `citizenStats`
+    // (danni settimanali, ricchezza, livello, ultimo accesso: roba che
+    // cambia ogni ora) saltarlo congelava quelle statistiche fino a 7
+    // giorni. Sintomo reale, verificato il 2026-08-27 su Italy: due
+    // cittadini fermi al 22/08 comparivano in cima all'elenco e al grafico
+    // dei danni settimanali con i numeri della settimana PRECEDENTE, cioè
+    // da prima del reset settimanale (Pizza: 10.567.115 in cache contro
+    // 23.869 dal vivo). `lastSkillsResetAt` resta salvato — non costa
+    // niente e dice ancora una cosa vera — ma non decide più chi si salta.
     const unknown = [];
-    const eligibleDue = []; // [id, ultimo controllo] — "liberi" e scaduto il giorno
+    const eligibleDue = []; // [id, ultimo controllo] — scaduta la finestra di refresh
     const currentMembers = new Set();
     for (const m of mus) {
       for (const id of m.members || []) currentMembers.add(id);
@@ -839,10 +844,9 @@ async function pollMuDirectory() {
     const candidates = new Set([...currentMembers, ...censusMap.keys()]);
     for (const id of candidates) {
       const entry = userCountries[id];
-      if (!entry || entry.length < 4 || !entry[2]) { unknown.push(id); continue; }
-      const lastReset = entry[3];
-      const locked = lastReset && (now - Date.parse(lastReset)) < RESET_COOLDOWN_MS;
-      if (locked) continue; // bloccato dal cooldown: non può essere cambiato, si salta
+      // Voci senza il quinto elemento (le statistiche): stessa migrazione
+      // automatica delle voci corte di prima, vanno risolte subito.
+      if (!entry || entry.length < 5 || !entry[2]) { unknown.push(id); continue; }
       if (now - entry[1] >= REFRESH_WINDOW_MS) eligibleDue.push([id, entry[1]]);
     }
     eligibleDue.sort((a, b) => a[1] - b[1]); // i più in ritardo prima
@@ -925,7 +929,58 @@ function readElectionDetail(electionId) {
 }
 
 function writeElectionDetail(electionId, payload) {
+  if (payload?.resolved) _resolvedElectionIds.add(electionId);
   fs.writeFileSync(path.join(ELECTIONS_DIR, `${electionId}.json`), JSON.stringify(payload));
+}
+
+// WarEra+: memo in RAM di quali elezioni sono già chiuse. Il controllo
+// "serve (ri)scaricare il dettaglio?" è una lettura da disco per elezione
+// per giro di poll: con lo storico corto (10 per nazione) erano 1.800
+// letture ogni 3 minuti, con quello completo diventerebbero migliaia, per
+// un dato che una volta chiuso non cambia più per definizione. Chiuso una
+// volta = mai più riletto dal disco.
+const _resolvedElectionIds = new Set();
+
+function isElectionDetailResolved(electionId) {
+  if (_resolvedElectionIds.has(electionId)) return true;
+  const existing = readElectionDetail(electionId);
+  if (existing?.resolved) { _resolvedElectionIds.add(electionId); return true; }
+  return false;
+}
+
+// WarEra+: `election.getElections` senza `limit` ne dà 10 e basta — 5
+// presidenziali e 5 congressuali — e lo storico del tool si fermava lì
+// (elenco elezioni, grafico andamento seggi, affluenza presidenziale).
+// Il massimo accettato dall'API è 100 (verificato dal vivo: con 200
+// risponde "Number must be less than or equal to 100"), più che
+// sufficiente per tutta la storia del gioco (l'Italia, fra le più
+// vecchie, ne ha 33 in totale e ne produce 2 al mese).
+//
+// Chiederne 100 ad OGNI giro però triplica il traffico del poll
+// (misurato: 1,6 MB -> 4,5 MB ogni 3 minuti, per un dato che si muove due
+// volte al mese). Quindi: giro normale a 10, passata completa ogni 6 ore,
+// e `byCountry` che diventa UNIONE con quanto già in cache invece di
+// sostituzione secca — le elezioni chiuse sono immutabili, una volta viste
+// restano.
+const ELECTIONS_LIST_LIMIT = 10;        // giro normale: solo le ultime
+const ELECTIONS_FULL_LIMIT = 100;       // passata completa: tetto dell'API
+const ELECTIONS_FULL_SWEEP_MS = 6 * 60 * 60 * 1000;
+const ELECTIONS_KEEP_PER_COUNTRY = 300; // rete di sicurezza, ~12 anni di gioco
+let _lastElectionsFullSweep = 0;
+
+function mergeElectionLists(prev, fresh) {
+  const byId = new Map();
+  for (const item of prev || []) {
+    const id = item?._id || item?.id;
+    if (id) byId.set(id, item);
+  }
+  for (const item of fresh || []) {
+    const id = item?._id || item?.id;
+    if (id) byId.set(id, item); // il giro fresco vince: un'elezione in corso cambia
+  }
+  return [...byId.values()]
+    .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0))
+    .slice(0, ELECTIONS_KEEP_PER_COUNTRY);
 }
 
 function isElectionResolved(electionData) {
@@ -939,16 +994,25 @@ async function pollElections() {
     const countries = countriesCache?.data?.result?.data || countriesCache?.data || [];
     if (!countries.length) { console.log('[poll] elections: nessuna nazione in cache ancora, salto'); return; }
 
-    const calls = countries.map(n => ['election.getElections', { countryId: n._id }]);
+    // WarEra+: passata completa ogni 6 ore (e alla prima esecuzione dopo un
+    // riavvio), giro corto in tutti gli altri casi — vedi il blocco di
+    // costanti sopra per il perché.
+    const fullSweep = (Date.now() - _lastElectionsFullSweep) > ELECTIONS_FULL_SWEEP_MS;
+    const listLimit = fullSweep ? ELECTIONS_FULL_LIMIT : ELECTIONS_LIST_LIMIT;
+    const calls = countries.map(n => ['election.getElections', { countryId: n._id, limit: listLimit }]);
     const results = await trpcBatch(calls, { useWorker: true });
+    if (fullSweep && results.some(r => r != null)) _lastElectionsFullSweep = Date.now();
 
     // ── ticker (invariato) ──
     const storico = readCache('ticker-history', []);
     const idEsistenti = new Set(storico.map(e => e.id));
     const nuoviTicker = [];
 
-    // ── lista completa per nazione, sempre riscritta (compatta: solo gli
-    //    item grezzi della lista, non il dettaglio pesante con candidati/voti) ──
+    // ── lista per nazione: UNIONE fra quanto già in cache e quanto tornato
+    //    da questo giro (WarEra+, vedi mergeElectionLists) invece della
+    //    sostituzione secca di prima. Il giro corto porta solo le ultime 10:
+    //    senza unione riscriverebbe via lo storico appena raccolto dalla
+    //    passata completa. ──
     // WarEra+: fix bug segnalato — trpcBatch chunka a MAX_BATCH e, se un
     // chunk prende 429 e supera i retry, ritorna `null` per OGNI call di
     // quel chunk (silenzioso, solo un warn). Prima si scriveva `[]` per quelle
@@ -962,6 +1026,7 @@ async function pollElections() {
     // ── quali electionId serve dettagliare in questo giro: non le ho mai
     //    scaricate, O l'ultima volta non erano ancora risolte ──
     const needsDetail = []; // [{electionId, countryId}]
+    let dettagliDaLista = 0; // scritti senza fetch, direttamente dalla voce di lista
 
     countries.forEach((n, i) => {
       // WarEra+: fix bug reale trovato in produzione — election.getElections
@@ -973,13 +1038,23 @@ async function pollElections() {
       // Stesso pattern di unwrap di pollParties; `raw == null` resta l'unico
       // caso che tiene il dato del giro precedente (fallimento batch vero).
       const raw = results[i];
-      const items = Array.isArray(raw) ? raw : (raw?.items || raw?.docs || raw?.results || raw?.data || (raw == null ? (prevByCountry[n._id] || []) : []));
+      const fresh = Array.isArray(raw) ? raw : (raw?.items || raw?.docs || raw?.results || raw?.data || null);
+      const prev = prevByCountry[n._id] || [];
+      const items = fresh == null ? prev : mergeElectionLists(prev, fresh);
       byCountry[n._id] = items;
 
       items.forEach(item => {
         const id = item.id || item._id || `${n._id}-${item.startedAt || item.createdAt}`;
 
-        if (!idEsistenti.has(id)) {
+        // WarEra+: il ticker guarda solo la finestra di ritenzione. Prima
+        // `items` erano le ultime 10 e la questione non si poneva; ora sono
+        // tutte, e senza questo filtro ogni giro riproporrebbe come "nuove"
+        // centinaia di elezioni vecchie che trimTickerHistory butterebbe
+        // comunque subito dopo.
+        const ts = Date.parse(item.startedAt || item.createdAt || 0);
+        const recente = !Number.isFinite(ts) || ts >= (Date.now() - TICKER_RETENTION_MS);
+
+        if (recente && !idEsistenti.has(id)) {
           nuoviTicker.push({
             id, category: 'election', // retrocompatibile: voci vecchie senza `category` restano implicitamente elezioni
             timestamp: item.startedAt || item.createdAt || Date.now(),
@@ -987,16 +1062,32 @@ async function pollElections() {
           });
         }
 
-        const existing = readElectionDetail(id);
-        if (!existing || !existing.resolved) needsDetail.push({ electionId: id, countryId: n._id });
+        if (isElectionDetailResolved(id)) return; // chiusa e già su disco: non si tocca più
+
+        // WarEra+: la voce della lista È già il dettaglio completo —
+        // verificato dal vivo, `election.getElections` e `election.getElection`
+        // restituiscono lo stesso oggetto byte per byte (candidates, votes,
+        // votesCount, votesStartAt/EndAt). Quando i candidati ci sono si
+        // scrive il dettaglio da qui e si risparmia una fetch per elezione;
+        // se un domani la lista tornasse leggera, `candidates` manca e si
+        // ricade sul dettaglio esplicito come prima.
+        if (Array.isArray(item.candidates)) {
+          writeElectionDetail(id, { fetchedAt: Date.now(), resolved: isElectionResolved(item), data: item });
+          dettagliDaLista++;
+        } else {
+          needsDetail.push({ electionId: id, countryId: n._id });
+        }
       });
     });
 
-    writeCache('elections-by-country', { fetchedAt: Date.now(), data: byCountry });
+    // `compact: true` (WarEra+): con lo storico completo il file passa da
+    // ~1,6 MB a ~4,5 MB e viene riscritto ogni 3 minuti — l'indentazione
+    // sarebbe un terzo di quel peso, su un file che non legge nessun umano.
+    writeCache('elections-by-country', { fetchedAt: Date.now(), data: byCountry }, { compact: true });
 
     const aggiornatoTicker = trimTickerHistory([...storico, ...nuoviTicker]);
     writeCache('ticker-history', aggiornatoTicker, { compact: true });
-    console.log(`[poll] elections/ticker aggiornato (+${nuoviTicker.length} nuove, ${needsDetail.length} dettagli da (ri)scaricare)`);
+    console.log(`[poll] elections/ticker aggiornato (limit ${listLimit}${fullSweep ? ', passata completa' : ''}, +${nuoviTicker.length} nuove, ${dettagliDaLista} dettagli dalla lista, ${needsDetail.length} da scaricare)`);
 
     // ── dettaglio: batch separato, solo per candidatura/voto ancora aperti
     //    o mai scaricati — le elezioni già chiuse non arrivano mai qui ──
@@ -1369,6 +1460,20 @@ function citizenStats(u) {
     u.rankings?.userBounty?.value ?? 0,
     u.skills?.attack?.total ?? null,
     Date.parse(u.dates?.lastConnectionAt) || null,
+    // [10] Prestigio. `leveling.prestigeLevel`, NON `leveling.prestige`:
+    // il secondo resta 0 anche su chi il prestigio l'ha fatto (verificato
+    // dal vivo il 2026-08-28 su 70 giocatori di cinque nazioni — quattro
+    // con prestigeLevel 1, prestige 0 per tutti). Il prestigio AZZERA il
+    // livello, quindi è l'unica cosa che spiega un livello 29 con 175
+    // punti abilità spesi: senza, quel giocatore sembra solo piccolo.
+    //
+    // In CODA, e senza forzare la migrazione delle voci già in cache: chi
+    // è stato risolto prima di questo campo ha un array da 10 e legge
+    // `undefined`, che il client tratta come "niente stellina". Si riempie
+    // da sé entro REFRESH_WINDOW_MS (2 ore), che è il giro completo del
+    // pool — molto meglio che rimandare tutti nella coda degli `unknown`
+    // per un dato che non cambia quasi mai.
+    u.leveling?.prestigeLevel ?? null,
   ];
 }
 
@@ -2064,6 +2169,15 @@ app.get('/country-citizens', (req, res) => {
       id,
       u: st[0], a: st[1], lv: st[2], mr: st[3],
       wk: st[4], dmg: st[5], w: st[6], b: st[7], atk: st[8], seen: st[9],
+      // Assente sulle voci risolte prima che questo campo esistesse: si
+      // riempie da solo al prossimo giro di refresh di quell'utente.
+      pr: st[10] ?? null,
+      // Quando è stata scattata QUESTA riga (entry[1] = ultima risoluzione
+      // di questo utente). Il `fetchedAt` in testa alla risposta è del
+      // censimento, non delle statistiche: righe diverse hanno età diverse
+      // perché il refresh gira a fette, e il client lo dichiara invece di
+      // far sembrare tutto appena sceso dal gioco.
+      ts: entry[1] || null,
       // classifyPlaystyle qui dentro ritorna il codice compatto ('w'/'e'/
       // 'm'/'u', vedi muPlaystyle), non l'oggetto della gemella client:
       // si espande al nome che il client usa.

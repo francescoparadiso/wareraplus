@@ -253,7 +253,16 @@ function _fmtEventTime(ts) {
     && d.getMonth() === now.getMonth()
     && d.getDate() === now.getDate();
   if (sameDay) return time;
-  return `${d.toLocaleDateString(locale, { day: 'numeric', month: 'short' })} ${time}`;
+
+  // Fuori da oggi: GIORNO E ORA esatti, mai "ieri" o "3 ore fa" — richiesta
+  // esplicita, ed è anche l'unica forma che regge la lettura a distanza di
+  // ore (il ticker resta a schermo, una distanza relativa invecchia).
+  // Mese NUMERICO e non abbreviato: "22 ago 14:31" con l'interfaccia in
+  // inglese si legge come "22 ago(fa)", ed è da lì che è partita la
+  // segnalazione (in italiano "ago" è agosto, in inglese è "fa"). "22/08
+  // 14:31" non è ambiguo in nessuna delle nove lingue.
+  const date = d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
+  return `${date} ${time}`;
 }
 
 // Appende l'orario al messaggio già tradotto, invece di passarlo come

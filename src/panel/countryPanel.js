@@ -13,6 +13,8 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { state } from '../diplomacy/state.js';
+import { productionInfo } from '../diplomacy/productionHeatmap.js';
+import { activeEthics, fetchCountryEthics } from '../diplomacy/countryEthics.js';
 import {
   getAllianceAllies, getDefensivePactAllies,
   getBlocMemberIds, getBlocWarTargets, getBlocExternalDefensivePacts, getBlocRelations,
@@ -25,7 +27,7 @@ import { t } from '../shared/i18n.js';
 import { trackEvent } from '../shared/analytics.js';
 import { isPinned, togglePin } from '../app/pins.js';
 import { ensureDailyDamage, sumCountryDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
-import { allianceDamageBonus, formatBonus } from '../shared/allianceBonus.js';
+import { allianceDamageBonus, formatBonus, isPenalty, curveTooltip } from '../shared/allianceBonus.js';
 // getFlagUrl/getNationCode vivevano qui: spostate in nationFlag.js perche'
 // le usa anche viewOverview.js (import circolare, altrimenti).
 import { getFlagUrl, getNationCode } from './nationFlag.js';
@@ -299,8 +301,38 @@ function allianceBonusStatHtml(members) {
   }
   // Numeri interi e non formattati con fmt(): lo sviluppo core sta sulle
   // migliaia, e "3.0K / 14.9K" perde proprio le cifre che spiegano la quota.
-  const title = `${b.share.toFixed(2)}% · core dev ${Math.round(b.core)} / ${Math.round(b.world)}`;
-  return `<div class="wp-stat" title="${title}"><div class="wp-stat-label">${label}</div><div class="wp-stat-value up">${formatBonus(b.bonus)}</div></div>`;
+  // Dal ribilanciamento del 1 settembre 2026 il bonus puo' essere una
+  // PENALITA': il valore va in rosso e il title spiega la curva in vigore,
+  // altrimenti un -12% verde si legge come un guadagno.
+  const title = `${b.share.toFixed(2)}% · core dev ${Math.round(b.core)} / ${Math.round(b.world)} — ${curveTooltip()}`;
+  const cls = isPenalty(b.bonus) ? 'down' : 'up';
+  return `<div class="wp-stat" title="${title}"><div class="wp-stat-label">${label}</div><div class="wp-stat-value ${cls}">${formatBonus(b.bonus)}</div></div>`;
+}
+
+/* WarEra+ — bonus produzione dalle risorse strategiche. Nessuna richiesta:
+   country.getAllCountries lo porta già, sia come
+   `strategicResources.bonuses.productionPercent` sia come classifica
+   `countryProductionBonus` (stesso numero). La pastiglia con la posizione
+   segue la stessa regola delle altre: compare solo dove il gioco classifica
+   davvero. */
+function productionBonusStatHtml(nation) {
+  const info = productionInfo(nation);
+  if (!info) {
+    return `<div class="wp-stat" id="wp-stat-production"><div class="wp-stat-label">${t('production_bonus_label')}</div><div class="wp-stat-value">—</div></div>`;
+  }
+  // QUALI risorse, non solo quanto: le icone stanno accanto alla
+  // percentuale (una per tipo, col numero solo se le regioni sono più di
+  // una), e posizione e bonus sviluppo nel title — stessa economia di
+  // spazio di regionDiffStatHtml.
+  const bits = [];
+  if (info.rank) bits.push(`#${info.rank}`);
+  if (info.dev != null) bits.push(`${t('development_label')} +${info.dev}%`);
+  bits.push(...info.types.map(x => `${x.icon} ${x.key} ×${x.regions}`));
+  const icons = info.types.map(x => `${x.icon}${x.regions > 1 ? x.regions : ''}`).join(' ');
+  return `<div class="wp-stat" id="wp-stat-production" title="${bits.join(' · ')}"><div class="wp-stat-label">${t('production_bonus_label')}</div>` +
+    `<div class="wp-stat-value up">+${info.bonus}%</div>` +
+    (icons ? `<div class="wp-stat-sub">${icons}</div>` : '') +
+    `</div>`;
 }
 
 function buildPanelHtml(nation) {
@@ -366,7 +398,10 @@ function buildPanelHtml(nation) {
       ${regionDiffStatHtml(nation?.rankings?.countryRegionDiff?.value, nation?.rankings?.countryRegionDiff?.rank)}
       <div class="wp-stat"><div class="wp-stat-label">${t('defensive_pacts_label')}</div><div class="wp-stat-value">${defensivePacts.length}</div></div>
       <div class="wp-stat"><div class="wp-stat-label">${t('active_wars_label')}</div><div class="wp-stat-value">${wars}</div></div>
+      ${productionBonusStatHtml(nation)}
     </div>
+
+    <div id="wp-panel-ethics"></div>
 
     ${swornEnemyName ? `
       <div class="wp-panel-section-title">${t('sworn_enemy_label')}</div>
@@ -384,6 +419,50 @@ function buildPanelHtml(nation) {
   `;
 }
 
+/* WarEra+ — etiche del partito al governo. Due chiamate, solo quando il
+   pannello si apre davvero, e in fondo alla griglia: il pannello resta
+   utile anche se non arrivano (o se la nazione non ha un governo). Vedi
+   src/diplomacy/countryEthics.js per la regola del +30%. */
+function paintEthics(nation) {
+  const host = document.getElementById('wp-panel-ethics');
+  if (!host) return;
+  fetchCountryEthics(nation._id).then(info => {
+    // Pannello già passato a un'altra nazione mentre la richiesta era in
+    // volo: non si scrive niente.
+    if (currentNationId !== nation._id) return;
+    // Il bonus produzione in cima alla griglia è stato scritto PRIMA che le
+    // etiche atterrassero, quindi contava le sole risorse strategiche: ora
+    // che il +30% dell'industrialismo è nella mappa condivisa
+    // (countryEthics.js:_publish) la casella si riscrive col totale, e i due
+    // numeri della stessa scheda tornano a dire la stessa cosa.
+    const prod = document.getElementById('wp-stat-production');
+    if (prod) prod.outerHTML = productionBonusStatHtml(nation);
+
+    const el = document.getElementById('wp-panel-ethics');
+    if (!el || !info?.party) return;
+
+    const axes = activeEthics(info.party.ethics)
+      .map(e => `<span class="wp-eth-tag wp-eth-${e.value > 0 ? 'pos' : 'neg'}">${t('ethic_' + e.axis + (e.value > 0 ? '_pos' : '_neg'))}</span>`)
+      .join('');
+
+    const spec = info.specializedItem
+      ? `<div class="wp-eth-spec">${t('ethic_specialization')}: <strong>${escapeHtml(info.specializedItem)}</strong>` +
+        (info.specBonus
+          ? ` <span class="wp-eth-bonus">+${info.specBonus}%</span>`
+          : ` <span class="wp-eth-none">${t('ethic_no_bonus')}</span>`) +
+        '</div>'
+      : `<div class="wp-eth-spec">${t('ethic_no_specialization')}</div>`;
+
+    el.innerHTML = `
+      <div class="wp-panel-section-title">${t('ethic_title')}</div>
+      <div class="wp-eth-box">
+        <div class="wp-eth-party">${escapeHtml(info.party.name || '—')}</div>
+        ${axes ? `<div class="wp-eth-tags">${axes}</div>` : ''}
+        ${spec}
+      </div>`;
+  }).catch(() => { /* nessun governo o API muta: la sezione resta vuota */ });
+}
+
 function render(nationId) {
   const nation = state.nationMap.get(nationId);
   if (!nation) return;
@@ -393,6 +472,7 @@ function render(nationId) {
   sphereOverviewOpen = false;
   currentOverviewMode = null;
   contentEl.innerHTML = overviewBackHtml() + buildPanelHtml(nation);
+  paintEthics(nation);
   hidePanelPeek();   // si arriva qui da una scelta esplicita: niente linguetta
   openPanelNow();
   wirePinStar();
@@ -1318,8 +1398,18 @@ export function selectBlocInPanel(allianceId) {
 
 export function closePanel() {
   hidePanelPeek();
-  panelEl.classList.remove('open');
-  panelEl.setAttribute('aria-hidden', 'true');
+  // WarEra+ fix: `panelEl` si popola in initCountryPanel(), ma closePanel può
+  // arrivare PRIMA — map.js:setColoringMode chiama selectBlocInPanel(null) via
+  // import() dinamico, e in boot quella catena si risolve mentre il pannello
+  // non è ancora montato. Il risultato era un "Cannot read properties of
+  // undefined (reading 'classList')" a ogni avvio: invisibile all'utente
+  // (rejection non gestita dentro una .then) ma reale, e interrompeva il resto
+  // della funzione — comprese le variabili di stato qui sotto, che restavano
+  // a puntare una selezione ormai chiusa. Lo stato si azzera comunque.
+  if (panelEl) {
+    panelEl.classList.remove('open');
+    panelEl.setAttribute('aria-hidden', 'true');
+  }
   document.body.classList.remove('wp-panel-open');
   currentNationId = null;
   currentBlocId = null;

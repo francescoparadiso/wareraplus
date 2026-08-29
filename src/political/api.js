@@ -37,7 +37,7 @@ const ENDPOINT_MAP = {
   '/parties':    { proc: 'party.getManyPaginated',          params: p => ({ countryId: p.countryId, page: p.page || 1, limit: p.limit || 100 }) }, // idem
   '/user':       { proc: 'user.getUserLite',                params: p => ({ userId: p.id }) },
   '/election':   { proc: 'election.getElection',            params: p => ({ electionId: p.id }) },
-  '/elections':  { proc: 'election.getElections',            params: p => ({ countryId: p.countryId }) },
+  '/elections':  { proc: 'election.getElections',            params: p => ({ countryId: p.countryId, limit: p.limit || 100 }) }, // WarEra+: senza `limit` l'API ne dà 10 e basta (5+5) — idem, bypassato in _localFetchImpl
   '/government': { proc: 'government.getByCountryId',       params: p => ({ countryId: p.countryId }) },
   '/article':    { proc: 'article.getArticleLiteById',       params: p => ({ articleId: p.id }) },
 };

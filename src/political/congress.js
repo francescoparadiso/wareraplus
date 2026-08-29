@@ -133,7 +133,7 @@ export async function loadElectionsHistory() {
       newCanvas.setAttribute('aria-label', 'Seats trend over time');
       parent.replaceChild(newCanvas, canvas);
     }
-    renderTimeline(congressElections.slice(-6));
+    renderTimeline(timelineRange(congressElections));
 
     if (items.length > 0) {
       const latest = [...items].reverse()[0];
@@ -199,6 +199,49 @@ export async function loadPartiesForCountry(countryId) {
 }
 
 /* ── TIMELINE ── */
+
+// WarEra+: erano gli ultimi 6 punti, per una ragione che non era una
+// scelta grafica — `election.getElections` senza `limit` restituisce dieci
+// elezioni in tutto (5 presidenziali + 5 congressuali), quindi di
+// congressuali ne arrivavano cinque e il sesto punto non esisteva
+// nemmeno. Ora lo storico è completo (vedi cacheClient.js e
+// mergeElectionLists nel cache-server) e il grafico può coprire due anni
+// di legislature; Chart.js dirada da solo le etichette sull'asse X quando
+// non ci stanno.
+const TIMELINE_MAX_POINTS = 24;
+
+// I partiti nel gioco esistono da marzo 2026: prima di allora gli eletti
+// erano tutti indipendenti, e il grafico — che disegna una linea per
+// partito — su quelle elezioni non ha proprio niente da mostrare (erano
+// otto punti piatti a zero prima del primo dato vero). Il taglio si fa sui
+// dati, non sulla data: si parte dalla prima elezione con almeno un
+// eletto in un partito. La data resta come rete di sicurezza, per quando
+// la lista arriva senza `candidates` e la domanda non è rispondibile.
+const PARTIES_SINCE = Date.parse('2026-03-01T00:00:00Z');
+
+function timelineRange(congressElections) {
+  const hasPartySeats = e => (e?.candidates || []).some(c => c.isElected && (c.party || c.partyId));
+  const first = congressElections.findIndex(hasPartySeats);
+  const partyEra = first >= 0
+    ? congressElections.slice(first)
+    : congressElections.filter(e => Date.parse(e.createdAt || 0) >= PARTIES_SINCE);
+  return partyEra.slice(-TIMELINE_MAX_POINTS);
+}
+
+// WarEra+: ogni voce di `election.getElections` È già il dettaglio
+// completo — verificato dal vivo, la voce di lista e la risposta di
+// `election.getElection` per lo stesso id sono identiche byte per byte
+// (candidates, votes, votesCount, votesStartAt/EndAt). Quando i candidati
+// ci sono si usa quella e si risparmia una fetch per punto del grafico:
+// con lo storico lungo sarebbero state una ventina di richieste al VPS
+// solo per disegnare l'andamento. Se un domani la lista tornasse leggera,
+// `candidates` manca e si ricade sul dettaglio esplicito, come prima.
+async function electionWithDetail(election) {
+  if (Array.isArray(election?.candidates) && election.candidates.length) return election;
+  try { return await localFetch('/election', { id: election._id }); }
+  catch (_) { return null; }
+}
+
 export function renderTimeline(congressElections) {
   const panel = document.getElementById('timelinePanel');
   if (!congressElections || congressElections.length === 0) {
@@ -250,18 +293,20 @@ export function renderTimeline(congressElections) {
 
 async function loadTimelineData(elections, electionIds) {
   startHeavyOperation('Loading timeline data...');
-  const partySeatsPerElection = await Promise.all(elections.map(async election => {
-    try {
-      const data = await localFetch('/election', { id: election._id });
-      const elected = (data?.candidates || []).filter(c => c.isElected);
-      const seatMap = {};
-      elected.forEach(c => {
-        const pid = String(c.party || c.partyId || 'independent');
-        seatMap[pid] = (seatMap[pid] || 0) + 1;
-      });
-      return seatMap;
-    } catch (_) { return {}; }
-  }));
+  // WarEra+: un solo passaggio. Prima erano due Promise.all separate sugli
+  // stessi id (seggi, poi affluenza) che si appoggiavano alla cache locale
+  // per non pagare due volte; con electionWithDetail il dato è già in
+  // mano e le due derivazioni leggono lo stesso array.
+  const details = await Promise.all(elections.map(e => electionWithDetail(e)));
+
+  const partySeatsPerElection = details.map(data => {
+    const seatMap = {};
+    (data?.candidates || []).filter(c => c.isElected).forEach(c => {
+      const pid = String(c.party || c.partyId || 'independent');
+      seatMap[pid] = (seatMap[pid] || 0) + 1;
+    });
+    return seatMap;
+  });
 
   const allPids = new Set();
   partySeatsPerElection.forEach(m => Object.keys(m).forEach(pid => allPids.add(pid)));
@@ -274,13 +319,12 @@ async function loadTimelineData(elections, electionIds) {
     } catch (_) { }
   }));
 
-  const _turnoutResults = await Promise.all(elections.map(async election => {
-    try {
-      const data = await localFetch('/election', { id: election._id });
-      const totalVotes = data.votesCount || (data.candidates || []).reduce((s, c) => s + (c.voteCount || 0), 0);
-      return { electionId: election._id, totalVotes: totalVotes || 0, date: election.createdAt, seats: (data.candidates || []).filter(c => c.isElected).length };
-    } catch (_) { return null; }
-  }));
+  const _turnoutResults = details.map((data, i) => {
+    if (!data) return null;
+    const election = elections[i];
+    const totalVotes = data.votesCount || (data.candidates || []).reduce((s, c) => s + (c.voteCount || 0), 0);
+    return { electionId: election._id, totalVotes: totalVotes || 0, date: election.createdAt, seats: (data.candidates || []).filter(c => c.isElected).length };
+  });
   setHistoricTurnouts(_turnoutResults.filter(Boolean));
 
   const datasets = [];

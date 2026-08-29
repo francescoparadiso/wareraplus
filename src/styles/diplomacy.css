@@ -1728,7 +1728,7 @@
 }
 
 .mode-toggle-row .mode-slider-bottom {
-  width: calc(50% - 3.6px); /* 2 pulsanti */
+  width: calc(33.33% - 3.6px); /* 3 pulsanti (era 2: aggiunto Bonus produzione) */
 }
 
 .mode-toggle-row .mode-btn {

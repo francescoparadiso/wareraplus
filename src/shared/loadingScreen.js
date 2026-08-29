@@ -49,6 +49,7 @@ const ACCENTS = {
   nations: '#39d0d8',
   guide: '#d29922',
   news: '#58a6ff',
+  market: '#e3b341',
   'bloc-stats': '#a371f7',
 };
 const DEFAULT_ACCENT = '#58a6ff';

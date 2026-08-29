@@ -9,6 +9,7 @@ import { trackEvent } from '../shared/analytics.js';
 import { getContestedStats, contestedLegendGradient } from './contestedHeatmap.js';
 import { getWarIntensityStats, warIntensityLegendGradient } from './warIntensityHeatmap.js';
 import { getPlaystyleStats, playstyleLegendGradient } from './playstyleHeatmap.js';
+import { activeDeposits, getProductionStats, productionLegendGradient, RESOURCE_TYPES, scaleMax } from './productionHeatmap.js';
 import { getTrendStats, trendLegendGradient } from './playstyleTrendHeatmap.js';
 import { mergedSphereGroups } from '../proxy/radar.js';
 
@@ -218,6 +219,32 @@ export function updateDynamicLegend() {
         <span style="font-size:10px; color:${sub};">up to ${fmtNumber(stats.max)}</span>
       </div>
       <div class="legend-note">Total damage of all resolved battles fought in the region, ranked (median ${fmtNumber(stats.median)}) · snapshot, not live</div>
+    `;
+    return;
+  }
+
+  // WarEra+ — Bonus produzione: scala fissa 0-30% (il massimo teorico è
+  // avere tutti e sei i tipi di risorsa), più il conto di quante regioni
+  // porta ogni risorsa nel mondo: la seconda domanda dopo "quanto" è
+  // "quali", e la legenda è il posto dove sta senza aprire nulla.
+  if (state.coloringMode === 'production') {
+    const sub = THEMES[state.theme].TEXT_SECONDARY;
+    const stats = getProductionStats();
+    const spread = RESOURCE_TYPES
+      .map(r => `${r.icon} ${stats.byResource[r.key] || 0}`)
+      .join(' · ');
+    box.innerHTML = `
+      <div class="legend-section-title">Production bonus</div>
+      <div class="legend-scale" style="margin:4px 0;">
+        <div style="width:100%;height:14px;background:${productionLegendGradient()};border-radius:3px;"></div>
+      </div>
+      <div class="legend-item" style="justify-content:space-between; padding:0 4px;">
+        <span style="font-size:10px; color:${sub};">+5%</span>
+        <span style="font-size:10px; color:${sub};">+${scaleMax()}%</span>
+      </div>
+      <div class="legend-note">Total = strategic resources + ruling-party ethics${stats.ethicsLoaded
+        ? ` (${stats.withEthic} industrialist nations, +30% each on their specialised item)`
+        : ' — ethics still loading, showing resources only'} · grey = nothing (${stats.without} nations) · best +${stats.best}%, average +${stats.avg.toFixed(1)}% · regions by resource: ${spread} · ⛏ ${activeDeposits().length} temporary deposits (+30% on one item, few days) — listed in the panel</div>
     `;
     return;
   }
@@ -694,4 +721,5 @@ export function syncUIToState() {
   document.getElementById('mode-contested')?.classList.toggle('active', state.coloringMode === 'contested');
   document.getElementById('mode-warIntensity')?.classList.toggle('active', state.coloringMode === 'warIntensity');
   document.getElementById('mode-playstyle')?.classList.toggle('active', state.coloringMode === 'playstyle');
+  document.getElementById('mode-production')?.classList.toggle('active', state.coloringMode === 'production');
 }

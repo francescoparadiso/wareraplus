@@ -28,8 +28,9 @@ ed è poi cresciuto ben oltre quei due:
   ⚠️ **L'attribuzione ad ArgusIA (card in cima alla vista) non va rimossa.**
 
 Tutto il resto è **nuovo di WarEra+**: pannello nazione, Unità Militari,
-Statistiche nazioni, News + ticker, Time machine, Guida, barre menù,
-preferiti, PWA, server di cache, temi mappa, viste mappa aggiuntive.
+Statistiche nazioni, Rendite di produzione, News + ticker, Time machine,
+Guida, barre menù, preferiti, PWA, server di cache, temi mappa, viste mappa
+aggiuntive.
 
 La mappa è la vista principale. Un pannello laterale nazione
 (`src/panel/countryPanel.js`) fa da ponte: si apre cliccando una nazione,
@@ -162,6 +163,25 @@ wareraPlus/
     │   ├── api.js               ← ecoCall via ECO_PROXY_BASE (Worker), dati di gioco
     │   ├── gameData.js, resolve.js, account.js, wage.js
     │   └── skills.js, positioning.js, workers.js, hiring.js  ← logica pura (hiring = nuova)
+    ├── market/                   ← NUOVO — Rendite di produzione: la classifica di
+    │   │                            mercato di tutte le risorse per rendita al punto
+    │   │                            produzione. Gemella dell'Ottimizzatore per chi
+    │   │                            un'azienda non ce l'ha ancora (cosa produrre, dove
+    │   │                            aprirla): NON chiede uno username, si apre e mostra.
+    │   ├── main.js               ← initMarketView(container) + stopMarketAutoRefresh():
+    │   │                          tabella, ordinamenti, riga espandibile, simulatore paga
+    │   ├── api.js                ← due orologi: prezzi + libro ordini (PUBBLICI, diretti
+    │   │                          su api6, TTL 5 min, giro automatico mentre è aperta) e
+    │   │                          regioni consigliate (token-gated via ecoBatch → proxy,
+    │   │                          TTL 30 min + localStorage). Un refresh completo = 2
+    │   │                          richieste HTTP. Regioni e tasse: zero fetch.
+    │   ├── model.js              ← formule PURE (la stessa di eco/gameData.js, ma con i
+    │   │                          prezzi eseguibili) + paga di pareggio, guadagno
+    │   │                          giornaliero per paga offerta e bonus FEDELTÀ allo
+    │   │                          slider dei giorni (+1%/giorno fino a 10, letto da
+    │   │                          gameConfig.worker, come eco/workers.js). Cambiare
+    │   │                          paga o giorni non costa una richiesta.
+    │   └── i18n.js               ← dizionario locale (9 lingue)
     ├── guide/                    ← NUOVO — Guida "Come si usa": SOLO testo statico
     │   ├── main.js                  (zero fetch, zero stato) + i18n.js a 9 lingue.
     │   └── i18n.js                  È la vista più leggera dell'app, deve restarlo.
@@ -182,6 +202,8 @@ wareraPlus/
     │   ├── muOverlay.js        ← apre Esplora Unità Militari
     │   ├── nationsOverlay.js   ← apre Statistiche nazioni
     │   ├── ecoOverlay.js       ← apre l'Ottimizzatore industriale
+    │   ├── marketOverlay.js    ← apre Rendite di produzione (e alla chiusura ferma
+    │   │                         il suo timer di aggiornamento prezzi)
     │   ├── newsOverlay.js      ← apre la vista News
     │   ├── guideOverlay.js     ← apre la Guida "Come si usa"
     │   ├── newsTicker.js       ← ticker in cima alla mappa: battaglie, elezioni, nuove
@@ -239,7 +261,7 @@ wareraPlus/
         │                          sotto #wp-political-root (c'era una collisione reale
         │                          con .panel, già usata dalla shell)
         └── menubar.css, mobile-menubar.css, mu.css, nations.css, news.css,
-            eco.css, guide.css
+            eco.css, guide.css, market.css
 ```
 
 ⚠️ **Attenzione ai nomi duplicati tra le due varianti di Political**:
@@ -253,7 +275,8 @@ collegati: modifiche vanno fatte in `src/political/`, non in
 completo quando chiedi modifiche — "modifica config.js" da solo è ambiguo tra
 tre file (`src/diplomacy/config.js`, `src/political/config.js`,
 `public/political/config.js`), e `main.js`/`api.js`/`i18n.js` esistono in
-ancora più copie (`src/mu/`, `src/nations/`, `src/eco/`, `src/guide/`).
+ancora più copie (`src/mu/`, `src/nations/`, `src/eco/`, `src/guide/`,
+`src/market/`).
 
 ## Come comunicano Diplomacy, lo shell e Political (in-page dalla Fase 2)
 
@@ -344,6 +367,13 @@ punto di fallimento. Vedi il ⚠️ in fondo per cosa degrada e come.
   Diplomacy (`state.nazioniGlobal`, `state.mapDataGlobal`, `state.labelsData`,
   `state.nationBaseColorMap`) copre gran parte dei casi a costo zero — è quello
   che fanno `shared/countries.js`, `nations/api.js`, `timeMachineMap.js`.
+- **Prezzi e libro ordini sono PUBBLICI**: `itemTrading.getPrices` e
+  `tradingOrder.getTopOrders` rispondono da `API_BASE_URL` senza chiave, e
+  `src/market/api.js` li prende così — un solo batch, nessun consumo del
+  budget del Worker. La chiave (quindi il proxy) serve solo per
+  `company.getRecommendedRegionIdsByItemCode`, che è anche l'unica fonte
+  ammessa del bonus produzione: **il bonus non si ricalcola mai lato
+  client**, né qui né in `src/eco/gameData.js`.
 - **`useWorker: true`** instrada attraverso il Worker Cloudflare
   (`WORKER_API_BASE`, limite 500/min invece di 100) — usato SOLO per
   battaglie ed elezioni/parlamenti/Political, e per gli endpoint token-gated

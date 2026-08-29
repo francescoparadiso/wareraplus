@@ -72,7 +72,7 @@
 /* ── Panoramica: tabella delle nazioni ─────────────────────── */
 .wp-nat-table-wrap { overflow-x: auto; }
 .wp-nat-table {
-  --wp-nat-cols: minmax(170px, 1.4fr) repeat(13, minmax(72px, .75fr));
+  --wp-nat-cols: minmax(170px, 1.4fr) repeat(14, minmax(72px, .75fr));
   min-width: 1180px;
 }
 .wp-nat-thead, .wp-nat-row {
@@ -310,7 +310,9 @@ body.light-theme .wp-nat-row { border-bottom-color: #e3e7ee; }
 
 /* Elenco cittadini — LISTA */
 .wp-nat-ctable-wrap { overflow-x: auto; }
-.wp-nat-ctable { --wp-nat-ccols: minmax(170px, 1.5fr) 52px 60px 92px repeat(6, minmax(76px, .8fr)); min-width: 1040px; }
+/* Colonne: nome, livello, prestigio, grado, stile di gioco, poi i sei
+   numeri. La colonna del prestigio è stretta — ci sta una stellina. */
+.wp-nat-ctable { --wp-nat-ccols: minmax(170px, 1.5fr) 52px 44px 60px 92px repeat(5, minmax(76px, .8fr)); min-width: 1000px; }
 .wp-nat-cthead, .wp-nat-crow {
   display: grid;
   grid-template-columns: var(--wp-nat-ccols);
@@ -353,6 +355,23 @@ body.light-theme .wp-nat-crow { border-bottom-color: #e3e7ee; }
 .wp-nat-cname { display: flex; align-items: center; gap: 7px; font-weight: 600; }
 .wp-nat-cnick { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Stellina del prestigio. Viola: è l'unico accento non ancora impegnato in
+   questa vista (rosso = guerra, verde = economia, giallo = misto, grigio =
+   indeciso, azzurro = accento generale), quindi non si confonde con lo
+   stile di gioco che sta due colonne più in là. `flex-shrink: 0` perché il
+   nick accanto ha l'ellissi: senza, con un nome lungo la stellina è la
+   prima cosa che si accartoccia. */
+.wp-nat-prestige {
+  flex-shrink: 0;
+  color: #a371f7;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  cursor: help;
+  text-shadow: 0 0 6px rgba(163, 113, 247, .45);
+}
+body.light-theme .wp-nat-prestige { color: #7c3aed; text-shadow: none; }
+
 /* Elenco cittadini — CARD */
 .wp-nat-citizen-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
 .wp-nat-ccard {
@@ -366,6 +385,10 @@ body.light-theme .wp-nat-crow { border-bottom-color: #e3e7ee; }
 .wp-nat-ccard:hover { border-color: var(--wp-ov-accent, #39d0d8); }
 .wp-nat-ccard-top { display: flex; align-items: center; gap: 10px; }
 .wp-nat-ccard-main { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+/* Riga nome + stellina prestigio: serve un contenitore in riga perché
+   ccard-main è una colonna, e la stellina finirebbe a capo da sola. Il
+   `min-width: 0` lascia che sia il nick a troncarsi, non la stellina. */
+.wp-nat-ccard-name { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .wp-nat-ccard-sub { font-size: 11px; color: var(--wp-ov-text-dim, #8b949e); }
 .wp-nat-ccard-stats {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
@@ -395,3 +418,99 @@ body.light-theme .wp-nat-ccard-stats { border-top-color: #e3e7ee; }
   .wp-nat-vs-row { grid-template-columns: 1fr; gap: 3px; }
   .wp-nat-vs-a, .wp-nat-vs-b { text-align: left; }
 }
+
+/* ── Livelli × stile di gioco (src/nations/levelPlaystyle.js) ── */
+.wp-nat-lv { margin-bottom: 18px; }
+.wp-nat-lv-legend { flex-direction: row; flex-wrap: wrap; gap: 10px; margin: 0 0 10px; }
+.wp-nat-lv-key {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; border-radius: 999px;
+  background: var(--wp-ov-surface, #161b22);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  color: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer;
+}
+.wp-nat-lv-key:hover { border-color: var(--wp-ov-accent, #39d0d8); }
+/* Gruppo escluso dal grafico: spento, non sparito — resta cliccabile per
+   riaccenderlo, quindi deve restare leggibile. */
+.wp-nat-lv-key.off { opacity: .42; text-decoration: line-through; }
+
+.wp-nat-lv-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.wp-nat-lv-grid.compare { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.wp-nat-lv-card {
+  padding: 12px 14px;
+  background: var(--wp-ov-surface, #161b22);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: var(--wp-ov-radius, 12px);
+  min-width: 0;
+}
+.wp-nat-lv-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.wp-nat-lv-head img { width: 20px; height: auto; border-radius: 3px; }
+.wp-nat-lv-n { color: var(--wp-ov-text-dim, #8b949e); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.wp-nat-lv-partial {
+  width: 16px; height: 16px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(227, 179, 65, .16); color: #e3b341;
+  font-size: 11px; font-weight: 800; cursor: help;
+}
+.wp-nat-lv-drop {
+  margin-left: auto;
+  width: 22px; height: 22px; border-radius: 6px;
+  background: transparent; border: 1px solid var(--wp-ov-border, #30363d);
+  color: var(--wp-ov-text-dim, #8b949e); font-size: 14px; line-height: 1; cursor: pointer;
+}
+.wp-nat-lv-drop:hover { border-color: #f85149; color: #f85149; }
+.wp-nat-lv-clear {
+  padding: 4px 10px; border-radius: 8px;
+  background: var(--wp-ov-surface, #161b22);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  color: var(--wp-ov-text-dim, #8b949e); font-size: 11.5px; font-weight: 600; cursor: pointer;
+}
+.wp-nat-lv-clear:hover { border-color: var(--wp-ov-accent, #39d0d8); color: var(--wp-ov-text, #e6edf3); }
+
+/* Livello per livello sono decine di colonne: il grafico scorre dentro la
+   sua carta invece di rimpicciolire fino all'illeggibile. */
+.wp-nat-lv-scroll { overflow-x: auto; overflow-y: hidden; }
+.wp-nat-lv-svg { display: block; }
+line.wp-nat-lv-gridline { stroke: rgba(255, 255, 255, .08); stroke-width: 1; }
+.wp-nat-lv-ytick { fill: var(--wp-ov-text-dim, #8b949e); font-size: 9.5px; text-anchor: end; }
+.wp-nat-lv-xtick { fill: var(--wp-ov-text-dim, #8b949e); font-size: 9.5px; text-anchor: middle; }
+.wp-nat-lv-cap { fill: var(--wp-ov-text-dim, #8b949e); font-size: 9.5px; text-anchor: middle; font-weight: 700; }
+.wp-nat-lv-seg { pointer-events: none; }
+/* Zona sensibile della colonna: invisibile ma cliccabile/puntabile a
+   tutta altezza, così anche un segmento da due pixel ha il suo tooltip. */
+.wp-nat-lv-hit { fill: transparent; }
+.wp-nat-lv-hit:hover { fill: rgba(255, 255, 255, .05); }
+
+/* Tema chiaro. Testi, bordi e sfondi di questa sezione passano tutti da
+   var(--wp-ov-*), che è già ridefinita per il chiaro e si adatta da sola:
+   restano solo i due punti in cui il bianco è cotto dentro, e su fondo
+   chiaro sparivano — la griglia dell'asse e l'evidenziazione della colonna
+   sotto il mouse, cioè proprio il riferimento per leggere le altezze e
+   l'unico segnale che il tooltip sta per uscire. L'ombra del tooltip è
+   tarata su un fondo scuro: alleggerita, altrimenti su bianco è una macchia. */
+body.light-theme line.wp-nat-lv-gridline { stroke: rgba(0, 0, 0, .10); }
+body.light-theme .wp-nat-lv-hit:hover { fill: rgba(0, 0, 0, .05); }
+body.light-theme .wp-nat-lv-tip { box-shadow: 0 8px 22px rgba(0, 0, 0, .16); }
+
+.wp-nat-lv-card { position: relative; }
+.wp-nat-lv-tip {
+  position: absolute; top: 0; left: 0;
+  z-index: 5; pointer-events: none;
+  min-width: 150px; padding: 8px 10px;
+  background: var(--wp-ov-bg, #0d1117);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 9px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .45);
+  font-size: 12px;
+}
+.wp-nat-lv-tip[hidden] { display: none; }
+.wp-nat-lv-tip-head { font-weight: 700; margin-bottom: 5px; white-space: nowrap; }
+.wp-nat-lv-tip-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.wp-nat-lv-tip-list li { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.wp-nat-lv-tip-name { flex: 1; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-nat-lv-tip-list strong { font-variant-numeric: tabular-nums; }
+.wp-nat-lv-tip-pct { width: 38px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Età del dato nell'intestazione dell'elenco cittadini: il server risolve i
+   cittadini a fette, e una riga vecchia porta numeri vecchi. */
+.wp-nat-fresh { color: var(--wp-ov-text-dim, #8b949e); font-size: 11.5px; font-weight: 500; cursor: help; }

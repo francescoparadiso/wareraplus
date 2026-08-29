@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { getProductionColor, productionInfo } from './productionHeatmap.js';
 import { COLORS, THEMES } from './config.js';
 import { flattenCoords } from './utils.js';
 import { getBlocMemberIds } from './diplomacy.js';
@@ -135,15 +136,20 @@ const _textWidthCache = new Map();
 function _labelMetric(label, mode) {
   const n = state.nationMap.get(label.properties.countryId);
   if (!n) return -Infinity;
-  const v = mode === 'population'
-    ? n?.rankings?.countryActivePopulation?.value
-    : n?.rankings?.weeklyCountryDamages?.value;
+  // WarEra+ — Bonus produzione: stessa regola, la priorità è il valore
+  // della vista (chi ha il bonus più alto resta visibile quando lo spazio
+  // scarseggia).
+  const v = mode === 'production'
+    ? productionInfo(n)?.bonus          // TOTALE: risorse + etica del partito al governo
+    : mode === 'population'
+      ? n?.rankings?.countryActivePopulation?.value
+      : n?.rankings?.weeklyCountryDamages?.value;
   return typeof v === 'number' ? v : -Infinity;
 }
 
 function _getSortedLabels(sourceLabels, mode) {
   if (_sortedCache.src === sourceLabels && _sortedCache.mode === mode && _sortedCache.list) return _sortedCache.list;
-  const isMetric = mode === 'population' || mode === 'weeklyDamage';
+  const isMetric = mode === 'population' || mode === 'weeklyDamage' || mode === 'production';
   const list = [...sourceLabels].sort(isMetric
     ? (a, b) => _labelMetric(b, mode) - _labelMetric(a, mode)
     : (a, b) => (b.properties.flagSize || 0) - (a.properties.flagSize || 0)
@@ -217,7 +223,8 @@ export function drawLabels() {
   // nazione — stessa unità di collisione, stesso font che scala col nome,
   // stesso ordinamento per priorità (vedi _getSortedLabels): se il nome è
   // visibile lo è anche il numero, e viceversa, senza mai sovrapporsi.
-  const metricMode = state.coloringMode === 'population' || state.coloringMode === 'weeklyDamage';
+  const metricMode = state.coloringMode === 'population' || state.coloringMode === 'weeklyDamage'
+    || state.coloringMode === 'production';
   let _minDmg = Infinity, _maxDmg = -Infinity;
   if (state.coloringMode === 'weeklyDamage') {
     for (const nation of state.nationMap.values()) {
@@ -232,6 +239,20 @@ export function drawLabels() {
   function _metricLabel(cId) {
     const nation = state.nationMap.get(cId);
     if (!nation) return null;
+    // WarEra+ — Bonus produzione: la percentuale scritta sulla nazione, nel
+    // colore della sua casella nella scala (vedi productionHeatmap.js), così
+    // mappa ed etichetta dicono la stessa cosa.
+    if (state.coloringMode === 'production') {
+      // Il TOTALE, non le sole risorse: productionInfo somma il bonus etico
+      // quando le etiche sono in memoria (vedi productionHeatmap.js). Con la
+      // sola parte da risorse l'etichetta diceva +30 dove la mappa, la
+      // legenda e il pannello dicevano +60.
+      const bonus = productionInfo(nation)?.bonus;
+      if (typeof bonus !== 'number' || bonus <= 0) return null;
+      // Mezzo punto in su vale la virgola (+25,5%), il tondo no (+25%).
+      const text = `+${bonus % 1 ? bonus.toFixed(1) : bonus}%`;
+      return { text, color: getProductionColor(bonus) };
+    }
     if (state.coloringMode === 'population') {
       const pop = nation?.rankings?.countryActivePopulation?.value;
       if (typeof pop !== 'number' || pop <= 0) return null;

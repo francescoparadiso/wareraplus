@@ -47,6 +47,13 @@ async function _applyToPoliticalIfMounted(theme) {
   try {
     const { applyTheme } = await import('../political/config.js');
     applyTheme(theme);
+    // I grafici Chart.js hanno i colori COTTI dentro al momento del
+    // disegno: cambiare le variabili CSS non li tocca. Political lo sapeva
+    // già (era la seconda metà del suo vecchio toggleTheme), ma quella
+    // parte girava solo dal suo bottone interno — rimosso perché
+    // duplicato. Ora la chiama chi il tema lo cambia davvero: qui.
+    const { repaintForTheme } = await import('../political/main.js');
+    repaintForTheme?.();
   } catch (_) {
     // Non dovrebbe accadere (stesso documento, nessun confine iframe),
     // ma non blocchiamo il resto dell'app se capita.

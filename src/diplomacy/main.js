@@ -282,6 +282,40 @@ document.getElementById('mode-population').addEventListener('click', () => {
   setColoringMode('population');
 });
 
+// WarEra+ — Bonus produzione: come popolazione e danni, il dato è già in
+// memoria (country.getAllCountries), quindi nessuna fetch e nessuna attesa.
+document.getElementById('mode-production')?.addEventListener('click', async () => {
+  const sliderTop = document.getElementById('mode-slider');
+  if (sliderTop) sliderTop.style.opacity = '0.3';
+  trackEvent('view-mode-change', { mode: 'production' });
+  setColoringMode('production');
+
+  // Le risorse strategiche sono già in memoria: la mappa si colora subito.
+  // Il bonus etico del partito al governo no (rulingParty sta solo nel
+  // dettaglio nazione) — arriva in una manciata di richieste batch e, quando
+  // atterra, si ridisegna col TOTALE. Se non arriva, resta il solo bonus da
+  // risorse: la vista non aspetta e non si rompe.
+  // `countryEthicsComplete`, non `countryEthics`: la mappa parziale può
+  // essere già stata aperta dal pannello nazione per una nazione sola (vedi
+  // countryEthics.js:_publish), e quella non basta a colorare il mondo.
+  if (state.countryEthicsComplete) return;
+  try {
+    const { ensureAllCountryEthics } = await import('./countryEthics.js');
+    await ensureAllCountryEthics();
+    if (state.coloringMode === 'production') {
+      // L'ordine di priorità delle etichette è calcolato sul valore della
+      // vista e messo in cache: col totale cambiato va ricalcolato, altrimenti
+      // resta l'ordinamento sulle sole risorse.
+      const { invalidateLabelCache } = await import('./labels.js');
+      invalidateLabelCache();
+      renderMap();
+      _refreshOverview('production');
+    }
+  } catch (err) {
+    console.warn('[production] etiche non disponibili, resta il bonus da risorse:', err.message);
+  }
+});
+
 // ══ Terza riga (WarEra+): heatmap storiche ════════════════════════════
 // I dati non stanno in memoria come popolazione/danni (che arrivano con
 // country.getAllCountries): si caricano alla PRIMA attivazione della vista

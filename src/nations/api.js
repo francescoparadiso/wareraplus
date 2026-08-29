@@ -125,8 +125,14 @@ async function citizensDirect(countryId) {
     b: u.rankings?.userBounty?.value ?? 0,
     atk: u.skills?.attack?.total ?? null,
     seen: Date.parse(u.dates?.lastConnectionAt) || null,
+    // Prestigio: `leveling.prestigeLevel`, NON `leveling.prestige` — il
+    // secondo è rimasto a 0 anche su chi il prestigio l'ha fatto (verificato
+    // dal vivo il 2026-08-28 su un campione di 70 giocatori di cinque
+    // nazioni: quattro con prestigeLevel 1, prestige 0 per tutti).
+    pr: u.leveling?.prestigeLevel ?? null,
     ps: null,   // lo stile si calcola dalle skill: qui le abbiamo, vedi sotto
     skills: u.skills,
+    ts: Date.now(),   // appena scaricato dal gioco: fresco per definizione
   }));
   rows.sort((a, b) => (b.wk || 0) - (a.wk || 0));
 

@@ -58,6 +58,14 @@ export const state = {
   playstyleTrendError: null,  // messaggio se lo storico non è disponibile
   regionData: null,
   regionCache: new Map(), // regionId → { position: [lng,lat], name: string }
+
+  // WarEra+ — etiche del partito al governo (src/diplomacy/countryEthics.js).
+  // MAPPA PARZIALE: si riempie sia una nazione alla volta (pannello nazione)
+  // sia tutta insieme (vista mappa Bonus produzione), quindi la presenza di
+  // una chiave non dice che ci sono tutte — per quello c'è il flag qui sotto.
+  countryEthics: null,        // { countryId: info } | null
+  countryEthicsComplete: false, // true solo dopo ensureAllCountryEthics()
+  countryEthicsVersion: 0,    // sale ad ogni scrittura: invalida le cache a valle
   // Indici O(1) per evitare le scansioni lineari (nazioniGlobal.find /
   // alliancesList.find) che erano sparse dentro loop annidati.
   nationByCode: new Map(),   // 'IT' (uppercase) → nation

@@ -37,6 +37,23 @@ const RETRY_BASE_MS = 1200;
 
 function _sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
+// WarEra+ robustezza: qui la fetch era nuda, senza alcun tetto d'attesa —
+// l'unica delle quattro chiamanti di fetchWithProxyChain a non averne uno
+// (shared/trpcClient.js ne ha uno da 8s, e spiega perche' nel commento di
+// _fetchWithTimeout). Una richiesta che resta appesa blocca tutto quello che
+// aspetta questo batch: marker battaglia, elezioni, etiche. Stesso valore
+// dell'altro percorso, per non avere due politiche diverse sulla stessa cosa.
+const FETCH_TIMEOUT_MS = 8000;
+async function _fetchWithTimeout(url, opts = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...opts, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function trpcBatch(calls, { useWorker = false, _attempt = 1 } = {}) {
   if (!calls || !calls.length) return [];
   if (calls.length > MAX_BATCH) {
@@ -57,7 +74,7 @@ export async function trpcBatch(calls, { useWorker = false, _attempt = 1 } = {})
     // WarEra+: le chiamate "da Worker" provano prima il proxy sul VPS e
     // ricadono sul Worker se non risponde (shared/trpcProxy.js). Le chiamate
     // dirette ad api6 non passano di qui: chainFor le lascia com'erano.
-    const res = await fetchWithProxyChain(base, b => `${b}${suffix}`, u => fetch(u));
+    const res = await fetchWithProxyChain(base, b => `${b}${suffix}`, u => _fetchWithTimeout(u));
 
     if (res.status === 429) {
       if (_attempt <= MAX_RETRY_ATTEMPTS) {

@@ -127,6 +127,7 @@
           <div class="mode-slider mode-slider-bottom" id="mode-slider-bottom"></div>
           <div id="mode-weeklyDamage" class="mode-btn" data-i18n="mode_weekly_damage">🔥 Weekly Dmg</div>
           <div id="mode-population" class="mode-btn" data-i18n="mode_population">👥 Pop.</div>
+          <div id="mode-production" class="mode-btn" data-i18n="mode_production">⚙️ Production</div>
         </div>
 
         <!-- Terza riga (WarEra+): heatmap storiche. Le prime due colorano la
@@ -391,6 +392,25 @@
       <span class="wp-political-title">Nation stats</span>
     </div>
     <div id="wp-nations-root" style="display:none;"></div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════
+       NUOVO — Overlay Rendite di produzione (src/market/*)
+       Vista sotto "Approfondimenti": la classifica di mercato di tutte
+       le risorse per rendita al punto produzione, con miglior regione,
+       bonus, tasse e paga di pareggio. Sorella dell'Ottimizzatore ma
+       SENZA username: risponde a "cosa produco e dove apro", non a
+       "come sistemo le aziende che ho". Montata IN-PAGE dentro
+       #wp-market-root da src/market/main.js: initMarketView(), aperta
+       da src/app/marketOverlay.js.
+       ════════════════════════════════════════════════════════════ -->
+  <div id="wp-market-overlay" class="wp-political-overlay wp-market-overlay" aria-hidden="true">
+    <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
+    <div class="wp-political-topbar">
+      <button id="wp-market-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
+      <span class="wp-political-title">Production yields</span>
+    </div>
+    <div id="wp-market-root" style="display:none;"></div>
   </div>
 
   <!-- Guida "Come si usa" (src/guide/*): la sezione più leggera

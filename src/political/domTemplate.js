@@ -49,8 +49,12 @@ export function getPoliticalTemplate() {
     <!-- HEADER (invariato) -->
     <header class="header">
       <div class="header-brand">
-        <button id="themeToggle" class="theme-toggle-btn" data-i18n-title="theme_toggle_title"
-          data-i18n-aria="theme_toggle_aria" title="Switch to light mode" aria-label="Toggle theme">☀️</button>
+        <!-- WarEra+ : qui c'era il bottone tema dell'originale (#themeToggle).
+             Rimosso: in-page ce n'è già uno nello shell, in alto a destra, e
+             due interruttori per la stessa cosa nella stessa pagina sono solo
+             un modo per litigare. Il tema di Political ora arriva da lì —
+             src/app/themeSync.js chiama applyTheme() e poi repaintForTheme()
+             per ridisegnare i grafici nei nuovi colori. -->
         <div class="header-logo">🏛️</div>
         <div>
           <div class="header-title">Political View</div>

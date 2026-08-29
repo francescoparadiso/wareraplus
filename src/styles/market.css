@@ -1,0 +1,326 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Rendite di produzione (src/market/*) — stile
+   ------------------------------------------------------------------
+   Namespace `wp-mkt-*`. Stessa estetica delle altre sezioni di
+   Approfondimenti: superfici e bordi dai token --wp-ov-* di shell.css,
+   accento della sezione da --wp-ov-accent (qui l'oro: è una vista di
+   prezzi). Caricato via import() da src/market/main.js, non pesa sul
+   boot.
+
+   I numeri sono incolonnati con `tabular-nums`: questa tabella si legge
+   confrontando quarte cifre decimali, e con le cifre di larghezza
+   variabile il confronto a colpo d'occhio non funziona.
+   ══════════════════════════════════════════════════════════════ */
+
+#wp-market-root {
+  flex: 1;
+  width: 100%;
+  overflow-y: auto;
+  background: transparent;
+  color: var(--wp-ov-text, #e6edf3);
+}
+
+.wp-mkt-page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 22px 18px 90px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.wp-mkt-masthead { margin-bottom: 14px; }
+.wp-mkt-title { margin: 0; font-size: clamp(22px, 3.4vw, 30px); font-weight: 800; letter-spacing: .01em; }
+.wp-mkt-subtitle { margin: 4px 0 0; font-size: 12.5px; color: var(--wp-ov-text-dim, #8b949e); }
+
+.wp-mkt-empty { color: var(--wp-ov-text-dim, #8b949e); font-size: 13px; padding: 22px 0; }
+.wp-mkt-dim { color: var(--wp-ov-text-dim, #8b949e); }
+
+.wp-mkt-notice {
+  margin: 0 0 12px;
+  padding: 9px 13px;
+  border-radius: 8px;
+  background: rgba(227, 179, 65, .1);
+  border: 1px solid rgba(227, 179, 65, .32);
+  font-size: 12px;
+  color: #e3b341;
+}
+body.light-theme .wp-mkt-notice { color: #8a6410; }
+
+.wp-mkt-legend {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--wp-ov-text-dim, #8b949e);
+  max-width: 108ch;
+}
+
+/* ── Barra strumenti ───────────────────────────────────────── */
+.wp-mkt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.wp-mkt-seg {
+  display: flex;
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.wp-mkt-seg button {
+  background: transparent;
+  border: 0;
+  padding: 7px 13px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wp-ov-text-dim, #8b949e);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.wp-mkt-seg button + button { border-left: 1px solid var(--wp-ov-border, #30363d); }
+.wp-mkt-seg button:hover { color: var(--wp-ov-text, #e6edf3); }
+.wp-mkt-seg button.active {
+  background: color-mix(in srgb, var(--wp-ov-accent, #e3b341) 16%, transparent);
+  color: var(--wp-ov-accent, #e3b341);
+}
+
+.wp-mkt-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--wp-ov-text-dim, #8b949e);
+  cursor: pointer;
+}
+.wp-mkt-check input { accent-color: var(--wp-ov-accent, #e3b341); cursor: pointer; }
+.wp-mkt-check:hover { color: var(--wp-ov-text, #e6edf3); }
+
+.wp-mkt-sim {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 12px;
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 8px;
+  background: var(--wp-ov-surface, #161b22);
+}
+.wp-mkt-simlabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--wp-ov-accent, #e3b341);
+}
+.wp-mkt-sim label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--wp-ov-text-dim, #8b949e);
+}
+.wp-mkt-sim input {
+  width: 78px;
+  padding: 5px 8px;
+  background: var(--wp-ov-bg, #0d1117);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 6px;
+  color: var(--wp-ov-text, #e6edf3);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+body.light-theme .wp-mkt-sim input { background: var(--wp-ov-bg-light, #f4f6fa); }
+.wp-mkt-sim input:focus { outline: none; border-color: var(--wp-ov-accent, #e3b341); }
+.wp-mkt-ppday { font-size: 12px; font-weight: 600; color: var(--wp-ov-text, #e6edf3); }
+
+/* Giorni di lavoro (bonus fedeltà). Cursore nella tinta della sezione come
+   tutto il resto: niente controlli grigi di sistema. */
+.wp-mkt-days { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--wp-ov-text-dim, #8b949e); cursor: pointer; }
+/* Disegnato a mano invece che con `accent-color`: il cursore nativo lascia
+   il riempimento indietro di mezzo pollice, e al massimo la barra sembrava
+   non arrivare in fondo (segnalato dall'utente). Con la traccia dipinta da
+   noi la quota `--fill` va davvero da 0 a 100%. */
+.wp-mkt-days input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 132px;
+  height: 16px;
+  background: transparent;
+  cursor: pointer;
+  --wp-mkt-track: rgba(255, 255, 255, .14);
+}
+body.light-theme .wp-mkt-days input[type="range"] { --wp-mkt-track: rgba(0, 0, 0, .16); }
+.wp-mkt-days input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(to right,
+    var(--wp-ov-accent, #e3b341) 0 var(--fill, 0%),
+    var(--wp-mkt-track) var(--fill, 0%) 100%);
+}
+.wp-mkt-days input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px; height: 14px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--wp-ov-accent, #e3b341);
+  border: 2px solid var(--wp-ov-bg, #0d1117);
+}
+body.light-theme .wp-mkt-days input[type="range"]::-webkit-slider-thumb { border-color: var(--wp-ov-bg-light, #f4f6fa); }
+/* Firefox: la traccia percorsa ce l'ha già sua, basta colorarla. */
+.wp-mkt-days input[type="range"]::-moz-range-track { height: 6px; border-radius: 999px; background: var(--wp-mkt-track); }
+.wp-mkt-days input[type="range"]::-moz-range-progress { height: 6px; border-radius: 999px; background: var(--wp-ov-accent, #e3b341); }
+.wp-mkt-days input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px; border: 2px solid var(--wp-ov-bg, #0d1117);
+  border-radius: 50%; background: var(--wp-ov-accent, #e3b341);
+}
+.wp-mkt-days input[type="range"]:focus { outline: none; }
+.wp-mkt-days input[type="range"]:focus-visible { outline: 2px solid var(--wp-ov-accent, #e3b341); outline-offset: 3px; border-radius: 4px; }
+.wp-mkt-daysval {
+  min-width: 92px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--wp-ov-text, #e6edf3);
+}
+.wp-mkt-fid { color: var(--wp-ov-accent, #e3b341); font-weight: 700; }
+
+.wp-mkt-refresh { display: flex; align-items: center; gap: 8px; margin-left: auto; font-size: 12px; }
+.wp-mkt-refresh button {
+  padding: 6px 13px;
+  background: var(--wp-ov-surface, #161b22);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 8px;
+  color: var(--wp-ov-text, #e6edf3);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wp-mkt-refresh button:hover:not(:disabled) { border-color: var(--wp-ov-accent, #e3b341); color: var(--wp-ov-accent, #e3b341); }
+.wp-mkt-refresh button:disabled { opacity: .55; cursor: default; }
+
+/* ── Tabella ───────────────────────────────────────────────── */
+.wp-mkt-table-wrap { overflow-x: auto; }
+.wp-mkt-table {
+  /* risorsa · vendita · costo MP · pp · base · bonus · rendita ·
+     regione · tassa · pareggio · tu · lavoratore · tu in X giorni */
+  --wp-mkt-cols:
+    minmax(134px, 1.1fr) minmax(86px, .7fr) minmax(82px, .7fr) 44px
+    minmax(90px, .75fr) 66px minmax(90px, .8fr)
+    minmax(140px, 1.05fr) 76px minmax(94px, .8fr)
+    minmax(86px, .7fr) minmax(94px, .75fr) minmax(94px, .8fr);
+  min-width: 1300px;
+}
+.wp-mkt-thead, .wp-mkt-row {
+  display: grid;
+  grid-template-columns: var(--wp-mkt-cols);
+  align-items: center;
+  gap: 8px;
+}
+.wp-mkt-thead {
+  position: sticky; top: 0; z-index: 2;
+  padding: 0 8px 6px;
+  background: var(--wp-ov-bg, #0d1117);
+  border-bottom: 1px solid var(--wp-ov-border, #30363d);
+}
+body.light-theme .wp-mkt-thead { background: var(--wp-ov-bg-light, #f4f6fa); }
+
+.wp-mkt-th {
+  background: none; border: none; padding: 4px 0;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--wp-ov-text-dim, #8b949e);
+  cursor: pointer; text-align: left;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wp-mkt-th:hover { color: var(--wp-ov-text, #e6edf3); }
+.wp-mkt-th.active { color: var(--wp-ov-accent, #e3b341); }
+/* La freccia dice anche il VERSO, non solo quale colonna ordina. */
+.wp-mkt-th.active[data-dir="-1"]::after { content: ' ▾'; }
+.wp-mkt-th.active[data-dir="1"]::after { content: ' ▴'; }
+.wp-mkt-th.wp-mkt-num { text-align: right; }
+
+.wp-mkt-row {
+  padding: 8px;
+  border-bottom: 1px solid #21262d;
+  font-size: 13px;
+  cursor: pointer;
+}
+body.light-theme .wp-mkt-row { border-bottom-color: #e3e7ee; }
+.wp-mkt-row:hover { background: color-mix(in srgb, var(--wp-ov-accent, #e3b341) 9%, transparent); }
+.wp-mkt-row.open { background: color-mix(in srgb, var(--wp-ov-accent, #e3b341) 13%, transparent); }
+.wp-mkt-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-mkt-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.wp-mkt-item { display: flex; align-items: center; gap: 7px; }
+.wp-mkt-code { font-weight: 600; }
+.wp-mkt-type {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 10px; flex-shrink: 0;
+}
+.wp-mkt-type-raw { background: rgba(139, 148, 158, .18); color: #8b949e; }
+.wp-mkt-type-product { background: rgba(88, 166, 255, .16); color: #58a6ff; }
+body.light-theme .wp-mkt-type-product { color: #1a60b6; }
+
+.wp-mkt-yield { color: var(--wp-ov-accent, #e3b341); font-weight: 700; }
+.wp-mkt-total { font-weight: 700; }
+.wp-mkt-bonus { color: #3fb950; }
+body.light-theme .wp-mkt-bonus { color: #1a7f37; }
+.wp-mkt-break.over { color: #f85149; }
+.wp-mkt-num.pos { color: #3fb950; }
+.wp-mkt-num.neg { color: #f85149; }
+body.light-theme .wp-mkt-num.pos { color: #1a7f37; }
+
+.wp-mkt-region { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.wp-mkt-rname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-mkt-flag { width: 18px; height: 13px; object-fit: cover; border-radius: 2px; flex-shrink: 0; }
+.wp-mkt-thin { color: #e3b341; margin-left: 4px; cursor: help; }
+
+/* ── Riga espansa ──────────────────────────────────────────── */
+.wp-mkt-detail {
+  display: grid;
+  grid-template-columns: minmax(240px, .8fr) minmax(320px, 1.6fr);
+  gap: 20px;
+  padding: 14px 12px 18px;
+  border-bottom: 1px solid #21262d;
+  background: color-mix(in srgb, var(--wp-ov-accent, #e3b341) 5%, transparent);
+}
+body.light-theme .wp-mkt-detail { border-bottom-color: #e3e7ee; }
+.wp-mkt-detail h4 {
+  margin: 0 0 7px;
+  font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--wp-ov-text-dim, #8b949e);
+}
+.wp-mkt-dcol + .wp-mkt-dcol h4 { margin-top: 0; }
+.wp-mkt-dcol h4 + .wp-mkt-dlist + h4 { margin-top: 14px; }
+.wp-mkt-dlist { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.wp-mkt-dlist b { font-variant-numeric: tabular-nums; }
+.wp-mkt-mat { font-size: 12.5px; }
+
+.wp-mkt-regrow {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.2fr) 64px 84px 56px minmax(180px, 1.4fr);
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 12.5px;
+  border-bottom: 1px dashed rgba(139, 148, 158, .18);
+}
+.wp-mkt-regrow:last-child { border-bottom: 0; }
+.wp-mkt-parts { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.wp-mkt-part {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: rgba(139, 148, 158, .14);
+  color: var(--wp-ov-text-dim, #8b949e);
+  white-space: nowrap;
+}
+
+/* ── Stretto ───────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .wp-mkt-page { padding: 16px 12px 80px; }
+  .wp-mkt-refresh { margin-left: 0; }
+  .wp-mkt-detail { grid-template-columns: 1fr; }
+  .wp-mkt-regrow { grid-template-columns: minmax(120px, 1fr) 56px 76px 50px; }
+  .wp-mkt-parts { grid-column: 1 / -1; }
+}

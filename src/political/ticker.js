@@ -171,8 +171,13 @@ async function fetchAllElectionsOnce() {
       const { e, countryName, start, end } = r;
       const detail    = details[idx];
       const type      = e.type === 'president' ? 'PRES' : 'CONG';
-      const startDate = new Date(start).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-      const endDate   = new Date(end).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+      // WarEra+ : la data segue la LINGUA SCELTA nell'app, non quella del
+      // browser. Con `undefined` un browser italiano scriveva "24 ago"
+      // dentro una frase in inglese, dove "ago" si legge come "fa": stessa
+      // ambiguità corretta nel ticker dello shell (src/app/newsTicker.js).
+      const dateLocale = document.documentElement.lang || undefined;
+      const startDate = new Date(start).toLocaleDateString(dateLocale, { day: 'numeric', month: 'short' });
+      const endDate   = new Date(end).toLocaleDateString(dateLocale, { day: 'numeric', month: 'short' });
 
       if (now < start) {
         const candidateCount = detail?.candidates?.length || 0;

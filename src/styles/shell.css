@@ -678,6 +678,11 @@ body.light-theme .wp-panel-name {
 .wp-mu-overlay   { --wp-ov-accent: #e5484d; }   /* Unità Militari: rosso */
 .wp-nations-overlay { --wp-ov-accent: #39d0d8; } /* Statistiche nazioni: ciano */
 .wp-guide-overlay { --wp-ov-accent: #d29922; }   /* Guida: ambra */
+.wp-market-overlay { --wp-ov-accent: #e3b341; }  /* Rendite di produzione: oro */
+/* L'oro chiaro sparisce sul fondo chiaro: sul tema chiaro l'accento della
+   sezione diventa la sua versione scura (la stessa dichiarata come
+   rgbLight in OVERLAY_TINTS, src/app/overlayChrome.js). */
+body.light-theme .wp-market-overlay { --wp-ov-accent: #8a6410; }
 .wp-news-overlay {                               /* News: blu */
   --wp-ov-accent: #58a6ff;
   --wp-ov-bg-light: #ece3d2;                     /* carta di giornale */
@@ -2901,3 +2906,25 @@ body.light-theme .wp-ship-tip {
   color: #3e2f1c;
   box-shadow: 0 4px 14px rgba(90, 65, 30, .28);
 }
+
+/* Etiche del partito al governo nel pannello nazione
+   (src/diplomacy/countryEthics.js) */
+.wp-eth-box {
+  padding: 9px 11px;
+  background: var(--wp-ov-surface, #161b22);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 10px;
+  font-size: 12.5px;
+}
+.wp-eth-party { font-weight: 700; margin-bottom: 6px; }
+.wp-eth-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+.wp-eth-tag {
+  padding: 2px 8px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.wp-eth-pos { color: #58a6ff; background: rgba(88, 166, 255, .12); border-color: rgba(88, 166, 255, .35); }
+.wp-eth-neg { color: #a371f7; background: rgba(163, 113, 247, .12); border-color: rgba(163, 113, 247, .35); }
+.wp-eth-spec { color: var(--wp-ov-text-dim, #8b949e); }
+.wp-eth-bonus { color: #3fb950; font-weight: 700; }
+.wp-eth-none { opacity: .75; }

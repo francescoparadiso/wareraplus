@@ -160,8 +160,16 @@ export function initTheme() {
  * importarli qui — stesso comportamento, dipendenza esplicita anziché
  * implicita nel binding globale.
  */
-export function toggleTheme({ loadElection, renderAllPartiesChart, loadPresidentialElection, safeDestroy, lastAllParties, lastPresData } = {}) {
+export function toggleTheme(deps = {}) {
   applyTheme(getTheme() === 'dark' ? 'light' : 'dark');
+  repaintAfterTheme(deps);
+}
+
+/* Solo la parte "ridisegna quello che è a schermo nei colori nuovi",
+   separata da toggleTheme perché ora il tema lo cambia lo shell (un
+   interruttore solo per tutta l'app, vedi domTemplate.js): applyTheme
+   arriva da src/app/themeSync.js, e questo lo segue. */
+export function repaintAfterTheme({ loadElection, renderAllPartiesChart, loadPresidentialElection, safeDestroy, lastAllParties, lastPresData } = {}) {
   setTimeout(() => {
     if (document.getElementById('congress-view').style.display !== 'none' && currentCongressElectionId) {
       loadElection?.(currentCongressElectionId);

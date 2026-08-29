@@ -44,11 +44,12 @@ import { contestedRankedList, getContestedStats } from '../diplomacy/contestedHe
 import { warIntensityRankedList, getWarIntensityStats } from '../diplomacy/warIntensityHeatmap.js';
 import { buildPlaystyleScale, getBalanceColor, getPlaystyleStats } from '../diplomacy/playstyleHeatmap.js';
 import { getTrendColor, getTrendStats } from '../diplomacy/playstyleTrendHeatmap.js';
+import { activeDeposits, depositsByCountry, getProductionColor, getProductionStats, productionRankedList, RESOURCE_TYPES } from '../diplomacy/productionHeatmap.js';
 
 /** Le viste che hanno un riepilogo. Chi chiama usa questo elenco per
  *  decidere se aprire il pannello: tenerlo qui evita che countryPanel.js
  *  e map.js abbiano due liste da tenere allineate a mano. */
-export const OVERVIEW_MODES = ['blocs', 'population', 'weeklyDamage', 'contested', 'warIntensity', 'playstyle'];
+export const OVERVIEW_MODES = ['blocs', 'population', 'weeklyDamage', 'production', 'contested', 'warIntensity', 'playstyle'];
 
 export function hasViewOverview(mode) {
   return OVERVIEW_MODES.includes(mode);
@@ -60,6 +61,7 @@ export function hasViewOverview(mode) {
 const TOP_NATIONS = 20;
 const TOP_REGIONS = 20;
 const TOP_PLAYSTYLE = 10;
+const TOP_DEPOSITS = 12;
 
 function fmt(n) {
   if (n == null || isNaN(n)) return '—';
@@ -399,6 +401,99 @@ function playstyleTrendBodyHtml() {
     + (toEco.length ? `<div class="wp-panel-section-title">${escapeHtml(t('vo_trend_most_eco'))}</div>` + toEco.map(row).join('') : '');
 }
 
+// ══════════════════ BONUS PRODUZIONE ══════════════════
+
+/** La classifica del bonus, con SOTTO ogni nazione quali risorse lo
+ *  producono: "+25%" da solo non dice se sono cinque risorse diverse o una
+ *  sola in cinque regioni, e sono due situazioni diverse (la seconda si
+ *  perde tutta insieme se cade quella regione). Il conto per risorsa in
+ *  fondo dice invece quanto è rara ciascuna nel mondo. */
+function productionHtml() {
+  const title = t('vo_production_title');
+  const about = t('vo_production_about');
+  const rows = productionRankedList(TOP_NATIONS);
+  if (!rows.length) return headerHtml(title) + aboutHtml(about) + emptyHtml(t('vo_no_data'));
+
+  const s = getProductionStats();
+  const top = rows[0].bonus || 1;
+  const deposits = activeDeposits();
+  const depByCountry = depositsByCountry();
+  const worldSpread = RESOURCE_TYPES
+    .map(r => `${r.icon} ${s.byResource[r.key] || 0}`)
+    .join('  ');
+
+  return headerHtml(title, s.withBonus)
+    + aboutHtml(about)
+    + statsHtml([
+      { label: t('vo_stat_nations_with_bonus'), value: fmt(s.withBonus) },
+      { label: t('vo_stat_nations_without_bonus'), value: fmt(s.without) },
+      { label: t('vo_stat_best_bonus'), value: `+${s.best}%` },
+      { label: t('vo_stat_ethic_nations'), value: s.ethicsLoaded ? fmt(s.withEthic) : '…' },
+    ])
+    + rows.map((r, i) => rowHtml({
+      rank: i + 1,
+      icon: flagImgHtml(r.id, r.nation, 'wp-vo-flag'),
+      name: r.nation.name || '—',
+      value: `+${r.bonus}%`,
+      // Una risorsa per icona, col numero solo quando le regioni sono più
+      // di una: "⚫💎 ☢️2" si legge, "⚫1 💎1 ☢️2" no.
+      // Icone delle risorse fisse + i giacimenti a tempo attivi in casa
+      // (⛏), che sono l'altro bonus alla produzione ma dura pochi giorni.
+      // Sotto il totale, da cosa è fatto: risorse (icone) + etica
+      // industrialista (⚙ +30 sull'item specializzato) + giacimenti a
+      // tempo attivi in casa (⛏). Il numero grande è la somma.
+      sub: [
+        r.types.map(x => `${x.icon}${x.regions > 1 ? x.regions : ''}`).join(' '),
+        r.ethic ? `⚙+${r.ethic}${r.specializedItem ? ` ${r.specializedItem}` : ''}` : '',
+        depByCountry.get(r.id) ? `⛏${depByCountry.get(r.id)}` : '',
+      ].filter(Boolean).join('  '),
+      share: r.bonus / top,
+      color: getProductionColor(r.bonus),
+      dataset: ` data-nation-id="${r.id}"`,
+    })).join('')
+    + `<div class="wp-vo-more">${escapeHtml(t('vo_production_world', { n: s.regions }))} ${worldSpread}`
+      + (s.ethicsLoaded ? '' : ` · ${escapeHtml(t('vo_production_ethics_loading'))}`)
+      + '</div>'
+    + depositsHtml(deposits);
+}
+
+/* I GIACIMENTI: l'altro bonus alla produzione, e l'unico che scade.
+   `region.deposit` vale +30% su UN item in UNA regione per pochi giorni
+   (vedi productionHeatmap.js), quindi la cosa che conta non è la
+   classifica ma quanto manca: l'elenco è ordinato per scadenza. */
+function depositsHtml(deposits) {
+  if (!deposits.length) return '';
+  const now = Date.now();
+  const rows = deposits.slice(0, TOP_DEPOSITS).map(d => {
+    const nation = d.countryId ? state.nationMap.get(d.countryId) : null;
+    const hours = Math.max(0, Math.round((d.endsAt - now) / 3600000));
+    const left = hours >= 24
+      ? t('vo_deposit_days', { n: Math.floor(hours / 24) })
+      : t('vo_deposit_hours', { n: hours });
+    return rowHtml({
+      rank: '⛏',
+      icon: nation ? flagImgHtml(d.countryId, nation, 'wp-vo-flag') : '<span class="wp-vo-dot" style="background:#30363d"></span>',
+      name: `${d.name} · ${d.type}`,
+      value: `+${d.bonusPercent}%`,
+      sub: `${nation?.name || '—'} · ${left}`,
+      // Barra = quanto ne resta sulla durata intera: si vede a colpo
+      // d'occhio quali stanno per spegnersi.
+      share: d.startsAt && d.endsAt > d.startsAt
+        ? Math.max(0, Math.min(1, (d.endsAt - now) / (d.endsAt - d.startsAt)))
+        : 0.5,
+      color: '#e3b341',
+      dataset: nation ? ` data-nation-id="${d.countryId}"` : '',
+    });
+  }).join('');
+
+  return `<div class="wp-panel-section-title">${escapeHtml(t('vo_deposits_title'))} (${deposits.length})</div>`
+    + `<div class="wp-vo-about">${escapeHtml(t('vo_deposits_about'))}</div>`
+    + rows
+    + (deposits.length > TOP_DEPOSITS
+      ? `<div class="wp-vo-more">${escapeHtml(t('vo_more', { n: deposits.length - TOP_DEPOSITS }))}</div>`
+      : '');
+}
+
 // ══════════════════ INGRESSO ══════════════════
 
 /** @returns {string} markup del riepilogo, o stringa vuota se la vista non ne ha uno. */
@@ -426,6 +521,8 @@ export function buildViewOverviewHtml(mode) {
       statLabel: t('vo_stat_world_week_damage'),
     });
   }
+
+  if (mode === 'production') return productionHtml();
 
   if (mode === 'contested') {
     const counts = state.contestedCounts;
