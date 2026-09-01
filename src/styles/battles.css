@@ -580,7 +580,6 @@ body.light-theme .wp-btl { --wp-btl-def: #1a5fb4; --wp-btl-atk: #b02026; }
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  max-width: 100%;
   padding: 1px 4px 1px 1px;
   margin: -1px 0 -1px -1px;
   border: 0;
@@ -591,11 +590,23 @@ body.light-theme .wp-btl { --wp-btl-def: #1a5fb4; --wp-btl-atk: #b02026; }
   text-align: left;
   cursor: pointer;
 }
+/* Il nome NON si taglia mai. Prima aveva ellissi e max-width, e in una
+   colonna stretta usciva "B..." o "Chasseurs Ardenn...": un nome tagliato
+   in una tabella che serve a leggere i nomi non e' un compromesso di
+   layout, e' il contenuto perso. Va a capo invece: la riga cresce in
+   altezza, che costa molto meno di un nome illeggibile, e la tabella non
+   sfonda in larghezza. */
 .wp-btl-mu-link > span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
 }
+/* La cella deve poter crescere: era inline-flex (ereditata da
+   .wp-btl-nation, pensata per bandiera+nome su una riga sola) e teneva
+   tutto schiacciato su una riga. */
+.wp-btl-table td.wp-btl-nation:has(.wp-btl-mu-link) { display: table-cell; }
+.wp-btl-mu-link { align-items: flex-start; }
+.wp-btl-mu-av { margin-top: 1px; }
 .wp-btl-mu-link:hover {
   background: rgba(255, 255, 255, .07);
   color: var(--wp-btl-link-hover, #79c0ff);
@@ -618,3 +629,24 @@ body.light-theme .wp-btl { --wp-btl-def: #1a5fb4; --wp-btl-atk: #b02026; }
   color: var(--wp-ov-text-dim, #8b949e);
   white-space: nowrap;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Taglia incassata meno quello che quella nazione ha versato
+   ------------------------------------------------------------------
+   Nella colonna "taglia incassata" compare, per le sole nazioni che
+   hanno anche FINANZIATO quello schieramento, quanto avevano mandato:
+   "3664 − 2000". I due numeri rispondono insieme alla domanda che nessuno
+   dei due risponde da solo — se chi ha pagato la guerra ci ha poi
+   rimesso o guadagnato.
+
+   ⚠️ NON è una sottrazione contabile e il rosso non è un saldo: i soldi
+   versati vanno nel TESORO del belligerante, quello incassato lo
+   prendono i CITTADINI del donatore. Sono due tasche diverse. Il rosso
+   dice "questo è uscito", non "questo è il risultato".
+   ══════════════════════════════════════════════════════════════ */
+.wp-btl-sent {
+  color: #f85149;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.wp-btl-sent-dash { opacity: .55; margin: 0 1px 0 3px; }

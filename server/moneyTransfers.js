@@ -26,12 +26,16 @@
    ogni venti minuti, e novanta giorni di archivio stanno in poche
    centinaia di KB.
 
-   ⚠️ Procedura TOKEN-GATED: su api6 risponde 401. Qui passa da `trpcBatch`
-   del server principale, che ha la chiave (WARERA_API_TOKEN nell'ambiente
-   di pm2) — è lo stesso motivo per cui lato client passa dal proxy.
+   ⚠️ PROCEDURA TOKEN-GATED, e la chiave giusta è una sola.
+   `transaction.getPaginatedTransactions` risponde 401 su api6 nudo E
+   attraverso il Worker Cloudflare — verificato dal vivo qui e già prima
+   in proxyIndex.js, che per lo stesso motivo non passa da `trpcBatch`.
+   L'unica che apre questo endpoint è quella del VPS, la stessa che la
+   route /trpc mette in `X-API-Key`: si riusa quella, presa dall'ambiente
+   di pm2 (WARERA_API_TOKEN) e mai scritta nel codice.
    ═══════════════════════════════════════════════════════════════════════ */
 
-let trpcBatch, readCache, writeCache;
+let deps = null;
 
 const FILE = 'money-transfers';
 
@@ -46,12 +50,15 @@ const PAGE = 50;
 // e il taglio non scattasse più, meglio fermarsi che sfogliare all'infinito.
 const MAX_PAGES = 10;
 
-/** Chiamato una volta dal server principale, prima di qualunque poll. */
+/** Chiamato una volta dal server principale, prima di qualunque poll.
+ *  `apiToken`/`trpcUpstream` arrivano come getter: sono dichiarati più in
+ *  basso nel file del server, insieme alla route /trpc. */
 function initMoneyTransfers(tools) {
-  trpcBatch = tools.trpcBatch;
-  readCache = tools.readCache;
-  writeCache = tools.writeCache;
+  deps = tools;
 }
+
+function readCache(name, fb) { return deps.readCache(name, fb); }
+function writeCache(name, data, opts) { return deps.writeCache(name, data, opts); }
 
 const _ts = (iso) => { const t = Date.parse(iso || ''); return Number.isFinite(t) ? t : null; };
 
@@ -66,17 +73,25 @@ function _read() {
 }
 
 /** Una pagina di bonifici, dal più recente all'indietro.
+ *  Non passa da `trpcBatch`: serve la chiave del VPS (vedi il blocco in
+ *  testa) ed è paginata a cursore, mentre il batch serve a raggruppare
+ *  chiamate indipendenti. Stessa scelta di proxyIndex.js.
+ *
  *  ⚠️ L'input va NUDO: incapsularlo in {json: ...} fa passare la richiesta
  *  ma i filtri vengono ignorati in silenzio e torna il flusso globale di
  *  tutte le transazioni del gioco. */
 async function _fetchPage(cursor) {
   const input = { transactionType: 'countryMoneyTransfer', limit: PAGE };
   if (cursor) input.cursor = cursor;
-  const [res] = await trpcBatch([['transaction.getPaginatedTransactions', input]]);
-  if (!res || !Array.isArray(res.items)) {
+  const url = `${deps.trpcUpstream}/transaction.getPaginatedTransactions`
+    + `?input=${encodeURIComponent(JSON.stringify(input))}`;
+  const res = await fetch(url, { headers: deps.apiToken ? { 'X-API-Key': deps.apiToken } : {} });
+  if (!res.ok) throw new Error(`getPaginatedTransactions: HTTP ${res.status}`);
+  const data = (await res.json())?.result?.data;
+  if (!data || !Array.isArray(data.items)) {
     throw new Error('getPaginatedTransactions: risposta inattesa');
   }
-  return { items: res.items, nextCursor: res.nextCursor || null };
+  return { items: data.items, nextCursor: data.nextCursor || null };
 }
 
 /** Riga compatta: chiavi corte perché il file viaggia intero verso il
@@ -97,7 +112,11 @@ function _toRow(t) {
  * un bonifico già in archivio: in regime normale una richiesta sola.
  */
 async function pollMoneyTransfers() {
-  if (!trpcBatch) return;
+  if (!deps) return;
+  if (!deps.apiToken) {
+    console.warn('[money-transfers] WARERA_API_TOKEN assente: archivio fermo (401 sulle transazioni)');
+    return;
+  }
   const store = _read();
   const known = new Set(store.data.map(r => r.i));
   const fresh = [];

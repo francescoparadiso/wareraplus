@@ -124,7 +124,8 @@ function typeLabel(t) {
    domanda è "quanto ha pesato questa nazione fra i suoi", e con due lati
    sbilanciati la quota sul totale non risponderebbe. */
 function sideTable(rows, sideKey, battle, opts) {
-  const { label, color, countryId, expanded, entityName, entityFlag, truncated, entityHeader, entityCell } = opts;
+  const { label, color, countryId, expanded, entityName, entityFlag, truncated, entityHeader,
+          entityCell, sentBy } = opts;
   // entityCell: cella già in HTML (unità militari, che sono cliccabili).
   // Senza, si resta al comportamento originale nome+bandiera come testo.
   const cell = entityCell || ((id) => `${entityFlag(id)}${escapeHtml(entityName(id) || '—')}`);
@@ -153,7 +154,7 @@ function sideTable(rows, sideKey, battle, opts) {
               <td class="wp-btl-nation">${cell(r.id)}</td>
               <td class="wp-btl-num">${fmtNum(r.damage)}</td>
               <td class="wp-btl-num wp-btl-pct">${totDmg ? (r.damage / totDmg * 100).toFixed(1) : '0.0'}%</td>
-              <td class="wp-btl-num wp-btl-bounty">${r.money ? fmtMoney(r.money) : '—'}</td>
+              <td class="wp-btl-num wp-btl-bounty">${r.money ? fmtMoney(r.money) : '—'}${sentHtml(sentBy, r.id)}</td>
             </tr>`).join('')}
         </tbody>
         <tfoot><tr>
@@ -169,6 +170,31 @@ function sideTable(rows, sideKey, battle, opts) {
             expanded ? btlT('showTop', { n: TOP }) : btlT('showAll', { n: rows.length })}</button>`
         : ''}
     </div>`;
+}
+
+/** Quanto quella nazione aveva VERSATO a questo schieramento, accanto a
+ *  quanto ha incassato. Compare solo per chi ha versato davvero: uno
+ *  "− 0" su tutte le altre righe sarebbe rumore su un dato raro.
+ *
+ *  ⚠️ i due numeri NON si sottraggono per davvero: il versato entra nel
+ *  tesoro del belligerante, l'incassato lo prendono i cittadini di chi
+ *  versa. Il rosso segna un'uscita, non un saldo — vedi la nota sotto la
+ *  tabella. */
+function sentHtml(sentBy, countryId) {
+  const sent = sentBy?.get(countryId);
+  if (!sent) return '';
+  return `<span class="wp-btl-sent-dash">−</span><span class="wp-btl-sent"
+    title="${btlT('sentHint')}">${fmtMoney(sent)}</span>`;
+}
+
+/** Somma per nazione dei bonifici entrati in `countryId` nella finestra. */
+function sentTotals(countryId, fromMs, toMs) {
+  const out = new Map();
+  if (!_money || !countryId || !fromMs) return out;
+  for (const t of transfersFor(_money, countryId, fromMs, toMs)) {
+    out.set(t.from, (out.get(t.from) || 0) + t.money);
+  }
+  return out;
 }
 
 function contractsHtml(contracts, truncated) {
@@ -333,6 +359,11 @@ export function renderBattleDetail(battle) {
   }
 
   const nm = (id) => nationName(id);
+  const wFrom = _detail?.startedAt;
+  const wTo = _detail?.finishedAt || (battle.live ? Date.now() : battle.endedAt);
+  const sentDef = sentTotals(battle.defender.countryId, wFrom, wTo);
+  const sentAtk = sentTotals(battle.attacker.countryId, wFrom, wTo);
+  const anySent = sentDef.size || sentAtk.size;
   return `
     <div class="wp-btl-detail">
       ${head}
@@ -343,13 +374,14 @@ export function renderBattleDetail(battle) {
       <div class="wp-btl-sides">
         ${sideTable(_detail.sides.defender, 'defender', battle, {
           label: btlT('defender'), color: 'var(--wp-btl-def)', countryId: battle.defender.countryId,
-          expanded: _expanded.defender, entityName: nm, entityFlag: flagHtml,
+          expanded: _expanded.defender, entityName: nm, entityFlag: flagHtml, sentBy: sentDef,
           entityHeader: btlT('colNation'), truncated: _detail.truncated?.defender })}
         ${sideTable(_detail.sides.attacker, 'attacker', battle, {
           label: btlT('attacker'), color: 'var(--wp-btl-atk)', countryId: battle.attacker.countryId,
-          expanded: _expanded.attacker, entityName: nm, entityFlag: flagHtml,
+          expanded: _expanded.attacker, entityName: nm, entityFlag: flagHtml, sentBy: sentAtk,
           entityHeader: btlT('colNation'), truncated: _detail.truncated?.attacker })}
       </div>
+      ${anySent ? `<p class="wp-btl-foot wp-btl-foot-tight">${btlT('sentNote')}</p>` : ''}
 
       <h3 class="wp-btl-h3">${btlT('byMu')}</h3>
       ${muSectionHtml(battle)}

@@ -248,8 +248,12 @@ initBattleArchive({
 });
 
 initMoneyTransfers({
-  trpcBatch: (...args) => trpcBatch(...args),
   readCache, writeCache,
+  // Come proxyIndex: le transazioni vogliono la chiave del VPS, e non
+  // basta quella del Worker (401 verificato). Getter per riferimento
+  // tardivo, le costanti sono dichiarate piu' in basso.
+  get apiToken() { return WARERA_API_TOKEN; },
+  get trpcUpstream() { return TRPC_UPSTREAM; },
 });
 
 // ---------------------------------------------------------------------------
@@ -2093,6 +2097,11 @@ cron.schedule('1 2 * * *', snapshotDailyDamage, { timezone: DAILY_DAMAGE_TZ });
   // si chiama qui — parte da solo alla prima notte utile (vedi cron sopra).
   await pollBattleArchive();
   await pollMercArchive();
+  // Finanziamenti: giro subito e non al primo cron. Non è impazienza —
+  // la finestra che l'API espone è di ~3 giorni e scorre, quindi ogni
+  // minuto in cui questo modulo non guarda è un pezzo di storico che si
+  // perde per sempre (vedi il blocco in testa a moneyTransfers.js).
+  await pollMoneyTransfers();
   // Primissimo avvio: senza scatto il "danno di oggi" resterebbe muto fino
   // alle 02:00 successive. Se ne fa uno subito — vale meno (parte da adesso,
   // non dal cambio giorno), e infatti il client mostra l'ora dello scatto
