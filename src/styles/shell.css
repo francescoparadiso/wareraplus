@@ -3154,15 +3154,18 @@ body.light-theme .wp-ship-tip {
    Compare solo fuori dal deploy live (vedi src/shared/deployEnv.js).
    Serve a non confondere il preview col tool pubblico: le due versioni
    sono identiche a vedersi e l'URL, da telefono, è mezzo nascosto.
-   In alto a SINISTRA perché a destra ci sono già i controlli della
-   mappa; pointer-events: none così non ruba mai un click alla mappa
-   sotto, che è l'unico modo in cui un cartellino decorativo può fare
-   danno vero.
+
+   In BASSO a sinistra, non in alto: il primo tentativo era l'angolo in
+   alto a sinistra e finiva sopra il logo "WarEra+" della barra menù,
+   che quella riga la occupa tutta. In basso a sinistra non c'è niente
+   — le credit pill stanno al centro e l'attribuzione MapLibre a destra.
+   pointer-events: none così non ruba mai un click alla mappa sotto, che
+   è l'unico modo in cui un cartellino decorativo può fare danno vero.
    ══════════════════════════════════════════════════════════════ */
 #wp-deploy-badge {
   position: fixed;
-  top: 8px;
-  left: 8px;
+  bottom: 10px;
+  left: 10px;
   z-index: 9999;
   padding: 3px 9px;
   border-radius: 999px;
@@ -3177,5 +3180,5 @@ body.light-theme .wp-ship-tip {
 }
 
 @media (max-width: 768px) {
-  #wp-deploy-badge { top: 6px; left: 6px; padding: 2px 7px; font-size: 10px; }
+  #wp-deploy-badge { bottom: 8px; left: 8px; padding: 2px 7px; font-size: 10px; }
 }
