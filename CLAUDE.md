@@ -270,8 +270,23 @@ wareraPlus/
     │   ├── battleDetail.js       ← scheda di UNA battaglia: scomposizione per
     │   │                          nazione e per unità militare (danno, quota del
     │   │                          lato, taglia INCASSATA) + elenco dei contratti
-    │   │                          mercenari. ⚠️ la colonna taglia qui è "incassato",
+    │   │                          mercenari, e in CIMA i FINANZIATORI: le nazioni che
+    │   │                          hanno versato nel tesoro dei due belligeranti mentre
+    │   │                          la battaglia era aperta (due tabelle, una per
+    │   │                          schieramento).
+    │   │                          ⚠️ la colonna taglia qui è "incassato",
     │   │                          non "speso": coincidono solo sommando il lato.
+    │   ├── moneyTransfers.js ← NUOVO — i bonifici da tesoro a tesoro
+    │   │                  (`transaction.getPaginatedTransactions`, tipo
+    │   │                  countryMoneyTransfer). Sono POCHI: ~36 al giorno in tutto
+    │   │                  il mondo e il cursore si esaurisce in tre pagine, quindi
+    │   │                  si scarica UNA lista per sessione e la si filtra in
+    │   │                  memoria sulla finestra della singola battaglia — aprire
+    │   │                  venti battaglie costa quanto aprirne una. ⚠️ procedura
+    │   │                  TOKEN-GATED (401 su api6): passa dal proxy, unica della
+    │   │                  sezione a farlo. Lo storico copre ~3 giorni: per una
+    │   │                  battaglia più vecchia la vista dice "fuori portata", non
+    │   │                  "nessun finanziamento".
     │   ├── main.js, battleList.js, warExpenses.js, i18n.js (9 lingue)
     ├── guide/                    ← NUOVO — Guida "Come si usa": SOLO testo statico
     │   ├── main.js                  (zero fetch, zero stato) + i18n.js a 9 lingue.
@@ -590,6 +605,14 @@ Il **contatore visite** (`/visits`) invece sì: finché non rideployi, la pill
 semplicemente non compare — è il degrado voluto, non un guasto. Il seme di
 1325 è la misura di Vercel Analytics al 2026-08-31 e vive in `VISITS_SEED`
 nel server, non nel client.
+
+⚠️ **L'input tRPC NON va incapsulato in `{"json": ...}`.** Le procedure
+vogliono l'oggetto nudo (`?input={"transactionType":"...","limit":50}`).
+Col wrapper superjson la richiesta riesce lo stesso ma **i filtri vengono
+ignorati in silenzio**: `transaction.getPaginatedTransactions` risponde 200
+con il flusso globale delle ultime transazioni invece che con quelle
+filtrate, e il sintomo si legge come "l'endpoint non sa filtrare" — falso,
+e porta a progettare intorno a un limite che non esiste.
 
 ⚠️ **`rankings.countryBounty` NON è la spesa di una nazione.** Sembra la
 risposta pronta (è già in `state.nazioniGlobal`, gratis) ma correla 0,87 col
