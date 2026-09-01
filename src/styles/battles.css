@@ -551,3 +551,59 @@ body.light-theme .wp-btl { --wp-btl-def: #1a5fb4; --wp-btl-atk: #b02026; }
 }
 
 .wp-btl-side-note { padding: 6px 12px 0; font-size: 10.5px; }
+
+/* ══════════════════════════════════════════════════════════════
+   Unità militari cliccabili nel dettaglio battaglia
+   ------------------------------------------------------------------
+   Nelle classifiche MU e nei contratti mercenari l'unità non è più una
+   stringa: logo + nome, e un click apre la sua scheda in Esplora Unità
+   Militari. Un <button> e non un <a>: non c'è un URL da copiare, e un
+   link finto è una promessa che il tasto destro non mantiene.
+   Il logo tiene il posto anche quando manca (quadrato vuoto), altrimenti
+   i nomi di una colonna finirebbero incolonnati male fra chi ce l'ha e
+   chi no.
+   ══════════════════════════════════════════════════════════════ */
+.wp-btl-mu-av {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, .06);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.wp-btl-mu-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.wp-btl-mu-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 1px 4px 1px 1px;
+  margin: -1px 0 -1px -1px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.wp-btl-mu-link > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wp-btl-mu-link:hover {
+  background: rgba(255, 255, 255, .07);
+  color: var(--wp-btl-link-hover, #79c0ff);
+}
+.wp-btl-mu-link:focus-visible {
+  outline: 2px solid var(--wp-btl-link-hover, #79c0ff);
+  outline-offset: 1px;
+}
+
+/* Id non risolto: resta testo inerte, e si vede che è un ripiego. */
+.wp-btl-mu-unres { opacity: .6; font-style: italic; }

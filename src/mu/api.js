@@ -239,6 +239,65 @@ export function fetchMuDetail(muId) {
   return trpcCall('mu.getById', { muId });
 }
 
+/* ═════════════════════════════════════════════════════════════
+   Nome e avatar, per pochi id già noti
+   ------------------------------------------------------------------
+   Nato per i contratti mercenari nel dettaglio battaglia: lì servono i
+   nomi di TRE O QUATTRO unità, non delle ~550 della directory. Prima
+   quella tabella leggeva la directory e basta, quindi finché nessuno la
+   scaricava mostrava "unità sconosciuta" su ogni riga — una frase che
+   dice "questa unità non si sa chi sia" quando la verità era "non
+   l'abbiamo chiesta".
+
+   Torna nome E avatarUrl perché chi la usa disegna una riga cliccabile
+   col logo dell'unità accanto, non una stringa.
+
+   Il costo qui è una richiesta sola a prescindere dal numero di id:
+   `trpcCall` accorpa da sé tutte le chiamate dello stesso giro di event
+   loop in un unico POST batch (vedi src/shared/trpcClient.js), lo stesso
+   meccanismo di fetchUsersLite qui sotto. A chunk di 25 perché un batch
+   sterminato è una richiesta che il server può rifiutare intera.
+
+   Tre livelli, dal più economico: cache dei nomi → directory se è già in
+   memoria (zero rete) → mu.getById per quel che resta. Un id che non si
+   risolve resta fuori dalla mappa: chi chiama decide cosa scriverci, e
+   NON deve scrivere un nome inventato.
+   ══════════════════════════════════════════════════════════════ */
+const _nameCache = new Map();
+const NAME_CHUNK = 25;
+
+export async function fetchMuBriefs(muIds) {
+  const out = new Map();
+  const missing = [];
+
+  for (const id of new Set((muIds || []).filter(Boolean))) {
+    if (_nameCache.has(id)) { out.set(id, _nameCache.get(id)); continue; }
+    const fromDir = getCachedMu(id);
+    if (fromDir?.name) {
+      const brief = { name: fromDir.name, avatarUrl: fromDir.avatarUrl || null };
+      _nameCache.set(id, brief);
+      out.set(id, brief);
+      continue;
+    }
+    missing.push(id);
+  }
+  if (!missing.length) return out;
+
+  for (let i = 0; i < missing.length; i += NAME_CHUNK) {
+    const chunk = missing.slice(i, i + NAME_CHUNK);
+    const res = await Promise.all(chunk.map(id =>
+      trpcCall('mu.getById', { muId: id }).catch(() => null)
+    ));
+    res.forEach((mu, k) => {
+      if (!mu?.name) return; // id irrisolto: fuori dalla mappa, mai un nome finto
+      const brief = { name: mu.name, avatarUrl: mu.avatarUrl || null };
+      _nameCache.set(chunk[k], brief);
+      out.set(chunk[k], brief);
+    });
+  }
+  return out;
+}
+
 /** Nome/avatar/livello/danni dei membri. `trpcCall` accoda da sé tutte le
  *  chiamate dello stesso giro di event loop in un unico POST batch (vedi
  *  src/shared/trpcClient.js), quindi un Promise.all qui è UNA richiesta,

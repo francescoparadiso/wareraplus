@@ -41,6 +41,11 @@ let _expanded = { attacker: false, defender: false };
 // cache di sessione — scaricata al massimo una volta, condivisa con la
 // vista Unità Militari, e sopravvive alla chiusura di un dettaglio.
 let _dir = null;
+// Nome + avatar risolti uno per uno (mu.getById in batch), per gli id che
+// servono SUBITO e in numero piccolo: i contratti mercenari. Vedi
+// fetchMuBriefs in src/mu/api.js per il perché non si scarica la
+// directory intera.
+let _muInfo = new Map();
 
 function fmtNum(n) {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -75,8 +80,33 @@ function flagHtml(id) {
 /** Nome unità militare dalla directory GIÀ in memoria. Non la scarica:
  *  quella scelta la fa il chiamante (vedi openMuSection). */
 function muName(id) {
+  const brief = _muInfo.get(id);
+  if (brief?.name) return brief.name;
   const m = _dir?.find(x => x._id === id);
   return m?.name || null;
+}
+
+function muAvatarUrl(id) {
+  const brief = _muInfo.get(id);
+  if (brief) return brief.avatarUrl || null;
+  return _dir?.find(x => x._id === id)?.avatarUrl || null;
+}
+
+/* ── Una unità militare come si deve: logo, nome, e un click che porta
+   alla sua scheda. Le stesse unità hanno già una vista dedicata —
+   leggerne il nome qui e dover poi andare a cercarla a mano in Esplora
+   Unità Militari era lavoro scaricato sull'utente.
+   Se il nome non si è risolto NON diventa un link: un bottone che porta
+   a una scheda vuota è peggio di un testo inerte. ── */
+function muCellHtml(id) {
+  const name = muName(id);
+  const url = muAvatarUrl(id);
+  const av = `<span class="wp-btl-mu-av">${
+    url ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.remove()">` : ''
+  }</span>`;
+  if (!name) return `${av}<span class="wp-btl-mu-unres">${btlT('unknownMu')}</span>`;
+  return `<button type="button" class="wp-btl-mu-link" data-mu-id="${escapeHtml(id)}"
+    title="${btlT('openMuHint')}">${av}<span>${escapeHtml(name)}</span></button>`;
 }
 
 function typeLabel(t) {
@@ -90,7 +120,10 @@ function typeLabel(t) {
    domanda è "quanto ha pesato questa nazione fra i suoi", e con due lati
    sbilanciati la quota sul totale non risponderebbe. */
 function sideTable(rows, sideKey, battle, opts) {
-  const { label, color, countryId, expanded, entityName, entityFlag, truncated, entityHeader } = opts;
+  const { label, color, countryId, expanded, entityName, entityFlag, truncated, entityHeader, entityCell } = opts;
+  // entityCell: cella già in HTML (unità militari, che sono cliccabili).
+  // Senza, si resta al comportamento originale nome+bandiera come testo.
+  const cell = entityCell || ((id) => `${entityFlag(id)}${escapeHtml(entityName(id) || '—')}`);
   const totDmg = rows.reduce((s, r) => s + r.damage, 0);
   const totMoney = rows.reduce((s, r) => s + r.money, 0);
   const shown = expanded ? rows : rows.slice(0, TOP);
@@ -113,7 +146,7 @@ function sideTable(rows, sideKey, battle, opts) {
         <tbody>
           ${shown.map(r => `
             <tr>
-              <td class="wp-btl-nation">${entityFlag(r.id)}${escapeHtml(entityName(r.id) || '—')}</td>
+              <td class="wp-btl-nation">${cell(r.id)}</td>
               <td class="wp-btl-num">${fmtNum(r.damage)}</td>
               <td class="wp-btl-num wp-btl-pct">${totDmg ? (r.damage / totDmg * 100).toFixed(1) : '0.0'}%</td>
               <td class="wp-btl-num wp-btl-bounty">${r.money ? fmtMoney(r.money) : '—'}</td>
@@ -154,7 +187,7 @@ function contractsHtml(contracts, truncated) {
             <tr>
               <td class="wp-btl-nation">${flagHtml(c.payer)}${escapeHtml(nationName(c.payer) || '—')}</td>
               <td><span class="wp-btl-type">${c.side === 'defender' ? btlT('defender') : btlT('attacker')}</span></td>
-              <td>${escapeHtml(muName(c.mu) || btlT('unknownMu'))}</td>
+              <td class="wp-btl-nation">${muCellHtml(c.mu)}</td>
               <td class="wp-btl-num">${fmtNum(c.minDamage)}</td>
               <td class="wp-btl-num">${c.perK ? c.perK.toFixed(3) : '—'}</td>
               <td class="wp-btl-num wp-btl-contracts">${fmtMoney(c.payout)}</td>
@@ -165,6 +198,15 @@ function contractsHtml(contracts, truncated) {
     ${truncated ? `<p class="wp-btl-foot">⚠️ ${btlT('contractsTruncated')}</p>` : ''}`;
 }
 
+/** La nota "nomi non disponibili" va mostrata solo se manca davvero un
+ *  nome, non solo perché la directory non è arrivata: adesso i nomi
+ *  possono venire anche da mu.getById, e una nota che contraddice quello
+ *  che si legge nella tabella è peggio di nessuna nota. */
+function muNamesMissing(mu) {
+  if (!mu) return false;
+  return [...(mu.defender || []), ...(mu.attacker || [])].some(r => !muName(r.id));
+}
+
 function muSectionHtml(battle) {
   if (_muState === 'closed') {
     return `<button type="button" class="wp-btl-more" id="wp-btl-mu-open">${btlT('showMus')}</button>`;
@@ -172,20 +214,18 @@ function muSectionHtml(battle) {
   if (_muState === 'loading') return `<div class="wp-btl-loading">${btlT('loadingCost')}</div>`;
   if (_muState === 'error' || !_mu) return `<p class="wp-btl-foot">${btlT('costUnavailable')}</p>`;
 
-  const nm = (id) => muName(id) || btlT('unknownMu');
-  const noFlag = () => '';
   return `
     <div class="wp-btl-sides">
       ${sideTable(_mu.defender, 'defender', battle, {
         label: btlT('defender'), color: 'var(--wp-btl-def)', countryId: battle.defender.countryId,
-        expanded: _expanded.defender, entityName: nm, entityFlag: noFlag,
+        expanded: _expanded.defender, entityCell: muCellHtml,
         entityHeader: btlT('colUnit'), truncated: _mu.truncated?.defender })}
       ${sideTable(_mu.attacker, 'attacker', battle, {
         label: btlT('attacker'), color: 'var(--wp-btl-atk)', countryId: battle.attacker.countryId,
-        expanded: _expanded.attacker, entityName: nm, entityFlag: noFlag,
+        expanded: _expanded.attacker, entityCell: muCellHtml,
         entityHeader: btlT('colUnit'), truncated: _mu.truncated?.attacker })}
     </div>
-    ${!_dir ? `<p class="wp-btl-foot">${btlT('muNamesMissing')}</p>` : ''}`;
+    ${muNamesMissing(_mu) ? `<p class="wp-btl-foot">${btlT('muNamesMissing')}</p>` : ''}`;
 }
 
 export function renderBattleDetail(battle) {
@@ -250,6 +290,25 @@ export async function loadBattleDetail(battle, repaint) {
   // quindi api.js non le memorizza — riaprirla ridà i numeri aggiornati.
   _detail = await getBattleDetail(battle.id, { live: Boolean(battle.live) });
   repaint();
+  await resolveMuBriefs((_detail?.contracts || []).map(c => c.mu));
+  repaint();
+}
+
+/** Risolve nome e logo di POCHE unità (una richiesta sola, vedi
+ *  fetchMuBriefs) e ridisegna. Volutamente dopo il primo repaint: la
+ *  tabella deve comparire subito, i nomi ci si posano sopra un attimo
+ *  dopo. Se fallisce non succede niente di brutto — restano le righe
+ *  senza link, che è esattamente lo stato di prima. */
+async function resolveMuBriefs(ids) {
+  const wanted = [...new Set((ids || []).filter(Boolean))].filter(id => !_muInfo.has(id));
+  if (!wanted.length) return;
+  try {
+    const { fetchMuBriefs } = await import('../mu/api.js');
+    const got = await fetchMuBriefs(wanted);
+    got.forEach((brief, id) => _muInfo.set(id, brief));
+  } catch (_) {
+    // silenzioso: i nomi sono un di più, la tabella resta leggibile
+  }
 }
 
 export function wireBattleDetail(root, battle, { onBack, repaint }) {
@@ -261,6 +320,19 @@ export function wireBattleDetail(root, battle, { onBack, repaint }) {
       _expanded[side] = !_expanded[side];
       repaint();
     });
+  });
+
+  // Un solo listener delegato: le righe si ridisegnano ad ogni repaint,
+  // e riagganciare un handler per bottone ad ogni giro è il modo classico
+  // di ritrovarsi con listener duplicati.
+  root.addEventListener('click', (e) => {
+    const link = e.target.closest?.('.wp-btl-mu-link');
+    if (!link) return;
+    const muId = link.dataset.muId;
+    if (!muId) return;
+    import('../app/muOverlay.js')
+      .then(m => m.openMuView(muId))
+      .catch(() => {});
   });
 
   root.querySelector('#wp-btl-mu-open')?.addEventListener('click', async () => {
@@ -278,6 +350,12 @@ export function wireBattleDetail(root, battle, { onBack, repaint }) {
     if (dir) _dir = dir;
     _muState = mu ? 'open' : 'error';
     repaint();
+    // La directory copre già quasi tutto; questo raccoglie le briciole
+    // (unità nate dopo l'ultimo giro del server, o directory non arrivata).
+    if (mu) {
+      await resolveMuBriefs([...(mu.defender || []), ...(mu.attacker || [])].map(r => r.id));
+      repaint();
+    }
   });
 }
 
