@@ -340,15 +340,24 @@ export async function getBattleDetail(battleId, { live = false } = {}) {
     ['battleRanking.getRanking', { battleId, dataType, type, side, limit: 100 }];
 
   try {
-    const [dAtk, dDef, mAtk, mDef, auctions] = await trpcBatch([
+    // `battle.getById` viaggia nello stesso batch: serve l'ORARIO DI
+    // INIZIO, che le righe dell'archivio non portano (hanno solo la fine)
+    // e senza il quale non si può dire quali finanziamenti siano arrivati
+    // "durante" la battaglia. È pubblica come le altre quattro: nessun
+    // consumo del proxy, e una procedura in più in un batch che c'era già
+    // non è una richiesta in più.
+    const [dAtk, dDef, mAtk, mDef, auctions, raw] = await trpcBatch([
       rank('damage', 'country', 'attacker'),
       rank('damage', 'country', 'defender'),
       rank('money', 'country', 'attacker'),
       rank('money', 'country', 'defender'),
       ['mercenaryContractAuction.getPaginatedAuctions', { battleId, status: 'won', limit: 50 }],
+      ['battle.getById', { battleId }],
     ]);
 
     const detail = {
+      startedAt: _ts(raw?.createdAt),
+      finishedAt: _ts(raw?.endedAt),
       sides: {
         attacker: _mergeSide(_rankRows(dAtk, 'country'), _rankRows(mAtk, 'country')),
         defender: _mergeSide(_rankRows(dDef, 'country'), _rankRows(mDef, 'country')),

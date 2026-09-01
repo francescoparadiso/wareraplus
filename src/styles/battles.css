@@ -607,3 +607,14 @@ body.light-theme .wp-btl { --wp-btl-def: #1a5fb4; --wp-btl-atk: #b02026; }
 
 /* Id non risolto: resta testo inerte, e si vede che è un ripiego. */
 .wp-btl-mu-unres { opacity: .6; font-style: italic; }
+
+/* Colonna "quando" dei finanziatori: data e ora per esteso in una tabella
+   già stretta. Tabulare così le cifre si incolonnano, e un filo più
+   piccola perché è il dato meno importante delle tre colonne — chi ha
+   mandato e quanto vengono prima. */
+.wp-btl-when {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--wp-ov-text-dim, #8b949e);
+  white-space: nowrap;
+}

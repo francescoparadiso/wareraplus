@@ -27,6 +27,7 @@ import { escapeHtml } from '../diplomacy/utils.js';
 import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 import { btlT } from './i18n.js';
 import { getBattleDetail, getBattleMuBreakdown } from './api.js';
+import { fetchMoneyTransfers, transfersFor, windowIsShort } from './moneyTransfers.js';
 
 // Righe mostrate prima del "mostra tutte": una battaglia grossa ha ~77
 // nazioni per lato, e le prime dieci fanno quasi tutto il danno.
@@ -46,6 +47,9 @@ let _dir = null;
 // fetchMuBriefs in src/mu/api.js per il perché non si scarica la
 // directory intera.
 let _muInfo = new Map();
+// Finanziamenti fra tesori. Lista unica per la sessione (vedi
+// moneyTransfers.js), filtrata qui sulla finestra della battaglia.
+let _money = null;
 
 function fmtNum(n) {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -228,6 +232,81 @@ function muSectionHtml(battle) {
     ${muNamesMissing(_mu) ? `<p class="wp-btl-foot">${btlT('muNamesMissing')}</p>` : ''}`;
 }
 
+/* ══ I FINANZIATORI ════════════════════════════════════════
+   Due tabelle sopra la scomposizione per nazione, una per schieramento:
+   chi ha versato soldi nel tesoro di quel belligerante MENTRE la
+   battaglia era aperta. Sta in cima e non in fondo perché è la domanda
+   che viene prima delle altre — chi ha pagato per far succedere questo
+   — e le classifiche di danno si leggono diversamente sapendo che
+   dietro a uno dei due c'erano altre sei nazioni.
+
+   ⚠️ Una tabella vuota vuol dire due cose diverse: "nessuno ha
+   finanziato" oppure "la nostra finestra non arriva così indietro".
+   windowIsShort() distingue, e la nota lo dice: mai lasciare che il
+   secondo caso si legga come il primo.
+   ─────────────────────────────────────────────────────────── */
+function fundersTable(rows, sideKey, opts) {
+  const { label, color, countryId, short } = opts;
+  const tot = rows.reduce((s, r) => s + r.money, 0);
+  return `
+    <div class="wp-btl-side-col wp-btl-side-${sideKey}">
+      <div class="wp-btl-side-head" style="--side:${color}">
+        ${countryId ? flagHtml(countryId) : ''}
+        <span class="wp-btl-side-name">${escapeHtml(nationName(countryId) || '—')}</span>
+        <span class="wp-btl-side-role">${label}</span>
+      </div>
+      ${rows.length ? `
+      <table class="wp-btl-table wp-btl-side-table">
+        <thead><tr>
+          <th>${btlT('colFunder')}</th>
+          <th>${btlT('colWhenSent')}</th>
+          <th class="wp-btl-num">${btlT('colAmount')}</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td class="wp-btl-nation">${flagHtml(r.from)}${escapeHtml(nationName(r.from) || '—')}</td>
+              <td class="wp-btl-when">${fmtDate(r.at)}</td>
+              <td class="wp-btl-num wp-btl-bounty">${fmtMoney(r.money)}</td>
+            </tr>`).join('')}
+        </tbody>
+        <tfoot><tr>
+          <td>${btlT('colTotalRow', { n: rows.length })}</td>
+          <td></td>
+          <td class="wp-btl-num wp-btl-bounty">${fmtMoney(tot)}</td>
+        </tr></tfoot>
+      </table>` : `<p class="wp-btl-foot wp-btl-foot-tight">${
+        short ? btlT('fundersOutOfRange') : btlT('noFunders')}</p>`}
+    </div>`;
+}
+
+function fundersHtml(battle) {
+  const from = _detail?.startedAt;
+  if (!from) return '';
+  const to = _detail?.finishedAt || (battle.live ? Date.now() : battle.endedAt);
+
+  // Ancora in volo, o proxy giu': in entrambi i casi non si disegna una
+  // tabella vuota che sembrerebbe una risposta.
+  if (!_money) {
+    return `
+      <h3 class="wp-btl-h3">${btlT('fundersLabel')}</h3>
+      <p class="wp-btl-foot wp-btl-foot-tight">${btlT('fundersLoading')}</p>`;
+  }
+
+  const short = windowIsShort(_money, from);
+  const def = transfersFor(_money, battle.defender.countryId, from, to);
+  const atk = transfersFor(_money, battle.attacker.countryId, from, to);
+  return `
+    <h3 class="wp-btl-h3">${btlT('fundersLabel')}
+      <span class="wp-btl-sub">${btlT('fundersSub')}</span></h3>
+    <div class="wp-btl-sides">
+      ${fundersTable(def, 'defender', { label: btlT('defender'), color: 'var(--wp-btl-def)',
+        countryId: battle.defender.countryId, short })}
+      ${fundersTable(atk, 'attacker', { label: btlT('attacker'), color: 'var(--wp-btl-atk)',
+        countryId: battle.attacker.countryId, short })}
+    </div>`;
+}
+
 export function renderBattleDetail(battle) {
   const head = `
     <button type="button" class="wp-btl-back" id="wp-btl-detail-back">← ${btlT('backToList')}</button>
@@ -257,6 +336,8 @@ export function renderBattleDetail(battle) {
   return `
     <div class="wp-btl-detail">
       ${head}
+      ${fundersHtml(battle)}
+
       <h3 class="wp-btl-h3">${btlT('byNation')}</h3>
       <p class="wp-btl-foot wp-btl-foot-tight">${btlT('earnedNote')}</p>
       <div class="wp-btl-sides">
@@ -283,6 +364,7 @@ export function renderBattleDetail(battle) {
 export async function loadBattleDetail(battle, repaint) {
   _detail = null;
   _mu = null;
+  _money = null;
   _muState = 'closed';
   _expanded = { attacker: false, defender: false };
   repaint();
@@ -290,7 +372,13 @@ export async function loadBattleDetail(battle, repaint) {
   // quindi api.js non le memorizza — riaprirla ridà i numeri aggiornati.
   _detail = await getBattleDetail(battle.id, { live: Boolean(battle.live) });
   repaint();
-  await resolveMuBriefs((_detail?.contracts || []).map(c => c.mu));
+  // In parallelo: i nomi delle unita' dei contratti e la lista dei
+  // finanziamenti. Sono indipendenti, e in serie l'utente aspetterebbe
+  // la somma di due attese invece della piu' lunga delle due.
+  await Promise.all([
+    resolveMuBriefs((_detail?.contracts || []).map(c => c.mu)),
+    fetchMoneyTransfers().then(d => { _money = d; }).catch(() => {}),
+  ]);
   repaint();
 }
 
@@ -364,6 +452,7 @@ export function wireBattleDetail(root, battle, { onBack, repaint }) {
 export function resetBattleDetail() {
   _detail = null;
   _mu = null;
+  _money = null;
   _muState = 'closed';
   _expanded = { attacker: false, defender: false };
   // _dir NON si azzera: è la cache dei nomi, buona per tutta la sessione.
