@@ -46,9 +46,13 @@ Il tool esiste in **due copie pubblicate**, distinte dal branch:
 - **live** — branch `main` → `https://wareraplus.vercel.app/`. È quella che
   usano le persone e quella citata negli articoli.
 - **dev** — branch `dev` → preview Vercel
-  `https://wareraplus-git-dev-<scope>.vercel.app/`. Stesso codice, URL
+  `https://wareraplus-git-dev-war-era-plus.vercel.app/`. Stesso codice, URL
   diverso, **origin diverso**: quindi localStorage, service worker e cache
-  sono suoi e non toccano quelli del live.
+  sono suoi e non toccano quelli del live. Quello è l'alias di BRANCH, valido
+  a ogni push; ogni deploy ha anche un URL col proprio hash, che cambia ogni
+  volta e non va salvato. Il preview è dietro Deployment Protection: si apre
+  loggati su Vercel, a chiunque altro chiede l'SSO (da disattivare in
+  Settings → Deployment Protection se serve mostrarlo a qualcuno).
 
 Il flusso è: si lavora e si spinge su `dev`, si guarda il preview, e solo
 quando va bene si porta su `main` (merge o fast-forward). Vercel costruisce
