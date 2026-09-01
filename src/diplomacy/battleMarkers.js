@@ -290,6 +290,11 @@ const CONTRIB_NARROW_MQ = '(max-width: 768px)';
 const isNarrowLayout = () => window.matchMedia(CONTRIB_NARROW_MQ).matches;
 let contribOpenDesktop = true;
 let contribOpenMobile = false;
+// WarEra+ — sezione "Battle spending" (taglie + contratti mercenari):
+// chiusa di default in entrambi i layout perché il suo contenuto costa due
+// chiamate, fatte solo alla prima apertura. Come le due flag qui sopra,
+// resettata in hideBattleTooltip.
+let spendOpen = false;
 // Simbolo del caret coerente col verso in cui il pannello si apre davvero:
 // su desktop e' una colonna a DESTRA (◀/▶), su mobile una sezione che si
 // apre SOTTO (▲/▼) — segnalato dall'utente: la freccia era sempre ▲/▼ anche
@@ -531,6 +536,34 @@ function injectContribStyles() {
 
     .bfm-contrib-toggle { display: none; }
     .bfm-contrib-toggle.bfm-contrib-has-data { display: flex; }
+
+    /* ── WarEra+ — "Battle spending" (taglie + contratti mercenari) ──
+       Stessa grammatica visiva del bottone "All contributors" qui sopra,
+       ma la sezione si apre SEMPRE dentro la card (anche su desktop):
+       sono poche righe, non vale una seconda colonna a lato. ── */
+    .bfm-spend-toggle {
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; border-radius: 6px; padding: 5px;
+    }
+    .bfm-spend-toggle:hover { background: rgba(128,128,128,0.12); }
+    .bfm-spend-panel { display: none; margin-top: 6px; padding-top: 6px; }
+    #battle-tooltip.bfm-spend-open .bfm-spend-panel { display: block; }
+    /* Tre colonne: etichetta, valore difesa, valore attacco. La riga
+       "Total" chiude con un filo sopra, come il totale di una ricevuta. */
+    .bfm-spend-grid {
+      display: grid; grid-template-columns: 1fr auto auto;
+      gap: 3px 10px; font-size: 10.5px; align-items: center;
+    }
+    .bfm-spend-grid .bfm-spend-h {
+      font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
+      font-size: 9.5px; text-align: right; padding-bottom: 2px;
+    }
+    .bfm-spend-grid .bfm-spend-h.def { color: var(--bfm-c-def-ink, #8fc3e8); }
+    .bfm-spend-grid .bfm-spend-h.atk { color: var(--bfm-c-atk-ink, #ef9269); }
+    .bfm-spend-v { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+    .bfm-spend-total > * { border-top: 1px solid rgba(128,128,128,0.28); padding-top: 4px; margin-top: 2px; font-weight: 700; }
+    .bfm-spend-note { font-size: 9.5px; opacity: .7; margin-top: 6px; line-height: 1.35; }
+    .bfm-spend-sub { font-size: 9.5px; opacity: .8; }
     .bfm-contrib-mobile-section { display: none; overflow: hidden; }
     @media (max-width: 768px) {
       #battle-tooltip.bfm-contrib-mobile-open .bfm-contrib-mobile-section.bfm-contrib-has-data { display: block; }
@@ -697,6 +730,17 @@ function buildBattleTooltipContent(battle, regionName, liveData, totalAttackerDm
           ${roundsToWin ? `<div style="grid-column:1 / -1;">🏆 Rounds won: <strong style="color:${defColor};">${defWon}</strong> – <strong style="color:${atkColor};">${atkWon}</strong> <span style="opacity:.75;">(first to ${roundsToWin})</span></div>` : ''}
         </div>
 
+        <!-- WarEra+ (richiesta community): quanto è costata la battaglia.
+             Taglie pagate + contratti mercenari aggiudicati, per
+             schieramento — due numeri che il gioco non somma da nessuna
+             parte. Chiuso di default e caricato SOLO al primo click: sono
+             due chiamate in più, e non ha senso pagarle per ogni tooltip
+             aperto di sfuggita. Vedi battleSpending.js. -->
+        <div id="battle-spend-toggle" class="bfm-spend-toggle" style="margin-top:8px; gap:5px; font-size:10px; color:${subColor}; border:1px solid ${border};">
+          💰 Battle spending <span id="battle-spend-caret">▾</span>
+        </div>
+        <div id="battle-spend-panel" class="bfm-spend-panel" style="border-top:1px solid ${border};"></div>
+
         <!-- WarEra+: bottone unico "Other contributors" — su desktop apre/
              chiude la colonna a lato (fuori da questa card, vedi sotto), su
              mobile la sezione qui dentro. Compare solo se ci sono davvero
@@ -761,6 +805,94 @@ function applyContribExpand(el) {
   if (btnM) btnM.textContent = label;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Sezione "Battle spending"
+   ------------------------------------------------------------------
+   Vedi battleSpending.js per il perché e per la provenienza dei numeri.
+   Qui c'è solo il disegno: due colonne (difesa / attacco), tre voci
+   (taglia pagata, contratti aggiudicati, totale) più gli impegni ancora
+   aperti quando ce ne sono.
+
+   Convenzione dichiarata in chiaro nella nota in fondo: la taglia è
+   quella USCITA finora, non un preventivo — su una battaglia in corso
+   continua a salire.
+   ══════════════════════════════════════════════════════════════ */
+
+// I valori sono in valuta di gioco e stanno spesso sotto la decina: fmt()
+// (pensato per i danni, con K/M/B) qui appiattirebbe tutto. Sotto 1000 si
+// mostrano i decimi, sopra si arrotonda.
+function fmtMoney(n) {
+  if (n == null || !Number.isFinite(n)) return '—';
+  if (n >= 1000) return Math.round(n).toLocaleString();
+  if (n >= 10) return n.toFixed(0);
+  return n.toFixed(2);
+}
+
+function buildSpendRows(data, subColor, textColor) {
+  const bountyDef = data.bounty.defender?.total;
+  const bountyAtk = data.bounty.attacker?.total;
+  const mercDef = data.merc.won.defender;
+  const mercAtk = data.merc.won.attacker;
+  const pendDef = data.merc.pending.defender;
+  const pendAtk = data.merc.pending.attacker;
+
+  const totDef = (bountyDef || 0) + mercDef.total;
+  const totAtk = (bountyAtk || 0) + mercAtk.total;
+
+  const row = (label, def, atk, cls = '') => `
+    <div class="${cls}" style="color:${subColor};">${label}</div>
+    <div class="bfm-spend-v ${cls}" style="color:${textColor};">${def}</div>
+    <div class="bfm-spend-v ${cls}" style="color:${textColor};">${atk}</div>`;
+
+  const pendingRow = (pendDef.total || pendAtk.total)
+    ? row(
+      `⏳ Open contracts <span class="bfm-spend-sub">(not spent yet)</span>`,
+      `${fmtMoney(pendDef.total)} <span class="bfm-spend-sub">×${pendDef.count}</span>`,
+      `${fmtMoney(pendAtk.total)} <span class="bfm-spend-sub">×${pendAtk.count}</span>`,
+    )
+    : '';
+
+  return `
+    <div class="bfm-spend-grid">
+      <div></div>
+      <div class="bfm-spend-h def">🛡️ Defence</div>
+      <div class="bfm-spend-h atk">⚔️ Attack</div>
+      ${row('🎯 Bounty paid out', fmtMoney(bountyDef), fmtMoney(bountyAtk))}
+      ${row(
+        `🤝 Mercenary contracts`,
+        `${fmtMoney(mercDef.total)} <span class="bfm-spend-sub">×${mercDef.count}</span>`,
+        `${fmtMoney(mercAtk.total)} <span class="bfm-spend-sub">×${mercAtk.count}</span>`,
+      )}
+      ${row('💰 Total spent', fmtMoney(totDef), fmtMoney(totAtk), 'bfm-spend-total')}
+      ${pendingRow}
+    </div>
+    <div class="bfm-spend-note" style="color:${subColor};">
+      Bounty is what each side's pool has already paid out to fighters, so it keeps
+      growing while the battle runs. Contracts count only awarded auctions.
+      ${data.truncated ? '<br>⚠️ Very large battle — figures are a lower bound (API paging limit).' : ''}
+    </div>`;
+}
+
+async function loadSpendingSection(battleId, subColor, textColor) {
+  const host = document.getElementById('battle-spend-panel');
+  if (!host) return;
+  host.innerHTML = `<div class="bfm-spend-note" style="color:${subColor};">Loading…</div>`;
+  let data = null;
+  try {
+    const mod = await import('./battleSpending.js');
+    data = await mod.fetchBattleSpending(battleId);
+  } catch (err) {
+    console.warn('battle spending: modulo non disponibile', err);
+  }
+  // Il tooltip può essere stato chiuso o spostato su un'altra battaglia
+  // mentre la richiesta era in volo: in quel caso non si scrive nulla.
+  const stillHere = document.getElementById('battle-spend-panel');
+  if (!stillHere || pinnedBattleId !== battleId) return;
+  stillHere.innerHTML = data
+    ? buildSpendRows(data, subColor, textColor)
+    : `<div class="bfm-spend-note" style="color:${subColor};">Spending data unavailable right now.</div>`;
+}
+
 function showBattleTooltip(battle, regionName, liveData, totalAttackerDmg, totalDefenderDmg, trend) {
   // I due tooltip vivono entrambi in basso al centro: se restano aperti
   // insieme, quello battaglia (z-index 9000) copre quello nazione (3000) e
@@ -794,6 +926,31 @@ function showBattleTooltip(battle, regionName, liveData, totalAttackerDmg, total
     else contribOpenDesktop = !contribOpenDesktop;
     applyContribVisibility(el);
   });
+
+  // WarEra+ — "Battle spending": si carica alla PRIMA apertura e poi resta
+  // in cache di modulo (battleSpending.js), così riaprire la sezione o il
+  // tooltip non ricompra le stesse due chiamate.
+  {
+    const isLight = state.theme === 'light';
+    const subColor = isLight ? '#555' : '#8b949e';
+    const textColor = isLight ? '#1a1a1a' : '#e6edf3';
+    const spendCaret = el.querySelector('#battle-spend-caret');
+    const applySpend = () => {
+      el.classList.toggle('bfm-spend-open', spendOpen);
+      if (spendCaret) spendCaret.textContent = spendOpen ? '▲' : '▼';
+    };
+    applySpend();
+    // Rete di sicurezza: se in futuro spendOpen sopravvivesse alla chiusura
+    // (oggi hideBattleTooltip lo azzera), il contenuto verrebbe ridisegnato
+    // qui invece di restare un pannello aperto e vuoto.
+    if (spendOpen) loadSpendingSection(battle._id, subColor, textColor);
+    el.querySelector('#battle-spend-toggle')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      spendOpen = !spendOpen;
+      applySpend();
+      if (spendOpen) loadSpendingSection(battle._id, subColor, textColor);
+    });
+  }
 
   // Bottone "espandi" — presente sia sopra la colonna desktop sia sopra la
   // lista mobile, ma e' sempre lo STESSO stato (contribExpanded): stopPropagation
@@ -838,6 +995,7 @@ export function hideBattleTooltip() {
   contribOpenDesktop = true;
   contribOpenMobile = false;
   contribExpanded = false;
+  spendOpen = false;
 
   // Ferma il poll live del widget battleFront montato nel tooltip — senza
   // questo continuerebbe a interrogare l'API anche a tooltip chiuso.

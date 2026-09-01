@@ -307,6 +307,40 @@ export function hashColor(str) {
   return `hsl(${hue}, 45%, 32%)`;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Un colore translucido, qualunque forma abbia
+   ------------------------------------------------------------------
+   Mezza interfaccia scriveva la trasparenza attaccando due cifre esa
+   al colore (`${color}30`): funziona solo se `color` e' un esadecimale.
+   Da quando i colori delle alleanze passano dalla rotazione di tinta
+   (alliances.js: finalAllianceColor) sono stringhe `hsl(...)`, e
+   `hsl(142, 77%, 21%)30` non e' un colore valido: il browser scartava
+   la regola in silenzio — le schede di Alliance Builder si erano
+   ritrovate senza sfondo colorato, e con loro le pastiglie alleanza del
+   pannello e del tooltip. hashColor() qui sopra ha sempre restituito
+   `hsl(...)` per gli stessi motivi.
+
+   `alpha` e' la stessa quantita' delle vecchie cifre esa, ma in 0..1
+   (0x30 = 48/255 ≈ 0.19). Riconosce esadecimale, rgb() e hsl(); su
+   qualunque altra forma ricade su color-mix, che li accetta tutti.
+   ══════════════════════════════════════════════════════════════ */
+export function withAlpha(color, alpha = 1) {
+  if (!color) return 'transparent';
+  const c = String(color).trim();
+  const hex = c.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hex) {
+    const h = hex[1].length === 3 ? hex[1].split('').map(x => x + x).join('') : hex[1];
+    const n = parseInt(h, 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+  }
+  // hsl(...) / rgb(...) senza alpha → la variante con alpha, che accetta
+  // la stessa lista di argomenti piu' uno.
+  const fn = c.match(/^(hsl|rgb)\(([^)]*)\)$/i);
+  if (fn) return `${fn[1].toLowerCase()}a(${fn[2].trim()}, ${alpha})`;
+  // Gia' con alpha, nome CSS, oklch, var(...): lo diluisce il browser.
+  return `color-mix(in srgb, ${c} ${Math.round(alpha * 100)}%, transparent)`;
+}
+
 // ==================== GEOMETRY ====================
 export function flattenCoords(geometry) {
   const result = [];

@@ -19,7 +19,7 @@ import {
   getAllianceAllies, getDefensivePactAllies,
   getBlocMemberIds, getBlocWarTargets, getBlocExternalDefensivePacts, getBlocRelations,
 } from '../diplomacy/diplomacy.js';
-import { escapeHtml, fmtNumber } from '../diplomacy/utils.js';
+import { escapeHtml, fmtNumber, withAlpha } from '../diplomacy/utils.js';
 import { openPoliticalView } from '../app/politicalOverlay.js';
 import { renderParliamentChart, renderParliamentSeats, renderParliamentAvatars, fetchGroupSeatsData, fetchGroupUserData, hasParliamentSeatsCached } from './parliamentChart.js';
 import { initPanelResize } from './panelResize.js';
@@ -57,6 +57,10 @@ function wirePinStar() {
     trackEvent('pin-toggle', { type, id, pinned: on, source: 'panel' });
   });
 }
+
+// WarEra+: quante alleate dirette si vedono prima del bottone "+ N altre".
+// Le restanti sono già nel DOM (nascoste), quindi aprirle non costa nulla.
+const ALLIES_PREVIEW = 6;
 
 let panelEl, contentEl, closeBtn;
 let currentNationId = null;
@@ -364,7 +368,7 @@ function buildPanelHtml(nation) {
         : ''}
       <div>
         <div class="wp-panel-name">${escapeHtml(nation.name)}</div>
-        ${blocInfo ? `<span class="wp-panel-bloc" style="background:${blocInfo.color}22;color:${blocInfo.color}">${escapeHtml(blocInfo.name)}</span>` : ''}
+        ${blocInfo ? `<span class="wp-panel-bloc" style="background:${withAlpha(blocInfo.color, .13)};color:${blocInfo.color}">${escapeHtml(blocInfo.name)}</span>` : ''}
       </div>
       ${pinStarHtml('nation', nation._id)}
     </div>
@@ -410,11 +414,16 @@ function buildPanelHtml(nation) {
 
     ${allies.length ? `
       <div class="wp-panel-section-title">${t('direct_allies_label')} (${allies.length})</div>
-      ${allies.slice(0, 6).map(id => {
-        const a = state.nationMap.get(id);
-        return a ? `<div class="wp-panel-row"><span>${escapeHtml(a.name)}</span></div>` : '';
-      }).join('')}
-      ${allies.length > 6 ? `<div class="wp-panel-row"><span style="color:#8b949e;">${t('plus_others', { n: allies.length - 6 })}</span></div>` : ''}
+      <div id="wp-allies-list">
+        ${allies.map((id, i) => {
+          const a = state.nationMap.get(id);
+          // WarEra+: le alleate oltre la sesta sono nel DOM ma nascoste
+          // (classe wp-panel-row-extra) — il bottone "+ N altre" qui sotto
+          // le scopre senza rifetch e senza ricostruire il pannello.
+          return a ? `<div class="wp-panel-row${i >= ALLIES_PREVIEW ? ' wp-panel-row-extra' : ''}"><span>${escapeHtml(a.name)}</span></div>` : '';
+        }).join('')}
+      </div>
+      ${allies.length > ALLIES_PREVIEW ? `<button type="button" class="wp-panel-more" id="wp-allies-more" aria-expanded="false" aria-controls="wp-allies-list">${t('plus_others', { n: allies.length - ALLIES_PREVIEW })} <span class="wp-panel-more-caret">▾</span></button>` : ''}
     ` : ''}
   `;
 }
@@ -508,9 +517,28 @@ function render(nationId) {
     renderParliamentChart(parliamentContainer, nationId);
   }
 
+  wireAlliesMore(getAllianceAllies(nationId).length);
+
   renderPlaystyle(nationId);
   paintDailyDamage([nation], () => currentNationId === nationId);
   paintCitizens([nationId], () => currentNationId === nationId);
+}
+
+/* WarEra+ — "+ N altre" cliccabile (richiesto: la lista alleate si fermava
+   a sei e il resto restava un numero muto). Nessuna fetch: le righe oltre
+   la sesta sono già scritte nel pannello con .wp-panel-row-extra, qui si
+   ribalta solo una classe sul contenitore. */
+function wireAlliesMore(total) {
+  const btn = document.getElementById('wp-allies-more');
+  const list = document.getElementById('wp-allies-list');
+  if (!btn || !list) return;
+  btn.addEventListener('click', () => {
+    const open = list.classList.toggle('wp-allies-open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.innerHTML = open
+      ? `${t('plus_others_less')} <span class="wp-panel-more-caret">▴</span>`
+      : `${t('plus_others', { n: total - ALLIES_PREVIEW })} <span class="wp-panel-more-caret">▾</span>`;
+  });
 }
 
 /* ── Stile di gioco dei cittadini (WarEra+) ──
@@ -766,7 +794,7 @@ function buildSpherePanelHtml(primaryId) {
       ${primaryFlag ? `<img class="wp-panel-flag" src="${primaryFlag}" alt="" onerror="this.style.display='none'">` : ''}
       <div>
         <div class="wp-panel-name">${escapeHtml(primary.name)}</div>
-        <span class="wp-panel-bloc" style="background:${color}22;color:${color}">${t('sphere_proxies_label')} · ${proxies.length}</span>
+        <span class="wp-panel-bloc" style="background:${withAlpha(color, .13)};color:${color}">${t('sphere_proxies_label')} · ${proxies.length}</span>
       </div>
       ${pinStarHtml('nation', primaryId)}
     </div>
@@ -1257,7 +1285,7 @@ function buildBlocPanelHtml(allianceId) {
         : `<div class="wp-bloc-swatch" style="background:${color};"></div>`}
       <div>
         <div class="wp-panel-name">${escapeHtml(alliance.name)}</div>
-        <span class="wp-panel-bloc" style="background:${color}22;color:${color}">${members.length} nations</span>
+        <span class="wp-panel-bloc" style="background:${withAlpha(color, .13)};color:${color}">${members.length} nations</span>
       </div>
       ${pinStarHtml('alliance', allianceId)}
     </div>

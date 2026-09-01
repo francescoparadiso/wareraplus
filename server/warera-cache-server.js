@@ -122,6 +122,17 @@ const zlib = require('zlib');
 // solo (la lingua di chi governa, una user.getUserById per ogni membro di
 // governo). Modulo a sé, non tocca nessun poll esistente.
 const { initProxyIndex, pollProxyIndex, readProxyIndex } = require('./proxyIndex');
+// WarEra+ archivio battaglie + spese di guerra: la domanda "quanto e' costata
+// quella battaglia" e "quanto spende al giorno questa nazione". Modulo a se'
+// per la stessa ragione di proxyIndex: e' un lavoro suo, con un bootstrap
+// suo, e non tocca nessun poll esistente. Vedi server/battleArchive.js.
+const {
+  initBattleArchive,
+  pollBattleArchive, pollBattleArchiveBootstrap,
+  pollMercArchive, pollMercArchiveBootstrap,
+  readBattleArchive, readWarExpenses, readArchiveStatus,
+  BOOT_TZ: BOOT_ARCHIVE_TZ,
+} = require('./battleArchive');
 
 const app = express();
 const PORT = 3001;
@@ -219,6 +230,13 @@ initProxyIndex({
   readCache, writeCache,
   get apiToken() { return WARERA_API_TOKEN; },
   get trpcUpstream() { return TRPC_UPSTREAM; },
+});
+
+// Stesso trattamento per l'archivio battaglie: riceve trpcBatch (con retry,
+// chunking e rate control gia' tarati) invece di rifarsi il suo.
+initBattleArchive({
+  trpcBatch: (...args) => trpcBatch(...args),
+  readCache, writeCache,
 });
 
 // ---------------------------------------------------------------------------
@@ -2020,6 +2038,17 @@ cron.schedule('36 * * * *', pollCitizens);                  // ogni ora, :36 (ce
 // un requisito stretto (i due giri non si sovrappongono mai per orario).
 cron.schedule('25 * * * *', pollExternalHistory);
 cron.schedule('18 */6 * * *', pollCreditProfiles);          // ogni 6 ore, :18
+// ── Archivio battaglie / spese di guerra (server/battleArchive.js) ──
+// Giro INCREMENTALE: leggero (1-2 richieste), gira tutto il giorno.
+// Offset :06 e :16 per non cadere addosso a nessun altro poll.
+cron.schedule('6,26,46 * * * *', pollBattleArchive);        // ogni 20 min, :06
+cron.schedule('16,36,56 * * * *', pollMercArchive);         // ogni 20 min, :16
+// BOOTSTRAP: pesante, quindi SOLO di notte italiana (02:00-06:59) quando il
+// gioco e' vuoto — richiesta esplicita dell'utente. Il cron gia' restringe
+// le ore, e _inQuietHours() dentro il modulo ripete il controllo per il caso
+// di un riavvio pm2 in pieno giorno (il primo giro non passa dal cron).
+cron.schedule('* 2-6 * * *', pollBattleArchiveBootstrap, { timezone: BOOT_ARCHIVE_TZ });
+cron.schedule('* 2-6 * * *', pollMercArchiveBootstrap, { timezone: BOOT_ARCHIVE_TZ });
 cron.schedule('45 */6 * * *', pollProxyIndex);               // ogni 6 ore, :45 (radar dei proxy)
 // Cambio giorno di gioco: 02:00 italiane, non UTC — da cui il fuso
 // esplicito (il server può stare ovunque). Minuto :01 per essere sicuri di
@@ -2043,6 +2072,10 @@ cron.schedule('1 2 * * *', snapshotDailyDamage, { timezone: DAILY_DAMAGE_TZ });
   // await pollBootstrapPage(); // disattivato, vedi nota sopra al cron.schedule commentato
   await pollExternalHistory(); // sync subito con spywarera invece di aspettare fino a 1h
   await pollCreditProfiles();
+  // Archivio battaglie: solo il giro incrementale all'avvio. Il bootstrap NON
+  // si chiama qui — parte da solo alla prima notte utile (vedi cron sopra).
+  await pollBattleArchive();
+  await pollMercArchive();
   // Primissimo avvio: senza scatto il "danno di oggi" resterebbe muto fino
   // alle 02:00 successive. Se ne fa uno subito — vale meno (parte da adesso,
   // non dal cambio giorno), e infatti il client mostra l'ora dello scatto
@@ -2368,6 +2401,15 @@ app.get('/region-history/external-status', (req, res) => {
 
 app.get('/credit-profiles', (req, res) => res.json(readCache('credit-profiles', { fetchedAt: null, data: {} })));
 
+// ── Archivio battaglie e spese di guerra (server/battleArchive.js) ──
+// /battle-archive porta le righe compatte (chiavi corte: il file viaggia
+// intero verso il browser, vedi il commento su _toRow nel modulo).
+// /war-expenses e' derivato dai due archivi al momento della richiesta:
+// costa niente e resta sempre coerente con l'ultimo giro di poll.
+app.get('/battle-archive', (req, res) => res.json(readBattleArchive()));
+app.get('/war-expenses', (req, res) => res.json(readWarExpenses()));
+app.get('/battle-archive/status', (req, res) => res.json(readArchiveStatus()));
+
 // Radar dei proxy: punteggio completo per nazione, con le evidenze che lo
 // compongono. Il client lo innesta su quello che ha calcolato da solo
 // (src/proxy/radar.js: applyServerIndex) e se questo non risponde resta il
@@ -2514,12 +2556,131 @@ function _readRawBody(req) {
 // l'handler `req.path` e' gia' la parte DOPO /trpc.
 app.use('/trpc', _trpcProxy);
 
+/* ══════════════════════════════════════════════════════════════
+   CONTATORE VISITE (/visits)
+   ------------------------------------------------------------------
+   Richiesta esplicita: mostrare nel tool quante persone lo hanno usato.
+   Vercel Analytics quel numero ce l'ha (1325 visitatori al momento in
+   cui questo contatore parte, vedi VISITS_SEED) ma non lo espone a una
+   pagina pubblica senza un token a pagamento, quindi si conta qui.
+
+   ── COME CONTA ─────────────────────────────────────────────────────
+   Il client manda un identificativo casuale che si e' generato da solo
+   e tiene in localStorage (src/app/visitorCounter.js). Il server lo
+   ricorda per il GIORNO corrente: lo stesso browser che ricarica dieci
+   volte conta una volta sola, e domani conta di nuovo. Quindi il totale
+   e' "visite giornaliere uniche sommate", non "persone diverse in
+   assoluto" — che nessun contatore senza login puo' sapere davvero. E'
+   la stessa grandezza che misura Vercel, ed e' per questo che il seme
+   si puo' sommare senza mescolare due unita' di misura.
+
+   ── PRIVACY ────────────────────────────────────────────────────────
+   Non si registra l'IP, non si legge nessun header di identificazione,
+   e l'identificativo del client e' un numero casuale senza legame con
+   la persona. Su disco restano solo gli id degli ultimi VISITS_KEEP_DAYS
+   giorni: quelli piu' vecchi servivano solo a non contare due volte lo
+   stesso giorno, e quel giorno e' passato.
+   ══════════════════════════════════════════════════════════════ */
+// Visitatori misurati da Vercel Analytics dalla messa online fino al
+// 2026-08-31, giorno in cui questo contatore ha cominciato a contare da
+// se'. Non e' una stima: e' il numero letto sul cruscotto.
+const VISITS_SEED = 1325;
+const VISITS_KEEP_DAYS = 3;
+const VISITS_MAX_IDS_PER_DAY = 50000; // tetto anti-abuso: oltre, si conta e basta
+
+function _visitsToday() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/* ── Chi c'e' adesso (`online` nella risposta di /visits) ──────────
+   Il client ripassa da qui ogni minuto con `count=0` (vedi l'heartbeat
+   in src/app/visitorCounter.js): tenere l'ultimo passaggio di ogni id e
+   contare quelli visti negli ultimi ONLINE_WINDOW_MS da' "quante persone
+   stanno usando il tool in questo momento".
+
+   Sta in MEMORIA e non su disco, di proposito: e' un dato che vale
+   cinque minuti, e scriverlo a ogni battito significherebbe un
+   fs.writeFileSync ogni pochi secondi per un numero che dopo un riavvio
+   si ricostruisce da se' nel giro di un minuto.
+
+   La finestra e' piu' larga del battito (5 contro 1) perche' una scheda
+   che tarda un giro — rete lenta, portatile che si sveglia — non deve
+   sparire e riapparire facendo ballare il numero. ── */
+const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+const ONLINE_HEARTBEAT_MS = 60 * 1000; // dichiarato al client nella risposta
+const _onlineSeen = new Map(); // id -> ultimo passaggio (ms)
+
+function _touchOnline(id) {
+  if (!id) return;
+  const now = Date.now();
+  _onlineSeen.set(id, now);
+  // Potatura opportunistica: si fa qui invece che con un timer, cosi' la
+  // mappa non cresce mai piu' di quanto ci sia davvero traffico.
+  if (_onlineSeen.size > 64) {
+    for (const [k, t] of _onlineSeen) if (now - t > ONLINE_WINDOW_MS) _onlineSeen.delete(k);
+  }
+}
+
+function _countOnline() {
+  const cutoff = Date.now() - ONLINE_WINDOW_MS;
+  let n = 0;
+  for (const t of _onlineSeen.values()) if (t >= cutoff) n++;
+  return n;
+}
+
+app.get('/visits', (req, res) => {
+  const store = readCache('visits', { own: 0, days: {} });
+  store.days = store.days || {};
+  const today = _visitsToday();
+  const day = store.days[today] = store.days[today] || { count: 0, ids: [] };
+
+  const id = String(req.query.id || '').slice(0, 64);
+  // Presenza: si aggiorna a OGNI passaggio, anche in sola lettura — e'
+  // esattamente cosa fa l'heartbeat, che non deve gonfiare il totale.
+  _touchOnline(id);
+  // `count=0` (o id assente) = sola lettura: la vista puo' rinfrescare il
+  // numero senza gonfiarlo.
+  if (id && req.query.count !== '0' && !day.ids.includes(id)) {
+    day.count += 1;
+    store.own = (store.own || 0) + 1;
+    if (day.ids.length < VISITS_MAX_IDS_PER_DAY) day.ids.push(id);
+
+    // Potatura dei giorni vecchi: gli id servono solo a deduplicare
+    // dentro la giornata. `count` invece resta, e' gia' dentro `own`.
+    const cutoff = new Date(Date.now() - VISITS_KEEP_DAYS * 86400000).toISOString().slice(0, 10);
+    for (const d of Object.keys(store.days)) {
+      if (d < cutoff) delete store.days[d];
+      else if (d !== today) store.days[d].ids = [];
+    }
+    writeCache('visits', store, { compact: true });
+  }
+
+  res.json({
+    total: VISITS_SEED + (store.own || 0),
+    today: day.count,
+    // Quante persone stanno usando il tool adesso (finestra di 5 minuti).
+    online: _countOnline(),
+    // Ogni quanto il client dovrebbe ripassare. Sta nella risposta e non
+    // in una costante nel client cosi' si puo' cambiare il ritmo con un
+    // pm2 restart invece che con un deploy su Vercel.
+    heartbeatMs: ONLINE_HEARTBEAT_MS,
+    // Dichiarato in chiaro: chi legge la risposta deve poter capire che
+    // il totale non nasce tutto da qui.
+    seed: VISITS_SEED,
+    countedHere: store.own || 0,
+  });
+});
+
 app.get('/health', (req, res) => res.json({
   status: 'ok',
   now: Date.now(),
   // Solo se c'e', mai il valore: serve a verificare dopo un deploy che
   // pm2 abbia davvero l'env var, senza doverla stampare.
   trpcProxy: { ready: true, apiKey: WARERA_API_TOKEN ? 'caricata' : 'MANCANTE' },
+  // Quanto e' avanti l'archivio battaglie: dopo un deploy dice a colpo
+  // d'occhio se il bootstrap notturno ha gia' girato o se le due viste
+  // stanno ancora lavorando in modalita' ridotta.
+  battleArchive: readArchiveStatus(),
 }));
 
 app.listen(PORT, '127.0.0.1', () => {

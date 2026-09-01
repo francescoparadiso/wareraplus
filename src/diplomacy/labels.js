@@ -360,7 +360,10 @@ export function drawLabels() {
       // rendendo confusa la lettura della situazione diplomatica.
       textColor = state.selectedBlocId
         ? (state.blocFocusColorMap.get(cId) || '#888888')
-        : (state.blocColorMap.get(cId) || '#cccccc');
+        // WarEra+: in anteprima Alliance Builder il nome nazione prende il
+        // colore del blocco COSTRUITO, non di quello di gioco — altrimenti
+        // etichetta e territorio direbbero due cose diverse.
+        : ((state.builderPreview ? state.builderPreview.colorMap : state.blocColorMap).get(cId) || '#cccccc');
     }
     else textColor = state.selectedCountryId ? '#ffffff' : (props.textColor || '#cccccc');
 
@@ -455,7 +458,11 @@ function _getBlocLabelColor(bloc) {
 // sovrapposta e illeggibile.
 function _drawBlocLabels(ctx, W, H) {
   const bboxes = [];
-  if (!state.externalBlocsInfo.length) return bboxes;
+  // WarEra+: in anteprima Alliance Builder si disegnano i nomi dei blocchi
+  // costruiti (stessa forma di externalBlocsInfo: name, color, labelLng,
+  // labelLat, memberCount), non quelli delle alleanze vere.
+  const blocList = state.builderPreview ? state.builderPreview.blocs : state.externalBlocsInfo;
+  if (!blocList.length) return bboxes;
   const zoom = state.map.getZoom();
   // Prima 28-56px: su schermi piccoli restavano solo 3-4 nomi giganti.
   // Ora la dimensione parte piu' bassa e scala col viewport.
@@ -475,7 +482,7 @@ function _drawBlocLabels(ctx, W, H) {
 
   // Priorità ai blocchi con più membri: quelli piccoli, in caso di conflitto,
   // sono quelli che vengono spostati o eventualmente saltati.
-  const sortedBlocs = [...state.externalBlocsInfo].sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0));
+  const sortedBlocs = [...blocList].sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0));
 
   // Offset verticali da provare in caso di sovrapposizione, in ordine crescente
   const OFFSETS = [0, fontSize * 1.3, -fontSize * 1.3, fontSize * 2.6, -fontSize * 2.6, fontSize * 3.9, -fontSize * 3.9];

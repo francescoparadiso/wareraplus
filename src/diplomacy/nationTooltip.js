@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { escapeHtml } from './utils.js';
+import { escapeHtml, withAlpha } from './utils.js';
 import { getBlocMemberIds } from './diplomacy.js';
 import * as topojson from 'topojson-client';
 
@@ -194,7 +194,7 @@ export function showBlocTooltip(allianceId) {
         ? `<img class="nt-flag" src="${alliance.avatarUrl}" alt="" onerror="this.style.display='none'">`
         : `<span class="nt-emoji">🛡️</span>`}
       <span class="nt-name">${escapeHtml(alliance.name)}</span>
-      <span class="nt-bloc" style="background:${color}22;color:${color}">${members.length} nations</span>
+      <span class="nt-bloc" style="background:${withAlpha(color, .13)};color:${color}">${members.length} nations</span>
     </div>
     <div class="nt-grid">
       <div class="nt-item"><span class="nt-icon">👥</span><span class="nt-val">${fmt(tot.pop)}</span><span class="nt-lbl">pop.</span></div>
@@ -245,7 +245,7 @@ function buildContent(nation, code, blocInfo, isPinned) {
       : `<span class="nt-emoji">${getFlagEmoji(code)}</span>`
     }
       <span class="nt-name">${escapeHtml(nation.name)}</span>
-      ${blocInfo ? `<span class="nt-bloc" style="background:${blocInfo.color}22;color:${blocInfo.color}">${escapeHtml(blocInfo.name)}</span>` : ''}
+      ${blocInfo ? `<span class="nt-bloc" style="background:${withAlpha(blocInfo.color, .13)};color:${blocInfo.color}">${escapeHtml(blocInfo.name)}</span>` : ''}
     </div>
     <div class="nt-grid">
       <div class="nt-item"><span class="nt-icon">👥</span><span class="nt-val">${fmt(pop)}</span><span class="nt-lbl">pop.</span></div>

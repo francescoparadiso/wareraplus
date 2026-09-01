@@ -185,8 +185,20 @@ export function sumPlaystyleDeltas(seriesByCountry) {
 export function playstyleBarHtml(counts, labels) {
   if (!counts?.known) return '';
   const groups = PLAYSTYLE_GROUPS.filter(g => counts[g] > 0);
+  const pct = g => (counts[g] / counts.known) * 100;
+  /* WarEra+ — le percentuali SOPRA la barra, ognuna sul proprio pezzo.
+     La legenda sotto porta i valori assoluti ("120 war"), che dicono
+     quanti sono ma non quanto pesano: la lettura che serve guardando la
+     barra e' la quota, e leggerla dalla larghezza a occhio non si fa.
+     Ogni etichetta e' larga quanto il suo segmento, quindi resta
+     allineata comunque cambino i numeri; sotto il 9% il testo non ci
+     sta e si lascia lo spazio vuoto (la larghezza resta, cosi' le altre
+     non scivolano) — il numero esatto e' comunque nella legenda. */
   return `
     <div class="wp-ps">
+      <div class="wp-ps-pcts" aria-hidden="true">
+        ${groups.map(g => `<span class="wp-ps-pct wp-ps-pct-${g}" style="width:${pct(g)}%">${pct(g) >= 9 ? Math.round(pct(g)) + '%' : ''}</span>`).join('')}
+      </div>
       <div class="wp-ps-bar">
         ${groups.map(g => `<span class="wp-ps-seg wp-ps-${g}" style="width:${(counts[g] / counts.known) * 100}%" title="${labels[g]} · ${counts[g]}"></span>`).join('')}
       </div>

@@ -274,10 +274,20 @@ export function buildDiplomacyColorExpression(directWars, directAllies, enemyAll
   return expr;
 }
 
+/* WarEra+ — Anteprima Alliance Builder (builderPreview.js): quando c'e',
+   la vista Alleanze dipinge i blocchi COSTRUITI invece di quelli di gioco.
+   Additivo con fallback: senza anteprima non cambia una riga. Nel builder
+   una nazione sta in un blocco solo, quindi qui non esistono multi-bloc
+   (il layer a pattern viene spento in renderMap). */
+function blocPaintMap() {
+  return state.builderPreview ? state.builderPreview.colorMap : state.blocColorMap;
+}
+
 export function buildBlocColorExpression() {
   const expr = ['match', ['get', 'countryId']];
-  for (const [id, color] of state.blocColorMap.entries()) {
-    if (!state.multiBlocMap.has(id)) expr.push(id, color);
+  const preview = !!state.builderPreview;
+  for (const [id, color] of blocPaintMap().entries()) {
+    if (preview || !state.multiBlocMap.has(id)) expr.push(id, color);
   }
   expr.push(THEMES[state.theme].DEFAULT_LAND);
   return expr;
@@ -285,10 +295,13 @@ export function buildBlocColorExpression() {
 
 export function buildOriginalBlocColorExpression() {
   const expr = ['match', ['to-string', ['get', 'initialCountryId']]];
-  for (const [id, color] of state.blocColorMap.entries()) {
-    if (!state.multiBlocMap.has(id)) expr.push(id, color);
+  const preview = !!state.builderPreview;
+  for (const [id, color] of blocPaintMap().entries()) {
+    if (preview || !state.multiBlocMap.has(id)) expr.push(id, color);
   }
-  for (const [id, { colors }] of state.multiBlocMap.entries()) expr.push(id, colors[0]);
+  if (!preview) {
+    for (const [id, { colors }] of state.multiBlocMap.entries()) expr.push(id, colors[0]);
+  }
   expr.push(THEMES[state.theme].DEFAULT_LAND);
   return expr;
 }

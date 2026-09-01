@@ -541,6 +541,54 @@ body.light-theme .wp-gov-member-name {
   border-bottom: none;
 }
 
+/* ── WarEra+ — Elenco alleate dirette espandibile ──
+   Le righe oltre l'anteprima sono nel DOM ma nascoste: il bottone
+   "+ N altre" (wp-panel-more) le scopre ribaltando .wp-allies-open sul
+   contenitore, senza rifetch né ricostruzione del pannello. ── */
+.wp-panel-row-extra {
+  display: none;
+}
+.wp-allies-open .wp-panel-row-extra {
+  display: flex;
+}
+.wp-panel-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 7px 10px;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #8b949e;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.wp-panel-more:hover {
+  color: #58a6ff;
+  border-color: #58a6ff;
+  background: rgba(88, 166, 255, 0.08);
+}
+.wp-panel-more-caret {
+  font-size: 10px;
+  opacity: 0.8;
+}
+body.light-theme .wp-panel-more {
+  border-color: #c4b394;
+  background: rgba(0, 0, 0, 0.03);
+  color: #6b5a47;
+}
+body.light-theme .wp-panel-more:hover {
+  color: #2266cc;
+  border-color: #2266cc;
+  background: rgba(34, 102, 204, 0.08);
+}
+
 .wp-expand-btn {
   margin-top: 24px;
   width: 100%;
@@ -679,10 +727,12 @@ body.light-theme .wp-panel-name {
 .wp-nations-overlay { --wp-ov-accent: #39d0d8; } /* Statistiche nazioni: ciano */
 .wp-guide-overlay { --wp-ov-accent: #d29922; }   /* Guida: ambra */
 .wp-market-overlay { --wp-ov-accent: #e3b341; }  /* Rendite di produzione: oro */
+.wp-battles-overlay { --wp-ov-accent: #db6d28; } /* Battaglie: arancio bruciato */
 /* L'oro chiaro sparisce sul fondo chiaro: sul tema chiaro l'accento della
    sezione diventa la sua versione scura (la stessa dichiarata come
    rgbLight in OVERLAY_TINTS, src/app/overlayChrome.js). */
 body.light-theme .wp-market-overlay { --wp-ov-accent: #8a6410; }
+body.light-theme .wp-battles-overlay { --wp-ov-accent: #9a4811; }
 .wp-news-overlay {                               /* News: blu */
   --wp-ov-accent: #58a6ff;
   --wp-ov-bg-light: #ece3d2;                     /* carta di giornale */
@@ -1154,6 +1204,49 @@ body.light-theme #wp-time-machine-btn.wp-time-machine-btn-active {
   font-weight: 700;
   min-width: 34px;
 }
+/* ── WarEra+ — Selettore data della time machine ──
+   Stesso "vestito" dei bottoni accanto (altezza 28px, bordo #30363d,
+   sfondo #161b22), così la riga controlli resta una sola fila coerente.
+   color-scheme:dark serve a far disegnare al browser anche il calendario
+   nativo e l'icona in scuro: senza, Chrome mostra un'icona nera su
+   sfondo scuro, praticamente invisibile. ── */
+#wp-tm-date {
+  flex: 0 0 auto;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 8px;
+  border: 1px solid #30363d;
+  background: #161b22;
+  color: #8b949e;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  color-scheme: dark;
+}
+#wp-tm-date:hover,
+#wp-tm-date:focus {
+  color: #e6edf3;
+  border-color: #58a6ff;
+  outline: none;
+}
+#wp-tm-date::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.65;
+}
+#wp-tm-date::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+body.light-theme #wp-tm-date {
+  background: #fdfaf5;
+  border-color: #c4b394;
+  color: #6b5a47;
+  color-scheme: light;
+}
+body.light-theme #wp-tm-date:hover,
+body.light-theme #wp-tm-date:focus {
+  color: #2e1f0c;
+  border-color: #2266cc;
+}
 /* BUG FIX (segnalato dall'utente): "scroll" bloccato su mobile — vedi
    commento su pointer-events sopra. touch-action:pan-x qui indica al
    browser che un drag che parte dallo slider è gestito interamente da lui
@@ -1264,10 +1357,21 @@ body.light-theme #wp-tm-day {
 }
 @media (max-width: 768px) {
   #wp-time-machine-panel {
+    /* BUG FIX (segnalato dall'utente: aprendo la time machine da telefono
+       "la nuova finestra rimane in parte nascosta"). Il pannello ereditava
+       `bottom:70px`, misura pensata per il solo bottone Ko-fi del desktop:
+       su mobile sotto c'è invece la tab bar (--wp-mbottom-h + safe-area,
+       vedi mobile-menubar.css), che su telefoni con inset di sistema
+       supera i 70px e copriva la riga slider + "Giorno N/N".
+       Qui l'ancoraggio è calcolato dalla barra vera, non da un numero
+       fisso, e la stessa variabile alimenta anche il transform di
+       chiusura — così le due misure non possono più divergere. */
+    --wp-tm-anchor: calc(var(--wp-mbottom-h, 58px) + env(safe-area-inset-bottom, 0px) + 12px);
     left: 16px;
     right: 16px;
-    /* Stesso fix del blocco base sopra: +70px di ancoraggio, non solo +24. */
-    transform: translateY(calc(100% + 94px));
+    bottom: var(--wp-tm-anchor);
+    /* Stesso fix del blocco base sopra: altezza + ancoraggio + margine. */
+    transform: translateY(calc(100% + var(--wp-tm-anchor) + 24px));
     min-width: 0;
     max-width: none;
   }
@@ -1558,6 +1662,98 @@ body.light-theme .wp-author-pill {
 body.light-theme .wp-author-pill:hover { background: #d63a35; }
 @media (max-width: 768px) {
   .wp-author-pill { display: none; }
+}
+
+/* ── Contatore visite (src/app/visitorCounter.js) ──────────────────
+   Terza pill della fascia, accanto a Ko-fi e all'autore. Volutamente la
+   più discreta delle tre: le altre due chiedono qualcosa a chi guarda
+   (un caffè, un click sul profilo), questa non chiede niente e si limita
+   a dire quante persone sono passate. Da qui il fondo neutro invece del
+   rosso, e nessun effetto al passaggio del mouse — non è cliccabile e non
+   deve sembrarlo.
+   Stessa altezza delle altre due (32px: 7+1 di padding e bordo sopra e
+   sotto attorno a una riga da 16px), altrimenti la fascia si scalinerebbe.
+   Compare solo se il server di cache risponde: se manca, il modulo non
+   crea proprio l'elemento. ── */
+.wp-visits-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 14px;
+  box-sizing: border-box;
+  border-radius: 24px;
+  background: rgba(22, 27, 34, .82);
+  border: 1px solid #30363d;
+  color: #e6edf3;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+  backdrop-filter: blur(8px);
+  cursor: default;
+  user-select: none;
+}
+.wp-visits-icon { font-size: 13px; line-height: 1; opacity: .75; }
+.wp-visits-text { display: flex; align-items: baseline; gap: 4px; }
+.wp-visits-num { font-weight: 800; font-variant-numeric: tabular-nums; }
+.wp-visits-label { font-weight: 400; opacity: .7; font-size: 11px; }
+
+/* Chi c'è adesso: pallino verde + conteggio, separato dal totale visite
+   da un filo verticale. Sono due grandezze diverse (una cumulativa, una
+   istantanea) e devono leggersi come due cose, non come un numero solo
+   spezzato in due. */
+.wp-visits-online {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 9px;
+  margin-left: 2px;
+  border-left: 1px solid rgba(255, 255, 255, .16);
+  cursor: help;
+}
+body.light-theme .wp-visits-online { border-left-color: rgba(0, 0, 0, .14); }
+.wp-visits-online-num { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.wp-visits-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3fb950;
+  flex-shrink: 0;
+  /* L'alone fa il lavoro del "si illumina" senza far ballare il layout:
+     è box-shadow, non dimensione, quindi il numero accanto non si sposta
+     mai di un pixel mentre pulsa. */
+  box-shadow: 0 0 0 0 rgba(63, 185, 80, .55);
+  animation: wp-visits-glow 2.4s ease-in-out infinite;
+}
+body.light-theme .wp-visits-dot {
+  background: #1a7f37;
+  box-shadow: 0 0 0 0 rgba(26, 127, 55, .5);
+}
+@keyframes wp-visits-glow {
+  0%   { box-shadow: 0 0 0 0 rgba(63, 185, 80, .55); }
+  70%  { box-shadow: 0 0 0 5px rgba(63, 185, 80, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(63, 185, 80, 0); }
+}
+/* Chi ha chiesto meno animazioni non ha chiesto meno informazioni: il
+   pallino resta verde e presente, smette solo di pulsare. */
+@media (prefers-reduced-motion: reduce) {
+  .wp-visits-dot { animation: none; }
+}
+
+body.light-theme .wp-visits-pill {
+  background: rgba(255, 255, 255, .88);
+  border-color: #d8cfbe;
+  color: #1f2328;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
+}
+
+/* Stessa regola della pill autore: sulla mappa, su telefono, non c'è
+   spazio — riappare dentro il drawer ☰, dove il wrapper viene rilocato. */
+@media (max-width: 768px) {
+  .wp-visits-pill { display: none; }
+  #wp-bottom-credits.wp-credits-in-drawer .wp-visits-pill { display: flex; }
 }
 
 /* ── Credit autore (richiesto dall'utente, sia desktop che mobile).
@@ -2190,6 +2386,29 @@ body.light-theme #wp-compass {
 }
 body.light-theme .wp-ps-bar { background: #dfe4ec; }
 .wp-ps-seg { display: block; height: 100%; }
+/* Percentuali sopra la barra: ogni etichetta larga quanto il suo
+   segmento (vedi playstyleBarHtml), cosi' resta sempre allineata. */
+.wp-ps-pcts {
+  display: flex;
+  margin-bottom: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.wp-ps-pct {
+  text-align: center;
+  overflow: hidden;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.wp-ps-pct-war       { color: #f85149; }
+.wp-ps-pct-eco       { color: #3fb950; }
+.wp-ps-pct-mixed     { color: #e3b341; }
+.wp-ps-pct-undecided { color: #8b949e; }
+body.light-theme .wp-ps-pct-war       { color: #cf222e; }
+body.light-theme .wp-ps-pct-eco       { color: #1a7f37; }
+body.light-theme .wp-ps-pct-mixed     { color: #9a6700; }
+body.light-theme .wp-ps-pct-undecided { color: #6b7280; }
 .wp-ps-dot {
   display: inline-block;
   width: 8px; height: 8px;
@@ -2928,3 +3147,35 @@ body.light-theme .wp-ship-tip {
 .wp-eth-spec { color: var(--wp-ov-text-dim, #8b949e); }
 .wp-eth-bonus { color: #3fb950; font-weight: 700; }
 .wp-eth-none { opacity: .75; }
+
+/* ══════════════════════════════════════════════════════════════
+   Cartellino DEV — versione di prova del tool
+   ------------------------------------------------------------------
+   Compare solo fuori dal deploy live (vedi src/shared/deployEnv.js).
+   Serve a non confondere il preview col tool pubblico: le due versioni
+   sono identiche a vedersi e l'URL, da telefono, è mezzo nascosto.
+   In alto a SINISTRA perché a destra ci sono già i controlli della
+   mappa; pointer-events: none così non ruba mai un click alla mappa
+   sotto, che è l'unico modo in cui un cartellino decorativo può fare
+   danno vero.
+   ══════════════════════════════════════════════════════════════ */
+#wp-deploy-badge {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 9999;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid #d29922;
+  background: rgba(187, 128, 9, .92);
+  color: #fff;
+  font: 700 11px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: .09em;
+  pointer-events: none;
+  user-select: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .45);
+}
+
+@media (max-width: 768px) {
+  #wp-deploy-badge { top: 6px; left: 6px; padding: 2px 7px; font-size: 10px; }
+}

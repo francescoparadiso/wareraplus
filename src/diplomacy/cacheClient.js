@@ -448,6 +448,69 @@ export async function fetchDailyDamageBaselineViaCache() {
   }
 }
 
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Archivio battaglie e spese di guerra
+   ------------------------------------------------------------------
+   Calcolati SOLO sul server di cache (server/battleArchive.js): il costo
+   di una battaglia sono due chiamate di classifica a battaglia e ~40
+   battaglie al giorno, quindi novanta giorni non si ricostruiscono da un
+   browser. Come per la time machine, "non c'è chiamata diretta
+   equivalente" — ma a differenza sua qui il fallback esiste, ed è una
+   FINESTRA RIDOTTA calcolata dal vivo (vedi src/battles/api.js): poche
+   pagine di battaglie recenti, con le taglie caricate solo per la riga
+   che l'utente apre. Meglio una settimana di dati veri che una schermata
+   vuota.
+
+   Le due funzioni qui ritornano `null` quando il server non risponde:
+   è il chiamante a decidere se ripiegare, non questo modulo.
+   ══════════════════════════════════════════════════════════════ */
+
+/** Righe compatte dell'archivio (chiavi corte, vedi _toRow nel modulo
+ *  server). Ritorna { fetchedAt, retentionDays, data: [...] } o null. */
+export async function fetchBattleArchiveViaCache() {
+  try {
+    const json = await _fetchCacheJsonRaw('/battle-archive');
+    if (!json || !Array.isArray(json.data)) return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /battle-archive non disponibile:', err.message);
+    return null;
+  }
+}
+
+/** Contatore visite: { total, today, seed, countedHere }.
+ *  `visitorId` è l'identificativo casuale che il browser si è generato da
+ *  solo (vedi src/app/visitorCounter.js) e serve al server per non contare
+ *  due volte lo stesso browser nello stesso giorno. Passando `count:false`
+ *  si legge il numero senza incrementarlo.
+ *  Ritorna null se il server non risponde: il contatore semplicemente non
+ *  compare, come ogni altra cosa che dipende dal VPS. */
+export async function fetchVisitsViaCache(visitorId, { count = true } = {}) {
+  try {
+    const q = `?id=${encodeURIComponent(visitorId || '')}${count ? '' : '&count=0'}`;
+    const json = await _fetchCacheJsonRaw(`/visits${q}`);
+    if (!json || !Number.isFinite(json.total)) return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /visits non disponibile:', err.message);
+    return null;
+  }
+}
+
+/** Serie giornaliera per nazione: { fetchedAt, retentionDays, tz, byDay }
+ *  con byDay[YYYY-MM-DD][countryId] = {bounty, contracts, contractCount,
+ *  battles}. Ritorna null se il server non ce l'ha. */
+export async function fetchWarExpensesViaCache() {
+  try {
+    const json = await _fetchCacheJsonRaw('/war-expenses');
+    if (!json || typeof json.byDay !== 'object') return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /war-expenses non disponibile:', err.message);
+    return null;
+  }
+}
+
 // ══════════════════════════════════════════════════════════════
 // FALLBACK time machine — sorgente esterna spywarera.com (via worker)
 // ------------------------------------------------------------------

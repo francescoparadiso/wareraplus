@@ -334,3 +334,107 @@ continua a funzionare, ma resta sul percorso vecchio e pesante (ricade su
 curl -s "https://warera-oracle.duckdns.org/warera-cache/ticker/summary?since=$(( ($(date +%s) - 172800) * 1000 ))&windows=$(( ($(date +%s) - 86400) * 1000 ))" | head -c 300
 ```
 
+
+## Round 6 — archivio battaglie e spese di guerra (`battleArchive.js`)
+
+**Da deployare**: `battleArchive.js` è un file NUOVO — va copiato anche lui,
+non basta aggiornare `warera-cache-server.js`.
+
+```bash
+scp server/warera-cache-server.js server/battleArchive.js <utente>@<vps>:<percorso>/
+ssh <utente>@<vps> "pm2 restart warera-cache"
+```
+
+Risponde a due domande che il gioco non risponde da nessuna parte: quanto è
+costata una battaglia (taglia pagata + contratti mercenari) e quanto spende
+una nazione al giorno per combattere. Endpoint nuovi:
+
+- `GET /battle-archive` — battaglie concluse degli ultimi 90 giorni, righe
+  compatte (chiavi corte: il file viaggia intero verso il browser).
+- `GET /war-expenses` — serie giornaliera `byDay[YYYY-MM-DD][countryId]`.
+  Derivata al momento della richiesta dai due archivi: costa niente e resta
+  sempre coerente con l'ultimo giro di poll.
+- `GET /battle-archive/status` — stato dei due bootstrap (anche in `/health`).
+
+### Il bootstrap gira SOLO di notte
+
+Il primo riempimento è l'unico lavoro pesante: ~72 pagine di battaglie (ognuna
+con 100 chiamate di classifica) e ~700 pagine di aste mercenarie. Gira quindi
+**solo fra le 02:00 e le 06:59 italiane**, quando il gioco è vuoto, per non
+contendere il rate limit ai giocatori veri. In quelle cinque ore copre tutti e
+novanta i giorni, quindi **una notte sola basta**. Il cursore è su disco: un
+`pm2 restart` riprende da dov'era, non ricomincia.
+
+Il giro **incrementale** invece è attivo tutto il giorno (una o due richieste
+ogni 20 minuti) e aggancia solo le battaglie e i contratti nuovi.
+
+```bash
+# quanto è avanti il bootstrap
+curl -s https://warera-oracle.duckdns.org/warera-cache/battle-archive/status | head -c 600
+```
+
+### ⚠️ La trappola da non rifare
+
+`country.getAllCountries` porta già `rankings.countryBounty`, che sembra la
+risposta pronta a "quanto ha speso di taglie questa nazione", a costo zero.
+**Non lo è**: misurato su tutte e 180 le nazioni, correla 0,87 col danno
+totale e 0,11 con la ricchezza — è quanto i *cittadini* hanno incassato
+combattendo, non quanto il governo ha pagato. La spesa vera si ricava solo
+battaglia per battaglia, che è quello che fa questo modulo. Il commento in
+testa a `battleArchive.js` lo ripete per chi ci passasse fra sei mesi.
+
+## Round 7 — contatore visite (`/visits`)
+
+Endpoint nuovo, tutto dentro `warera-cache-server.js` (nessun file in più da
+copiare). Serve alla pill in fondo alla mappa (`src/app/visitorCounter.js`).
+
+Il client manda un identificativo casuale che si è generato da solo e tiene in
+localStorage; il server lo ricorda per la giornata corrente. Stesso browser
+che ricarica dieci volte = una visita; domani ne conta un'altra. **Nessun IP
+viene letto o salvato** — il che, oltre a essere la cosa giusta, evita anche il
+problema pratico che dietro nginx `req.ip` sarebbe 127.0.0.1 per tutti.
+
+Il totale mostrato è `VISITS_SEED + quello contato qui`. `VISITS_SEED = 1325`
+sono i visitatori misurati da Vercel Analytics dalla messa online fino al
+2026-08-31, giorno in cui il contatore proprio ha cominciato a girare: è la
+stessa unità di misura (visite giornaliere uniche), quindi i due numeri si
+sommano senza mescolare grandezze diverse. **Il seme vive qui, non nel
+client**: correggerlo è un `pm2 restart`, non un deploy su Vercel.
+
+```bash
+curl -s "https://warera-oracle.duckdns.org/warera-cache/visits?id=prova"
+# {"total":1326,"today":1,"seed":1325,"countedHere":1}
+# `&count=0` legge senza incrementare
+```
+
+Su disco: `cache/visits.json`, che tiene il totale proprio e gli id degli
+ultimi 3 giorni (servono solo a deduplicare dentro la giornata, poi si
+buttano). **Non cancellarlo a un deploy**, o il conteggio proprio riparte da
+zero e resta solo il seme. Vale la regola generale: la cartella `cache/` non
+si tocca.
+
+Finché non rideployi, `/visits` risponde 404 e la pill semplicemente non
+compare — mai uno zero né un segnaposto, come per tutto il resto che passa dal
+VPS.
+
+### Chi c'è adesso (`online` nella risposta di `/visits`)
+
+Stesso endpoint, campo in più. Il client ripassa una volta al minuto con
+`count=0` (dice "ci sono ancora" senza gonfiare il totale) e il server conta
+gli id distinti visti negli ultimi 5 minuti.
+
+La mappa delle presenze sta **in memoria, non su disco**: vale cinque minuti, e
+scriverla a ogni battito sarebbe un `writeFileSync` ogni pochi secondi per un
+numero che dopo un riavvio si ricostruisce da sé nel giro di un minuto. Quindi
+subito dopo un `pm2 restart` il pallino dice 1 o 2 e risale da solo — non è un
+guasto.
+
+La finestra (5 min) è volutamente più larga del battito (1 min): una scheda che
+tarda un giro non deve sparire e riapparire facendo ballare il numero. Il ritmo
+viaggia nella risposta (`heartbeatMs`), non in una costante nel client:
+cambiarlo è un `pm2 restart`, non un deploy su Vercel.
+
+```bash
+curl -s "https://warera-oracle.duckdns.org/warera-cache/visits?id=tizio&count=0"
+# {"total":1331,"today":6,"online":8,"heartbeatMs":60000,"seed":1325,"countedHere":6}
+```

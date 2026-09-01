@@ -87,7 +87,36 @@ function _fmtDateForFilename(ts) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
 }
 
-let _btn, _panel, _slider, _label, _dayLabel, _popup;
+// Data in formato <input type="date"> (YYYY-MM-DD) nel fuso LOCALE —
+// toISOString() qui sarebbe sbagliato: converte in UTC e a seconda del fuso
+// e dell'ora mostrata restituirebbe il giorno prima o quello dopo.
+function _toDateInputValue(ts) {
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// YYYY-MM-DD scelto dall'utente -> istante da mostrare. Si conserva l'ORA
+// della posizione corrente (cambiare giorno non deve anche far saltare
+// l'orologio a mezzanotte) e si resta dentro il range coperto dallo
+// storico. Ritorna null se la data non è interpretabile.
+function _dateInputValueToTs(value, currentTs) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m || !_range) return null;
+  const cur = new Date(Number.isFinite(currentTs) ? currentTs : _range.max);
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), cur.getHours(), cur.getMinutes(), 0, 0);
+  const ts = d.getTime();
+  if (!Number.isFinite(ts)) return null;
+  return Math.min(Math.max(ts, _range.min), _range.max);
+}
+
+function _syncDateInput(ts) {
+  if (!_dateInput) return;
+  const v = _toDateInputValue(ts);
+  if (_dateInput.value !== v) _dateInput.value = v;
+}
+
+let _btn, _panel, _slider, _label, _dayLabel, _popup, _dateInput;
 let _playBtn, _prevEventBtn, _nextEventBtn, _speedBtn, _shareBtn;
 // Indicatore "sei nella time machine" (badge + orologio analogico + data) e
 // classifica territorio ("hall of fame" + lista regioni per nazione).
@@ -174,6 +203,9 @@ async function _activate(initialTs) {
   _slider.min = String(_range.min);
   _slider.max = String(_range.max);
   _slider.value = String(startTs);
+  // Il selettore data copre esattamente lo stesso intervallo dello slider.
+  _dateInput.min = _toDateInputValue(_range.min);
+  _dateInput.max = _toDateInputValue(_range.max);
   const ok = await _applyAt(startTs);
   if (!ok) {
     // Il range c'era (spesso nginx serve un file /range stale) ma la
@@ -238,6 +270,13 @@ function _buildPanelIfNeeded() {
       <button id="wp-tm-play" data-i18n-title="tm_play" data-i18n-aria="tm_play" title="${t('tm_play')}" aria-label="${t('tm_play')}">▶</button>
       <button id="wp-tm-next-event" data-i18n-title="tm_next_event" data-i18n-aria="tm_next_event" title="${t('tm_next_event')}" aria-label="${t('tm_next_event')}" disabled>⏭</button>
       <button id="wp-tm-speed" data-i18n-title="tm_speed_title" data-i18n-aria="tm_speed_title" title="${t('tm_speed_title')}" aria-label="${t('tm_speed_title')}">1x</button>
+      <!-- WarEra+ (richiesto): scelta diretta della data. Con ~490 giorni
+           di storico su una traccia larga poche centinaia di pixel, lo
+           slider non permette di "beccare" un giorno preciso; questo lo
+           affianca (non lo sostituisce) e su telefono apre il selettore
+           di data nativo. min/max sono impostati in _activate dal range
+           reale dello storico. -->
+      <input id="wp-tm-date" type="date" data-i18n-title="tm_pick_date" data-i18n-aria="tm_pick_date" title="${t('tm_pick_date')}" aria-label="${t('tm_pick_date')}" />
       <button id="wp-tm-standings-toggle" data-i18n-title="tm_standings" data-i18n-aria="tm_standings" title="${t('tm_standings')}" aria-label="${t('tm_standings')}">🏆</button>
       <button id="wp-tm-share" data-i18n-title="tm_share" data-i18n-aria="tm_share" title="${t('tm_share')}" aria-label="${t('tm_share')}">📤</button>
     </div>
@@ -260,6 +299,7 @@ function _buildPanelIfNeeded() {
   _speedBtn = _panel.querySelector('#wp-tm-speed');
   _shareBtn = _panel.querySelector('#wp-tm-share');
   _standingsBtn = _panel.querySelector('#wp-tm-standings-toggle');
+  _dateInput = _panel.querySelector('#wp-tm-date');
 
   _panel.querySelector('#wp-tm-close').addEventListener('click', _deactivate);
   _playBtn.addEventListener('click', _togglePlay);
@@ -269,11 +309,26 @@ function _buildPanelIfNeeded() {
   _standingsBtn.addEventListener('click', _toggleStandings);
   _shareBtn.addEventListener('click', _shareScreenshot);
 
+  // Scelta diretta della data: si comporta come un salto manuale (ferma il
+  // playback) e riusa _applyAt, quindi slider, etichette e URL condivisibile
+  // restano allineati come per qualunque altro spostamento.
+  _dateInput.addEventListener('change', () => {
+    if (!_range || !_dateInput.value) return;
+    const ts = _dateInputValueToTs(_dateInput.value, Number(_slider.value));
+    if (ts === null) { _syncDateInput(Number(_slider.value)); return; }
+    _stopPlay();
+    clearTimeout(_debounceTimer);
+    _slider.value = String(ts);
+    _applyAt(ts);
+    trackEvent('time-machine-pick-date');
+  });
+
   _slider.addEventListener('input', () => {
     _stopPlay(); // trascinamento manuale = l'utente prende il controllo, ferma il playback
     const ts = Number(_slider.value);
     _label.textContent = _fmtDate(ts);
     _dayLabel.textContent = _fmtDay(ts);
+    _syncDateInput(ts);
     // Debounce: la fetch server-side (ricostruzione keyframe+replay) non ha
     // senso rifarla per OGNI pixel trascinato — solo quando l'utente si ferma.
     clearTimeout(_debounceTimer);
@@ -714,6 +769,7 @@ function _notifyHistoryError() {
 async function _applyAt(ts) {
   _label.textContent = _fmtDate(ts);
   _dayLabel.textContent = _fmtDay(ts);
+  _syncDateInput(ts);
   _updateClock(ts);
   _hidePopup();
   _syncUrl(ts);

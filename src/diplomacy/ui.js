@@ -374,6 +374,24 @@ export function updateDynamicLegend() {
       `;
       return;
     }
+    // WarEra+: in anteprima Alliance Builder la legenda elenca i blocchi
+    // COSTRUITI, coi loro membri. Le voci non sono cliccabili: il focus su
+    // un blocco e' spento in anteprima (vedi map.js, _onRegionClick).
+    if (state.builderPreview) {
+      box.innerHTML = state.builderPreview.blocs.map(b => `
+        <div class="legend-item">
+          <div class="legend-bar" style="background:${b.color};"></div>
+          <div class="legend-info">
+            <div class="legend-name">${escapeHtml(b.name)}</div>
+            <div class="legend-desc">${b.memberCount} nations${b.movedCount ? ` · ${b.movedCount} moved` : ''}</div>
+          </div>
+        </div>`).join('') + `
+        <div class="legend-item">
+          <div class="legend-bar" style="background:${COLORS.DEFAULT_LAND};opacity:0.6;"></div>
+          <div class="legend-info"><div class="legend-name">Unaligned</div></div>
+        </div>`;
+      return;
+    }
     let html = '';
     state.externalBlocsInfo.forEach(b => {
       // lookup per id invece di .find per nome dentro il forEach (O(n^2));

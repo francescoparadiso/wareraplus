@@ -1,6 +1,9 @@
 import { state } from './state.js';
 import { worldCoreDevelopment, bonusFromShare, formatBonus, isPenalty, curveTooltip } from '../shared/allianceBonus.js';
 import { trackEvent } from '../shared/analytics.js';
+// withAlpha: i colori delle alleanze sono stringhe hsl(...), la vecchia
+// trasparenza "colore + due cifre esa" su quelle non e' un colore valido.
+import { withAlpha } from './utils.js';
 import { ensureDailyDamage, sumCountryDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
 
 /* ── Helpers ── */
@@ -448,6 +451,10 @@ function injectStyles() {
     .bs-builder-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
     .bs-newbtn{background:rgba(63,185,80,.15);border:1px solid rgba(63,185,80,.5);border-radius:8px;padding:8px 16px;color:#3fb950;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
     .bs-newbtn:hover{background:rgba(63,185,80,.28);border-color:#3fb950}
+    /* Anteprima sulla mappa: viola come la sezione Alleanze, per non
+       confonderlo col verde di "crea" — non aggiunge nulla, mostra. */
+    .bs-mapbtn{background:rgba(163,113,247,.15);border:1px solid rgba(163,113,247,.5);border-radius:8px;padding:8px 16px;color:#a371f7;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
+    .bs-mapbtn:hover{background:rgba(163,113,247,.28);border-color:#a371f7}
     .bs-builder-hint{font-size:12px;color:#8b949e}
     .bs-view-toggle{display:flex;border:1px solid rgba(255,255,255,.12);border-radius:8px;overflow:hidden}
     .bs-viewbtn{background:transparent;border:0;color:#8b949e;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
@@ -554,11 +561,27 @@ function injectStyles() {
 
     /* Popup */
     .bs-popup-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:9999;backdrop-filter:blur(3px)}
-    .bs-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#161b22;border:1px solid #30363d;border-radius:14px;padding:24px;z-index:10000;box-shadow:0 24px 80px rgba(0,0,0,.85);max-width:92vw}
+    /* WarEra+ BUG FIX (segnalato: "in 1366x768 compare così, non è il
+       massimo"): il popup non aveva NESSUN vincolo di altezza — solo
+       max-width. Su schermi bassi (768px e giù di lì) le 5 righe di
+       riquadri + la tabella nazioni superavano il viewport e il popup,
+       centrato con translate(-50%,-50%), veniva tagliato SIA sopra SIA
+       sotto: intestazione e ultime righe fuori schermo, senza modo di
+       raggiungerle. Ora è una colonna flex alta al massimo quanto la
+       finestra: intestazione e riquadri restano interi (flex:0 0 auto),
+       la tabella si stringe per prima (flex:1 1 auto) e scorre dentro
+       di sé. Il blocco @media(max-height) più sotto compatta i riquadri
+       quando anche così non basterebbe. */
+    .bs-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#161b22;border:1px solid #30363d;border-radius:14px;padding:24px;z-index:10000;box-shadow:0 24px 80px rgba(0,0,0,.85);max-width:92vw;max-height:calc(100dvh - 32px);display:flex;flex-direction:column;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent}
+    .bs-popup::-webkit-scrollbar{width:6px}
+    .bs-popup::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:3px}
+    .bs-popup::-webkit-scrollbar-track{background:transparent}
+    .bs-popup-header,.bs-popup-grid,.bs-breakdown-header{flex:0 0 auto}
     .bs-popup.nation-popup{width:560px}
     .bs-popup.bloc-popup{width:780px}
     .bs-popup-header{display:flex;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px solid #30363d;margin-bottom:16px}
     .bs-popup-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;font-size:14px}
+    .bs-popup-grid.bs-popup-grid-spaced{margin-bottom:18px}
     .bs-popup-item{display:flex;flex-direction:column;color:#8b949e;padding:10px 12px;background:rgba(255,255,255,.03);border-radius:8px}
     .bs-popup-item span{color:#e6edf3;font-weight:600;font-size:17px;margin-top:2px}
     .bs-popup-percent{grid-column:span 2;background:linear-gradient(90deg,rgba(88,166,255,.18),rgba(88,166,255,.08));padding:14px;border-radius:8px;text-align:center;font-weight:700;color:#58a6ff;font-size:16px;margin-top:6px;border:1px solid rgba(88,166,255,.3)}
@@ -578,9 +601,25 @@ function injectStyles() {
     .bs-breakdown-row .bar-fill{height:100%;border-radius:3px;transition:width .3s}
     .bs-breakdown-row .val{min-width:60px;text-align:right;font-weight:600;font-size:13px}
     .bs-breakdown-row .val.pct{color:#58a6ff;min-width:50px}
-    .bs-breakdown-body{max-height:340px;overflow-y:auto}
+    .bs-breakdown-body{flex:1 1 auto;min-height:110px;max-height:340px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent}
     .bs-breakdown-body::-webkit-scrollbar{width:6px}
     .bs-breakdown-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:3px}
+
+    /* WarEra+ — schermi bassi (il caso 1366×768 segnalato): stessi
+       contenuti, riquadri e righe più compatti, così la tabella nazioni
+       conserva un'altezza utile invece di ridursi al minimo. */
+    @media(max-height:820px){
+      .bs-popup{padding:16px 18px}
+      .bs-popup-header{padding-bottom:10px;margin-bottom:12px}
+      .bs-popup-header > div > div:first-child{font-size:19px}
+      .bs-popup-grid{gap:7px 10px;font-size:12px}
+      .bs-popup-item{padding:6px 10px}
+      .bs-popup-item span{font-size:15px}
+      .bs-popup-percent{padding:10px;font-size:14px}
+      .bs-popup-grid.bs-popup-grid-spaced{margin-bottom:12px}
+      .bs-breakdown-header{padding:6px 12px}
+      .bs-breakdown-row{padding:5px 12px}
+    }
 
     @keyframes glowPulse{0%,100%{opacity:.6;box-shadow:0 0 6px currentColor}50%{opacity:1;box-shadow:0 0 14px currentColor}}
     .bs-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;animation:glowPulse 2s ease-in-out infinite}
@@ -722,7 +761,9 @@ function injectStyles() {
     body.light-theme .bs-merge-close{color:#6b5a47}
     body.light-theme .bs-merge-close:hover{color:#2e1f0c}
     body.light-theme .bs-popup-overlay{background:rgba(240,230,210,.7)}
-    body.light-theme .bs-popup{background:#fdfaf5;border-color:#c4b394;box-shadow:0 24px 80px rgba(0,0,0,.3)}
+    body.light-theme .bs-popup{background:#fdfaf5;border-color:#c4b394;box-shadow:0 24px 80px rgba(0,0,0,.3);scrollbar-color:rgba(139,90,43,.35) transparent}
+    body.light-theme .bs-popup::-webkit-scrollbar-thumb,body.light-theme .bs-breakdown-body::-webkit-scrollbar-thumb{background:rgba(139,90,43,.35)}
+    body.light-theme .bs-breakdown-body{scrollbar-color:rgba(139,90,43,.35) transparent}
     body.light-theme .bs-popup-header{border-bottom-color:#c4b394}
     body.light-theme .bs-popup-item{background:rgba(0,0,0,.03);color:#3e2f1c}
     body.light-theme .bs-popup-item span{color:#3e2f1c}
@@ -808,6 +849,7 @@ function injectStyles() {
     body.light-theme .bs-chip.bonus{background:rgba(47,125,58,.14);color:#2f7d3a}
     body.light-theme .bs-chip.bonus.neg{background:rgba(194,43,34,.14);color:#c22b22}
     body.light-theme .bs-newbtn{background:rgba(47,125,58,.12);border-color:rgba(47,125,58,.5);color:#2f7d3a}
+    body.light-theme .bs-mapbtn{background:rgba(110,64,201,.12);border-color:rgba(110,64,201,.5);color:#6e40c9}
     body.light-theme .bs-builder-hint{color:#6b5a47}
     body.light-theme .bs-view-toggle{border-color:rgba(0,0,0,.15)}
     body.light-theme .bs-viewbtn{color:#6b5a47}
@@ -935,13 +977,13 @@ function showBlocPopup(blocId) {
   popup.innerHTML = `
     <div class="bs-popup-close">✕</div>
     <div class="bs-popup-header">
-      <div style="width:16px;height:16px;border-radius:50%;background:${bloc.color};flex-shrink:0;box-shadow:0 0 12px ${bloc.color}88"></div>
+      <div style="width:16px;height:16px;border-radius:50%;background:${bloc.color};flex-shrink:0;box-shadow:0 0 12px ${withAlpha(bloc.color, .53)}"></div>
       <div style="flex:1">
         <div style="font-weight:700;font-size:22px;color:#fff">${bloc.name}</div>
         <div style="font-size:12px;color:#8b949e">${bloc.countryCount} nations${bloc.isMerged ? ' · MERGED' : ''}</div>
       </div>
     </div>
-    <div class="bs-popup-grid" style="margin-bottom:18px">
+    <div class="bs-popup-grid bs-popup-grid-spaced">
       <div class="bs-popup-item">Weekly Damage <span style="color:#58a6ff">${fmt(bloc.totalDmg)}</span></div>
       <div class="bs-popup-item">Total Damage <span style="color:#f0ad4e">${fmt(bloc.totalAbsoluteDmg)}</span></div>
       <div class="bs-popup-item">Population <span>${fmt(bloc.totalPop)}</span></div>
@@ -1114,6 +1156,7 @@ function renderBuilder() {
   </div>
   <div class="bs-builder-bar">
     <button class="bs-newbtn" id="bs-new-alliance">＋ New alliance</button>
+    <button class="bs-mapbtn" id="bs-show-on-map" title="Paint these alliances on the map and go look at them">${state.builderPreview ? '🗺️ Update map' : '🗺️ Show on map'}</button>
     <div class="bs-view-toggle">
       <button class="bs-viewbtn${builderView === 'cards' ? ' active' : ''}" data-bview="cards">▦ Cards</button>
       <button class="bs-viewbtn${builderView === 'table' ? ' active' : ''}" data-bview="table">☰ Table</button>
@@ -1662,7 +1705,7 @@ function blocCard(bloc, isUnaligned) {
   const mergeBtn = `<button class="bs-mergebtn" data-merge-src="${bloc.id}" title="Add a nation, or merge with another alliance">＋</button>`;
   const pinBtn = isUnaligned ? '' : pinBtnHtml(bloc);
   return `<div class="bs-card${isUnaligned ? ' unaligned' : ''}${pinnedBlocs.has(bloc.id) ? ' pinned' : ''}" data-drop-bloc="${bloc.id}">
-    <div class="bs-hdr" draggable="true" data-bloc-drag="${bloc.id}" data-bloc-id="${bloc.name}" style="background:linear-gradient(135deg,${bloc.color}30,${bloc.color}08);cursor:pointer" title="Click for bloc stats">
+    <div class="bs-hdr" draggable="true" data-bloc-drag="${bloc.id}" data-bloc-id="${bloc.name}" style="background:linear-gradient(135deg,${withAlpha(bloc.color, .19)},${withAlpha(bloc.color, .03)});cursor:pointer" title="Click for bloc stats">
       <span>${pinBtn}${bloc.name}${splitBtn}${delBtn}</span>
       <span style="font-size:13px;opacity:.8;display:flex;align-items:center;gap:6px">${bloc.countryCount} nations${mergeBtn}</span>
     </div>
@@ -2080,7 +2123,7 @@ function attachSearchEvent(c) {
     rd.innerHTML = hits.length
       ? `<div class="bs-grid">${hits.slice(0, 20).map(m => `
           <div class="bs-card" style="border-top:3px solid ${m.blocColor}">
-            <div class="bs-hdr" style="background:linear-gradient(135deg,${m.blocColor}30,${m.blocColor}08)">
+            <div class="bs-hdr" style="background:linear-gradient(135deg,${withAlpha(m.blocColor, .19)},${withAlpha(m.blocColor, .03)})">
               <span style="display:flex;align-items:center;gap:8px">${flagImg(m.code, '18px')} ${m.name}</span>
               <span style="font-size:12px;color:#8b949e">${m.blocName}</span>
             </div>
@@ -2162,6 +2205,33 @@ function attachEvents(c) {
     const newAlliance = e.target.closest('#bs-new-alliance');
     if (newAlliance) {
       createCustomBloc();
+      return;
+    }
+
+    /* WarEra+ — "Show on map": il builder risponde con dei numeri, la
+       mappa risponde con una forma (contiguita', enclave, chi resta in
+       mezzo). Si passa `allStats`, cioe' esattamente i blocchi che si
+       stanno guardando qui, a builderPreview.js, che chiude questa pagina
+       e dipinge la vista Alleanze. Import dinamico + catch: se il chunk
+       non arriva il builder resta usabile com'e' sempre stato. */
+    const showMap = e.target.closest('#bs-show-on-map');
+    if (showMap) {
+      showMap.disabled = true;
+      import('./builderPreview.js')
+        .then(m => {
+          if (!m.enterBuilderPreview(allStats)) {
+            showMap.disabled = false;
+            const label = showMap.textContent;
+            showMap.textContent = '🗺️ Nothing to show yet';
+            setTimeout(() => { showMap.textContent = label; }, 2200);
+            return;
+          }
+          trackEvent('bloc-builder-map-preview', { blocs: allStats.filter(b => !b.isUnaligned && b.countryCount).length });
+        })
+        .catch(err => {
+          console.error('[bloc-stats] anteprima mappa non disponibile:', err);
+          showMap.disabled = false;
+        });
       return;
     }
 

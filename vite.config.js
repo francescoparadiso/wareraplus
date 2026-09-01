@@ -1,7 +1,19 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// WarEra+: ambiente di deploy deciso a build time. Vercel mette
+// VERCEL_ENV a 'production' sul branch di produzione e a 'preview' su
+// ogni altro branch (è così che nasce la versione "dev" del tool: un
+// branch a parte, un URL a parte). In locale la variabile non esiste e
+// vale 'local'. Il perché e cosa cambia: src/shared/deployEnv.js.
+const DEPLOY_ENV = process.env.VERCEL_ENV || 'local';
+const IS_LIVE = DEPLOY_ENV === 'production';
+
 export default defineConfig({
+  define: {
+    __WP_DEPLOY_ENV__: JSON.stringify(DEPLOY_ENV),
+  },
+
   // Deploy su Vercel: root del dominio, nessun sub-path (a differenza del
   // vecchio Diplomacy View che era su GitHub Pages con base '/repo-name/').
   base: '/',
@@ -15,6 +27,15 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
+
+      // WarEra+: sul deploy di prova il service worker si DISINSTALLA
+      // invece di installarsi. Motivo pratico: un preview serve a vedere
+      // se una modifica funziona, e un SW che serve il bundle precedente
+      // dalla cache è esattamente il modo migliore per guardare una
+      // modifica che c'è e credere che non ci sia. Conseguenza accettata:
+      // il comportamento PWA (offline, installazione) si prova solo in
+      // produzione o con una build locale a mano.
+      selfDestroying: !IS_LIVE,
 
       // Precache di tutto il bundle costruito (JS/CSS/HTML dell'app,
       // incluso il Political View invariato sotto /political/).

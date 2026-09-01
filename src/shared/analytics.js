@@ -20,6 +20,33 @@
    quota superata sul piano Umami): try/catch silenzioso.
    ══════════════════════════════════════════════════════════════ */
 
+import { IS_LIVE } from './deployEnv.js';
+
+/* ══════════════════════════════════════════════════════════════
+   Caricamento dello script Umami
+   ------------------------------------------------------------------
+   Stava come tag <script> in index.html. È stato spostato qui quando è
+   nata la versione "dev" del tool: un tag statico si carica su
+   QUALSIASI deploy, e Umami conta le pageview da solo — cioè ogni prova
+   su un preview sarebbe finita nel numero pubblico. Da JS invece la
+   condizione si può mettere. ID e URL restano gli stessi di prima.
+   ══════════════════════════════════════════════════════════════ */
+const UMAMI_SRC = 'https://cloud.umami.is/script.js';
+const UMAMI_WEBSITE_ID = 'dc8b6461-36c0-4765-b340-cce22c231910';
+
+export function initAnalytics() {
+  if (!IS_LIVE) return;
+  try {
+    const s = document.createElement('script');
+    s.defer = true;
+    s.src = UMAMI_SRC;
+    s.setAttribute('data-website-id', UMAMI_WEBSITE_ID);
+    document.head.appendChild(s);
+  } catch (err) {
+    // silenzioso di proposito — vedi nota sopra
+  }
+}
+
 export function trackEvent(name, data) {
   try {
     if (window.umami?.track) window.umami.track(name, data);

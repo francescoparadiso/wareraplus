@@ -49,6 +49,10 @@ export const OVERLAY_TINTS = {
   // ciano → verde acqua
   nations:  { rgbDark: '57,208,216',  rgbDark2: '63,185,80',
               rgbLight: '17,138,144', rgbLight2: '26,127,55' },
+  // arancio bruciato → rosso (Battaglie: guerra e denaro, tinta sua —
+  // vicina ma distinta dal rosso pieno delle Unità Militari)
+  battles:  { rgbDark: '219,109,40',  rgbDark2: '229,72,77',
+              rgbLight: '154,72,17',  rgbLight2: '176,32,38' },
 };
 
 const _stoppers = new WeakMap();

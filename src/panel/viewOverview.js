@@ -135,6 +135,12 @@ function regionLabel(regionId) {
 // ══════════════════ ALLEANZE ══════════════════
 
 function alliancesHtml() {
+  // WarEra+: con l'anteprima di Alliance Builder attiva (builderPreview.js)
+  // il riepilogo deve elencare i blocchi COSTRUITI — quello che la mappa
+  // sta dipingendo — non le alleanze di gioco. I numeri sono gia' calcolati
+  // dal builder, quindi qui non si somma nulla di nuovo; le righe non
+  // aprono il dettaglio blocco perche' in anteprima il focus e' spento.
+  if (state.builderPreview) return builderPreviewAlliancesHtml();
   const rows = state.externalBlocsInfo.map(b => {
     const alliance = state.allianceMap.get(b.id);
     const members = alliance?.memberCountries || [];
@@ -176,6 +182,33 @@ function alliancesHtml() {
       share: r.dmg / maxDmg,
       color: r.color,
       dataset: ` data-bloc-id="${r.id}"`,
+    })).join('');
+}
+
+/* Le stesse righe del riepilogo alleanze, ma dai blocchi del builder. */
+function builderPreviewAlliancesHtml() {
+  const rows = state.builderPreview.blocs.slice().sort((a, b) => b.dmg - a.dmg || b.memberCount - a.memberCount);
+  if (!rows.length) return headerHtml(t('vo_alliances_title')) + emptyHtml(t('vo_no_data'));
+  const maxDmg = Math.max(...rows.map(r => r.dmg), 1);
+  const totalMembers = rows.reduce((s, r) => s + r.memberCount, 0);
+  const totalDmg = rows.reduce((s, r) => s + r.dmg, 0);
+  const totalPop = rows.reduce((s, r) => s + r.pop, 0);
+  return headerHtml(t('vo_alliances_title'), rows.length)
+    + '<div class="wp-panel-hint">Alliance Builder preview — these blocs do not exist in game.</div>'
+    + statsHtml([
+      { label: t('vo_stat_nations_in_alliances'), value: fmt(totalMembers) },
+      { label: t('vo_stat_active'), value: fmt(totalPop) },
+      { label: t('vo_stat_week_damage'), value: fmt(totalDmg) },
+      { label: t('vo_stat_alliances'), value: rows.length },
+    ])
+    + rows.map((r, i) => rowHtml({
+      rank: i + 1,
+      icon: `<span class="wp-vo-dot" style="background:${r.color}"></span>`,
+      name: r.name,
+      value: `💥 ${fmt(r.dmg)}`,
+      sub: `${r.memberCount} ${t('vo_nations')} · 👥 ${fmt(r.pop)}`,
+      share: r.dmg / maxDmg,
+      color: r.color,
     })).join('');
 }
 

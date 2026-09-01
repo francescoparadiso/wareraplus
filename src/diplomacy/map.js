@@ -544,7 +544,11 @@ export function renderMap() {
   _setLayerVisibility(LYR_COAST, false);
 
   const multiIds = [...state.multiBlocMap.keys()];
-  if (state.coloringMode === 'blocs' && multiIds.length > 0 && !state.selectedBlocId) {
+  // WarEra+: in anteprima Alliance Builder le nazioni multi-alleanza non
+  // esistono (il builder ne assegna una sola a testa), quindi il layer a
+  // pattern resta spento: lasciarlo acceso ridipingerebbe quelle nazioni
+  // coi colori delle alleanze VERE sopra l'anteprima.
+  if (state.coloringMode === 'blocs' && multiIds.length > 0 && !state.selectedBlocId && !state.builderPreview) {
     if (state.mapSource === 'original') {
       _setLayerVisibility(LYR_MULTI_BLOC, false);
       const lyr = 'multi-bloc-pattern-original';
@@ -797,6 +801,12 @@ function _onRegionClick(e) {
   // mappa evidenzia poi la situazione diplomatica aggregata di tutto il
   // blocco (vedi buildBlocFocusColorExpression in diplomacy.js).
   if (state.coloringMode === 'blocs') {
+    // WarEra+: in anteprima Alliance Builder il focus su un'alleanza e'
+    // spento. Il focus si calcola sulla diplomazia VERA di un'alleanza
+    // vera (buildBlocFocusColorExpression): su un blocco inventato non
+    // esiste, e su uno vero mostrerebbe membri diversi da quelli dipinti.
+    // Il clic quindi non fa nulla, invece di dare una risposta sbagliata.
+    if (state.builderPreview) return;
     const allianceIds = state.nationAlliancesMap.get(cId);
     const blocId = allianceIds && allianceIds.size > 0 ? [...allianceIds][0] : null;
     if (blocId) {
@@ -1343,6 +1353,11 @@ export function setColoringMode(mode) {
   // 'blocs' — se si cambia modalità (anche rientrando dopo), si riparte
   // dalla vista blocs "flat" invece di lasciare un focus obsoleto.
   if (mode !== 'blocs') {
+    // WarEra+: uscendo dalla vista Alleanze cade anche l'anteprima del
+    // builder — tenerla viva la farebbe ricomparire a sorpresa rientrando,
+    // con dati magari vecchi di mezz'ora. rerender:false perche' il
+    // renderMap di fine setColoringMode arriva comunque.
+    import('./builderPreview.js').then(m => m.exitBuilderPreview({ rerender: false })).catch(() => {});
     state.selectedBlocId = null;
     state.blocFocusColorMap.clear();
     // WarEra+ fix: era il punto mancante esatto del bug "uscendo dalla

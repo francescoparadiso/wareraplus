@@ -39,6 +39,50 @@ apre Political View in-page nello stesso overlay. Le sezioni pesanti stanno
 sotto "Approfondimenti" nelle barre menù, ognuna in overlay con `import()`
 dinamico.
 
+## Due deploy: live e dev
+
+Il tool esiste in **due copie pubblicate**, distinte dal branch:
+
+- **live** — branch `main` → `https://wareraplus.vercel.app/`. È quella che
+  usano le persone e quella citata negli articoli.
+- **dev** — branch `dev` → preview Vercel
+  `https://wareraplus-git-dev-<scope>.vercel.app/`. Stesso codice, URL
+  diverso, **origin diverso**: quindi localStorage, service worker e cache
+  sono suoi e non toccano quelli del live.
+
+Il flusso è: si lavora e si spinge su `dev`, si guarda il preview, e solo
+quando va bene si porta su `main` (merge o fast-forward). Vercel costruisce
+un preview per ogni push su qualsiasi branch che non sia quello di
+produzione — non serve configurare nulla lato Vercel.
+
+**Cosa cambia fra i due**, tutto deciso a build time da `VERCEL_ENV` e
+raccolto in `src/shared/deployEnv.js` (`IS_LIVE`, `DEPLOY_ENV`):
+
+| | live | dev / locale |
+|---|---|---|
+| Vercel Web Analytics (`inject()`) | sì | no |
+| Umami (`initAnalytics()` in `shared/analytics.js`) | sì | no |
+| Pill visite (`initVisitorCounter`, POST su `/visits`) | sì | no |
+| Service worker PWA | precache normale | `selfDestroying` |
+| Cartellino in alto a sinistra | — | `DEV` / `LOCAL` |
+
+Le prime tre sono **contatori pubblici condivisi**: il server di cache non sa
+da quale deploy arrivi una richiesta, quindi senza questo gate ogni ricarica
+in dev alzerebbe il totale visite mostrato ai veri utenti. Regola generale:
+**qualunque cosa nuova che scriva su un contatore o su uno stato condiviso va
+messa dietro `IS_LIVE`.**
+
+Il service worker in dev si auto-disinstalla di proposito: un preview serve a
+vedere se una modifica funziona, e un SW che serve il bundle precedente dalla
+cache è il modo migliore per guardare una modifica che c'è e credere che non
+ci sia. Conseguenza accettata: il comportamento PWA si prova solo in live.
+
+Il **server di cache e il Worker Cloudflare sono condivisi** dai due deploy —
+non esiste un VPS di prova. Il CORS del server è `origin: '*'`, quindi il
+preview funziona senza toccare nulla; ma le richieste del dev consumano lo
+stesso budget del Worker e la stessa cache del VPS. Per il traffico di
+sviluppo normale è irrilevante; per un test che martella le API, no.
+
 ## Stack & comandi
 
 ```bash
@@ -88,6 +132,12 @@ wareraPlus/
 ├── server/
 │   ├── warera-cache-server.js  ← server di cache su VPS (Node, pm2) — poll periodico
 │   │                              delle API WarEra al posto dei browser utente
+│   ├── battleArchive.js        ← NUOVO — archivio battaglie concluse (90 gg) coi loro
+│   │                              costi + serie giornaliera delle spese per nazione.
+│   │                              Bootstrap SOLO fra le 02:00 e le 06:59 italiane
+│   │                              (gioco vuoto), giro incrementale tutto il giorno.
+│   │                              Endpoint: /battle-archive, /war-expenses,
+│   │                              /battle-archive/status.
 │   └── README.md               ← deploy a mano (scp + pm2 restart), vedi ⚠️ in fondo
 ├── public/
 │   ├── icons/
@@ -107,6 +157,23 @@ wareraPlus/
     │   ├── ui.js, diplomacy.js, labels.js, patterns.js
     │   ├── alliances.js, naps.js, sphereOfInfluence.js, blocs.js (dead, vedi sotto)
     │   ├── battleMarkers.js, battleHeatmap.js, battleFront.js, battleFront/
+    │   ├── battleSpending.js  ← NUOVO — quanto è costata una battaglia: taglie
+    │   │                        pagate (classifica "money" per nazione) + contratti
+    │   │                        mercenari aggiudicati, per schieramento. Tre procedure
+    │   │                        PUBBLICHE su api6 (nessun consumo del Worker), un
+    │   │                        batch per aggiornamento, cache 60s. Il tooltip
+    │   │                        battaglia lo carica solo alla prima apertura della
+    │   │                        sezione "Battle spending". Gemello lato archivio:
+    │   │                        src/battles/api.js (stesse procedure, altra scala).
+    │   ├── builderPreview.js ← NUOVO — le alleanze costruite in Alliance
+    │   │                        Builder dipinte SULLA MAPPA ("Show on map"):
+    │   │                        una fotografia dei blocchi del builder in
+    │   │                        state.builderPreview, che vista Alleanze,
+    │   │                        etichette, legenda e riepilogo pannello
+    │   │                        leggono PRIMA di blocColorMap/externalBlocsInfo
+    │   │                        (dato di gioco, mai toccato). Non è un
+    │   │                        collegamento vivo: si aggiorna ripremendo il
+    │   │                        bottone. Cade da sola uscendo dalla vista.
     │   ├── dualBadges.js, blocStats.js, weeklyDamage.js, population.js,
     │   │   regions.js, nationTooltip.js, utils.js
     │   ├── cacheClient.js       ← NUOVO — client del server di cache: OGNI funzione ha
@@ -182,6 +249,26 @@ wareraPlus/
     │   │                          gameConfig.worker, come eco/workers.js). Cambiare
     │   │                          paga o giorni non costa una richiesta.
     │   └── i18n.js               ← dizionario locale (9 lingue)
+    ├── battles/                  ← NUOVO — Battaglie: una voce, due schede.
+    │   │                            "Archivio battaglie" (in corso + concluse, con danno,
+    │   │                            taglia pagata e contratti mercenari) e "Spese di
+    │   │                            guerra" (quanto spende ogni nazione al giorno).
+    │   ├── api.js                ← server di cache (/battle-archive, /war-expenses) con
+    │   │                          fallback nel browser: ~10 giorni di elenco e i costi
+    │   │                          caricati SOLO per la riga che l'utente apre. Mai 800
+    │   │                          richieste per riempire una tabella. Le battaglie IN
+    │   │                          CORSO (getLiveBattles) riusano fetchActiveBattles()
+    │   │                          di battleHeatmap.js — stessa sorgente dei marker
+    │   │                          sulla mappa, nessuna fetch nuova, TTL 4 min contro i
+    │   │                          ~2 della mappa. Su una battaglia viva le cache per
+    │   │                          battaglia si saltano ({live:true}): taglia,
+    │   │                          classifiche e dettaglio crescono ancora.
+    │   ├── battleDetail.js       ← scheda di UNA battaglia: scomposizione per
+    │   │                          nazione e per unità militare (danno, quota del
+    │   │                          lato, taglia INCASSATA) + elenco dei contratti
+    │   │                          mercenari. ⚠️ la colonna taglia qui è "incassato",
+    │   │                          non "speso": coincidono solo sommando il lato.
+    │   ├── main.js, battleList.js, warExpenses.js, i18n.js (9 lingue)
     ├── guide/                    ← NUOVO — Guida "Come si usa": SOLO testo statico
     │   ├── main.js                  (zero fetch, zero stato) + i18n.js a 9 lingue.
     │   └── i18n.js                  È la vista più leggera dell'app, deve restarlo.
@@ -202,6 +289,25 @@ wareraPlus/
     │   ├── muOverlay.js        ← apre Esplora Unità Militari
     │   ├── nationsOverlay.js   ← apre Statistiche nazioni
     │   ├── ecoOverlay.js       ← apre l'Ottimizzatore industriale
+    │   ├── battlesOverlay.js   ← apre Battaglie (archivio + spese di guerra) e alla
+    │   │                         chiusura ferma il giro delle battaglie in corso
+    │   ├── visitorCounter.js   ← NUOVO — pill "N visite · ● M" in #wp-bottom-credits,
+    │   │                         accanto a Ko-fi e all'autore. Due numeri diversi: le
+    │   │                         VISITE (cumulative) da /visits sul server di cache,
+    │   │                         che parte dal totale misurato da Vercel Analytics fino
+    │   │                         al 2026-08-31 (1325, seme lato SERVER: cambiarlo non
+    │   │                         richiede un deploy del client), e gli ONLINE ADESSO
+    │   │                         (pallino verde), che il server conta in memoria su una
+    │   │                         finestra di 5 minuti. Il client ripassa ogni minuto
+    │   │                         con `count=0` — "ci sono ancora" senza gonfiare il
+    │   │                         totale — e smette a scheda nascosta, così una scheda
+    │   │                         dimenticata esce dal conto da sola. Il ritmo lo detta
+    │   │                         il server (`heartbeatMs` nella risposta).
+    │   │                         Nessun IP registrato: il browser si genera un id
+    │   │                         casuale in localStorage, che serve solo a non contare
+    │   │                         due volte nello stesso giorno. Server giù = niente
+    │   │                         pill; server vecchio che non manda `online` = pill con
+    │   │                         le sole visite. Mai un numero inventato.
     │   ├── marketOverlay.js    ← apre Rendite di produzione (e alla chiusura ferma
     │   │                         il suo timer di aggiornamento prezzi)
     │   ├── newsOverlay.js      ← apre la vista News
@@ -261,7 +367,7 @@ wareraPlus/
         │                          sotto #wp-political-root (c'era una collisione reale
         │                          con .panel, già usata dalla shell)
         └── menubar.css, mobile-menubar.css, mu.css, nations.css, news.css,
-            eco.css, guide.css, market.css
+            eco.css, guide.css, market.css, battles.css
 ```
 
 ⚠️ **Attenzione ai nomi duplicati tra le due varianti di Political**:
@@ -335,7 +441,7 @@ serve a ridurre i 429. Espone fra gli altri: `/mu-directory`,
 `/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
 `/daily-damage`, `/ticker` + `/ticker/summary`, `/region-history/{at,range,
 events,contested,war-intensity}`, `/alliances`, `/battles`, `/elections`,
-`/parties`, `/users-lite`, `/credit-profiles`, `/health`.
+`/parties`, `/users-lite`, `/credit-profiles`, `/visits`, `/health`.
 
 Espone inoltre **`/trpc/*`**: un proxy passthrough verso `api2.warera.io`
 che aggiunge `X-API-Key` server-side, cioè esattamente quello che fa il
@@ -459,6 +565,33 @@ il pannello da sola su desktop e resta dietro la linguetta "Vedi dettagli" su
 mobile — stessa regola del riepilogo sfere, vedi `src/panel/viewOverview.js`.
 La vista un tempo chiamata "Guerra vs Commercio" si chiama "Guerra vs Eco":
 misura la build economica dei giocatori, non il commercio.
+
+La sezione **Battaglie** (`src/battles/*`) dipende dai due endpoint nuovi
+`/battle-archive` e `/war-expenses`: **finché non rideployi il server** parte
+in "modalità ridotta", dichiarata in chiaro nell'interfaccia — l'archivio si
+ferma alle ~400 battaglie più recenti sfogliate dal browser (~10 giorni), i
+costi si caricano a richiesta riga per riga con un bottone, e le "Spese di
+guerra" mostrano i soli contratti mercenari degli ultimi due giorni, senza la
+colonna taglie. Dopo il deploy serve **una notte** perché si riempia: il
+bootstrap gira SOLO fra le 02:00 e le 06:59 italiane (richiesta esplicita:
+mai sfogliare l'archivio mentre il gioco è pieno di gente), e in quelle cinque
+ore copre tutti e novanta i giorni. `/health` riporta `battleArchive` con lo
+stato dei due bootstrap.
+
+Le **battaglie in corso** in cima all'archivio sono l'unica parte della
+sezione che NON dipende da un rideploy: arrivano da `/battles`, che il server
+serve già, e senza server ricadono sul Worker come i marker della mappa.
+
+Il **contatore visite** (`/visits`) invece sì: finché non rideployi, la pill
+semplicemente non compare — è il degrado voluto, non un guasto. Il seme di
+1325 è la misura di Vercel Analytics al 2026-08-31 e vive in `VISITS_SEED`
+nel server, non nel client.
+
+⚠️ **`rankings.countryBounty` NON è la spesa di una nazione.** Sembra la
+risposta pronta (è già in `state.nazioniGlobal`, gratis) ma correla 0,87 col
+danno totale e 0,11 con la ricchezza: è quanto i *cittadini* hanno incassato,
+non quanto il governo ha pagato. La spesa vera si ricostruisce solo battaglia
+per battaglia. Vedi il blocco in testa a `server/battleArchive.js`.
 
 Le viste mappa storiche degradano ognuna a modo suo: "Regioni contese", se
 `/region-history/contested` manca, si conta i passaggi di mano da sola nel

@@ -20,8 +20,17 @@ import './diplomacy/main.js';
 // pacchetto (l'onboarding di Vercel mostra di default lo snippet
 // @vercel/analytics/next per Next.js, non applicabile qui: questo progetto
 // è Vite puro — vedi https://vercel.com/docs/analytics/quickstart).
+// WarEra+ dev: solo sul deploy live. Su un preview (branch `dev`) le
+// prove finirebbero mescolate ai visitatori veri — vedi
+// src/shared/deployEnv.js.
+import { IS_LIVE, initDeployBadge } from './shared/deployEnv.js';
 import { inject } from '@vercel/analytics';
-inject();
+if (IS_LIVE) inject();
+
+// Umami: era un tag statico in index.html, ora si carica da qui (e solo
+// in live) per lo stesso motivo.
+import { initAnalytics } from './shared/analytics.js';
+initAnalytics();
 
 import { initCountryPanel, selectNationInPanel } from './panel/countryPanel.js';
 import { initPoliticalOverlay, openPoliticalView } from './app/politicalOverlay.js';
@@ -30,6 +39,7 @@ import { initNewsOverlay, openNewsView } from './app/newsOverlay.js';
 import { initMuOverlay, openMuView } from './app/muOverlay.js';
 import { initNationsOverlay, openNationsView } from './app/nationsOverlay.js';
 import { initMarketOverlay } from './app/marketOverlay.js';
+import { initBattlesOverlay } from './app/battlesOverlay.js';
 import { initGuideOverlay } from './app/guideOverlay.js';
 import { takeReloadIntent } from './shared/lazyModule.js';
 import { initThemeSync } from './app/themeSync.js';
@@ -41,6 +51,7 @@ import { initMobileMenuBar } from './app/mobileMenuBar.js';
 import { startNewsTicker } from './app/newsTicker.js';
 import { initTimeMachine, openTimeMachineAt } from './app/timeMachine.js';
 import { initAuthorPill } from './app/authorPill.js';
+import { initVisitorCounter } from './app/visitorCounter.js';
 import { applyTranslations, initLangButton } from './shared/i18n.js';
 import { updateDynamicLegend } from './diplomacy/ui.js';
 import { state } from './diplomacy/state.js';
@@ -76,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initMuOverlay();
   initNationsOverlay();
   initMarketOverlay();
+  initBattlesOverlay();
   initGuideOverlay();
   applyTranslations();
   initLangButton();
@@ -102,6 +114,11 @@ window.addEventListener('wareraplus:diplomacy-ready', () => {
   startNewsTicker();
   initTimeMachine();
   initAuthorPill();
+  // WarEra+ dev: la pill visite scrive su un contatore PUBBLICO (/visits
+  // sul server di cache, che non sa da quale deploy arrivi la richiesta).
+  // Fuori dal live non si tocca; al suo posto il cartellino DEV.
+  if (IS_LIVE) initVisitorCounter();
+  initDeployBadge();
   handleIncomingDeepLink();
   restoreAfterChunkReload();
 }, { once: true });

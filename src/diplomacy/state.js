@@ -12,6 +12,17 @@ export const state = {
   // apertura riparte dalla vista prudente.
   showAllDetectedProxies: false,
   blocFocusColorMap: new Map(), // WarEra+: colori calcolati per il blocco in focus, condivisi tra mappa ed etichette
+  // WarEra+ — Anteprima sulla mappa delle alleanze costruite in Alliance
+  // Builder (src/diplomacy/builderPreview.js). null = nessuna anteprima, la
+  // vista Alleanze disegna il mondo vero (comportamento invariato).
+  // Quando c'e', e' una FOTOGRAFIA presa al momento del clic:
+  //   { blocs: [{ id, name, color, memberIds, memberCount, pop, dmg,
+  //               labelLng, labelLat }],
+  //     colorMap: Map(countryId -> colore) }
+  // Non tocca ne' blocColorMap ne' externalBlocsInfo, che restano dati di
+  // gioco: chi disegna la vista Alleanze legge prima questo, e se e' null
+  // ricade su quelli di sempre.
+  builderPreview: null,
   customNaps: [],
   nationBaseColorMap: new Map(),
   externalBlocsInfo: [],

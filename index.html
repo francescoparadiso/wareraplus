@@ -35,9 +35,12 @@
        dentro un iframe non più raggiunto da alcun path). Caricato qui una
        volta sola per TUTTO il tool (Diplomacy + Political in-page). Vedi
        src/shared/analytics.js per il wrapper trackEvent() usato da tutti
-       i moduli. -->
-  <script defer src="https://cloud.umami.is/script.js"
-    data-website-id="dc8b6461-36c0-4765-b340-cce22c231910"></script>
+       i moduli.
+
+       WarEra+ dev: il tag statico che stava qui è diventato una chiamata
+       in src/shared/analytics.js (initAnalytics), perché un tag si
+       carica su qualsiasi deploy e le prove sul preview `dev` sarebbero
+       finite nel conteggio pubblico. -->
 </head>
 
 <body>
@@ -411,6 +414,18 @@
       <span class="wp-political-title">Production yields</span>
     </div>
     <div id="wp-market-root" style="display:none;"></div>
+  </div>
+
+  <!-- Battaglie (src/battles/*): archivio delle battaglie concluse coi
+       loro costi + spese di guerra giornaliere per nazione. Stessa
+       struttura overlay delle altre viste di Approfondimenti. -->
+  <div id="wp-battles-overlay" class="wp-political-overlay wp-battles-overlay" aria-hidden="true">
+    <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
+    <div class="wp-political-topbar">
+      <button id="wp-battles-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
+      <span class="wp-political-title">Battles</span>
+    </div>
+    <div id="wp-battles-root" style="display:none;"></div>
   </div>
 
   <!-- Guida "Come si usa" (src/guide/*): la sezione più leggera

@@ -131,7 +131,11 @@ function getBaseAllianceColor(ally) {
 // membro (popolazione attiva) — a parità di posizione geografica, il
 // punto si sposta verso le nazioni più popolose del blocco, non solo
 // verso dove ce ne sono di più in numero.
-function geometricMedian(points, weights, iterations = 60) {
+// WarEra+ export (additivo): la stessa posizione-etichetta serve alle
+// alleanze inventate in Alliance Builder (builderPreview.js), che non
+// passano da processAlliancesData ma devono avere il nome nello stesso
+// punto in cui lo avrebbe un'alleanza vera con quei membri.
+export function geometricMedian(points, weights, iterations = 60) {
   if (!points.length) return null;
   if (points.length === 1) return points[0];
   if (!weights) weights = points.map(() => 1);
