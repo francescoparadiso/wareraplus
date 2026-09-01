@@ -133,6 +133,14 @@ const {
   readBattleArchive, readWarExpenses, readArchiveStatus,
   BOOT_TZ: BOOT_ARCHIVE_TZ,
 } = require('./battleArchive');
+// WarEra+ finanziamenti fra nazioni: chi versa nel tesoro di chi. Modulo a
+// se' come i due sopra. ⚠️ niente bootstrap, e non e' una dimenticanza:
+// l'API tiene solo ~3 giorni di bonifici, quindi i 90 giorni si ACCUMULANO
+// dal primo avvio. Vedi il blocco in testa a server/moneyTransfers.js.
+const {
+  initMoneyTransfers, pollMoneyTransfers,
+  readMoneyTransfers, readMoneyTransfersStatus,
+} = require('./moneyTransfers');
 
 const app = express();
 const PORT = 3001;
@@ -235,6 +243,11 @@ initProxyIndex({
 // Stesso trattamento per l'archivio battaglie: riceve trpcBatch (con retry,
 // chunking e rate control gia' tarati) invece di rifarsi il suo.
 initBattleArchive({
+  trpcBatch: (...args) => trpcBatch(...args),
+  readCache, writeCache,
+});
+
+initMoneyTransfers({
   trpcBatch: (...args) => trpcBatch(...args),
   readCache, writeCache,
 });
@@ -2049,6 +2062,10 @@ cron.schedule('16,36,56 * * * *', pollMercArchive);         // ogni 20 min, :16
 // di un riavvio pm2 in pieno giorno (il primo giro non passa dal cron).
 cron.schedule('* 2-6 * * *', pollBattleArchiveBootstrap, { timezone: BOOT_ARCHIVE_TZ });
 cron.schedule('* 2-6 * * *', pollMercArchiveBootstrap, { timezone: BOOT_ARCHIVE_TZ });
+// Finanziamenti fra nazioni: ~36 al giorno in tutto il mondo, e il giro si
+// ferma al primo id gia' visto — cioe' quasi sempre UNA richiesta. Offset
+// :11 per non cadere addosso ai due giri dell'archivio (:06 e :16).
+cron.schedule('11,31,51 * * * *', pollMoneyTransfers);       // ogni 20 min, :11
 cron.schedule('45 */6 * * *', pollProxyIndex);               // ogni 6 ore, :45 (radar dei proxy)
 // Cambio giorno di gioco: 02:00 italiane, non UTC — da cui il fuso
 // esplicito (il server può stare ovunque). Minuto :01 per essere sicuri di
@@ -2410,6 +2427,11 @@ app.get('/battle-archive', (req, res) => res.json(readBattleArchive()));
 app.get('/war-expenses', (req, res) => res.json(readWarExpenses()));
 app.get('/battle-archive/status', (req, res) => res.json(readArchiveStatus()));
 
+// Finanziamenti fra nazioni (server/moneyTransfers.js). `coverageFrom` nella
+// risposta dice da quando questo archivio guarda: prima di quella data una
+// lista vuota NON vuol dire "nessun finanziamento", e il client lo dichiara.
+app.get('/money-transfers', (req, res) => res.json(readMoneyTransfers()));
+
 // Radar dei proxy: punteggio completo per nazione, con le evidenze che lo
 // compongono. Il client lo innesta su quello che ha calcolato da solo
 // (src/proxy/radar.js: applyServerIndex) e se questo non risponde resta il
@@ -2681,6 +2703,9 @@ app.get('/health', (req, res) => res.json({
   // d'occhio se il bootstrap notturno ha gia' girato o se le due viste
   // stanno ancora lavorando in modalita' ridotta.
   battleArchive: readArchiveStatus(),
+  // Quanto indietro arrivano i finanziamenti. Subito dopo un deploy copre
+  // i ~3 giorni che l'API ricorda, e da li' cresce da solo.
+  moneyTransfers: readMoneyTransfersStatus(),
 }));
 
 app.listen(PORT, '127.0.0.1', () => {

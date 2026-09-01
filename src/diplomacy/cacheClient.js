@@ -478,6 +478,29 @@ export async function fetchBattleArchiveViaCache() {
   }
 }
 
+/** Finanziamenti fra nazioni: { fetchedAt, retentionDays, coverageFrom, data }.
+ *  Le righe hanno le chiavi corte del server (i/f/t/m/a) — le riespande
+ *  src/battles/moneyTransfers.js, che qui NON entra per non far dipendere
+ *  cacheClient da una vista.
+ *
+ *  `coverageFrom` è il dato che conta quanto le righe: dice da quando in qua
+ *  l'archivio stava guardando. Prima di quella data una lista vuota non è
+ *  una risposta, e chi disegna deve saperlo distinguere.
+ *
+ *  null se il server non risponde: chi chiama ricade sulla finestra corta
+ *  che l'API espone da sé (~3 giorni), che è il comportamento che c'era
+ *  prima di questo endpoint. */
+export async function fetchMoneyTransfersViaCache() {
+  try {
+    const json = await _fetchCacheJsonRaw('/money-transfers');
+    if (!json || !Array.isArray(json.data)) return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /money-transfers non disponibile:', err.message);
+    return null;
+  }
+}
+
 /** Contatore visite: { total, today, seed, countedHere }.
  *  `visitorId` è l'identificativo casuale che il browser si è generato da
  *  solo (vedi src/app/visitorCounter.js) e serve al server per non contare

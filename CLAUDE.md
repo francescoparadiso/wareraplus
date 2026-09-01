@@ -142,6 +142,16 @@ wareraPlus/
 │   │                              (gioco vuoto), giro incrementale tutto il giorno.
 │   │                              Endpoint: /battle-archive, /war-expenses,
 │   │                              /battle-archive/status.
+│   ├── moneyTransfers.js    ← NUOVO — archivio dei finanziamenti fra nazioni
+│   │                              (bonifici da tesoro a tesoro), retention 90 gg.
+│   │                              ⚠️ NIENTE bootstrap e non è una dimenticanza:
+│   │                              l'API tiene una finestra scorrevole di ~3
+│   │                              giorni (misurato: 104 righe / ~70 ore, poi il
+│   │                              cursore finisce), quindi i 90 giorni si
+│   │                              ACCUMULANO dal primo avvio e NON si recuperano
+│   │                              a ritroso. Endpoint: /money-transfers, che
+│   │                              espone `coverageFrom` — da quando in qua
+│   │                              l'archivio guardava.
 │   └── README.md               ← deploy a mano (scp + pm2 restart), vedi ⚠️ in fondo
 ├── public/
 │   ├── icons/
@@ -456,7 +466,7 @@ perché — non riscritture del comportamento esistente.
 
 Node su VPS esterno (`WARERA_CACHE_BASE`), gestito con pm2. Polla le API
 WarEra una volta per tutti invece di lasciare che lo faccia ogni browser —
-serve a ridurre i 429. Espone fra gli altri: `/mu-directory`,
+serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`,
 `/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
 `/daily-damage`, `/ticker` + `/ticker/summary`, `/region-history/{at,range,
 events,contested,war-intensity}`, `/alliances`, `/battles`, `/elections`,
@@ -596,6 +606,16 @@ bootstrap gira SOLO fra le 02:00 e le 06:59 italiane (richiesta esplicita:
 mai sfogliare l'archivio mentre il gioco è pieno di gente), e in quelle cinque
 ore copre tutti e novanta i giorni. `/health` riporta `battleArchive` con lo
 stato dei due bootstrap.
+
+I **finanziatori** nel dettaglio battaglia dipendono da `/money-transfers`:
+finché non rideployi funzionano lo stesso, ma sulla sola finestra che l'API
+espone da sé (~3 giorni), quindi una battaglia più vecchia dice "fuori
+portata" invece di elencare i finanziatori. Dopo il deploy la copertura
+**non si riempie di colpo**: parte dai ~3 giorni che l'API ricorda e cresce
+di un giorno al giorno fino ai novanta — non esiste modo di recuperarli a
+ritroso, il dato semplicemente non c'è più da nessuna parte. Il campo
+`coverageFrom` nella risposta è quello che la vista usa per non spacciare
+un buco di copertura per un "nessuno ha finanziato".
 
 Le **battaglie in corso** in cima all'archivio sono l'unica parte della
 sezione che NON dipende da un rideploy: arrivano da `/battles`, che il server
