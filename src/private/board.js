@@ -31,6 +31,7 @@ import {
 import {
   preparaBattaglie, nomeNazione, caricaFinanziatori, finanziatoriDi,
 } from './battles.js';
+import { creaPannelloAdmin } from './admin.js';
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -59,7 +60,8 @@ export function creaTavolo(ctx) {
   let occupato = false;
   // Tre sezioni invece di un elenco di schede tutte uguali: si arriva
   // qui per fare UNA cosa, e le altre due non devono essere in mezzo.
-  let sezione = 'battaglie';    // 'battaglie' | 'tavolo' | 'impostazioni'
+  let sezione = 'battaglie';    // 'battaglie' | 'tavolo' | 'impostazioni' | 'admin'
+  let pannelloAdmin = null;
 
   async function carica() {
     caricamento = true; errore = null; ctx.ridisegna();
@@ -134,6 +136,12 @@ export function creaTavolo(ctx) {
     if (puoChiedere) sezioni.push(['battaglie', pvT('battlesTitle')]);
     sezioni.push(['tavolo', pvT('boardTitle')]);
     if (haImpostazioni) sezioni.push(['impostazioni', pvT('settingsTitle')]);
+    // L'amministrazione e' una sezione come le altre, ma compare solo a
+    // chi lo e'. Sta QUI dentro e non in una vista a parte: e' lo stesso
+    // posto, con una porta in piu' che per quasi tutti non esiste.
+    // La voce nascosta non e' il permesso — il server rifiuta comunque —
+    // ma non ha senso mostrare a tutti una porta che si apre per due.
+    if (cap.admin && !dati.lente) sezioni.push(['admin', pvT('adminTitle')]);
 
     // Se la sezione scelta non esiste per questa persona si ricade sulla
     // prima disponibile: un ministro non ha le battaglie, un comandante
@@ -144,6 +152,7 @@ export function creaTavolo(ctx) {
 
     if (sezione === 'battaglie') frag.appendChild(cardBattaglie(cap));
     else if (sezione === 'tavolo') frag.appendChild(cardTavolo(cap));
+    else if (sezione === 'admin') frag.appendChild(cardAdmin());
     else {
       for (const [cid, lista] of liste) frag.appendChild(cardLista(cid, lista));
       if (canali.size) frag.appendChild(cardCanali());
@@ -578,6 +587,23 @@ export function creaTavolo(ctx) {
     r2.appendChild(id); r2.appendChild(salva);
     form.appendChild(r1); form.appendChild(r2); form.appendChild(nota);
     return form;
+  }
+
+  // ── Amministrazione ──────────────────────────────────────────────────
+  function cardAdmin() {
+    if (!pannelloAdmin) {
+      pannelloAdmin = creaPannelloAdmin({
+        ridisegna: ctx.ridisegna,
+        // "Vedi come" e' della vista, non del pannello: cambia l'identita'
+        // di tutta l'area riservata, non solo di questa sezione.
+        apriComeAltri: (id) => ctx.apriComeAltri?.(id),
+        // Una deroga appena concessa cambia i poteri: ruoli e tavolo vanno
+        // riletti, altrimenti restano quelli di un minuto fa. Era un bug
+        // reale — si concedeva una carica e il bottone non compariva.
+        ruoliCambiati: async () => { await ctx.ruoliCambiati?.(); await carica(); },
+      });
+    }
+    return pannelloAdmin.render();
   }
 
   // ── Canali Discord ───────────────────────────────────────────────────

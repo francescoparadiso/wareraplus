@@ -544,6 +544,8 @@ function creaOTavolo() {
       ridisegna: render,
       lente: () => comeAltri,
       nomeUnita: (id) => (ruoli?.derivati?.muId === id ? ruoli.derivati.muNome : null),
+      apriComeAltri: guardaCome,
+      ruoliCambiati: async () => { await caricaRuoli({ refresh: true }); render(); },
     });
   }
   return tavolo;
