@@ -9,11 +9,18 @@
    che possano incontrare la mappa o Political.
    ══════════════════════════════════════════════════════════════ */
 
+/* I colori sono scritti per esteso e non presi da variabili dello shell:
+   `--wp-text` & co. non esistono in questo progetto (verificato dal vivo —
+   getComputedStyle non ne restituiva nessuna), e appoggiarcisi lasciava
+   vincere il fallback scuro anche in tema chiaro, cioè testo quasi bianco
+   su fondo chiaro. La Guida risolve allo stesso modo, vedi guide.css.
+
+   ⚠️ La classe del tema chiaro è `body.light-theme`, NON `wp-theme-light`. */
 #wp-private-root {
   --pv-accent: #818cf8;
   --pv-accent-soft: rgba(129, 140, 248, .14);
-  --pv-ink: var(--wp-text, #e6edf3);
-  --pv-ink-soft: var(--wp-text-dim, #8b949e);
+  --pv-ink: #e6edf3;
+  --pv-ink-soft: #8b949e;
   --pv-surface: rgba(255, 255, 255, .03);
   --pv-rule: rgba(255, 255, 255, .10);
   --pv-danger: #f0776c;
@@ -24,9 +31,11 @@
   color: var(--pv-ink);
 }
 
-body.wp-theme-light #wp-private-root {
+body.light-theme #wp-private-root {
   --pv-accent: #4f46e5;
   --pv-accent-soft: rgba(79, 70, 229, .10);
+  --pv-ink: #1a1a1a;
+  --pv-ink-soft: #4a5560;
   --pv-surface: rgba(0, 0, 0, .025);
   --pv-rule: rgba(0, 0, 0, .12);
   --pv-danger: #b42318;
