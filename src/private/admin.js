@@ -24,9 +24,10 @@
    indistinguibile da un errore, e nessuno oserà toglierla.
    ══════════════════════════════════════════════════════════════ */
 
+import { state } from '../diplomacy/state.js';
 import { pvT, pvErr } from './i18n.js';
 import {
-  elencoAccount, metteDeroga, togliDeroga, nominaAdmin, leggiRuoli, ApiError,
+  elencoAccount, metteDeroga, togliDeroga, nominaAdmin, leggiRuoli, cercaUnita, ApiError,
 } from './api.js';
 
 const RUOLI_NAZIONE = ['president', 'vicePresident', 'minOfDefense', 'minOfForeignAffairs', 'minOfEconomy', 'congress'];
@@ -43,6 +44,11 @@ function el(tag, cls, text) {
  * @param {object} ctx
  * @param {Function} ctx.ridisegna  richiama il render della vista
  * @param {Function} ctx.apriComeAltri  (accountId|null) => void
+ * @param {Function} ctx.ruoliCambiati  da chiamare dopo ogni modifica che
+ *   tocca i poteri: il tavolo tiene in memoria le capacita' con cui era
+ *   stato caricato, e senza questo avviso continua a disegnare i bottoni
+ *   di prima. Era un bug reale: si concedeva una carica e il bottone
+ *   "Approva" non compariva finche' non si ricaricava la pagina.
  */
 export function creaPannelloAdmin(ctx) {
   let accounts = null;
@@ -112,7 +118,7 @@ export function creaPannelloAdmin(ctx) {
     adm.type = 'button';
     adm.addEventListener('click', async () => {
       adm.disabled = true;
-      try { await nominaAdmin(a.id, !a.admin); await carica(); }
+      try { await nominaAdmin(a.id, !a.admin); await carica(); await ctx.ruoliCambiati?.(); }
       catch (err) { errore = err instanceof ApiError ? pvErr(err.codice) : pvT('errErrore_server'); ctx.ridisegna(); }
     });
     azioni.appendChild(adm);
@@ -125,9 +131,12 @@ export function creaPannelloAdmin(ctx) {
   function moduloDeroga(a) {
     const form = el('form', 'wp-pv-form wp-pv-form-deroga');
     form.appendChild(el('h3', 'wp-pv-h3', pvT('addOverride')));
+    // Una correzione qui non tocca il gioco: va detto, perche' "rendi
+    // presidente" suona come se lo facesse.
+    form.appendChild(el('p', 'wp-pv-note', pvT('grantHint')));
 
     const ambito = el('select', 'wp-pv-select');
-    for (const [v, t] of [['country', pvT('office')], ['mu', pvT('unit')], ['alliance', 'Alliance']]) {
+    for (const [v, t] of [['country', pvT('scopeCountry')], ['mu', pvT('scopeMu')], ['alliance', 'Alliance']]) {
       const o = el('option', null, t); o.value = v; ambito.appendChild(o);
     }
 
@@ -146,10 +155,71 @@ export function creaPannelloAdmin(ctx) {
       const o = el('option', null, t); o.value = v; tipo.appendChild(o);
     }
 
+    // ── A COSA si applica la correzione ──────────────────────────────
+    // Prima era un campo di testo che diceva soltanto "id": chi lo
+    // guardava non poteva sapere se volesse la nazione, l'unita' o
+    // l'account, e quei ventiquattro caratteri esadecimali andavano
+    // presi da chissa' dove. Le nazioni sono gia' tutte in memoria dal
+    // boot della mappa, quindi si scelgono per nome; le unita' si
+    // cercano per nome con una chiamata pubblica.
     const idAmbito = el('input', 'wp-pv-input');
-    idAmbito.type = 'text';
-    idAmbito.placeholder = 'id';
-    idAmbito.autocomplete = 'off';
+    idAmbito.type = 'hidden';
+
+    const sceltaNazione = el('select', 'wp-pv-select');
+    for (const [id, n] of (state.nationMap || new Map())) {
+      const o = el('option', null, n?.name || id); o.value = id; sceltaNazione.appendChild(o);
+    }
+    // In ordine alfabetico: un elenco di centottanta nazioni nell'ordine
+    // in cui le ha restituite l'API non e' un elenco, e' un mucchio.
+    [...sceltaNazione.options]
+      .sort((x, y) => x.textContent.localeCompare(y.textContent))
+      .forEach((o) => sceltaNazione.appendChild(o));
+    sceltaNazione.addEventListener('change', () => { idAmbito.value = sceltaNazione.value; });
+    idAmbito.value = sceltaNazione.value || '';
+
+    const cercaMu = el('input', 'wp-pv-input');
+    cercaMu.type = 'text';
+    cercaMu.placeholder = pvT('muSearchPh');
+    cercaMu.autocomplete = 'off';
+    const risultatiMu = el('select', 'wp-pv-select');
+    risultatiMu.size = 1;
+    risultatiMu.addEventListener('change', () => { idAmbito.value = risultatiMu.value; });
+
+    let tickCerca = null;
+    cercaMu.addEventListener('input', () => {
+      clearTimeout(tickCerca);
+      const testo = cercaMu.value.trim();
+      if (testo.length < 3) return;
+      // Mezzo secondo di attesa: una chiamata per tasto premuto sarebbe
+      // otto richieste per scrivere "praetorians".
+      tickCerca = setTimeout(async () => {
+        const trovate = await cercaUnita(testo).catch(() => []);
+        risultatiMu.textContent = '';
+        if (!trovate.length) {
+          const o = el('option', null, pvT('noMatch')); o.value = ''; risultatiMu.appendChild(o);
+        }
+        for (const m of trovate) { const o = el('option', null, m.nome); o.value = m.id; risultatiMu.appendChild(o); }
+        idAmbito.value = risultatiMu.value || '';
+      }, 500);
+    });
+
+    const bloccoNazione = el('div', 'wp-pv-campo');
+    bloccoNazione.appendChild(el('span', 'wp-pv-label', pvT('pickCountry')));
+    bloccoNazione.appendChild(sceltaNazione);
+
+    const bloccoMu = el('div', 'wp-pv-campo');
+    bloccoMu.appendChild(el('span', 'wp-pv-label', pvT('pickMu')));
+    bloccoMu.appendChild(cercaMu);
+    bloccoMu.appendChild(risultatiMu);
+
+    const mostraBlocco = () => {
+      const suMu = ambito.value === 'mu';
+      bloccoNazione.hidden = suMu;
+      bloccoMu.hidden = !suMu;
+      idAmbito.value = suMu ? (risultatiMu.value || '') : (sceltaNazione.value || '');
+    };
+    ambito.addEventListener('change', mostraBlocco);
+    mostraBlocco();
 
     const motivo = el('input', 'wp-pv-input');
     motivo.type = 'text';
@@ -169,6 +239,7 @@ export function creaPannelloAdmin(ctx) {
           role: ruolo.value, mode: tipo.value, reason: motivo.value.trim(),
         });
         await carica();
+        await ctx.ruoliCambiati?.();
       } catch (err) {
         errore = err instanceof ApiError ? pvErr(err.codice) : pvT('errErrore_server');
         ctx.ridisegna();
@@ -177,11 +248,12 @@ export function creaPannelloAdmin(ctx) {
 
     const r1 = el('div', 'wp-pv-riga');
     r1.appendChild(ambito); r1.appendChild(ruolo); r1.appendChild(tipo);
-    const r2 = el('div', 'wp-pv-riga');
-    r2.appendChild(idAmbito);
     const r3 = el('div', 'wp-pv-riga');
     r3.appendChild(motivo); r3.appendChild(salva);
-    form.appendChild(r1); form.appendChild(r2); form.appendChild(r3);
+    form.appendChild(r1);
+    form.appendChild(bloccoNazione); form.appendChild(bloccoMu);
+    form.appendChild(idAmbito);
+    form.appendChild(r3);
     return form;
   }
 
@@ -205,7 +277,7 @@ export function renderDeroghe(deroghe, { accountId, onCambio } = {}) {
       togli.addEventListener('click', async () => {
         togli.disabled = true;
         await togliDeroga({ accountId, scopeType: d.scopeType, scopeId: d.scopeId, role: d.role });
-        onCambio();
+        await onCambio();
       });
       riga.appendChild(togli);
     }

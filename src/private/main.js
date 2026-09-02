@@ -183,7 +183,19 @@ function render() {
     }
 
     if (account.admin) {
-      if (!pannelloAdmin) pannelloAdmin = creaPannelloAdmin({ ridisegna: render, apriComeAltri: guardaCome });
+      if (!pannelloAdmin) {
+        pannelloAdmin = creaPannelloAdmin({
+          ridisegna: render,
+          apriComeAltri: guardaCome,
+          // Una deroga appena concessa cambia i poteri: ruoli e tavolo
+          // vanno riletti, altrimenti restano quelli di un minuto fa.
+          ruoliCambiati: async () => {
+            await caricaRuoli({ refresh: true });
+            await tavolo?.ricarica();
+            render();
+          },
+        });
+      }
       wrap.appendChild(pannelloAdmin.render());
     }
   }

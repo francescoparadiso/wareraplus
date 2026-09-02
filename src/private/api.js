@@ -269,3 +269,15 @@ export function aggiungiAllaLista(countryId, { entryType, entryId, mode, nota })
 export function togliDallaLista(countryId, { entryType, entryId }) {
   return callOrThrow(`/policy/${countryId}/remove`, { entryType, entryId });
 }
+
+/** Unità militari per nome. Pubblica, una chiamata per ricerca: serve ai
+ *  moduli in cui altrimenti bisognerebbe incollare 24 caratteri
+ *  esadecimali presi da chissà dove. */
+export async function cercaUnita(testo) {
+  const { API_BASE_URL } = await import('../diplomacy/config.js');
+  const input = encodeURIComponent(JSON.stringify({ search: testo, limit: 8 }));
+  const res = await fetch(`${API_BASE_URL}/trpc/mu.getManyPaginated?input=${input}`);
+  if (!res.ok) return [];
+  const body = await res.json();
+  return (body?.result?.data?.items || []).map((m) => ({ id: m._id, nome: m.name }));
+}
