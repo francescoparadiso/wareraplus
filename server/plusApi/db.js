@@ -133,6 +133,20 @@ CREATE TABLE IF NOT EXISTS role_override (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_override_unico
   ON role_override(account_id, scope_type, IFNULL(scope_id, ''), role);
 CREATE INDEX IF NOT EXISTS idx_override_account ON role_override(account_id);
+
+-- Una verifica in corso per account, non una coda: chiedere un codice
+-- nuovo sostituisce il precedente. Sono usa-e-getta e vivono mezz'ora,
+-- il tempo di andare in gioco e rinominare un'azienda.
+CREATE TABLE IF NOT EXISTS verify_claim (
+  account_id    INTEGER PRIMARY KEY REFERENCES account(id) ON DELETE CASCADE,
+  war_user_id   TEXT    NOT NULL,
+  war_username  TEXT,
+  code          TEXT    NOT NULL,
+  created_at    INTEGER NOT NULL,
+  expires_at    INTEGER NOT NULL,
+  attempts      INTEGER NOT NULL DEFAULT 0,
+  last_check_at INTEGER
+);
 `;
 
 function initDb() {
@@ -276,6 +290,46 @@ function deleteAccount(id) {
   getDb().prepare('DELETE FROM account WHERE id = ?').run(id);
 }
 
+/** Collega (o scollega, con null) il personaggio di gioco. */
+function setWarIdentity(accountId, warUserId, warUsername) {
+  getDb().prepare('UPDATE account SET war_user_id = ?, war_username = ?, linked_at = ? WHERE id = ?')
+    .run(warUserId || null, warUsername || null, warUserId ? Date.now() : null, accountId);
+}
+
+function findAccountByWarUserId(warUserId) {
+  if (!warUserId) return null;
+  return getDb().prepare('SELECT * FROM account WHERE war_user_id = ?').get(warUserId) || null;
+}
+
+// ---------------------------------------------------------------------------
+// RICHIESTE DI VERIFICA
+// ---------------------------------------------------------------------------
+
+function getClaim(accountId) {
+  return getDb().prepare('SELECT * FROM verify_claim WHERE account_id = ?').get(accountId) || null;
+}
+
+/** Sostituisce l'eventuale richiesta precedente: chiedere un codice nuovo
+ *  annulla il vecchio, che e' quello che si aspetta chi preme il bottone. */
+function setClaim({ accountId, warUserId, warUsername, code, expiresAt }) {
+  getDb().prepare(`
+    INSERT INTO verify_claim (account_id, war_user_id, war_username, code, created_at, expires_at, attempts, last_check_at)
+    VALUES (?, ?, ?, ?, ?, ?, 0, NULL)
+    ON CONFLICT(account_id) DO UPDATE SET
+      war_user_id = excluded.war_user_id, war_username = excluded.war_username,
+      code = excluded.code, created_at = excluded.created_at, expires_at = excluded.expires_at,
+      attempts = 0, last_check_at = NULL
+  `).run(accountId, warUserId, warUsername || null, code, Date.now(), expiresAt);
+}
+
+function deleteClaim(accountId) {
+  getDb().prepare('DELETE FROM verify_claim WHERE account_id = ?').run(accountId);
+}
+
+function purgeExpiredClaims() {
+  return getDb().prepare('DELETE FROM verify_claim WHERE expires_at < ?').run(Date.now()).changes || 0;
+}
+
 // ---------------------------------------------------------------------------
 // SESSIONI
 // ---------------------------------------------------------------------------
@@ -352,6 +406,7 @@ function dbStatus() {
     verificati: one('SELECT COUNT(*) AS n FROM account WHERE war_user_id IS NOT NULL'),
     admin: one('SELECT COUNT(*) AS n FROM account WHERE is_admin = 1'),
     deroghe: one('SELECT COUNT(*) AS n FROM role_override'),
+    verificheInCorso: one(`SELECT COUNT(*) AS n FROM verify_claim WHERE expires_at > ${Date.now()}`),
     sessioniAttive: one(`SELECT COUNT(*) AS n FROM session WHERE expires_at > ${Date.now()}`),
   };
 }
@@ -359,6 +414,8 @@ function dbStatus() {
 module.exports = {
   initDb, getDb, DATA_DIR,
   upsertDiscordAccount, getAccountById, deleteAccount,
+  setWarIdentity, findAccountByWarUserId,
+  getClaim, setClaim, deleteClaim, purgeExpiredClaims,
   syncAdminsFromEnv, setAdmin,
   setRoleOverride, removeRoleOverride, listRoleOverrides,
   createSession, accountFromToken, destroySession, purgeExpiredSessions,

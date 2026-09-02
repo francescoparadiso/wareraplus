@@ -193,3 +193,98 @@ body.light-theme #wp-private-root {
   #wp-private-root { padding: 1.75rem 1rem 3rem; }
   .wp-pv-badge { margin-left: 0; }
 }
+
+/* ── Collegamento del personaggio ─────────────────────────────
+   La colonna resta stretta: qui si legge un'istruzione, si scrive un
+   nome e si preme un bottone. Niente che assomigli a un modulo lungo. */
+
+.wp-pv-card-id { flex-direction: row; align-items: center; padding: .9rem 1.1rem; }
+.wp-pv-card-id .wp-pv-who { padding-bottom: 0; border-bottom: none; }
+
+.wp-pv-form { width: 100%; display: flex; flex-direction: column; gap: .4rem; }
+
+.wp-pv-riga { display: flex; gap: .5rem; align-items: stretch; }
+
+.wp-pv-input {
+  flex: 1;
+  min-width: 0;                     /* senza, il flex non lascia restringere l'input */
+  background: transparent;
+  border: 1px solid var(--pv-rule);
+  border-radius: 7px;
+  padding: .55rem .75rem;
+  font: inherit;
+  font-size: .95rem;
+  color: var(--pv-ink);
+}
+.wp-pv-input::placeholder { color: var(--pv-ink-soft); opacity: .7; }
+.wp-pv-input:focus { outline: none; border-color: var(--pv-accent); }
+.wp-pv-input:disabled { opacity: .55; }
+
+.wp-pv-btn-primary { background: var(--pv-accent); color: #fff; white-space: nowrap; }
+.wp-pv-btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+.wp-pv-btn-small { padding: .38rem .8rem; font-size: .85rem; }
+
+.wp-pv-candidati { display: flex; flex-direction: column; gap: .4rem; width: 100%; }
+
+.wp-pv-candidato {
+  display: flex; align-items: center; gap: .6rem;
+  width: 100%; padding: .5rem .7rem;
+  background: transparent;
+  border: 1px solid var(--pv-rule);
+  border-radius: 7px;
+  font: inherit; color: var(--pv-ink);
+  cursor: pointer; text-align: left;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.wp-pv-candidato:hover:not(:disabled) { border-color: var(--pv-accent); background: var(--pv-accent-soft); }
+.wp-pv-candidato:focus-visible { outline: 2px solid var(--pv-accent); outline-offset: 2px; }
+.wp-pv-candidato:disabled { opacity: .55; cursor: default; }
+.wp-pv-candidato-nome { font-weight: 600; font-size: .95rem; }
+
+.wp-pv-avatar-sm { width: 32px; height: 32px; }
+
+/* Il codice è la cosa che va copiata: grande, spaziato, selezionabile
+   con un doppio clic senza prendersi il testo intorno. */
+.wp-pv-codice {
+  width: 100%;
+  display: flex; justify-content: center;
+  padding: .9rem;
+  background: var(--pv-accent-soft);
+  border: 1px dashed var(--pv-accent);
+  border-radius: 8px;
+}
+.wp-pv-codice-testo {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: .12em;
+  color: var(--pv-accent);
+  user-select: all;
+}
+
+.wp-pv-azioni { display: flex; gap: .5rem; flex-wrap: wrap; }
+
+.wp-pv-msg {
+  width: 100%;
+  padding: .7rem .9rem;
+  border-left: 3px solid var(--pv-accent);
+  background: var(--pv-accent-soft);
+  border-radius: 0 6px 6px 0;
+}
+.wp-pv-msg-testo { margin: 0; font-size: .9rem; color: var(--pv-ink); }
+
+.wp-pv-aziende {
+  margin: .5rem 0 0; padding-left: 1.1rem;
+  font-size: .85rem; color: var(--pv-ink-soft);
+  display: flex; flex-direction: column; gap: .12rem;
+}
+
+.wp-pv-card-ok { border-color: rgba(129, 140, 248, .35); }
+.wp-pv-name-big { font-size: 1.25rem; }
+.wp-pv-h2-sep { margin-top: .6rem; padding-top: .9rem; border-top: 1px solid var(--pv-rule); width: 100%; }
+
+@media (max-width: 560px) {
+  .wp-pv-riga { flex-direction: column; }
+  .wp-pv-codice-testo { font-size: 1.25rem; }
+  .wp-pv-card-id { flex-wrap: wrap; }
+}

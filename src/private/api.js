@@ -94,3 +94,64 @@ export async function fetchHealth() {
   if (!res.ok) throw new Error(`health: HTTP ${res.status}`);
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// Collegamento del personaggio di gioco
+// ---------------------------------------------------------------------------
+// Le quattro procedure WarEra dietro a questo giro sono tutte PUBBLICHE, ma
+// le chiama il SERVER e non il browser: la prova deve valere qualcosa, e una
+// verifica fatta dal client è una verifica che il client può raccontare come
+// vuole. Qui si parla solo con la nostra API.
+
+/** Errore che porta con sé il codice dell'API, così la vista può tradurlo
+ *  invece di mostrare "HTTP 409" a chi ha appena premuto un bottone. */
+export class ApiError extends Error {
+  constructor(codice, stato) { super(codice); this.codice = codice; this.stato = stato; }
+}
+
+async function callOrThrow(path, body) {
+  const token = getToken();
+  const res = await fetch(`${WARERA_PLUS_API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body || {}),
+  });
+  const dati = await res.json().catch(() => ({}));
+  if (res.status === 401) { clearToken(); throw new ApiError('non_autenticato', 401); }
+  if (!res.ok) throw new ApiError(dati.error || 'errore_server', res.status);
+  return dati;
+}
+
+/** Candidati per un nome: i nomi in WarEra non sono univoci, quindi la
+ *  scelta la fa l'utente guardando avatar e nazione. */
+export function cercaPersonaggio(username) {
+  return callOrThrow('/verify/search', { username });
+}
+
+export function iniziaVerifica(warUserId) {
+  return callOrThrow('/verify/start', { warUserId });
+}
+
+export function controllaVerifica() {
+  return callOrThrow('/verify/check');
+}
+
+export function annullaVerifica() {
+  return callOrThrow('/verify/cancel');
+}
+
+export function scollegaPersonaggio() {
+  return callOrThrow('/verify/unlink');
+}
+
+/** Richiesta in corso, per ritrovare il codice riaprendo la vista invece di
+ *  doverne chiedere un altro (e ripartire da capo coi trenta minuti). */
+export async function statoVerifica() {
+  const token = getToken();
+  if (!token) return null;
+  const res = await fetch(`${WARERA_PLUS_API_BASE}/verify/state`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  return (await res.json()).claim || null;
+}

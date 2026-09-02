@@ -36,8 +36,11 @@
 const express = require('express');
 const cors = require('cors');
 
-const { initDb, purgeExpiredSessions, dbStatus, syncAdminsFromEnv } = require('./db');
-const { buildAuthRouter } = require('./auth');
+const {
+  initDb, purgeExpiredSessions, purgeExpiredClaims, dbStatus, syncAdminsFromEnv, accountFromToken,
+} = require('./db');
+const { buildAuthRouter, bearer, publicAccount } = require('./auth');
+const { buildVerifyRouter } = require('./verify');
 
 const WP_ENV = process.env.WP_ENV === 'live' ? 'live' : 'dev';
 const PORT = Number(process.env.PORT) || (WP_ENV === 'live' ? 3002 : 3003);
@@ -94,6 +97,30 @@ app.use(cors({
 
 app.use(express.json({ limit: '32kb' }));
 
+// ---------------------------------------------------------------------------
+// CHI SEI, E PUOI FARLO?
+// ---------------------------------------------------------------------------
+// Due sbarramenti soli, applicati per rotta. Il client riceve `admin` in
+// /auth/me e lo usa per decidere COSA DISEGNARE; il permesso vero si
+// controlla sempre qui, ad ogni chiamata — un bottone nascosto non e' un
+// permesso negato.
+function requireAuth(req, res, next) {
+  const account = accountFromToken(bearer(req));
+  if (!account) return res.status(401).json({ error: 'non_autenticato' });
+  req.account = account;
+  // Le rotte restituiscono account ripuliti passando da qui, cosi' la
+  // forma esposta al client resta definita in un posto solo (auth.js).
+  req.publicAccount = publicAccount;
+  next();
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.account?.is_admin) return res.status(403).json({ error: 'non_autorizzato' });
+  next();
+}
+
+app.use('/verify', buildVerifyRouter({ requireAuth, requireAdmin }));
+
 app.use('/auth', buildAuthRouter({
   env: WP_ENV,
   publicBase: PUBLIC_BASE,
@@ -146,6 +173,10 @@ if (promossi) console.log(`[plusApi] ${promossi} account promossi ad admin da AD
 setInterval(() => {
   const n = purgeExpiredSessions();
   if (n) console.log(`[plusApi] ${n} sessioni scadute rimosse`);
+  // Le richieste di verifica scadute si intercettano gia' quando qualcuno
+  // ci ritorna sopra; questo giro serve a quelle abbandonate.
+  const c = purgeExpiredClaims();
+  if (c) console.log(`[plusApi] ${c} richieste di verifica scadute rimosse`);
 }, 3600_000).unref();
 
 app.listen(PORT, '127.0.0.1', () => {
