@@ -79,7 +79,7 @@ pubblica il live.
 | Umami (`initAnalytics()` in `shared/analytics.js`) | sì | no |
 | Pill visite (`initVisitorCounter`, POST su `/visits`) | sì | no |
 | Service worker PWA | precache normale | `selfDestroying` |
-| Cartellino in alto a sinistra | — | `DEV` / `LOCAL` |
+| Cartellino in basso a sinistra | — | `DEV` / `LOCAL` |
 | `<meta name="robots">` | — | `noindex, nofollow` |
 | `WARERA_PLUS_API_BASE` (area riservata) | `/warera-plus-api` | `/warera-plus-api-dev` |
 

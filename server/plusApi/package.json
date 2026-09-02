@@ -1,0 +1,10 @@
+{
+  "name": "warera-plus-api",
+  "private": true,
+  "type": "commonjs",
+  "description": "Area riservata di WarEra+ (accesso Discord, identita di gioco verificata, prenotazione contratti mercenari). Processo separato dal cache-server: scrive, e autenticato e ne girano DUE istanze (live e dev) con database distinti. Dipendenze: express, cors. Il database e node:sqlite, dentro Node dalla 22.5 — niente moduli nativi.",
+  "dependencies": {
+    "express": "^5.0.0",
+    "cors": "^2.8.5"
+  }
+}
