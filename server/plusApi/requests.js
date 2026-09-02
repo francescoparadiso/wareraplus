@@ -36,6 +36,7 @@ const {
   getAccountById, getWebhook, setWebhook, deleteWebhook, audit,
 } = require('./db');
 const { calcolaEffettivi } = require('./roles');
+const { puoChiedere } = require('./policy');
 const {
   avvisa, urlWebhookValido,
   testoNuovaRichiesta, testoApprovata, testoRifiutata, testoAperta,
@@ -114,6 +115,15 @@ function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSott
 
     const cap = await capacita(req);
     if (!cap.chiedePer.includes(muId)) return res.status(403).json({ error: 'non_comandi_questa_unita' });
+
+    // Comandare un'unita' non basta: e' la nazione che paga, ed e' la
+    // nazione che decide con chi lavora (policy.js).
+    const permesso = await puoChiedere({
+      muId, muCountryId: cap.muCountryId, targetCountryId: countryId,
+    });
+    if (!permesso.ammesso) {
+      return res.status(403).json({ error: permesso.motivo === 'esclusa' ? 'unita_esclusa' : 'fuori_dalla_lista' });
+    }
 
     const r = creaRichiesta({
       battleId, battleLabel: String(b.battleLabel || '').slice(0, 200) || null,

@@ -245,3 +245,27 @@ export async function battaglieInCorso() {
   const body = await res.json();
   return body?.data || [];
 }
+
+// ---------------------------------------------------------------------------
+// Chi può chiedere a chi
+// ---------------------------------------------------------------------------
+
+/** Le nazioni a cui la mia unità può chiedere contratti. Una chiamata al
+ *  posto di centottanta domande, e soprattutto al posto di mostrare
+ *  battaglie su cui si prenderebbe un rifiuto. */
+export function nazioniAmmesse({ asAccount = null } = {}) {
+  return getJson(conLente('/policy/mie/nazioni', asAccount));
+}
+
+/** La lista permessi di una nazione, con dentro se posso modificarla. */
+export function leggiListaPermessi(countryId, { asAccount = null } = {}) {
+  return getJson(conLente(`/policy/${countryId}`, asAccount));
+}
+
+export function aggiungiAllaLista(countryId, { entryType, entryId, mode, nota }) {
+  return callOrThrow(`/policy/${countryId}`, { entryType, entryId, mode, nota });
+}
+
+export function togliDallaLista(countryId, { entryType, entryId }) {
+  return callOrThrow(`/policy/${countryId}/remove`, { entryType, entryId });
+}

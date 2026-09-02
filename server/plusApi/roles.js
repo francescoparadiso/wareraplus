@@ -101,6 +101,9 @@ async function calcolaDerivati(warUserId, { forzaRicalcolo = false } = {}) {
     carica,                                   // null se semplice cittadino
     muId,
     muNome: mu?.name || null,
+    // La nazione dell'unita': serve a sapere se e' dentro l'alleanza di
+    // chi paga, che e' il predefinito della lista permessi.
+    muCountryId: mu?.country || null,
     ruoloMu,                                  // null se senza unità
     calcolatoIl: ora,
   };
@@ -135,6 +138,7 @@ async function calcolaEffettivi(account, opzioni) {
   // gioco quella persona non ha.
   const approvaPer = new Set();
   const chiedePer = new Set();
+  const gestisceNazione = new Set();
 
   if (derivati?.carica && CARICHE_APPROVAZIONE.has(derivati.carica)
       && !revocato('country', derivati.countryId, derivati.carica)) {
@@ -144,8 +148,13 @@ async function calcolaEffettivi(account, opzioni) {
       && !revocato('mu', derivati.muId, derivati.ruoloMu)) {
     chiedePer.add(derivati.muId);
   }
+  if (derivati?.carica && CARICHE_GOVERNO.has(derivati.carica)
+      && !revocato('country', derivati.countryId, derivati.carica)) {
+    gestisceNazione.add(derivati.countryId);
+  }
   for (const g of concesse) {
     if (g.scope_type === 'country' && CARICHE_APPROVAZIONE.has(g.role)) approvaPer.add(g.scope_id);
+    if (g.scope_type === 'country' && CARICHE_GOVERNO.has(g.role)) gestisceNazione.add(g.scope_id);
     if (g.scope_type === 'mu' && RUOLI_MU_RICHIESTA.has(g.role)) chiedePer.add(g.scope_id);
   }
 
@@ -169,6 +178,10 @@ async function calcolaEffettivi(account, opzioni) {
     capacita: {
       approvaPer: [...approvaPer].filter(Boolean),
       chiedePer: [...chiedePer].filter(Boolean),
+      gestisceNazione: [...gestisceNazione].filter(Boolean),
+      // La nazione dell'unita' serve al controllo della lista permessi:
+      // e' la nazione di chi CHIEDE, non quella di chi paga.
+      muCountryId: derivati?.muCountryId || null,
       // L'amministratore non passa da qui: il suo potere non e' un ruolo
       // di gioco e non deve poter essere revocato da una deroga.
       admin: Boolean(account.is_admin),

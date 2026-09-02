@@ -198,6 +198,22 @@ CREATE TABLE IF NOT EXISTS webhook (
   PRIMARY KEY (scope_type, scope_id)
 );
 
+-- Chi puo' chiedere contratti a una nazione. E' un DELTA sul predefinito
+-- (l'alleanza), non un elenco assoluto: vedi policy.js per il perche'.
+-- Una lista vuota significa "vale il predefinito", non "nessuno" — un
+-- elenco da riempire a mano prima di poter fare qualsiasi cosa e' il modo
+-- piu' affidabile per far abbandonare uno strumento al primo utilizzo.
+CREATE TABLE IF NOT EXISTS request_allow (
+  country_id TEXT NOT NULL,
+  entry_type TEXT NOT NULL,
+  entry_id   TEXT NOT NULL,
+  mode       TEXT NOT NULL,
+  nota       TEXT,
+  added_by   INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (country_id, entry_type, entry_id)
+);
+
 CREATE TABLE IF NOT EXISTS verify_claim (
   account_id    INTEGER PRIMARY KEY REFERENCES account(id) ON DELETE CASCADE,
   war_user_id   TEXT    NOT NULL,

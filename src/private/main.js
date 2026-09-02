@@ -177,7 +177,7 @@ function render() {
     // senza cariche sarebbe una scatola vuota con dentro una spiegazione
     // di qualcosa che non lo riguarda.
     const cap = ruoli?.capacita;
-    if (cap && (cap.chiedePer?.length || cap.approvaPer?.length || cap.admin)) {
+    if (cap && (cap.chiedePer?.length || cap.approvaPer?.length || cap.gestisceNazione?.length || cap.admin)) {
       wrap.appendChild(creaOTavolo().render());
     }
 
@@ -202,9 +202,12 @@ function cardOspite() {
   return card;
 }
 
-/** Chi sei: sempre in cima quando sei entrato, in ogni passo del flusso. */
+/** Chi sei: una striscia compatta in alto a sinistra, appiccicata mentre
+ *  si scorre. Era una card a tutta larghezza, ma questo non e' contenuto:
+ *  e' il "chi sono adesso", e serve a colpo d'occhio soprattutto quando
+ *  si guarda con la lente di qualcun altro. */
 function cardIdentita() {
-  const card = el('div', 'wp-pv-card wp-pv-card-id');
+  const card = el('div', 'wp-pv-id');
   const riga = el('div', 'wp-pv-who');
 
   if (account.discordAvatar) {
@@ -218,6 +221,12 @@ function cardIdentita() {
   nomi.appendChild(el('strong', 'wp-pv-name', account.discordUsername));
   riga.appendChild(nomi);
 
+  // Il personaggio di gioco accanto al nome Discord: sono due identita'
+  // diverse e vanno lette insieme, non una nella card sotto.
+  if (account.warUsername) {
+    riga.appendChild(el('span', 'wp-pv-id-sep', '·'));
+    riga.appendChild(el('strong', 'wp-pv-id-pg', account.warUsername));
+  }
   if (account.admin) riga.appendChild(el('span', 'wp-pv-badge wp-pv-badge-admin', 'admin'));
   riga.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('signOut'), async () => {
     await logout(); account = null; claim = null; passo = 'ricerca'; candidati = []; render();
@@ -370,11 +379,10 @@ function cardCodice() {
 }
 
 function cardCollegato() {
+  // Il nome del personaggio non si ripete qui: sta gia' nella striscia in
+  // alto a sinistra, ed e' li' che lo si cerca.
   const card = el('div', 'wp-pv-card wp-pv-card-ok');
-  card.appendChild(el('h2', 'wp-pv-h2', pvT('linkedAs')));
-  card.appendChild(el('strong', 'wp-pv-name wp-pv-name-big', account.warUsername || account.warUserId));
-
-  card.appendChild(el('h2', 'wp-pv-h2 wp-pv-h2-sep', pvT('nextStep')));
+  card.appendChild(el('h2', 'wp-pv-h2', pvT('nextStep')));
   // `nextStepDone` e non `nextStepBody`: quest'ultimo descrive il
   // collegamento, che a questo punto è già avvenuto. Dire a chi ha appena
   // finito che il prossimo passo è quello che ha appena fatto è il modo

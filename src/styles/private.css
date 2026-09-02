@@ -16,7 +16,14 @@
    su fondo chiaro. La Guida risolve allo stesso modo, vedi guide.css.
 
    ⚠️ La classe del tema chiaro è `body.light-theme`, NON `wp-theme-light`. */
+/* Come #wp-guide-root e #wp-news-root: dentro un overlay a flex, un div
+   ha bisogno che flex e overflow siano dichiarati QUI, altrimenti il
+   contenuto sfora senza scorrere. E' esattamente il bug che avevo
+   introdotto dimenticandolo. */
 #wp-private-root {
+  flex: 1;
+  overflow-y: auto;
+
   --pv-accent: #818cf8;
   --pv-accent-soft: rgba(129, 140, 248, .14);
   --pv-ink: #e6edf3;
@@ -25,10 +32,13 @@
   --pv-rule: rgba(255, 255, 255, .10);
   --pv-danger: #f0776c;
 
+  color: var(--pv-ink);
+}
+
+.wp-pv {
   max-width: 42rem;
   margin: 0 auto;
-  padding: 2.5rem 1.25rem 4rem;
-  color: var(--pv-ink);
+  padding: 2.5rem 1.25rem 5rem;
 }
 
 body.light-theme #wp-private-root {
@@ -429,4 +439,80 @@ body.light-theme .wp-pv-select option { background: #fff; color: #1a1a1a; }
   .wp-pv-req-due { grid-template-columns: 1fr; }
   .wp-pv-req-fatti { border-left: none; padding-left: 0; border-top: 1px solid var(--pv-rule); padding-top: .5rem; }
   .wp-pv-req-stato { margin-left: 0; }
+}
+
+/* ── Identità in alto a sinistra ──────────────────────────────────
+   Appiccicata mentre si scorre: non è contenuto, è il "chi sono
+   adesso", e serve a colpo d'occhio soprattutto sotto la lente. */
+.wp-pv-id {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin: -2.5rem -1.25rem 1.5rem;
+  padding: .55rem 1.25rem;
+  background: color-mix(in srgb, var(--pv-bg-sticky, #0d1416) 92%, transparent);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--pv-rule);
+}
+body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
+
+.wp-pv-id .wp-pv-who {
+  padding-bottom: 0; border-bottom: none;
+  gap: .5rem; justify-content: flex-start;
+}
+.wp-pv-id .wp-pv-names { flex-direction: row; align-items: baseline; gap: .4rem; }
+.wp-pv-id .wp-pv-avatar { width: 26px; height: 26px; }
+.wp-pv-id .wp-pv-name { font-size: .92rem; }
+.wp-pv-id-sep { color: var(--pv-ink-faint, #6e8285); }
+.wp-pv-id-pg { font-size: .92rem; color: var(--pv-accent); }
+.wp-pv-id .wp-pv-badge { margin-left: auto; }
+.wp-pv-id .wp-pv-badge-admin { margin-left: .35rem; }
+
+/* ── Card battaglie ───────────────────────────────────────────── */
+
+.wp-pv-battaglie { width: 100%; display: flex; flex-direction: column; gap: .5rem; }
+
+.wp-pv-btl {
+  border: 1px solid var(--pv-rule);
+  border-radius: 7px;
+  padding: .6rem .8rem;
+  display: flex; flex-direction: column; gap: .4rem;
+}
+.wp-pv-btl-testa { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.wp-pv-btl-nome { font-size: .95rem; flex: 1; min-width: 0; }
+.wp-pv-btl-numeri { display: flex; gap: 1.4rem; flex-wrap: wrap; }
+.wp-pv-btl-voce {
+  display: flex; flex-direction: column; gap: .1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Lista permessi ───────────────────────────────────────────── */
+
+.wp-pv-lista-base { width: 100%; }
+.wp-pv-lista-base .wp-pv-badge { margin-left: 0; }
+
+.wp-pv-lista { width: 100%; display: flex; flex-direction: column; gap: .35rem; }
+.wp-pv-lista-riga {
+  display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  padding: .4rem .6rem;
+  border: 1px solid var(--pv-rule);
+  border-left-width: 3px;
+  border-radius: 6px;
+  font-size: .88rem;
+}
+.wp-pv-lista-allow { border-left-color: #2f9e5f; }
+.wp-pv-lista-deny  { border-left-color: var(--pv-danger); }
+.wp-pv-lista-modo {
+  font-size: .68rem; font-weight: 600; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--pv-ink-soft);
+}
+.wp-pv-lista-chi { font-weight: 600; }
+.wp-pv-lista-nota { color: var(--pv-ink-soft); font-style: italic; }
+.wp-pv-lista-riga .wp-pv-btn { margin-left: auto; }
+
+.wp-pv-form-lista { gap: .45rem; margin-top: .5rem; }
+
+@media (max-width: 560px) {
+  .wp-pv-id { margin: -1.75rem -1rem 1.25rem; padding: .5rem 1rem; }
+  .wp-pv-btl-numeri { gap: 1rem; }
 }

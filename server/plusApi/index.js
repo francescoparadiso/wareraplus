@@ -43,6 +43,7 @@ const { buildAuthRouter, bearer, publicAccount } = require('./auth');
 const { buildVerifyRouter } = require('./verify');
 const { buildRolesRouter } = require('./roles');
 const { buildRequestsRouter } = require('./requests');
+const { buildPolicyRouter } = require('./policy');
 const { risolviIdentita, bloccaScrittureSottoLente } = require('./identity');
 
 const WP_ENV = process.env.WP_ENV === 'live' ? 'live' : 'dev';
@@ -125,6 +126,12 @@ function requireAdmin(req, res, next) {
 app.use('/verify', buildVerifyRouter({ requireAuth, requireAdmin }));
 app.use('/roles', buildRolesRouter({ requireAuth, requireAdmin }));
 app.use('/requests', buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente }));
+
+// La lista permessi ha bisogno delle capacita' come le prenotazioni: si
+// passa la stessa funzione invece di ricalcolarle in due modi diversi.
+const { calcolaEffettivi } = require('./roles');
+const capacitaDi = async (account) => (await calcolaEffettivi(account, {})).capacita;
+app.use('/policy', buildPolicyRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, capacitaDi }));
 
 app.use('/auth', buildAuthRouter({
   env: WP_ENV,
