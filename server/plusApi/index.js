@@ -38,12 +38,14 @@ const cors = require('cors');
 
 const {
   initDb, purgeExpiredSessions, purgeExpiredClaims, dbStatus, syncAdminsFromEnv, accountFromToken,
+  DATA_DIR,
 } = require('./db');
 const { buildAuthRouter, bearer, publicAccount } = require('./auth');
 const { buildVerifyRouter } = require('./verify');
 const { buildRolesRouter } = require('./roles');
 const { buildRequestsRouter } = require('./requests');
 const { buildPolicyRouter } = require('./policy');
+const { initWatcher, statoWatcher } = require('./watcher');
 const { risolviIdentita, bloccaScrittureSottoLente } = require('./identity');
 
 const WP_ENV = process.env.WP_ENV === 'live' ? 'live' : 'dev';
@@ -160,6 +162,9 @@ app.get('/health', (req, res) => res.json({
   // Quanti ne sono dichiarati, non CHI: un id Discord e' un dato personale
   // e /health e' una rotta pubblica.
   adminDaAmbiente: ADMIN_DISCORD_IDS.length,
+  // Quanti controlli sulle aste sono in attesa. Dopo un restart dice a
+  // colpo d'occhio se la coda è stata ripresa da disco o persa.
+  watcher: statoWatcher(),
   db: dbStatus(),
 }));
 
@@ -175,6 +180,11 @@ app.use((err, req, res, next) => {
 // Avvio
 // ---------------------------------------------------------------------------
 initDb();
+
+// Il sorvegliante rilegge da disco i controlli lasciati a meta': un
+// restart a finestra aperta altrimenti li perderebbe in silenzio, e le
+// righe resterebbero "non ancora verificata" per sempre.
+initWatcher({ dataDir: DATA_DIR });
 
 const promossi = syncAdminsFromEnv(ADMIN_DISCORD_IDS);
 if (promossi) console.log(`[plusApi] ${promossi} account promossi ad admin da ADMIN_DISCORD_IDS`);

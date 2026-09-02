@@ -37,6 +37,7 @@ const {
 } = require('./db');
 const { calcolaEffettivi } = require('./roles');
 const { puoChiedere } = require('./policy');
+const { segnalaApertura } = require('./watcher');
 const {
   avvisa, urlWebhookValido,
   testoNuovaRichiesta, testoApprovata, testoRifiutata, testoAperta,
@@ -187,6 +188,11 @@ function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSott
 
     const agg = aggiornaRichiesta(r.id, { opened_at: Date.now(), opened_by: req.identita.id });
     audit(req.identita.id, 'request.opened', `request:${r.id}`, null);
+
+    // La spunta e' l'innesco: da qui parte la raffica che cerca l'asta e
+    // schedula i due controlli. Non c'e' polling a vuoto prima di questo
+    // momento, perche' prima non c'era niente da guardare.
+    segnalaApertura(r.id);
 
     avvisa('mu', r.mu_id, testoAperta(agg, req.identita.war_username || req.identita.discord_username));
 

@@ -26,7 +26,7 @@ import {
   leggiTavolo, chiediContratto, approvaRichiesta, rifiutaRichiesta,
   segnaAperta, ritiraRichiesta, battaglieInCorso,
   nazioniAmmesse, leggiListaPermessi, aggiungiAllaLista, togliDallaLista,
-  ApiError,
+  leggiCanale, impostaCanale, ApiError,
 } from './api.js';
 import { preparaBattaglie, nomeNazione } from './battles.js';
 
@@ -50,6 +50,7 @@ export function creaTavolo(ctx) {
   let battaglie = null;         // preparate e ordinate
   let ammesse = null;           // Set di countryId
   let liste = new Map();        // countryId → lista permessi
+  let canali = new Map();       // "tipo:id" → { configurato }
   let caricamento = false;
   let errore = null;
   let apertaId = null;          // battaglia con il modulo aperto
@@ -78,6 +79,18 @@ export function creaTavolo(ctx) {
       for (const cid of cap.gestisceNazione || []) {
         try { liste.set(cid, await leggiListaPermessi(cid, { asAccount: lente })); }
         catch { /* una lista che non si legge non deve rompere la vista */ }
+      }
+
+      // I canali di avviso: uno per ogni nazione che governa e per ogni
+      // unita' che comanda. Si legge solo SE e' configurato, mai l'URL —
+      // contiene il token del canale, e chi lo legge puo' scriverci
+      // dentro per sempre.
+      canali = new Map();
+      for (const [tipo, ids] of [['country', cap.gestisceNazione || []], ['mu', cap.chiedePer || []]]) {
+        for (const id of ids) {
+          try { canali.set(`${tipo}:${id}`, await leggiCanale(tipo, id)); }
+          catch { /* idem */ }
+        }
       }
     } catch (err) {
       errore = err instanceof ApiError ? pvErr(err.codice) : pvT('errErrore_server');
@@ -109,6 +122,7 @@ export function creaTavolo(ctx) {
     if (cap.chiedePer?.length && !dati.lente) frag.appendChild(cardBattaglie(cap));
     frag.appendChild(cardTavolo(cap));
     for (const [cid, lista] of liste) frag.appendChild(cardLista(cid, lista));
+    if (canali.size && !dati.lente) frag.appendChild(cardCanali());
     return frag;
   }
 
@@ -371,6 +385,56 @@ export function creaTavolo(ctx) {
     r2.appendChild(id); r2.appendChild(salva);
     form.appendChild(r1); form.appendChild(r2); form.appendChild(nota);
     return form;
+  }
+
+  // ── Canali Discord ───────────────────────────────────────────────────
+  function cardCanali() {
+    const card = el('div', 'wp-pv-card');
+    card.appendChild(el('h2', 'wp-pv-h2', pvT('channelTitle')));
+    card.appendChild(el('p', 'wp-pv-body', pvT('channelBody')));
+
+    for (const [chiave, stato] of canali) {
+      const [tipo, id] = chiave.split(':');
+      card.appendChild(rigaCanale(tipo, id, stato));
+    }
+    return card;
+  }
+
+  function rigaCanale(tipo, id, stato) {
+    const box = el('div', 'wp-pv-canale');
+
+    const testa = el('div', 'wp-pv-canale-testa');
+    testa.appendChild(el('strong', null,
+      tipo === 'country' ? (nomeNazione(id) || id) : (ctx.nomeUnita?.(id) || id)));
+    testa.appendChild(el('span', `wp-pv-badge${stato?.configurato ? ' wp-pv-badge-ok' : ''}`,
+      stato?.configurato ? pvT('channelSet') : pvT('channelNone')));
+    box.appendChild(testa);
+
+    const form = el('form', 'wp-pv-riga');
+    const url = el('input', 'wp-pv-input');
+    url.type = 'url';
+    url.placeholder = pvT('channelPh');
+    url.autocomplete = 'off';
+
+    const salva = el('button', 'wp-pv-btn wp-pv-btn-primary wp-pv-btn-small', pvT('channelSave'));
+    salva.type = 'submit'; salva.disabled = occupato;
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      azione(() => impostaCanale(tipo, id, url.value.trim()));
+    });
+    form.appendChild(url); form.appendChild(salva);
+
+    if (stato?.configurato) {
+      // Togliere = salvare vuoto: una sola strada lato server, e nessun
+      // dubbio su cosa succede premendo.
+      const via = el('button', 'wp-pv-btn wp-pv-btn-quiet wp-pv-btn-small', pvT('channelClear'));
+      via.type = 'button'; via.disabled = occupato;
+      via.addEventListener('click', () => azione(() => impostaCanale(tipo, id, '')));
+      form.appendChild(via);
+    }
+
+    box.appendChild(form);
+    return box;
   }
 
   function etichetta(testo, controllo) {

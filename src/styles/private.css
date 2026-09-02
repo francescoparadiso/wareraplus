@@ -518,3 +518,16 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
   .wp-pv-id { margin: -1.75rem -1rem 1.5rem; padding: .55rem 1rem; }
   .wp-pv-btl-numeri { gap: 1rem; }
 }
+
+/* ── Canali di avviso ─────────────────────────────────────────── */
+
+.wp-pv-canale {
+  width: 100%;
+  border: 1px solid var(--pv-rule);
+  border-radius: 7px;
+  padding: .6rem .8rem;
+  display: flex; flex-direction: column; gap: .45rem;
+}
+.wp-pv-canale-testa { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.wp-pv-canale-testa .wp-pv-badge { margin-left: auto; }
+.wp-pv-badge-ok { border-color: transparent; background: rgba(47, 158, 95, .16); color: #2f9e5f; }
