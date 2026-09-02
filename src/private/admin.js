@@ -24,12 +24,11 @@
    indistinguibile da un errore, e nessuno oserà toglierla.
    ══════════════════════════════════════════════════════════════ */
 
-import { state } from '../diplomacy/state.js';
 import { pvT, pvErr } from './i18n.js';
 import {
-  elencoAccount, metteDeroga, togliDeroga, nominaAdmin, leggiRuoli, cercaUnita,
-  elencoAlleanze, ApiError,
+  elencoAccount, metteDeroga, togliDeroga, nominaAdmin, leggiRuoli, ApiError,
 } from './api.js';
+import { creaSelettoreEntita } from './selettori.js';
 
 const RUOLI_NAZIONE = ['president', 'vicePresident', 'minOfDefense', 'minOfForeignAffairs', 'minOfEconomy', 'congress'];
 const RUOLI_MU = ['owner', 'commander', 'manager'];
@@ -136,114 +135,25 @@ export function creaPannelloAdmin(ctx) {
     // presidente" suona come se lo facesse.
     form.appendChild(el('p', 'wp-pv-note', pvT('grantHint')));
 
-    const ambito = el('select', 'wp-pv-select');
-    for (const [v, t] of [['country', pvT('scopeCountry')], ['mu', pvT('scopeMu')], ['alliance', 'Alliance']]) {
-      const o = el('option', null, t); o.value = v; ambito.appendChild(o);
-    }
-
     const ruolo = el('select', 'wp-pv-select');
     const riempiRuoli = () => {
       ruolo.textContent = '';
-      const elenco = ambito.value === 'mu' ? RUOLI_MU
-        : ambito.value === 'alliance' ? ['leader'] : RUOLI_NAZIONE;
+      const elenco = chi.tipo() === 'mu' ? RUOLI_MU
+        : chi.tipo() === 'alliance' ? ['leader'] : RUOLI_NAZIONE;
       for (const r of elenco) { const o = el('option', null, pvT(r)); o.value = r; ruolo.appendChild(o); }
     };
     riempiRuoli();
-    ambito.addEventListener('change', riempiRuoli);
+    chi.tipoSel.addEventListener('change', riempiRuoli);
 
     const tipo = el('select', 'wp-pv-select');
     for (const [v, t] of [['grant', pvT('grant')], ['revoke', pvT('revoke')]]) {
       const o = el('option', null, t); o.value = v; tipo.appendChild(o);
     }
 
-    // ── A COSA si applica la correzione ──────────────────────────────
-    // Prima era un campo di testo che diceva soltanto "id": chi lo
-    // guardava non poteva sapere se volesse la nazione, l'unita' o
-    // l'account, e quei ventiquattro caratteri esadecimali andavano
-    // presi da chissa' dove. Le nazioni sono gia' tutte in memoria dal
-    // boot della mappa, quindi si scelgono per nome; le unita' si
-    // cercano per nome con una chiamata pubblica.
-    const idAmbito = el('input', 'wp-pv-input');
-    idAmbito.type = 'hidden';
-
-    const sceltaNazione = el('select', 'wp-pv-select');
-    for (const [id, n] of (state.nationMap || new Map())) {
-      const o = el('option', null, n?.name || id); o.value = id; sceltaNazione.appendChild(o);
-    }
-    // In ordine alfabetico: un elenco di centottanta nazioni nell'ordine
-    // in cui le ha restituite l'API non e' un elenco, e' un mucchio.
-    [...sceltaNazione.options]
-      .sort((x, y) => x.textContent.localeCompare(y.textContent))
-      .forEach((o) => sceltaNazione.appendChild(o));
-    sceltaNazione.addEventListener('change', () => { idAmbito.value = sceltaNazione.value; });
-    idAmbito.value = sceltaNazione.value || '';
-
-    const cercaMu = el('input', 'wp-pv-input');
-    cercaMu.type = 'text';
-    cercaMu.placeholder = pvT('muSearchPh');
-    cercaMu.autocomplete = 'off';
-    const risultatiMu = el('select', 'wp-pv-select');
-    risultatiMu.size = 1;
-    risultatiMu.addEventListener('change', () => { idAmbito.value = risultatiMu.value; });
-
-    let tickCerca = null;
-    cercaMu.addEventListener('input', () => {
-      clearTimeout(tickCerca);
-      const testo = cercaMu.value.trim();
-      if (testo.length < 3) return;
-      // Mezzo secondo di attesa: una chiamata per tasto premuto sarebbe
-      // otto richieste per scrivere "praetorians".
-      tickCerca = setTimeout(async () => {
-        const trovate = await cercaUnita(testo).catch(() => []);
-        risultatiMu.textContent = '';
-        if (!trovate.length) {
-          const o = el('option', null, pvT('noMatch')); o.value = ''; risultatiMu.appendChild(o);
-        }
-        for (const m of trovate) { const o = el('option', null, m.nome); o.value = m.id; risultatiMu.appendChild(o); }
-        idAmbito.value = risultatiMu.value || '';
-      }, 500);
-    });
-
-    const bloccoNazione = el('div', 'wp-pv-campo');
-    bloccoNazione.appendChild(el('span', 'wp-pv-label', pvT('pickCountry')));
-    bloccoNazione.appendChild(sceltaNazione);
-
-    const bloccoMu = el('div', 'wp-pv-campo');
-    bloccoMu.appendChild(el('span', 'wp-pv-label', pvT('pickMu')));
-    bloccoMu.appendChild(cercaMu);
-    bloccoMu.appendChild(risultatiMu);
-
-    // ⚠️ Le alleanze avevano il loro ambito ma nessun selettore: scegliendo
-    // "Alleanza" restava il menu' delle NAZIONI, cioe' si sarebbe salvato
-    // l'id sbagliato senza che niente lo dicesse. Sedici alleanze stanno in
-    // un menu' come le nazioni.
-    const sceltaAlleanza = el('select', 'wp-pv-select');
-    const optAttesa = el('option', null, '…'); optAttesa.value = '';
-    sceltaAlleanza.appendChild(optAttesa);
-    sceltaAlleanza.addEventListener('change', () => { idAmbito.value = sceltaAlleanza.value; });
-    elencoAlleanze().then((elenco) => {
-      sceltaAlleanza.textContent = '';
-      for (const a of elenco) {
-        const o = el('option', null, a.nome); o.value = a.id; sceltaAlleanza.appendChild(o);
-      }
-      if (ambito.value === 'alliance') idAmbito.value = sceltaAlleanza.value || '';
-    }).catch(() => { optAttesa.textContent = pvT('noMatch'); });
-
-    const bloccoAlleanza = el('div', 'wp-pv-campo');
-    bloccoAlleanza.appendChild(el('span', 'wp-pv-label', pvT('pickAlliance')));
-    bloccoAlleanza.appendChild(sceltaAlleanza);
-
-    const mostraBlocco = () => {
-      const q = ambito.value;
-      bloccoNazione.hidden = q !== 'country';
-      bloccoMu.hidden = q !== 'mu';
-      bloccoAlleanza.hidden = q !== 'alliance';
-      idAmbito.value = q === 'mu' ? (risultatiMu.value || '')
-        : q === 'alliance' ? (sceltaAlleanza.value || '')
-        : (sceltaNazione.value || '');
-    };
-    ambito.addEventListener('change', mostraBlocco);
-    mostraBlocco();
+    // A cosa si applica: nazione, unita' o alleanza, scelte per NOME.
+    // Il selettore e' condiviso con la lista permessi — due copie della
+    // stessa cosa divergono sempre, e la seconda resta indietro.
+    const chi = creaSelettoreEntita({ tipi: ['country', 'mu', 'alliance'] });
 
     const motivo = el('input', 'wp-pv-input');
     motivo.type = 'text';
@@ -259,7 +169,7 @@ export function creaPannelloAdmin(ctx) {
       salva.disabled = true;
       try {
         await metteDeroga({
-          accountId: a.id, scopeType: ambito.value, scopeId: idAmbito.value.trim() || null,
+          accountId: a.id, scopeType: chi.tipo(), scopeId: chi.id() || null,
           role: ruolo.value, mode: tipo.value, reason: motivo.value.trim(),
         });
         await carica();
@@ -270,13 +180,12 @@ export function creaPannelloAdmin(ctx) {
       }
     });
 
+    form.appendChild(chi.wrap);
     const r1 = el('div', 'wp-pv-riga');
-    r1.appendChild(ambito); r1.appendChild(ruolo); r1.appendChild(tipo);
+    r1.appendChild(ruolo); r1.appendChild(tipo);
     const r3 = el('div', 'wp-pv-riga');
     r3.appendChild(motivo); r3.appendChild(salva);
     form.appendChild(r1);
-    form.appendChild(bloccoNazione); form.appendChild(bloccoMu); form.appendChild(bloccoAlleanza);
-    form.appendChild(idAmbito);
     form.appendChild(r3);
     return form;
   }

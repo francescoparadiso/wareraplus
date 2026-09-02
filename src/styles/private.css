@@ -764,3 +764,6 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
   .wp-pv-btl-barra { grid-column: 1 / -1; order: 3; }
 }
 .wp-pv-btl-fin-verso { display: inline-flex; align-items: center; gap: .35rem; }
+
+/* Il selettore condiviso: tipo sopra, poi il campo giusto per quel tipo. */
+.wp-pv-selettore { display: flex; flex-direction: column; gap: .45rem; width: 100%; }

@@ -32,6 +32,7 @@ import {
   preparaBattaglie, nomeNazione, caricaFinanziatori, finanziatoriDi,
 } from './battles.js';
 import { creaPannelloAdmin } from './admin.js';
+import { creaSelettoreEntita } from './selettori.js';
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -329,7 +330,13 @@ export function creaTavolo(ctx) {
     // Scalini per i tagli usuali, campo libero per il resto, e il numero
     // riscritto per esteso sotto: uno zero di troppo si vede.
     const danno = campo('number', pvT('minDamage'), '1000000', { obbligatorio: true });
-    danno.input.step = '100000';
+    // ⚠️ `step` in HTML non e' solo l'incremento delle frecce: VINCOLA la
+    // validazione. Con step=100000 e min=1 i valori accettati diventano
+    // 1, 100001, 200001... e 2.000.000 veniva rifiutato con "i due valori
+    // validi piu' vicini sono 1900001 e 2000001". Gli scalini qui sotto
+    // fanno gia' il lavoro delle frecce, senza vincolare niente.
+    danno.input.step = 'any';
+    danno.input.min = '1000';
 
     const scalini = el('div', 'wp-pv-scalini');
     scalini.appendChild(el('span', 'wp-pv-label', pvT('damagePreset')));
@@ -346,9 +353,11 @@ export function creaTavolo(ctx) {
     // E' la grandezza con cui si ragiona nel gioco (initialPerK), non il
     // totale: si muove fra 0,01 e 0,2, quindi serve il decimale.
     const taglia = campo('number', pvT('bountyL'), '0.08', { obbligatorio: true });
-    taglia.input.step = '0.01';
-    taglia.input.min = '0.01';
-    taglia.input.max = '2';
+    // Stessa ragione: con step=0.01 una taglia di 0,015 verrebbe rifiutata.
+    // Il range si dichiara con min e max, che non vincolano i decimali.
+    taglia.input.step = 'any';
+    taglia.input.min = '0.001';
+    taglia.input.max = '5';
     taglia.wrap.appendChild(el('span', 'wp-pv-suggerimento', pvT('bountyHint')));
 
     // Il totale non si chiede, si calcola: e' il numero che esce davvero
@@ -575,7 +584,8 @@ export function creaTavolo(ctx) {
     riga.appendChild(el('span', 'wp-pv-lista-modo',
       v.mode === 'allow' ? pvT('listAllowed') : pvT('listDenied')));
     riga.appendChild(el('span', 'wp-pv-lista-chi',
-      v.entryType === 'country' ? (nomeNazione(v.entryId) || v.entryId) : v.entryId));
+      v.entryType === 'country' ? (nomeNazione(v.entryId) || v.entryId)
+        : (ctx.nomeUnita?.(v.entryId) || v.entryId)));
     if (v.nota) riga.appendChild(el('span', 'wp-pv-lista-nota', v.nota));
 
     if (modificabile && !dati.lente) {
@@ -591,16 +601,15 @@ export function creaTavolo(ctx) {
   function moduloLista(countryId) {
     const form = el('form', 'wp-pv-form wp-pv-form-lista');
 
-    const tipo = el('select', 'wp-pv-select');
-    for (const [v, t] of [['country', pvT('addCountry')], ['mu', pvT('addMu')]]) {
-      const o = el('option', null, t); o.value = v; tipo.appendChild(o);
-    }
+    // Chi si ammette o si esclude si sceglie per NOME. Prima qui c'era un
+    // campo "id (24 caratteri)": non diceva nemmeno di cosa, e chi lo
+    // compilava lo copiava da un posto che non gli avevamo dato.
+    const chi = creaSelettoreEntita({ tipi: ['country', 'mu'] });
+
     const modo = el('select', 'wp-pv-select');
     for (const [v, t] of [['allow', pvT('allow')], ['deny', pvT('deny')]]) {
       const o = el('option', null, t); o.value = v; modo.appendChild(o);
     }
-    const id = el('input', 'wp-pv-input');
-    id.type = 'text'; id.placeholder = pvT('idPh'); id.autocomplete = 'off'; id.maxLength = 24;
 
     const nota = el('input', 'wp-pv-input');
     nota.type = 'text'; nota.placeholder = pvT('reasonPh'); nota.autocomplete = 'off';
@@ -610,17 +619,19 @@ export function creaTavolo(ctx) {
 
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      const entryId = chi.id();
+      if (!entryId) return;
       azione(() => aggiungiAllaLista(countryId, {
-        entryType: tipo.value, entryId: id.value.trim(),
+        entryType: chi.tipo(), entryId,
         mode: modo.value, nota: nota.value.trim() || null,
       }));
     });
 
-    const r1 = el('div', 'wp-pv-riga');
-    r1.appendChild(tipo); r1.appendChild(modo);
-    const r2 = el('div', 'wp-pv-riga');
-    r2.appendChild(id); r2.appendChild(salva);
-    form.appendChild(r1); form.appendChild(r2); form.appendChild(nota);
+    form.appendChild(chi.wrap);
+    const r = el('div', 'wp-pv-riga');
+    r.appendChild(modo); r.appendChild(salva);
+    form.appendChild(nota);
+    form.appendChild(r);
     return form;
   }
 
@@ -705,7 +716,7 @@ export function creaTavolo(ctx) {
     wrap.appendChild(lab);
     const input = el('input', 'wp-pv-input');
     input.type = tipo; input.placeholder = placeholder || ''; input.autocomplete = 'off';
-    if (obbligatorio) { input.required = true; input.min = '1'; }
+    if (obbligatorio) input.required = true;
     wrap.appendChild(input);
     return { wrap, input };
   }
