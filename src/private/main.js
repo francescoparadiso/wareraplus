@@ -141,6 +141,25 @@ async function conAttesa(fn) {
 // ---------------------------------------------------------------------------
 
 function render() {
+  try { disegna(); }
+  catch (err) {
+    // ⚠️ Una vista che lancia lasciava la pagina VUOTA, e una pagina vuota
+    // non dice niente: e' successo davvero — un nome sbagliato dentro una
+    // funzione e tutta l'area riservata spariva aprendo una linguetta.
+    // Meglio un riquadro che ammette il guasto: si vede che c'e' un
+    // problema invece di credere che non ci sia niente da vedere.
+    console.error('[area riservata] disegno fallito:', err);
+    if (!rootEl) return;
+    rootEl.textContent = '';
+    const box = el('div', 'wp-pv');
+    box.appendChild(el('p', 'wp-pv-error', pvT('errErrore_server')));
+    const dett = el('p', 'wp-pv-note', String(err?.message || err));
+    box.appendChild(dett);
+    rootEl.appendChild(box);
+  }
+}
+
+function disegna() {
   if (!rootEl) return;
   // Il conto alla rovescia si ferma ad ogni ridisegno: senza, ogni render
   // ne lascerebbe uno vivo e dopo dieci passaggi ce ne sarebbero dieci.

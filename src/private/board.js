@@ -133,6 +133,19 @@ export function creaTavolo(ctx) {
 
   /** Tutte le schede, in un frammento: chi le monta decide dove. */
   function render() {
+    try { return disegnaSezioni(); }
+    catch (err) {
+      // Un guasto in una sezione non deve portarsi via profilo e ruoli:
+      // si perde la sezione, non la pagina.
+      console.error('[tavolo] disegno fallito:', err);
+      const f = document.createDocumentFragment();
+      f.appendChild(el('p', 'wp-pv-error', pvT('errErrore_server')));
+      f.appendChild(el('p', 'wp-pv-note', String(err?.message || err)));
+      return f;
+    }
+  }
+
+  function disegnaSezioni() {
     const frag = document.createDocumentFragment();
 
     if (!dati && !caricamento) carica();
@@ -454,7 +467,10 @@ export function creaTavolo(ctx) {
       ? dati.richieste
       : dati.richieste.filter(cappello === 'governo' ? comeGoverno : comeComandante);
 
-    if (haDueCappelli) frag.appendChild(scegliCappello(cap));
+    // `card`, non `frag`: quest'ultimo esiste solo in render(), e qui
+    // dentro nominarlo faceva lanciare tutta la vista — schermata vuota
+    // appena si apriva il tavolo.
+    if (haDueCappelli) card.appendChild(scegliCappello(cap));
 
     const aperte = suoi.filter((r) => ['pending', 'approved'].includes(r.status));
     const chiuse = suoi.filter((r) => !['pending', 'approved'].includes(r.status));
