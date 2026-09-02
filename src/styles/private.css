@@ -602,3 +602,165 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
 /* Come e' stata aperta davvero, quando non combacia con la richiesta.
    Non e' un allarme: e' un fatto, e va letto come tale. */
 .wp-pv-scostamento { font-size: .78rem; color: var(--pv-ink-soft); font-variant-numeric: tabular-nums; }
+
+/* ══════════════════════════════════════════════════════════════════
+   Sezioni, card battaglia e modulo di richiesta
+   ------------------------------------------------------------------
+   ⚠️ Questo blocco era andato perduto: il comando che lo scriveva stava
+   in una catena `&&` dopo uno script che falliva, e il CSS non e' mai
+   arrivato sul file. La card girava senza stili — testo incollato,
+   nessuna barra — e si e' visto solo guardandola.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Sezioni ─────────────────────────────────────────────────────── */
+.wp-pv-sezioni {
+  display: flex; gap: .25rem; flex-wrap: wrap;
+  border-bottom: 1px solid var(--pv-rule);
+  margin-bottom: .25rem;
+}
+.wp-pv-sezione {
+  appearance: none; background: none; border: none;
+  border-bottom: 2px solid transparent;
+  padding: .5rem .85rem; margin-bottom: -1px;
+  font: inherit; font-size: .88rem; font-weight: 600;
+  color: var(--pv-ink-soft); cursor: pointer;
+}
+.wp-pv-sezione:hover { color: var(--pv-ink); }
+.wp-pv-sezione.attiva { color: var(--pv-accent); border-bottom-color: var(--pv-accent); }
+.wp-pv-sezione:focus-visible { outline: 2px solid var(--pv-accent); outline-offset: -2px; }
+
+/* ── Card battaglia ──────────────────────────────────────────────── */
+
+.wp-pv-btl { gap: .7rem; padding: .8rem .9rem; }
+
+.wp-pv-btl-testa {
+  display: flex; align-items: baseline; gap: .75rem;
+  width: 100%;
+}
+.wp-pv-btl-regione {
+  font-size: 1rem; font-weight: 700;
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* La taglia e' il numero per cui si sceglie una battaglia: etichetta
+   sopra e cifra sotto, non incollate su una riga. */
+.wp-pv-btl-taglia {
+  display: flex; flex-direction: column; align-items: flex-end;
+  gap: .1rem; flex: none;
+}
+.wp-pv-btl-taglia strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+
+.wp-pv-btl-parti { display: flex; flex-direction: column; gap: .5rem; width: 100%; }
+
+/* Griglia a tre: chi, quanto (barra), il numero. Cosi' i numeri restano
+   incolonnati fra i due schieramenti e si confrontano a colpo d'occhio. */
+.wp-pv-btl-parte {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1fr) minmax(3rem, 8rem) auto;
+  align-items: center;
+  gap: .5rem .7rem;
+}
+/* Uno schieramento che non ammette la tua unita' resta visibile ma
+   spento: sapere che esiste conta, poterlo scegliere no. */
+.wp-pv-btl-parte.esclusa { opacity: .45; }
+
+.wp-pv-btl-capo { display: flex; align-items: center; gap: .45rem; min-width: 0; }
+
+.wp-pv-btl-bandiera {
+  width: 20px; height: 14px; flex: none;
+  border-radius: 2px; display: block;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--pv-rule);
+}
+
+/* ⚠️ Il nome NON prende la tinta della nazione. Quei colori nascono per
+   riempire i poligoni della mappa: come testo su fondo scuro, un rosso
+   cupo o un blu profondo diventano illeggibili — provato, e si leggeva
+   davvero male. Il colore vive nella barra e in un trattino accanto al
+   nome, dove fa il suo mestiere senza costare leggibilita'. */
+.wp-pv-btl-nazione {
+  font-size: .9rem; font-weight: 600; color: var(--pv-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wp-pv-btl-tinta {
+  width: 3px; height: 1em; flex: none;
+  border-radius: 2px; background: var(--pv-ink-soft);
+}
+.wp-pv-btl-lato {
+  font-size: .72rem; color: var(--pv-ink-soft);
+  white-space: nowrap; flex: none;
+}
+
+.wp-pv-btl-barra {
+  height: 7px; border-radius: 4px;
+  background: var(--pv-rule);
+  overflow: hidden;
+}
+.wp-pv-btl-barra-piena {
+  height: 100%; border-radius: 4px;
+  background: var(--pv-accent);
+  min-width: 2px;
+}
+
+.wp-pv-btl-danno {
+  font-size: .85rem; font-variant-numeric: tabular-nums;
+  text-align: right; white-space: nowrap;
+}
+
+/* ── Finanziatori ───────────────────────────────────────────────── */
+
+.wp-pv-btl-fin {
+  width: 100%;
+  display: flex; flex-direction: column; gap: .3rem;
+  padding-top: .6rem; border-top: 1px solid var(--pv-rule);
+}
+.wp-pv-btl-fin-nota { font-size: .8rem; color: var(--pv-ink-soft); font-style: italic; }
+.wp-pv-btl-fin-riga {
+  display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap;
+  font-size: .82rem;
+}
+.wp-pv-btl-fin-verso { white-space: nowrap; }
+.wp-pv-btl-fin-voci { color: var(--pv-ink-soft); }
+
+/* ── Modulo richiesta ───────────────────────────────────────────── */
+
+.wp-pv-scalini { display: flex; flex-direction: column; gap: .3rem; }
+.wp-pv-scalini-riga { display: flex; gap: .35rem; flex-wrap: wrap; }
+.wp-pv-scalino {
+  appearance: none; background: transparent;
+  border: 1px solid var(--pv-rule); border-radius: 6px;
+  padding: .3rem .65rem;
+  font: inherit; font-size: .82rem; font-weight: 600;
+  color: var(--pv-ink-soft); cursor: pointer;
+}
+.wp-pv-scalino:hover { border-color: var(--pv-accent); color: var(--pv-accent); }
+
+.wp-pv-suggerimento { font-size: .78rem; color: var(--pv-ink-soft); }
+
+/* Il totale non e' un campo: e' il controllo che si guarda per
+   accorgersi di uno zero di troppo prima di mandare la richiesta. */
+.wp-pv-totale {
+  display: flex; flex-direction: column; gap: .1rem;
+  padding: .6rem .8rem; width: 100%;
+  background: var(--pv-accent-soft);
+  border-radius: 7px;
+}
+.wp-pv-totale-val { font-size: 1.3rem; font-variant-numeric: tabular-nums; color: var(--pv-accent); }
+
+.wp-pv-opzione {
+  display: flex; align-items: flex-start; gap: .6rem;
+  cursor: pointer; padding: .6rem .7rem; width: 100%;
+  border: 1px solid var(--pv-rule); border-radius: 7px;
+}
+.wp-pv-opzione:hover { border-color: var(--pv-accent); }
+.wp-pv-opzione input {
+  accent-color: var(--pv-accent);
+  width: 1rem; height: 1rem; margin-top: .15rem; flex: none;
+}
+.wp-pv-opzione-testi { display: flex; flex-direction: column; gap: .15rem; font-size: .9rem; }
+
+@media (max-width: 40rem) {
+  .wp-pv-btl-parte { grid-template-columns: minmax(0, 1fr) auto; }
+  .wp-pv-btl-barra { grid-column: 1 / -1; order: 3; }
+}
+.wp-pv-btl-fin-verso { display: inline-flex; align-items: center; gap: .35rem; }

@@ -207,9 +207,16 @@ export function creaTavolo(ctx) {
         f.addEventListener('error', () => { f.style.display = 'none'; });
         capo.appendChild(f);
       }
-      const nome = el('strong', 'wp-pv-btl-nazione', p.nome || p.countryId);
-      if (p.colore) nome.style.color = p.colore;
-      capo.appendChild(nome);
+      // La tinta della nazione sta in un trattino, non nel testo: quei
+      // colori nascono per riempire i poligoni della mappa e come testo
+      // su fondo scuro diventano illeggibili (un rosso cupo su nero non
+      // si legge). Qui fanno il loro mestiere senza costare leggibilita'.
+      if (p.colore) {
+        const tinta = el('span', 'wp-pv-btl-tinta');
+        tinta.style.background = p.colore;
+        capo.appendChild(tinta);
+      }
+      capo.appendChild(el('strong', 'wp-pv-btl-nazione', p.nome || p.countryId));
       capo.appendChild(el('span', 'wp-pv-btl-lato',
         p.side === 'attacker' ? pvT('sideAttacker') : pvT('sideDefender')));
       riga.appendChild(capo);
@@ -263,8 +270,13 @@ export function creaTavolo(ctx) {
 
     for (const p of fin.perParte) {
       const riga = el('div', 'wp-pv-btl-fin-riga');
-      const chi = el('strong', 'wp-pv-btl-fin-verso', p.nome || p.countryId);
-      if (p.colore) chi.style.color = p.colore;
+      const chi = el('span', 'wp-pv-btl-fin-verso');
+      if (p.colore) {
+        const tinta = el('span', 'wp-pv-btl-tinta');
+        tinta.style.background = p.colore;
+        chi.appendChild(tinta);
+      }
+      chi.appendChild(el('strong', null, p.nome || p.countryId));
       riga.appendChild(chi);
       const voci = el('span', 'wp-pv-btl-fin-voci',
         p.voci.map((v) => `${nomeNazione(v.from) || '?'} ${num(v.money)}`).join(' · '));
