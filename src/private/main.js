@@ -147,10 +147,19 @@ function render() {
 
   if (erroreRete) wrap.appendChild(cardIndisponibile());
   else if (!account) wrap.appendChild(cardOspite());
+  else if (comeAltri) {
+    // ── Con la lente attiva si vede SOLO quella persona ────────────────
+    // Il flusso di verifica e il pannello amministratore riguardano me,
+    // non lei: mostrarli qui accanto ai suoi ruoli faceva credere che
+    // "personaggio collegato" fosse il suo stato quando era il mio.
+    // La scheda dei ruoli si disegna sempre, anche vuota: "questa persona
+    // non ha poteri" e' esattamente l'informazione che si sta cercando.
+    wrap.appendChild(cardIdentita());
+    wrap.appendChild(cardLente());
+    wrap.appendChild(cardRuoli());
+  }
   else {
     wrap.appendChild(cardIdentita());
-
-    if (comeAltri) wrap.appendChild(cardLente());
 
     if (account.verificato) wrap.appendChild(cardCollegato());
     else if (passo === 'codice' && claim) wrap.appendChild(cardCodice());
@@ -161,10 +170,7 @@ function render() {
       wrap.appendChild(cardRuoli());
     }
 
-    // Il pannello amministratore non compare mentre si guarda con gli
-    // occhi di un altro: si sta osservando quella persona, e vedere i
-    // propri comandi accanto ai suoi ruoli confonde chi sta guardando.
-    if (account.admin && !comeAltri) {
+    if (account.admin) {
       if (!pannelloAdmin) pannelloAdmin = creaPannelloAdmin({ ridisegna: render, apriComeAltri: guardaCome });
       wrap.appendChild(pannelloAdmin.render());
     }
@@ -398,7 +404,12 @@ function cardRuoli() {
   card.appendChild(el('h2', 'wp-pv-h2', pvT('rolesTitle')));
   card.appendChild(el('p', 'wp-pv-body', pvT('rolesBody')));
 
-  if (ruoli.erroreGioco) card.appendChild(el('p', 'wp-pv-note', pvT('roleUnavailable')));
+  // Puo' essere chiamata anche senza ruoli caricati (lente su un account
+  // che il gioco non sa risolvere): non deve esplodere, deve dirlo.
+  if (!ruoli || ruoli.erroreGioco) {
+    card.appendChild(el('p', 'wp-pv-note', pvT('roleUnavailable')));
+    if (!ruoli) return card;
+  }
 
   const d = ruoli.derivati;
   if (d) {
