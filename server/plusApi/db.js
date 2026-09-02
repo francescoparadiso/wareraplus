@@ -137,6 +137,67 @@ CREATE INDEX IF NOT EXISTS idx_override_account ON role_override(account_id);
 -- Una verifica in corso per account, non una coda: chiedere un codice
 -- nuovo sostituisce il precedente. Sono usa-e-getta e vivono mezz'ora,
 -- il tempo di andare in gioco e rinominare un'azienda.
+-- ── IL TAVOLO DELLE PRENOTAZIONI ───────────────────────────────
+-- Il pezzo per cui esiste tutto il resto. Oggi un comandante scrive in
+-- chat quanto danno puo' fare, un ministro risponde "ok" e apre l'asta:
+-- funziona, ma non lascia traccia di chi ha chiesto, chi ha acconsentito
+-- e se il contratto e' poi finito all'unita' giusta.
+--
+-- Due colonne di stato che NON vanno fuse, ed e' la scelta centrale di
+-- tutta la sezione:
+--     status  = cosa dicono le persone (in attesa, approvata, aperta)
+--     esito   = cosa dice il gioco (conforme, altra unita', mai aperta)
+-- Meta' del valore del tavolo sta nel poter mostrare "il ministro aveva
+-- detto ok alle 21:04, l'asta e' comparsa alle 21:31, l'ha presa
+-- un'altra unita'". Fondendole si perde esattamente quello.
+--
+-- battle_label e' denormalizzato apposta: una battaglia conclusa sparisce
+-- dall'elenco live, e senza l'etichetta lo storico diventerebbe una
+-- colonna di identificativi esadecimali.
+CREATE TABLE IF NOT EXISTS request (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  battle_id          TEXT    NOT NULL,
+  battle_label       TEXT,
+  side               TEXT,
+  country_id         TEXT    NOT NULL,
+  mu_id              TEXT    NOT NULL,
+  mu_nome            TEXT,
+  requested_by       INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  min_damage         INTEGER,
+  budget             REAL,
+  per_k              REAL,
+  duration           INTEGER,
+  professionals_only INTEGER NOT NULL DEFAULT 0,
+  note               TEXT,
+  status             TEXT    NOT NULL DEFAULT 'pending',
+  approved_by        INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  approved_at        INTEGER,
+  opened_at          INTEGER,
+  opened_by          INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  esito              TEXT,
+  auction_id         TEXT,
+  winner_mu          TEXT,
+  final_per_k        REAL,
+  verificato_il      INTEGER,
+  created_at         INTEGER NOT NULL,
+  updated_at         INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_request_country ON request(country_id, status);
+CREATE INDEX IF NOT EXISTS idx_request_mu ON request(mu_id, status);
+CREATE INDEX IF NOT EXISTS idx_request_battle ON request(battle_id);
+
+-- Canale Discord dove mandare gli avvisi. E' li' che la cosa gia' succede:
+-- non stiamo spostando le persone altrove, stiamo dando memoria a un gesto
+-- che fanno gia'. Un canale per nazione e/o per unita'.
+CREATE TABLE IF NOT EXISTS webhook (
+  scope_type TEXT NOT NULL,
+  scope_id   TEXT NOT NULL,
+  url        TEXT NOT NULL,
+  created_by INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (scope_type, scope_id)
+);
+
 CREATE TABLE IF NOT EXISTS verify_claim (
   account_id    INTEGER PRIMARY KEY REFERENCES account(id) ON DELETE CASCADE,
   war_user_id   TEXT    NOT NULL,
@@ -398,6 +459,75 @@ function purgeExpiredSessions() {
 }
 
 // ---------------------------------------------------------------------------
+// PRENOTAZIONI
+// ---------------------------------------------------------------------------
+
+function creaRichiesta(d) {
+  const ora = Date.now();
+  const info = getDb().prepare(`
+    INSERT INTO request (battle_id, battle_label, side, country_id, mu_id, mu_nome,
+      requested_by, min_damage, budget, per_k, duration, professionals_only, note,
+      status, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',?,?)
+  `).run(d.battleId, d.battleLabel || null, d.side || null, d.countryId, d.muId, d.muNome || null,
+         d.requestedBy, d.minDamage || null, d.budget || null, d.perK || null, d.duration || null,
+         d.professionalsOnly ? 1 : 0, d.note || null, ora, ora);
+  return getRichiesta(info.lastInsertRowid);
+}
+
+function getRichiesta(id) {
+  return getDb().prepare('SELECT * FROM request WHERE id = ?').get(id) || null;
+}
+
+/** Le prenotazioni che questa identita' puo' vedere: quelle delle sue
+ *  unita' e quelle delle nazioni per cui puo' approvare. Un amministratore
+ *  con `tutto` vede l'intero tavolo. */
+function listaRichieste({ muIds = [], countryIds = [], tutto = false, limit = 200 } = {}) {
+  if (tutto) {
+    return getDb().prepare('SELECT * FROM request ORDER BY created_at DESC LIMIT ?').all(limit);
+  }
+  if (!muIds.length && !countryIds.length) return [];
+  const segnaposti = (n) => new Array(n).fill('?').join(',');
+  const condizioni = [];
+  if (muIds.length) condizioni.push(`mu_id IN (${segnaposti(muIds.length)})`);
+  if (countryIds.length) condizioni.push(`country_id IN (${segnaposti(countryIds.length)})`);
+  const sql = `SELECT * FROM request WHERE ${condizioni.join(' OR ')}
+               ORDER BY created_at DESC LIMIT ?`;
+  return getDb().prepare(sql).all(...muIds, ...countryIds, limit);
+}
+
+function aggiornaRichiesta(id, campi) {
+  const chiavi = Object.keys(campi);
+  if (!chiavi.length) return getRichiesta(id);
+  const set = chiavi.map((k) => `${k} = ?`).join(', ');
+  getDb().prepare(`UPDATE request SET ${set}, updated_at = ? WHERE id = ?`)
+    .run(...chiavi.map((k) => campi[k]), Date.now(), id);
+  return getRichiesta(id);
+}
+
+// ---------------------------------------------------------------------------
+// WEBHOOK
+// ---------------------------------------------------------------------------
+
+function getWebhook(scopeType, scopeId) {
+  return getDb().prepare('SELECT * FROM webhook WHERE scope_type = ? AND scope_id = ?')
+    .get(scopeType, scopeId) || null;
+}
+
+function setWebhook({ scopeType, scopeId, url, createdBy }) {
+  getDb().prepare(`
+    INSERT INTO webhook (scope_type, scope_id, url, created_by, created_at)
+    VALUES (?,?,?,?,?)
+    ON CONFLICT(scope_type, scope_id) DO UPDATE SET
+      url = excluded.url, created_by = excluded.created_by, created_at = excluded.created_at
+  `).run(scopeType, scopeId, url, createdBy || null, Date.now());
+}
+
+function deleteWebhook(scopeType, scopeId) {
+  getDb().prepare('DELETE FROM webhook WHERE scope_type = ? AND scope_id = ?').run(scopeType, scopeId);
+}
+
+// ---------------------------------------------------------------------------
 // AUDIT
 // ---------------------------------------------------------------------------
 
@@ -423,6 +553,9 @@ function dbStatus() {
     admin: one('SELECT COUNT(*) AS n FROM account WHERE is_admin = 1'),
     deroghe: one('SELECT COUNT(*) AS n FROM role_override'),
     verificheInCorso: one(`SELECT COUNT(*) AS n FROM verify_claim WHERE expires_at > ${Date.now()}`),
+    prenotazioni: one('SELECT COUNT(*) AS n FROM request'),
+    inAttesa: one("SELECT COUNT(*) AS n FROM request WHERE status = 'pending'"),
+    webhook: one('SELECT COUNT(*) AS n FROM webhook'),
     sessioniAttive: one(`SELECT COUNT(*) AS n FROM session WHERE expires_at > ${Date.now()}`),
   };
 }
@@ -434,6 +567,8 @@ module.exports = {
   getClaim, setClaim, deleteClaim, purgeExpiredClaims,
   syncAdminsFromEnv, setAdmin,
   setRoleOverride, removeRoleOverride, listRoleOverrides,
+  creaRichiesta, getRichiesta, listaRichieste, aggiornaRichiesta,
+  getWebhook, setWebhook, deleteWebhook,
   createSession, accountFromToken, destroySession, purgeExpiredSessions,
   audit, dbStatus,
 };
