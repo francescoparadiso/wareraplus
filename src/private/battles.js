@@ -85,7 +85,15 @@ export async function preparaBattaglie(battaglie, nazioniAmmesse) {
     .sort((x, y) => y.danno - x.danno);
 
   await aggiungiTaglie(utili.slice(0, CON_TAGLIA));
-  return utili;
+
+  // Riordino: dove la taglia VERA si conosce, e' quella a decidere. Il
+  // danno era solo il miglior segnale disponibile a costo zero, ma non
+  // sono la stessa cosa — misurato: una battaglia con 121M di danno
+  // aveva pagato piu' di una da 270M. Chi ha il numero vero passa
+  // davanti a chi ha solo la stima.
+  const conTaglia = utili.filter((b) => b.taglia != null).sort((x, y) => y.taglia - x.taglia);
+  const senza = utili.filter((b) => b.taglia == null);
+  return [...conTaglia, ...senza];
 }
 
 /** Taglia già pagata, dalle classifiche money dei due schieramenti.
