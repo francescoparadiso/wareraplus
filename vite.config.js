@@ -6,7 +6,18 @@ import { VitePWA } from 'vite-plugin-pwa';
 // ogni altro branch (è così che nasce la versione "dev" del tool: un
 // branch a parte, un URL a parte). In locale la variabile non esiste e
 // vale 'local'. Il perché e cosa cambia: src/shared/deployEnv.js.
-const DEPLOY_ENV = process.env.VERCEL_ENV || 'local';
+//
+// WP_DEPLOY_ENV ha la precedenza, e non è un capriccio: dal settembre 2026
+// la copia dev NON è più un preview del progetto principale ma un SECONDO
+// progetto Vercel sullo stesso repo, che tratta `dev` come proprio branch
+// di produzione — serviva un URL pubblico, apribile da chi non ha un
+// account Vercel, mentre i preview stanno dietro l'SSO. Conseguenza: là
+// dentro VERCEL_ENV vale 'production', perché Vercel guarda il branch di
+// produzione DEL PROGETTO, non il nome del branch. Senza questo override
+// il progetto dev si crederebbe live e riaccenderebbe le tre cose che
+// deployEnv.js esiste per spegnere (analytics, Umami, pill visite).
+// Si imposta a 'preview' fra le env var di quel progetto, e basta.
+const DEPLOY_ENV = process.env.WP_DEPLOY_ENV || process.env.VERCEL_ENV || 'local';
 const IS_LIVE = DEPLOY_ENV === 'production';
 
 export default defineConfig({
@@ -24,6 +35,23 @@ export default defineConfig({
   server: { port: Number(process.env.PORT) || 5173 },
 
   plugins: [
+    // WarEra+: la copia di prova non deve finire nei motori di ricerca.
+    // Ha un URL pubblico (secondo progetto Vercel, vedi WP_DEPLOY_ENV
+    // sopra), quindi senza questo prima o poi un giocatore ci arriva da
+    // una ricerca e segnala un bug già corretto in live — o peggio, legge
+    // dati di prova credendoli veri. Iniettato a build time e non da JS
+    // perché i crawler leggono l'HTML servito, non il DOM dopo gli script.
+    {
+      name: 'wp-noindex-non-live',
+      transformIndexHtml(html) {
+        if (IS_LIVE) return html;
+        return html.replace(
+          /<head>/i,
+          '<head>\n  <meta name="robots" content="noindex, nofollow" />'
+        );
+      },
+    },
+
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',

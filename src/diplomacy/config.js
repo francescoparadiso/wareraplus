@@ -1,4 +1,6 @@
 // config.js
+import { IS_LIVE } from '../shared/deployEnv.js';
+
 //export const API_BASE_URL = 'https://apidev.warera.io';  // per test
 export const API_BASE_URL = 'https://api6.warera.io'; // per produzione
 export const CACHE_API_BASE_URL = 'https://gateway.warerastats.io'
@@ -57,6 +59,31 @@ export const TRPC_PROXY_BASE = WARERA_CACHE_BASE;
 // (WarEra ignora quest'ultimo → 401). Se il tool mostra lo stato "setup", il
 // worker non sta iniettando la key: controlla il secret API_TOKEN e l'header.
 export const ECO_PROXY_BASE = WORKER_API_BASE;
+
+// WarEra+ — API dell'AREA RISERVATA (login Discord, identità di gioco
+// verificata, prenotazione dei contratti mercenari). È l'unico endpoint del
+// progetto che SCRIVE, e l'unico autenticato: tutto il resto qui sopra legge
+// dati pubblici e può essere condiviso senza pensarci.
+//
+// Proprio per questo NON è lo stesso processo del cache-server, e non è la
+// stessa base per i due deploy:
+//
+//   live → /warera-plus-api        (porta 3002, database suo)
+//   dev  → /warera-plus-api-dev    (porta 3003, database suo)
+//
+// I due database sono separati apposta. Il cache-server può servire live e
+// dev insieme perché espone dati pubblici in sola lettura; qui no — una
+// prenotazione di prova fatta da un tester sul dev comparirebbe ai ministri
+// veri. Stessa logica del gate su IS_LIVE per i contatori (deployEnv.js),
+// ma con una conseguenza in più: le verifiche fatte sul dev non valgono in
+// live, e la vista deve dirlo in chiaro invece di lasciarlo scoprire.
+//
+// In locale si punta all'istanza dev: non esiste un terzo processo, e per
+// provare l'area riservata serve comunque il giro OAuth su un dominio che
+// Discord conosca (il redirect URI sta sul VPS, non su localhost).
+export const WARERA_PLUS_API_BASE = IS_LIVE
+  ? 'https://warera-oracle.duckdns.org/warera-plus-api'
+  : 'https://warera-oracle.duckdns.org/warera-plus-api-dev';
 
 // ⚠️ RIMOSSA: la chiave era in chiaro nel bundle servito al browser, quindi
 // leggibile da chiunque aprisse i devtools. Nessun modulo la usava davvero
