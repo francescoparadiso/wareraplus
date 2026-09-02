@@ -288,3 +288,84 @@ body.light-theme #wp-private-root {
   .wp-pv-codice-testo { font-size: 1.25rem; }
   .wp-pv-card-id { flex-wrap: wrap; }
 }
+
+/* ── Ruoli e amministrazione ──────────────────────────────────── */
+
+.wp-pv-ruoli {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: .8rem;
+  width: 100%;
+}
+.wp-pv-ruolo { display: flex; flex-direction: column; gap: .15rem; }
+.wp-pv-ruolo-valore { font-size: 1rem; font-weight: 600; }
+
+.wp-pv-capacita {
+  margin: .3rem 0 0; padding-left: 1.1rem;
+  width: 100%; font-size: .93rem;
+  display: flex; flex-direction: column; gap: .25rem;
+}
+.wp-pv-cap-vuota { color: var(--pv-ink-soft); list-style: none; margin-left: -1.1rem; }
+
+.wp-pv-deroghe { width: 100%; display: flex; flex-direction: column; gap: .35rem; }
+.wp-pv-deroga {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  padding: .45rem .6rem;
+  border: 1px dashed var(--pv-rule);
+  border-radius: 6px;
+  font-size: .85rem;
+}
+.wp-pv-deroga-testo { font-weight: 600; }
+.wp-pv-deroga-motivo { color: var(--pv-ink-soft); font-style: italic; }
+
+/* La lente ha un bordo suo: mentre e' attiva si sta guardando qualcun
+   altro, e non deve poter passare inosservato. */
+.wp-pv-card-lente {
+  border-color: var(--pv-accent);
+  border-left-width: 3px;
+  background: var(--pv-accent-soft);
+}
+
+.wp-pv-card-admin { border-style: dashed; }
+
+.wp-pv-h3 {
+  margin: .4rem 0 .2rem;
+  font-size: .78rem; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--pv-ink-soft);
+}
+
+.wp-pv-accounts { width: 100%; display: flex; flex-direction: column; gap: .4rem; }
+
+.wp-pv-account { border: 1px solid var(--pv-rule); border-radius: 7px; overflow: hidden; }
+.wp-pv-account-testa {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .5rem .7rem;
+}
+.wp-pv-account-nomi { display: flex; flex-direction: column; gap: .05rem; min-width: 0; flex: 1; }
+.wp-pv-account-sub { font-size: .78rem; color: var(--pv-ink-soft); }
+.wp-pv-account-testa .wp-pv-badge { margin-left: 0; }
+
+.wp-pv-account-dettaglio {
+  padding: .7rem;
+  border-top: 1px solid var(--pv-rule);
+  display: flex; flex-direction: column; gap: .7rem;
+}
+
+.wp-pv-select {
+  background: transparent;
+  border: 1px solid var(--pv-rule);
+  border-radius: 6px;
+  padding: .4rem .5rem;
+  font: inherit; font-size: .88rem;
+  color: var(--pv-ink);
+  min-width: 0;
+}
+.wp-pv-select:focus { outline: none; border-color: var(--pv-accent); }
+/* Le option ereditano il fondo del sistema, non quello della card:
+   senza questo, in tema scuro alcune combinazioni danno testo scuro su
+   fondo scuro nel menu a tendina. */
+.wp-pv-select option { background: #141d20; color: #e6edf3; }
+body.light-theme .wp-pv-select option { background: #fff; color: #1a1a1a; }
+
+.wp-pv-form-deroga .wp-pv-riga { gap: .4rem; }

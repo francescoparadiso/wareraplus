@@ -33,8 +33,9 @@ import { pvT, pvErr } from './i18n.js';
 import {
   fetchMe, logout, loginUrl, getToken,
   cercaPersonaggio, iniziaVerifica, controllaVerifica, annullaVerifica,
-  scollegaPersonaggio, statoVerifica, ApiError,
+  scollegaPersonaggio, statoVerifica, leggiRuoli, ApiError,
 } from './api.js';
+import { creaPannelloAdmin, renderDeroghe } from './admin.js';
 
 let rootEl = null;
 let account = null;
@@ -50,6 +51,13 @@ let claim = null;             // { code, expiresAt, warUsername }
 let messaggio = null;         // { testo, aziende? }
 let occupato = false;
 let tickScadenza = null;
+
+// Ruoli: derivati dal gioco, deroghe e capacita' effettive, tenuti
+// separati perche' l'interfaccia deve poter mostrare che una capacita'
+// viene da una correzione e non dalla carica.
+let ruoli = null;
+let comeAltri = null;         // id dell'account che si sta guardando
+let pannelloAdmin = null;
 
 export async function initPrivateView(container, { authError = null } = {}) {
   rootEl = container;
@@ -72,11 +80,22 @@ async function refresh() {
       claim = await statoVerifica();
       passo = claim ? 'codice' : 'ricerca';
     }
+    if (account) await caricaRuoli();
   } catch {
     account = null;
     erroreRete = true;
   }
   render();
+}
+
+async function caricaRuoli({ refresh = false } = {}) {
+  try {
+    ruoli = await leggiRuoli({ asAccount: comeAltri, refresh });
+  } catch {
+    // I ruoli sono un di piu': se il gioco non risponde la vista resta
+    // usabile e lo dice, invece di sembrare vuota.
+    ruoli = null;
+  }
 }
 
 function el(tag, cls, text) {
@@ -130,10 +149,25 @@ function render() {
   else if (!account) wrap.appendChild(cardOspite());
   else {
     wrap.appendChild(cardIdentita());
+
+    if (comeAltri) wrap.appendChild(cardLente());
+
     if (account.verificato) wrap.appendChild(cardCollegato());
     else if (passo === 'codice' && claim) wrap.appendChild(cardCodice());
     else if (passo === 'scelta') wrap.appendChild(cardScelta());
     else wrap.appendChild(cardRicerca());
+
+    if (ruoli && (ruoli.derivati || ruoli.deroghe?.length || ruoli.erroreGioco)) {
+      wrap.appendChild(cardRuoli());
+    }
+
+    // Il pannello amministratore non compare mentre si guarda con gli
+    // occhi di un altro: si sta osservando quella persona, e vedere i
+    // propri comandi accanto ai suoi ruoli confonde chi sta guardando.
+    if (account.admin && !comeAltri) {
+      if (!pannelloAdmin) pannelloAdmin = creaPannelloAdmin({ ridisegna: render, apriComeAltri: guardaCome });
+      wrap.appendChild(pannelloAdmin.render());
+    }
   }
 
   if (!IS_LIVE) wrap.appendChild(el('p', 'wp-pv-devnote', pvT('devWarning')));
@@ -301,7 +335,7 @@ function cardCodice() {
   controlla.disabled = occupato;
   controlla.addEventListener('click', () => conAttesa(async () => {
     const r = await controllaVerifica();
-    if (r.ok) { account = r.account; claim = null; return; }
+    if (r.ok) { account = r.account; claim = null; await caricaRuoli({ refresh: true }); return; }
     messaggio = r.motivo === 'nessuna_azienda'
       ? { testo: pvT('noCompanies') }
       : { testo: pvT('notFound'), aziende: r.aziende };
@@ -333,10 +367,76 @@ function cardCollegato() {
   card.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('unlink'), () => conAttesa(async () => {
     account = (await scollegaPersonaggio()).account;
     passo = 'ricerca'; candidati = []; claim = null;
+    await caricaRuoli({ refresh: true });
   })));
 
   const msg = boxMessaggio(); if (msg) card.appendChild(msg);
   return card;
+}
+
+/** Passa a guardare (in sola lettura) quello che vede un altro. */
+async function guardaCome(accountId) {
+  comeAltri = accountId;
+  await caricaRuoli();
+  render();
+}
+
+function cardLente() {
+  const card = el('div', 'wp-pv-card wp-pv-card-lente');
+  card.appendChild(el('h2', 'wp-pv-h2', pvT('viewingAs')));
+  const chi = ruoli?.account;
+  if (chi) card.appendChild(el('strong', 'wp-pv-name', chi.warUsername || chi.discordUsername));
+  card.appendChild(el('p', 'wp-pv-note', pvT('readOnlyNote')));
+  card.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('backToMe'), async () => {
+    comeAltri = null; await caricaRuoli(); render();
+  }));
+  return card;
+}
+
+function cardRuoli() {
+  const card = el('div', 'wp-pv-card');
+  card.appendChild(el('h2', 'wp-pv-h2', pvT('rolesTitle')));
+  card.appendChild(el('p', 'wp-pv-body', pvT('rolesBody')));
+
+  if (ruoli.erroreGioco) card.appendChild(el('p', 'wp-pv-note', pvT('roleUnavailable')));
+
+  const d = ruoli.derivati;
+  if (d) {
+    const griglia = el('div', 'wp-pv-ruoli');
+    griglia.appendChild(voceRuolo(pvT('office'), d.carica ? pvT(d.carica) : pvT('noOffice')));
+    griglia.appendChild(voceRuolo(pvT('unit'),
+      d.ruoloMu ? `${pvT(d.ruoloMu)}${d.muNome ? ` · ${d.muNome}` : ''}` : pvT('noUnit')));
+    card.appendChild(griglia);
+  }
+
+  // Le capacita' sono la domanda vera ("posso approvare?"), i ruoli sono
+  // il come ci si arriva. Vanno mostrate entrambe, non solo la seconda.
+  const cap = ruoli.capacita || {};
+  const elencoCap = el('ul', 'wp-pv-capacita');
+  if (cap.approvaPer?.length) elencoCap.appendChild(el('li', null, pvT('canApprove')));
+  if (cap.chiedePer?.length) elencoCap.appendChild(el('li', null, pvT('canRequest')));
+  if (!elencoCap.children.length) elencoCap.appendChild(el('li', 'wp-pv-cap-vuota', pvT('canNothingYet')));
+  card.appendChild(elencoCap);
+
+  const deroghe = renderDeroghe(ruoli.deroghe, account.admin && comeAltri
+    ? { accountId: comeAltri, onCambio: async () => { await caricaRuoli(); render(); } }
+    : {});
+  if (deroghe) {
+    card.appendChild(el('p', 'wp-pv-note', pvT('overridden')));
+    card.appendChild(deroghe);
+  }
+
+  card.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('refreshRoles'), async () => {
+    await caricaRuoli({ refresh: true }); render();
+  }));
+  return card;
+}
+
+function voceRuolo(etichetta, valore) {
+  const v = el('div', 'wp-pv-ruolo');
+  v.appendChild(el('span', 'wp-pv-label', etichetta));
+  v.appendChild(el('strong', 'wp-pv-ruolo-valore', valore));
+  return v;
 }
 
 function cardIndisponibile() {

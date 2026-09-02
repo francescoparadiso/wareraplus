@@ -279,6 +279,22 @@ function upsertDiscordAccount({ discordId, username, avatar }) {
   return getDb().prepare('SELECT * FROM account WHERE id = ?').get(info.lastInsertRowid);
 }
 
+/** Elenco per il pannello amministratore. Niente hash, niente token:
+ *  quello che non esce non si puo' sbagliare a mostrare. */
+function listAccounts() {
+  return getDb().prepare(`
+    SELECT a.id, a.discord_username, a.war_user_id, a.war_username, a.is_admin,
+           a.created_at, a.linked_at,
+           (SELECT COUNT(*) FROM role_override o WHERE o.account_id = a.id) AS deroghe
+    FROM account a ORDER BY a.created_at DESC LIMIT 500
+  `).all().map((r) => ({
+    id: r.id, discordUsername: r.discord_username,
+    warUserId: r.war_user_id, warUsername: r.war_username,
+    admin: Boolean(r.is_admin), createdAt: r.created_at, linkedAt: r.linked_at,
+    deroghe: r.deroghe,
+  }));
+}
+
 function getAccountById(id) {
   return getDb().prepare('SELECT * FROM account WHERE id = ?').get(id) || null;
 }
@@ -413,7 +429,7 @@ function dbStatus() {
 
 module.exports = {
   initDb, getDb, DATA_DIR,
-  upsertDiscordAccount, getAccountById, deleteAccount,
+  upsertDiscordAccount, getAccountById, deleteAccount, listAccounts,
   setWarIdentity, findAccountByWarUserId,
   getClaim, setClaim, deleteClaim, purgeExpiredClaims,
   syncAdminsFromEnv, setAdmin,

@@ -155,3 +155,50 @@ export async function statoVerifica() {
   if (!res.ok) return null;
   return (await res.json()).claim || null;
 }
+
+// ---------------------------------------------------------------------------
+// Ruoli e amministrazione
+// ---------------------------------------------------------------------------
+
+async function getJson(path) {
+  const token = getToken();
+  const res = await fetch(`${WARERA_PLUS_API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  const dati = await res.json().catch(() => ({}));
+  if (res.status === 401) { clearToken(); throw new ApiError('non_autenticato', 401); }
+  if (!res.ok) throw new ApiError(dati.error || 'errore_server', res.status);
+  return dati;
+}
+
+/** Ruoli propri, oppure — solo per un amministratore — quelli di un altro.
+ *  La lente `asAccount` è di SOLA LETTURA lato server: serve a capire
+ *  perché qualcuno non vede quello che dovrebbe, non ad agire al suo posto. */
+export function leggiRuoli({ asAccount = null, refresh = false } = {}) {
+  const q = new URLSearchParams();
+  if (asAccount) q.set('asAccount', String(asAccount));
+  if (refresh) q.set('refresh', '1');
+  const qs = q.toString();
+  return getJson(`/roles/me${qs ? `?${qs}` : ''}`);
+}
+
+export async function elencoAccount() {
+  return (await getJson('/roles/admin/accounts')).accounts || [];
+}
+
+export function metteDeroga(dati) {
+  return callOrThrow('/roles/admin/override', dati);
+}
+
+export function togliDeroga(dati) {
+  return callOrThrow('/roles/admin/override/remove', dati);
+}
+
+export function nominaAdmin(accountId, admin) {
+  return callOrThrow('/roles/admin/set-admin', { accountId, admin });
+}
+
+/** Collegamento a mano, per chi un'azienda non ce l'ha. */
+export function collegaAMano(accountId, warUserId, reason) {
+  return callOrThrow('/verify/admin-link', { accountId, warUserId, reason });
+}

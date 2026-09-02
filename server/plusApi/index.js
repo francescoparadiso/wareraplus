@@ -41,6 +41,7 @@ const {
 } = require('./db');
 const { buildAuthRouter, bearer, publicAccount } = require('./auth');
 const { buildVerifyRouter } = require('./verify');
+const { buildRolesRouter } = require('./roles');
 
 const WP_ENV = process.env.WP_ENV === 'live' ? 'live' : 'dev';
 const PORT = Number(process.env.PORT) || (WP_ENV === 'live' ? 3002 : 3003);
@@ -120,6 +121,7 @@ function requireAdmin(req, res, next) {
 }
 
 app.use('/verify', buildVerifyRouter({ requireAuth, requireAdmin }));
+app.use('/roles', buildRolesRouter({ requireAuth, requireAdmin }));
 
 app.use('/auth', buildAuthRouter({
   env: WP_ENV,

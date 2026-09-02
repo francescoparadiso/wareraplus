@@ -42,8 +42,7 @@ const {
   getDb, getAccountById, setWarIdentity, findAccountByWarUserId,
   getClaim, setClaim, deleteClaim, audit,
 } = require('./db');
-
-const API = 'https://api6.warera.io/trpc';
+const { trpcGet, trpcBatchSame } = require('./wareraApi');
 
 const CODE_TTL_MS = 30 * 60 * 1000;   // mezz'ora per andare in gioco e rinominare
 const MAX_COMPANIES = 20;
@@ -68,47 +67,6 @@ function generaCodice() {
 const normalizza = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 // ---------------------------------------------------------------------------
-// Chiamate a WarEra (tutte pubbliche)
-// ---------------------------------------------------------------------------
-
-/** Errore che distingue "il gioco dice di no" da "il gioco non risponde".
- *  Servono due messaggi diversi: dire "gioco non raggiungibile" a chi ha
- *  solo sbagliato personaggio lo manda a controllare la propria
- *  connessione invece del nome che ha scritto. */
-class TrpcError extends Error {
-  constructor(proc, codice, messaggio) {
-    super(`${proc}: ${messaggio}`);
-    this.codiceGioco = codice; // es. 'NOT_FOUND'
-  }
-}
-
-async function trpcGet(proc, input) {
-  const url = `${API}/${proc}?input=${encodeURIComponent(JSON.stringify(input))}`;
-  const res = await fetch(url, { headers: { accept: 'application/json' } });
-
-  // Un 404 di tRPC ha comunque un corpo con l'errore dentro: si legge
-  // quello invece di fermarsi al codice HTTP.
-  let body = null;
-  try { body = await res.json(); } catch { /* risposta non JSON */ }
-
-  if (body?.error) throw new TrpcError(proc, body.error?.data?.code || 'ERRORE', body.error.message);
-  if (!res.ok) throw new Error(`${proc}: HTTP ${res.status}`);
-  return body.result.data;
-}
-
-/** Più chiamate alla STESSA procedura in un solo GET. Il formato è quello
- *  che usa già src/diplomacy/utils.js: `proc,proc?batch=1&input={"0":…}`. */
-async function trpcBatch(proc, inputs) {
-  if (!inputs.length) return [];
-  const url = `${API}/${new Array(inputs.length).fill(proc).join(',')}`
-    + `?batch=1&input=${encodeURIComponent(JSON.stringify(Object.fromEntries(inputs.map((v, i) => [i, v]))))}`;
-  const res = await fetch(url, { headers: { accept: 'application/json' } });
-  if (!res.ok) throw new Error(`${proc} batch: HTTP ${res.status}`);
-  const body = await res.json();
-  return (Array.isArray(body) ? body : [body]).map((x) => x?.result?.data ?? null);
-}
-
-// ---------------------------------------------------------------------------
 // Rotte
 // ---------------------------------------------------------------------------
 
@@ -126,7 +84,7 @@ function buildVerifyRouter({ requireAuth, requireAdmin }) {
     try {
       const ids = (await trpcGet('search.searchUsers', { searchText: testo })) || [];
       const scelti = ids.slice(0, 8);
-      const utenti = await trpcBatch('user.getUserLite', scelti.map((userId) => ({ userId })));
+      const utenti = await trpcBatchSame('user.getUserLite', scelti.map((userId) => ({ userId })));
       res.json({
         candidati: scelti.map((id, i) => ({
           warUserId: id,
@@ -206,7 +164,7 @@ function buildVerifyRouter({ requireAuth, requireAdmin }) {
       const elenco = await trpcGet('company.getCompanies', { userId: claim.war_user_id, perPage: MAX_COMPANIES });
       const ids = (elenco?.items || []).slice(0, MAX_COMPANIES);
       if (!ids.length) return res.json({ ok: false, motivo: 'nessuna_azienda', aziende: [] });
-      aziende = (await trpcBatch('company.getById', ids.map((companyId) => ({ companyId }))))
+      aziende = (await trpcBatchSame('company.getById', ids.map((companyId) => ({ companyId }))))
         .filter(Boolean)
         // Doppio controllo della proprietà: il record dell'azienda porta
         // `user`, e ci si fida di quello invece che solo dell'elenco.
