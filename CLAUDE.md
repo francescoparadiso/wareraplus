@@ -45,22 +45,33 @@ Il tool esiste in **due copie pubblicate**, distinte dal branch:
 
 - **live** — branch `main` → `https://wareraplus.vercel.app/`. È quella che
   usano le persone e quella citata negli articoli.
-- **dev** — branch `dev` → preview Vercel
-  `https://wareraplus-git-dev-war-era-plus.vercel.app/`. Stesso codice, URL
-  diverso, **origin diverso**: quindi localStorage, service worker e cache
-  sono suoi e non toccano quelli del live. Quello è l'alias di BRANCH, valido
-  a ogni push; ogni deploy ha anche un URL col proprio hash, che cambia ogni
-  volta e non va salvato. Il preview è dietro Deployment Protection: si apre
-  loggati su Vercel, a chiunque altro chiede l'SSO (da disattivare in
-  Settings → Deployment Protection se serve mostrarlo a qualcuno).
+- **dev** — branch `dev` → `https://wareraplus-dev.vercel.app/`. Stesso
+  codice, URL diverso, **origin diverso**: quindi localStorage, service
+  worker e cache sono suoi e non toccano quelli del live.
 
-Il flusso è: si lavora e si spinge su `dev`, si guarda il preview, e solo
-quando va bene si porta su `main` (merge o fast-forward). Vercel costruisce
-un preview per ogni push su qualsiasi branch che non sia quello di
-produzione — non serve configurare nulla lato Vercel.
+⚠️ **Dal 2026-09-02 il dev NON è più un preview del progetto principale.**
+È un **secondo progetto Vercel** (`wareraplus-dev`) sullo stesso repo
+GitHub, che tratta `dev` come proprio *branch di produzione*. Il motivo:
+serviva un indirizzo apribile da chi non ha un account Vercel — i preview
+stanno dietro Deployment Protection e chiedono l'SSO a chiunque altro — e
+serviva stabile, perché finisce nell'allowlist CORS del server e nei
+redirect di Discord per l'area riservata. I preview veri degli altri branch
+restano protetti come prima.
 
-**Cosa cambia fra i due**, tutto deciso a build time da `VERCEL_ENV` e
-raccolto in `src/shared/deployEnv.js` (`IS_LIVE`, `DEPLOY_ENV`):
+La conseguenza da ricordare: **là dentro `VERCEL_ENV` vale `'production'`**,
+perché Vercel guarda il branch di produzione DEL PROGETTO e non il nome del
+branch. Per questo `vite.config.js` legge prima `WP_DEPLOY_ENV`, impostata a
+`preview` fra le env var di quel progetto: senza, il dev si crederebbe live
+e riaccenderebbe i tre contatori qui sotto. Se un giorno il cartellino `DEV`
+sparisce dal dev, è quella variabile che non è arrivata alla build.
+
+Il flusso è: si lavora e si spinge su `dev` — il che pubblica il progetto
+dev — e solo quando va bene si porta su `main` (merge o fast-forward), che
+pubblica il live.
+
+**Cosa cambia fra i due**, tutto deciso a build time da `WP_DEPLOY_ENV` /
+`VERCEL_ENV` e raccolto in `src/shared/deployEnv.js` (`IS_LIVE`,
+`DEPLOY_ENV`):
 
 | | live | dev / locale |
 |---|---|---|
@@ -69,6 +80,12 @@ raccolto in `src/shared/deployEnv.js` (`IS_LIVE`, `DEPLOY_ENV`):
 | Pill visite (`initVisitorCounter`, POST su `/visits`) | sì | no |
 | Service worker PWA | precache normale | `selfDestroying` |
 | Cartellino in alto a sinistra | — | `DEV` / `LOCAL` |
+| `<meta name="robots">` | — | `noindex, nofollow` |
+| `WARERA_PLUS_API_BASE` (area riservata) | `/warera-plus-api` | `/warera-plus-api-dev` |
+
+Le ultime due sono nate col dev pubblico: un URL raggiungibile da Google
+prima o poi porta un giocatore a segnalare un bug già corretto in live, e
+l'area riservata scrive su un database che non deve essere quello vero.
 
 Le prime tre sono **contatori pubblici condivisi**: il server di cache non sa
 da quale deploy arrivi una richiesta, quindi senza questo gate ogni ricarica
