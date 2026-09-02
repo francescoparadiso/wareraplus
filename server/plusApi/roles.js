@@ -57,6 +57,14 @@ const CARICHE_APPROVAZIONE = new Set(['president', 'vicePresident', 'minOfDefens
 // Chi può CHIEDERE un contratto per la propria unità.
 const RUOLI_MU_RICHIESTA = new Set(['owner', 'commander', 'manager']);
 
+// Chi può decidere CON CHI la nazione lavora (la lista in policy.js).
+// Tutto il governo, non solo chi approva: è una scelta politica, e
+// limitarla al ministro della difesa bloccherebbe tutto quando manca.
+// Il congresso no: è parlamento, non governo.
+const CARICHE_GOVERNO = new Set([
+  'president', 'vicePresident', 'minOfDefense', 'minOfForeignAffairs', 'minOfEconomy',
+]);
+
 /**
  * Ruoli DERIVATI dai dati di gioco, senza deroghe.
  * Costo: due richieste HTTP (la seconda in batch), entrambe pubbliche.
