@@ -28,7 +28,11 @@
 body.light-theme #wp-mu-root { color: #1f2430; }
 
 .wp-mu-page {
-  max-width: 1180px;
+  /* WarEra+: 1180px era la larghezza di una colonna di LETTURA, ma il
+     contenuto di questa vista è una tabella a quattordici colonne: con
+     quel tetto la riga non ci stava su nessuno schermo e si finiva a
+     trascinare in orizzontale sempre. Qui comanda la tabella. */
+  max-width: 1400px;
   margin: 0 auto;
   padding: 22px 18px 90px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -118,20 +122,27 @@ body.light-theme .wp-mu-count { color: #5b6473; }
    che non si sarebbe potuta far scorrere in orizzontale né collassare su
    mobile con la stessa facilità.
 
-   Il contenitore scorre in orizzontale sotto una certa larghezza invece di
-   comprimere le colonne fino a renderle illeggibili. */
+   Le colonne si STRINGONO al restringersi della finestra invece di far
+   scorrere la riga: fino al layout compatto di mobile la tabella intera
+   deve stare a schermo senza trascinamento (richiesta esplicita). Lo
+   scorrimento resta solo come ultima rete, sotto ai minimi qui sotto. */
 .wp-mu-table {
-  /* #, nome, nazione, composizione, guerra/eco, membri, poi le sei classifiche
-     piu' la colonna "Oggi" (ricavata dal settimanale, le sta subito accanto) */
-  --wp-mu-cols: 34px minmax(130px, 1.3fr) minmax(100px, .9fr) minmax(146px, 1.1fr) minmax(96px, .8fr) 50px repeat(7, minmax(74px, .7fr));
+  /* #, nome, nazione, composizione, guerra/eco, membri, referral, poi le sei
+     classifiche piu' la colonna "Oggi" (ricavata dal settimanale, le sta
+     subito accanto) */
+  --wp-mu-cols: 30px minmax(104px, 1.15fr) minmax(76px, .75fr) minmax(112px, 1fr) minmax(80px, .72fr) 44px repeat(8, minmax(58px, .7fr));
   overflow-x: auto;
 }
 .wp-mu-thead, .wp-mu-row {
   display: grid;
   grid-template-columns: var(--wp-mu-cols);
   align-items: center;
-  gap: 8px;
-  min-width: 1210px; /* +1 colonna ("Oggi") rispetto ai 1130px originali */
+  gap: 6px;
+  /* Somma dei minimi delle colonne più i gap: sotto questa soglia si
+     scorre, sopra le colonne si allargano da sole con le fr. Sta sotto
+     al max-width della pagina apposta — la riga intera deve entrare
+     senza trascinamento su un portatile normale. */
+  min-width: 990px;
 }
 .wp-mu-thead {
   position: sticky;
@@ -154,6 +165,15 @@ body.light-theme .wp-mu-thead { background: #f4f6fa; border-bottom-color: #d5dae
   text-align: left;
   cursor: pointer;
   line-height: 1.2;
+  /* WarEra+: senza min-width:0 la cella di intestazione non scende sotto
+     la larghezza della sua parola ("REPUTAZIONE") e allarga la griglia
+     oltre lo schermo — erano le INTESTAZIONI a far scorrere la tabella,
+     non le righe, che stavano già dentro. Sopra al minimo non tronca
+     niente: l’ellissi entra solo quando lo spazio manca davvero. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .wp-mu-th-static { cursor: default; }
 .wp-mu-th-num { text-align: right; }
@@ -642,6 +662,20 @@ body.light-theme .wp-mu-rank-country { color: #5b6473; }
 .wp-mu-rank-value { font-size: 13px; font-weight: 700; white-space: nowrap; }
 
 /* ── Mobile ────────────────────────────────────────────────── */
+/* ── Fascia intermedia (portatili piccoli, tablet in orizzontale) ──
+   Fra il layout pieno e quello compatto di mobile la tabella NON deve
+   scorrere: le colonne di testo scendono a minmax(0, …) — hanno già
+   l’ellissi, quindi possono stringersi quanto serve — e cadono i
+   numerini di posizione in classifica (#12), che sono la parte meno
+   necessaria di una cella numerica. Stessa rinuncia già fatta su mobile. */
+@media (max-width: 1120px) {
+  .wp-mu-table {
+    --wp-mu-cols: 26px minmax(0, 1.15fr) minmax(0, .75fr) minmax(0, 1fr) minmax(0, .72fr) 40px repeat(8, minmax(52px, .7fr));
+  }
+  .wp-mu-thead, .wp-mu-row { min-width: 620px; gap: 5px; }
+  .wp-mu-cell-rank { display: none; }
+}
+
 @media (max-width: 768px) {
   .wp-mu-page { padding: 16px 12px 90px; }
   .wp-mu-toolbar { gap: 8px; }
@@ -677,8 +711,13 @@ body.light-theme .wp-mu-rank-country { color: #5b6473; }
   .wp-mu-thead, .wp-mu-row { min-width: 0; gap: 4px; font-size: 12px; }
   .wp-mu-thead { padding: 0 4px 6px; }
   .wp-mu-row { padding: 7px 4px; }
+  /* Cade anche la 7ª (Referral): su schermo stretto le colonne visibili
+     devono restare le stesse di prima — #, nome, composizione, guerra/eco,
+     membri, danni settimanali — altrimenti la nuova colonna entrerebbe al
+     posto del settimanale, che è il metro di paragone principale. */
   .wp-mu-th:nth-child(3), .wp-mu-row > :nth-child(3),
-  .wp-mu-th:nth-child(n+8), .wp-mu-row > :nth-child(n+8) { display: none; }
+  .wp-mu-th:nth-child(7), .wp-mu-row > :nth-child(7),
+  .wp-mu-th:nth-child(n+9), .wp-mu-row > :nth-child(n+9) { display: none; }
   .wp-mu-cell-ps { gap: 5px; }
   .wp-mu-ps-chip { font-size: 11.5px; }
   .wp-mu-cell-country-name { font-size: 11px; }

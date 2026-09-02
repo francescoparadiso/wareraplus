@@ -38,6 +38,7 @@ import { muT } from './i18n.js';
 import { PLAYSTYLE_GROUPS } from './playstyle.js';
 import { avatarImg, countryName, dominantCountry, escapeHtml, flagImg, fmtCompact, tierOf } from './ui.js';
 import { ensureDailyDamage, muDamageToday } from '../shared/dailyDamage.js';
+import { ensureMuReferrals, muReferrals, muReferralsInfo } from './referrals.js';
 
 const CHUNK = 60;
 
@@ -58,6 +59,10 @@ const SORTS = {
   name:    { get: m => m.name || '', text: true },
   country: { get: m => countryName(m.country), text: true },
   members: { get: m => m.memberCount ?? 0 },
+  // Referral: -1 (non 0) per chi non ha ancora il dato, cosi' ordinando per
+  // questa colonna le unita' di cui non si sa nulla restano in fondo invece
+  // di mescolarsi a quelle che hanno davvero zero inviti.
+  referrals: { get: m => muReferrals(m) ?? -1 },
   // Ordina per QUOTA di membri in modalità guerra, non per numero assoluto:
   // altrimenti in cima ci sarebbero solo le unità grandi, che è già quello
   // che dice la colonna Membri.
@@ -203,6 +208,10 @@ export function renderMuList(host, context) {
   // La colonna "Oggi" arriva dal server di cache: quando lo scatto è pronto
   // si ridisegna, senza far aspettare l'elenco (che è già tutto in memoria).
   ensureDailyDamage().then(baseline => { if (baseline && hostEl === host) paint(); });
+  // Stessa cosa per i referral: la classifica globale (una GET, vedi
+  // src/mu/referrals.js) arriva dopo il primo disegno e la colonna si
+  // riempie da sola. Finche' non c'e', resta un trattino.
+  ensureMuReferrals().then(map => { if (map && hostEl === host) paint(); });
 }
 
 function headerHtml() {
@@ -216,6 +225,7 @@ function headerHtml() {
       ${th('defacto', muT('colComposition'), 'wp-mu-th-left')}
       ${th('playstyle', muT('colPlaystyle'), 'wp-mu-th-left')}
       ${th('members', muT('colMembers'), 'wp-mu-th-num')}
+      ${th('referrals', muT('colReferrals'), 'wp-mu-th-num')}
       ${METRICS.map((m, i) => th(m.id, muT(m.short), 'wp-mu-th-num')
           // "Oggi" sta subito dopo il settimanale, da cui è ricavata.
           + (i === 0 ? th('today', muT('colToday'), 'wp-mu-th-num') : '')).join('')}
@@ -339,6 +349,35 @@ function todayCell(m) {
   </span>`;
 }
 
+/* ── Colonna "Referral" (WarEra+) ──
+   Quanti giocatori hanno portato nel gioco, in tutto, i membri di questa
+   unita'. WarEra non pubblica chi ha invitato chi (vedi il blocco in testa
+   a src/mu/referrals.js): questo e' la somma dei contatori personali dei
+   membri, cosi' come la classifica globale li vedeva.
+
+   Il tooltip porta sempre il massimo singolo perche' la distribuzione e'
+   estremamente concentrata — misurato il 2026-09-02: la prima unita' al
+   mondo ha 519 referral, di cui 515 di un solo membro. Senza quel numero
+   la colonna farebbe leggere come reclutamento di squadra quello che quasi
+   sempre e' il lavoro di una persona. */
+function referralsCell(m) {
+  const info = muReferralsInfo(m);
+  const cls = `wp-mu-cell-num${sortId === 'referrals' ? ' wp-mu-cell-sorted' : ''}`;
+  if (!info) return `<span class="${cls}"><span class="wp-mu-cell-empty">—</span></span>`;
+
+  // Copertura: quanti membri la classifica vedeva davvero in questa unita'.
+  // Si scrive solo quando NON coincide col totale dei membri, come fa la
+  // colonna Composizione — un "24/24" su ogni riga sarebbe rumore.
+  const total = m.memberCount ?? info.known;
+  const parts = [`${info.total} ${muT('colReferrals')}`];
+  if (info.known < total) parts.push(`${info.known}/${total} ${muT('refRanked')}`);
+  if (info.total > 0) parts.push(`${muT('refTop')}: ${info.top}`);
+
+  return `<span class="${cls}" title="${escapeHtml(parts.join(' · '))}">
+    ${info.total ? escapeHtml(fmtCompact(info.total)) : '<span class="wp-mu-cell-empty">0</span>'}
+  </span>`;
+}
+
 function rowHtml(m, position) {
   // Il colore della riga segue la colonna su cui si ordina: se non è una
   // classifica (nome, membri, nazione…) si ricade sul tier dei danni
@@ -362,6 +401,7 @@ function rowHtml(m, position) {
       ${composition}
       ${playstyleCell(m)}
       <span class="wp-mu-cell-num">${m.memberCount}</span>
+      ${referralsCell(m)}
       ${METRICS.map((metric, i) => {
         const v = metricValue(m, metric.id);
         const t = tierOf(m.rankings?.[metric.id]);
