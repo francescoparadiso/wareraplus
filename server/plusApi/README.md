@@ -80,6 +80,22 @@ La barra finale in `proxy_pass http://127.0.0.1:3002/` **non è decorativa**:
 è ciò che toglie il prefisso, così Express vede `/health` e non
 `/warera-plus-api/health`.
 
+## Migrazioni del database
+
+Girano da sole all'avvio (`db.js: migrate()`), sono ripetibili e non
+chiedono niente: dopo lo scp basta il `pm2 restart`. Valgono per **tutti e
+due** i database — `data/` del live e `data-dev/` del dev — perché ognuno
+le esegue quando il suo processo riparte.
+
+Fatte finora:
+
+- `account.is_admin`
+- `request.apert_min_damage`, `request.apert_budget`
+- `request_allow.nome` — il nome di chi si ammette o si esclude, com'era
+  al momento dell'aggiunta. Il server non sa come si chiama un'unità
+  militare, quindi senza questa colonna una voce riletta il giorno dopo
+  era ventiquattro caratteri esadecimali.
+
 ## Aggiornare
 
 ```bash

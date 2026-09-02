@@ -276,6 +276,17 @@ function migrate() {
       console.log(`[plusApi] migrazione: aggiunta request.${nome}`);
     }
   }
+
+  // 2026-09-03 - il NOME di chi si ammette o si esclude, com'era quando lo
+  // si e' aggiunto. Senza, riaperta la lista il giorno dopo, una voce e'
+  // ventiquattro caratteri esadecimali: il server non sa come si chiama
+  // un'unita' militare e il client lo saprebbe solo rifacendo la ricerca.
+  // Il nome vero resta quello del gioco - questo e' un'etichetta per
+  // rileggere la propria lista, e va detto se un giorno divergesse.
+  if (!colonne('request_allow').includes('nome')) {
+    db.exec('ALTER TABLE request_allow ADD COLUMN nome TEXT');
+    console.log('[plusApi] migrazione: aggiunta request_allow.nome');
+  }
 }
 
 // ---------------------------------------------------------------------------

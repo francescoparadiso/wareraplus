@@ -262,12 +262,16 @@ export function leggiListaPermessi(countryId, { asAccount = null } = {}) {
   return getJson(conLente(`/policy/${countryId}`, asAccount));
 }
 
-export function aggiungiAllaLista(countryId, { entryType, entryId, mode, nota }) {
-  return callOrThrow(`/policy/${countryId}`, { entryType, entryId, mode, nota });
+/** Ammette o esclude una o piu' voci in un colpo solo. Il server accetta
+ *  sia la forma singola sia `voci: [...]`; qui si manda sempre l'elenco,
+ *  perche' aggiungere sei nazioni una alla volta voleva dire sei giri di
+ *  richiesta e ricarica, con la pagina che saltava sotto le mani. */
+export function aggiungiAllaLista(countryId, voci) {
+  return callOrThrow(`/policy/${countryId}`, { voci: [].concat(voci) });
 }
 
-export function togliDallaLista(countryId, { entryType, entryId }) {
-  return callOrThrow(`/policy/${countryId}/remove`, { entryType, entryId });
+export function togliDallaLista(countryId, voci) {
+  return callOrThrow(`/policy/${countryId}/remove`, { voci: [].concat(voci) });
 }
 
 /** Unità militari per nome. Pubblica, una chiamata per ricerca: serve ai

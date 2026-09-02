@@ -86,32 +86,61 @@ export function schieramenti(b) {
  * @param {object[]} battaglie   da /battles
  * @param {Set<string>} nazioniAmmesse
  */
+/**
+ * Una battaglia grezza nella forma che serve alla vista. Estratta da
+ * preparaBattaglie() perche' ora la vogliono in due: l'elenco di dove
+ * portare l'unita' (filtrato sulle nazioni ammesse) e il TAVOLO, che
+ * raggruppa le richieste per battaglia e quindi ha bisogno anche di
+ * quelle su cui questa persona non potrebbe mai chiedere — un ministro
+ * non chiede niente a nessuno, ma le richieste le deve vedere.
+ *
+ * `nazioniAmmesse` resta facoltativo: senza, `ammessa` e `lati` sono
+ * semplicemente vuoti, e nessuno dei due chiamanti se ne accorge.
+ */
+export function preparaBattaglia(b, nazioniAmmesse) {
+  const cr = b.currentRound || {};
+  const ammesse = nazioniAmmesse || new Set();
+  return {
+    raw: b,
+    id: b._id,
+    etichetta: etichettaBattaglia(b),
+    regione: nomeRegione(b.defender?.region) || nomeRegione(b.attacker?.region),
+    danno: dannoBattaglia(b),
+    // Il danno diviso per schieramento: "chi sta picchiando" e' una
+    // domanda diversa da "quanto si sta picchiando", e per decidere
+    // dove portare un'unita' conta la prima.
+    parti: schieramenti(b).map((sd) => ({
+      ...sd,
+      danno: cr[sd.side]?.damages || 0,
+      colpi: cr[sd.side]?.hitCount || 0,
+      colore: coloreNazione(sd.countryId),
+      bandiera: urlBandiera(sd.countryId),
+      ammessa: ammesse.has(sd.countryId),
+    })),
+    inizio: b.createdAt ? new Date(b.createdAt).getTime() : null,
+    lati: schieramenti(b).filter((sd) => ammesse.has(sd.countryId)),
+  };
+}
+
+/**
+ * Le battaglie vive indicizzate per id. Il tavolo ne ha bisogno per
+ * dire, riga per riga, se quella battaglia e' ancora aperta e come sta
+ * andando: una richiesta senza il suo campo di battaglia accanto e' una
+ * cifra senza il fatto che la giustifica.
+ */
+export function indicizzaBattaglie(battaglie, nazioniAmmesse) {
+  const m = new Map();
+  for (const b of battaglie || []) {
+    if (!b?._id) continue;
+    m.set(b._id, preparaBattaglia(b, nazioniAmmesse));
+  }
+  return m;
+}
+
 export async function preparaBattaglie(battaglie, nazioniAmmesse) {
   const utili = (battaglie || [])
     .filter((b) => b.isActive !== false)
-    .map((b) => {
-      const cr = b.currentRound || {};
-      return {
-        raw: b,
-        id: b._id,
-        etichetta: etichettaBattaglia(b),
-        regione: nomeRegione(b.defender?.region) || nomeRegione(b.attacker?.region),
-        danno: dannoBattaglia(b),
-        // Il danno diviso per schieramento: "chi sta picchiando" e' una
-        // domanda diversa da "quanto si sta picchiando", e per decidere
-        // dove portare un'unita' conta la prima.
-        parti: schieramenti(b).map((sd) => ({
-          ...sd,
-          danno: cr[sd.side]?.damages || 0,
-          colpi: cr[sd.side]?.hitCount || 0,
-          colore: coloreNazione(sd.countryId),
-          bandiera: urlBandiera(sd.countryId),
-          ammessa: nazioniAmmesse.has(sd.countryId),
-        })),
-        inizio: b.createdAt ? new Date(b.createdAt).getTime() : null,
-        lati: schieramenti(b).filter((sd) => nazioniAmmesse.has(sd.countryId)),
-      };
-    })
+    .map((b) => preparaBattaglia(b, nazioniAmmesse))
     .filter((b) => b.lati.length)
     .sort((x, y) => y.danno - x.danno);
 
@@ -181,6 +210,26 @@ export async function caricaFinanziatori() {
       .catch(() => null);
   }
   return _bonificiPromessa;
+}
+
+/**
+ * I soldi arrivati nel tesoro di UNA nazione in una finestra di tempo,
+ * gia' sommati. E' la domanda del ministro — "questa battaglia me l'ha
+ * pagata qualcun altro?" — che e' diversa da quella del comandante, a cui
+ * serve sapere se il tesoro si sta riempiendo per chiunque dei due.
+ *
+ * Ritorna null quando i bonifici non sono ancora arrivati: "non lo
+ * sappiamo" e "nessuno ha mandato niente" non sono la stessa cosa e non
+ * devono disegnare lo stesso zero.
+ */
+export function finanziamentiRicevuti(countryId, da, a) {
+  if (!_bonifici || !countryId || !da) return null;
+  const voci = transfersFor(_bonifici, countryId, da, a);
+  return {
+    fuoriPortata: windowIsShort(_bonifici, da),
+    totale: voci.reduce((t, v) => t + (v.money || 0), 0),
+    voci,
+  };
 }
 
 /** I finanziatori dei due schieramenti di una battaglia, gia' pronti da

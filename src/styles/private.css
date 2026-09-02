@@ -29,6 +29,13 @@
   --pv-ink: #e6edf3;
   --pv-ink-soft: #8b949e;
   --pv-surface: rgba(255, 255, 255, .03);
+  /* Un secondo livello di superficie: le tessere di "chi puo' biddare"
+     stanno DENTRO un riquadro che usa gia' --pv-surface, e la stessa
+     tinta sulla stessa tinta non si vede. Sta fra le variabili e non
+     scritto a mano nella regola perche' un rgba bianco fisso sparisce
+     sul tema chiaro. */
+  --pv-surface-2: rgba(255, 255, 255, .055);
+  --pv-hover: rgba(255, 255, 255, .05);
   --pv-rule: rgba(255, 255, 255, .10);
   --pv-danger: #f0776c;
 
@@ -112,6 +119,8 @@ body.light-theme #wp-private-root {
   --pv-ink: #1a1a1a;
   --pv-ink-soft: #4a5560;
   --pv-surface: rgba(0, 0, 0, .025);
+  --pv-surface-2: rgba(0, 0, 0, .05);
+  --pv-hover: rgba(0, 0, 0, .04);
   --pv-rule: rgba(0, 0, 0, .12);
   --pv-danger: #b42318;
 }
@@ -810,3 +819,269 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
   border-radius: 0 6px 6px 0;
   font-size: .8rem; color: var(--pv-ink-soft);
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   ⚠️ `hidden` DEVE VINCERE
+   ------------------------------------------------------------------
+   `[hidden]` nel foglio del browser vale solo `display: none`, e
+   qualunque classe con un `display` esplicito lo batte. `.wp-pv-campo`
+   e' `flex`: i blocchi nascosti del selettore restavano quindi a
+   schermo, e la lista permessi mostrava insieme il menu' delle nazioni
+   e la ricerca delle unita' — due campi identici uno sotto l'altro, che
+   sembravano un errore di disegno e invece erano due controlli veri
+   sovrapposti.
+   Vale per tutta la vista, non solo per il selettore: e' una classe di
+   bug che si ripresenta ogni volta che si nasconde un contenitore.
+   ══════════════════════════════════════════════════════════════════ */
+#wp-private-root [hidden] { display: none !important; }
+
+.wp-pv-h3 {
+  margin: 0 0 .1rem;
+  font-size: .85rem; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: var(--pv-accent);
+  width: 100%;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   IL CARRELLO DEL SELETTORE
+   ------------------------------------------------------------------
+   Nazioni, unita' e alleanze si scelgono anche mescolate e si
+   confermano una volta sola. Il tipo si legge sul gettone perche' una
+   volta nel carrello "Iraq" e "Praetorians" si somigliano troppo.
+   ══════════════════════════════════════════════════════════════════ */
+.wp-pv-selettore-azioni { justify-content: flex-start; }
+
+.wp-pv-gettoni {
+  display: flex; flex-wrap: wrap; gap: .35rem;
+  width: 100%; min-height: 1.9rem;
+  align-items: flex-start;
+}
+.wp-pv-gettoni-vuoto { margin: 0; align-self: center; }
+
+.wp-pv-gettone {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .22rem .3rem .22rem .5rem;
+  border: 1px solid var(--pv-rule); border-radius: 999px;
+  background: var(--pv-surface);
+  font-size: .8rem; max-width: 100%;
+}
+.wp-pv-gettone-tipo {
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--pv-ink-soft);
+}
+.wp-pv-gettone-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-pv-gettone-country { border-color: rgba(129, 140, 248, .45); }
+.wp-pv-gettone-alliance { border-color: rgba(212, 160, 23, .45); }
+.wp-pv-gettone-mu { border-color: rgba(240, 119, 108, .45); }
+
+.wp-pv-gettone-via {
+  width: 1.15rem; height: 1.15rem; flex: none;
+  display: grid; place-items: center;
+  border: none; border-radius: 999px;
+  background: transparent; color: var(--pv-ink-soft);
+  font-size: .95rem; line-height: 1; cursor: pointer;
+  padding: 0;
+}
+.wp-pv-gettone-via:hover { background: rgba(240, 119, 108, .18); color: var(--pv-danger); }
+.wp-pv-gettone-via:disabled { opacity: .4; cursor: default; }
+
+/* ══════════════════════════════════════════════════════════════════
+   IL TAVOLO: I QUATTRO NUMERI, I FILTRI, I GRUPPI
+   ------------------------------------------------------------------
+   In cima le cifre che fanno decidere, subito sotto i filtri, poi una
+   scheda per battaglia. L'ordine e' quello: chi apre il tavolo vuole
+   prima sapere quanto gli costa, poi guardare i dettagli.
+   ══════════════════════════════════════════════════════════════════ */
+.wp-pv-totali {
+  display: grid; width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: .5rem;
+  padding: .75rem;
+  border: 1px solid var(--pv-rule); border-radius: 10px;
+  background: var(--pv-surface);
+}
+.wp-pv-totale-voce { display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
+.wp-pv-totale-val {
+  font-size: 1.15rem; font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+/* Quello che aspetta una decisione e' l'unico numero su cui si puo'
+   ancora agire: gli altri tre sono cronaca. */
+.wp-pv-totale-attesa .wp-pv-totale-val { color: var(--pv-accent); }
+.wp-pv-totale-ric .wp-pv-totale-val { color: #2f9e5f; }
+
+.wp-pv-barra-filtri {
+  display: flex; flex-wrap: wrap; gap: .6rem;
+  align-items: flex-end; justify-content: space-between;
+  width: 100%;
+}
+.wp-pv-chip-riga { display: flex; flex-wrap: wrap; gap: .35rem; }
+.wp-pv-chip {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .3rem .6rem;
+  border: 1px solid var(--pv-rule); border-radius: 999px;
+  background: transparent; color: var(--pv-ink-soft);
+  font: inherit; font-size: .82rem; cursor: pointer;
+}
+.wp-pv-chip:hover:not(:disabled) { border-color: var(--pv-accent); color: var(--pv-ink); }
+.wp-pv-chip.attivo {
+  border-color: transparent;
+  background: var(--pv-accent-soft); color: var(--pv-accent);
+}
+/* Spenta ma non tolta: una linguetta che sparisce quando si svuota fa
+   ballare la barra, e cercarla dov'era ieri e' peggio che vederla
+   grigia. */
+.wp-pv-chip:disabled { opacity: .38; cursor: default; }
+.wp-pv-chip-n { font-variant-numeric: tabular-nums; opacity: .75; }
+
+.wp-pv-barra-coda { display: flex; gap: .5rem; align-items: flex-end; margin-left: auto; }
+.wp-pv-barra-coda .wp-pv-campo { flex: none; }
+.wp-pv-select-piccola { font-size: .82rem; padding: .3rem .5rem; }
+
+.wp-pv-gruppi { display: flex; flex-direction: column; gap: .7rem; width: 100%; }
+
+.wp-pv-gruppo {
+  border: 1px solid var(--pv-rule); border-radius: 10px;
+  background: var(--pv-surface);
+  overflow: hidden;
+}
+.wp-pv-gruppo-testa {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  width: 100%; padding: .6rem .75rem;
+  border: none; background: transparent;
+  color: var(--pv-ink); font: inherit; text-align: left; cursor: pointer;
+  border-bottom: 1px solid var(--pv-rule);
+}
+.wp-pv-gruppo.chiuso .wp-pv-gruppo-testa { border-bottom: none; }
+.wp-pv-gruppo-testa:hover { background: var(--pv-hover); }
+.wp-pv-gruppo-freccia { color: var(--pv-ink-soft); font-size: .8rem; flex: none; }
+.wp-pv-gruppo-nome {
+  font-weight: 600;
+  /* Su schermo stretto il nome della battaglia e' lungo e andava a capo
+     da solo, lasciando la freccia orfana su una riga tutta sua. Cosi'
+     resta accanto alla freccia e si tronca. */
+  flex: 1 1 8rem; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wp-pv-gruppo-testa .wp-pv-badge { margin-left: 0; }
+.wp-pv-gruppo-n { margin-left: auto; font-size: .78rem; color: var(--pv-ink-soft); }
+.wp-pv-gruppo-tot {
+  font-variant-numeric: tabular-nums; font-size: .82rem; color: var(--pv-accent);
+}
+
+.wp-pv-gruppo-andamento {
+  display: flex; flex-direction: column; gap: .3rem;
+  padding: .6rem .75rem;
+  border-bottom: 1px solid var(--pv-rule);
+}
+.wp-pv-gruppo-taglia { display: flex; align-items: baseline; gap: .4rem; flex-wrap: wrap; }
+.wp-pv-gruppo-taglia strong { font-variant-numeric: tabular-nums; }
+
+.wp-pv-gruppo-soldi {
+  display: flex; flex-wrap: wrap; gap: .4rem .9rem;
+  padding: .5rem .75rem;
+  border-bottom: 1px solid var(--pv-rule);
+}
+.wp-pv-gsoldo { display: inline-flex; align-items: baseline; gap: .35rem; }
+.wp-pv-gsoldo strong { font-variant-numeric: tabular-nums; }
+.wp-pv-gsoldo-attesa strong { color: var(--pv-accent); }
+.wp-pv-gsoldo-ric strong { color: #2f9e5f; }
+
+.wp-pv-gruppo .wp-pv-righe { padding: .6rem .75rem; }
+
+/* Due unita' sulla stessa battaglia possono servire lati opposti: e'
+   l'unica cosa che distingue le due righe una volta che il nome della
+   battaglia e' salito nella testa del gruppo. */
+.wp-pv-req-lato {
+  font-size: .78rem; color: var(--pv-ink-soft);
+  padding-left: .5rem; border-left: 1px solid var(--pv-rule);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   CHI PUO' BIDDARE PER NOI
+   ------------------------------------------------------------------
+   Le tessere sono l'elenco vero — quello che risponde alla domanda. Le
+   correzioni stanno sotto, piu' piccole: sono il come, non il cosa.
+   Il bordo colorato dice da dove viene il permesso, perche' "perche'
+   costui puo' chiedermi dei soldi" e' la domanda che viene subito dopo.
+   ══════════════════════════════════════════════════════════════════ */
+.wp-pv-risolta {
+  display: flex; flex-direction: column; gap: .5rem;
+  width: 100%;
+  padding: .75rem;
+  border: 1px solid var(--pv-rule); border-radius: 10px;
+  background: var(--pv-surface);
+}
+.wp-pv-risolta-testa { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.wp-pv-risolta-testa .wp-pv-h3 { width: auto; margin: 0; }
+.wp-pv-risolta-testa .wp-pv-badge { margin-left: 0; }
+.wp-pv-risolta .wp-pv-suggerimento { margin: 0; }
+.wp-pv-input-filtro { max-width: 18rem; }
+
+.wp-pv-tessere {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: .4rem;
+  width: 100%;
+}
+.wp-pv-tessera {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .4rem .5rem;
+  border: 1px solid var(--pv-rule); border-left-width: 3px; border-radius: 8px;
+  background: var(--pv-surface-2);
+  min-width: 0;
+}
+.wp-pv-tessera-bandiera {
+  width: 1.35rem; height: 1rem; flex: none;
+  object-fit: cover; border-radius: 2px;
+}
+.wp-pv-tessera-testi { display: flex; flex-direction: column; min-width: 0; gap: .05rem; }
+.wp-pv-tessera-nome {
+  font-size: .85rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wp-pv-tessera-via {
+  font-size: .7rem; color: var(--pv-ink-soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wp-pv-via-propria { border-left-color: var(--pv-accent); }
+.wp-pv-via-alleanza { border-left-color: rgba(129, 140, 248, .45); }
+.wp-pv-via-aggiunta { border-left-color: #2f9e5f; }
+.wp-pv-via-alleanza_aggiunta { border-left-color: #d4a017; }
+
+.wp-pv-tessera-via-btn {
+  margin-left: auto; flex: none;
+  padding: .15rem .45rem;
+  border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: var(--pv-ink-soft);
+  font: inherit; font-size: .72rem; cursor: pointer;
+}
+.wp-pv-tessera:hover .wp-pv-tessera-via-btn { border-color: var(--pv-rule); }
+.wp-pv-tessera-via-btn:hover { border-color: var(--pv-danger); color: var(--pv-danger); }
+.wp-pv-tessera-via-btn:disabled { opacity: .4; cursor: default; }
+
+.wp-pv-unita-extra { display: flex; flex-direction: column; gap: .3rem; width: 100%; }
+
+.wp-pv-correzioni {
+  display: flex; flex-direction: column; gap: .4rem;
+  width: 100%; margin-top: .3rem;
+}
+.wp-pv-correzioni .wp-pv-note { margin: 0; }
+.wp-pv-lista-tipo {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--pv-ink-soft);
+}
+
+@media (max-width: 560px) {
+  .wp-pv-totali { grid-template-columns: 1fr 1fr; }
+  .wp-pv-barra-coda { margin-left: 0; width: 100%; }
+  .wp-pv-tessere { grid-template-columns: 1fr; }
+}
+
+/* Il menu' ammetti/escludi e il bottone stanno sulla stessa riga, ma il
+   primo e' un campo (`flex: 1`) e si prendeva tutta la larghezza
+   schiacciando il secondo contro il bordo. Qui il menu' vale quanto gli
+   serve e il bottone resta leggibile. */
+.wp-pv-form-lista > .wp-pv-riga { align-items: flex-end; }
+.wp-pv-form-lista > .wp-pv-riga > .wp-pv-campo { flex: 0 0 auto; min-width: 9rem; }
