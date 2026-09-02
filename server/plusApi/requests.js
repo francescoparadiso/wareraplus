@@ -56,6 +56,9 @@ function pubblica(r) {
     status: r.status,
     approvedAt: r.approved_at, openedAt: r.opened_at,
     esito: r.esito, winnerMu: r.winner_mu, finalPerK: r.final_per_k,
+    // Com'e' stata aperta davvero: la vista mostra "chiesto X, aperto Y"
+    // quando differiscono, che dice piu' di un'etichetta.
+    apertMinDamage: r.apert_min_damage, apertBudget: r.apert_budget,
     verificatoIl: r.verificato_il,
     createdAt: r.created_at, updatedAt: r.updated_at,
     // Chi ha fatto cosa, per nome: l'archivio serve a questo.

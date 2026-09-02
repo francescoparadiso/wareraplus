@@ -116,10 +116,33 @@ function corrisponde(a, r) {
   return true;
 }
 
-/** Quanto i parametri dell'asta si scostano da quelli concordati. */
+/**
+ * "Aperta con parametri diversi" solo quando lo e' DAVVERO.
+ *
+ * ⚠️ I contratti non si aprono quasi mai identici alla richiesta: si
+ * chiedono 4 milioni a 0,10 e se ne aprono 3,9 a 0,08. E' negoziazione
+ * normale, non uno scostamento da segnalare. Una tolleranza stretta —
+ * la prima versione era al 10% — avrebbe marcato come anomalia il caso
+ * ordinario, e una colonna che grida al lupo si smette di guardarla.
+ *
+ * Le soglie sono larghe apposta: qui non si cerca la differenza, si
+ * cerca il CONTRATTO DIVERSO. Ridurre il danno di un terzo o dimezzare
+ * il compenso non e' un arrotondamento, e' un altro accordo.
+ *
+ * I valori veri vengono registrati SEMPRE (apert_min_damage,
+ * apert_budget) a prescindere dal verdetto: la vista mostra "chiesto X,
+ * aperto Y", che dice piu' di qualunque etichetta.
+ */
+const TOLLERANZA_DANNO = 0.30;
+const TOLLERANZA_COMPENSO = 0.40;
+
 function parametriDiversi(a, r) {
-  const scosta = (x, y) => (x == null || y == null) ? false : Math.abs(x - y) > Math.max(1, y * 0.1);
-  return scosta(a.minimumDamage, r.min_damage) || scosta(a.budget, r.budget);
+  const fuori = (vero, chiesto, soglia) => {
+    if (vero == null || !chiesto) return false;
+    return Math.abs(vero - chiesto) / chiesto > soglia;
+  };
+  return fuori(a.minimumDamage, r.min_damage, TOLLERANZA_DANNO)
+      || fuori(a.budget, r.budget, TOLLERANZA_COMPENSO);
 }
 
 // ---------------------------------------------------------------------------
@@ -232,6 +255,10 @@ async function verdetto(c) {
     status: 'closed',
     winner_mu: a.currentWinner || null,
     final_per_k: a.currentPerK ?? null,
+    // Sempre, anche quando l'esito e' "conforme": e' la differenza fra
+    // dire "e' andata bene" e poter mostrare a quali condizioni.
+    apert_min_damage: a.minimumDamage ?? null,
+    apert_budget: a.budget ?? null,
     verificato_il: Date.now(),
   });
   audit(null, `watcher.${esito}`, `request:${r.id}`, { auctionId: a._id, winner: a.currentWinner || null });

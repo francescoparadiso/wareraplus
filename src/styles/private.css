@@ -598,3 +598,7 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
 /* L'amministrazione non ha una colonna profilo: una griglia a due
    colonne con una vuota sarebbe solo spazio sprecato. */
 .wp-pv-solo { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'testata' 'dx'; }
+
+/* Come e' stata aperta davvero, quando non combacia con la richiesta.
+   Non e' un allarme: e' un fatto, e va letto come tale. */
+.wp-pv-scostamento { font-size: .78rem; color: var(--pv-ink-soft); font-variant-numeric: tabular-nums; }

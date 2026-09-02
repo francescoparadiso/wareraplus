@@ -134,9 +134,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_override_unico
   ON role_override(account_id, scope_type, IFNULL(scope_id, ''), role);
 CREATE INDEX IF NOT EXISTS idx_override_account ON role_override(account_id);
 
--- Una verifica in corso per account, non una coda: chiedere un codice
--- nuovo sostituisce il precedente. Sono usa-e-getta e vivono mezz'ora,
--- il tempo di andare in gioco e rinominare un'azienda.
 -- ── IL TAVOLO DELLE PRENOTAZIONI ───────────────────────────────
 -- Il pezzo per cui esiste tutto il resto. Oggi un comandante scrive in
 -- chat quanto danno puo' fare, un ministro risponde "ok" e apre l'asta:
@@ -214,6 +211,9 @@ CREATE TABLE IF NOT EXISTS request_allow (
   PRIMARY KEY (country_id, entry_type, entry_id)
 );
 
+-- Una verifica in corso per account, non una coda: chiedere un codice
+-- nuovo sostituisce il precedente. Sono usa-e-getta e vivono mezz'ora,
+-- il tempo di andare in gioco e rinominare un'azienda.
 CREATE TABLE IF NOT EXISTS verify_claim (
   account_id    INTEGER PRIMARY KEY REFERENCES account(id) ON DELETE CASCADE,
   war_user_id   TEXT    NOT NULL,
@@ -262,6 +262,19 @@ function migrate() {
   if (!colonne('account').includes('is_admin')) {
     db.exec('ALTER TABLE account ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
     console.log('[plusApi] migrazione: aggiunta account.is_admin');
+  }
+
+  // 2026-09-02 — com'è stata aperta DAVVERO l'asta. I contratti quasi mai
+  // combaciano con la richiesta: si chiedono 4M a 0,10 e se ne aprono 3,9M
+  // a 0,08, ed è normale. Registrare i valori veri accanto a quelli
+  // chiesti dice la cosa esatta; ridurre tutto a "conforme / diverso"
+  // butterebbe via l'unica informazione utile.
+  const colReq = colonne('request');
+  for (const [nome, tipo] of [['apert_min_damage', 'INTEGER'], ['apert_budget', 'REAL']]) {
+    if (!colReq.includes(nome)) {
+      db.exec(`ALTER TABLE request ADD COLUMN ${nome} ${tipo}`);
+      console.log(`[plusApi] migrazione: aggiunta request.${nome}`);
+    }
   }
 }
 

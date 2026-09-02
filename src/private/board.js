@@ -435,6 +435,17 @@ export function creaTavolo(ctx) {
 
     const fatti = el('div', 'wp-pv-req-col wp-pv-req-fatti');
     fatti.appendChild(el('span', 'wp-pv-label', pvT('outcome')));
+
+    // Come e' stata aperta DAVVERO, quando non combacia con la richiesta.
+    // Si chiedono 4M a 0,10 e se ne aprono 3,9 a 0,08: e' normale, e non
+    // e' un'anomalia da segnalare — ma vederlo scritto dice piu' di
+    // qualunque etichetta, e toglie il dubbio a chi rilegge fra un mese.
+    const diverso = (r.apertMinDamage != null && r.apertMinDamage !== r.minDamage)
+      || (r.apertBudget != null && Math.abs((r.apertBudget || 0) - (r.budget || 0)) > 0.01);
+    if (diverso) {
+      fatti.appendChild(el('span', 'wp-pv-scostamento',
+        `${pvT('opened')} ${num(r.apertMinDamage)} · ${num(r.apertBudget)}`));
+    }
     if (r.esito) {
       fatti.appendChild(el('strong', `wp-pv-esito wp-pv-esito-${r.esito}`,
         pvT(`es${r.esito.charAt(0).toUpperCase()}${r.esito.slice(1)}`)));
