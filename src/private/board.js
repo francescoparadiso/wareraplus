@@ -73,6 +73,9 @@ export function creaTavolo(ctx) {
   // Le righe concluse restano nell'archivio ma non nel tavolo: si apre il
   // tavolo per vedere cosa aspetta una decisione, non cosa e' gia' finito.
   let mostraStorico = false;
+  // Con quale cappello si sta guardando il tavolo. Chi ha un solo ruolo
+  // non vede nemmeno la scelta: sarebbe una domanda con una risposta sola.
+  let cappello = 'governo';     // 'governo' | 'comandante'
 
   async function carica() {
     caricamento = true; errore = null; ctx.ridisegna();
@@ -434,9 +437,28 @@ export function creaTavolo(ctx) {
     card.appendChild(el('h2', 'wp-pv-h2', pvT('boardTitle')));
     card.appendChild(el('p', 'wp-pv-body', pvT('boardBody')));
 
-    const aperte = dati.richieste.filter((r) => ['pending', 'approved'].includes(r.status));
-    const chiuse = dati.richieste.filter((r) => !['pending', 'approved'].includes(r.status));
-    const daMostrare = mostraStorico ? dati.richieste : aperte;
+    // ── Due mestieri, due elenchi ──────────────────────────────────────
+    // Chi comanda un'unita' E siede in un governo vedeva le stesse righe
+    // per due ragioni diverse, senza sapere quale: "l'ho chiesta io" e
+    // "devo deciderla io" sono domande opposte, e mescolarle rende il
+    // tavolo illeggibile proprio a chi ne ha piu' bisogno.
+    const comeComandante = (r) => cap.chiedePer?.includes(r.muId);
+    const comeGoverno = (r) => cap.approvaPer?.includes(r.countryId);
+
+    const haDueCappelli = Boolean(cap.chiedePer?.length) && Boolean(cap.approvaPer?.length);
+    if (!haDueCappelli) cappello = cap.approvaPer?.length ? 'governo' : 'comandante';
+
+    // Un amministratore senza lente vede tutto: non e' un cappello, e'
+    // l'assenza di cappelli.
+    const suoi = cap.admin && !dati.lente && !haDueCappelli
+      ? dati.richieste
+      : dati.richieste.filter(cappello === 'governo' ? comeGoverno : comeComandante);
+
+    if (haDueCappelli) frag.appendChild(scegliCappello(cap));
+
+    const aperte = suoi.filter((r) => ['pending', 'approved'].includes(r.status));
+    const chiuse = suoi.filter((r) => !['pending', 'approved'].includes(r.status));
+    const daMostrare = mostraStorico ? suoi : aperte;
 
     // Barra dei comandi: lo storico si mostra a richiesta, e chi
     // amministra puo' svuotarlo.
@@ -465,6 +487,25 @@ export function creaTavolo(ctx) {
     for (const r of daMostrare) lista.appendChild(rigaRichiesta(r, cap));
     card.appendChild(lista);
     return card;
+  }
+
+  /** Le due linguette del tavolo, con il conteggio di cosa aspetta. */
+  function scegliCappello(cap) {
+    const barra = el('nav', 'wp-pv-cappelli');
+    const conta = (f) => dati.richieste.filter((r) => f(r) && ['pending', 'approved'].includes(r.status)).length;
+    const voci = [
+      ['governo', pvT('hatGovernment'), conta((r) => cap.approvaPer?.includes(r.countryId))],
+      ['comandante', pvT('hatCommander'), conta((r) => cap.chiedePer?.includes(r.muId))],
+    ];
+    for (const [chiave, testo, n] of voci) {
+      const b = el('button', `wp-pv-cappello${cappello === chiave ? ' attivo' : ''}`);
+      b.type = 'button';
+      b.appendChild(el('span', null, testo));
+      if (n) b.appendChild(el('span', 'wp-pv-cappello-n', String(n)));
+      b.addEventListener('click', () => { cappello = chiave; mostraStorico = false; ctx.ridisegna(); });
+      barra.appendChild(b);
+    }
+    return barra;
   }
 
   function rigaRichiesta(r, cap) {
@@ -520,6 +561,13 @@ export function creaTavolo(ctx) {
     }
     due.appendChild(fatti);
     box.appendChild(due);
+
+    // Approvare una richiesta della propria unita' e' legittimo — un
+    // presidente che comanda anche una MU esiste — ma non deve passare
+    // inosservato a chi rileggera' l'archivio.
+    if (cap.chiedePer?.includes(r.muId) && cap.approvaPer?.includes(r.countryId)) {
+      box.appendChild(el('p', 'wp-pv-req-doppio', pvT('bothHats')));
+    }
 
     const azioni = azioniRiga(r, cap);
     if (azioni) box.appendChild(azioni);

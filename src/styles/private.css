@@ -767,3 +767,46 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
 
 /* Il selettore condiviso: tipo sopra, poi il campo giusto per quel tipo. */
 .wp-pv-selettore { display: flex; flex-direction: column; gap: .45rem; width: 100%; }
+
+/* ── I due cappelli del tavolo ────────────────────────────────────
+   "L'ho chiesta io" e "devo deciderla io" sono domande opposte:
+   mescolarle rende il tavolo illeggibile proprio a chi ha entrambi i
+   ruoli. Il numero accanto dice quanto aspetta da quella parte. */
+.wp-pv-cappelli {
+  display: flex; gap: .4rem; flex-wrap: wrap;
+  width: 100%; margin-bottom: .2rem;
+}
+.wp-pv-cappello {
+  appearance: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: .45rem;
+  background: transparent;
+  border: 1px solid var(--pv-rule); border-radius: 999px;
+  padding: .35rem .85rem;
+  font: inherit; font-size: .85rem; font-weight: 600;
+  color: var(--pv-ink-soft);
+}
+.wp-pv-cappello:hover { border-color: var(--pv-accent); color: var(--pv-ink); }
+.wp-pv-cappello.attivo {
+  border-color: transparent;
+  background: var(--pv-accent-soft);
+  color: var(--pv-accent);
+}
+.wp-pv-cappello-n {
+  min-width: 1.3rem; padding: 0 .3rem;
+  border-radius: 999px;
+  background: var(--pv-accent); color: #fff;
+  font-size: .72rem; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.wp-pv-cappello.attivo .wp-pv-cappello-n { background: var(--pv-accent); }
+
+/* Approvare una richiesta della propria unita' e' legittimo, ma non
+   deve passare inosservato a chi rileggera' l'archivio. */
+.wp-pv-req-doppio {
+  margin: 0; width: 100%;
+  padding: .4rem .6rem;
+  border-left: 3px solid var(--pv-accent);
+  background: var(--pv-accent-soft);
+  border-radius: 0 6px 6px 0;
+  font-size: .8rem; color: var(--pv-ink-soft);
+}
