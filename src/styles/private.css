@@ -45,27 +45,66 @@
    che e' il pezzo largo, prende tutta la riga. Sotto i 60rem torna
    una colonna sola senza bisogno di dirlo: `auto-fit` con un minimo
    di 26rem lo fa da se'. */
+/* Due zone, non un elenco di schede.
+   A sinistra CHI SEI: il profilo, appiccicato in alto mentre si scorre,
+   perche' e' il contesto di tutto il resto. A destra COSA PUOI FARE:
+   battaglie, tavolo, cose di governo. Prima era tutto in una colonna da
+   42rem e su un monitor grande diventava una striscia in mezzo al vuoto. */
 .wp-pv {
   max-width: 84rem;
   margin: 0 auto;
-  padding: 2.5rem 1.5rem 5rem;
+  padding: 2rem 1.5rem 5rem;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(26rem, 1fr));
-  gap: 1rem;
+  grid-template-columns: 21rem minmax(0, 1fr);
+  grid-template-areas: 'testata testata' 'sx dx';
+  gap: 1rem 1.5rem;
   align-items: start;
 }
 
-/* Titolo e presentazione occupano tutta la riga: sono l'intestazione
-   della pagina, non una delle schede. */
-.wp-pv-testata { grid-column: 1 / -1; max-width: 46rem; }
+.wp-pv-testata { grid-area: testata; max-width: 46rem; }
 .wp-pv-testata .wp-pv-lead { margin-bottom: .5rem; }
 
-/* Il tavolo e il pannello amministratore prendono la riga intera: hanno
-   righe con due sottocolonne e a meta' larghezza si accartocciano. */
-.wp-pv-card-tavolo,
-.wp-pv-card-admin,
-.wp-pv-error,
-.wp-pv-devnote { grid-column: 1 / -1; }
+.wp-pv-sx { grid-area: sx; position: sticky; top: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+.wp-pv-dx { grid-area: dx; display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+
+/* Sotto i 72rem non c'e' spazio per due colonne: il profilo torna sopra
+   e smette di essere appiccicato, altrimenti mangia mezzo schermo. */
+@media (max-width: 72rem) {
+  .wp-pv {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'testata' 'sx' 'dx';
+  }
+  .wp-pv-sx { position: static; }
+}
+
+/* ── Card profilo ─────────────────────────────────────────────────── */
+
+.wp-pv-profilo { gap: .9rem; }
+
+.wp-pv-profilo-testa { display: flex; align-items: center; gap: .7rem; width: 100%; }
+.wp-pv-profilo-nomi { display: flex; flex-direction: column; gap: .05rem; min-width: 0; }
+.wp-pv-profilo-pg { font-size: 1.1rem; font-weight: 700; }
+.wp-pv-profilo-discord { font-size: .8rem; color: var(--pv-ink-soft); }
+.wp-pv-profilo-testa .wp-pv-badge { margin-left: auto; }
+.wp-pv-profilo .wp-pv-avatar { width: 48px; height: 48px; }
+
+.wp-pv-profilo-righe {
+  width: 100%;
+  display: flex; flex-direction: column; gap: .55rem;
+  padding-top: .8rem;
+  border-top: 1px solid var(--pv-rule);
+}
+.wp-pv-profilo-riga { display: flex; flex-direction: column; gap: .15rem; }
+.wp-pv-profilo-corpo { display: flex; align-items: center; gap: .45rem; min-width: 0; }
+.wp-pv-profilo-valore { font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-pv-profilo-ruolo { font-size: .8rem; color: var(--pv-accent); }
+
+/* La bandiera ha proporzioni sue e non va deformata; lo stemma
+   dell'unita' e' quadrato. */
+.wp-pv-bandiera { width: 22px; height: auto; border-radius: 2px; display: block; }
+.wp-pv-stemma { width: 22px; height: 22px; border-radius: 4px; object-fit: cover; display: block; }
+
+.wp-pv-obbligatorio { color: var(--pv-accent); text-transform: none; letter-spacing: 0; }
 
 body.light-theme #wp-private-root {
   --pv-accent: #4f46e5;
@@ -470,15 +509,11 @@ body.light-theme .wp-pv-select option { background: #fff; color: #1a1a1a; }
 /* ── Identità in alto a sinistra ──────────────────────────────────
    Appiccicata mentre si scorre: non è contenuto, è il "chi sono
    adesso", e serve a colpo d'occhio soprattutto sotto la lente. */
-/* Attaccata al bordo SINISTRO dell'overlay, non alla colonna: dentro
-   la colonna centrata, su uno schermo largo, "in alto a sinistra"
-   diventava "in alto al centro". */
+/* Resta per la sola lente: dice "stai guardando come X". Il profilo
+   vero e' .wp-pv-profilo nella colonna di sinistra. */
 .wp-pv-id {
-  position: sticky;
-  top: 0;
-  z-index: 3;
   margin: 0;
-  padding: .6rem 1.5rem;
+  padding: .6rem 0;
   background: color-mix(in srgb, var(--pv-bg-sticky, #0d1416) 92%, transparent);
   backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--pv-rule);

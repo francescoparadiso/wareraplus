@@ -109,6 +109,10 @@ async function calcolaDerivati(warUserId, { forzaRicalcolo = false } = {}) {
     carica,                                   // null se semplice cittadino
     muId,
     muNome: mu?.name || null,
+    // Serve alla card profilo: mostrare stemma e nome dell'unita' accanto
+    // alla bandiera della nazione e' quello che rende riconoscibile
+    // "chi sono" a colpo d'occhio.
+    muAvatar: mu?.avatarUrl || null,
     // La nazione dell'unita': serve a sapere se e' dentro l'alleanza di
     // chi paga, che e' il predefinito della lista permessi.
     muCountryId: mu?.country || null,

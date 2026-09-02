@@ -189,8 +189,11 @@ export function creaTavolo(ctx) {
       o.value = id; unita.appendChild(o);
     }
 
-    const danno = campo('number', pvT('minDamage'), '1000000');
-    const budget = campo('number', pvT('budgetL'), '100');
+    // Obbligatori: un contratto senza danno minimo e senza budget non e'
+    // una richiesta, e' una domanda a cui il ministro non puo' rispondere.
+    // Prima passavano vuoti e sul tavolo comparivano due trattini.
+    const danno = campo('number', pvT('minDamage'), '1000000', { obbligatorio: true });
+    const budget = campo('number', pvT('budgetL'), '100', { obbligatorio: true });
     const nota = campo('text', pvT('noteL'), pvT('notePh'));
 
     const pro = el('label', 'wp-pv-check');
@@ -259,7 +262,14 @@ export function creaTavolo(ctx) {
     const due = el('div', 'wp-pv-req-due');
     const dette = el('div', 'wp-pv-req-col');
     if (r.richiedente) dette.appendChild(el('span', null, `${pvT('askedBy')} ${r.richiedente} · ${quando(r.createdAt)}`));
-    if (r.approvatore) dette.appendChild(el('span', null, `${pvT('approvedBy')} ${r.approvatore} · ${quando(r.approvedAt)}`));
+    if (r.approvatore) {
+      // La colonna sul server si chiama `approved_by` ma ci scrive dentro
+      // anche il rifiuto: e' `status` a dire in che verso e' andata. Una
+      // richiesta rifiutata che compariva come "approvata da" era un bug
+      // reale, segnalato guardando il tavolo.
+      const verbo = r.status === 'rejected' ? pvT('rejectedBy') : pvT('approvedBy');
+      dette.appendChild(el('span', null, `${verbo} ${r.approvatore} · ${quando(r.approvedAt)}`));
+    }
     if (r.apritore) dette.appendChild(el('span', null, `${pvT('openedBy')} ${r.apritore} · ${quando(r.openedAt)}`));
     due.appendChild(dette);
 
@@ -444,11 +454,14 @@ export function creaTavolo(ctx) {
     return w;
   }
 
-  function campo(tipo, testo, placeholder) {
+  function campo(tipo, testo, placeholder, { obbligatorio = false } = {}) {
     const wrap = el('div', 'wp-pv-campo');
-    wrap.appendChild(el('span', 'wp-pv-label', testo));
+    const lab = el('span', 'wp-pv-label', testo);
+    if (obbligatorio) lab.appendChild(el('span', 'wp-pv-obbligatorio', ` · ${pvT('required')}`));
+    wrap.appendChild(lab);
     const input = el('input', 'wp-pv-input');
     input.type = tipo; input.placeholder = placeholder || ''; input.autocomplete = 'off';
+    if (obbligatorio) { input.required = true; input.min = '1'; }
     wrap.appendChild(input);
     return { wrap, input };
   }

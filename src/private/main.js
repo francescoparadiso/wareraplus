@@ -35,6 +35,8 @@ import {
   cercaPersonaggio, iniziaVerifica, controllaVerifica, annullaVerifica,
   scollegaPersonaggio, statoVerifica, leggiRuoli, ApiError,
 } from './api.js';
+import { state } from '../diplomacy/state.js';
+import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 import { creaPannelloAdmin, renderDeroghe } from './admin.js';
 import { creaTavolo } from './board.js';
 
@@ -139,11 +141,6 @@ function render() {
   if (tickScadenza) { clearInterval(tickScadenza); tickScadenza = null; }
   rootEl.textContent = '';
 
-  // L'identita' sta FUORI dalla colonna dei contenuti, attaccata al bordo
-  // sinistro dell'overlay: dentro la colonna centrata, su uno schermo
-  // largo, "in alto a sinistra" finiva per essere "in alto al centro".
-  if (account) rootEl.appendChild(cardIdentita());
-
   const wrap = el('div', 'wp-pv');
 
   const errAccesso = pvErr(erroreAccesso);
@@ -154,8 +151,18 @@ function render() {
   testata.appendChild(el('p', 'wp-pv-lead', pvT('lead')));
   wrap.appendChild(testata);
 
-  if (erroreRete) wrap.appendChild(cardIndisponibile());
-  else if (!account) wrap.appendChild(cardOspite());
+  // ── Due zone, non un elenco ────────────────────────────────────────
+  // A sinistra CHI SEI: profilo, poteri, prossimo passo. Sta in alto a
+  // sinistra e ci resta mentre si scorre, perche' e' il contesto di
+  // tutto il resto — non una scheda fra le altre.
+  // A destra COSA PUOI FARE: battaglie prima di tutto (e' la domanda con
+  // cui un comandante apre la pagina), poi il tavolo, poi le cose di
+  // governo. Prima erano tutte in fila e si assomigliavano.
+  const colonnaSx = el('aside', 'wp-pv-sx');
+  const colonnaDx = el('div', 'wp-pv-dx');
+
+  if (erroreRete) colonnaDx.appendChild(cardIndisponibile());
+  else if (!account) colonnaDx.appendChild(cardOspite());
   else if (comeAltri) {
     // ── Con la lente attiva si vede SOLO quella persona ────────────────
     // Il flusso di verifica e il pannello amministratore riguardano me,
@@ -163,18 +170,17 @@ function render() {
     // "personaggio collegato" fosse il suo stato quando era il mio.
     // La scheda dei ruoli si disegna sempre, anche vuota: "questa persona
     // non ha poteri" e' esattamente l'informazione che si sta cercando.
-    wrap.appendChild(cardLente());
-    wrap.appendChild(cardRuoli());
-    wrap.appendChild(creaOTavolo().render());
+    colonnaSx.appendChild(cardLente());
+    colonnaSx.appendChild(cardProfilo());
+    colonnaDx.appendChild(creaOTavolo().render());
   }
   else {
-    if (account.verificato) wrap.appendChild(cardCollegato());
-    else if (passo === 'codice' && claim) wrap.appendChild(cardCodice());
-    else if (passo === 'scelta') wrap.appendChild(cardScelta());
-    else wrap.appendChild(cardRicerca());
+    colonnaSx.appendChild(cardProfilo());
 
-    if (ruoli && (ruoli.derivati || ruoli.deroghe?.length || ruoli.erroreGioco)) {
-      wrap.appendChild(cardRuoli());
+    if (!account.verificato) {
+      if (passo === 'codice' && claim) colonnaDx.appendChild(cardCodice());
+      else if (passo === 'scelta') colonnaDx.appendChild(cardScelta());
+      else colonnaDx.appendChild(cardRicerca());
     }
 
     // Il tavolo si mostra solo a chi ha almeno un potere: a un cittadino
@@ -182,7 +188,7 @@ function render() {
     // di qualcosa che non lo riguarda.
     const cap = ruoli?.capacita;
     if (cap && (cap.chiedePer?.length || cap.approvaPer?.length || cap.gestisceNazione?.length || cap.admin)) {
-      wrap.appendChild(creaOTavolo().render());
+      colonnaDx.appendChild(creaOTavolo().render());
     }
 
     if (account.admin) {
@@ -199,9 +205,12 @@ function render() {
           },
         });
       }
-      wrap.appendChild(pannelloAdmin.render());
+      colonnaDx.appendChild(pannelloAdmin.render());
     }
   }
+
+  wrap.appendChild(colonnaSx);
+  wrap.appendChild(colonnaDx);
 
   if (!IS_LIVE) wrap.appendChild(el('p', 'wp-pv-devnote', pvT('devWarning')));
   rootEl.appendChild(wrap);
@@ -218,10 +227,129 @@ function cardOspite() {
   return card;
 }
 
-/** Chi sei: una striscia compatta in alto a sinistra, appiccicata mentre
- *  si scorre. Era una card a tutta larghezza, ma questo non e' contenuto:
- *  e' il "chi sono adesso", e serve a colpo d'occhio soprattutto quando
- *  si guarda con la lente di qualcun altro. */
+/**
+ * La card profilo: tutto quello che dice "chi sei" in un posto solo, in
+ * alto a sinistra. Nome Discord e personaggio di gioco sono due identita'
+ * diverse e vanno lette insieme; bandiera e stemma dell'unita' rendono
+ * la cosa riconoscibile prima ancora di leggere.
+ *
+ * Ci sta dentro anche il "prossimo passo": era una card separata, ma
+ * parla di TE, non di quello che puoi fare — accanto alle battaglie
+ * sembrava un'altra sezione da guardare.
+ */
+function cardProfilo() {
+  const card = el('div', 'wp-pv-card wp-pv-profilo');
+
+  // ── Discord ─────────────────────────────────────────────────────────
+  const testa = el('div', 'wp-pv-profilo-testa');
+  if (account.discordAvatar) {
+    const img = el('img', 'wp-pv-avatar');
+    img.src = account.discordAvatar; img.alt = '';
+    img.width = 48; img.height = 48;
+    testa.appendChild(img);
+  }
+  const nomi = el('div', 'wp-pv-profilo-nomi');
+  nomi.appendChild(el('strong', 'wp-pv-profilo-pg', account.warUsername || account.discordUsername));
+  const sotto = el('span', 'wp-pv-profilo-discord', account.discordUsername);
+  nomi.appendChild(sotto);
+  testa.appendChild(nomi);
+  if (account.admin) testa.appendChild(el('span', 'wp-pv-badge wp-pv-badge-admin', 'admin'));
+  card.appendChild(testa);
+
+  const d = ruoli?.derivati;
+
+  // ── Nazione e unita', con bandiera e stemma ────────────────────────
+  if (d) {
+    const righe = el('div', 'wp-pv-profilo-righe');
+    righe.appendChild(rigaProfilo(
+      pvT('profileNation'),
+      bandieraNazione(d.countryId),
+      nomeNazionePv(d.countryId) || pvT('profileNoNation'),
+      d.carica ? pvT(d.carica) : null,
+    ));
+    righe.appendChild(rigaProfilo(
+      pvT('profileUnit'),
+      d.muAvatar ? immagine(d.muAvatar) : null,
+      d.muNome || pvT('profileNoUnit'),
+      d.ruoloMu ? pvT(d.ruoloMu) : null,
+    ));
+    card.appendChild(righe);
+  }
+
+  // ── Cosa puoi fare ─────────────────────────────────────────────────
+  const cap = ruoli?.capacita || {};
+  const elenco = el('ul', 'wp-pv-capacita');
+  if (cap.approvaPer?.length) elenco.appendChild(el('li', null, pvT('canApprove')));
+  if (cap.chiedePer?.length) elenco.appendChild(el('li', null, pvT('canRequest')));
+  if (!elenco.children.length) elenco.appendChild(el('li', 'wp-pv-cap-vuota', pvT('canNothingYet')));
+  card.appendChild(elenco);
+
+  const deroghe = renderDeroghe(ruoli?.deroghe, account.admin && comeAltri
+    ? { accountId: comeAltri, onCambio: async () => { await caricaRuoli(); render(); } }
+    : {});
+  if (deroghe) {
+    card.appendChild(el('p', 'wp-pv-note', pvT('overridden')));
+    card.appendChild(deroghe);
+  }
+
+  if (ruoli?.erroreGioco || !ruoli) card.appendChild(el('p', 'wp-pv-note', pvT('roleUnavailable')));
+
+  // ── Azioni sul proprio account ─────────────────────────────────────
+  if (!comeAltri) {
+    const azioni = el('div', 'wp-pv-azioni');
+    azioni.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('refreshRoles'), async () => {
+      await caricaRuoli({ refresh: true }); render();
+    }));
+    if (account.verificato) {
+      azioni.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('unlink'), () => conAttesa(async () => {
+        account = (await scollegaPersonaggio()).account;
+        passo = 'ricerca'; candidati = []; claim = null;
+        await caricaRuoli({ refresh: true });
+      })));
+    }
+    azioni.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('signOut'), async () => {
+      await logout(); account = null; claim = null; passo = 'ricerca'; candidati = []; tavolo = null; render();
+    }));
+    card.appendChild(azioni);
+  }
+
+  const msg = boxMessaggio(); if (msg) card.appendChild(msg);
+  return card;
+}
+
+function rigaProfilo(etichetta, immagineEl, nome, ruolo) {
+  const riga = el('div', 'wp-pv-profilo-riga');
+  riga.appendChild(el('span', 'wp-pv-label', etichetta));
+  const corpo = el('div', 'wp-pv-profilo-corpo');
+  if (immagineEl) corpo.appendChild(immagineEl);
+  corpo.appendChild(el('strong', 'wp-pv-profilo-valore', nome));
+  riga.appendChild(corpo);
+  if (ruolo) riga.appendChild(el('span', 'wp-pv-profilo-ruolo', ruolo));
+  return riga;
+}
+
+function immagine(url, cls = 'wp-pv-stemma') {
+  const i = el('img', cls);
+  i.src = url; i.alt = ''; i.loading = 'lazy';
+  i.addEventListener('error', () => { i.style.display = 'none'; });
+  return i;
+}
+
+/** Bandiera dalla stessa sorgente del pannello nazione: nessuna seconda
+ *  strada per la stessa immagine. */
+function bandieraNazione(countryId) {
+  if (!countryId) return null;
+  const n = state.nationMap?.get(countryId);
+  if (!n) return null;
+  const url = getFlagUrl(getNationCode(countryId, n));
+  return url ? immagine(url, 'wp-pv-bandiera') : null;
+}
+
+function nomeNazionePv(countryId) {
+  return state.nationMap?.get(countryId)?.name || null;
+}
+
+/** Resta per la lente, dove serve solo sapere chi si sta guardando. */
 function cardIdentita() {
   const card = el('div', 'wp-pv-id');
   const riga = el('div', 'wp-pv-who');
@@ -394,27 +522,6 @@ function cardCodice() {
   return card;
 }
 
-function cardCollegato() {
-  // Il nome del personaggio non si ripete qui: sta gia' nella striscia in
-  // alto a sinistra, ed e' li' che lo si cerca.
-  const card = el('div', 'wp-pv-card wp-pv-card-ok');
-  card.appendChild(el('h2', 'wp-pv-h2', pvT('nextStep')));
-  // `nextStepDone` e non `nextStepBody`: quest'ultimo descrive il
-  // collegamento, che a questo punto è già avvenuto. Dire a chi ha appena
-  // finito che il prossimo passo è quello che ha appena fatto è il modo
-  // più rapido per far dubitare che sia andata a buon fine.
-  card.appendChild(el('p', 'wp-pv-body', pvT('nextStepDone')));
-
-  card.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('unlink'), () => conAttesa(async () => {
-    account = (await scollegaPersonaggio()).account;
-    passo = 'ricerca'; candidati = []; claim = null;
-    await caricaRuoli({ refresh: true });
-  })));
-
-  const msg = boxMessaggio(); if (msg) card.appendChild(msg);
-  return card;
-}
-
 /** Passa a guardare (in sola lettura) quello che vede un altro. */
 async function guardaCome(accountId) {
   comeAltri = accountId;
@@ -436,57 +543,6 @@ function cardLente() {
     comeAltri = null; await caricaRuoli(); tavolo = null; render();
   }));
   return card;
-}
-
-function cardRuoli() {
-  const card = el('div', 'wp-pv-card');
-  card.appendChild(el('h2', 'wp-pv-h2', pvT('rolesTitle')));
-  card.appendChild(el('p', 'wp-pv-body', pvT('rolesBody')));
-
-  // Puo' essere chiamata anche senza ruoli caricati (lente su un account
-  // che il gioco non sa risolvere): non deve esplodere, deve dirlo.
-  if (!ruoli || ruoli.erroreGioco) {
-    card.appendChild(el('p', 'wp-pv-note', pvT('roleUnavailable')));
-    if (!ruoli) return card;
-  }
-
-  const d = ruoli.derivati;
-  if (d) {
-    const griglia = el('div', 'wp-pv-ruoli');
-    griglia.appendChild(voceRuolo(pvT('office'), d.carica ? pvT(d.carica) : pvT('noOffice')));
-    griglia.appendChild(voceRuolo(pvT('unit'),
-      d.ruoloMu ? `${pvT(d.ruoloMu)}${d.muNome ? ` · ${d.muNome}` : ''}` : pvT('noUnit')));
-    card.appendChild(griglia);
-  }
-
-  // Le capacita' sono la domanda vera ("posso approvare?"), i ruoli sono
-  // il come ci si arriva. Vanno mostrate entrambe, non solo la seconda.
-  const cap = ruoli.capacita || {};
-  const elencoCap = el('ul', 'wp-pv-capacita');
-  if (cap.approvaPer?.length) elencoCap.appendChild(el('li', null, pvT('canApprove')));
-  if (cap.chiedePer?.length) elencoCap.appendChild(el('li', null, pvT('canRequest')));
-  if (!elencoCap.children.length) elencoCap.appendChild(el('li', 'wp-pv-cap-vuota', pvT('canNothingYet')));
-  card.appendChild(elencoCap);
-
-  const deroghe = renderDeroghe(ruoli.deroghe, account.admin && comeAltri
-    ? { accountId: comeAltri, onCambio: async () => { await caricaRuoli(); render(); } }
-    : {});
-  if (deroghe) {
-    card.appendChild(el('p', 'wp-pv-note', pvT('overridden')));
-    card.appendChild(deroghe);
-  }
-
-  card.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('refreshRoles'), async () => {
-    await caricaRuoli({ refresh: true }); render();
-  }));
-  return card;
-}
-
-function voceRuolo(etichetta, valore) {
-  const v = el('div', 'wp-pv-ruolo');
-  v.appendChild(el('span', 'wp-pv-label', etichetta));
-  v.appendChild(el('strong', 'wp-pv-ruolo-valore', valore));
-  return v;
 }
 
 /** Il tavolo si costruisce una volta sola: ricrearlo ad ogni render

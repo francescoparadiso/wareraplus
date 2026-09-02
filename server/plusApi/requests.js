@@ -158,6 +158,12 @@ function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSott
     if (!cap.approvaPer.includes(r.country_id)) return res.status(403).json({ error: 'non_approvi_per_questa_nazione' });
 
     const chi = req.identita.war_username || req.identita.discord_username;
+    // ⚠️ `approved_by`/`approved_at` significano "chi ha DECISO e quando",
+    // non "chi ha approvato": ci scrive dentro anche il rifiuto. Il nome
+    // della colonna e' infelice ma cambiarlo costerebbe una migrazione su
+    // dati veri; chi mostra il dato deve guardare `status` per sapere in
+    // che verso e' andata. Era un bug reale: una richiesta rifiutata
+    // compariva come "approvata da".
     const agg = aggiornaRichiesta(r.id, {
       status: nuovoStato,
       approved_by: req.identita.id,
