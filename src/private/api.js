@@ -202,3 +202,46 @@ export function nominaAdmin(accountId, admin) {
 export function collegaAMano(accountId, warUserId, reason) {
   return callOrThrow('/verify/admin-link', { accountId, warUserId, reason });
 }
+
+// ---------------------------------------------------------------------------
+// Il tavolo delle prenotazioni
+// ---------------------------------------------------------------------------
+// Ogni chiamata porta `asAccount` quando la lente è attiva: è il server a
+// risolvere l'identità e a rifiutare le scritture, ma il client deve
+// comunque dirgli chi sta guardando.
+
+function conLente(path, asAccount) {
+  return asAccount ? `${path}${path.includes('?') ? '&' : '?'}asAccount=${asAccount}` : path;
+}
+
+export function leggiTavolo({ asAccount = null } = {}) {
+  return getJson(conLente('/requests', asAccount));
+}
+
+export function chiediContratto(dati) {
+  return callOrThrow('/requests', dati);
+}
+
+export function approvaRichiesta(id) { return callOrThrow(`/requests/${id}/approve`); }
+export function rifiutaRichiesta(id) { return callOrThrow(`/requests/${id}/reject`); }
+export function segnaAperta(id) { return callOrThrow(`/requests/${id}/opened`); }
+export function ritiraRichiesta(id) { return callOrThrow(`/requests/${id}/cancel`); }
+
+export function leggiCanale(scopeType, scopeId) {
+  return getJson(`/requests/webhooks/${scopeType}/${scopeId}`);
+}
+
+export function impostaCanale(scopeType, scopeId, url) {
+  return callOrThrow(`/requests/webhooks/${scopeType}/${scopeId}`, { url });
+}
+
+/** Battaglie in corso, dal server di cache: pubbliche, nessuna
+ *  autenticazione, e sono le stesse che alimentano i marker sulla mappa —
+ *  non si apre una seconda sorgente per la stessa cosa. */
+export async function battaglieInCorso() {
+  const { WARERA_CACHE_BASE } = await import('../diplomacy/config.js');
+  const res = await fetch(`${WARERA_CACHE_BASE}/battles`);
+  if (!res.ok) return [];
+  const body = await res.json();
+  return body?.data || [];
+}

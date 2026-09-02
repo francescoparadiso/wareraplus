@@ -369,3 +369,64 @@ body.light-theme #wp-private-root {
 body.light-theme .wp-pv-select option { background: #fff; color: #1a1a1a; }
 
 .wp-pv-form-deroga .wp-pv-riga { gap: .4rem; }
+
+/* ── Il tavolo dei contratti ──────────────────────────────────── */
+
+.wp-pv-card-tavolo { gap: .9rem; }
+
+.wp-pv-righe { width: 100%; display: flex; flex-direction: column; gap: .6rem; }
+
+.wp-pv-riga-req {
+  border: 1px solid var(--pv-rule);
+  border-left: 3px solid var(--pv-rule);
+  border-radius: 7px;
+  padding: .7rem .85rem;
+  display: flex; flex-direction: column; gap: .35rem;
+}
+/* Lo stato si legge dal bordo prima che dal testo: su un tavolo si
+   cerca "cosa aspetta me", e il colore ci arriva prima della lettura. */
+.wp-pv-st-pending  { border-left-color: var(--pv-accent); }
+.wp-pv-st-approved { border-left-color: #2f9e5f; }
+.wp-pv-st-rejected,
+.wp-pv-st-cancelled { border-left-color: var(--pv-ink-faint, #6e8285); opacity: .72; }
+
+.wp-pv-req-testa { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; }
+.wp-pv-req-mu { font-size: 1rem; }
+.wp-pv-req-stato {
+  font-size: .7rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--pv-ink-soft); margin-left: auto;
+}
+.wp-pv-req-battaglia { font-size: .88rem; color: var(--pv-ink-soft); }
+.wp-pv-req-numeri { font-size: .88rem; font-variant-numeric: tabular-nums; }
+.wp-pv-req-nota {
+  font-size: .86rem; font-style: italic; color: var(--pv-ink-soft);
+  border-left: 2px solid var(--pv-rule); padding-left: .55rem;
+}
+
+/* Le due colonne: a sinistra quello che hanno detto le persone, a destra
+   quello che ha detto il gioco. Non si fondono mai. */
+.wp-pv-req-due {
+  display: grid; grid-template-columns: 1fr 1fr; gap: .8rem;
+  margin-top: .25rem; padding-top: .5rem;
+  border-top: 1px solid var(--pv-rule);
+}
+.wp-pv-req-col { display: flex; flex-direction: column; gap: .18rem; font-size: .8rem; color: var(--pv-ink-soft); }
+.wp-pv-req-fatti { border-left: 1px solid var(--pv-rule); padding-left: .8rem; }
+
+.wp-pv-esito { font-size: .88rem; }
+.wp-pv-esito-conforme { color: #2f9e5f; }
+.wp-pv-esito-altra_unita, .wp-pv-esito-mai_aperta { color: var(--pv-danger); }
+.wp-pv-esito-parametri_diversi { color: #b8860b; }
+.wp-pv-esito-attesa { font-style: italic; }
+
+.wp-pv-campo { display: flex; flex-direction: column; gap: .2rem; flex: 1; min-width: 0; }
+.wp-pv-form-richiesta { gap: .6rem; margin-top: .3rem; }
+
+.wp-pv-check { display: flex; align-items: center; gap: .45rem; font-size: .9rem; cursor: pointer; }
+.wp-pv-check input { accent-color: var(--pv-accent); width: 1rem; height: 1rem; }
+
+@media (max-width: 560px) {
+  .wp-pv-req-due { grid-template-columns: 1fr; }
+  .wp-pv-req-fatti { border-left: none; padding-left: 0; border-top: 1px solid var(--pv-rule); padding-top: .5rem; }
+  .wp-pv-req-stato { margin-left: 0; }
+}

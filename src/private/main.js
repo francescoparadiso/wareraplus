@@ -36,6 +36,7 @@ import {
   scollegaPersonaggio, statoVerifica, leggiRuoli, ApiError,
 } from './api.js';
 import { creaPannelloAdmin, renderDeroghe } from './admin.js';
+import { creaTavolo } from './board.js';
 
 let rootEl = null;
 let account = null;
@@ -58,6 +59,7 @@ let tickScadenza = null;
 let ruoli = null;
 let comeAltri = null;         // id dell'account che si sta guardando
 let pannelloAdmin = null;
+let tavolo = null;
 
 export async function initPrivateView(container, { authError = null } = {}) {
   rootEl = container;
@@ -157,6 +159,7 @@ function render() {
     wrap.appendChild(cardIdentita());
     wrap.appendChild(cardLente());
     wrap.appendChild(cardRuoli());
+    wrap.appendChild(creaOTavolo().render());
   }
   else {
     wrap.appendChild(cardIdentita());
@@ -168,6 +171,14 @@ function render() {
 
     if (ruoli && (ruoli.derivati || ruoli.deroghe?.length || ruoli.erroreGioco)) {
       wrap.appendChild(cardRuoli());
+    }
+
+    // Il tavolo si mostra solo a chi ha almeno un potere: a un cittadino
+    // senza cariche sarebbe una scatola vuota con dentro una spiegazione
+    // di qualcosa che non lo riguarda.
+    const cap = ruoli?.capacita;
+    if (cap && (cap.chiedePer?.length || cap.approvaPer?.length || cap.admin)) {
+      wrap.appendChild(creaOTavolo().render());
     }
 
     if (account.admin) {
@@ -384,6 +395,10 @@ function cardCollegato() {
 async function guardaCome(accountId) {
   comeAltri = accountId;
   await caricaRuoli();
+  // Il tavolo tiene in memoria le righe di CHI stava guardando prima:
+  // senza questo, entrando in lente si vedrebbero per un istante le
+  // proprie richieste attribuite a un'altra persona.
+  tavolo = null;
   render();
 }
 
@@ -394,7 +409,7 @@ function cardLente() {
   if (chi) card.appendChild(el('strong', 'wp-pv-name', chi.warUsername || chi.discordUsername));
   card.appendChild(el('p', 'wp-pv-note', pvT('readOnlyNote')));
   card.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('backToMe'), async () => {
-    comeAltri = null; await caricaRuoli(); render();
+    comeAltri = null; await caricaRuoli(); tavolo = null; render();
   }));
   return card;
 }
@@ -448,6 +463,20 @@ function voceRuolo(etichetta, valore) {
   v.appendChild(el('span', 'wp-pv-label', etichetta));
   v.appendChild(el('strong', 'wp-pv-ruolo-valore', valore));
   return v;
+}
+
+/** Il tavolo si costruisce una volta sola: ricrearlo ad ogni render
+ *  perderebbe il suo stato (modulo aperto, righe caricate) ogni volta che
+ *  qualcuno preme un bottone qualsiasi della pagina. */
+function creaOTavolo() {
+  if (!tavolo) {
+    tavolo = creaTavolo({
+      ridisegna: render,
+      lente: () => comeAltri,
+      nomeUnita: (id) => (ruoli?.derivati?.muId === id ? ruoli.derivati.muNome : null),
+    });
+  }
+  return tavolo;
 }
 
 function cardIndisponibile() {
