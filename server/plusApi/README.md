@@ -102,6 +102,17 @@ ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 \
   "pm2 restart warera-plus-api warera-plus-api-dev && pm2 logs warera-plus-api-dev --lines 20 --nostream"
 ```
 
+⚠️ **Se hai cambiato `ecosystem.config.js` — cioè i segreti o gli origin —
+quel comando NON basta.** `pm2 restart <nome>` rilegge il codice ma tiene
+l'ambiente con cui il processo era stato avviato, e `--update-env` prende
+quello della *shell*, non del file. Il sintomo è preciso e ingannevole: hai
+appena messo il secret vero, `/health` continua a dire `SEGNAPOSTO`, e sembra
+che la modifica non sia stata salvata. Per rileggere il file serve passarlo:
+
+```bash
+cd ~/warera-plus-api && pm2 restart ecosystem.config.js --update-env && pm2 save
+```
+
 ## Verifica
 
 ```bash

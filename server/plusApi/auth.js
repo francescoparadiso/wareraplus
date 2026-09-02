@@ -151,10 +151,14 @@ function buildAuthRouter(cfg) {
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('scope', 'identify');
     url.searchParams.set('state', state);
-    // Senza questo Discord salta la schermata di consenso per chi ha già
-    // autorizzato una volta. Va bene: l'utente ha appena premuto un bottone
-    // che diceva "Entra con Discord", non è una sorpresa.
-    url.searchParams.set('prompt', 'none');
+    // NIENTE `prompt=none`, deliberatamente. Salterebbe la schermata di
+    // consenso a chi ha già autorizzato — un clic in meno — ma il
+    // comportamento per chi NON ha mai autorizzato non è garantito, e se lì
+    // rispondesse errore invece di mostrare il consenso nessuno riuscirebbe
+    // a registrarsi: il percorso critico. Un clic contro il rischio che non
+    // entri nessuno non è uno scambio conveniente. Il default di Discord
+    // mostra il consenso, e mostrare a ogni accesso cosa si sta
+    // autorizzando non è comunque un difetto.
 
     res.redirect(url.toString());
   });
