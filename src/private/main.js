@@ -144,6 +144,10 @@ function render() {
   const errAccesso = pvErr(erroreAccesso);
   if (errAccesso) wrap.appendChild(el('p', 'wp-pv-error', errAccesso));
 
+  // L'identita' apre la pagina: e' "chi sono adesso", e va letta prima
+  // di qualunque contenuto — non incastrata fra il titolo e le schede.
+  if (account) wrap.appendChild(cardIdentita());
+
   wrap.appendChild(el('h1', 'wp-pv-title', pvT('title')));
   wrap.appendChild(el('p', 'wp-pv-lead', pvT('lead')));
 
@@ -156,14 +160,11 @@ function render() {
     // "personaggio collegato" fosse il suo stato quando era il mio.
     // La scheda dei ruoli si disegna sempre, anche vuota: "questa persona
     // non ha poteri" e' esattamente l'informazione che si sta cercando.
-    wrap.appendChild(cardIdentita());
     wrap.appendChild(cardLente());
     wrap.appendChild(cardRuoli());
     wrap.appendChild(creaOTavolo().render());
   }
   else {
-    wrap.appendChild(cardIdentita());
-
     if (account.verificato) wrap.appendChild(cardCollegato());
     else if (passo === 'codice' && claim) wrap.appendChild(cardCodice());
     else if (passo === 'scelta') wrap.appendChild(cardScelta());
