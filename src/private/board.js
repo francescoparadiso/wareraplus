@@ -26,7 +26,7 @@ import {
   leggiTavolo, chiediContratto, approvaRichiesta, rifiutaRichiesta,
   segnaAperta, ritiraRichiesta, battaglieInCorso,
   nazioniAmmesse, leggiListaPermessi, aggiungiAllaLista, togliDallaLista,
-  leggiCanale, impostaCanale, ApiError,
+  leggiCanale, impostaCanale, svuotaTavolo, ApiError,
 } from './api.js';
 import {
   preparaBattaglie, nomeNazione, caricaFinanziatori, finanziatoriDi,
@@ -41,6 +41,13 @@ function el(tag, cls, text) {
 }
 
 const num = (n) => (n == null ? '—' : Math.round(Number(n)).toLocaleString());
+
+function bottone(cls, testo, onClick) {
+  const b = el('button', `wp-pv-btn ${cls}`, testo);
+  b.type = 'button';
+  b.addEventListener('click', onClick);
+  return b;
+}
 
 function quando(ms) {
   if (!ms) return null;
@@ -62,6 +69,9 @@ export function creaTavolo(ctx) {
   // qui per fare UNA cosa, e le altre due non devono essere in mezzo.
   let sezione = 'battaglie';    // 'battaglie' | 'tavolo' | 'impostazioni' | 'admin'
   let pannelloAdmin = null;
+  // Le righe concluse restano nell'archivio ma non nel tavolo: si apre il
+  // tavolo per vedere cosa aspetta una decisione, non cosa e' gia' finito.
+  let mostraStorico = false;
 
   async function carica() {
     caricamento = true; errore = null; ctx.ridisegna();
@@ -415,10 +425,35 @@ export function creaTavolo(ctx) {
     card.appendChild(el('h2', 'wp-pv-h2', pvT('boardTitle')));
     card.appendChild(el('p', 'wp-pv-body', pvT('boardBody')));
 
-    if (!dati.richieste.length) { card.appendChild(el('p', 'wp-pv-note', pvT('empty'))); return card; }
+    const aperte = dati.richieste.filter((r) => ['pending', 'approved'].includes(r.status));
+    const chiuse = dati.richieste.filter((r) => !['pending', 'approved'].includes(r.status));
+    const daMostrare = mostraStorico ? dati.richieste : aperte;
+
+    // Barra dei comandi: lo storico si mostra a richiesta, e chi
+    // amministra puo' svuotarlo.
+    if (chiuse.length) {
+      const barra = el('div', 'wp-pv-azioni');
+      barra.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small',
+        mostraStorico ? pvT('hideHistory') : `${pvT('showHistory')} (${chiuse.length})`,
+        () => { mostraStorico = !mostraStorico; ctx.ridisegna(); }));
+
+      if (cap.admin && !dati.lente) {
+        barra.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('clearBoard'), () => {
+          // Una conferma, perche' cancella davvero e non si torna indietro.
+          // L'audit resta: chi ha chiesto e chi ha approvato non si perde
+          // con la riga, ed e' quello il registro che conta.
+          // eslint-disable-next-line no-alert
+          if (!window.confirm(pvT('clearBoardConfirm'))) return;
+          azione(async () => { await svuotaTavolo(); mostraStorico = false; });
+        }));
+      }
+      card.appendChild(barra);
+    }
+
+    if (!daMostrare.length) { card.appendChild(el('p', 'wp-pv-note', pvT('empty'))); return card; }
 
     const lista = el('div', 'wp-pv-righe');
-    for (const r of dati.richieste) lista.appendChild(rigaRichiesta(r, cap));
+    for (const r of daMostrare) lista.appendChild(rigaRichiesta(r, cap));
     card.appendChild(lista);
     return card;
   }

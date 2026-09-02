@@ -33,7 +33,7 @@
 const express = require('express');
 const {
   creaRichiesta, getRichiesta, listaRichieste, aggiornaRichiesta,
-  getAccountById, getWebhook, setWebhook, deleteWebhook, audit,
+  getAccountById, getWebhook, setWebhook, deleteWebhook, audit, getDb,
 } = require('./db');
 const { calcolaEffettivi } = require('./roles');
 const { puoChiedere } = require('./policy');
@@ -222,6 +222,25 @@ function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSott
     const agg = aggiornaRichiesta(r.id, { status: 'cancelled' });
     audit(req.identita.id, 'request.cancel', `request:${r.id}`, null);
     res.json({ richiesta: pubblica(conNomi(agg)) });
+  });
+
+  // ── Svuotare il tavolo ─────────────────────────────────────────────────
+  // Cancella SOLO le righe gia' concluse: quelle ancora aperte sono lavoro
+  // in corso, e sparirebbero sotto le mani di chi le sta aspettando.
+  //
+  // L'audit NON si tocca: chi ha chiesto, chi ha approvato e con che esito
+  // resta scritto anche dopo che la riga sparisce dal tavolo. E' quello il
+  // registro che il tool esiste per tenere; il tavolo e' solo la vista di
+  // cosa aspetta una decisione adesso.
+  router.post('/svuota', async (req, res) => {
+    const cap = await capacita(req);
+    if (!cap.admin) return res.status(403).json({ error: 'non_autorizzato' });
+
+    const info = getDb()
+      .prepare("DELETE FROM request WHERE status NOT IN ('pending','approved')")
+      .run();
+    audit(req.identita.id, 'request.svuota', null, { cancellate: info.changes || 0 });
+    res.json({ ok: true, cancellate: info.changes || 0 });
   });
 
   // ── Canali di avviso ───────────────────────────────────────────────────

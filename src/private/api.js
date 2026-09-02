@@ -281,3 +281,21 @@ export async function cercaUnita(testo) {
   const body = await res.json();
   return (body?.result?.data?.items || []).map((m) => ({ id: m._id, nome: m.name }));
 }
+
+/** Le alleanze con il loro nome, dal server di cache. Sedici righe, ~29 KB:
+ *  costa meno di far incollare a mano un id di ventiquattro caratteri. */
+export async function elencoAlleanze() {
+  const { WARERA_CACHE_BASE } = await import('../diplomacy/config.js');
+  const res = await fetch(`${WARERA_CACHE_BASE}/alliances`);
+  if (!res.ok) return [];
+  const body = await res.json();
+  return (body?.data || [])
+    .map((a) => ({ id: a.allianceId, nome: a.data?.name || a.allianceId }))
+    .sort((x, y) => x.nome.localeCompare(y.nome));
+}
+
+/** Svuota il tavolo dalle righe gia' chiuse. Le richieste ancora aperte
+ *  non si toccano: quelle sono lavoro in corso, non storico. */
+export function svuotaTavolo() {
+  return callOrThrow('/requests/svuota');
+}

@@ -27,7 +27,8 @@
 import { state } from '../diplomacy/state.js';
 import { pvT, pvErr } from './i18n.js';
 import {
-  elencoAccount, metteDeroga, togliDeroga, nominaAdmin, leggiRuoli, cercaUnita, ApiError,
+  elencoAccount, metteDeroga, togliDeroga, nominaAdmin, leggiRuoli, cercaUnita,
+  elencoAlleanze, ApiError,
 } from './api.js';
 
 const RUOLI_NAZIONE = ['president', 'vicePresident', 'minOfDefense', 'minOfForeignAffairs', 'minOfEconomy', 'congress'];
@@ -212,11 +213,34 @@ export function creaPannelloAdmin(ctx) {
     bloccoMu.appendChild(cercaMu);
     bloccoMu.appendChild(risultatiMu);
 
+    // ⚠️ Le alleanze avevano il loro ambito ma nessun selettore: scegliendo
+    // "Alleanza" restava il menu' delle NAZIONI, cioe' si sarebbe salvato
+    // l'id sbagliato senza che niente lo dicesse. Sedici alleanze stanno in
+    // un menu' come le nazioni.
+    const sceltaAlleanza = el('select', 'wp-pv-select');
+    const optAttesa = el('option', null, '…'); optAttesa.value = '';
+    sceltaAlleanza.appendChild(optAttesa);
+    sceltaAlleanza.addEventListener('change', () => { idAmbito.value = sceltaAlleanza.value; });
+    elencoAlleanze().then((elenco) => {
+      sceltaAlleanza.textContent = '';
+      for (const a of elenco) {
+        const o = el('option', null, a.nome); o.value = a.id; sceltaAlleanza.appendChild(o);
+      }
+      if (ambito.value === 'alliance') idAmbito.value = sceltaAlleanza.value || '';
+    }).catch(() => { optAttesa.textContent = pvT('noMatch'); });
+
+    const bloccoAlleanza = el('div', 'wp-pv-campo');
+    bloccoAlleanza.appendChild(el('span', 'wp-pv-label', pvT('pickAlliance')));
+    bloccoAlleanza.appendChild(sceltaAlleanza);
+
     const mostraBlocco = () => {
-      const suMu = ambito.value === 'mu';
-      bloccoNazione.hidden = suMu;
-      bloccoMu.hidden = !suMu;
-      idAmbito.value = suMu ? (risultatiMu.value || '') : (sceltaNazione.value || '');
+      const q = ambito.value;
+      bloccoNazione.hidden = q !== 'country';
+      bloccoMu.hidden = q !== 'mu';
+      bloccoAlleanza.hidden = q !== 'alliance';
+      idAmbito.value = q === 'mu' ? (risultatiMu.value || '')
+        : q === 'alliance' ? (sceltaAlleanza.value || '')
+        : (sceltaNazione.value || '');
     };
     ambito.addEventListener('change', mostraBlocco);
     mostraBlocco();
@@ -251,7 +275,7 @@ export function creaPannelloAdmin(ctx) {
     const r3 = el('div', 'wp-pv-riga');
     r3.appendChild(motivo); r3.appendChild(salva);
     form.appendChild(r1);
-    form.appendChild(bloccoNazione); form.appendChild(bloccoMu);
+    form.appendChild(bloccoNazione); form.appendChild(bloccoMu); form.appendChild(bloccoAlleanza);
     form.appendChild(idAmbito);
     form.appendChild(r3);
     return form;
