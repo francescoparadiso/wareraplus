@@ -324,7 +324,11 @@ function cardCollegato() {
   card.appendChild(el('strong', 'wp-pv-name wp-pv-name-big', account.warUsername || account.warUserId));
 
   card.appendChild(el('h2', 'wp-pv-h2 wp-pv-h2-sep', pvT('nextStep')));
-  card.appendChild(el('p', 'wp-pv-body', pvT('nextStepBody')));
+  // `nextStepDone` e non `nextStepBody`: quest'ultimo descrive il
+  // collegamento, che a questo punto è già avvenuto. Dire a chi ha appena
+  // finito che il prossimo passo è quello che ha appena fatto è il modo
+  // più rapido per far dubitare che sia andata a buon fine.
+  card.appendChild(el('p', 'wp-pv-body', pvT('nextStepDone')));
 
   card.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('unlink'), () => conAttesa(async () => {
     account = (await scollegaPersonaggio()).account;
