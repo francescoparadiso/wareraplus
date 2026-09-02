@@ -69,6 +69,13 @@ export async function fetchMe() {
   if (!getToken()) return null;
   try {
     const data = await call('/auth/me');
+    // Si annota se questo browser appartiene a un amministratore, cosi'
+    // la barra dei menu' puo' decidere se mostrare la voce senza pagare
+    // una richiesta di rete al boot. E' un suggerimento d'interfaccia,
+    // non un permesso: il server rifiuta comunque chi non lo e'.
+    try {
+      if (data?.account) localStorage.setItem('wp_plus_admin', data.account.admin ? '1' : '0');
+    } catch { /* modalita' privata: si fa a meno della voce di menu' */ }
     return data?.account || null;
   } catch (err) {
     // Server irraggiungibile: si distingue dal "non loggato", perché la
@@ -81,6 +88,7 @@ export async function fetchMe() {
 export async function logout() {
   try { await call('/auth/logout', { method: 'POST' }); } catch { /* si esce comunque */ }
   clearToken();
+  try { localStorage.removeItem('wp_plus_admin'); } catch { /* ignora */ }
 }
 
 /** URL a cui mandare il browser per iniziare il giro OAuth. */

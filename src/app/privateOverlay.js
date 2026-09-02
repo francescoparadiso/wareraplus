@@ -22,6 +22,7 @@ let overlayEl, backBtn, rootEl;
 // sta nel chunk pigro: leggerlo al boot vorrebbe dire scaricare l'intera
 // vista anche a chi non la aprira' mai.
 let authError = null;
+let _comeAccount = null;
 
 const TOKEN_KEY = 'wp_plus_token';
 
@@ -69,6 +70,14 @@ export function initPrivateOverlay() {
     window.addEventListener('wareraplus:diplomacy-ready', () => { openPrivateView(); }, { once: true });
   }
 
+  // L'amministrazione e' una sezione a parte: quando chiede "vedi come",
+  // si apre QUESTA vista con la lente, invece di ricostruirne una copia
+  // di la' che prima o poi divergerebbe da quella vera.
+  window.addEventListener('wareraplus:private-view-as', (e) => {
+    _comeAccount = e.detail?.accountId || null;
+    openPrivateView();
+  });
+
   backBtn.addEventListener('click', closePrivateView);
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && overlayEl.classList.contains('open')) closePrivateView();
@@ -88,7 +97,12 @@ export async function openPrivateView() {
     // L'errore si consegna una volta sola: riaprendo la vista non deve
     // ricomparire un messaggio su un tentativo di mezz'ora fa.
     const err = authError; authError = null;
-    mod.initPrivateView(rootEl, { authError: err });
+    const come = _comeAccount; _comeAccount = null;
+    if (come && mod.guardaComeDaFuori) {
+      mod.initPrivateView(rootEl, { authError: err, comeAccount: come });
+    } else {
+      mod.initPrivateView(rootEl, { authError: err });
+    }
   });
 
   trackEvent('private-view-open');

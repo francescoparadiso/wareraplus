@@ -29,6 +29,8 @@
 
 import { state } from '../diplomacy/state.js';
 import { trpcBatch } from '../diplomacy/utils.js';
+import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
+import { fetchMoneyTransfers, transfersFor, windowIsShort } from '../battles/moneyTransfers.js';
 
 /** Quante battaglie arricchire con la taglia vera. Oltre la decina il
  *  numero non cambia più una decisione: si sceglie fra le prime. */
@@ -36,6 +38,19 @@ const CON_TAGLIA = 10;
 
 export function nomeNazione(id) { return state.nationMap?.get(id)?.name || null; }
 export function nomeRegione(id) { return state.regionData?.[id]?.name || null; }
+
+/** La tinta con cui la nazione e' dipinta sulla mappa. Usarla anche qui
+ *  fa si' che "il verde" sia lo stesso verde di la': un colore inventato
+ *  per questa vista sarebbe un secondo vocabolario da imparare. */
+export function coloreNazione(id) {
+  return state.nationBaseColorMap?.get(id) || null;
+}
+
+export function urlBandiera(id) {
+  const n = state.nationMap?.get(id);
+  if (!n) return null;
+  return getFlagUrl(getNationCode(id, n)) || null;
+}
 
 /** Danno fatto nel round in corso, i due lati sommati. Il campo `damages`
  *  a livello di battaglia è risultato sempre 0 (misurato): quello vivo
@@ -74,13 +89,29 @@ export function schieramenti(b) {
 export async function preparaBattaglie(battaglie, nazioniAmmesse) {
   const utili = (battaglie || [])
     .filter((b) => b.isActive !== false)
-    .map((b) => ({
-      raw: b,
-      id: b._id,
-      etichetta: etichettaBattaglia(b),
-      danno: dannoBattaglia(b),
-      lati: schieramenti(b).filter((s) => nazioniAmmesse.has(s.countryId)),
-    }))
+    .map((b) => {
+      const cr = b.currentRound || {};
+      return {
+        raw: b,
+        id: b._id,
+        etichetta: etichettaBattaglia(b),
+        regione: nomeRegione(b.defender?.region) || nomeRegione(b.attacker?.region),
+        danno: dannoBattaglia(b),
+        // Il danno diviso per schieramento: "chi sta picchiando" e' una
+        // domanda diversa da "quanto si sta picchiando", e per decidere
+        // dove portare un'unita' conta la prima.
+        parti: schieramenti(b).map((sd) => ({
+          ...sd,
+          danno: cr[sd.side]?.damages || 0,
+          colpi: cr[sd.side]?.hitCount || 0,
+          colore: coloreNazione(sd.countryId),
+          bandiera: urlBandiera(sd.countryId),
+          ammessa: nazioniAmmesse.has(sd.countryId),
+        })),
+        inizio: b.createdAt ? new Date(b.createdAt).getTime() : null,
+        lati: schieramenti(b).filter((sd) => nazioniAmmesse.has(sd.countryId)),
+      };
+    })
     .filter((b) => b.lati.length)
     .sort((x, y) => y.danno - x.danno);
 
@@ -121,4 +152,49 @@ async function aggiungiTaglie(prime) {
     // perfettamente usabile. Non si fa cadere una vista per un numero.
     console.warn('[area riservata] taglie non disponibili:', err.message);
   }
+}
+
+
+// ---------------------------------------------------------------------------
+// Finanziatori
+// ---------------------------------------------------------------------------
+// Chi sta versando nel tesoro dei belligeranti mentre la battaglia e'
+// aperta. Non e' un dettaglio da curiosi: un tesoro che si sta riempiendo
+// e' un tesoro che paghera' le taglie, ed e' esattamente quello che un
+// comandante vuole sapere prima di impegnare l'unita' per cinque minuti.
+//
+// ⚠️ Costa UNA fetch per sessione, non una per battaglia: il modulo
+// scarica la lista globale dei bonifici e la si filtra in memoria sulla
+// finestra della singola battaglia. Aprire venti battaglie costa quanto
+// aprirne una. La copertura dell'API e' di ~3 giorni: per una battaglia
+// piu' vecchia windowIsShort() dice "fuori portata", che e' diverso da
+// "nessuno ha finanziato".
+
+let _bonifici = null;
+let _bonificiPromessa = null;
+
+export async function caricaFinanziatori() {
+  if (_bonifici) return _bonifici;
+  if (!_bonificiPromessa) {
+    _bonificiPromessa = fetchMoneyTransfers()
+      .then((d) => { _bonifici = d; return d; })
+      .catch(() => null);
+  }
+  return _bonificiPromessa;
+}
+
+/** I finanziatori dei due schieramenti di una battaglia, gia' pronti da
+ *  disegnare. `fuoriPortata` distingue "non lo sappiamo" da "nessuno". */
+export function finanziatoriDi(b) {
+  if (!_bonifici || !b?.inizio) return null;
+  const perParte = b.parti.map((p) => ({
+    countryId: p.countryId,
+    nome: p.nome,
+    colore: p.colore,
+    voci: transfersFor(_bonifici, p.countryId, b.inizio, Date.now()).slice(0, 5),
+  }));
+  return {
+    fuoriPortata: windowIsShort(_bonifici, b.inizio),
+    perParte: perParte.filter((p) => p.voci.length),
+  };
 }

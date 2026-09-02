@@ -594,3 +594,7 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
 .wp-pv-canale-testa { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 .wp-pv-canale-testa .wp-pv-badge { margin-left: auto; }
 .wp-pv-badge-ok { border-color: transparent; background: rgba(47, 158, 95, .16); color: #2f9e5f; }
+
+/* L'amministrazione non ha una colonna profilo: una griglia a due
+   colonne con una vuota sarebbe solo spazio sprecato. */
+.wp-pv-solo { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'testata' 'dx'; }

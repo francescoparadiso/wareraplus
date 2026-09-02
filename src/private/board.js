@@ -28,7 +28,9 @@ import {
   nazioniAmmesse, leggiListaPermessi, aggiungiAllaLista, togliDallaLista,
   leggiCanale, impostaCanale, ApiError,
 } from './api.js';
-import { preparaBattaglie, nomeNazione } from './battles.js';
+import {
+  preparaBattaglie, nomeNazione, caricaFinanziatori, finanziatoriDi,
+} from './battles.js';
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -55,6 +57,9 @@ export function creaTavolo(ctx) {
   let errore = null;
   let apertaId = null;          // battaglia con il modulo aperto
   let occupato = false;
+  // Tre sezioni invece di un elenco di schede tutte uguali: si arriva
+  // qui per fare UNA cosa, e le altre due non devono essere in mezzo.
+  let sezione = 'battaglie';    // 'battaglie' | 'tavolo' | 'impostazioni'
 
   async function carica() {
     caricamento = true; errore = null; ctx.ridisegna();
@@ -72,6 +77,9 @@ export function creaTavolo(ctx) {
         ]);
         ammesse = new Set(p.countryIds || []);
         battaglie = await preparaBattaglie(b, ammesse);
+        // Una fetch per sessione, non una per battaglia: si scarica la
+        // lista globale dei bonifici e la si filtra in memoria.
+        caricaFinanziatori().then(() => ctx.ridisegna());
       }
 
       // Le liste permessi delle nazioni che questa persona governa.
@@ -119,11 +127,39 @@ export function creaTavolo(ctx) {
     }
 
     const cap = dati.capacita || {};
-    if (cap.chiedePer?.length && !dati.lente) frag.appendChild(cardBattaglie(cap));
-    frag.appendChild(cardTavolo(cap));
-    for (const [cid, lista] of liste) frag.appendChild(cardLista(cid, lista));
-    if (canali.size && !dati.lente) frag.appendChild(cardCanali());
+    const puoChiedere = Boolean(cap.chiedePer?.length) && !dati.lente;
+    const haImpostazioni = (liste.size || canali.size) && !dati.lente;
+
+    const sezioni = [];
+    if (puoChiedere) sezioni.push(['battaglie', pvT('battlesTitle')]);
+    sezioni.push(['tavolo', pvT('boardTitle')]);
+    if (haImpostazioni) sezioni.push(['impostazioni', pvT('settingsTitle')]);
+
+    // Se la sezione scelta non esiste per questa persona si ricade sulla
+    // prima disponibile: un ministro non ha le battaglie, un comandante
+    // senza governo non ha le impostazioni.
+    if (!sezioni.some(([k]) => k === sezione)) sezione = sezioni[0]?.[0] || 'tavolo';
+
+    if (sezioni.length > 1) frag.appendChild(barraSezioni(sezioni));
+
+    if (sezione === 'battaglie') frag.appendChild(cardBattaglie(cap));
+    else if (sezione === 'tavolo') frag.appendChild(cardTavolo(cap));
+    else {
+      for (const [cid, lista] of liste) frag.appendChild(cardLista(cid, lista));
+      if (canali.size) frag.appendChild(cardCanali());
+    }
     return frag;
+  }
+
+  function barraSezioni(sezioni) {
+    const barra = el('nav', 'wp-pv-sezioni');
+    for (const [chiave, testo] of sezioni) {
+      const b = el('button', `wp-pv-sezione${sezione === chiave ? ' attiva' : ''}`, testo);
+      b.type = 'button';
+      b.addEventListener('click', () => { sezione = chiave; apertaId = null; ctx.ridisegna(); });
+      barra.appendChild(b);
+    }
+    return barra;
   }
 
   // ── Battaglie ────────────────────────────────────────────────────────
@@ -144,31 +180,98 @@ export function creaTavolo(ctx) {
   function rigaBattaglia(b, cap) {
     const box = el('div', 'wp-pv-btl');
 
+    // ── Testa: la regione e il bottone ─────────────────────────────────
     const testa = el('div', 'wp-pv-btl-testa');
-    testa.appendChild(el('strong', 'wp-pv-btl-nome', b.etichetta));
+    testa.appendChild(el('span', 'wp-pv-btl-regione', b.regione || b.etichetta));
+    if (b.taglia != null) {
+      const t = el('span', 'wp-pv-btl-taglia');
+      t.appendChild(el('span', 'wp-pv-label', pvT('bountyPaid')));
+      t.appendChild(el('strong', null, num(b.taglia)));
+      testa.appendChild(t);
+    }
+    box.appendChild(testa);
+
+    // ── I due schieramenti, con bandiera, colore e danno ───────────────
+    // Il colore e' quello con cui la nazione e' dipinta sulla mappa: qui
+    // non si inventa una tavolozza nuova, si riusa quella che l'utente
+    // ha gia' negli occhi.
+    const massimo = Math.max(1, ...b.parti.map((p) => p.danno));
+    const parti = el('div', 'wp-pv-btl-parti');
+    for (const p of b.parti) {
+      const riga = el('div', `wp-pv-btl-parte${p.ammessa ? '' : ' esclusa'}`);
+
+      const capo = el('div', 'wp-pv-btl-capo');
+      if (p.bandiera) {
+        const f = el('img', 'wp-pv-btl-bandiera');
+        f.src = p.bandiera; f.alt = ''; f.loading = 'lazy';
+        f.addEventListener('error', () => { f.style.display = 'none'; });
+        capo.appendChild(f);
+      }
+      const nome = el('strong', 'wp-pv-btl-nazione', p.nome || p.countryId);
+      if (p.colore) nome.style.color = p.colore;
+      capo.appendChild(nome);
+      capo.appendChild(el('span', 'wp-pv-btl-lato',
+        p.side === 'attacker' ? pvT('sideAttacker') : pvT('sideDefender')));
+      riga.appendChild(capo);
+
+      // Una barra al posto di un secondo numero: "chi sta picchiando di
+      // piu'" si legge dalla lunghezza prima che dalla cifra.
+      const barra = el('div', 'wp-pv-btl-barra');
+      const dentro = el('div', 'wp-pv-btl-barra-piena');
+      dentro.style.width = `${Math.round((p.danno / massimo) * 100)}%`;
+      if (p.colore) dentro.style.background = p.colore;
+      barra.appendChild(dentro);
+      riga.appendChild(barra);
+
+      riga.appendChild(el('span', 'wp-pv-btl-danno', num(p.danno)));
+      parti.appendChild(riga);
+    }
+    box.appendChild(parti);
+
+    // ── Finanziatori ───────────────────────────────────────────────────
+    const fin = finanziatoriDi(b);
+    if (fin) box.appendChild(bloccoFinanziatori(fin));
+
+    const azioni = el('div', 'wp-pv-azioni');
     const apri = el('button', 'wp-pv-btn wp-pv-btn-primary wp-pv-btn-small',
       apertaId === b.id ? pvT('cancel') : pvT('askHere'));
     apri.type = 'button'; apri.disabled = occupato;
     apri.addEventListener('click', () => { apertaId = apertaId === b.id ? null : b.id; ctx.ridisegna(); });
-    testa.appendChild(apri);
-    box.appendChild(testa);
-
-    const numeri = el('div', 'wp-pv-btl-numeri');
-    numeri.appendChild(voce(pvT('damageSoFar'), num(b.danno)));
-    // La taglia c'è solo sulle prime della classifica: sotto, il numero
-    // non cambierebbe una decisione e non vale una richiesta in più.
-    if (b.taglia != null) numeri.appendChild(voce(pvT('bountyPaid'), num(b.taglia)));
-    box.appendChild(numeri);
+    azioni.appendChild(apri);
+    box.appendChild(azioni);
 
     if (apertaId === b.id) box.appendChild(moduloRichiesta(b, cap));
     return box;
   }
 
-  function voce(etichetta, valore) {
-    const v = el('div', 'wp-pv-btl-voce');
-    v.appendChild(el('span', 'wp-pv-label', etichetta));
-    v.appendChild(el('strong', null, valore));
-    return v;
+  /** Chi sta versando nel tesoro dei belligeranti mentre la battaglia e'
+   *  aperta. Un tesoro che si riempie e' un tesoro che paghera'. */
+  function bloccoFinanziatori(fin) {
+    const box = el('div', 'wp-pv-btl-fin');
+    box.appendChild(el('span', 'wp-pv-label', pvT('financiers')));
+
+    if (fin.fuoriPortata) {
+      // "Non lo sappiamo" non e' "nessuno": la copertura dell'API arriva
+      // a ~3 giorni, e spacciare un buco per un fatto sarebbe una bugia.
+      box.appendChild(el('span', 'wp-pv-btl-fin-nota', pvT('financiersOutOfRange')));
+      return box;
+    }
+    if (!fin.perParte.length) {
+      box.appendChild(el('span', 'wp-pv-btl-fin-nota', pvT('financiersNone')));
+      return box;
+    }
+
+    for (const p of fin.perParte) {
+      const riga = el('div', 'wp-pv-btl-fin-riga');
+      const chi = el('strong', 'wp-pv-btl-fin-verso', p.nome || p.countryId);
+      if (p.colore) chi.style.color = p.colore;
+      riga.appendChild(chi);
+      const voci = el('span', 'wp-pv-btl-fin-voci',
+        p.voci.map((v) => `${nomeNazione(v.from) || '?'} ${num(v.money)}`).join(' · '));
+      riga.appendChild(voci);
+      box.appendChild(riga);
+    }
+    return box;
   }
 
   function moduloRichiesta(b, cap) {
@@ -189,16 +292,67 @@ export function creaTavolo(ctx) {
       o.value = id; unita.appendChild(o);
     }
 
-    // Obbligatori: un contratto senza danno minimo e senza budget non e'
-    // una richiesta, e' una domanda a cui il ministro non puo' rispondere.
-    // Prima passavano vuoti e sul tavolo comparivano due trattini.
+    // ── Danno minimo ───────────────────────────────────────────────────
+    // A mano ci si perde uno zero, e cinque milioni al posto di cinquecento
+    // mila e' una richiesta che il ministro rifiuta senza capire perche'.
+    // Scalini per i tagli usuali, campo libero per il resto, e il numero
+    // riscritto per esteso sotto: uno zero di troppo si vede.
     const danno = campo('number', pvT('minDamage'), '1000000', { obbligatorio: true });
-    const budget = campo('number', pvT('budgetL'), '100', { obbligatorio: true });
+    danno.input.step = '100000';
+
+    const scalini = el('div', 'wp-pv-scalini');
+    scalini.appendChild(el('span', 'wp-pv-label', pvT('damagePreset')));
+    const bottoniScalini = el('div', 'wp-pv-scalini-riga');
+    for (const v of [500000, 1000000, 2000000, 5000000, 10000000]) {
+      const b2 = el('button', 'wp-pv-scalino', v >= 1000000 ? `${v / 1000000}M` : `${v / 1000}k`);
+      b2.type = 'button';
+      b2.addEventListener('click', () => { danno.input.value = String(v); aggiornaTotale(); });
+      bottoniScalini.appendChild(b2);
+    }
+    scalini.appendChild(bottoniScalini);
+
+    // ── Taglia per 1000 danni ──────────────────────────────────────────
+    // E' la grandezza con cui si ragiona nel gioco (initialPerK), non il
+    // totale: si muove fra 0,01 e 0,2, quindi serve il decimale.
+    const taglia = campo('number', pvT('bountyL'), '0.08', { obbligatorio: true });
+    taglia.input.step = '0.01';
+    taglia.input.min = '0.01';
+    taglia.input.max = '2';
+    taglia.wrap.appendChild(el('span', 'wp-pv-suggerimento', pvT('bountyHint')));
+
+    // Il totale non si chiede, si calcola: e' il numero che esce davvero
+    // dal tesoro, ed e' guardandolo che ci si accorge dello zero di troppo.
+    const totale = el('div', 'wp-pv-totale');
+    const totaleVal = el('strong', 'wp-pv-totale-val', '—');
+    totale.appendChild(el('span', 'wp-pv-label', pvT('totalBudget')));
+    totale.appendChild(totaleVal);
+    totale.appendChild(el('span', 'wp-pv-suggerimento', pvT('totalBudgetHint')));
+
+    function budgetCalcolato() {
+      const d = Number(danno.input.value) || 0;
+      const t = Number(taglia.input.value) || 0;
+      return (d / 1000) * t;
+    }
+    function aggiornaTotale() {
+      const v = budgetCalcolato();
+      totaleVal.textContent = v > 0 ? v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—';
+    }
+    danno.input.addEventListener('input', aggiornaTotale);
+    taglia.input.addEventListener('input', aggiornaTotale);
+    aggiornaTotale();
+
     const nota = campo('text', pvT('noteL'), pvT('notePh'));
 
-    const pro = el('label', 'wp-pv-check');
+    // ── Solo professioniste ────────────────────────────────────────────
+    // Non una spunta muta: e' la sola difesa tecnica contro il furto del
+    // contratto, e chi non sa cosa fa non la usa.
+    const pro = el('label', 'wp-pv-opzione');
     const proBox = el('input'); proBox.type = 'checkbox';
-    pro.appendChild(proBox); pro.appendChild(el('span', null, pvT('proOnly')));
+    pro.appendChild(proBox);
+    const proTesti = el('span', 'wp-pv-opzione-testi');
+    proTesti.appendChild(el('strong', null, pvT('proOnly')));
+    proTesti.appendChild(el('span', 'wp-pv-suggerimento', pvT('proOnlyHint')));
+    pro.appendChild(proTesti);
 
     const invia = el('button', 'wp-pv-btn wp-pv-btn-primary wp-pv-btn-small', pvT('send'));
     invia.type = 'submit'; invia.disabled = occupato;
@@ -211,7 +365,10 @@ export function creaTavolo(ctx) {
           battleId: b.id, battleLabel: b.etichetta, side, countryId,
           muId: unita.value, muNome: ctx.nomeUnita?.(unita.value) || null,
           minDamage: Number(danno.input.value) || null,
-          budget: Number(budget.input.value) || null,
+          // Si manda il totale calcolato, che e' cio' che l'asta vuole, e
+          // anche la tariffa: il tavolo mostra quella, il gioco quello.
+          budget: budgetCalcolato() || null,
+          perK: Number(taglia.input.value) || null,
           professionalsOnly: proBox.checked,
           note: nota.input.value.trim() || null,
         });
@@ -221,9 +378,10 @@ export function creaTavolo(ctx) {
 
     form.appendChild(etichetta(pvT('side'), lato));
     form.appendChild(etichetta(pvT('unit'), unita));
-    const r = el('div', 'wp-pv-riga');
-    r.appendChild(danno.wrap); r.appendChild(budget.wrap);
-    form.appendChild(r);
+    form.appendChild(danno.wrap);
+    form.appendChild(scalini);
+    form.appendChild(taglia.wrap);
+    form.appendChild(totale);
     form.appendChild(nota.wrap);
     form.appendChild(pro);
     form.appendChild(invia);
@@ -255,7 +413,9 @@ export function creaTavolo(ctx) {
 
     box.appendChild(el('div', 'wp-pv-req-battaglia', r.battleLabel || r.battleId));
     box.appendChild(el('div', 'wp-pv-req-numeri',
-      `${pvT('minDamage')} ${num(r.minDamage)} · ${pvT('budgetL')} ${num(r.budget)}`
+      `${pvT('minDamage')} ${num(r.minDamage)}`
+      + (r.perK ? ` · ${pvT('bountyL')} ${r.perK}` : '')
+      + ` · ${pvT('totalBudget')} ${num(r.budget)}`
       + (r.professionalsOnly ? ` · ${pvT('proOnly')}` : '')));
     if (r.note) box.appendChild(el('div', 'wp-pv-req-nota', r.note));
 

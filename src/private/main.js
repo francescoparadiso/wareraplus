@@ -37,7 +37,7 @@ import {
 } from './api.js';
 import { state } from '../diplomacy/state.js';
 import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
-import { creaPannelloAdmin, renderDeroghe } from './admin.js';
+import { renderDeroghe } from './admin.js';
 import { creaTavolo } from './board.js';
 
 let rootEl = null;
@@ -60,16 +60,22 @@ let tickScadenza = null;
 // viene da una correzione e non dalla carica.
 let ruoli = null;
 let comeAltri = null;         // id dell'account che si sta guardando
-let pannelloAdmin = null;
 let tavolo = null;
 
-export async function initPrivateView(container, { authError = null } = {}) {
+export async function initPrivateView(container, { authError = null, comeAccount = null } = {}) {
   rootEl = container;
   erroreAccesso = authError;
+  if (comeAccount) comeAltri = comeAccount;
   render();
   await refresh();
 
   window.addEventListener('wareraplus:langchange', render);
+}
+
+/** Chiamata dall'esterno quando l'amministrazione chiede di guardare con
+ *  gli occhi di un altro: la lente vive QUI, dove sta la vista vera. */
+export async function guardaComeDaFuori(accountId) {
+  await guardaCome(accountId);
 }
 
 async function refresh() {
@@ -191,22 +197,6 @@ function render() {
       colonnaDx.appendChild(creaOTavolo().render());
     }
 
-    if (account.admin) {
-      if (!pannelloAdmin) {
-        pannelloAdmin = creaPannelloAdmin({
-          ridisegna: render,
-          apriComeAltri: guardaCome,
-          // Una deroga appena concessa cambia i poteri: ruoli e tavolo
-          // vanno riletti, altrimenti restano quelli di un minuto fa.
-          ruoliCambiati: async () => {
-            await caricaRuoli({ refresh: true });
-            await tavolo?.ricarica();
-            render();
-          },
-        });
-      }
-      colonnaDx.appendChild(pannelloAdmin.render());
-    }
   }
 
   wrap.appendChild(colonnaSx);
