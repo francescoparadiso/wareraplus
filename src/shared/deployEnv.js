@@ -54,7 +54,7 @@ export const IS_DEV_BUILD = !IS_LIVE;
    Le due versioni sono identiche a vedersi, e un URL di preview
    somiglia abbastanza a quello vero da poterci cascare — soprattutto
    da telefono, dove la barra degli indirizzi è mezza nascosta. Un
-   cartellino in alto a sinistra toglie ogni dubbio su quale delle due
+   cartellino in basso a sinistra toglie ogni dubbio su quale delle due
    si ha davanti prima ancora di leggere l'URL.
 
    Volutamente NON cliccabile e senza logica: se un giorno finisse per
