@@ -16,6 +16,7 @@
    che non c'è: promette qualcosa e poi accusa chi l'ha premuto.
    ══════════════════════════════════════════════════════════════ */
 
+import { state } from '../diplomacy/state.js';
 import { pvT, pvErr } from './i18n.js';
 import {
   leggiTavolo, chiediContratto, approvaRichiesta, rifiutaRichiesta,
@@ -120,12 +121,29 @@ export function creaTavolo(ctx) {
     };
     riempi();
     if (!battaglie) {
-      battaglieInCorso().then((b) => { battaglie = b || []; ctx.ridisegna(); }).catch(() => { battaglie = []; });
+      battaglieInCorso()
+        .then((b) => { battaglie = (b || []).filter((x) => x.isActive !== false); ctx.ridisegna(); })
+        .catch(() => { battaglie = []; });
     }
+
+    // Per chi si combatte: due opzioni, coi nomi veri. Si aggiorna quando
+    // cambia la battaglia, perche' gli schieramenti sono suoi.
+    const lato = el('select', 'wp-pv-select');
+    const riempiLato = () => {
+      lato.textContent = '';
+      const b = (battaglie || []).find((x) => x._id === battaglia.value);
+      for (const s of schieramenti(b)) {
+        const o = el('option', null, s.nome || s.countryId);
+        o.value = `${s.side}|${s.countryId}`;
+        lato.appendChild(o);
+      }
+    };
+    riempiLato();
+    battaglia.addEventListener('change', riempiLato);
 
     const unita = el('select', 'wp-pv-select');
     for (const id of cap.chiedePer) {
-      const o = el('option', null, id === dataMuNome(id) ? id : dataMuNome(id));
+      const o = el('option', null, dataMuNome(id));
       o.value = id; unita.appendChild(o);
     }
 
@@ -146,12 +164,13 @@ export function creaTavolo(ctx) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const b = (battaglie || []).find((x) => x._id === battaglia.value);
+      const [side, countryId] = String(lato.value || '|').split('|');
       azione(async () => {
         await chiediContratto({
           battleId: battaglia.value,
           battleLabel: b ? etichettaBattaglia(b) : null,
-          side: null,
-          countryId: paeseDellaBattaglia(b),
+          side,
+          countryId,
           muId: unita.value,
           muNome: dataMuNome(unita.value),
           minDamage: Number(danno.input.value) || null,
@@ -164,6 +183,7 @@ export function creaTavolo(ctx) {
     });
 
     form.appendChild(etichetta(pvT('battle'), battaglia));
+    form.appendChild(etichetta(pvT('side'), lato));
     form.appendChild(etichetta(pvT('unit'), unita));
     const r = el('div', 'wp-pv-riga');
     r.appendChild(danno.wrap); r.appendChild(budget.wrap);
@@ -269,16 +289,33 @@ export function creaTavolo(ctx) {
   return { render, ricarica: carica };
 }
 
-function etichettaBattaglia(b) {
-  const r = b?.region?.name || b?.regionName || b?.region || '';
-  const a = b?.attackerCountry?.name || '';
-  const d = b?.defenderCountry?.name || '';
-  if (r && a && d) return `${r} — ${a} vs ${d}`;
-  return r || b?._id || '?';
+// I record di /battles portano SOLO id, per nazione e per regione. I nomi
+// sono gia' in memoria dal boot della mappa — state.nationMap e
+// state.regionData — e si leggono da li' invece di aggiungere una fetch,
+// che e' la regola del progetto. Stessa risoluzione che usa gia'
+// src/battles/battleList.js: non se ne inventa una seconda.
+function nomeNazione(id) { return state.nationMap?.get(id)?.name || null; }
+function nomeRegione(id) { return state.regionData?.[id]?.name || null; }
+
+export function etichettaBattaglia(b) {
+  if (!b) return '?';
+  const regione = nomeRegione(b.defender?.region) || nomeRegione(b.attacker?.region);
+  const att = nomeNazione(b.attacker?.country);
+  const dif = nomeNazione(b.defender?.country);
+  if (regione && att && dif) return `${regione} — ${att} → ${dif}`;
+  if (att && dif) return `${att} → ${dif}`;
+  // Meglio dirlo che stampare un id esadecimale: succede sulle battaglie
+  // di torneo, dove non c'e' una nazione ma una squadra.
+  return regione || b._id || '?';
 }
 
-/** Per chi si combatte: si prende il difensore quando c'è, altrimenti
- *  l'attaccante. Il modulo lo mostra e resta modificabile lato server. */
-function paeseDellaBattaglia(b) {
-  return b?.defenderCountry?._id || b?.attackerCountry?._id || b?.countryId || '';
+/** I due schieramenti, per far scegliere PER CHI si combatte. Non si
+ *  indovina: il difensore non e' sempre quello che paga, e sbagliare
+ *  nazione significa mandare la richiesta a un ministro che non c'entra. */
+export function schieramenti(b) {
+  if (!b) return [];
+  return [
+    { side: 'attacker', countryId: b.attacker?.country, nome: nomeNazione(b.attacker?.country) },
+    { side: 'defender', countryId: b.defender?.country, nome: nomeNazione(b.defender?.country) },
+  ].filter((s) => s.countryId);
 }
