@@ -36,7 +36,7 @@
 const express = require('express');
 const cors = require('cors');
 
-const { initDb, purgeExpiredSessions, dbStatus } = require('./db');
+const { initDb, purgeExpiredSessions, dbStatus, syncAdminsFromEnv } = require('./db');
 const { buildAuthRouter } = require('./auth');
 
 const WP_ENV = process.env.WP_ENV === 'live' ? 'live' : 'dev';
@@ -63,6 +63,14 @@ const SESSION_SECRET = process.env.SESSION_SECRET
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
   .split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
+
+// Amministratori del tool, per id Discord. Stanno nell'AMBIENTE e vengono
+// riapplicati a ogni avvio: se una query sbagliata azzerasse la colonna
+// is_admin, un riavvio rimette in piedi l'amministratore invece di lasciare
+// il tool chiuso a chiave con la chiave dentro. Altri admin si nominano poi
+// normalmente e quelli vivono nel database.
+const ADMIN_DISCORD_IDS = (process.env.ADMIN_DISCORD_IDS || '')
+  .split(',').map((s) => s.trim()).filter(Boolean);
 
 const app = express();
 app.disable('x-powered-by');
@@ -110,6 +118,9 @@ app.get('/health', (req, res) => res.json({
   },
   sessionSecret: process.env.SESSION_SECRET ? 'caricato' : 'EFFIMERO (le sessioni cadono ad ogni restart)',
   allowedOrigins: ALLOWED_ORIGINS,
+  // Quanti ne sono dichiarati, non CHI: un id Discord e' un dato personale
+  // e /health e' una rotta pubblica.
+  adminDaAmbiente: ADMIN_DISCORD_IDS.length,
   db: dbStatus(),
 }));
 
@@ -125,6 +136,9 @@ app.use((err, req, res, next) => {
 // Avvio
 // ---------------------------------------------------------------------------
 initDb();
+
+const promossi = syncAdminsFromEnv(ADMIN_DISCORD_IDS);
+if (promossi) console.log(`[plusApi] ${promossi} account promossi ad admin da ADMIN_DISCORD_IDS`);
 
 // Le sessioni scadute si cancellano da sole quando qualcuno prova a usarle;
 // questo giro serve alle altre, quelle di chi non torna più. Un'ora è

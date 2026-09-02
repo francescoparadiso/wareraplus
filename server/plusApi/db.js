@@ -67,6 +67,10 @@ CREATE TABLE IF NOT EXISTS account (
   war_user_id       TEXT    UNIQUE,
   war_username      TEXT,
   linked_at         INTEGER,
+  -- Amministratore del tool (non del gioco). Vede tutto, corregge i ruoli
+  -- derivati e può guardare l'area con gli occhi di un altro. Vedi il
+  -- blocco "AMMINISTRAZIONE" più sotto per come si diventa tali.
+  is_admin          INTEGER NOT NULL DEFAULT 0,
   created_at        INTEGER NOT NULL,
   last_seen_at      INTEGER NOT NULL
 );
@@ -97,6 +101,38 @@ CREATE TABLE IF NOT EXISTS audit (
   detail     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_audit_at ON audit(at);
+
+-- ── CORREZIONI AI RUOLI ────────────────────────────────────────────────
+-- I ruoli si CALCOLANO dai dati di gioco (government.getByCountryId per le
+-- cariche, mu.getById per owner/commander/manager): chi vince le elezioni
+-- entra da solo, chi le perde esce da solo, e nessuno deve evadere una coda
+-- di richieste. Ma il gioco non modella tutto — i capi alleanza non hanno
+-- un campo — e a volte sbaglia rispetto a come funzionano davvero le cose:
+-- un ministro che delega, un comandante che ha appena cambiato unità.
+--
+-- Questa tabella è il DELTA rispetto a quel calcolo, mai il sostituto:
+--   ruolo effettivo = (derivato dal gioco) + grant - revoke
+-- Tenerli separati fa sì che il derivato resti sempre visibile accanto
+-- alla correzione, così si vede *cosa* è stato corretto e non solo il
+-- risultato. Ogni riga porta chi l'ha messa e perché: una deroga senza
+-- motivo scritto, fra sei mesi, è indistinguibile da un errore.
+CREATE TABLE IF NOT EXISTS role_override (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  scope_type TEXT    NOT NULL,           -- 'country' | 'mu' | 'alliance' | 'global'
+  scope_id   TEXT,                       -- id di gioco; NULL quando scope_type='global'
+  role       TEXT    NOT NULL,           -- 'president' | 'minOfDefense' | 'commander' | 'admin' | …
+  mode       TEXT    NOT NULL,           -- 'grant' | 'revoke'
+  reason     TEXT,
+  granted_by INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER                     -- NULL = senza scadenza
+);
+-- Una sola riga per combinazione: la deroga più recente sostituisce la
+-- precedente invece di accumularsi in una pila da interpretare.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_override_unico
+  ON role_override(account_id, scope_type, IFNULL(scope_id, ''), role);
+CREATE INDEX IF NOT EXISTS idx_override_account ON role_override(account_id);
 `;
 
 function initDb() {
@@ -126,7 +162,73 @@ function initDb() {
 // già esistente non rilegge quelle. `PRAGMA table_info` dice cosa c'è già,
 // così la funzione è ripetibile a ogni avvio senza effetti.
 function migrate() {
-  // (nessuna migrazione ancora — il primo schema è questo)
+  const colonne = (tabella) =>
+    db.prepare(`PRAGMA table_info(${tabella})`).all().map((r) => r.name);
+
+  // 2026-09-02 — is_admin, aggiunta dopo che il database dev esisteva già
+  // con un account dentro. Senza questa riga il processo partirebbe e poi
+  // fallirebbe alla prima query che la nomina.
+  if (!colonne('account').includes('is_admin')) {
+    db.exec('ALTER TABLE account ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
+    console.log('[plusApi] migrazione: aggiunta account.is_admin');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// AMMINISTRAZIONE
+// ---------------------------------------------------------------------------
+// Chi amministra il TOOL — non il gioco. Serve per correggere i ruoli
+// derivati, concedere quelli che il gioco non espone (i capi alleanza) e
+// guardare l'area con gli occhi di un altro quando qualcuno segnala che non
+// vede quello che dovrebbe.
+//
+// L'elenco di partenza sta nell'AMBIENTE (ADMIN_DISCORD_IDS), non nel
+// database, e viene riapplicato a ogni avvio. È deliberato: se una query
+// sbagliata o una migrazione andata storta azzerasse la colonna, un riavvio
+// rimette in piedi l'amministratore invece di lasciare il tool senza
+// nessuno che possa rientrarci. Da lì in poi altri admin si nominano
+// normalmente, e quelli restano nel database.
+function syncAdminsFromEnv(discordIds) {
+  if (!discordIds?.length) return 0;
+  const stmt = getDb().prepare('UPDATE account SET is_admin = 1 WHERE discord_id = ? AND is_admin = 0');
+  let n = 0;
+  for (const id of discordIds) n += stmt.run(id).changes || 0;
+  return n;
+}
+
+function setAdmin(accountId, valore) {
+  getDb().prepare('UPDATE account SET is_admin = ? WHERE id = ?').run(valore ? 1 : 0, accountId);
+}
+
+// ---------------------------------------------------------------------------
+// CORREZIONI AI RUOLI
+// ---------------------------------------------------------------------------
+
+/** Mette (o sostituisce) una deroga. `mode` è 'grant' o 'revoke'. */
+function setRoleOverride({ accountId, scopeType, scopeId = null, role, mode, reason, grantedBy, expiresAt = null }) {
+  getDb().prepare(`
+    INSERT INTO role_override (account_id, scope_type, scope_id, role, mode, reason, granted_by, created_at, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(account_id, scope_type, IFNULL(scope_id, ''), role)
+    DO UPDATE SET mode = excluded.mode, reason = excluded.reason,
+                  granted_by = excluded.granted_by, created_at = excluded.created_at,
+                  expires_at = excluded.expires_at
+  `).run(accountId, scopeType, scopeId, role, mode, reason || null, grantedBy || null, Date.now(), expiresAt);
+}
+
+function removeRoleOverride({ accountId, scopeType, scopeId = null, role }) {
+  getDb().prepare(`DELETE FROM role_override
+                   WHERE account_id = ? AND scope_type = ? AND IFNULL(scope_id,'') = IFNULL(?,'') AND role = ?`)
+    .run(accountId, scopeType, scopeId, role);
+}
+
+/** Le deroghe ancora valide di un account (le scadute non si contano, ma
+ *  restano in tabella: sono storia, e l'audit da solo non basterebbe a
+ *  ricostruire cosa era in vigore in un dato momento). */
+function listRoleOverrides(accountId) {
+  return getDb().prepare(`SELECT * FROM role_override
+                          WHERE account_id = ? AND (expires_at IS NULL OR expires_at > ?)`)
+    .all(accountId, Date.now());
 }
 
 function getDb() {
@@ -248,6 +350,8 @@ function dbStatus() {
     file: path.join(DATA_DIR, 'plus.sqlite'),
     accounts: one('SELECT COUNT(*) AS n FROM account'),
     verificati: one('SELECT COUNT(*) AS n FROM account WHERE war_user_id IS NOT NULL'),
+    admin: one('SELECT COUNT(*) AS n FROM account WHERE is_admin = 1'),
+    deroghe: one('SELECT COUNT(*) AS n FROM role_override'),
     sessioniAttive: one(`SELECT COUNT(*) AS n FROM session WHERE expires_at > ${Date.now()}`),
   };
 }
@@ -255,6 +359,8 @@ function dbStatus() {
 module.exports = {
   initDb, getDb, DATA_DIR,
   upsertDiscordAccount, getAccountById, deleteAccount,
+  syncAdminsFromEnv, setAdmin,
+  setRoleOverride, removeRoleOverride, listRoleOverrides,
   createSession, accountFromToken, destroySession, purgeExpiredSessions,
   audit, dbStatus,
 };

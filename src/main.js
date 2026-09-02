@@ -41,6 +41,7 @@ import { initNationsOverlay, openNationsView } from './app/nationsOverlay.js';
 import { initMarketOverlay } from './app/marketOverlay.js';
 import { initBattlesOverlay } from './app/battlesOverlay.js';
 import { initGuideOverlay } from './app/guideOverlay.js';
+import { initPrivateOverlay } from './app/privateOverlay.js';
 import { takeReloadIntent } from './shared/lazyModule.js';
 import { initThemeSync } from './app/themeSync.js';
 import { initLangSync } from './app/langSync.js';
@@ -89,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initMarketOverlay();
   initBattlesOverlay();
   initGuideOverlay();
+  initPrivateOverlay();
   applyTranslations();
   initLangButton();
 });

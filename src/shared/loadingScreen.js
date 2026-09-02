@@ -52,6 +52,7 @@ const ACCENTS = {
   market: '#e3b341',
   'bloc-stats': '#a371f7',
   battles: '#db6d28',
+  private: '#818cf8',
 };
 const DEFAULT_ACCENT = '#58a6ff';
 

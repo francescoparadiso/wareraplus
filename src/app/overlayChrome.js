@@ -43,6 +43,10 @@ export const OVERLAY_TINTS = {
   // ambra → oro pallido (Guida: tinta propria, distinta dall'oro di Political)
   guide:    { rgbDark: '210,153,34',  rgbDark2: '240,136,62',
               rgbLight: '154,103,0',  rgbLight2: '181,96,25' },
+  // acciaio → indaco (Area riservata: volutamente fredda e diversa da
+  // tutte le altre — non è una sezione di dati e non deve sembrarlo)
+  private:  { rgbDark: '125,148,173', rgbDark2: '129,140,248',
+              rgbLight: '71,94,122',  rgbLight2: '79,70,229' },
   // oro → verde (Rendite di produzione: prezzi e produzione)
   market:   { rgbDark: '227,179,65',  rgbDark2: '63,185,80',
               rgbLight: '138,100,16', rgbLight2: '26,127,55' },

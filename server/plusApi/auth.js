@@ -258,6 +258,11 @@ function publicAccount(a) {
     warUserId: a.war_user_id || null,
     warUsername: a.war_username || null,
     verificato: Boolean(a.war_user_id),
+    // Amministratore del TOOL, non del gioco: il client lo usa per mostrare
+    // i comandi di gestione dei ruoli. Il permesso vero resta comunque
+    // controllato dal server ad ogni chiamata — questo flag decide solo
+    // cosa disegnare, mai cosa e' concesso.
+    admin: Boolean(a.is_admin),
   };
 }
 

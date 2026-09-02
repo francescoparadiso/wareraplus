@@ -431,6 +431,15 @@
   <!-- Guida "Come si usa" (src/guide/*): la sezione più leggera
        dell'app — solo testo statico, nessuna fetch. Stessa struttura
        overlay delle altre viste di Approfondimenti. -->
+  <div id="wp-private-overlay" class="wp-political-overlay wp-private-overlay" aria-hidden="true">
+    <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
+    <div class="wp-political-topbar">
+      <button id="wp-private-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
+      <span class="wp-political-title">Reserved area</span>
+    </div>
+    <div id="wp-private-root" style="display:none;"></div>
+  </div>
+
   <div id="wp-guide-overlay" class="wp-political-overlay wp-guide-overlay" aria-hidden="true">
     <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
     <div class="wp-political-topbar">
