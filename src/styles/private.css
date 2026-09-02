@@ -35,11 +35,37 @@
   color: var(--pv-ink);
 }
 
+/* ── Impaginazione ────────────────────────────────────────────────
+   Era una colonna da 42rem centrata, e su un monitor grande diventava
+   una striscia in mezzo al vuoto: il tavolo dei contratti e' una
+   tabella con due sottocolonne, non un articolo da leggere.
+
+   Ora e' una griglia che si riempie da sola. Le schede piccole (ruoli,
+   battaglie, lista permessi, canali) stanno affiancate; il tavolo,
+   che e' il pezzo largo, prende tutta la riga. Sotto i 60rem torna
+   una colonna sola senza bisogno di dirlo: `auto-fit` con un minimo
+   di 26rem lo fa da se'. */
 .wp-pv {
-  max-width: 42rem;
+  max-width: 84rem;
   margin: 0 auto;
-  padding: 2.5rem 1.25rem 5rem;
+  padding: 2.5rem 1.5rem 5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(26rem, 1fr));
+  gap: 1rem;
+  align-items: start;
 }
+
+/* Titolo e presentazione occupano tutta la riga: sono l'intestazione
+   della pagina, non una delle schede. */
+.wp-pv-testata { grid-column: 1 / -1; max-width: 46rem; }
+.wp-pv-testata .wp-pv-lead { margin-bottom: .5rem; }
+
+/* Il tavolo e il pannello amministratore prendono la riga intera: hanno
+   righe con due sottocolonne e a meta' larghezza si accartocciano. */
+.wp-pv-card-tavolo,
+.wp-pv-card-admin,
+.wp-pv-error,
+.wp-pv-devnote { grid-column: 1 / -1; }
 
 body.light-theme #wp-private-root {
   --pv-accent: #4f46e5;
@@ -444,14 +470,15 @@ body.light-theme .wp-pv-select option { background: #fff; color: #1a1a1a; }
 /* ── Identità in alto a sinistra ──────────────────────────────────
    Appiccicata mentre si scorre: non è contenuto, è il "chi sono
    adesso", e serve a colpo d'occhio soprattutto sotto la lente. */
+/* Attaccata al bordo SINISTRO dell'overlay, non alla colonna: dentro
+   la colonna centrata, su uno schermo largo, "in alto a sinistra"
+   diventava "in alto al centro". */
 .wp-pv-id {
   position: sticky;
   top: 0;
   z-index: 3;
-  /* Niente margine negativo: la striscia apre la colonna, non si
-     arrampica sopra il testo che la segue. */
-  margin: -2.5rem -1.25rem 1.75rem;
-  padding: .6rem 1.25rem;
+  margin: 0;
+  padding: .6rem 1.5rem;
   background: color-mix(in srgb, var(--pv-bg-sticky, #0d1416) 92%, transparent);
   backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--pv-rule);
@@ -515,7 +542,8 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
 .wp-pv-form-lista { gap: .45rem; margin-top: .5rem; }
 
 @media (max-width: 560px) {
-  .wp-pv-id { margin: -1.75rem -1rem 1.5rem; padding: .55rem 1rem; }
+  .wp-pv-id { padding: .55rem 1rem; }
+  .wp-pv { padding: 1.5rem 1rem 3rem; gap: .8rem; }
   .wp-pv-btl-numeri { gap: 1rem; }
 }
 

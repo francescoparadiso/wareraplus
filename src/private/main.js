@@ -139,17 +139,20 @@ function render() {
   if (tickScadenza) { clearInterval(tickScadenza); tickScadenza = null; }
   rootEl.textContent = '';
 
+  // L'identita' sta FUORI dalla colonna dei contenuti, attaccata al bordo
+  // sinistro dell'overlay: dentro la colonna centrata, su uno schermo
+  // largo, "in alto a sinistra" finiva per essere "in alto al centro".
+  if (account) rootEl.appendChild(cardIdentita());
+
   const wrap = el('div', 'wp-pv');
 
   const errAccesso = pvErr(erroreAccesso);
   if (errAccesso) wrap.appendChild(el('p', 'wp-pv-error', errAccesso));
 
-  // L'identita' apre la pagina: e' "chi sono adesso", e va letta prima
-  // di qualunque contenuto — non incastrata fra il titolo e le schede.
-  if (account) wrap.appendChild(cardIdentita());
-
-  wrap.appendChild(el('h1', 'wp-pv-title', pvT('title')));
-  wrap.appendChild(el('p', 'wp-pv-lead', pvT('lead')));
+  const testata = el('header', 'wp-pv-testata');
+  testata.appendChild(el('h1', 'wp-pv-title', pvT('title')));
+  testata.appendChild(el('p', 'wp-pv-lead', pvT('lead')));
+  wrap.appendChild(testata);
 
   if (erroreRete) wrap.appendChild(cardIndisponibile());
   else if (!account) wrap.appendChild(cardOspite());
