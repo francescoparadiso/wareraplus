@@ -976,10 +976,21 @@ function writeElectionDetail(electionId, payload) {
 // volta = mai più riletto dal disco.
 const _resolvedElectionIds = new Set();
 
+// WarEra+: il `resolved` già scritto su disco viene rivalidato contro il dato
+// che accompagna (isElectionResolved più sotto) invece che creduto sulla
+// parola. Serve a guarire da soli i file scritti col criterio vecchio: un
+// dettaglio marcato risolto ma fermo a status "voting" rientra fra quelli da
+// riscaricare al prossimo giro, e lì si risolve per davvero. Senza questo, i
+// file già avvelenati (l'Egitto dell'1/9) resterebbero sbagliati per sempre
+// anche col criterio nuovo, perché nessuno li rilegge. Non aggiunge letture
+// da disco: rivaluta l'oggetto appena letto.
 function isElectionDetailResolved(electionId) {
   if (_resolvedElectionIds.has(electionId)) return true;
   const existing = readElectionDetail(electionId);
-  if (existing?.resolved) { _resolvedElectionIds.add(electionId); return true; }
+  if (existing?.resolved && isElectionResolved(existing.data)) {
+    _resolvedElectionIds.add(electionId);
+    return true;
+  }
   return false;
 }
 
@@ -1018,9 +1029,29 @@ function mergeElectionLists(prev, fresh) {
     .slice(0, ELECTIONS_KEEP_PER_COUNTRY);
 }
 
+// WarEra+: `votesEndAt` passato NON basta a dichiarare chiusa un'elezione.
+// Il poll gira a :02 di ogni terzo minuto e può cadere pochi secondi dopo la
+// chiusura, quando WarEra ha già spostato l'orologio ma non ha ancora scritto
+// i conteggi per candidato: l'elezione arriva con status "voting" e `votes`
+// tutto a zero. Marcandola risolta in quel giro, gli zeri restavano congelati
+// per sempre — un'elezione risolta non viene mai più riletta né riscritta.
+//
+// Caso reale: presidenziali Egitto dell'1/9/2026 (6a9615c83794d58a4668b05e),
+// chiusura alle 00:01:43.857Z, poll alle 00:02:01.490Z — diciotto secondi.
+// Il file su disco è rimasto con status "voting" e i quindici candidati a
+// zero voti, mentre la lista (riscritta ad ogni giro) aveva i 347 voti veri:
+// Political apriva l'elezione, leggeva il dettaglio e disegnava tutti i
+// candidati a 0 e 0,0%. Una sola nazione su 180 colpita — chi perde questa
+// corsa è arbitrario, dipende dall'ordine in cui WarEra finalizza i paesi.
+//
+// La fonte di verità è lo `status` che manda WarEra, non il nostro orologio.
+// `status` assente (payload vecchio o forma cambiata) ricade sul criterio di
+// prima: meglio il comportamento vecchio che non risolvere mai più nulla.
 function isElectionResolved(electionData) {
   const endTs = Date.parse(electionData?.votesEndAt || 0);
-  return Number.isFinite(endTs) && endTs < Date.now();
+  if (!Number.isFinite(endTs) || endTs >= Date.now()) return false;
+  const status = electionData?.status;
+  return status == null ? true : status === 'finished';
 }
 
 async function pollElections() {
