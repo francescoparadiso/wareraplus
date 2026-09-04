@@ -55,6 +55,19 @@ function catturaRitornoDaDiscord() {
   return Boolean(token);
 }
 
+/**
+ * C'e' una sessione dell'area riservata? Non dice se da' diritto a
+ * qualcosa — solo se ha senso chiederlo al server.
+ *
+ * Vive QUI e non in src/private/api.js per lo stesso motivo di authError
+ * qui sopra: chi vuole saperlo (la linguetta "Bilancio" della vista unita'
+ * militari) deve poterlo chiedere senza tirarsi dietro il chunk pigro
+ * dell'area riservata. Il TOKEN_KEY resta scritto in un posto solo.
+ */
+export function haSessionePlus() {
+  try { return Boolean(localStorage.getItem(TOKEN_KEY)); } catch { return false; }
+}
+
 export function initPrivateOverlay() {
   overlayEl = document.getElementById('wp-private-overlay');
   backBtn = document.getElementById('wp-private-back');

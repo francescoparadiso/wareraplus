@@ -224,6 +224,36 @@ CREATE TABLE IF NOT EXISTS verify_claim (
   attempts      INTEGER NOT NULL DEFAULT 0,
   last_check_at INTEGER
 );
+
+-- ── Ricchezza giornaliera dei membri delle unita' italiane ───────────
+-- Una riga per (giorno, giocatore). Lo scatto e' delle 02:00 italiane,
+-- cioe' la fotografia con cui APRE quel giorno: la differenza fra due
+-- scatti consecutivi e' quello che il giocatore ha guadagnato o speso nel
+-- giorno che sta in mezzo.
+--
+-- ⚠️ E' l'unica tabella di questo database che NON si puo' ricostruire.
+-- Il gioco espone la ricchezza di ADESSO e nient'altro: nessuna
+-- procedura, ne' pubblica ne' token-gated, dice quanto aveva un giocatore
+-- ieri. Quindi lo storico parte dal primo scatto e cresce di un giorno al
+-- giorno — cancellare questa tabella butta via dati che non tornano piu'.
+-- Stesso vincolo dei bonifici fra tesori (server/moneyTransfers.js), per
+-- lo stesso motivo, e va detto nell'interfaccia invece di lasciar
+-- sembrare un buco di copertura un "non ha speso niente".
+--
+-- mu_id e username sono com'erano AL MOMENTO DELLO SCATTO: servono a
+-- rileggere lo storico di chi nel frattempo ha cambiato unita' o nome
+-- senza dover ripescare l'utente dal gioco.
+CREATE TABLE IF NOT EXISTS wealth_snapshot (
+  day         TEXT    NOT NULL,   -- 'YYYY-MM-DD', fuso Europe/Rome
+  war_user_id TEXT    NOT NULL,
+  wealth      INTEGER NOT NULL,
+  username    TEXT,
+  mu_id       TEXT,
+  taken_at    INTEGER NOT NULL,
+  PRIMARY KEY (day, war_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_wealth_mu_day ON wealth_snapshot (mu_id, day);
 `;
 
 function initDb() {
@@ -582,6 +612,72 @@ function audit(actorId, action, entity, detail) {
 // STATO (per /health)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// RICCHEZZA GIORNALIERA
+// ---------------------------------------------------------------------------
+// Il lettore vero sta in wealth.js: qui c'e' solo il modo di scriverla e
+// rileggerla, come per tutto il resto del database.
+
+/** Uno scatto intero in una transazione sola. `INSERT OR REPLACE` e non
+ *  `INSERT`: un riavvio a meta' scatto lo fa ripetere, e ripeterlo deve
+ *  essere innocuo. */
+function salvaScattoRicchezza(day, righe) {
+  const d = getDb();
+  const stmt = d.prepare(`
+    INSERT OR REPLACE INTO wealth_snapshot (day, war_user_id, wealth, username, mu_id, taken_at)
+    VALUES (?, ?, ?, ?, ?, ?)`);
+  d.exec('BEGIN');
+  try {
+    for (const r of righe) {
+      stmt.run(day, r.warUserId, Math.round(r.wealth), r.username || null, r.muId || null, r.takenAt);
+    }
+    d.exec('COMMIT');
+  } catch (err) {
+    d.exec('ROLLBACK');
+    throw err;
+  }
+  return righe.length;
+}
+
+/** I giorni presenti, dal più recente. Serve a sapere quanto indietro si
+ *  può guardare davvero, che non è quanto si vorrebbe. */
+function giorniScattoRicchezza(limite = 30) {
+  return getDb()
+    .prepare('SELECT day, COUNT(*) AS n, MAX(taken_at) AS taken_at FROM wealth_snapshot GROUP BY day ORDER BY day DESC LIMIT ?')
+    .all(limite)
+    .map((r) => ({ giorno: r.day, righe: r.n, presoIl: r.taken_at }));
+}
+
+/** Le righe di un gruppo di giocatori dal giorno indicato in poi. Una
+ *  query sola per l'intera unità: N query per N membri sarebbe la stessa
+ *  cosa scritta peggio. */
+function scattiRicchezza(warUserIds, dalGiorno) {
+  if (!warUserIds.length) return [];
+  const segnaposti = warUserIds.map(() => '?').join(',');
+  return getDb()
+    .prepare(`SELECT day, war_user_id, wealth, username, mu_id FROM wealth_snapshot
+              WHERE war_user_id IN (${segnaposti}) AND day >= ?
+              ORDER BY day ASC`)
+    .all(...warUserIds, dalGiorno)
+    .map((r) => ({ giorno: r.day, warUserId: r.war_user_id, wealth: r.wealth, username: r.username, muId: r.mu_id }));
+}
+
+/** Chi era nell'unità all'ultimo scatto. È il ripiego quando la directory
+ *  del cache-server non risponde: meglio riscattare gli stessi di ieri che
+ *  saltare un giorno, perché un giorno saltato non si recupera. */
+function ultimoScattoMu() {
+  const ultimo = getDb().prepare('SELECT MAX(day) AS d FROM wealth_snapshot').get()?.d;
+  if (!ultimo) return [];
+  return getDb()
+    .prepare('SELECT DISTINCT mu_id FROM wealth_snapshot WHERE day = ? AND mu_id IS NOT NULL')
+    .all(ultimo)
+    .map((r) => r.mu_id);
+}
+
+function potaScattiRicchezza(primoGiornoDaTenere) {
+  return getDb().prepare('DELETE FROM wealth_snapshot WHERE day < ?').run(primoGiornoDaTenere).changes || 0;
+}
+
 function dbStatus() {
   const one = (sql) => {
     try { return getDb().prepare(sql).get()?.n ?? 0; } catch { return null; }
@@ -597,6 +693,8 @@ function dbStatus() {
     inAttesa: one("SELECT COUNT(*) AS n FROM request WHERE status = 'pending'"),
     webhook: one('SELECT COUNT(*) AS n FROM webhook'),
     sessioniAttive: one(`SELECT COUNT(*) AS n FROM session WHERE expires_at > ${Date.now()}`),
+    scattiRicchezza: one('SELECT COUNT(*) AS n FROM wealth_snapshot'),
+    giorniRicchezza: one('SELECT COUNT(DISTINCT day) AS n FROM wealth_snapshot'),
   };
 }
 
@@ -610,5 +708,6 @@ module.exports = {
   creaRichiesta, getRichiesta, listaRichieste, aggiornaRichiesta,
   getWebhook, setWebhook, deleteWebhook,
   createSession, accountFromToken, destroySession, purgeExpiredSessions,
+  salvaScattoRicchezza, giorniScattoRicchezza, scattiRicchezza, ultimoScattoMu, potaScattiRicchezza,
   audit, dbStatus,
 };

@@ -243,7 +243,17 @@ wareraPlus/
     │   │                          nazione + marchio "de facto"), blocchi da 60 righe
     │   ├── muDetail.js          ← scheda unità: sei classifiche + composizione per
     │   │                          nazionalità (calcolata dal vivo sui membri) + membri
-    │   └── ranking.js           ← classifiche, ordinate dalla directory (zero fetch)
+    │   ├── ranking.js           ← classifiche, ordinate dalla directory (zero fetch)
+    │   ├── muWealth.js          ← NUOVO — linguetta "Bilancio", l'unica parte CHIUSA
+    │   │                          della vista: saldo netto giornaliero della ricchezza
+    │   │                          dei membri (oggi in corso + 7 giorni chiusi), verdetto
+    │   │                          guadagna/perde/in pari, barre sulla linea dello zero e
+    │   │                          tabella ordinabile. Compare solo a chi COMANDA in gioco
+    │   │                          un'unità italiana o de facto italiana ed è entrato con
+    │   │                          Discord. Chunk a parte: import() alla prima apertura.
+    │   └── wealthApi.js         ← NUOVO — client di /wealth sull'area riservata. Se non
+    │                              c'è un token NON parte nessuna richiesta: la vista
+    │                              unità è pubblica e si apre migliaia di volte.
     ├── nations/                  ← NUOVO — Statistiche nazioni
     │   ├── main.js              ← initNationsView(container) + openNationDetail(countryId);
     │   │                          tab panoramica / 1 vs 2 / grafici + scheda nazione
@@ -637,6 +647,24 @@ un buco di copertura per un "nessuno ha finanziato".
 Le **battaglie in corso** in cima all'archivio sono l'unica parte della
 sezione che NON dipende da un rideploy: arrivano da `/battles`, che il server
 serve già, e senza server ricadono sul Worker come i marker della mappa.
+
+Il **Bilancio unità** (`src/mu/muWealth.js` + `server/plusApi/wealth.js`)
+dipende dal redeploy di **warera-plus-api**, non del cache-server: finché
+non lo fai, `/wealth/unita` risponde 404 e la linguetta semplicemente non
+compare (verificato: il client logga un warning e la vista unità resta
+identica per tutti). Dopo il deploy c'è però un'attesa che non si può
+saltare: **lo storico della ricchezza non esiste da nessuna parte e si
+accumula**. Nessuna procedura WarEra dice quanto aveva un giocatore ieri —
+`rankings.userWealth` è istantanea — quindi il primo giorno non c'è niente
+da confrontare, i sette giorni pieni arrivano dopo una settimana, e un
+giorno saltato è perso per sempre. È lo stesso vincolo dei bonifici fra
+tesori, e come là la vista lo dichiara (fascia "L'archivio si sta ancora
+riempiendo") invece di far sembrare un buco di copertura un "non ha speso
+niente". `/health` di plusApi riporta `ricchezza` con i giorni in archivio.
+
+⚠️ Il numero è il **saldo netto**, non la spesa militare: entrate meno
+uscite fra due scatti. Chiamarlo "quanto costa la guerra" sarebbe la
+stessa trappola di `rankings.countryBounty` — la vista lo dice in testa.
 
 Il **contatore visite** (`/visits`) invece sì: finché non rideployi, la pill
 semplicemente non compare — è il degrado voluto, non un guasto. Il seme di

@@ -45,6 +45,7 @@ const { buildVerifyRouter } = require('./verify');
 const { buildRolesRouter } = require('./roles');
 const { buildRequestsRouter } = require('./requests');
 const { buildPolicyRouter } = require('./policy');
+const { buildWealthRouter, initWealth, statoRicchezza } = require('./wealth');
 const { initWatcher, statoWatcher } = require('./watcher');
 const { risolviIdentita, bloccaScrittureSottoLente } = require('./identity');
 
@@ -135,6 +136,13 @@ const { calcolaEffettivi } = require('./roles');
 const capacitaDi = async (account) => (await calcolaEffettivi(account, {})).capacita;
 app.use('/policy', buildPolicyRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, capacitaDi }));
 
+// Il bilancio delle unita' usa le STESSE capacita' delle prenotazioni: chi
+// puo' chiedere un contratto per un'unita' e' chi la comanda, ed e' la
+// stessa persona che ha diritto di sapere quanto le sta costando la
+// guerra. Un secondo elenco di permessi qui sarebbe un secondo elenco da
+// tenere allineato.
+app.use('/wealth', buildWealthRouter({ requireAuth, capacitaDi }));
+
 app.use('/auth', buildAuthRouter({
   env: WP_ENV,
   publicBase: PUBLIC_BASE,
@@ -165,6 +173,10 @@ app.get('/health', (req, res) => res.json({
   // Quanti controlli sulle aste sono in attesa. Dopo un restart dice a
   // colpo d'occhio se la coda è stata ripresa da disco o persa.
   watcher: statoWatcher(),
+  // Da quando in qua l'archivio ricchezza guarda. E' la prima cosa da
+  // controllare dopo il deploy: la serie completa arriva dopo otto giorni
+  // di scatti, e prima di allora la vista mostra meno colonne DI PROPOSITO.
+  ricchezza: statoRicchezza(),
   db: dbStatus(),
 }));
 
@@ -185,6 +197,12 @@ initDb();
 // restart a finestra aperta altrimenti li perderebbe in silenzio, e le
 // righe resterebbero "non ancora verificata" per sempre.
 initWatcher({ dataDir: DATA_DIR });
+
+// Lo scatto giornaliero della ricchezza. Parte subito se l'archivio e'
+// vuoto (vedi scattoDovuto in wealth.js): il primo giorno di un tool che
+// non ha ancora niente da mostrare non deve essere anche un giorno di
+// attesa in piu'.
+initWealth();
 
 const promossi = syncAdminsFromEnv(ADMIN_DISCORD_IDS);
 if (promossi) console.log(`[plusApi] ${promossi} account promossi ad admin da ADMIN_DISCORD_IDS`);

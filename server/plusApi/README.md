@@ -95,6 +95,42 @@ Fatte finora:
   al momento dell'aggiunta. Il server non sa come si chiama un'unità
   militare, quindi senza questa colonna una voce riletta il giorno dopo
   era ventiquattro caratteri esadecimali.
+- `wealth_snapshot` — la ricchezza giornaliera dei membri delle unità
+  italiane. Tabella NUOVA, quindi nasce dalla `CREATE TABLE IF NOT EXISTS`
+  dello schema e non da `migrate()`: un database che esiste già se la
+  ritrova al primo riavvio, vuota.
+
+## Il bilancio delle unita' (`wealth.js`)
+
+Uno scatto al giorno della ricchezza di ogni membro delle unita' italiane —
+registrate in Italia o italiane *de facto* — alle **02:00 italiane**. La
+differenza fra due scatti e' quello che quel giocatore ha guadagnato o
+speso nel giorno in mezzo, ed e' l'unico modo di saperlo: il gioco espone
+la ricchezza di adesso e nient'altro.
+
+⚠️ **Lo storico non si recupera a ritroso, si accumula.** Il primo giorno
+non c'e' niente da confrontare, i sette giorni pieni arrivano dopo una
+settimana, e un giorno saltato e' perso per sempre. Stesso vincolo dei
+bonifici fra tesori (`server/moneyTransfers.js`), e come la' va detto
+nell'interfaccia invece di far sembrare un buco di copertura un "non ha
+speso niente". Cancellare `wealth_snapshot` butta via dati che non
+tornano piu'.
+
+Non serve nessuna variabile d'ambiente nuova: le unita' italiane si
+leggono dal cache-server sulla loopback (`http://127.0.0.1:3001`,
+sovrascrivibile con `CACHE_BASE`) e la nazione si cerca per codice
+(`WEALTH_COUNTRY_CODE`, `IT` di suo). Quindi per questa modifica il
+`pm2 restart` normale basta — non c'e' `ecosystem.config.js` da rileggere.
+
+Costo: una richiesta al cache-server, una ventina di `mu.getById` e i
+membri risolti a blocchi di 30 con `user.getUserLite`. Tutte procedure
+pubbliche: nessuna chiave, nessun consumo del Worker.
+
+Lo scatto parte da se' al primo avvio con l'archivio vuoto, a qualunque
+ora — quel primo intervallo copre meno di 24 ore e la vista lo dichiara.
+`/health` riporta `ricchezza` con giorni in archivio, primo e ultimo, e
+l'esito dell'ultimo scatto. Un amministratore puo' forzarne uno con
+`POST /wealth/scatta`.
 
 ## Aggiornare
 
@@ -110,7 +146,7 @@ Poi il preflight, e solo se stampa `PREFLIGHT-OK`:
 
 ```bash
 ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 \
-  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && echo PREFLIGHT-OK"
+  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && node --check wealth.js && echo PREFLIGHT-OK"
 ```
 
 ```bash

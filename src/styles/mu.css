@@ -730,3 +730,176 @@ body.light-theme .wp-mu-rank-country { color: #5b6473; }
   .wp-mu-cell-rank { display: none; }
   .wp-mu-avatar-sm { width: 22px; height: 22px; border-radius: 6px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   BILANCIO DELL'UNITÀ (linguetta riservata, src/mu/muWealth.js)
+   -------------------------------------------------------------------
+   Namespace `wp-mw-` e non `wp-mu-`: la tabella qui ha un numero di
+   colonne VARIABILE (da due a nove, secondo quanti giorni ha l'archivio)
+   e non può condividere `--wp-mu-cols`, che è fisso per costruzione.
+
+   Verde e rosso sono gli stessi del resto del tool (#3fb950 / #f85149):
+   una seconda coppia di verdi renderebbe ambiguo il colpo d'occhio, che
+   qui è tutto il punto.
+   ═══════════════════════════════════════════════════════════════════ */
+.wp-mw-page { display: flex; flex-direction: column; gap: 14px; }
+
+.wp-mw-testa { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.wp-mw-titolo { margin: 0; font-size: 18px; font-weight: 700; color: #e6edf3; }
+.wp-mw-lead { margin: 4px 0 0; max-width: 62ch; font-size: 12px; line-height: 1.5; color: #8b949e; }
+.wp-mw-testa-dx { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+body.light-theme .wp-mw-titolo { color: #1f2430; }
+body.light-theme .wp-mw-lead { color: #5b6473; }
+
+.wp-mw-solo { font-size: 13px; font-weight: 600; color: #e6edf3; display: inline-flex; align-items: center; gap: 6px; }
+body.light-theme .wp-mw-solo { color: #1f2430; }
+.wp-mw-pick { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #8b949e; }
+.wp-mw-pick select {
+  background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+  color: #e6edf3; font: inherit; padding: 6px 8px;
+}
+body.light-theme .wp-mw-pick { color: #5b6473; }
+body.light-theme .wp-mw-pick select { background: #fff; border-color: #d5dae3; color: #1f2430; }
+
+/* La linguetta chiusa si distingue dalle altre: non è una sezione in più
+   dello stesso tipo, è una stanza a cui non tutti entrano. */
+.wp-mu-tab-riservata { border-style: dashed; }
+.wp-mu-tab-riservata.active { border-style: solid; }
+
+/* ── Copertura ─────────────────────────────────────────────────────── */
+.wp-mw-cov {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; border-radius: 10px; font-size: 12px; line-height: 1.45;
+}
+.wp-mw-cov-ok { color: #6e7681; padding: 0 2px; }
+.wp-mw-cov-parziale {
+  background: rgba(227, 179, 65, .12); border: 1px solid rgba(227, 179, 65, .38); color: #e3b341;
+}
+.wp-mw-cov-parziale strong { color: #f0c556; }
+body.light-theme .wp-mw-cov-ok { color: #8a93a3; }
+body.light-theme .wp-mw-cov-parziale { background: rgba(196, 145, 20, .12); border-color: rgba(196, 145, 20, .4); color: #8a6408; }
+body.light-theme .wp-mw-cov-parziale strong { color: #6d4f05; }
+
+/* ── Verdetto ──────────────────────────────────────────────────────── */
+.wp-mw-verdetto {
+  border: 1px solid #30363d; border-left-width: 4px; border-radius: 12px;
+  padding: 14px 16px; background: #0f141b;
+}
+.wp-mw-v-su   { border-left-color: #3fb950; }
+.wp-mw-v-giu  { border-left-color: #f85149; }
+.wp-mw-v-pari { border-left-color: #8b949e; }
+.wp-mw-v-vuoto { border-left-color: #30363d; }
+body.light-theme .wp-mw-verdetto { background: #fff; border-color: #d5dae3; }
+
+.wp-mw-v-testa { display: flex; align-items: center; gap: 9px; }
+.wp-mw-v-testa h3 { margin: 0; font-size: 16px; font-weight: 700; color: #e6edf3; }
+.wp-mw-v-icona { font-size: 15px; line-height: 1; }
+.wp-mw-v-su .wp-mw-v-icona { color: #3fb950; }
+.wp-mw-v-giu .wp-mw-v-icona { color: #f85149; }
+.wp-mw-v-pari .wp-mw-v-icona, .wp-mw-v-vuoto .wp-mw-v-icona { color: #8b949e; }
+body.light-theme .wp-mw-v-testa h3 { color: #1f2430; }
+
+.wp-mw-v-cifre { display: flex; gap: 26px; flex-wrap: wrap; margin-top: 12px; }
+.wp-mw-v-cifra { display: flex; flex-direction: column; gap: 2px; min-width: 96px; }
+.wp-mw-v-et { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #6e7681; }
+.wp-mw-v-val { font-size: 21px; font-weight: 700; font-variant-numeric: tabular-nums; color: #e6edf3; }
+.wp-mw-v-nota { font-size: 11px; color: #8b949e; }
+body.light-theme .wp-mw-v-et { color: #8a93a3; }
+body.light-theme .wp-mw-v-val { color: #1f2430; }
+body.light-theme .wp-mw-v-nota { color: #5b6473; }
+
+/* ── Colori del segno, condivisi da barre, celle e riassunto ───────── */
+.wp-mw-su   { color: #3fb950; }
+.wp-mw-giu  { color: #f85149; }
+.wp-mw-pari { color: #8b949e; }
+.wp-mw-bg-su   { background: #3fb950; }
+.wp-mw-bg-giu  { background: #f85149; }
+.wp-mw-bg-pari { background: #6e7681; }
+body.light-theme .wp-mw-su  { color: #1a7f37; }
+body.light-theme .wp-mw-giu { color: #cf222e; }
+body.light-theme .wp-mw-bg-su  { background: #1a7f37; }
+body.light-theme .wp-mw-bg-giu { background: #cf222e; }
+
+/* ── Barre giorno per giorno ───────────────────────────────────────── */
+/* align-items: flex-start e non flex-end: le colonne con una nota sotto
+   ("14h", "2gg") sono più alte delle altre, e allineandole in basso le
+   tracce si sfalsavano — le linee dello zero non stavano più sulla stessa
+   riga, che è l'unica cosa che rende confrontabili due barre. */
+.wp-mw-barre { display: flex; gap: 8px; align-items: flex-start; }
+.wp-mw-barra { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.wp-mw-barra-corpo {
+  position: relative; width: 100%; height: 72px;
+  background: #161b22; border-radius: 6px; overflow: hidden;
+}
+body.light-theme .wp-mw-barra-corpo { background: #eef1f6; }
+/* La linea dello zero: senza, una barra corta verso il basso e una corta
+   verso l'alto si distinguono solo dal colore. */
+.wp-mw-barra-zero { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: #30363d; }
+body.light-theme .wp-mw-barra-zero { background: #ccd3de; }
+.wp-mw-barra-riemp { position: absolute; left: 0; right: 0; display: block; border-radius: 3px; }
+/* Il giorno in corso è tratteggiato: è una misura ancora aperta, e
+   metterla accanto a sette giornate chiuse senza dirlo la farebbe leggere
+   come loro pari. */
+.wp-mw-barra-corso .wp-mw-barra-corpo { outline: 1px dashed #484f58; outline-offset: -1px; }
+.wp-mw-barra-val { font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.wp-mw-barra-et, .wp-mw-barra-nota {
+  font-size: 10px; color: #6e7681; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.wp-mw-barra-nota { color: #484f58; }
+body.light-theme .wp-mw-barra-et { color: #8a93a3; }
+body.light-theme .wp-mw-barra-nota { color: #a6adba; }
+
+/* ── Tabella dei membri ────────────────────────────────────────────── */
+.wp-mw-table { overflow-x: auto; }
+.wp-mw-thead, .wp-mw-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.6fr) minmax(64px, .8fr) repeat(var(--wp-mw-giorni, 8), minmax(56px, .68fr)) minmax(64px, .8fr);
+  align-items: center;
+  gap: 6px;
+  min-width: 760px;
+}
+.wp-mw-thead {
+  position: sticky; top: 0; z-index: 2;
+  padding: 0 8px 6px; background: #0d1117; border-bottom: 1px solid #30363d;
+}
+body.light-theme .wp-mw-thead { background: #f4f6fa; border-bottom-color: #d5dae3; }
+.wp-mw-thead .wp-mu-th { display: flex; flex-direction: column; gap: 1px; }
+.wp-mw-thead .wp-mu-th-num { align-items: flex-end; }
+.wp-mw-th-nota { font-size: 9px; font-weight: 600; text-transform: none; letter-spacing: 0; color: #484f58; }
+body.light-theme .wp-mw-th-nota { color: #a6adba; }
+
+.wp-mw-row { padding: 7px 8px; border-bottom: 1px solid #21262d; font-size: 13px; }
+body.light-theme .wp-mw-row { border-bottom-color: #e3e8f0; }
+.wp-mw-row:hover { background: rgba(88, 166, 255, .06); }
+.wp-mw-row-nuovo { opacity: .82; }
+
+.wp-mw-cell-nome { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wp-mw-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e6edf3; }
+body.light-theme .wp-mw-nome { color: #1f2430; }
+.wp-mw-tag {
+  flex: none; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  padding: 1px 5px; border-radius: 5px; background: #21262d; color: #8b949e;
+}
+body.light-theme .wp-mw-tag { background: #e8ecf3; color: #5b6473; }
+
+.wp-mw-num { text-align: right; font-variant-numeric: tabular-nums; color: #c9d1d9; }
+body.light-theme .wp-mw-num { color: #384252; }
+.wp-mw-d { font-weight: 600; }
+.wp-mw-corso { opacity: .85; font-style: italic; }
+.wp-mw-nd { color: #484f58; }
+body.light-theme .wp-mw-nd { color: #a6adba; }
+.wp-mw-tot .wp-mw-d { font-weight: 700; }
+
+.wp-mw-pie { margin: 0; font-size: 11px; color: #6e7681; }
+body.light-theme .wp-mw-pie { color: #8a93a3; }
+
+@media (max-width: 720px) {
+  /* Sotto questa larghezza le nove colonne non si stringono: si scorre.
+     Preferibile a nascondere giorni — il confronto fra ieri e l'altroieri
+     è tutta la ragione della tabella. */
+  .wp-mw-thead, .wp-mw-row { min-width: 720px; font-size: 12px; }
+  .wp-mw-v-cifre { gap: 16px; }
+  .wp-mw-v-val { font-size: 18px; }
+  .wp-mw-barra-corpo { height: 56px; }
+  .wp-mw-barra-val { font-size: 10px; }
+}
