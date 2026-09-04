@@ -12,12 +12,29 @@
    accumula. Conseguenza da dire in chiaro nell'interfaccia e non da
    scoprire dopo:
 
-     · il primo giorno la vista non ha nulla da confrontare;
      · i sette giorni pieni arrivano dopo una settimana di scatti;
      · un giorno saltato (server giù alle 02:00) è perso per sempre, e la
        differenza fra i due scatti superstiti copre due giorni — per
        questo ogni intervallo porta con sé quanti giorni e quante ore
        copre davvero, invece di far finta che siano sempre 24.
+
+   ── IL RODAGGIO ───────────────────────────────────────────────────────
+   Ma «torna fra ventiquattr'ore» è il modo migliore per non far tornare
+   nessuno. Il PRIMO giorno si scatta quindi anche in mezzo, ogni
+   ORE_RODAGGIO, così un raffronto c'è già la sera stessa. Quegli scatti
+   hanno un'etichetta con l'ora ('2026-09-04T20') accanto a quella del
+   giorno ('2026-09-04'), e le due si ordinano già bene fra loro.
+
+   Non sono una versione peggiore del dato giornaliero: sono lo stesso
+   dato su una finestra più corta, e ogni intervallo dice quante ore
+   copre — otto ore si leggono come otto ore.
+
+   ⚠️ Il rodaggio finisce appena in archivio ci sono DUE giorni, e da lì
+   la serie mostrata usa solo gli scatti giornalieri (vedi `finestra`).
+   Non è pignoleria: le colonne mostrate sono al massimo sette, e se
+   restassero quelle da quattro ore la "settimana" coprirebbe ventotto
+   ore per tutta la settimana vera — il numero giusto sotto l'etichetta
+   sbagliata, che è il modo più difficile di accorgersi di un errore.
 
    Stesso identico vincolo dei bonifici fra tesori
    (server/moneyTransfers.js): là l'API tiene tre giorni scorrevoli, qui
@@ -58,7 +75,7 @@
 const express = require('express');
 const { trpcBatch } = require('./wareraApi');
 const {
-  salvaScattoRicchezza, giorniScattoRicchezza, scattiRicchezza,
+  salvaScattoRicchezza, scattiRicchezzaDisponibili, scattiRicchezza,
   ultimoScattoMu, potaScattiRicchezza, deltaRicchezzaPerMu, totaliRicchezzaPerMu, audit,
 } = require('./db');
 
@@ -80,7 +97,16 @@ const CHUNK_UTENTI = 30;                // getUserLite: a 100 il batch dà HTTP 
 const CHUNK_MU = 20;
 const TTL_LIVE_MS = 3 * 60 * 1000;      // la ricchezza "di adesso", per unità
 const TTL_ELENCO_MS = 30 * 60 * 1000;   // l'elenco delle unità italiane
-const CONTROLLO_MS = 5 * 60 * 1000;     // ogni quanto si chiede "manca lo scatto di oggi?"
+const CONTROLLO_MS = 5 * 60 * 1000;     // ogni quanto si chiede "manca uno scatto?"
+// Ogni quante ore si scatta finché l'archivio non ha la settimana piena.
+// Quattro e non una: la ricchezza di un giocatore si muove a colpi di
+// battaglia e di mercato, e otto misure al giorno sarebbero otto colonne
+// di rumore attorno allo stesso numero.
+const ORE_RODAGGIO = 4;
+// Per quanti giorni si scatta anche in mezzo. Due: cioè oggi. Domani alle
+// 02:00 arriva il primo scatto giornaliero, ci sono due giorni in
+// archivio e la serie diventa quella vera.
+const GIORNI_RODAGGIO = 2;
 
 // ---------------------------------------------------------------------------
 // Giorni
@@ -105,9 +131,19 @@ function giornoMeno(giorno, n) {
   return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
 }
 
+/** La data dentro un'etichetta di momento: '2026-09-04T16' → '2026-09-04'. */
+const giornoDelSlot = (slot) => String(slot).slice(0, 10);
+
+/** L'etichetta di uno scatto in mezzo alla giornata. L'ora basta: due
+ *  scatti di rodaggio distano ORE_RODAGGIO, non possono cadere nella
+ *  stessa. */
+function slotOrario(ts = Date.now()) {
+  return `${giornoDi(ts)}T${String(oraDi(ts)).padStart(2, '0')}`;
+}
+
 /** Quanti giorni di calendario fra due etichette. */
 function distanzaGiorni(da, a) {
-  const ms = (g) => { const [y, m, d] = g.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+  const ms = (g) => { const [y, m, d] = giornoDelSlot(g).split('-').map(Number); return Date.UTC(y, m - 1, d); };
   return Math.round((ms(a) - ms(da)) / 86400_000);
 }
 
@@ -252,11 +288,12 @@ async function ricchezzaDi(userIds) {
 let _scattoInCorso = false;
 let _ultimoEsito = null; // { giorno, righe, unita, durataMs, quando, errore }
 
-async function scatta({ motivo = 'programmato' } = {}) {
+async function scatta({ motivo = 'programmato', slot = null } = {}) {
   if (_scattoInCorso) return { saltato: 'gia_in_corso' };
   _scattoInCorso = true;
   const avvio = Date.now();
-  const giorno = giornoDi(avvio);
+  // Senza indicazioni si scatta "adesso": è il caso dello scatto a mano.
+  const momento = slot || slotOrario(avvio);
   try {
     const { mus, fonte } = await elencoUnita({ forza: true });
     if (!mus.length) throw new Error('nessuna unità da fotografare');
@@ -280,19 +317,19 @@ async function scatta({ motivo = 'programmato' } = {}) {
       righe.push({ warUserId: userId, wealth: r.wealth, username: r.username, muId, takenAt });
     }
 
-    salvaScattoRicchezza(giorno, righe);
-    const potate = potaScattiRicchezza(giornoMeno(giorno, RETENTION_GIORNI));
+    salvaScattoRicchezza(momento, righe);
+    const potate = potaScattiRicchezza(giornoMeno(giornoDi(avvio), RETENTION_GIORNI));
 
     _ultimoEsito = {
-      giorno, righe: righe.length, unita: dettagli.size, fonte, motivo,
+      momento, righe: righe.length, unita: dettagli.size, fonte, motivo,
       durataMs: Date.now() - avvio, quando: takenAt, errore: null,
     };
-    console.log(`[wealth] scatto ${giorno} (${motivo}): ${righe.length} giocatori in ${dettagli.size} unità, `
+    console.log(`[wealth] scatto ${momento} (${motivo}): ${righe.length} giocatori in ${dettagli.size} unità, `
       + `${Date.now() - avvio}ms${potate ? `, ${potate} righe vecchie potate` : ''}`);
     return _ultimoEsito;
   } catch (err) {
-    _ultimoEsito = { giorno, righe: 0, motivo, durataMs: Date.now() - avvio, quando: Date.now(), errore: err.message };
-    console.error(`[wealth] scatto ${giorno} fallito:`, err.message);
+    _ultimoEsito = { momento, righe: 0, motivo, durataMs: Date.now() - avvio, quando: Date.now(), errore: err.message };
+    console.error(`[wealth] scatto ${momento} fallito:`, err.message);
     return _ultimoEsito;
   } finally {
     _scattoInCorso = false;
@@ -303,27 +340,48 @@ async function scatta({ motivo = 'programmato' } = {}) {
  * Il programmatore. Non un cron: questo processo non ha node-cron fra le
  * dipendenze, e soprattutto si riavvia decine di volte al giorno mentre si
  * sviluppa — una sveglia alle 02:00 la perderebbe ogni volta. La domanda
- * qui è invece «manca lo scatto di oggi ed è ora?», che dopo un riavvio ha
- * la stessa risposta di prima.
+ * qui è invece «manca uno scatto?», che dopo un riavvio ha la stessa
+ * risposta di prima.
  *
- * ⚠️ Al PRIMO avvio (archivio vuoto) lo scatto parte subito, a qualunque
- * ora: un giorno di attesa prima ancora di poter mostrare qualcosa sarebbe
- * un tool che non parte. Quel primo intervallo copre quindi meno di 24
- * ore, ed è il motivo per cui ogni differenza porta con sé le ore vere.
+ * Tre casi, in quest'ordine:
+ *
+ *   1. archivio vuoto  → si scatta SUBITO, a qualunque ora. Un giorno di
+ *      attesa prima di poter mostrare qualsiasi cosa sarebbe un tool che
+ *      non parte.
+ *   2. manca il giorno → lo scatto delle 02:00, quello che fa la serie
+ *      giornaliera. Etichetta senza ora.
+ *   3. rodaggio        → finché l'archivio non ha la settimana piena si
+ *      scatta anche in mezzo, ogni ORE_RODAGGIO, così un raffronto c'è
+ *      già la sera del primo giorno invece che il giorno dopo.
  */
 function scattoDovuto() {
-  const ultimo = giorniScattoRicchezza(1)[0]?.giorno || null;
-  if (ultimo === giornoDi()) return null;
-  if (!ultimo) return 'primo-avvio';
-  return oraDi() >= ORA_SCATTO ? 'programmato' : null;
+  const scatti = scattiRicchezzaDisponibili(RETENTION_GIORNI * 8);
+  const ultimo = scatti[0] || null;
+  // Etichetta di GIORNO e non di ora, anche se non sono le 02:00: è il
+  // primo scatto di oggi, cioè quello che d'ora in poi rappresenta oggi
+  // nella serie giornaliera. Con un'etichetta oraria, domani `finestra()`
+  // non troverebbe due scatti giornalieri e resterebbe sulle colonne di
+  // rodaggio per un giorno di troppo.
+  if (!ultimo) return { motivo: 'primo-avvio', slot: giornoDi() };
+
+  const giorniNoti = new Set(scatti.map((x) => giornoDelSlot(x.slot)));
+  const oggi = giornoDi();
+  if (!giorniNoti.has(oggi) && oraDi() >= ORA_SCATTO) return { motivo: 'giornaliero', slot: oggi };
+
+  if (giorniNoti.size < GIORNI_RODAGGIO
+      && ultimo.presoIl
+      && Date.now() - ultimo.presoIl >= ORE_RODAGGIO * 3600_000) {
+    return { motivo: 'rodaggio', slot: slotOrario() };
+  }
+  return null;
 }
 
 let _timer = null;
 
 function initWealth() {
   const giro = () => {
-    const motivo = scattoDovuto();
-    if (motivo) scatta({ motivo }).catch(() => {});
+    const dovuto = scattoDovuto();
+    if (dovuto) scatta(dovuto).catch(() => {});
   };
   giro();
   _timer = setInterval(giro, CONTROLLO_MS);
@@ -332,14 +390,19 @@ function initWealth() {
 
 /** Per /health: dice se lo storico si sta riempiendo, e da quando. */
 function statoRicchezza() {
-  const giorni = giorniScattoRicchezza(RETENTION_GIORNI + 1);
+  const scatti = scattiRicchezzaDisponibili(RETENTION_GIORNI * 8);
+  const giorni = new Set(scatti.map((x) => giornoDelSlot(x.slot)));
   return {
     paese: PAESE_CODICE,
-    giorniInArchivio: giorni.length,
-    primoGiorno: giorni.at(-1)?.giorno || null,
-    ultimoGiorno: giorni[0]?.giorno || null,
-    scattoDiOggi: giorni[0]?.giorno === giornoDi(),
-    serieCompleta: giorni.length >= GIORNI_SCATTO,
+    scattiInArchivio: scatti.length,
+    giorniInArchivio: giorni.size,
+    primoScatto: scatti.at(-1)?.slot || null,
+    ultimoScatto: scatti[0]?.slot || null,
+    scattoDiOggi: giorni.has(giornoDi()),
+    serieCompleta: giorni.size >= GIORNI_SCATTO,
+    // Finché è vero si scatta anche in mezzo alla giornata: serve a non
+    // chiedere ventiquattr'ore di pazienza prima del primo raffronto.
+    rodaggio: giorni.size < GIORNI_RODAGGIO,
     ultimoEsito: _ultimoEsito,
     unitaSeguite: _elenco?.mus.length ?? null,
     fonteElenco: _elenco?.fonte ?? null,
@@ -380,29 +443,82 @@ async function ricchezzaAttuale(muId) {
 /** I giorni in archivio dentro la finestra che la vista guarda, dal più
  *  vecchio. Sta qui perché lo usano sia la panoramica sia il rapporto, e
  *  due copie della stessa finestra sono due copie da tenere allineate. */
+/**
+ * Gli scatti su cui si costruisce la serie mostrata.
+ *
+ * Appena esistono due scatti GIORNALIERI si usano solo quelli: le colonne
+ * a schermo sono al massimo sette, e tenerci dentro anche quelli di
+ * rodaggio farebbe una "settimana" lunga ventotto ore. Gli scatti in
+ * mezzo restano in archivio — non danno fastidio a nessuno e il primo
+ * giorno sono l'unica cosa che c'è.
+ */
 function finestra() {
   const dal = giornoMeno(giornoDi(), GIORNI_SCATTO);
-  return giorniScattoRicchezza(RETENTION_GIORNI + 1)
-    .filter((g) => g.giorno >= dal)
-    .sort((a, b) => (a.giorno < b.giorno ? -1 : 1));
+  const tutti = scattiRicchezzaDisponibili(RETENTION_GIORNI * 8)
+    .filter((g) => g.slot >= dal)
+    .sort((a, b) => (a.slot < b.slot ? -1 : 1));
+  const giornalieri = tutti.filter((g) => !g.slot.includes('T'));
+  return giornalieri.length >= 2 ? giornalieri : tutti;
 }
 
 /** Gli intervalli CHIUSI fra scatti consecutivi. `giorni`/`ore` dicono
  *  quanto coprono davvero: un giorno saltato non si spalma. */
-function intervalliChiusi(giorni) {
+function intervalliChiusi(scatti) {
   const out = [];
-  for (let i = 0; i < giorni.length - 1; i++) {
-    const da = giorni[i];
-    const a = giorni[i + 1];
+  for (let i = 0; i < scatti.length - 1; i++) {
+    const da = scatti[i];
+    const a = scatti[i + 1];
     out.push({
-      da: da.giorno,
-      a: a.giorno,
-      giorni: distanzaGiorni(da.giorno, a.giorno),
+      da: da.slot,
+      a: a.slot,
+      giorni: distanzaGiorni(da.slot, a.slot),
       ore: da.presoIl && a.presoIl ? Math.round((a.presoIl - da.presoIl) / 3600_000) : null,
+      // L'istante vero di partenza: serve alla vista per intitolare la
+      // colonna con un'ora quando l'intervallo non è una giornata.
+      presoIl: da.presoIl || null,
       inCorso: false,
     });
   }
   return out;
+}
+
+/**
+ * Quanto lontano guarda davvero l'archivio, e quanto pesano le colonne
+ * mostrate. `oreMostrate` è la somma degli intervalli CHIUSI a schermo:
+ * è quello che permette alla vista di non intitolare "7 giorni" una
+ * colonna che ne copre uno e mezzo.
+ */
+/**
+ * Il ritmo GIORNALIERO di un saldo, dalle ore che copre davvero.
+ *
+ * Non `totale / numero di colonne`: quella formula è giusta solo se ogni
+ * colonna è una giornata piena, e non lo è mai in rodaggio (colonne da
+ * quattro ore) né quando un giorno è saltato (una colonna da 48 ore).
+ * Sotto le 24 ore non si estrapola: `null`, e la vista non mostra la
+ * riga — moltiplicare per sei un pomeriggio non è una media, è una
+ * profezia.
+ */
+function ritmoGiornaliero(totale, ore) {
+  if (totale == null || !ore || ore < 24) return null;
+  return Math.round(totale / (ore / 24));
+}
+
+function coperturaDi(scatti, intervalliMostrati) {
+  const giorni = new Set(scatti.map((x) => giornoDelSlot(x.slot)));
+  const ore = intervalliMostrati.reduce((s, iv) => s + (iv.ore ?? (iv.giorni || 0) * 24), 0);
+  return {
+    primoGiorno: scatti[0] ? giornoDelSlot(scatti[0].slot) : null,
+    ultimoGiorno: scatti.at(-1) ? giornoDelSlot(scatti.at(-1).slot) : null,
+    ultimoScattoIl: scatti.at(-1)?.presoIl || null,
+    giorniDisponibili: giorni.size,
+    giorniRichiesti: GIORNI_SCATTO,
+    scattiDisponibili: scatti.length,
+    oreMostrate: ore,
+    // Vero quando le colonne mostrate NON sono giornate: la vista deve
+    // poterlo dire, perché una colonna da quattro ore non è un giorno.
+    rodaggio: intervalliMostrati.some((iv) => iv.ore != null && iv.ore < 20),
+    completa: giorni.size >= GIORNI_SCATTO,
+  };
 }
 
 /**
@@ -420,6 +536,10 @@ function intervalliChiusi(giorni) {
  */
 function panoramica(unita) {
   const giorni = finestra();
+  // In rodaggio gli intervalli sono più corti e più numerosi: se ne
+  // mostrano comunque al massimo sette, e `copertura.oreMostrate` dice
+  // quanto pesano davvero — così la colonna del totale non si intitola
+  // "7 giorni" quando copre trenta ore.
   const intervalli = intervalliChiusi(giorni).slice(-GIORNI_DELTA);
 
   // muId → array di delta, allineato agli intervalli (null dove l'unità
@@ -435,9 +555,10 @@ function panoramica(unita) {
 
   const ultimo = giorni.at(-1) || null;
   const testa = new Map(
-    (ultimo ? totaliRicchezzaPerMu(ultimo.giorno) : []).map((r) => [r.muId, r]),
+    (ultimo ? totaliRicchezzaPerMu(ultimo.slot) : []).map((r) => [r.muId, r]),
   );
 
+  const oreMostrate = intervalli.reduce((x, iv) => x + (iv.ore ?? (iv.giorni || 0) * 24), 0);
   const righe = unita.map((u) => {
     const s = serie.get(u.id);
     const t = testa.get(u.id);
@@ -450,7 +571,7 @@ function panoramica(unita) {
       membriPerGiorno: s?.membri || new Array(intervalli.length).fill(0),
       ultimo: chiusi.length ? chiusi.at(-1) : null,
       settimana: chiusi.length ? chiusi.reduce((x, v) => x + v, 0) : null,
-      media: chiusi.length ? Math.round(chiusi.reduce((x, v) => x + v, 0) / chiusi.length) : null,
+      media: chiusi.length ? ritmoGiornaliero(chiusi.reduce((x, v) => x + v, 0), oreMostrate) : null,
       giorniNoti: chiusi.length,
     };
   });
@@ -458,14 +579,7 @@ function panoramica(unita) {
   return {
     intervalli,
     unita: righe,
-    copertura: {
-      primoGiorno: giorni[0]?.giorno || null,
-      ultimoGiorno: ultimo?.giorno || null,
-      ultimoScattoIl: ultimo?.presoIl || null,
-      giorniDisponibili: giorni.length,
-      giorniRichiesti: GIORNI_SCATTO,
-      completa: giorni.length >= GIORNI_SCATTO,
-    },
+    copertura: coperturaDi(giorni, intervalli),
     riassunto: {
       unita: righe.length,
       giocatori: righe.reduce((x, r) => x + (r.membri || 0), 0),
@@ -496,7 +610,7 @@ async function rapportoUnita(muId, meta = {}) {
   const perUtente = new Map(); // userId → Map(giorno → wealth)
   for (const r of scattiRicchezza(ids, dal)) {
     if (!perUtente.has(r.warUserId)) perUtente.set(r.warUserId, new Map());
-    perUtente.get(r.warUserId).set(r.giorno, r.wealth);
+    perUtente.get(r.warUserId).set(r.slot, r.wealth);
   }
 
   const intervalli = intervalliChiusi(giorniArchivio);
@@ -504,10 +618,11 @@ async function rapportoUnita(muId, meta = {}) {
   const ultimo = giorniArchivio.at(-1) || null;
   if (ultimo) {
     intervalli.push({
-      da: ultimo.giorno,
+      da: ultimo.slot,
       a: null,
-      giorni: distanzaGiorni(ultimo.giorno, oggi),
+      giorni: distanzaGiorni(ultimo.slot, oggi),
       ore: ultimo.presoIl ? Math.round((attuale.letteIl - ultimo.presoIl) / 3600_000) : null,
+      presoIl: ultimo.presoIl || null,
       inCorso: true,
     });
   }
@@ -562,14 +677,7 @@ async function rapportoUnita(muId, meta = {}) {
     // Da quando in qua l'archivio guarda davvero. Senza questo la vista
     // non può distinguere «nessuno ha speso niente» da «non lo sappiamo»,
     // che è la differenza fra un dato e una bugia.
-    copertura: {
-      primoGiorno: giorniArchivio[0]?.giorno || null,
-      ultimoGiorno: ultimo?.giorno || null,
-      ultimoScattoIl: ultimo?.presoIl || null,
-      giorniDisponibili: giorniArchivio.length,
-      giorniRichiesti: GIORNI_SCATTO,
-      completa: giorniArchivio.length >= GIORNI_SCATTO,
-    },
+    copertura: coperturaDi(giorniArchivio, mostrati.filter((iv) => !iv.inCorso)),
     intervalli: mostrati,
     membri,
     totali,
@@ -578,7 +686,10 @@ async function rapportoUnita(muId, meta = {}) {
       inCorso: totali.at(-1)?.delta ?? null,
       settimana: chiusiTot.length ? chiusiTot.reduce((s, t) => s + t.delta, 0) : null,
       mediaGiornaliera: chiusiTot.length
-        ? Math.round(chiusiTot.reduce((s, t) => s + t.delta, 0) / chiusiTot.length)
+        ? ritmoGiornaliero(
+          chiusiTot.reduce((s, t) => s + t.delta, 0),
+          mostrati.filter((iv) => !iv.inCorso).reduce((x, iv) => x + (iv.ore ?? (iv.giorni || 0) * 24), 0),
+        )
         : null,
       membriTotali: membri.length,
       membriSenzaStorico: membri.filter((m) => m.nuovo).length,

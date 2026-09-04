@@ -660,9 +660,11 @@ compare (verificato: il client logga un warning e la vista unità resta
 identica per tutti). Dopo il deploy c'è però un'attesa che non si può
 saltare: **lo storico della ricchezza non esiste da nessuna parte e si
 accumula**. Nessuna procedura WarEra dice quanto aveva un giocatore ieri —
-`rankings.userWealth` è istantanea — quindi il primo giorno non c'è niente
-da confrontare, i sette giorni pieni arrivano dopo una settimana, e un
-giorno saltato è perso per sempre. È lo stesso vincolo dei bonifici fra
+`rankings.userWealth` è istantanea — quindi i sette giorni pieni arrivano
+dopo una settimana, e un giorno saltato è perso per sempre. Il **primo
+giorno** però si scatta ogni 4 ore ("rodaggio"), così un raffronto c'è
+già la sera stessa: quelle colonne durano ore e lo dichiarano, e appena
+in archivio ci sono due giorni la serie torna giornaliera da sola. È lo stesso vincolo dei bonifici fra
 tesori, e come là la vista lo dichiara (fascia "L'archivio si sta ancora
 riempiendo") invece di far sembrare un buco di copertura un "non ha speso
 niente". `/health` di plusApi riporta `ricchezza` con i giorni in archivio.

@@ -181,14 +181,38 @@ function verdettoDi(saldo, patrimonio) {
 
 /** L'etichetta di colonna di un intervallo. Il giorno mostrato è quello
  *  che l'intervallo COPRE (lo scatto di partenza), non quello in cui è
- *  stato chiuso: la colonna "lun" deve dire cos'è successo lunedì. */
+ *  stato chiuso: la colonna "lun" deve dire cos'è successo lunedì.
+ *
+ *  In RODAGGIO, però, gli intervalli sono di poche ore: due colonne dello
+ *  stesso giorno intitolate entrambe "ven 4" sarebbero indistinguibili, e
+ *  lì l'etichetta diventa l'ora d'inizio. */
 function etichettaIntervallo(iv) {
   if (iv.inCorso) return muT('wToday');
   const locale = document.documentElement.lang || undefined;
-  const [y, m, d] = iv.da.split('-').map(Number);
+  if (iv.ore != null && iv.ore < 20 && iv.presoIl) {
+    return new Date(iv.presoIl).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  }
+  const [y, m, d] = iv.da.slice(0, 10).split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(locale, {
     weekday: 'short', day: 'numeric', timeZone: 'UTC',
   });
+}
+
+/**
+ * Come si chiama il periodo che le colonne coprono davvero.
+ *
+ * A regime è la settimana e si dice "Ultimi 7 giorni". In rodaggio no:
+ * intitolare "7 giorni" una somma di otto ore è la bugia più facile da
+ * scrivere e la più difficile da accorgersene, perché il numero sotto è
+ * giusto. Si mostra quindi "Periodo" con accanto quanto dura.
+ */
+function periodo(copertura) {
+  const ore = copertura?.oreMostrate ?? null;
+  if (ore == null || ore >= 6 * 24) {
+    return { et: muT('wWeek7'), etTot: muT('wTotal7'), nota: '' };
+  }
+  const nota = ore >= 24 ? `${Math.round(ore / 24)}${muT('wDaysSpan')}` : `${ore}${muT('wHours')}`;
+  return { et: muT('wPeriod'), etTot: muT('wTotalPeriod'), nota };
 }
 
 /** Il sottotitolo di colonna: quanto copre davvero quell'intervallo. Si
@@ -257,6 +281,17 @@ function scintilla(serie, max) {
     </svg>`;
 }
 
+/** La colonna dell'ultimo intervallo: come si chiama e quanto copre.
+ *  A regime è "l'ultimo giorno"; in rodaggio è l'ultimo SCATTO, che di
+ *  giorni non ne copre uno — e chiamarlo giorno sarebbe l'errore che il
+ *  numero sotto non permette di accorgersi. */
+function colonnaUltimo() {
+  const iv = pano?.intervalli?.at(-1);
+  if (!iv) return { et: muT('wYesterday'), nota: '' };
+  const lungo = iv.ore == null || iv.ore >= 20;
+  return { et: lungo ? muT('wYesterday') : muT('wLastShot'), nota: noteIntervallo(iv) };
+}
+
 function unitaFiltrate() {
   const q = cerca.trim().toLowerCase();
   const comandate = new Set(pano.comandate || []);
@@ -290,10 +325,11 @@ function ordinaElenco(righe) {
 }
 
 function tabellaElenco(righe) {
-  const th = (campo, testo, cls = '') => `
+  const th = (campo, testo, cls = '', nota = '') => `
     <button type="button" class="wp-mu-th ${cls}${ordineElenco.campo === campo ? ' active' : ''}" data-ordu="${escapeHtml(campo)}">
-      ${escapeHtml(testo)}
+      ${escapeHtml(testo)}${nota ? `<span class="wp-mw-th-nota">${escapeHtml(nota)}</span>` : ''}
     </button>`;
+  const per = periodo(pano.copertura);
 
   const max = Math.max(1, ...pano.unita.flatMap((u) => u.serie.filter((x) => x != null).map(Math.abs)));
   const comandate = new Set(pano.comandate || []);
@@ -324,8 +360,8 @@ function tabellaElenco(righe) {
         ${th('membri', muT('wColMembers'), 'wp-mu-th-num')}
         ${th('ricchezza', muT('wCurrent'), 'wp-mu-th-num')}
         <span class="wp-mu-th wp-mu-th-static">${escapeHtml(muT('wTrend'))}</span>
-        ${th('ultimo', muT('wYesterday'), 'wp-mu-th-num')}
-        ${th('settimana', muT('wTotal7'), 'wp-mu-th-num')}
+        ${th('ultimo', colonnaUltimo().et, 'wp-mu-th-num', colonnaUltimo().nota)}
+        ${th('settimana', per.etTot, 'wp-mu-th-num', per.nota)}
         ${th('media', muT('wAvgDay'), 'wp-mu-th-num')}
       </div>
       ${corpo || `<div class="wp-mu-empty">${escapeHtml(muT('wNoMatch'))}</div>`}
@@ -359,7 +395,8 @@ function disegnaElenco() {
       ${fasciaCopertura(pano.copertura)}
       <section class="wp-mw-somma">
         <span class="wp-mw-somma-cifra wp-mw-${segno(r.settimana ?? 0)}">${escapeHtml(delta(r.settimana))}</span>
-        <span class="wp-mw-somma-et">${escapeHtml(muT('wWeek7'))}</span>
+        <span class="wp-mw-somma-et">${escapeHtml(periodo(pano.copertura).et)}${
+          periodo(pano.copertura).nota ? ` · ${escapeHtml(periodo(pano.copertura).nota)}` : ''}</span>
         <span class="wp-mw-somma-nota">${escapeHtml(muT('wUnitsLine').replace('{u}', String(r.unita)).replace('{p}', String(r.giocatori)))}
           · ${escapeHtml(fmtCompact(r.ricchezza))}</span>
       </section>
@@ -431,6 +468,7 @@ function agganciaElenco() {
 function pannelloVerdetto(r) {
   const settimana = r.riassunto.settimana;
   const verdetto = verdettoDi(settimana, r.riassunto.ricchezzaTotale);
+  const per = periodo(r.copertura);
 
   const titolo = verdetto === 'su' ? muT('wGaining')
     : verdetto === 'giu' ? muT('wLosing')
@@ -448,7 +486,7 @@ function pannelloVerdetto(r) {
       </div>
       <div class="wp-mw-v-cifre">
         <div class="wp-mw-v-cifra">
-          <span class="wp-mw-v-et">${escapeHtml(muT('wWeek7'))}</span>
+          <span class="wp-mw-v-et">${escapeHtml(per.et)}${per.nota ? ` · ${escapeHtml(per.nota)}` : ''}</span>
           <span class="wp-mw-v-val wp-mw-${segno(settimana ?? 0)}">${escapeHtml(delta(settimana))}</span>
           ${r.riassunto.mediaGiornaliera != null
             ? `<span class="wp-mw-v-nota">${escapeHtml(delta(r.riassunto.mediaGiornaliera))} ${escapeHtml(muT('wPerDay'))}</span>`
@@ -548,13 +586,14 @@ function tabellaMembri(r) {
       <span class="wp-mw-num wp-mw-tot">${deltaCella(m.totale)}</span>
     </div>`).join('');
 
+  const per = periodo(r.copertura);
   return `
     <div class="wp-mw-table" style="--wp-mw-giorni:${r.intervalli.length}">
       <div class="wp-mw-thead">
         ${th('nome', muT('wMember'), '', 'wp-mu-th-left')}
         ${th('attuale', muT('wCurrent'), '', 'wp-mu-th-num')}
         ${colonneGiorni}
-        ${th('totale', muT('wTotal7'), '', 'wp-mu-th-num')}
+        ${th('totale', per.etTot, per.nota, 'wp-mu-th-num')}
       </div>
       ${righe}
     </div>`;

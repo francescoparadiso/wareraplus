@@ -225,11 +225,24 @@ CREATE TABLE IF NOT EXISTS verify_claim (
   last_check_at INTEGER
 );
 
--- ── Ricchezza giornaliera dei membri delle unita' italiane ───────────
--- Una riga per (giorno, giocatore). Lo scatto e' delle 02:00 italiane,
--- cioe' la fotografia con cui APRE quel giorno: la differenza fra due
--- scatti consecutivi e' quello che il giocatore ha guadagnato o speso nel
--- giorno che sta in mezzo.
+-- ── Ricchezza dei membri delle unita' italiane, scatto per scatto ────
+-- Una riga per (momento, giocatore). Il momento e' un'ETICHETTA
+-- ordinabile come stringa:
+--
+--     '2026-09-04'      lo scatto del giorno, alle 02:00 italiane
+--     '2026-09-04T16'   uno scatto in mezzo, di rodaggio (vedi wealth.js)
+--
+-- Le due forme si ordinano gia' bene fra loro ('2026-09-04' viene prima
+-- di '2026-09-04T16', che viene prima di '2026-09-05'), ed e' il motivo
+-- per cui il momento e' una stringa sola e non due colonne.
+--
+-- A regime c'e' uno scatto al giorno e la differenza fra due scatti
+-- consecutivi e' quello che il giocatore ha guadagnato o speso in quel
+-- giorno. Nella prima settimana ce ne sono anche in mezzo, perche' un
+-- tool che chiede sette giorni prima di dire qualcosa e' un tool che
+-- nessuno riapre: ogni intervallo porta con se' quante ore copre
+-- davvero, quindi un raffronto di otto ore si legge come tale invece di
+-- essere spacciato per una giornata.
 --
 -- ⚠️ E' l'unica tabella di questo database che NON si puo' ricostruire.
 -- Il gioco espone la ricchezza di ADESSO e nient'altro: nessuna
@@ -244,16 +257,16 @@ CREATE TABLE IF NOT EXISTS verify_claim (
 -- rileggere lo storico di chi nel frattempo ha cambiato unita' o nome
 -- senza dover ripescare l'utente dal gioco.
 CREATE TABLE IF NOT EXISTS wealth_snapshot (
-  day         TEXT    NOT NULL,   -- 'YYYY-MM-DD', fuso Europe/Rome
+  slot        TEXT    NOT NULL,   -- 'YYYY-MM-DD' o 'YYYY-MM-DDTHH', fuso Europe/Rome
   war_user_id TEXT    NOT NULL,
   wealth      INTEGER NOT NULL,
   username    TEXT,
   mu_id       TEXT,
   taken_at    INTEGER NOT NULL,
-  PRIMARY KEY (day, war_user_id)
+  PRIMARY KEY (slot, war_user_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_wealth_mu_day ON wealth_snapshot (mu_id, day);
+CREATE INDEX IF NOT EXISTS idx_wealth_mu_slot ON wealth_snapshot (mu_id, slot);
 `;
 
 function initDb() {
@@ -313,6 +326,19 @@ function migrate() {
   // un'unita' militare e il client lo saprebbe solo rifacendo la ricerca.
   // Il nome vero resta quello del gioco - questo e' un'etichetta per
   // rileggere la propria lista, e va detto se un giorno divergesse.
+  // 2026-09-04 - wealth_snapshot.day diventa .slot. La colonna conteneva
+  // gia' un'etichetta, ma solo di giorni: da qui in poi puo' portare anche
+  // un'ora, e continuare a chiamarla "day" sarebbe la premessa del bug di
+  // chi la rilegge fra sei mesi. RENAME COLUMN aggiorna da solo chiave
+  // primaria e indici (SQLite >= 3.25, cioe' quello dentro Node 22).
+  const colWealth = colonne('wealth_snapshot');
+  if (colWealth.includes('day') && !colWealth.includes('slot')) {
+    db.exec('ALTER TABLE wealth_snapshot RENAME COLUMN day TO slot');
+    db.exec('DROP INDEX IF EXISTS idx_wealth_mu_day');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_wealth_mu_slot ON wealth_snapshot (mu_id, slot)');
+    console.log('[plusApi] migrazione: wealth_snapshot.day rinominata in .slot');
+  }
+
   if (!colonne('request_allow').includes('nome')) {
     db.exec('ALTER TABLE request_allow ADD COLUMN nome TEXT');
     console.log('[plusApi] migrazione: aggiunta request_allow.nome');
@@ -621,15 +647,15 @@ function audit(actorId, action, entity, detail) {
 /** Uno scatto intero in una transazione sola. `INSERT OR REPLACE` e non
  *  `INSERT`: un riavvio a meta' scatto lo fa ripetere, e ripeterlo deve
  *  essere innocuo. */
-function salvaScattoRicchezza(day, righe) {
+function salvaScattoRicchezza(slot, righe) {
   const d = getDb();
   const stmt = d.prepare(`
-    INSERT OR REPLACE INTO wealth_snapshot (day, war_user_id, wealth, username, mu_id, taken_at)
+    INSERT OR REPLACE INTO wealth_snapshot (slot, war_user_id, wealth, username, mu_id, taken_at)
     VALUES (?, ?, ?, ?, ?, ?)`);
   d.exec('BEGIN');
   try {
     for (const r of righe) {
-      stmt.run(day, r.warUserId, Math.round(r.wealth), r.username || null, r.muId || null, r.takenAt);
+      stmt.run(slot, r.warUserId, Math.round(r.wealth), r.username || null, r.muId || null, r.takenAt);
     }
     d.exec('COMMIT');
   } catch (err) {
@@ -639,37 +665,37 @@ function salvaScattoRicchezza(day, righe) {
   return righe.length;
 }
 
-/** I giorni presenti, dal più recente. Serve a sapere quanto indietro si
- *  può guardare davvero, che non è quanto si vorrebbe. */
-function giorniScattoRicchezza(limite = 30) {
+/** Gli scatti presenti, dal più recente. Serve a sapere quanto indietro
+ *  si può guardare davvero, che non è quanto si vorrebbe. */
+function scattiRicchezzaDisponibili(limite = 120) {
   return getDb()
-    .prepare('SELECT day, COUNT(*) AS n, MAX(taken_at) AS taken_at FROM wealth_snapshot GROUP BY day ORDER BY day DESC LIMIT ?')
+    .prepare('SELECT slot, COUNT(*) AS n, MAX(taken_at) AS taken_at FROM wealth_snapshot GROUP BY slot ORDER BY slot DESC LIMIT ?')
     .all(limite)
-    .map((r) => ({ giorno: r.day, righe: r.n, presoIl: r.taken_at }));
+    .map((r) => ({ slot: r.slot, righe: r.n, presoIl: r.taken_at }));
 }
 
 /** Le righe di un gruppo di giocatori dal giorno indicato in poi. Una
  *  query sola per l'intera unità: N query per N membri sarebbe la stessa
  *  cosa scritta peggio. */
-function scattiRicchezza(warUserIds, dalGiorno) {
+function scattiRicchezza(warUserIds, dalMomento) {
   if (!warUserIds.length) return [];
   const segnaposti = warUserIds.map(() => '?').join(',');
   return getDb()
-    .prepare(`SELECT day, war_user_id, wealth, username, mu_id FROM wealth_snapshot
-              WHERE war_user_id IN (${segnaposti}) AND day >= ?
-              ORDER BY day ASC`)
-    .all(...warUserIds, dalGiorno)
-    .map((r) => ({ giorno: r.day, warUserId: r.war_user_id, wealth: r.wealth, username: r.username, muId: r.mu_id }));
+    .prepare(`SELECT slot, war_user_id, wealth, username, mu_id FROM wealth_snapshot
+              WHERE war_user_id IN (${segnaposti}) AND slot >= ?
+              ORDER BY slot ASC`)
+    .all(...warUserIds, dalMomento)
+    .map((r) => ({ slot: r.slot, warUserId: r.war_user_id, wealth: r.wealth, username: r.username, muId: r.mu_id }));
 }
 
 /** Chi era nell'unità all'ultimo scatto. È il ripiego quando la directory
  *  del cache-server non risponde: meglio riscattare gli stessi di ieri che
  *  saltare un giorno, perché un giorno saltato non si recupera. */
 function ultimoScattoMu() {
-  const ultimo = getDb().prepare('SELECT MAX(day) AS d FROM wealth_snapshot').get()?.d;
+  const ultimo = getDb().prepare('SELECT MAX(slot) AS s FROM wealth_snapshot').get()?.s;
   if (!ultimo) return [];
   return getDb()
-    .prepare('SELECT DISTINCT mu_id FROM wealth_snapshot WHERE day = ? AND mu_id IS NOT NULL')
+    .prepare('SELECT DISTINCT mu_id FROM wealth_snapshot WHERE slot = ? AND mu_id IS NOT NULL')
     .all(ultimo)
     .map((r) => r.mu_id);
 }
@@ -686,27 +712,27 @@ function ultimoScattoMu() {
  * L'unità a cui il delta viene attribuito è quella di PARTENZA: quel
  * giorno quel giocatore l'ha vissuto lì.
  */
-function deltaRicchezzaPerMu(giornoDa, giornoA) {
+function deltaRicchezzaPerMu(momentoDa, momentoA) {
   return getDb().prepare(`
     SELECT a.mu_id AS mu_id, SUM(b.wealth - a.wealth) AS delta, COUNT(*) AS n
     FROM wealth_snapshot a
-    JOIN wealth_snapshot b ON b.war_user_id = a.war_user_id AND b.day = ?
-    WHERE a.day = ? AND a.mu_id IS NOT NULL
+    JOIN wealth_snapshot b ON b.war_user_id = a.war_user_id AND b.slot = ?
+    WHERE a.slot = ? AND a.mu_id IS NOT NULL
     GROUP BY a.mu_id`)
-    .all(giornoA, giornoDa)
+    .all(momentoA, momentoDa)
     .map((r) => ({ muId: r.mu_id, delta: r.delta, membri: r.n }));
 }
 
 /** Quanti erano e quanto avevano, per unità, a uno scatto dato. */
-function totaliRicchezzaPerMu(giorno) {
+function totaliRicchezzaPerMu(momento) {
   return getDb()
-    .prepare('SELECT mu_id, COUNT(*) AS n, SUM(wealth) AS tot FROM wealth_snapshot WHERE day = ? AND mu_id IS NOT NULL GROUP BY mu_id')
-    .all(giorno)
+    .prepare('SELECT mu_id, COUNT(*) AS n, SUM(wealth) AS tot FROM wealth_snapshot WHERE slot = ? AND mu_id IS NOT NULL GROUP BY mu_id')
+    .all(momento)
     .map((r) => ({ muId: r.mu_id, membri: r.n, ricchezza: r.tot }));
 }
 
 function potaScattiRicchezza(primoGiornoDaTenere) {
-  return getDb().prepare('DELETE FROM wealth_snapshot WHERE day < ?').run(primoGiornoDaTenere).changes || 0;
+  return getDb().prepare('DELETE FROM wealth_snapshot WHERE slot < ?').run(primoGiornoDaTenere).changes || 0;
 }
 
 function dbStatus() {
@@ -725,7 +751,8 @@ function dbStatus() {
     webhook: one('SELECT COUNT(*) AS n FROM webhook'),
     sessioniAttive: one(`SELECT COUNT(*) AS n FROM session WHERE expires_at > ${Date.now()}`),
     scattiRicchezza: one('SELECT COUNT(*) AS n FROM wealth_snapshot'),
-    giorniRicchezza: one('SELECT COUNT(DISTINCT day) AS n FROM wealth_snapshot'),
+    momentiRicchezza: one('SELECT COUNT(DISTINCT slot) AS n FROM wealth_snapshot'),
+    giorniRicchezza: one('SELECT COUNT(DISTINCT substr(slot, 1, 10)) AS n FROM wealth_snapshot'),
   };
 }
 
@@ -739,7 +766,7 @@ module.exports = {
   creaRichiesta, getRichiesta, listaRichieste, aggiornaRichiesta,
   getWebhook, setWebhook, deleteWebhook,
   createSession, accountFromToken, destroySession, purgeExpiredSessions,
-  salvaScattoRicchezza, giorniScattoRicchezza, scattiRicchezza, ultimoScattoMu, potaScattiRicchezza,
+  salvaScattoRicchezza, scattiRicchezzaDisponibili, scattiRicchezza, ultimoScattoMu, potaScattiRicchezza,
   deltaRicchezzaPerMu, totaliRicchezzaPerMu,
   audit, dbStatus,
 };

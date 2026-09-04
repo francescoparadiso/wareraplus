@@ -48,6 +48,8 @@ const MU_DICT = {
     wAsOf: 'as of the snapshot of', wOpenForToday: 'Open a unit to see the day in progress.',
     wUnitsLine: '{u} units · {p} players', wOpenUnit: 'Open',
     wYours: 'yours',
+    wPeriod: 'Period', wTotalPeriod: 'Total',
+    wLastShot: 'Since last',
   },
   it: {
     title: 'Unità Militari', subtitle: 'unità', tabList: 'Elenco', tabRanking: 'Classifiche',
@@ -82,6 +84,8 @@ const MU_DICT = {
     wAsOf: 'allo scatto del', wOpenForToday: "Apri un'unità per vedere il giorno in corso.",
     wUnitsLine: '{u} unità · {p} giocatori', wOpenUnit: 'Apri',
     wYours: 'tua',
+    wPeriod: 'Periodo', wTotalPeriod: 'Totale',
+    wLastShot: "Dall'ultimo",
   },
   es: {
     title: 'Unidades Militares', subtitle: 'unidades', tabList: 'Listado', tabRanking: 'Clasificaciones',
@@ -116,6 +120,8 @@ const MU_DICT = {
     wAsOf: 'a la captura del', wOpenForToday: 'Abre una unidad para ver el día en curso.',
     wUnitsLine: '{u} unidades · {p} jugadores', wOpenUnit: 'Abrir',
     wYours: 'tuya',
+    wPeriod: 'Periodo', wTotalPeriod: 'Total',
+    wLastShot: 'Desde la última',
   },
   de: {
     title: 'Militäreinheiten', subtitle: 'Einheiten', tabList: 'Verzeichnis', tabRanking: 'Ranglisten',
@@ -150,6 +156,8 @@ const MU_DICT = {
     wAsOf: 'Stand der Aufnahme vom', wOpenForToday: 'Öffne eine Einheit für den laufenden Tag.',
     wUnitsLine: '{u} Einheiten · {p} Spieler', wOpenUnit: 'Öffnen',
     wYours: 'deine',
+    wPeriod: 'Zeitraum', wTotalPeriod: 'Gesamt',
+    wLastShot: 'Seit letzter',
   },
   fr: {
     title: 'Unités Militaires', subtitle: 'unités', tabList: 'Annuaire', tabRanking: 'Classements',
@@ -184,6 +192,8 @@ const MU_DICT = {
     wAsOf: 'au relevé du', wOpenForToday: 'Ouvre une unité pour voir la journée en cours.',
     wUnitsLine: '{u} unités · {p} joueurs', wOpenUnit: 'Ouvrir',
     wYours: 'à toi',
+    wPeriod: 'Période', wTotalPeriod: 'Total',
+    wLastShot: 'Depuis la dernière',
   },
   nl: {
     title: 'Militaire Eenheden', subtitle: 'eenheden', tabList: 'Overzicht', tabRanking: 'Ranglijsten',
@@ -218,6 +228,8 @@ const MU_DICT = {
     wAsOf: 'stand van de opname van', wOpenForToday: 'Open een eenheid voor de lopende dag.',
     wUnitsLine: '{u} eenheden · {p} spelers', wOpenUnit: 'Openen',
     wYours: 'van jou',
+    wPeriod: 'Periode', wTotalPeriod: 'Totaal',
+    wLastShot: 'Sinds vorige',
   },
   sv: {
     title: 'Militära Enheter', subtitle: 'enheter', tabList: 'Katalog', tabRanking: 'Topplistor',
@@ -252,6 +264,8 @@ const MU_DICT = {
     wAsOf: 'per stillbilden den', wOpenForToday: 'Öppna en enhet för att se dagen som pågår.',
     wUnitsLine: '{u} enheter · {p} spelare', wOpenUnit: 'Öppna',
     wYours: 'din',
+    wPeriod: 'Period', wTotalPeriod: 'Totalt',
+    wLastShot: 'Sedan förra',
   },
   pt: {
     title: 'Unidades Militares', subtitle: 'unidades', tabList: 'Diretório', tabRanking: 'Classificações',
@@ -286,6 +300,8 @@ const MU_DICT = {
     wAsOf: 'à captura de', wOpenForToday: 'Abre uma unidade para ver o dia em curso.',
     wUnitsLine: '{u} unidades · {p} jogadores', wOpenUnit: 'Abrir',
     wYours: 'tua',
+    wPeriod: 'Período', wTotalPeriod: 'Total',
+    wLastShot: 'Desde a última',
   },
   ar: {
     title: 'الوحدات العسكرية', subtitle: 'وحدات', tabList: 'الدليل', tabRanking: 'التصنيفات',
@@ -320,6 +336,8 @@ const MU_DICT = {
     wAsOf: 'حسب لقطة', wOpenForToday: 'افتح وحدة لرؤية اليوم الجاري.',
     wUnitsLine: '{u} وحدات · {p} لاعبين', wOpenUnit: 'افتح',
     wYours: 'لك',
+    wPeriod: 'الفترة', wTotalPeriod: 'الإجمالي',
+    wLastShot: 'منذ الأخيرة',
   },
 };
 

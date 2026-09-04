@@ -108,9 +108,16 @@ differenza fra due scatti e' quello che quel giocatore ha guadagnato o
 speso nel giorno in mezzo, ed e' l'unico modo di saperlo: il gioco espone
 la ricchezza di adesso e nient'altro.
 
-⚠️ **Lo storico non si recupera a ritroso, si accumula.** Il primo giorno
-non c'e' niente da confrontare, i sette giorni pieni arrivano dopo una
-settimana, e un giorno saltato e' perso per sempre. Stesso vincolo dei
+Il **primo giorno** si scatta anche in mezzo, ogni 4 ore, cosi' un
+raffronto c'e' gia' la sera stessa invece che il giorno dopo: quegli
+scatti hanno un'etichetta con l'ora (`2026-09-04T20`) accanto a quella
+del giorno (`2026-09-04`), e ogni colonna dichiara quante ore copre. Il
+rodaggio finisce da se' appena in archivio ci sono due giorni, e da li'
+la serie mostrata usa solo gli scatti giornalieri.
+
+⚠️ **Lo storico non si recupera a ritroso, si accumula.** I sette giorni
+pieni arrivano dopo una settimana, e un giorno saltato e' perso per
+sempre. Stesso vincolo dei
 bonifici fra tesori (`server/moneyTransfers.js`), e come la' va detto
 nell'interfaccia invece di far sembrare un buco di copertura un "non ha
 speso niente". Cancellare `wealth_snapshot` butta via dati che non
