@@ -245,12 +245,17 @@ wareraPlus/
     │   │                          nazionalità (calcolata dal vivo sui membri) + membri
     │   ├── ranking.js           ← classifiche, ordinate dalla directory (zero fetch)
     │   ├── muWealth.js          ← NUOVO — linguetta "Bilancio", l'unica parte CHIUSA
-    │   │                          della vista: saldo netto giornaliero della ricchezza
-    │   │                          dei membri (oggi in corso + 7 giorni chiusi), verdetto
-    │   │                          guadagna/perde/in pari, barre sulla linea dello zero e
-    │   │                          tabella ordinabile. Compare solo a chi COMANDA in gioco
-    │   │                          un'unità italiana o de facto italiana ed è entrato con
-    │   │                          Discord. Chunk a parte: import() alla prima apertura.
+    │   │                          della vista. DUE schermate: ELENCO delle unità con i
+    │   │                          loro numeri (zero fetch a WarEra: il server lo calcola
+    │   │                          in SQL, quindi "chi sta perdendo" si legge invece di
+    │   │                          aprire trenta schede — con ricerca, filtri e colonne
+    │   │                          ordinabili) e SCHEDA di una unità, che legge la
+    │   │                          ricchezza dal vivo perché le serve il giorno IN CORSO.
+    │   │                          Chi comanda UNA sola unità salta l'elenco. Verdetto
+    │   │                          guadagna/perde/in pari, barre sulla linea dello zero.
+    │   │                          Compare solo a chi COMANDA in gioco un'unità italiana
+    │   │                          o de facto italiana ed è entrato con Discord. Chunk a
+    │   │                          parte: import() alla prima apertura.
     │   └── wealthApi.js         ← NUOVO — client di /wealth sull'area riservata. Se non
     │                              c'è un token NON parte nessuna richiesta: la vista
     │                              unità è pubblica e si apre migliaia di volte.

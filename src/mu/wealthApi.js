@@ -52,5 +52,15 @@ export function haSessione() { return Boolean(getToken()); }
  */
 export function fetchUnitaBilancio() { return call('/wealth/unita'); }
 
+/**
+ * Tutte le unità che si possono guardare, coi loro numeri: è la PRIMA
+ * schermata. Non costa una richiesta a WarEra — il server la calcola in
+ * SQL sugli scatti già in archivio — quindi con trenta unità si vede
+ * subito chi sta perdendo, invece di doverle aprire una per una.
+ * Non contiene il giorno in corso: quello vuole una lettura dal vivo, e
+ * si paga solo sull'unità che si apre davvero.
+ */
+export function fetchPanoramica() { return call('/wealth/panoramica'); }
+
 /** Il rapporto di UNA unità: membri, serie giornaliera, riassunto. */
 export function fetchBilancio(muId) { return call(`/wealth/unita/${encodeURIComponent(muId)}`); }

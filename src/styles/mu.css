@@ -903,3 +903,85 @@ body.light-theme .wp-mw-pie { color: #8a93a3; }
   .wp-mw-barra-corpo { height: 56px; }
   .wp-mw-barra-val { font-size: 10px; }
 }
+
+/* ── Bilancio: l'ELENCO delle unità (prima schermata) ──────────────── */
+.wp-mw-indietro { font-weight: 600; }
+
+/* La somma di tutte le unità visibili. Sta sopra i filtri perché è la
+   risposta che si legge senza cercare niente. */
+.wp-mw-somma {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; border: 1px solid #30363d; border-radius: 12px; background: #0f141b;
+}
+body.light-theme .wp-mw-somma { background: #fff; border-color: #d5dae3; }
+.wp-mw-somma-cifra { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.wp-mw-somma-et { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #6e7681; }
+.wp-mw-somma-nota { font-size: 12px; color: #8b949e; margin-left: auto; }
+body.light-theme .wp-mw-somma-et { color: #8a93a3; }
+body.light-theme .wp-mw-somma-nota { color: #5b6473; }
+
+.wp-mw-filtri { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.wp-mw-cerca {
+  flex: 1 1 220px; min-width: 0;
+  background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+  color: #e6edf3; font: inherit; font-size: 13px; padding: 7px 10px;
+}
+.wp-mw-cerca::placeholder { color: #6e7681; }
+body.light-theme .wp-mw-cerca { background: #fff; border-color: #d5dae3; color: #1f2430; }
+
+.wp-mw-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.wp-mw-chip {
+  background: #161b22; border: 1px solid #30363d; border-radius: 999px;
+  color: #8b949e; font: inherit; font-size: 12px; padding: 6px 12px; cursor: pointer;
+}
+.wp-mw-chip:hover { border-color: #4b5563; color: #e6edf3; }
+.wp-mw-chip.active { background: #21262d; border-color: #58a6ff; color: #e6edf3; }
+body.light-theme .wp-mw-chip { background: #fff; border-color: #d5dae3; color: #5b6473; }
+body.light-theme .wp-mw-chip.active { background: #e8f0fe; border-color: #2f6fed; color: #1f2430; }
+
+.wp-mw-utable { overflow-x: auto; }
+.wp-mw-uthead, .wp-mw-urow {
+  display: grid;
+  grid-template-columns: minmax(150px, 2fr) 62px minmax(70px, .8fr) minmax(78px, .9fr) minmax(70px, .8fr) minmax(74px, .85fr) minmax(70px, .8fr);
+  align-items: center;
+  gap: 6px;
+  min-width: 700px;
+}
+.wp-mw-uthead {
+  position: sticky; top: 0; z-index: 2;
+  padding: 0 8px 6px; background: #0d1117; border-bottom: 1px solid #30363d;
+}
+body.light-theme .wp-mw-uthead { background: #f4f6fa; border-bottom-color: #d5dae3; }
+.wp-mw-uthead .wp-mu-th-num { text-align: right; }
+
+/* La barretta a sinistra dice il verdetto della settimana prima ancora
+   di leggere un numero: è il motivo per cui l'elenco viene prima. */
+.wp-mw-urow {
+  padding: 8px; border-bottom: 1px solid #21262d; border-left: 3px solid transparent;
+  font-size: 13px; cursor: pointer;
+}
+.wp-mw-urow:hover, .wp-mw-urow:focus-visible { outline: none; background: rgba(88, 166, 255, .07); }
+body.light-theme .wp-mw-urow { border-bottom-color: #e3e8f0; }
+.wp-mw-u-su { border-left-color: #3fb950; }
+.wp-mw-u-giu { border-left-color: #f85149; }
+.wp-mw-u-pari { border-left-color: #8b949e; }
+.wp-mw-u-vuoto { border-left-color: #30363d; }
+
+.wp-mw-tag-mia { background: rgba(88, 166, 255, .16); color: #79c0ff; }
+body.light-theme .wp-mw-tag-mia { background: #e2ecfd; color: #2f6fed; }
+.wp-mw-tag-df { flex: none; }
+
+.wp-mw-cell-sc { display: block; min-width: 0; }
+.wp-mw-scintilla { display: block; width: 100%; height: 26px; }
+.wp-mw-sc-zero { stroke: #30363d; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.wp-mw-sc-su { fill: #3fb950; }
+.wp-mw-sc-giu { fill: #f85149; }
+.wp-mw-sc-pari { fill: #6e7681; }
+body.light-theme .wp-mw-sc-zero { stroke: #ccd3de; }
+body.light-theme .wp-mw-sc-su { fill: #1a7f37; }
+body.light-theme .wp-mw-sc-giu { fill: #cf222e; }
+
+@media (max-width: 720px) {
+  .wp-mw-uthead, .wp-mw-urow { min-width: 660px; font-size: 12px; }
+  .wp-mw-somma-nota { margin-left: 0; flex-basis: 100%; }
+}

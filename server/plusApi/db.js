@@ -674,6 +674,37 @@ function ultimoScattoMu() {
     .map((r) => r.mu_id);
 }
 
+/**
+ * Somma dei delta per unità fra due scatti, calcolata SOLO sui giocatori
+ * presenti in TUTTI E DUE.
+ *
+ * ⚠️ Non si sommano i patrimoni dell'unità per poi sottrarli: quel numero
+ * salta ogni volta che qualcuno entra o esce, e un reclutamento
+ * comparirebbe come un guadagno di centomila che nessuno ha fatto. Il
+ * JOIN sul giocatore è quello che tiene il conto onesto.
+ *
+ * L'unità a cui il delta viene attribuito è quella di PARTENZA: quel
+ * giorno quel giocatore l'ha vissuto lì.
+ */
+function deltaRicchezzaPerMu(giornoDa, giornoA) {
+  return getDb().prepare(`
+    SELECT a.mu_id AS mu_id, SUM(b.wealth - a.wealth) AS delta, COUNT(*) AS n
+    FROM wealth_snapshot a
+    JOIN wealth_snapshot b ON b.war_user_id = a.war_user_id AND b.day = ?
+    WHERE a.day = ? AND a.mu_id IS NOT NULL
+    GROUP BY a.mu_id`)
+    .all(giornoA, giornoDa)
+    .map((r) => ({ muId: r.mu_id, delta: r.delta, membri: r.n }));
+}
+
+/** Quanti erano e quanto avevano, per unità, a uno scatto dato. */
+function totaliRicchezzaPerMu(giorno) {
+  return getDb()
+    .prepare('SELECT mu_id, COUNT(*) AS n, SUM(wealth) AS tot FROM wealth_snapshot WHERE day = ? AND mu_id IS NOT NULL GROUP BY mu_id')
+    .all(giorno)
+    .map((r) => ({ muId: r.mu_id, membri: r.n, ricchezza: r.tot }));
+}
+
 function potaScattiRicchezza(primoGiornoDaTenere) {
   return getDb().prepare('DELETE FROM wealth_snapshot WHERE day < ?').run(primoGiornoDaTenere).changes || 0;
 }
@@ -709,5 +740,6 @@ module.exports = {
   getWebhook, setWebhook, deleteWebhook,
   createSession, accountFromToken, destroySession, purgeExpiredSessions,
   salvaScattoRicchezza, giorniScattoRicchezza, scattiRicchezza, ultimoScattoMu, potaScattiRicchezza,
+  deltaRicchezzaPerMu, totaliRicchezzaPerMu,
   audit, dbStatus,
 };

@@ -59,7 +59,7 @@ const express = require('express');
 const { trpcBatch } = require('./wareraApi');
 const {
   salvaScattoRicchezza, giorniScattoRicchezza, scattiRicchezza,
-  ultimoScattoMu, potaScattiRicchezza, audit,
+  ultimoScattoMu, potaScattiRicchezza, deltaRicchezzaPerMu, totaliRicchezzaPerMu, audit,
 } = require('./db');
 
 // Il cache-server sta sulla stessa macchina e ascolta solo sulla loopback:
@@ -377,6 +377,106 @@ async function ricchezzaAttuale(muId) {
   return dati;
 }
 
+/** I giorni in archivio dentro la finestra che la vista guarda, dal più
+ *  vecchio. Sta qui perché lo usano sia la panoramica sia il rapporto, e
+ *  due copie della stessa finestra sono due copie da tenere allineate. */
+function finestra() {
+  const dal = giornoMeno(giornoDi(), GIORNI_SCATTO);
+  return giorniScattoRicchezza(RETENTION_GIORNI + 1)
+    .filter((g) => g.giorno >= dal)
+    .sort((a, b) => (a.giorno < b.giorno ? -1 : 1));
+}
+
+/** Gli intervalli CHIUSI fra scatti consecutivi. `giorni`/`ore` dicono
+ *  quanto coprono davvero: un giorno saltato non si spalma. */
+function intervalliChiusi(giorni) {
+  const out = [];
+  for (let i = 0; i < giorni.length - 1; i++) {
+    const da = giorni[i];
+    const a = giorni[i + 1];
+    out.push({
+      da: da.giorno,
+      a: a.giorno,
+      giorni: distanzaGiorni(da.giorno, a.giorno),
+      ore: da.presoIl && a.presoIl ? Math.round((a.presoIl - da.presoIl) / 3600_000) : null,
+      inCorso: false,
+    });
+  }
+  return out;
+}
+
+/**
+ * LA PANORAMICA: una riga per unità, i giorni in colonna.
+ *
+ * Costa ZERO richieste a WarEra — è tutta SQL sugli scatti già in
+ * archivio. È il motivo per cui è la prima cosa che si vede: con trenta
+ * unità, aprire la scheda di ognuna per sapere quale sta perdendo
+ * significherebbe trenta letture dal vivo, e la domanda «chi sta
+ * andando male» va risposta prima di scegliere dove guardare.
+ *
+ * Il prezzo, dichiarato nella vista: qui NON c'è il giorno in corso.
+ * Quello vuole la ricchezza di adesso, cioè una lettura dal vivo, e si
+ * paga solo per l'unità che si apre davvero.
+ */
+function panoramica(unita) {
+  const giorni = finestra();
+  const intervalli = intervalliChiusi(giorni).slice(-GIORNI_DELTA);
+
+  // muId → array di delta, allineato agli intervalli (null dove l'unità
+  // non aveva nessuno in entrambi gli scatti).
+  const serie = new Map();
+  intervalli.forEach((iv, i) => {
+    for (const r of deltaRicchezzaPerMu(iv.da, iv.a)) {
+      if (!serie.has(r.muId)) serie.set(r.muId, { delta: new Array(intervalli.length).fill(null), membri: new Array(intervalli.length).fill(0) });
+      serie.get(r.muId).delta[i] = r.delta;
+      serie.get(r.muId).membri[i] = r.membri;
+    }
+  });
+
+  const ultimo = giorni.at(-1) || null;
+  const testa = new Map(
+    (ultimo ? totaliRicchezzaPerMu(ultimo.giorno) : []).map((r) => [r.muId, r]),
+  );
+
+  const righe = unita.map((u) => {
+    const s = serie.get(u.id);
+    const t = testa.get(u.id);
+    const chiusi = (s?.delta || []).filter((v) => v != null);
+    return {
+      ...u,
+      membri: t?.membri ?? null,
+      ricchezza: t?.ricchezza ?? null,
+      serie: s?.delta || new Array(intervalli.length).fill(null),
+      membriPerGiorno: s?.membri || new Array(intervalli.length).fill(0),
+      ultimo: chiusi.length ? chiusi.at(-1) : null,
+      settimana: chiusi.length ? chiusi.reduce((x, v) => x + v, 0) : null,
+      media: chiusi.length ? Math.round(chiusi.reduce((x, v) => x + v, 0) / chiusi.length) : null,
+      giorniNoti: chiusi.length,
+    };
+  });
+
+  return {
+    intervalli,
+    unita: righe,
+    copertura: {
+      primoGiorno: giorni[0]?.giorno || null,
+      ultimoGiorno: ultimo?.giorno || null,
+      ultimoScattoIl: ultimo?.presoIl || null,
+      giorniDisponibili: giorni.length,
+      giorniRichiesti: GIORNI_SCATTO,
+      completa: giorni.length >= GIORNI_SCATTO,
+    },
+    riassunto: {
+      unita: righe.length,
+      giocatori: righe.reduce((x, r) => x + (r.membri || 0), 0),
+      ricchezza: righe.reduce((x, r) => x + (r.ricchezza || 0), 0),
+      settimana: righe.some((r) => r.settimana != null)
+        ? righe.reduce((x, r) => x + (r.settimana || 0), 0)
+        : null,
+    },
+  };
+}
+
 /**
  * Il rapporto: una riga per membro, una colonna per giorno.
  *
@@ -391,9 +491,7 @@ async function rapportoUnita(muId, meta = {}) {
 
   const oggi = giornoDi();
   const dal = giornoMeno(oggi, GIORNI_SCATTO);
-  const giorniArchivio = giorniScattoRicchezza(RETENTION_GIORNI + 1)
-    .filter((g) => g.giorno >= dal)
-    .sort((a, b) => (a.giorno < b.giorno ? -1 : 1));
+  const giorniArchivio = finestra();
 
   const perUtente = new Map(); // userId → Map(giorno → wealth)
   for (const r of scattiRicchezza(ids, dal)) {
@@ -401,21 +499,7 @@ async function rapportoUnita(muId, meta = {}) {
     perUtente.get(r.warUserId).set(r.giorno, r.wealth);
   }
 
-  // Intervalli chiusi: fra due scatti consecutivi. Se un giorno manca
-  // (server giù) l'intervallo ne copre due, e lo dichiara invece di
-  // spalmare la differenza su una giornata sola.
-  const intervalli = [];
-  for (let i = 0; i < giorniArchivio.length - 1; i++) {
-    const da = giorniArchivio[i];
-    const a = giorniArchivio[i + 1];
-    intervalli.push({
-      da: da.giorno,
-      a: a.giorno,
-      giorni: distanzaGiorni(da.giorno, a.giorno),
-      ore: da.presoIl && a.presoIl ? Math.round((a.presoIl - da.presoIl) / 3600_000) : null,
-      inCorso: false,
-    });
-  }
+  const intervalli = intervalliChiusi(giorniArchivio);
   // Il giorno che stiamo vivendo: dall'ultimo scatto a questo momento.
   const ultimo = giorniArchivio.at(-1) || null;
   if (ultimo) {
@@ -546,6 +630,22 @@ function buildWealthRouter({ requireAuth, capacitaDi }) {
       });
     } catch (err) {
       console.error('[wealth] elenco unità fallito:', err.message);
+      res.status(502).json({ error: 'gioco_non_raggiungibile' });
+    }
+  });
+
+  /**
+   * La panoramica: tutte le unità che si possono guardare, con i loro
+   * numeri. Nessuna richiesta a WarEra — è la ragione per cui è la prima
+   * schermata invece di un menù a tendina.
+   */
+  router.get('/panoramica', async (req, res) => {
+    try {
+      const capacita = await capacitaDi(req.account);
+      const { unita, fonte } = await unitaVisibili(capacita);
+      res.json({ ...panoramica(unita), fonte, paese: PAESE_CODICE, admin: Boolean(capacita.admin), comandate: capacita.chiedePer || [] });
+    } catch (err) {
+      console.error('[wealth] panoramica fallita:', err.message);
       res.status(502).json({ error: 'gioco_non_raggiungibile' });
     }
   });
