@@ -266,7 +266,11 @@ CREATE TABLE IF NOT EXISTS wealth_snapshot (
   PRIMARY KEY (slot, war_user_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_wealth_mu_slot ON wealth_snapshot (mu_id, slot);
+-- ⚠️ L'indice su (mu_id, slot) NON sta qui ma in migrate(). SCHEMA gira
+-- PRIMA delle migrazioni: su un database che ha ancora la colonna day
+-- la CREATE TABLE viene saltata (IF NOT EXISTS) ma la CREATE INDEX no, e
+-- fallisce con "no such column: slot" prima ancora che la rinomina possa
+-- girare. Costato un processo che non riparte, il 2026-09-04.
 `;
 
 function initDb() {
@@ -335,9 +339,10 @@ function migrate() {
   if (colWealth.includes('day') && !colWealth.includes('slot')) {
     db.exec('ALTER TABLE wealth_snapshot RENAME COLUMN day TO slot');
     db.exec('DROP INDEX IF EXISTS idx_wealth_mu_day');
-    db.exec('CREATE INDEX IF NOT EXISTS idx_wealth_mu_slot ON wealth_snapshot (mu_id, slot)');
     console.log('[plusApi] migrazione: wealth_snapshot.day rinominata in .slot');
   }
+  // Qui e non in SCHEMA, per il motivo scritto accanto alla tabella.
+  db.exec('CREATE INDEX IF NOT EXISTS idx_wealth_mu_slot ON wealth_snapshot (mu_id, slot)');
 
   if (!colonne('request_allow').includes('nome')) {
     db.exec('ALTER TABLE request_allow ADD COLUMN nome TEXT');

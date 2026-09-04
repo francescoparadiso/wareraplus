@@ -366,7 +366,19 @@ function scattoDovuto() {
 
   const giorniNoti = new Set(scatti.map((x) => giornoDelSlot(x.slot)));
   const oggi = giornoDi();
-  if (!giorniNoti.has(oggi) && oraDi() >= ORA_SCATTO) return { motivo: 'giornaliero', slot: oggi };
+
+  // Lo scatto del giorno manca se manca l'etichetta SENZA ora. Guardare
+  // "c'è qualcosa di oggi?" sarebbe sbagliato in un caso solo, ma reale:
+  // uno scatto di rodaggio all'una di notte conterebbe come il giorno
+  // nuovo e farebbe saltare quello delle 02:00 — quel giorno resterebbe
+  // senza etichetta giornaliera, e `finestra()` continuerebbe a mostrare
+  // le colonne di rodaggio invece di passare a quelle vere.
+  const giorniConScattoGiornaliero = new Set(
+    scatti.filter((x) => !x.slot.includes('T')).map((x) => x.slot),
+  );
+  if (!giorniConScattoGiornaliero.has(oggi) && oraDi() >= ORA_SCATTO) {
+    return { motivo: 'giornaliero', slot: oggi };
+  }
 
   if (giorniNoti.size < GIORNI_RODAGGIO
       && ultimo.presoIl
@@ -802,4 +814,7 @@ function buildWealthRouter({ requireAuth, capacitaDi }) {
   return router;
 }
 
-module.exports = { buildWealthRouter, initWealth, statoRicchezza, scatta };
+// `scattoDovuto` esce insieme al resto perché è la sola parte di questo
+// modulo che gira da sola mentre nessuno guarda: poterla interrogare
+// senza far passare le ore è la differenza fra averla provata e sperarci.
+module.exports = { buildWealthRouter, initWealth, statoRicchezza, scatta, scattoDovuto };
