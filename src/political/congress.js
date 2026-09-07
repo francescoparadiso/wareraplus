@@ -152,6 +152,7 @@ export async function loadElectionsHistory() {
   }
   catch (err) {
     console.warn('Storico elezioni non disponibile:', err.message);
+    endHeavyOperation(); // WarEra+: mancava anche qui, stessa causa del ramo buono
     window.dispatchEvent(new CustomEvent('wareraplus:elections-ready'));
   }
 }
@@ -363,7 +364,6 @@ async function loadTimelineData(elections, electionIds) {
   if (timelineChart && datasets.length) {
     timelineChart.data.datasets = datasets;
     timelineChart.update('active');
-    endHeavyOperation();
     document.getElementById('timelineBadge').textContent = `${elections.length} elections`;
 
     // Populate the party filter dropdown
@@ -397,6 +397,13 @@ async function loadTimelineData(elections, electionIds) {
       };
     }
   }
+
+  // WarEra+: il contatore del loader si chiude QUI, non dentro l'if
+  // sopra. Con il ramo non preso (nessun dataset da disegnare: una nazione
+  // senza storico congressuale) lo startHeavyOperation di questa funzione
+  // restava scoperto e la barra spariva solo per il timeout di sicurezza a
+  // 15s in loading.js.
+  endHeavyOperation();
 }
 
 function updateTimelineHighlight() {
@@ -1037,6 +1044,12 @@ export async function loadCongressElection(election) {
 
   const panel = document.getElementById('presGovernmentPanel');
   if (panel) panel.open = false;
+
+  // WarEra+: mancava. Gli altri tre esiti di questa funzione (voto in corso,
+  // candidatura, nessun eletto) chiudono il contatore, la strada buona no:
+  // ogni congresso caricato lo lasciava a +1 e la barra restava appesa fino
+  // al reset di sicurezza a 15s ("Loading counter stuck"), su OGNI nazione.
+  endHeavyOperation();
 }
 
 /* ── LIVE SIMULATOR (voting in progress) ──

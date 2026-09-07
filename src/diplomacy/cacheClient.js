@@ -298,10 +298,32 @@ export async function fetchElectionsForCountriesViaCache(countryIds) {
  *  pur essendo valida per definizione (è immutabile) — uso quindi
  *  _fetchCacheJsonRaw, col fallback diretto solo se il server non risponde
  *  affatto (rete giù, non "dato vecchio"). */
+/** WarEra+: uno snapshot di elezione può essere INCOERENTE, non solo
+ *  vecchio. Il poll del server gira a :02 di ogni terzo minuto e le
+ *  elezioni chiudono a :01: se cade nei secondi in cui WarEra ha già
+ *  spostato l'orologio ma non ha ancora scritto gli eletti, congela un
+ *  dettaglio con `votesEndAt` passato, `status: "voting"` e zero
+ *  `isElected`. Political lo apre e disegna un parlamento vuoto ("No
+ *  elected candidates available for this election") pur avendo l'API il
+ *  risultato vero — misurato su Egitto e Spagna, congresso del 7/9/2026.
+ *
+ *  Il server ha già il suo criterio (isElectionResolved in
+ *  server/warera-cache-server.js) e si ripara da solo, ma solo dopo un
+ *  rideploy: qui si tiene lo stesso criterio come rete di sicurezza lato
+ *  client, così un file avvelenato costa una fetch diretta invece di un
+ *  risultato sbagliato. `status` assente (payload vecchio) resta valido,
+ *  stessa convenzione del server. */
+function _electionDetailIsCoherent(data) {
+  const endTs = Date.parse(data?.votesEndAt || 0);
+  if (!Number.isFinite(endTs) || endTs >= Date.now()) return true; // ancora aperta: parziale per definizione
+  return data?.status == null || data.status === 'finished';
+}
+
 export async function fetchElectionDetailViaCache(electionId) {
   try {
     const json = await _fetchCacheJsonRaw(`/election/${encodeURIComponent(electionId)}`);
-    if (json.data) return json.data;
+    if (json.data && _electionDetailIsCoherent(json.data)) return json.data;
+    if (json.data) throw new Error(`cache /election: snapshot incoerente (chiusa ma status "${json.data.status}")`);
     throw new Error('cache /election: non ancora disponibile'); // mai vista dal server, poll non ancora passato
   } catch (err) {
     const url = `${WORKER_API_BASE}/trpc/election.getElection?input=${encodeURIComponent(JSON.stringify({ electionId }))}`;
