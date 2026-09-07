@@ -2655,8 +2655,20 @@ html[data-theme="light"] #wp-political-root .sim-party-card:hover { box-shadow: 
    SENATE VIEW — horizontal semicircle + party cards below
 ══════════════════════════════════════════════════════════ */
 
+/* WarEra+: NON `inset: 0`. L'overlay del Senato e' `fixed`, quindi si
+   posiziona sul viewport e non eredita il `padding-top` che
+   .wp-political-overlay ha gia' per la barra menu' fissa (menubar.css e
+   mobile-menubar.css). Partendo da 0 finiva SOTTO la barra, che sta in un
+   contesto di impilamento piu' alto: misurato, il titolo "Senate" (43px di
+   altezza, top 0) spariva interamente dietro i 42px della barra, insieme
+   alle prime righe della colonna dei senatori a destra.
+   Fallback annidato perche' le due variabili non coesistono mai:
+   --wp-bar-h esiste solo sopra i 768px, --wp-mbar-h solo sotto. */
 #wp-political-root .senate-overlay {
-  position: fixed; inset: 0; z-index: 40000;
+  position: fixed;
+  top: var(--wp-bar-h, var(--wp-mbar-h, 0px));
+  right: 0; bottom: 0; left: 0;
+  z-index: 40000;
   display: none;
   background: var(--bg-overlay, rgba(7,9,13,0.92));
   backdrop-filter: blur(6px);
