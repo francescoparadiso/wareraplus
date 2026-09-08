@@ -17,15 +17,20 @@ cartella `server/` non esiste. La chiave sta una cartella più in su, in
 `warEra/serverOracle/`, da cui il `../` nel percorso.
 
 ```bash
-scp -i ../serverOracle/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/languages.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
+scp -i ../serverOracle/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/battleArchive.js server/moneyTransfers.js server/damageTimeline.js server/languages.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
 ```
 
-Prima di riavviare conviene un controllo: il `require('./proxyIndex')` sta in
-cima al file, quindi un file mancante uccide il processo al caricamento e pm2
-lo riavvia in loop.
+Manda **tutti** i moduli, non il solo `warera-cache-server.js`: i loro
+`require` stanno in cima al file, quindi basta che ne manchi uno perche' il
+processo muoia al caricamento e pm2 lo riavvii in loop. Per questo l'elenco
+qui sopra e' esplicito: va allungato ogni volta che nasce un modulo nuovo.
+
+Prima di riavviare, il controllo che li verifica tutti — solo `node --check`,
+che si ferma alla sintassi: eseguire il server per provarlo aprirebbe la
+porta 3001 e i cron accanto al processo pm2 gia' vivo.
 
 ```bash
-ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && ls -la proxyIndex.js languages.js package.json && node --check warera-cache-server.js && echo PREFLIGHT-OK"
+ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && ls -la proxyIndex.js battleArchive.js moneyTransfers.js damageTimeline.js languages.js package.json && for f in warera-cache-server.js proxyIndex.js battleArchive.js moneyTransfers.js damageTimeline.js languages.js; do node --check \$f || exit 1; done && echo PREFLIGHT-OK"
 ```
 
 Solo se stampa `PREFLIGHT-OK`:
