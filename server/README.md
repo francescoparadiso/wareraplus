@@ -197,6 +197,83 @@ Al primissimo avvio, se il file non esiste, se ne fa uno subito: vale meno
 (parte dall'avvio, non dal cambio giorno) e infatti il client scrive
 "Since HH:MM" invece di "Today" finché non passano le 02:00.
 
+### Danno ora per ora e giocatori pillati (`/damage-timeline`)
+
+`server/damageTimeline.js`. Due serie sulla stessa griglia oraria, perché la
+domanda che ci si fa è una sola: **il picco di danno di una nazione cade dove
+cade il picco di pillole?** Se sì quella nazione si coordina; se le barre
+hanno una punta e la linea delle pillole resta piatta, quella punta è
+arrivata da fuori (mercenari, alleati) o senza preparazione.
+
+Come il danno di oggi qui sopra, **non costa una sola chiamata a WarEra**: il
+danno lo campiona dalla cache `countries` una volta all'ora, le pillole
+escono da un campo delle risposte `user.getUserLite` che il giro dei
+cittadini scarica già per lo stile di gioco e che finiva nel cestino.
+
+Le due metà però si comportano in modo **opposto**, ed è la cosa da sapere
+prima di guardare il grafico appena dopo un deploy.
+
+**Il danno accumula e non si recupera.** Esiste solo il cumulato settimanale,
+quindi il danno di un'ora è la differenza fra due letture: un'ora in cui
+nessuno stava guardando è persa per sempre, esattamente come i bonifici fra
+tesori. Il campione va a `:02` (subito dopo `pollCountries` a `:00`) proprio
+perché l'intervallo fra due campioni coincida con l'ora solare e il secchio
+sia etichettato con l'ora che contiene davvero. Se i due campioni distano
+molto meno o molto più di un'ora — riavvio pm2, server fermo — quell'ora
+resta **assente**: spalmare 18 minuti di danno sull'etichetta di un'ora
+intera darebbe un numero sbagliato e credibile, che è il tipo di errore
+peggiore. Il client disegna il buco come buco.
+
+Al reset settimanale il cumulato riparte da zero: in quell'ora il valore
+nuovo è già il danno fatto dal reset in poi, quindi si usa quello e l'ora si
+marca `r: 1` (il pezzo prima dello zero è perso, e la vista lo dichiara).
+Il reset si riconosce dal fatto che scendono TUTTE le nazioni insieme: una
+sola che scende è una correzione del gioco, non l'inizio della settimana.
+
+**Le pillole invece si ricostruiscono all'indietro, e ci sono subito.** La
+pillola è l'item `cocain`: `gameConfig.items.cocain.flatStats` dà
+`percentAttack: 60`, `buffDurationHours: 8`, `debuffDurationHours: 15.5`
+(riletti ogni 6 ore, non scritti a mano: se il gioco ribilancia, ribilancia
+anche questo). `user.getUserLite` porta:
+
+```
+buff attivo   → buffs: { buffCodes: ['cocain'],   buffEndAt }
+dopo-sbornia  → buffs: { debuffCodes: ['cocain'], debuffEndAt }
+```
+
+Sono timestamp **futuri e fissi**, quindi l'ora della presa si calcola
+all'indietro ed è esatta al millisecondo:
+
+```
+in buff   → presa = buffEndAt   − 8h
+in debuff → presa = debuffEndAt − 8h − 15,5h   (= − 23,5h)
+```
+
+Un giocatore osservato in un qualunque momento delle 23,5 ore successive
+racconta quindi la stessa pillola, e siccome ogni cittadino viene
+rirosolto entro `REFRESH_WINDOW_MS` (2 ore) non ne sfugge nessuna. La
+chiave di dedup è `userId|presa`, potata a 26 ore.
+
+Conseguenza pratica: **la curva delle ultime 23 ore è piena dopo ~2 ore dal
+deploy**, comprese le pillole prese prima che il modulo esistesse. Solo la
+coda delle ultime ~2,5 ore può ancora crescere (`pill.settledUntil`), e il
+client la tratteggia invece di farla leggere come un calo serale.
+
+La risposta espone tre date che dicono cose diverse e vanno tenute distinte:
+`coverageFrom` (da quando c'è il danno), `pill.seenFrom` (da quando un
+conteggio di pillole a zero vale zero davvero) e `pill.completeFrom` (da
+quando il giro dei cittadini ha coperto tutta la popolazione almeno una
+volta). Un'ora fuori copertura torna `null`, mai `0`.
+
+`/health` riporta `damageTimeline` con ore in archivio, nazioni, pillole
+nella finestra di dedup e le durate in uso.
+
+⚠️ **Non provare a riempire il danno orario dall'archivio battaglie.** `ad` e
+`dd` di `battleArchive.js` sono il totale di uno schieramento a battaglia
+CONCLUSA: spalmarli sulle ore della battaglia darebbe una curva credibile e
+inventata, in cui si vedrebbe il picco delle battaglie aperte invece di
+quello dei colpi. È la stessa trappola di `countryBounty`.
+
 ### Quando si ricontrolla un utente
 
 Non un TTL fisso, ma il regolamento del gioco (`gameConfig.getGameConfig()

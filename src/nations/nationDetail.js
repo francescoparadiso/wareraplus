@@ -25,6 +25,7 @@ import { fetchCountryCitizens } from './api.js';
 import { barsHtml, donutHtml } from './charts.js';
 import { classifyPlaystyle } from '../mu/playstyle.js';
 import { renderLevelPlaystyle } from './levelPlaystyle.js';
+import { renderDamageCurves } from './damageCurves.js';
 import { avatarImg, escapeHtml, flagImg, fmtCompact, fmtRelative } from '../mu/ui.js';
 import { countryDamageToday, dailyDamageLabel, ensureDailyDamage } from '../shared/dailyDamage.js';
 import { t as sharedT } from '../shared/i18n.js';
@@ -94,6 +95,8 @@ export function renderNationDetail(host, nation, ctx) {
 
     <section class="wp-nat-lv" id="wp-nat-levels"></section>
 
+    <section class="wp-nat-curves" id="wp-nat-curves"></section>
+
     <section class="wp-nat-citizens">
       <h3 class="wp-nat-section-title">
         ${escapeHtml(natT('citizenList'))}
@@ -130,6 +133,7 @@ export function renderNationDetail(host, nation, ctx) {
   });
 
   paintToday(nation);
+  paintCurves(nation);
   loadCitizens(nation);
 }
 
@@ -162,6 +166,19 @@ function paintToday(nation) {
     const target = _host?.querySelector('#wp-nat-today');
     if (!target || today == null) return;
     target.innerHTML = `<span>${escapeHtml(dailyDamageLabel(sharedT))}</span> <strong>${escapeHtml(fmtCompact(today))}</strong>`;
+  });
+}
+
+/* Danno ora per ora + giocatori sotto pillola, e la curva a 14 giorni.
+   Indipendente dall'elenco cittadini (viene da un altro endpoint e non
+   aspetta la sua risposta): se il server non ce l'ha, la sezione resta
+   vuota e la scheda e' quella di prima. Vedi src/nations/damageCurves.js. */
+function paintCurves(nation) {
+  const el = _host?.querySelector('#wp-nat-curves');
+  if (!el) return;
+  renderDamageCurves(el, nation).catch(err => {
+    console.warn('WarEra+ nations: curve del danno non disegnate:', err.message);
+    el.innerHTML = '';
   });
 }
 

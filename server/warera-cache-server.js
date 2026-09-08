@@ -141,6 +141,18 @@ const {
   initMoneyTransfers, pollMoneyTransfers,
   readMoneyTransfers, readMoneyTransfersStatus,
 } = require('./moneyTransfers');
+// WarEra+ danno ora per ora + giocatori "pillati": a che ora picchia una
+// nazione, e quanti dei suoi erano sotto pillola in quell'ora. Il danno
+// orario ACCUMULA (e' la differenza fra due letture del cumulato
+// settimanale, non esiste a ritroso); i pillati invece si ricostruiscono
+// all'indietro da `buffs.buffEndAt`/`debuffEndAt`, quindi ci sono gia' al
+// primo giro. Nessuna fetch propria: campiona la cache `countries` e legge
+// un campo delle risposte getUserLite che prima si buttava via. Vedi il
+// blocco in testa a server/damageTimeline.js.
+const {
+  initDamageTimeline, sampleDamage, refreshPillConfig, recordPills,
+  readTimeline, timelineStatus,
+} = require('./damageTimeline');
 
 const app = express();
 const PORT = 3001;
@@ -254,6 +266,14 @@ initMoneyTransfers({
   // tardivo, le costanti sono dichiarate piu' in basso.
   get apiToken() { return WARERA_API_TOKEN; },
   get trpcUpstream() { return TRPC_UPSTREAM; },
+});
+
+// La timeline riceve trpcBatch per la sola gameConfig (una chiamata ogni 6
+// ore, per le durate della pillola): il danno lo campiona dalla cache
+// `countries` e le pillole gliele passa il loop dei cittadini.
+initDamageTimeline({
+  trpcBatch: (...args) => trpcBatch(...args),
+  readCache, writeCache,
 });
 
 // ---------------------------------------------------------------------------
@@ -901,6 +921,13 @@ async function pollMuDirectory() {
         // nessun consumatore esistente da aggiornare.
         if (u?.country) userCountries[id] = [u.country, now, classifyPlaystyle(u), u.dates?.lastSkillsResetAt || null, citizenStats(u)];
       });
+      // WarEra+ pillole: `u.buffs` viaggia dentro queste stesse risposte e
+      // finiva nel cestino. Da qui esce la curva dei giocatori "pillati"
+      // ora per ora, senza una sola chiamata in piu' — vedi il blocco in
+      // testa a server/damageTimeline.js. Non deve poter far fallire il
+      // giro della directory: e' un di piu'.
+      try { recordPills(users); }
+      catch (err) { console.error('[damage-timeline] registrazione pillole fallita:', err.message); }
     }
 
     // Potatura: via chi non è né cittadino censito né membro di un'unità
@@ -2107,6 +2134,17 @@ cron.schedule('45 */6 * * *', pollProxyIndex);               // ogni 6 ore, :45 
 // leggere il giro di pollCountries delle :00.
 cron.schedule('1 2 * * *', snapshotDailyDamage, { timezone: DAILY_DAMAGE_TZ });
 
+// WarEra+ danno orario: un campione a inizio ora, a :02 — pollCountries ha
+// appena riscritto la cache a :00, quindi si legge il valore piu' fresco
+// possibile senza fare una fetch propria, e l'intervallo fra due campioni
+// coincide con l'ora solare (vedi l'etichettatura in sampleDamage). L'ora
+// si chiude col campione SUCCESSIVO, quindi l'ora in corso non compare mai
+// nella serie: e' voluto, vedi readTimeline.
+cron.schedule('2 * * * *', () => { try { sampleDamage(); } catch (err) { console.error('[damage-timeline] campione fallito:', err.message); } });
+// Durate della pillola dal gioco (una chiamata, ogni 6 ore): se WarEra
+// ribilancia +60%/8h, la ricostruzione all'indietro deve seguirlo.
+cron.schedule('40 */6 * * *', () => { refreshPillConfig().catch(() => {}); });
+
 // Primo giro completo all'avvio (in ordine: countries prima, perché tutto
 // il resto dipende dalla cache delle nazioni), così non si parte a vuoto.
 (async () => {
@@ -2120,6 +2158,10 @@ cron.schedule('1 2 * * *', snapshotDailyDamage, { timezone: DAILY_DAMAGE_TZ });
   await pollBattles();
   await pollElections();
   await pollGameEvents();
+  // Le durate della pillola PRIMA di pollMuDirectory: e' quel giro a
+  // registrare le pillole, e senza durate ricostruirebbe l'ora della presa
+  // con i valori di default invece che con quelli veri del gioco.
+  await refreshPillConfig().catch(() => {});
   await pollMuDirectory();
   // await pollBootstrapPage(); // disattivato, vedi nota sopra al cron.schedule commentato
   await pollExternalHistory(); // sync subito con spywarera invece di aspettare fino a 1h
@@ -2138,6 +2180,13 @@ cron.schedule('1 2 * * *', snapshotDailyDamage, { timezone: DAILY_DAMAGE_TZ });
   // non dal cambio giorno), e infatti il client mostra l'ora dello scatto
   // invece di dire "oggi" quando non è delle 02:00.
   if (!readCache(DAILY_DAMAGE_FILE, null)) snapshotDailyDamage();
+
+  // Primo campione della timeline subito, non al prossimo :55: e' la BASE
+  // della prima differenza, e finche' non esiste nessun'ora si chiude. Un
+  // riavvio a meta' ora fa quindi perdere al massimo l'ora in corso, non
+  // l'ora successiva. (Il campione porta con se' il proprio timestamp, la
+  // griglia oraria resta allineata comunque.)
+  try { sampleDamage(); } catch (err) { console.error('[damage-timeline] campione iniziale fallito:', err.message); }
 
   // Aggregati per regione: il conteggio delle contese si riallinea da solo
   // al prossimo evento, ma su un server già avviato da tempo il prossimo
@@ -2472,6 +2521,18 @@ app.get('/battle-archive/status', (req, res) => res.json(readArchiveStatus()));
 // lista vuota NON vuol dire "nessun finanziamento", e il client lo dichiara.
 app.get('/money-transfers', (req, res) => res.json(readMoneyTransfers()));
 
+// Danno ora per ora + giocatori pillati (server/damageTimeline.js).
+// Senza `countryId` risponde col mondo (somma di tutte le nazioni), che e'
+// il metro di paragone della singola: "il picco delle 21 e' suo o e' di
+// tutti". `coverageFrom` dice da quando questo archivio guarda: prima di
+// quella data una serie vuota NON vuol dire "nessun danno", e il client la
+// taglia li' invece di riempirla di zeri.
+app.get('/damage-timeline', (req, res) => {
+  const hours = Math.min(Math.max(Number(req.query.hours) || 48, 1), 24 * 16);
+  const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 16);
+  res.json(readTimeline({ countryId: req.query.countryId || null, hours, days }));
+});
+
 // Radar dei proxy: punteggio completo per nazione, con le evidenze che lo
 // compongono. Il client lo innesta su quello che ha calcolato da solo
 // (src/proxy/radar.js: applyServerIndex) e se questo non risponde resta il
@@ -2746,6 +2807,11 @@ app.get('/health', (req, res) => res.json({
   // Quanto indietro arrivano i finanziamenti. Subito dopo un deploy copre
   // i ~3 giorni che l'API ricorda, e da li' cresce da solo.
   moneyTransfers: readMoneyTransfersStatus(),
+  // Quante ore di danno orario sono in archivio (accumulano da qui in
+  // avanti, non si recuperano) e quante pillole sono nella finestra di
+  // dedup. `pillola` riporta le durate: se dice "valori noti" gameConfig
+  // non e' stato letto e la ricostruzione all'indietro usa i default.
+  damageTimeline: timelineStatus(),
 }));
 
 app.listen(PORT, '127.0.0.1', () => {

@@ -514,3 +514,83 @@ body.light-theme .wp-nat-lv-tip { box-shadow: 0 8px 22px rgba(0, 0, 0, .16); }
 /* Età del dato nell'intestazione dell'elenco cittadini: il server risolve i
    cittadini a fette, e una riga vecchia porta numeri vecchi. */
 .wp-nat-fresh { color: var(--wp-ov-text-dim, #8b949e); font-size: 11.5px; font-weight: 500; cursor: help; }
+
+/* ══════════════════════════════════════════════════════════════
+   Danno ora per ora + giocatori pillati, e curva a 14 giorni
+   (src/nations/damageCurves.js). Riusa i pezzi già tarati del
+   grafico livelli — .wp-nat-lv-gridline, .wp-nat-lv-hit e tutto
+   .wp-nat-lv-tip — invece di clonarli con un altro prefisso: sono
+   la stessa cosa (griglia, zona di cattura, tooltip) e una seconda
+   copia divergerebbe al primo ritocco del tema chiaro.
+   ══════════════════════════════════════════════════════════════ */
+.wp-nat-curves { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
+.wp-nat-curves:empty { display: none; margin: 0; }
+
+.wp-nat-curve-card {
+  position: relative;
+  padding: 12px 14px 10px;
+  background: var(--wp-ov-surface, #161b22);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 12px;
+}
+.wp-nat-curve-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+
+/* Selettore 24/48/72 ore: stessa pastiglia del commutatore lista/card
+   dell'elenco cittadini, perché fa la stessa cosa (cambia il disegno,
+   non i dati: la serie è già tutta in memoria). */
+.wp-nat-curve-range { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--wp-ov-bg, #0d1117); }
+.wp-nat-curve-range button {
+  padding: 3px 9px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--wp-ov-text-dim, #8b949e);
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.wp-nat-curve-range button:hover { color: var(--wp-ov-text, #e6edf3); }
+.wp-nat-curve-range button.active { background: var(--wp-ov-surface, #161b22); color: var(--wp-ov-text, #e6edf3); }
+
+.wp-nat-curve-legend {
+  list-style: none; display: flex; flex-wrap: wrap; gap: 4px 14px;
+  margin: 6px 0 2px; padding: 0;
+  font-size: 12px; color: var(--wp-ov-text-dim, #8b949e);
+}
+.wp-nat-curve-legend li { display: flex; align-items: center; gap: 6px; }
+/* La pastiglia della serie disegnata come LINEA è un trattino, non un
+   pallino: la legenda deve dire anche COME è disegnata la serie, non
+   soltanto di che colore è. */
+.wp-nat-dot-line { width: 14px; height: 3px; border-radius: 2px; }
+
+.wp-nat-curve-slot { width: 100%; overflow: hidden; }
+/* `height: auto` insieme a max-width: il grafico si disegna sulla larghezza
+   misurata al render, ma sotto un certo minimo (telefono stretto, o carta
+   ancora a zero perché non impaginata) l'SVG resta più largo del suo posto.
+   Con la sola max-width si rimpicciolirebbe in larghezza tenendo l'altezza,
+   cioè due bande vuote sopra e sotto; così scala in proporzione. */
+.wp-nat-curve-svg { display: block; max-width: 100%; height: auto; }
+.wp-nat-curve-bar { transition: opacity .12s; }
+.wp-nat-curve-slot:hover .wp-nat-curve-bar { opacity: .78; }
+/* Ora del reset settimanale: il valore c'è ma è parziale (manca il pezzo
+   prima dello zero), quindi la barra è smorzata invece di sembrare una
+   misura piena come le altre. */
+.wp-nat-curve-bar-reset { opacity: .45; }
+.wp-nat-curve-axis { fill: var(--wp-ov-text-dim, #8b949e); font-size: 10px; font-variant-numeric: tabular-nums; }
+.wp-nat-curve-axis-r { text-anchor: start; }
+
+.wp-nat-curve-note,
+.wp-nat-curve-peak { margin: 0; font-size: 12px; line-height: 1.45; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-nat-curve-note {
+  padding: 8px 10px; border-radius: 9px;
+  background: var(--wp-ov-bg, #0d1117);
+  border: 1px solid var(--wp-ov-border, #30363d);
+}
+.wp-nat-curve-peak { margin-top: 8px; }
+.wp-nat-curve-peak strong { color: var(--wp-ov-text, #e6edf3); }
+.wp-nat-curve-loading { padding: 10px 0; font-size: 12.5px; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-nat-curve-tip-warn { color: #e3b341; font-size: 11px; }
+
+/* Tema chiaro. `--wp-ov-bg` resta scuro in ENTRAMBI i temi (è il fondo
+   dell'overlay, non della carta): le superfici incassate sul chiaro vanno
+   su --wp-ov-bg-light, come già fanno .wp-nat-thead e .wp-nat-cthead. Senza
+   questo il riquadro della fascia e il gruppo 24h/48h/72h restavano due
+   macchie nere sul bianco. */
+body.light-theme .wp-nat-curve-note,
+body.light-theme .wp-nat-curve-range { background: var(--wp-ov-bg-light, #f4f6fa); }
+body.light-theme .wp-nat-curve-range button.active { background: var(--wp-ov-surface, #fff); }

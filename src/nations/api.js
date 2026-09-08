@@ -56,6 +56,45 @@ async function cacheJson(path, { timeout = TIMEOUT_MS } = {}) {
   }
 }
 
+/* ── Danno ora per ora + giocatori pillati ───────────────────── */
+
+const _timelines = new Map();   // chiave → risposta, per la sessione
+
+/**
+ * La serie oraria del danno e dei giocatori sotto pillola, dal server di
+ * cache (/damage-timeline). `countryId` omesso = mondo.
+ *
+ * ⚠️ Ritorna `null` — e non una serie vuota — se il server non risponde o
+ * non ha l'endpoint (deploy non ancora fatto). La differenza conta: una
+ * serie vuota si disegnerebbe come "questa nazione non ha fatto danno",
+ * che è il contrario di quello che è successo. Chi chiama, col null,
+ * nasconde la sezione.
+ *
+ * Nessun fallback nel browser, a differenza dell'elenco cittadini: qui non
+ * c'è niente da ricalcolare dal vivo. Il danno di un'ora è la differenza
+ * fra due letture di un cumulato, e un browser aperto adesso non ha la
+ * lettura di un'ora fa. Vedi server/damageTimeline.js.
+ */
+export async function fetchDamageTimeline(countryId, { hours = 48, days = 14 } = {}) {
+  const key = `${countryId || '*'}|${hours}|${days}`;
+  if (_timelines.has(key)) return _timelines.get(key);
+
+  const p = (async () => {
+    const qs = new URLSearchParams({ hours: String(hours), days: String(days) });
+    if (countryId) qs.set('countryId', countryId);
+    try {
+      const json = await cacheJson(`/damage-timeline?${qs}`);
+      return json && Array.isArray(json.series) ? json : null;
+    } catch (err) {
+      console.warn('WarEra+ nations: /damage-timeline non disponibile:', err.message);
+      return null;
+    }
+  })();
+
+  _timelines.set(key, p);
+  return p;
+}
+
 /* ── Elenco cittadini di una nazione ─────────────────────────── */
 
 const _citizensByCountry = new Map();   // countryId → { rows, total, known, partial }

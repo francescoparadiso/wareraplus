@@ -169,6 +169,18 @@ wareraPlus/
 │   │                              a ritroso. Endpoint: /money-transfers, che
 │   │                              espone `coverageFrom` — da quando in qua
 │   │                              l'archivio guardava.
+│   ├── damageTimeline.js       ← NUOVO — danno ORA PER ORA per nazione + quanti
+│   │                              giocatori erano sotto pillola in quell'ora.
+│   │                              Zero fetch proprie: campiona la cache `countries`
+│   │                              una volta all'ora (:02) e legge `buffs` dentro le
+│   │                              risposte getUserLite che il giro cittadini scarica
+│   │                              già. ⚠️ le due metà si comportano in modo OPPOSTO —
+│   │                              il danno ACCUMULA dal primo avvio (è la differenza
+│   │                              fra due letture del cumulato settimanale, a ritroso
+│   │                              non esiste), le pillole si RICOSTRUISCONO indietro
+│   │                              di 23,5 ore da `buffEndAt`/`debuffEndAt`, quindi
+│   │                              quella curva c'è già al primo giro.
+│   │                              Endpoint: /damage-timeline.
 │   └── README.md               ← deploy a mano (scp + pm2 restart), vedi ⚠️ in fondo
 ├── public/
 │   ├── icons/
@@ -268,6 +280,16 @@ wareraPlus/
     │   ├── metrics.js           ← le metriche in un posto solo (panoramica, 1vs2 e scheda
     │   │                          leggono le stesse definizioni)
     │   ├── charts.js            ← ciambelle/barre in SVG scritto a mano, niente Chart.js
+    │   ├── damageCurves.js      ← NUOVO — nella scheda nazione: il danno ORA PER ORA
+    │   │                          con sopra, sullo stesso riquadro e su un secondo
+    │   │                          asse, la linea dei giocatori PILLATI (item `cocain`,
+    │   │                          +60% attacco per 8 ore). Le due serie stanno insieme
+    │   │                          apposta: la domanda è se il picco di danno cade dove
+    │   │                          cade il picco di pillole. Sotto, la curva del danno
+    │   │                          a 14 giorni. Dati da /damage-timeline; se il server
+    │   │                          non ce l'ha la sezione non compare.
+    │   │                          ⚠️ un'ora senza misura è `d: null` e si disegna come
+    │   │                          BUCO (barra assente, linea spezzata), mai come zero.
     │   ├── nationList.js, nationCompare.js, nationDetail.js, i18n.js (9 lingue)
     ├── eco/                      ← NUOVO — Ottimizzatore industriale (port del bot Discord
     │   │                            "WarEra Eco Optimizer" di ArgusIA — attribuzione
@@ -500,9 +522,10 @@ Node su VPS esterno (`WARERA_CACHE_BASE`), gestito con pm2. Polla le API
 WarEra una volta per tutti invece di lasciare che lo faccia ogni browser —
 serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`,
 `/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
-`/daily-damage`, `/ticker` + `/ticker/summary`, `/region-history/{at,range,
-events,contested,war-intensity}`, `/alliances`, `/battles`, `/elections`,
-`/parties`, `/users-lite`, `/credit-profiles`, `/visits`, `/health`.
+`/daily-damage`, `/damage-timeline`, `/ticker` + `/ticker/summary`,
+`/region-history/{at,range,events,contested,war-intensity}`, `/alliances`,
+`/battles`, `/elections`, `/parties`, `/users-lite`, `/credit-profiles`,
+`/visits`, `/health`.
 
 Espone inoltre **`/trpc/*`**: un proxy passthrough verso `api2.warera.io`
 che aggiunge `X-API-Key` server-side, cioè esattamente quello che fa il
@@ -672,6 +695,31 @@ niente". `/health` di plusApi riporta `ricchezza` con i giorni in archivio.
 ⚠️ Il numero è il **saldo netto**, non la spesa militare: entrate meno
 uscite fra due scatti. Chiamarlo "quanto costa la guerra" sarebbe la
 stessa trappola di `rankings.countryBounty` — la vista lo dice in testa.
+
+Il **danno ora per ora** e la **curva a 14 giorni** nella scheda nazione
+(`src/nations/damageCurves.js` + `server/damageTimeline.js`) dipendono da
+`/damage-timeline`: finché non rideployi la sezione non compare affatto —
+degrado voluto, non un guasto. Dopo il deploy le sue due metà si riempiono
+a velocità molto diverse, e vale la pena saperlo prima di crederlo rotto:
+
+- i **giocatori pillati** ci sono quasi subito. `user.getUserLite` porta
+  `buffs` con `buffEndAt` (o `debuffEndAt`), che sono timestamp FUTURI e
+  fissi: sottraendo le durate della pillola (`gameConfig.items.cocain`:
+  8 ore di buff, 15,5 di malus) si ricava l'ora ESATTA in cui è stata
+  presa, anche per pillole prese prima del deploy. Bastano quindi ~2 ore
+  (il giro completo dei cittadini, REFRESH_WINDOW_MS) perché la curva
+  delle ultime 23 ore sia piena;
+- il **danno orario** no, e non c'è modo di accelerarlo: WarEra pubblica
+  solo il cumulato settimanale, e il danno di un'ora è la differenza fra
+  due letture. Un'ora in cui nessuno stava guardando è persa per sempre,
+  esattamente come i bonifici fra tesori. `coverageFrom` dice da quando in
+  qua, la vista lo dichiara in una fascia, e la curva a 14 giorni è piena
+  dopo 14 giorni.
+
+⚠️ Non provare a riempire il danno orario dall'archivio battaglie: `ad`/`dd`
+di `battleArchive.js` sono il totale di uno schieramento a battaglia
+CONCLUSA, e spalmarli sulle ore produrrebbe una curva credibile e inventata
+(si vedrebbe il picco delle battaglie aperte, non quello dei colpi).
 
 Il **contatore visite** (`/visits`) invece sì: finché non rideployi, la pill
 semplicemente non compare — è il degrado voluto, non un guasto. Il seme di
