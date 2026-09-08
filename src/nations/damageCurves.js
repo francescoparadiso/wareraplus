@@ -188,6 +188,12 @@ function drawHourly(tl) {
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
 
+  // Le prime ore dopo un deploy: le pillole ci sono gia' (ricostruite
+  // all'indietro), il danno no (si chiude un'ora alla volta). Senza questa
+  // distinzione l'asse sinistro si tarerebbe sul minimo tecnico di 1 e
+  // stamperebbe "1 / 0,8 / 0,5" accanto a un grafico senza barre: numeri
+  // veri di una scala che non misura niente.
+  const hasDamage = rows.some(r => r.d != null);
   const maxD = Math.max(...rows.map(r => r.d || 0), 1);
   const maxP = Math.max(...rows.map(r => r.p || 0), 1);
   const step = plotW / rows.length;
@@ -207,7 +213,7 @@ function drawHourly(tl) {
     const dv = maxD * (1 - k / ticks);
     const pv = maxP * (1 - k / ticks);
     grid += `<line class="wp-nat-lv-gridline" x1="${PAD.left}" y1="${y.toFixed(1)}" x2="${W - PAD.right}" y2="${y.toFixed(1)}"/>
-      <text class="wp-nat-curve-axis" x="${PAD.left - 6}" y="${(y + 3.5).toFixed(1)}" text-anchor="end">${escapeHtml(fmtCompact(dv))}</text>
+      ${hasDamage ? `<text class="wp-nat-curve-axis" x="${PAD.left - 6}" y="${(y + 3.5).toFixed(1)}" text-anchor="end">${escapeHtml(fmtCompact(dv))}</text>` : ''}
       <text class="wp-nat-curve-axis wp-nat-curve-axis-r" x="${W - PAD.right + 6}" y="${(y + 3.5).toFixed(1)}">${Math.round(pv)}</text>`;
   }
 
@@ -256,7 +262,8 @@ function drawHourly(tl) {
     width="${step.toFixed(1)}" height="${plotH}" data-i="${i}" fill="transparent"/>`).join('');
 
   slot.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="wp-nat-curve-svg" role="img"
-      aria-label="${escapeHtml(natT('curveHourly'))}">${grid}${bars}${line}${labels}${hits}</svg>`;
+      aria-label="${escapeHtml(natT('curveHourly'))}">${grid}${bars}${line}${labels}${hits}</svg>`
+    + (hasDamage ? '' : `<p class="wp-nat-curve-pending">${escapeHtml(natT('curveDamagePending'))}</p>`);
 
   bindTip(slot, rows, hourlyTip);
 }

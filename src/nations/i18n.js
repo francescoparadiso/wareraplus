@@ -43,6 +43,7 @@ const N_DICT = {
     curvePeakWorldSame: 'It is the same hour the whole world peaks in.', curvePeakWorldDiff: 'The rest of the world peaks at another hour.',
     curveNoData: 'Damage not measured in this hour', curveReset: 'Weekly counter reset in this hour: partial value',
     curvePartialDay: 'Partial day: {n} hours out of 24',
+    curveDamagePending: 'The damage bars start here: one closes every hour. The cocaine line, unlike them, is reconstructed backwards and is already complete.',
   },
   it: {
     title: 'Statistiche nazioni', tabOverview: 'Panoramica', tabCompare: '1 vs 2', tabCharts: 'Grafici',
@@ -74,6 +75,7 @@ const N_DICT = {
     curvePeakWorldSame: 'È la stessa ora in cui picchia tutto il mondo.', curvePeakWorldDiff: "Il resto del mondo picchia a un'altra ora.",
     curveNoData: "Danno non misurato in quest'ora", curveReset: "Contatore settimanale ripartito in quest'ora: valore parziale",
     curvePartialDay: 'Giorno parziale: {n} ore su 24',
+    curveDamagePending: 'Le barre del danno partono da qui: se ne chiude una ogni ora. La linea delle pillole, al contrario, è ricostruita all\'indietro ed è già completa.',
   },
   es: {
     title: 'Estadísticas de naciones', tabOverview: 'Resumen', tabCompare: '1 vs 2', tabCharts: 'Gráficos',
@@ -105,6 +107,7 @@ const N_DICT = {
     curvePeakWorldSame: 'Es la misma hora en la que pica todo el mundo.', curvePeakWorldDiff: 'El resto del mundo pica a otra hora.',
     curveNoData: 'Daño no medido en esta hora', curveReset: 'Contador semanal reiniciado en esta hora: valor parcial',
     curvePartialDay: 'Día parcial: {n} horas de 24',
+    curveDamagePending: 'Las barras de daño empiezan aquí: se cierra una cada hora. La línea de la cocaína, en cambio, se reconstruye hacia atrás y ya está completa.',
   },
   de: {
     title: 'Nationsstatistiken', tabOverview: 'Überblick', tabCompare: '1 vs 2', tabCharts: 'Diagramme',
@@ -136,6 +139,7 @@ const N_DICT = {
     curvePeakWorldSame: 'Es ist dieselbe Stunde, in der die ganze Welt zuschlägt.', curvePeakWorldDiff: 'Der Rest der Welt schlägt zu einer anderen Stunde zu.',
     curveNoData: 'Schaden in dieser Stunde nicht gemessen', curveReset: 'Wochenzähler in dieser Stunde zurückgesetzt: Teilwert',
     curvePartialDay: 'Unvollständiger Tag: {n} von 24 Stunden',
+    curveDamagePending: 'Die Schadensbalken beginnen hier: einer pro Stunde. Die Kokain-Linie wird dagegen rückwirkend rekonstruiert und ist bereits vollständig.',
   },
   fr: {
     title: 'Statistiques des nations', tabOverview: "Vue d'ensemble", tabCompare: '1 vs 2', tabCharts: 'Graphiques',
@@ -167,6 +171,7 @@ const N_DICT = {
     curvePeakWorldSame: "C'est la même heure où le monde entier frappe.", curvePeakWorldDiff: 'Le reste du monde frappe à une autre heure.',
     curveNoData: 'Dégâts non mesurés sur cette heure', curveReset: 'Compteur hebdomadaire réinitialisé sur cette heure : valeur partielle',
     curvePartialDay: 'Journée partielle : {n} heures sur 24',
+    curveDamagePending: "Les barres de dégâts commencent ici : il s'en referme une par heure. La courbe de la cocaïne, elle, est reconstruite en arrière et est déjà complète.",
   },
   nl: {
     title: 'Natiestatistieken', tabOverview: 'Overzicht', tabCompare: '1 vs 2', tabCharts: 'Grafieken',
@@ -198,6 +203,7 @@ const N_DICT = {
     curvePeakWorldSame: 'Het is hetzelfde uur waarop de hele wereld piekt.', curvePeakWorldDiff: 'De rest van de wereld piekt op een ander uur.',
     curveNoData: 'Schade in dit uur niet gemeten', curveReset: 'Weekteller in dit uur gereset: gedeeltelijke waarde',
     curvePartialDay: 'Gedeeltelijke dag: {n} van de 24 uur',
+    curveDamagePending: 'De schadebalken beginnen hier: er sluit er één per uur. De cocaïnelijn wordt daarentegen met terugwerkende kracht gereconstrueerd en is al compleet.',
   },
   sv: {
     title: 'Nationsstatistik', tabOverview: 'Översikt', tabCompare: '1 mot 2', tabCharts: 'Diagram',
@@ -229,6 +235,7 @@ const N_DICT = {
     curvePeakWorldSame: 'Det är samma timme som hela världen toppar på.', curvePeakWorldDiff: 'Resten av världen toppar en annan timme.',
     curveNoData: 'Skadan mättes inte den här timmen', curveReset: 'Veckoräknaren nollställdes den här timmen: delvärde',
     curvePartialDay: 'Ofullständig dag: {n} av 24 timmar',
+    curveDamagePending: 'Skadestaplarna börjar här: en stängs varje timme. Kokainlinjen däremot rekonstrueras bakåt och är redan komplett.',
   },
   pt: {
     title: 'Estatísticas das nações', tabOverview: 'Visão geral', tabCompare: '1 vs 2', tabCharts: 'Gráficos',
@@ -260,6 +267,7 @@ const N_DICT = {
     curvePeakWorldSame: 'É a mesma hora em que o mundo inteiro atinge o pico.', curvePeakWorldDiff: 'O resto do mundo atinge o pico noutra hora.',
     curveNoData: 'Dano não medido nesta hora', curveReset: 'Contador semanal reiniciado nesta hora: valor parcial',
     curvePartialDay: 'Dia parcial: {n} horas de 24',
+    curveDamagePending: 'As barras de dano começam aqui: fecha-se uma por hora. A linha da cocaína, pelo contrário, é reconstruída para trás e já está completa.',
   },
   ar: {
     title: 'إحصاءات الدول', tabOverview: 'نظرة عامة', tabCompare: '1 ضد 2', tabCharts: 'الرسوم',
@@ -291,6 +299,7 @@ const N_DICT = {
     curvePeakWorldSame: 'إنها الساعة نفسها التي يبلغ فيها العالم كله ذروته.', curvePeakWorldDiff: 'بقية العالم تبلغ ذروتها في ساعة أخرى.',
     curveNoData: 'لم يُقَس الضرر في هذه الساعة', curveReset: 'أُعيد ضبط العدّاد الأسبوعي في هذه الساعة: قيمة جزئية',
     curvePartialDay: 'يوم جزئي: {n} ساعة من 24',
+    curveDamagePending: 'تبدأ أعمدة الضرر من هنا: يُستكمل عمود كل ساعة. أمّا خط الكوكايين فيُعاد بناؤه بأثر رجعي وهو مكتمل بالفعل.',
   },
 };
 

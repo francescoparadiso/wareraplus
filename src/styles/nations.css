@@ -594,3 +594,6 @@ body.light-theme .wp-nat-lv-tip { box-shadow: 0 8px 22px rgba(0, 0, 0, .16); }
 body.light-theme .wp-nat-curve-note,
 body.light-theme .wp-nat-curve-range { background: var(--wp-ov-bg-light, #f4f6fa); }
 body.light-theme .wp-nat-curve-range button.active { background: var(--wp-ov-surface, #fff); }
+/* Prime ore dopo un deploy: pillole gia' complete, danno ancora da
+   accumulare. Spiega perche' il riquadro ha una linea e nessuna barra. */
+.wp-nat-curve-pending { margin: 6px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--wp-ov-text-dim, #8b949e); }
