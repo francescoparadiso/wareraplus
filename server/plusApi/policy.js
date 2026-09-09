@@ -232,9 +232,9 @@ function vociDaCorpo(body) {
   return grezze.map(normalizzaVoce);
 }
 
-function buildPolicyRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, capacitaDi }) {
+function buildPolicyRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, capacitaDi, filtroNazione }) {
   const router = express.Router();
-  router.use(requireAuth, risolviIdentita, bloccaScrittureSottoLente);
+  router.use(requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione);   // vedi nazioni.js
 
   /**
    * Le nazioni a cui QUESTA identita' puo' chiedere contratti.

@@ -77,9 +77,13 @@ function conNomi(r) {
   return { ...r, richiedente: nome(r.requested_by), approvatore: nome(r.approved_by), apritore: nome(r.opened_by) };
 }
 
-function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente }) {
+function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione }) {
   const router = express.Router();
-  router.use(requireAuth, risolviIdentita, bloccaScrittureSottoLente);
+  // `filtroNazione` sta nella catena del router, non sulle singole rotte:
+  // cosi' copre anche quelle che verranno aggiunte da chi non ha letto
+  // nazioni.js. Va DOPO risolviIdentita perche' sotto la lente deve
+  // filtrare come il bersaglio, non come l'amministratore.
+  router.use(requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione);
 
   /** Capacità dell'identità corrente (che sotto lente è il bersaglio). */
   async function capacita(req) {

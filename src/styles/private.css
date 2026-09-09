@@ -1085,3 +1085,9 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
    serve e il bottone resta leggibile. */
 .wp-pv-form-lista > .wp-pv-riga { align-items: flex-end; }
 .wp-pv-form-lista > .wp-pv-riga > .wp-pv-campo { flex: 0 0 auto; min-width: 9rem; }
+
+/* Elenco delle nazioni a cui l'area e' aperta, nella card che spiega
+   perche' le sezioni non ci sono (vedi server/plusApi/nazioni.js). */
+.wp-pv-nazioni { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.wp-pv-nazioni li { display: flex; align-items: center; gap: 7px; font-size: 13px; }
+.wp-pv-nazione-flag { width: 20px; height: 14px; object-fit: cover; border-radius: 2px; }

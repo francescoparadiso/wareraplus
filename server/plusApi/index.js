@@ -48,6 +48,9 @@ const { buildPolicyRouter } = require('./policy');
 const { buildWealthRouter, initWealth, statoRicchezza } = require('./wealth');
 const { initWatcher, statoWatcher } = require('./watcher');
 const { risolviIdentita, bloccaScrittureSottoLente } = require('./identity');
+// A quali nazioni e' aperta l'area riservata. Si SOMMA ai permessi di
+// ruolo, non li sostituisce: vedi il blocco in testa a nazioni.js.
+const { costruisciFiltroNazione, nazioniAmmesse, etichette: etichetteNazioni } = require('./nazioni');
 
 const WP_ENV = process.env.WP_ENV === 'live' ? 'live' : 'dev';
 const PORT = Number(process.env.PORT) || (WP_ENV === 'live' ? 3002 : 3003);
@@ -126,22 +129,31 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-app.use('/verify', buildVerifyRouter({ requireAuth, requireAdmin }));
-app.use('/roles', buildRolesRouter({ requireAuth, requireAdmin }));
-app.use('/requests', buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente }));
-
 // La lista permessi ha bisogno delle capacita' come le prenotazioni: si
 // passa la stessa funzione invece di ricalcolarle in due modi diversi.
 const { calcolaEffettivi } = require('./roles');
 const capacitaDi = async (account) => (await calcolaEffettivi(account, {})).capacita;
-app.use('/policy', buildPolicyRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, capacitaDi }));
+const derivatiDi = async (account) => (await calcolaEffettivi(account, {})).derivati;
+
+// Il filtro nazione. Montato sulle tre rotte che servono le SEZIONI, non
+// su quelle che servono a entrare: /auth e /verify restano aperte perche'
+// la nazione si sa solo dopo che uno ha collegato l'account di gioco, e
+// filtrarle chiuderebbe la porta in faccia proprio a chi ha diritto di
+// entrare. /roles resta aperta perche' e' da li' che il client scopre di
+// non essere abilitato e lo scrive, invece di mostrare una pagina rotta.
+const filtroNazione = costruisciFiltroNazione(derivatiDi);
+
+app.use('/verify', buildVerifyRouter({ requireAuth, requireAdmin }));
+app.use('/roles', buildRolesRouter({ requireAuth, requireAdmin }));
+app.use('/requests', buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione }));
+app.use('/policy', buildPolicyRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, capacitaDi, filtroNazione }));
 
 // Il bilancio delle unita' usa le STESSE capacita' delle prenotazioni: chi
 // puo' chiedere un contratto per un'unita' e' chi la comanda, ed e' la
 // stessa persona che ha diritto di sapere quanto le sta costando la
 // guerra. Un secondo elenco di permessi qui sarebbe un secondo elenco da
 // tenere allineato.
-app.use('/wealth', buildWealthRouter({ requireAuth, capacitaDi }));
+app.use('/wealth', buildWealthRouter({ requireAuth, capacitaDi, filtroNazione }));
 
 app.use('/auth', buildAuthRouter({
   env: WP_ENV,
@@ -177,6 +189,10 @@ app.get('/health', (req, res) => res.json({
   // controllare dopo il deploy: la serie completa arriva dopo otto giorni
   // di scatti, e prima di allora la vista mostra meno colonne DI PROPOSITO.
   ricchezza: statoRicchezza(),
+  // A quali nazioni e' aperta l'area riservata adesso. Dopo aver cambiato
+  // WP_NAZIONI_AMMESSE e' la riga da guardare per sapere se pm2 ha preso
+  // davvero la variabile, senza doversi far chiudere fuori per scoprirlo.
+  nazioniAmmesse: etichetteNazioni(),
   db: dbStatus(),
 }));
 

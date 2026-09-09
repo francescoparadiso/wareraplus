@@ -208,12 +208,23 @@ function disegna() {
       else colonnaDx.appendChild(cardRicerca());
     }
 
-    // Il tavolo si mostra solo a chi ha almeno un potere: a un cittadino
-    // senza cariche sarebbe una scatola vuota con dentro una spiegazione
-    // di qualcosa che non lo riguarda.
-    const cap = ruoli?.capacita;
-    if (cap && (cap.chiedePer?.length || cap.approvaPer?.length || cap.gestisceNazione?.length || cap.admin)) {
-      colonnaDx.appendChild(creaOTavolo().render());
+    // Nazione non abilitata: si dice, e si dice PRIMA. Il permesso vero e'
+    // il filtro sul server (server/plusApi/nazioni.js) — questo e' solo
+    // l'annuncio, e come per ogni altra cosa qui dentro vale la regola che
+    // nascondere un bottone non e' negare un permesso. Ma senza questa
+    // card l'utente vedrebbe le sezioni fallire una per una con un 403
+    // muto, senza mai capire il perche'.
+    const nazione = ruoli?.nazione;
+    if (account.verificato && nazione && nazione.abilitata === false) {
+      colonnaDx.appendChild(cardNazioneNonAbilitata(nazione));
+    } else {
+      // Il tavolo si mostra solo a chi ha almeno un potere: a un cittadino
+      // senza cariche sarebbe una scatola vuota con dentro una spiegazione
+      // di qualcosa che non lo riguarda.
+      const cap = ruoli?.capacita;
+      if (cap && (cap.chiedePer?.length || cap.approvaPer?.length || cap.gestisceNazione?.length || cap.admin)) {
+        colonnaDx.appendChild(creaOTavolo().render());
+      }
     }
 
   }
@@ -223,6 +234,51 @@ function disegna() {
 
   if (!IS_LIVE) wrap.appendChild(el('p', 'wp-pv-devnote', pvT('devWarning')));
   rootEl.appendChild(wrap);
+}
+
+/**
+ * "L'area non e' aperta alla tua nazione". Elenca QUALI sono le nazioni
+ * ammesse invece di dire solo di no: senza l'elenco l'unica reazione
+ * possibile e' chiedere in chat se sia un guasto, e il piu' delle volte
+ * la risposta e' che non lo e'.
+ *
+ * L'elenco arriva dal server (`ammesse`) e non da una costante nel
+ * bundle: sarebbe la seconda copia della stessa lista, e si scoprirebbe
+ * disallineata il giorno in cui se ne aggiunge una.
+ */
+function cardNazioneNonAbilitata(nazione) {
+  const card = el('div', 'wp-pv-card');
+  card.appendChild(el('h2', 'wp-pv-h2', pvT('natTitle')));
+  card.appendChild(el('p', 'wp-pv-body', pvT('natBody')));
+
+  const elenco = el('ul', 'wp-pv-nazioni');
+  for (const n of nazione.ammesse || []) {
+    const li = el('li');
+    // La bandiera e' la stessa che la scheda profilo mette accanto al
+    // nome: qui riconoscere la propria (o non trovarla) e' il punto.
+    const naz = state.nationMap?.get(n.id);
+    const url = naz ? getFlagUrl(getNationCode(n.id, naz)) : null;
+    if (url) {
+      const img = el('img', 'wp-pv-nazione-flag');
+      img.src = url; img.alt = ''; img.loading = 'lazy';
+      li.appendChild(img);
+    }
+    li.appendChild(el('span', null, naz?.name || n.nome || n.id));
+    elenco.appendChild(li);
+  }
+  if (elenco.childElementCount) card.appendChild(elenco);
+
+  // Perche' proprio io sono fuori: "non ti sei ancora verificato" si
+  // risolve in due minuti, "la tua nazione non c'e'" no. Dirle con lo
+  // stesso messaggio manda a chiedere aiuto chi doveva solo finire.
+  if (nazione.motivo === 'non_verificato' || nazione.motivo === 'nazione_sconosciuta') {
+    card.appendChild(el('p', 'wp-pv-note', pvT('natUnverified')));
+  } else {
+    const mia = ruoli?.derivati?.countryId;
+    const nome = mia ? (state.nationMap?.get(mia)?.name || mia) : pvT('natUnknown');
+    card.appendChild(el('p', 'wp-pv-note', `${pvT('natYours')}: ${nome}`));
+  }
+  return card;
 }
 
 function cardOspite() {

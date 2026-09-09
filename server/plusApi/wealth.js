@@ -726,9 +726,9 @@ async function unitaVisibili(capacita) {
   return { unita, fonte };
 }
 
-function buildWealthRouter({ requireAuth, capacitaDi }) {
+function buildWealthRouter({ requireAuth, capacitaDi, filtroNazione }) {
   const router = express.Router();
-  router.use(requireAuth);
+  router.use(requireAuth, filtroNazione);   // vedi nazioni.js
 
   /**
    * Cosa può vedere chi chiede. Il client la usa per decidere se disegnare

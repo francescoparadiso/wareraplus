@@ -36,6 +36,7 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 const express = require('express');
+const { nazioneAmmessa, etichette: etichetteNazioni } = require('./nazioni');
 const { trpcGet, trpcBatch } = require('./wareraApi');
 const {
   getAccountById, listRoleOverrides, setRoleOverride, removeRoleOverride,
@@ -235,7 +236,14 @@ function buildRolesRouter({ requireAuth, requireAdmin }) {
 
     try {
       const dati = await calcolaEffettivi(account, { forzaRicalcolo: req.query.refresh === '1' });
-      res.json({ ...dati, comeAltri });
+      // L'esito del filtro nazione viaggia QUI e non solo nei 403 delle
+      // sezioni: il client deve poter dire "il tuo account non e' di una
+      // nazione abilitata" nella schermata, invece di lasciare l'utente
+      // davanti a sezioni che falliscono una per una senza spiegare.
+      // E' una dichiarazione, non un permesso: il permesso vero resta il
+      // filtro sulle rotte, che non si puo' aggirare mentendo al client.
+      const { ok, motivo } = nazioneAmmessa(account, dati.derivati);
+      res.json({ ...dati, comeAltri, nazione: { abilitata: ok, motivo, ammesse: etichetteNazioni() } });
     } catch (err) {
       console.error('[roles] calcolo fallito:', err.message);
       res.status(502).json({ error: 'gioco_non_raggiungibile' });
