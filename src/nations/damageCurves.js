@@ -36,7 +36,16 @@
      · le ULTIME ore della curva pillole possono ancora crescere (il server
        rirosolve i cittadini a fette, ci mette ~2 ore a girarli tutti):
        quel tratto è tratteggiato, perché altrimenti si leggerebbe come un
-       calo di fine serata che non c'è.
+       calo di fine serata che non c'è;
+     · i punti NON durano tutti uguale. Il server campionava ogni ora ed
+       è poi passato a ogni mezz'ora, e i secchi vecchi restano quelli
+       che sono (a ritroso non si dividono a metà): ogni punto porta la
+       sua durata in `min`. Due conseguenze, entrambe visibili qui:
+       l'asse x va sul TEMPO e non sull'indice, altrimenti mezz'ora e
+       un'ora occuperebbero la stessa larghezza; e la curva del danno
+       porta un RITMO (danno all'ora) invece del totale grezzo, che al
+       cambio di passo si dimezzerebbe di colpo mostrando un crollo mai
+       avvenuto. Il tooltip riporta la finestra vera, inizio e fine.
 
    SVG scritto a mano come il resto della vista (charts.js,
    levelPlaystyle.js): niente Chart.js, che nel bundle esiste solo per
@@ -150,12 +159,17 @@ function legendHtml() {
 function peakHtml(own, world) {
   const rows = own.series.filter(s => s.d != null);
   if (rows.length < 3) return '';
-  const peak = rows.reduce((a, b) => (b.d > a.d ? b : a));
+  // Il confronto e' sul RITMO, non sul totale del secchio: fra un punto da
+  // un'ora e uno da mezza vincerebbe sempre il primo per il solo fatto di
+  // durare il doppio.
+  const rate = (r) => r.d / ((r.min || 60) / 60);
+  const peak = rows.reduce((a, b) => (rate(b) > rate(a) ? b : a));
   if (!peak.d) return '';
 
-  const hour = new Date(peak.t).toLocaleTimeString(document.documentElement.lang || undefined, {
+  const hm = (ms) => new Date(ms).toLocaleTimeString(document.documentElement.lang || undefined, {
     hour: '2-digit', minute: '2-digit',
   });
+  const hour = `${hm(peak.t)}\u2013${hm(peak.to || peak.t + HOUR_MS)}`;
   let out = `<p class="wp-nat-curve-peak">${escapeHtml(natT('curvePeak').replace('{hour}', hour).replace('{dmg}', fmtCompact(peak.d)))}`;
 
   // Pillole nella stessa ora: è il confronto per cui i due dati stanno
@@ -179,8 +193,9 @@ function drawHourly(tl) {
   const slot = _host?.querySelector('#wp-nat-curve-hourly');
   if (!slot) return;
 
-  const cut = Date.now() - _hours * HOUR_MS;
-  const rows = tl.series.filter(s => s.t >= cut);
+  const now = Date.now();
+  const t0 = now - _hours * HOUR_MS;
+  const rows = tl.series.filter(s => s.t >= t0);
   if (!rows.length) { slot.innerHTML = `<p class="wp-nat-empty">${escapeHtml(natT('curveEmpty'))}</p>`; return; }
 
   const W = Math.max(slot.clientWidth || 0, 320);
@@ -189,21 +204,36 @@ function drawHourly(tl) {
   const plotH = H - PAD.top - PAD.bottom;
 
   // Le prime ore dopo un deploy: le pillole ci sono gia' (ricostruite
-  // all'indietro), il danno no (si chiude un'ora alla volta). Senza questa
+  // all'indietro), il danno no (si chiude uno slot alla volta). Senza questa
   // distinzione l'asse sinistro si tarerebbe sul minimo tecnico di 1 e
-  // stamperebbe "1 / 0,8 / 0,5" accanto a un grafico senza barre: numeri
+  // stamperebbe "1 / 0,8 / 0,5" accanto a un grafico senza curva: numeri
   // veri di una scala che non misura niente.
   const hasDamage = rows.some(r => r.d != null);
-  const maxD = Math.max(...rows.map(r => r.d || 0), 1);
-  const maxP = Math.max(...rows.map(r => r.p || 0), 1);
-  const step = plotW / rows.length;
-  const barW = Math.max(1, step * 0.62);
 
-  const x = (i) => PAD.left + i * step + step / 2;
+  // ⚠️ La curva del danno porta un RITMO (danno all'ora), non il totale
+  // grezzo del secchio. La serie mescola punti da 60 e da 30 minuti — il
+  // server ha cambiato passo strada facendo e ogni punto dichiara il suo
+  // (`min`) — e disegnare i valori grezzi farebbe crollare la curva a meta'
+  // esattamente dove il passo si dimezza: un dimezzamento che non e' mai
+  // successo nel gioco, solo nel campionamento. Il tooltip riporta poi
+  // ANCHE il totale della finestra, che e' il numero che si va a cercare.
+  const rate = (r) => (r.d == null ? null : r.d / ((r.min || 60) / 60));
+
+  const maxD = Math.max(...rows.map(r => rate(r) || 0), 1);
+  const maxP = Math.max(...rows.map(r => r.p || 0), 1);
+
+  // Asse x sul TEMPO, non sull'indice: con punti di durata diversa una
+  // spaziatura uniforme li mostrerebbe tutti larghi uguale, e un buco di
+  // tre ore sarebbe indistinguibile da uno di trenta minuti.
+  const tEnd = rows[rows.length - 1].to || (rows[rows.length - 1].t + HOUR_MS);
+  const tStart = rows[0].t;
+  const span = Math.max(1, tEnd - tStart);
+  const x = (t) => PAD.left + ((t - tStart) / span) * plotW;
+  const xMid = (r) => x(r.t + ((r.to || r.t + HOUR_MS) - r.t) / 2);
   const yD = (v) => PAD.top + plotH - (v / maxD) * plotH;
   const yP = (v) => PAD.top + plotH - (v / maxP) * plotH;
 
-  // Griglia + asse sinistro (danno) e destro (pillati): due unità sullo
+  // Griglia + asse sinistro (danno/ora) e destro (pillati): due unità sullo
   // stesso riquadro, ognuna con le sue etichette dalla sua parte, così non
   // si può leggere un numero sull'asse sbagliato.
   const ticks = 4;
@@ -217,15 +247,28 @@ function drawHourly(tl) {
       <text class="wp-nat-curve-axis wp-nat-curve-axis-r" x="${W - PAD.right + 6}" y="${(y + 3.5).toFixed(1)}">${Math.round(pv)}</text>`;
   }
 
-  // Barre: solo dove c'è misura. `d: null` = il server non stava
-  // guardando, e una barra a zero direbbe una cosa diversa.
-  const bars = rows.map((r, i) => {
-    if (r.d == null) return '';
-    const h = Math.max(0, plotH - (yD(r.d) - PAD.top));
-    return `<rect class="wp-nat-curve-bar${r.r ? ' wp-nat-curve-bar-reset' : ''}"
-      x="${(x(i) - barW / 2).toFixed(1)}" y="${yD(r.d).toFixed(1)}"
-      width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="${DMG_COLOR}"/>`;
+  // Curva del danno con la sua area sotto, spezzata sui buchi come quella
+  // delle pillole: dove il server non stava guardando la linea si
+  // interrompe, non scende a zero.
+  const dSegs = segments(rows, rate);
+  const area = dSegs.map(seg => {
+    if (seg.length < 2) return '';
+    const d = seg.map(({ i, v }, k) => `${k ? 'L' : 'M'}${xMid(rows[i]).toFixed(1)},${yD(v).toFixed(1)}`).join(' ');
+    const base = (PAD.top + plotH).toFixed(1);
+    return `<path d="${d} L${xMid(rows[seg[seg.length - 1].i]).toFixed(1)},${base} L${xMid(rows[seg[0].i]).toFixed(1)},${base} Z"
+      fill="${DMG_COLOR}" fill-opacity=".12"/>`;
   }).join('');
+  const dLine = dSegs.map(seg => {
+    if (seg.length < 2) return '';
+    const d = seg.map(({ i, v }, k) => `${k ? 'L' : 'M'}${xMid(rows[i]).toFixed(1)},${yD(v).toFixed(1)}`).join(' ');
+    return `<path d="${d}" fill="none" stroke="${DMG_COLOR}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }).join('');
+  // Lo slot in cui il contatore settimanale e' ripartito porta un valore
+  // parziale: si segna con un pallino cavo invece di sparire dentro la
+  // curva come se fosse una misura piena.
+  const resetDots = rows.map(r => (r.r && r.d != null
+    ? `<circle cx="${xMid(r).toFixed(1)}" cy="${yD(rate(r)).toFixed(1)}" r="3" fill="var(--wp-ov-surface, #161b22)" stroke="${DMG_COLOR}" stroke-width="1.6"/>`
+    : '')).join('');
 
   // Linea pillati, spezzata sui buchi (vedi segments()) e poi ancora sul
   // confine dell'assestamento: SOLO la coda ancora incompleta va
@@ -235,7 +278,7 @@ function drawHourly(tl) {
   const settled = tl.pill?.settledUntil ?? Infinity;
   const path = (pts, dashed) => {
     if (pts.length < 2) return '';
-    const d = pts.map(({ i, v }, k) => `${k ? 'L' : 'M'}${x(i).toFixed(1)},${yP(v).toFixed(1)}`).join(' ');
+    const d = pts.map(({ i, v }, k) => `${k ? 'L' : 'M'}${xMid(rows[i]).toFixed(1)},${yP(v).toFixed(1)}`).join(' ');
     return `<path d="${d}" fill="none" stroke="${PILL_COLOR}" stroke-width="2"
       stroke-linejoin="round" stroke-linecap="round"${dashed ? ' stroke-dasharray="4 3"' : ''}/>`;
   };
@@ -243,26 +286,31 @@ function drawHourly(tl) {
     const cutAt = seg.findIndex(({ i }) => rows[i].t > settled);
     if (cutAt === -1) return path(seg, false);
     // Il punto di confine sta in ENTRAMBI i tratti, altrimenti fra il
-    // pieno e il tratteggiato resta un buco largo un'ora.
+    // pieno e il tratteggiato resta un buco largo uno slot.
     return path(seg.slice(0, cutAt + 1), false) + path(seg.slice(Math.max(0, cutAt - 1)), true);
   }).join('');
 
-  // Etichette dell'ora: ogni 6 ore, nel fuso di chi guarda. I secchi sono
+  // Etichette dell'ora: ogni 6 ore, nel fuso di chi guarda. Gli slot sono
   // istanti assoluti, quindi la conversione è esatta — ed è l'ora locale
-  // quella che serve per decidere quando collegarsi.
-  const labels = rows.map((r, i) => {
+  // quella che serve per decidere quando collegarsi. Si etichetta sull'ORA
+  // piena, mai su una mezza, altrimenti a passo di 30 minuti l'asse
+  // stamperebbe due volte lo stesso numero.
+  const labels = rows.map(r => {
     const dt = new Date(r.t);
-    if (dt.getHours() % 6 !== 0) return '';
-    return `<text class="wp-nat-curve-axis" x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${dt.getHours()}</text>`;
+    if (dt.getMinutes() !== 0 || dt.getHours() % 6 !== 0) return '';
+    return `<text class="wp-nat-curve-axis" x="${x(r.t).toFixed(1)}" y="${H - 6}" text-anchor="middle">${dt.getHours()}</text>`;
   }).join('');
 
-  // Zone di cattura per il tooltip: una per colonna, larghe quanto il
-  // passo — puntare una barra alta 2px sarebbe impossibile.
-  const hits = rows.map((r, i) => `<rect class="wp-nat-lv-hit" x="${(x(i) - step / 2).toFixed(1)}" y="${PAD.top}"
-    width="${step.toFixed(1)}" height="${plotH}" data-i="${i}" fill="transparent"/>`).join('');
+  // Zone di cattura per il tooltip: una per punto, larga quanto la sua
+  // finestra vera — puntare una linea spessa 2px sarebbe impossibile.
+  const hits = rows.map((r, i) => {
+    const x0 = x(r.t), x1 = x(r.to || r.t + HOUR_MS);
+    return `<rect class="wp-nat-lv-hit" x="${x0.toFixed(1)}" y="${PAD.top}"
+      width="${Math.max(1, x1 - x0).toFixed(1)}" height="${plotH}" data-i="${i}" fill="transparent"/>`;
+  }).join('');
 
   slot.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="wp-nat-curve-svg" role="img"
-      aria-label="${escapeHtml(natT('curveHourly'))}">${grid}${bars}${line}${labels}${hits}</svg>`
+      aria-label="${escapeHtml(natT('curveHourly'))}">${grid}${area}${dLine}${resetDots}${line}${labels}${hits}</svg>`
     + (hasDamage ? '' : `<p class="wp-nat-curve-pending">${escapeHtml(natT('curveDamagePending'))}</p>`);
 
   bindTip(slot, rows, hourlyTip);
@@ -283,14 +331,21 @@ function segments(rows, get) {
 }
 
 function hourlyTip(r) {
-  const dt = new Date(r.t);
-  const head = dt.toLocaleString(document.documentElement.lang || undefined, {
-    weekday: 'short', hour: '2-digit', minute: '2-digit',
-  });
+  // La testata del tooltip e' la FINESTRA, non un istante: questo punto
+  // conta il danno fatto fra due orari, e senza dirli si legge come una
+  // misura presa alle 14:00 in punto.
+  const from = new Date(r.t);
+  const to = new Date(r.to || r.t + HOUR_MS);
+  const hm = (d) => d.toLocaleTimeString(document.documentElement.lang || undefined, { hour: '2-digit', minute: '2-digit' });
+  const day = from.toLocaleDateString(document.documentElement.lang || undefined, { weekday: 'short' });
+  const head = `${day} ${hm(from)}\u2013${hm(to)}`;
+
   const dmg = r.d == null
     ? `<li><span class="wp-nat-lv-tip-name">${escapeHtml(natT('curveNoData'))}</span></li>`
     : `<li><span class="wp-nat-dot" style="background:${DMG_COLOR}"></span>
-       <span class="wp-nat-lv-tip-name">${escapeHtml(natT('curveDamage'))}</span><strong>${escapeHtml(fmtCompact(r.d))}</strong></li>`;
+       <span class="wp-nat-lv-tip-name">${escapeHtml(natT('curveDamage'))}</span><strong>${escapeHtml(fmtCompact(r.d))}</strong></li>
+       <li><span class="wp-nat-dot" style="visibility:hidden"></span>
+       <span class="wp-nat-lv-tip-name">${escapeHtml(natT('curveRate'))}</span><strong>${escapeHtml(fmtCompact(r.d / ((r.min || 60) / 60)))}</strong></li>`;
   const pill = r.p == null ? '' : `<li><span class="wp-nat-dot" style="background:${PILL_COLOR}"></span>
        <span class="wp-nat-lv-tip-name">${escapeHtml(natT('curvePilled'))}</span><strong>${r.p}</strong></li>`;
   const reset = r.r ? `<li class="wp-nat-curve-tip-warn">${escapeHtml(natT('curveReset'))}</li>` : '';

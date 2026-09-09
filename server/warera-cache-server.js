@@ -2134,13 +2134,13 @@ cron.schedule('45 */6 * * *', pollProxyIndex);               // ogni 6 ore, :45 
 // leggere il giro di pollCountries delle :00.
 cron.schedule('1 2 * * *', snapshotDailyDamage, { timezone: DAILY_DAMAGE_TZ });
 
-// WarEra+ danno orario: un campione a inizio ora, a :02 — pollCountries ha
-// appena riscritto la cache a :00, quindi si legge il valore piu' fresco
-// possibile senza fare una fetch propria, e l'intervallo fra due campioni
-// coincide con l'ora solare (vedi l'etichettatura in sampleDamage). L'ora
-// si chiude col campione SUCCESSIVO, quindi l'ora in corso non compare mai
-// nella serie: e' voluto, vedi readTimeline.
-cron.schedule('2 * * * *', () => { try { sampleDamage(); } catch (err) { console.error('[damage-timeline] campione fallito:', err.message); } });
+// WarEra+ danno: un campione ogni MEZZ'ORA, a :02 e :32 — pollCountries ha
+// appena riscritto la cache a :00 e :30, quindi si legge il valore piu'
+// fresco possibile senza fare una fetch propria, e l'intervallo fra due
+// campioni coincide con lo slot (vedi l'etichettatura in sampleDamage).
+// Lo slot si chiude col campione SUCCESSIVO, quindi quello in corso non
+// compare mai nella serie: e' voluto, vedi readTimeline.
+cron.schedule('2,32 * * * *', () => { try { sampleDamage(); } catch (err) { console.error('[damage-timeline] campione fallito:', err.message); } });
 // Durate della pillola dal gioco (una chiamata, ogni 6 ore): se WarEra
 // ribilancia +60%/8h, la ricostruzione all'indietro deve seguirlo.
 cron.schedule('40 */6 * * *', () => { refreshPillConfig().catch(() => {}); });

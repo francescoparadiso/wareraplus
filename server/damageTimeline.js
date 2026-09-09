@@ -85,12 +85,28 @@ let writeCache = null;
 const TIMELINE_FILE = 'damage-timeline';
 
 const HOUR_MS = 3600 * 1000;
-const RETENTION_HOURS = 16 * 24;      // 16 giorni: i 14 chiesti dalla curva + margine
+const RETENTION_MS = 16 * 24 * HOUR_MS;  // 16 giorni: i 14 chiesti dalla curva + margine
 const DEDUP_MS = 26 * HOUR_MS;        // oltre, di una pillola non arriva più notizia
-// Quanto può discostarsi da un'ora l'intervallo fra due campioni perché la
-// differenza valga ancora come "danno di quell'ora" (vedi sampleDamage).
-const MIN_SPAN_MS = 50 * 60 * 1000;
-const MAX_SPAN_MS = 70 * 60 * 1000;
+
+// ── RISOLUZIONE: mezz'ora, ma l'archivio ricorda quella di prima ──
+//
+// Si è partiti campionando ogni ora. Passare a mezz'ora non è cambiare una
+// costante: i secchi già su disco valgono SESSANTA minuti, e riletti come
+// secchi da trenta racconterebbero un danno doppio del vero — con in più un
+// buco a ogni :30 dove non c'è mai stato un campione.
+//
+// Cancellare l'archivio per ripartire puliti sarebbe la scorciatoia, e
+// costerebbe l'unico danno orario esistente (a ritroso non si ricostruisce,
+// vedi la testata). Quindi l'archivio porta con sé le sue EPOCHE: da quando
+// a quando ha campionato con che passo. Ogni punto della serie esce con la
+// sua durata, e chi disegna scrive la finestra vera sotto al punto invece
+// di far finta che tutti i punti misurino la stessa cosa.
+const SLOT_MS = 30 * 60 * 1000;
+const LEGACY_SLOT_MS = HOUR_MS;
+// Quanto può discostarsi dal passo l'intervallo fra due campioni perché la
+// differenza valga ancora come "danno di quello slot" (vedi sampleDamage).
+// ±5 minuti: il cron è al minuto :02/:32 e pollCountries gira ogni 10.
+const SPAN_TOLERANCE_MS = 5 * 60 * 1000;
 // Quanto ci mette il server principale a rirosolvere TUTTI i cittadini una
 // volta: REFRESH_WINDOW_MS in warera-cache-server.js (2 ore), più un giro di
 // margine. È il ritardo con cui una pillola presa adesso entra nel conto,
@@ -118,16 +134,52 @@ function initDamageTimeline(tools) {
 // Helper
 // ---------------------------------------------------------------------------
 
-/** Inizio dell'ora UTC che contiene `ms`. UTC e non Europe/Rome: il giorno
- *  di gioco cambia a 00:00 UTC (gameConfig.getDates: nextDayAt), quindi i
- *  giorni della curva a 14 giorni cadono dove il gioco li fa cadere. Il
- *  client lo dichiara in interfaccia, come già fa l'archivio battaglie. */
-const _hourFloor = (ms) => Math.floor(ms / HOUR_MS) * HOUR_MS;
+/** Inizio dello slot UTC che contiene `ms`, al passo indicato. UTC e non
+ *  Europe/Rome: il giorno di gioco cambia a 00:00 UTC (gameConfig.getDates:
+ *  nextDayAt), quindi i giorni della curva a 14 giorni cadono dove il gioco
+ *  li fa cadere. Il client lo dichiara in interfaccia, come già fa
+ *  l'archivio battaglie.
+ *
+ *  Nota: mezz'ora divide l'ora, quindi ogni confine d'ora è anche un
+ *  confine di slot — le epoche si incastrano senza secchi a cavallo. */
+const _floor = (ms, slot) => Math.floor(ms / slot) * slot;
 
 const _num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
+/** Le epoche di campionamento, dalla più vecchia. Un archivio nato prima che
+ *  esistesse questo campo ha solo secchi da un'ora: glielo si dichiara una
+ *  volta sola, alla prima lettura dopo l'aggiornamento (vedi _migrate). */
+function _epochs(st) {
+  return Array.isArray(st.epochs) && st.epochs.length
+    ? st.epochs
+    : [{ from: 0, ms: LEGACY_SLOT_MS }];
+}
+
+/** Con che passo è stato (o sarà) campionato l'istante `ts`. */
+function _slotAt(st, ts) {
+  const eps = _epochs(st);
+  let ms = eps[0].ms;
+  for (const e of eps) { if (ts >= e.from) ms = e.ms; else break; }
+  return ms;
+}
+
+/**
+ * Chiude l'epoca precedente e ne apre una al passo corrente, se serve.
+ * Il taglio cade sul prossimo confine d'ora: prima di lì i secchi restano
+ * quelli da un'ora già scritti, dopo cominciano quelli nuovi, e nessuna
+ * chiave viene mai riusata con due significati diversi.
+ */
+function _migrate(st, now) {
+  const eps = _epochs(st);
+  const last = eps[eps.length - 1];
+  if (last.ms === SLOT_MS) { st.epochs = eps; return; }
+  const cut = _floor(now, HOUR_MS) + HOUR_MS;
+  st.epochs = [...eps, { from: cut, ms: SLOT_MS }];
+  console.log(`[damage-timeline] passo a ${SLOT_MS / 60000} min dalle ${new Date(cut).toISOString()}; i secchi precedenti restano da ${last.ms / 60000} min`);
+}
+
 function _emptyState() {
-  return { startedAt: null, pillsFrom: null, ids: [], last: null, hours: {}, seen: {} };
+  return { startedAt: null, pillsFrom: null, ids: [], last: null, hours: {}, seen: {}, epochs: [{ from: 0, ms: SLOT_MS }] };
 }
 
 function _readState() {
@@ -200,6 +252,7 @@ function sampleDamage() {
   const now = Date.now();
   const st = _readState();
   if (!st.startedAt) st.startedAt = now;
+  _migrate(st, now);
 
   const w = [];                       // cumulato settimanale per indice
   for (const n of countries) {
@@ -211,18 +264,24 @@ function sampleDamage() {
   const prev = st.last;
   const span = prev ? now - prev.ts : 0;
 
-  // L'ora da chiudere è quella del campione PRECEDENTE: i campioni cadono a
-  // inizio ora (cron a :02, subito dopo pollCountries), quindi l'intervallo
-  // [12:02, 13:02] è l'ora 12 e va etichettato 12:00.
+  // Lo slot da chiudere è quello del campione PRECEDENTE: i campioni cadono
+  // a inizio slot (cron a :02 e :32, subito dopo pollCountries), quindi
+  // l'intervallo [12:02, 12:32] è lo slot 12:00 e va etichettato così.
   //
-  // ⚠️ Solo se l'intervallo è davvero un'ora. Dopo un riavvio pm2 i due
-  // campioni distano quello che distano, e spalmare 18 minuti di danno
-  // sull'etichetta di un'ora intera (o un buco di cinque ore su una sola)
-  // darebbe un numero sbagliato e credibile. Quelle ore restano ASSENTI
-  // dalla serie — chi disegna ci mette un buco, che è la verità: in
-  // quell'ora il server non stava guardando.
-  if (prev && Array.isArray(prev.w) && span >= MIN_SPAN_MS && span <= MAX_SPAN_MS) {
-    const b = _bucket(st, _hourFloor(prev.ts));
+  // Il passo è quello in vigore ALLORA, non quello di adesso: così i due
+  // campioni a cavallo del cambio di risoluzione chiudono ancora il secchio
+  // da un'ora che avevano aperto, invece di scriverne mezzo.
+  //
+  // ⚠️ Solo se l'intervallo è davvero lungo un passo. Dopo un riavvio pm2 i
+  // due campioni distano quello che distano, e spalmare 18 minuti di danno
+  // sull'etichetta di uno slot intero (o un buco di cinque ore su uno solo)
+  // darebbe un numero sbagliato e credibile. Quegli slot restano ASSENTI
+  // dalla serie — chi disegna ci mette un buco, che è la verità: lì il
+  // server non stava guardando.
+  const slot = prev ? _slotAt(st, prev.ts) : SLOT_MS;
+  if (prev && Array.isArray(prev.w)
+      && span >= slot - SPAN_TOLERANCE_MS && span <= slot + SPAN_TOLERANCE_MS) {
+    const b = _bucket(st, _floor(prev.ts, slot));
     let resets = 0, counted = 0;
 
     for (let i = 0; i < w.length; i++) {
@@ -237,15 +296,15 @@ function sampleDamage() {
     // del gioco, non l'inizio della settimana.
     if (counted && resets > counted / 2) b.r = 1;
   } else if (prev) {
-    console.warn(`[damage-timeline] intervallo di ${Math.round(span / 60000)} min fra due campioni: ora saltata (riavvio o server fermo)`);
+    console.warn(`[damage-timeline] intervallo di ${Math.round(span / 60000)} min contro un passo di ${slot / 60000}: slot saltato (riavvio o server fermo)`);
   }
 
   st.last = { ts: now, w };
   _prune(st, now);
   _writeState(st);
 
-  const hours = Object.keys(st.hours).length;
-  console.log(`[damage-timeline] campione preso: ${w.length} nazioni, ${hours} ore in archivio`);
+  const slots = Object.keys(st.hours).length;
+  console.log(`[damage-timeline] campione preso: ${w.length} nazioni, ${slots} slot in archivio (passo ${SLOT_MS / 60000} min)`);
 }
 
 // ---------------------------------------------------------------------------
@@ -307,6 +366,7 @@ function recordPills(users) {
   const now = Date.now();
   const st = _readState();
   if (!st.startedAt) st.startedAt = now;
+  _migrate(st, now);
   const first = !st.pillsFrom;
   // Quando questo modulo ha guardato le pillole per la prima volta. Da qui
   // readTimeline ricava due date diverse e le espone entrambe, perché
@@ -339,10 +399,17 @@ function recordPills(users) {
     // Un giocatore è "pillato" per tutte le ore coperte dalle 8 ore di
     // buff, prima inclusa e ultima inclusa: chi la prende alle 14:50 conta
     // per le 14, e conta ancora per le 22 (fino alle 22:50).
+    // Gli slot coperti dal buff, al passo in vigore in ciascuno: una
+    // pillola presa poco prima del cambio di risoluzione riempie secchi da
+    // un'ora fino al taglio e da mezz'ora dopo, senza mai scriverne uno che
+    // sta già lì con un altro significato.
     const i = _idx(st, u.country);
-    const from = _hourFloor(taken);
-    const to = _hourFloor(taken + spanMs);
-    for (let h = from; h <= to; h += HOUR_MS) _bump(_bucket(st, h).p, i, 1);
+    const end = taken + spanMs;
+    let h = _floor(taken, _slotAt(st, taken));
+    while (h <= end) {
+      _bump(_bucket(st, h).p, i, 1);
+      h += _slotAt(st, h);
+    }
   }
 
   // `first` anche senza pillole nuove: la data di prima osservazione è
@@ -359,7 +426,7 @@ function recordPills(users) {
 // ---------------------------------------------------------------------------
 
 function _prune(st, now) {
-  const cutoff = _hourFloor(now) - RETENTION_HOURS * HOUR_MS;
+  const cutoff = _floor(now, HOUR_MS) - RETENTION_MS;
   for (const k of Object.keys(st.hours)) {
     if (Number(k) < cutoff) delete st.hours[k];
   }
@@ -387,7 +454,10 @@ function _prune(st, now) {
 function readTimeline({ countryId = null, hours = 48, days = 14 } = {}) {
   const st = _readState();
   const cfg = _pillCfg;
-  const nowHour = _hourFloor(Date.now());
+  const now = Date.now();
+  // L'ultimo confine di slot passato, al passo in vigore adesso: da lì in
+  // avanti lo slot è ancora aperto e non si mostra.
+  const nowSlot = _floor(now, _slotAt(st, now));
 
   // Le due date della copertura pillole, che dicono cose diverse: vedi il
   // commento in recordPills.
@@ -403,7 +473,7 @@ function readTimeline({ countryId = null, hours = 48, days = 14 } = {}) {
       completeFrom: pillsCompleteFrom,
       // L'ultima fetta di ore può ancora crescere: chi ha preso la pillola
       // adesso lo sapremo al suo prossimo giro di risoluzione.
-      settledUntil: nowHour - PILL_SWEEP_MS,
+      settledUntil: nowSlot - PILL_SWEEP_MS,
     },
   };
 
@@ -433,8 +503,8 @@ function readTimeline({ countryId = null, hours = 48, days = 14 } = {}) {
   };
 
   const series = [];
-  const cut = nowHour - Math.max(1, hours) * HOUR_MS;
-  // Si scorrono le ore del CALENDARIO, non le chiavi presenti: un'ora
+  const cut = nowSlot - Math.max(1, hours) * HOUR_MS;
+  // Si scorrono gli slot del CALENDARIO, non le chiavi presenti: uno slot
   // mancante deve comparire come buco esplicito, altrimenti chi disegna
   // congiunge due punti lontani e inventa una linea dove non c'è niente.
   //
@@ -447,30 +517,47 @@ function readTimeline({ countryId = null, hours = 48, days = 14 } = {}) {
     st.startedAt ?? Infinity,
     pillsSeenFrom ?? Infinity,
   );
-  const from = Number.isFinite(earliest) ? Math.max(cut, _hourFloor(earliest)) : cut;
-  for (let h = from; h < nowHour; h += HOUR_MS) {
+  const startAt = Number.isFinite(earliest) ? Math.max(cut, earliest) : cut;
+
+  // Il passo cambia strada facendo (vedi le EPOCHE in testa): si avanza
+  // slot per slot chiedendo ogni volta quanto è lungo QUESTO, e ogni punto
+  // esce con la sua durata in minuti. È il campo che permette a chi
+  // disegna di scrivere "14:00–14:30" sotto un punto e "13:00–14:00"
+  // sotto quello prima, invece di dare per scontato che misurino lo stesso
+  // intervallo.
+  let h = _floor(startAt, _slotAt(st, startAt));
+  while (h < nowSlot) {
+    const dur = _slotAt(st, h);
     const b = st.hours[String(h)];
     const d = b ? dmgAt(b) : null;
     const p = b ? pillAt(b, h) : (pillsSeenFrom != null && h >= pillsSeenFrom ? 0 : null);
-    if (d == null && p == null) continue;
-    series.push({ t: h, d, p, ...(b?.r ? { r: 1 } : {}) });
+    if (d != null || p != null) {
+      series.push({ t: h, to: h + dur, min: dur / 60000, d, p, ...(b?.r ? { r: 1 } : {}) });
+    }
+    h += dur;
   }
 
   // Curva giornaliera: aggregazione della STESSA griglia oraria — una
   // seconda serie salvata a parte divergerebbe dalla prima al primo
   // arrotondamento. Giorni UTC, come li fa il gioco.
   const byDay = new Map();
-  const dayCut = nowHour - Math.max(1, days) * 24 * HOUR_MS;
+  const dayCut = nowSlot - Math.max(1, days) * 24 * HOUR_MS;
   for (const h of keys) {
-    if (h < dayCut || h >= nowHour) continue;
+    if (h < dayCut || h >= nowSlot) continue;
     const b = st.hours[String(h)];
     const day = new Date(h).toISOString().slice(0, 10);
     let row = byDay.get(day);
-    if (!row) { row = { day, d: 0, dHours: 0, pPeak: 0, pSum: 0, pHours: 0, r: 0 }; byDay.set(day, row); }
+    if (!row) { row = { day, d: 0, dMin: 0, pPeak: 0, pSum: 0, pSlots: 0, r: 0 }; byDay.set(day, row); }
+    // ⚠️ Si contano i MINUTI coperti, non i secchi: da quando il passo è
+    // mezz'ora un giorno pieno ha 48 secchi, e contarli direbbe "48 ore su
+    // 24" marcando come parziale ogni giorno completo. Un giorno può anche
+    // essere misto (l'epoca cambia a metà giornata), quindi la somma dei
+    // singoli passi è l'unica misura che regge in tutti e tre i casi.
+    const dur = _slotAt(st, h);
     const d = dmgAt(b);
-    if (d != null) { row.d += d; row.dHours++; }
+    if (d != null) { row.d += d; row.dMin += dur / 60000; }
     const p = pillAt(b, h);
-    if (p != null) { row.pPeak = Math.max(row.pPeak, p); row.pSum += p; row.pHours++; }
+    if (p != null) { row.pPeak = Math.max(row.pPeak, p); row.pSum += p; row.pSlots++; }
     if (b.r) row.r = 1;
   }
   const daily = [...byDay.values()]
@@ -481,11 +568,11 @@ function readTimeline({ countryId = null, hours = 48, days = 14 } = {}) {
       // quante ore delle 24 è calcolato, e chi disegna lo tratteggia. Il
       // primo giorno e quello in corso sono sempre parziali.
       day: r.day,
-      d: r.dHours ? r.d : null,
-      hours: r.dHours,
-      pPeak: r.pHours ? r.pPeak : null,
-      pAvg: r.pHours ? Math.round(r.pSum / r.pHours) : null,
-      ...(r.dHours < 24 ? { partial: 1 } : {}),
+      d: r.dMin ? r.d : null,
+      hours: Math.round((r.dMin / 60) * 10) / 10,
+      pPeak: r.pSlots ? r.pPeak : null,
+      pAvg: r.pSlots ? Math.round(r.pSum / r.pSlots) : null,
+      ...(r.dMin < 24 * 60 ? { partial: 1 } : {}),
       ...(r.r ? { r: 1 } : {}),
     }));
 
