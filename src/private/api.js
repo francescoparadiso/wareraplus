@@ -106,7 +106,10 @@ export async function fetchHealth() {
 /** Errore che porta con sé il codice dell'API, così la vista può tradurlo
  *  invece di mostrare "HTTP 409" a chi ha appena premuto un bottone. */
 export class ApiError extends Error {
-  constructor(codice, stato) { super(codice); this.codice = codice; this.stato = stato; }
+  // `dati` è il corpo della risposta: alcuni rifiuti portano con sé cosa
+  // fare dopo (il 403 della nazione dice chi siede nel governo, cioè a chi
+  // chiedere l'accesso).
+  constructor(codice, stato, dati = null) { super(codice); this.codice = codice; this.stato = stato; this.dati = dati; }
 }
 
 async function callOrThrow(path, body) {
@@ -167,7 +170,7 @@ async function getJson(path) {
   });
   const dati = await res.json().catch(() => ({}));
   if (res.status === 401) { clearToken(); throw new ApiError('non_autenticato', 401); }
-  if (!res.ok) throw new ApiError(dati.error || 'errore_server', res.status);
+  if (!res.ok) throw new ApiError(dati.error || 'errore_server', res.status, dati);
   return dati;
 }
 
@@ -323,6 +326,24 @@ export function leggiNazione({ asAccount = null, paese = null } = {}) {
  *  vivo): il quadro si disegna subito, i nemici arrivano dopo. */
 export function leggiNemici({ asAccount = null, paese = null } = {}) {
   return getJson(conLente(conPaese('/nazione/nemici', paese), asAccount));
+}
+
+/** Chi altro vede la pagina della nazione (oltre al governo, per carica).
+ *  Leggerlo e cambiarlo è del governo. */
+export function leggiAccessi({ asAccount = null, paese = null } = {}) {
+  return getJson(conLente(conPaese('/nazione/accessi', paese), asAccount));
+}
+
+export function cercaCittadini(testo, { paese = null } = {}) {
+  return getJson(conPaese(`/nazione/cittadini?q=${encodeURIComponent(testo)}`, paese));
+}
+
+export function aggiungiAccesso(warUserId, { paese = null } = {}) {
+  return callOrThrow(conPaese('/nazione/accessi', paese), { warUserId });
+}
+
+export function togliAccesso(warUserId, { paese = null } = {}) {
+  return callOrThrow(conPaese('/nazione/accessi/remove', paese), { warUserId });
 }
 
 /** Il canale Discord degli avvisi di confine. Vuoto = togli. */

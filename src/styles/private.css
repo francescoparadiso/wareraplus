@@ -1283,6 +1283,16 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
 .wp-pv-nz-confine-guerra .wp-pv-nz-regione,
 .wp-pv-nz-confine-nemico_giurato .wp-pv-nz-regione { box-shadow: inset 3px 0 0 var(--pv-danger); }
 
+/* ── Chi vede la pagina ──────────────────────────────────────── */
+.wp-pv-nz-acc-lista { display: flex; flex-direction: column; gap: .35rem; }
+.wp-pv-nz-acc-riga {
+  display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  padding: .4rem .6rem; border-radius: 8px; background: var(--pv-surface-2);
+}
+.wp-pv-nz-acc-riga > .wp-pv-suggerimento { flex: 1; min-width: 8rem; }
+.wp-pv-nz-acc-riga > .wp-pv-btn { margin-left: auto; }
+.wp-pv-nz-acc-cerca { display: flex; flex-direction: column; gap: .45rem; border-top: 1px solid var(--pv-rule); padding-top: .8rem; }
+
 @media (max-width: 720px) {
   .wp-pv-nz-rel-riga { grid-template-columns: minmax(0, 1fr); gap: .2rem; }
   .wp-pv-nz-regione { grid-template-columns: minmax(0, 1fr); }

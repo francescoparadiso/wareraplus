@@ -24,26 +24,46 @@
        loopback e il browser farebbe attraverso internet.
 
    ── CHI VEDE COSA ─────────────────────────────────────────────────────
-   Tutto il router sta dietro al filtro nazione (nazioni.js): cittadini
-   verificati delle nazioni abilitate, più gli amministratori. La nazione
-   è quella del GIOCATORE (`derivati.countryId`), non una scelta: un
-   cittadino italiano vede l'Italia. Un amministratore può passare
-   `?paese=` per guardarne un'altra — serve a rispondere a «a me non si
-   vede», come la lente — e senza personaggio collegato vede la prima
-   delle nazioni abilitate invece di una pagina vuota.
+   Tutto il router sta dietro al filtro nazione (nazioni.js): solo le
+   nazioni abilitate. Dentro, la pagina la vedono in tre:
 
-   Configurare il canale Discord degli avvisi di confine è l'unica
-   SCRITTURA, ed è del governo (`gestisceNazione`), come la lista permessi.
+     · il GOVERNO, per carica (`gestisceNazione`: presidente, vice,
+       ministri — il congresso no, è parlamento). Calcolata dal gioco
+       come ogni ruolo: chi è eletto entra, chi decade esce;
+     · i giocatori che il governo SCEGLIE (tabella nation_access). Devono
+       essere cittadini di quella nazione, e servono comunque Discord e il
+       personaggio collegato: la riga dice "questo personaggio", il login
+       dice "sono io";
+     · gli amministratori del tool.
+
+   Il cittadino qualunque no — decisione del 2026-09-10, dopo una prima
+   versione aperta a tutti i cittadini: basi nemiche e pillole altrui
+   sono cose che un governo sceglie con chi condividere. A lui il 403
+   porta i nomi del governo, così la vista dice a chi chiedere invece di
+   dire solo di no.
+
+   La nazione è quella del GIOCATORE (`derivati.countryId`), non una
+   scelta: un cittadino italiano vede l'Italia. Un amministratore può
+   passare `?paese=` per guardarne un'altra — serve a rispondere a «a me
+   non si vede», come la lente — e senza personaggio collegato vede la
+   prima delle nazioni abilitate invece di una pagina vuota.
+
+   Le SCRITTURE sono tutte del governo, come la lista permessi: il canale
+   Discord degli avvisi di confine e chi altro può vedere la pagina.
    ══════════════════════════════════════════════════════════════════════ */
 
 const express = require('express');
 const { calcolaEffettivi } = require('./roles');
 const { nazioniAmmesse } = require('./nazioni');
-const { getWebhook, setWebhook, deleteWebhook, audit } = require('./db');
+const {
+  getWebhook, setWebhook, deleteWebhook, audit, getAccountById, findAccountByWarUserId,
+  accessiNazione, haAccessoNazione, aggiungiAccessoNazione, togliAccessoNazione,
+} = require('./db');
 const { urlWebhookValido } = require('./notify');
+const { trpcGet } = require('./wareraApi');
 const {
   regioniMappa, paesiMappa, paeseLive, governo, nomiUtenti,
-  battaglieVive, baseDannoGiornaliero, bonifici, timeline,
+  battaglieVive, baseDannoGiornaliero, bonifici, timeline, dalCache, memo,
 } = require('./fonti');
 const { quadroConfini, relazione } = require('./confini');
 const { quadroNemici } = require('./nemici');
@@ -213,6 +233,44 @@ async function quadroNazione(countryId) {
 }
 
 // ---------------------------------------------------------------------------
+// Chi altro vede la pagina
+// ---------------------------------------------------------------------------
+
+/** L'elenco completo dei cittadini, per cercarne uno per nome. Tutti e non
+ *  i primi 400 come per i nemici: chi il governo vuole aggiungere è spesso
+ *  proprio uno che fa poco danno (un diplomatico, un economista). */
+const tuttiICittadini = memo(10 * 60_000, (countryId) =>
+  dalCache(`/country-citizens?countryId=${encodeURIComponent(countryId)}&limit=5000`));
+
+async function formaAccessi(countryId) {
+  const righe = accessiNazione(countryId);
+  const nomi = await nomiUtenti(righe.map((r) => r.war_user_id));
+  return righe.map((r) => {
+    const chi = r.added_by ? getAccountById(r.added_by) : null;
+    return {
+      warUserId: r.war_user_id,
+      nome: nomi[r.war_user_id]?.username || r.war_username || null,
+      avatar: nomi[r.war_user_id]?.avatarUrl || null,
+      // L'accesso c'è, ma finché quel giocatore non entra con Discord e
+      // collega questo personaggio non lo usa nessuno: la vista lo dice,
+      // altrimenti "gliel'ho dato e non vede niente" diventa un guasto.
+      entrato: Boolean(findAccountByWarUserId(r.war_user_id)),
+      aggiuntoDa: chi ? (chi.war_username || chi.discord_username) : null,
+      aggiuntoIl: r.created_at,
+    };
+  });
+}
+
+/** Gli id di chi siede nel governo adesso: nella ricerca si segnano, così
+ *  non si aggiunge a mano chi la pagina la vede già per carica. */
+async function idGoverno(countryId) {
+  try {
+    const g = await governo(countryId);
+    return new Set(CARICHE.map(([k]) => g?.[k]).filter(Boolean));
+  } catch { return new Set(); }
+}
+
+// ---------------------------------------------------------------------------
 // Rotte
 // ---------------------------------------------------------------------------
 
@@ -231,23 +289,39 @@ function buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSotto
     if (amministra && /^[a-f0-9]{24}$/i.test(scelto)) countryId = scelto;
     if (!countryId && amministra) countryId = nazioniAmmesse()[0] || null;
     const cap = eff.capacita || {};
-    return {
-      countryId,
-      governa: Boolean(countryId && (cap.gestisceNazione || []).includes(countryId)),
-      amministra,
-    };
+    const governa = Boolean(countryId && (cap.gestisceNazione || []).includes(countryId));
+    // La delega si controlla sulla nazione di cui il giocatore è cittadino
+    // ADESSO: cambiata cittadinanza, `countryId` è un altro e la riga non
+    // combacia più, senza che nessuno debba ricordarsi di toglierla.
+    const delegato = Boolean(countryId && haAccessoNazione(countryId, req.identita?.war_user_id));
+    const via = governa ? 'governo' : delegato ? 'delega' : amministra ? 'admin' : null;
+    return { countryId, governa, amministra, delegato, via, accesso: Boolean(via) };
+  }
+
+  const puoGestire = (ctx) => ctx.governa || ctx.amministra;
+
+  /** Il no, con dentro a chi chiedere: nomi pubblici, gli stessi che il
+   *  gioco mostra sulla pagina del governo. */
+  async function negato(res, countryId) {
+    let gov = null;
+    try { gov = await formaGoverno(countryId); } catch { /* chi chiamare è un di più */ }
+    return res.status(403).json({ error: 'accesso_nazione_negato', governo: gov });
   }
 
   router.get('/', async (req, res) => {
     try {
       const ctx = await contesto(req);
       if (!ctx.countryId) return res.status(404).json({ error: 'nazione_sconosciuta' });
+      if (!ctx.accesso) return negato(res, ctx.countryId);
       const quadro = await quadroNazione(ctx.countryId);
       const w = getWebhook('confini', ctx.countryId);
       res.json({
         ...quadro,
         governa: ctx.governa,
         amministra: ctx.amministra,
+        // Perché questa persona vede la pagina: a un delegato la vista lo
+        // scrive, perché è un accesso che qualcuno gli ha dato e può togliere.
+        via: ctx.via,
         // Per l'amministratore: fra quali nazioni puo' scegliere.
         ammesse: ctx.amministra ? nazioniAmmesse() : null,
         // Mai l'URL del webhook: contiene il token del canale.
@@ -263,6 +337,7 @@ function buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSotto
     try {
       const ctx = await contesto(req);
       if (!ctx.countryId) return res.status(404).json({ error: 'nazione_sconosciuta' });
+      if (!ctx.accesso) return negato(res, ctx.countryId);
       res.json(await quadroNemici(ctx.countryId));
     } catch (err) {
       console.error('[nazione] nemici falliti:', err.message);
@@ -288,6 +363,91 @@ function buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSotto
     setWebhook({ scopeType: 'confini', scopeId: ctx.countryId, url, createdBy: req.account.id });
     audit(req.account.id, 'webhook.set', `confini:${ctx.countryId}`, null);
     res.json({ configurato: true });
+  });
+
+  // ── Chi altro vede la pagina ───────────────────────────────────────────
+  // Leggere l'elenco e scriverlo sono del governo: un delegato vede la
+  // pagina, non decide chi altro la vede.
+
+  router.get('/accessi', async (req, res) => {
+    try {
+      const ctx = await contesto(req);
+      if (!ctx.countryId) return res.status(404).json({ error: 'nazione_sconosciuta' });
+      if (!puoGestire(ctx)) return res.status(403).json({ error: 'non_governi_questa_nazione' });
+      res.json({ accessi: await formaAccessi(ctx.countryId) });
+    } catch (err) {
+      console.error('[nazione] accessi falliti:', err.message);
+      res.status(502).json({ error: 'errore_server' });
+    }
+  });
+
+  /** Cerca fra i cittadini della nazione. Solo loro: la pagina è di una
+   *  nazione, e dare le basi nemiche a uno straniero è un'altra decisione,
+   *  che per ora il tool non prende. */
+  router.get('/cittadini', async (req, res) => {
+    const ctx = await contesto(req);
+    if (!ctx.countryId) return res.status(404).json({ error: 'nazione_sconosciuta' });
+    if (!puoGestire(ctx)) return res.status(403).json({ error: 'non_governi_questa_nazione' });
+
+    const q = String(req.query.q || '').trim().toLowerCase().slice(0, 40);
+    let cit;
+    try { cit = await tuttiICittadini(ctx.countryId); }
+    catch { return res.status(502).json({ error: 'gioco_non_raggiungibile' }); }
+
+    const deleghe = new Set(accessiNazione(ctx.countryId).map((r) => r.war_user_id));
+    const perCarica = await idGoverno(ctx.countryId);
+    const nome = (c) => String(c.u || '').toLowerCase();
+    const trovati = (cit?.data || [])
+      .filter((c) => c.u && (!q || nome(c).includes(q)))
+      // Chi comincia col testo scritto prima di chi lo contiene soltanto,
+      // poi chi fa più danno: fra tre "Marco" si cerca quasi sempre quello
+      // attivo.
+      .sort((a, b) => (Number(!nome(a).startsWith(q)) - Number(!nome(b).startsWith(q)))
+        || ((b.wk || 0) - (a.wk || 0)))
+      .slice(0, 15)
+      .map((c) => ({
+        id: c.id, nome: c.u, avatar: c.a || null, livello: c.lv ?? null, settimana: c.wk ?? null,
+        delegato: deleghe.has(c.id), perCarica: perCarica.has(c.id),
+      }));
+    // `noti` < `censiti` vuol dire che il cache-server non ha ancora letto
+    // tutti: chi manca dalla ricerca c'è, e la vista lo dice.
+    res.json({ trovati, censiti: cit?.total ?? null, noti: cit?.known ?? null });
+  });
+
+  router.post('/accessi', async (req, res) => {
+    const ctx = await contesto(req);
+    if (!ctx.countryId) return res.status(404).json({ error: 'nazione_sconosciuta' });
+    if (!puoGestire(ctx)) return res.status(403).json({ error: 'non_governi_questa_nazione' });
+
+    const warUserId = String(req.body?.warUserId || '').trim();
+    if (!/^[a-f0-9]{24}$/i.test(warUserId)) return res.status(400).json({ error: 'parametri_non_validi' });
+
+    // La cittadinanza si controlla sul gioco, adesso, non sull'elenco del
+    // cache-server che può avere ore: è la regola della riga, e va
+    // verificata nel momento in cui la si scrive.
+    let lite;
+    try { lite = await trpcGet('user.getUserLite', { userId: warUserId }); }
+    catch (err) {
+      const nonEsiste = err.codiceGioco === 'NOT_FOUND';
+      return res.status(nonEsiste ? 404 : 502).json({ error: nonEsiste ? 'utente_inesistente' : 'gioco_non_raggiungibile' });
+    }
+    if (lite?.country !== ctx.countryId) return res.status(400).json({ error: 'non_cittadino' });
+
+    aggiungiAccessoNazione({ countryId: ctx.countryId, warUserId, warUsername: lite.username, addedBy: req.account.id });
+    audit(req.account.id, 'nazione.accesso.add', `country:${ctx.countryId}`, { warUserId, username: lite.username });
+    res.json({ accessi: await formaAccessi(ctx.countryId) });
+  });
+
+  router.post('/accessi/remove', async (req, res) => {
+    const ctx = await contesto(req);
+    if (!ctx.countryId) return res.status(404).json({ error: 'nazione_sconosciuta' });
+    if (!puoGestire(ctx)) return res.status(403).json({ error: 'non_governi_questa_nazione' });
+
+    const warUserId = String(req.body?.warUserId || '').trim();
+    if (!warUserId) return res.status(400).json({ error: 'parametri_non_validi' });
+    togliAccessoNazione(ctx.countryId, warUserId);
+    audit(req.account.id, 'nazione.accesso.remove', `country:${ctx.countryId}`, { warUserId });
+    res.json({ accessi: await formaAccessi(ctx.countryId) });
   });
 
   return router;

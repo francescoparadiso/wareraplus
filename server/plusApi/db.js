@@ -276,8 +276,9 @@ CREATE TABLE IF NOT EXISTS border_state (
   region_id      TEXT    NOT NULL,
   tipo           TEXT    NOT NULL,   -- 'base' | 'bunker'
   livello        INTEGER NOT NULL DEFAULT 0,
-  stato          TEXT,               -- 'active' | 'disabled' | 'pending' | 'assente' | NULL (cantiere)
-  in_costruzione INTEGER NOT NULL DEFAULT 0,
+  stato          TEXT,               -- 'active' | 'disabled' | 'pending' (in accensione) | 'assente'
+  in_costruzione INTEGER NOT NULL DEFAULT 0,  -- della prima fonte (upgradesV2), non più scritto
+  attivo_il      INTEGER,            -- willBeActiveAt, quando è nel futuro
   owner_id       TEXT,
   primo_il       INTEGER NOT NULL,   -- da quando la si guarda
   visto_il       INTEGER NOT NULL,
@@ -305,6 +306,24 @@ CREATE TABLE IF NOT EXISTS border_event (
   at          INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_border_event_paese ON border_event (country_id, at);
+
+-- ── Chi vede "la mia nazione" oltre al governo (nazione.js) ────────────
+-- Il governo la vede per CARICA, calcolata dal gioco come ogni altro
+-- ruolo: qui ci sono solo i giocatori che il governo ha scelto in più.
+-- La riga è della NAZIONE, non di chi l'ha scritta: resta quando il
+-- governo cambia (il nuovo può toglierla), e smette di valere da sola se
+-- il giocatore cambia cittadinanza, perché l'accesso si controlla sulla
+-- nazione di cui è cittadino adesso. Per id di gioco e non per account:
+-- si può dare accesso a chi non è ancora entrato, e comincia a valere il
+-- giorno in cui entra con Discord e collega quel personaggio.
+CREATE TABLE IF NOT EXISTS nation_access (
+  country_id   TEXT    NOT NULL,
+  war_user_id  TEXT    NOT NULL,
+  war_username TEXT,
+  added_by     INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_at   INTEGER NOT NULL,
+  PRIMARY KEY (country_id, war_user_id)
+);
 
 -- ⚠️ L'indice su (mu_id, slot) NON sta qui ma in migrate(). SCHEMA gira
 -- PRIMA delle migrazioni: su un database che ha ancora la colonna day
@@ -387,6 +406,19 @@ function migrate() {
   if (!colonne('request_allow').includes('nome')) {
     db.exec('ALTER TABLE request_allow ADD COLUMN nome TEXT');
     console.log('[plusApi] migrazione: aggiunta request_allow.nome');
+  }
+
+  // 2026-09-10 — la sorveglianza dei confini cambia FONTE: la prima
+  // leggeva `upgradesV2` della regione, fermo a metà 2025 (vedi confini.js),
+  // e la fotografia salvata con quella è sbagliata. Confrontarla con la
+  // fonte giusta produrrebbe una raffica di cambi mai avvenuti — e di
+  // avvisi su Discord. Quindi, una volta sola, si butta la fotografia (non
+  // gli eventi: su quella fonte non ne era nato nessuno) e il giro dopo la
+  // rifà in silenzio, come un primo avvio.
+  if (!colonne('border_state').includes('attivo_il')) {
+    db.exec('DELETE FROM border_state');
+    db.exec('ALTER TABLE border_state ADD COLUMN attivo_il INTEGER');
+    console.log('[plusApi] migrazione: border_state rifatta da capo sulla fonte upgrade.* (+ attivo_il)');
   }
 }
 
@@ -797,15 +829,15 @@ function leggiStatoConfini() {
 function salvaStatoConfini(righe, at) {
   const d = getDb();
   const stmt = d.prepare(`
-    INSERT INTO border_state (region_id, tipo, livello, stato, in_costruzione, owner_id, primo_il, visto_il)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO border_state (region_id, tipo, livello, stato, in_costruzione, attivo_il, owner_id, primo_il, visto_il)
+    VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)
     ON CONFLICT(region_id, tipo) DO UPDATE SET
-      livello = excluded.livello, stato = excluded.stato, in_costruzione = excluded.in_costruzione,
+      livello = excluded.livello, stato = excluded.stato, attivo_il = excluded.attivo_il,
       owner_id = excluded.owner_id, visto_il = excluded.visto_il`);
   d.exec('BEGIN');
   try {
     for (const r of righe) {
-      stmt.run(r.regionId, r.tipo, r.livello || 0, r.stato ?? null, r.inCostruzione ? 1 : 0, r.ownerId || null, at, at);
+      stmt.run(r.regionId, r.tipo, r.livello || 0, r.stato ?? null, r.attivoIl ?? null, r.ownerId || null, at, at);
     }
     d.exec('COMMIT');
   } catch (err) {
@@ -862,6 +894,34 @@ function inizioSorveglianzaConfini() {
   catch { return null; }
 }
 
+// ---------------------------------------------------------------------------
+// ACCESSI ALLA "MIA NAZIONE"
+// ---------------------------------------------------------------------------
+
+function accessiNazione(countryId) {
+  return getDb().prepare('SELECT * FROM nation_access WHERE country_id = ? ORDER BY created_at DESC').all(countryId);
+}
+
+function haAccessoNazione(countryId, warUserId) {
+  if (!countryId || !warUserId) return false;
+  return Boolean(getDb().prepare('SELECT 1 AS x FROM nation_access WHERE country_id = ? AND war_user_id = ?')
+    .get(countryId, warUserId));
+}
+
+/** Ridare accesso a chi l'ha già non è un errore: aggiorna solo il nome. */
+function aggiungiAccessoNazione({ countryId, warUserId, warUsername, addedBy }) {
+  getDb().prepare(`
+    INSERT INTO nation_access (country_id, war_user_id, war_username, added_by, created_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(country_id, war_user_id) DO UPDATE SET war_username = excluded.war_username`)
+    .run(countryId, warUserId, warUsername || null, addedBy || null, Date.now());
+}
+
+function togliAccessoNazione(countryId, warUserId) {
+  return getDb().prepare('DELETE FROM nation_access WHERE country_id = ? AND war_user_id = ?')
+    .run(countryId, warUserId).changes || 0;
+}
+
 function dbStatus() {
   const one = (sql) => {
     try { return getDb().prepare(sql).get()?.n ?? 0; } catch { return null; }
@@ -882,6 +942,7 @@ function dbStatus() {
     giorniRicchezza: one('SELECT COUNT(DISTINCT substr(slot, 1, 10)) AS n FROM wealth_snapshot'),
     costruzioniSorvegliate: one('SELECT COUNT(*) AS n FROM border_state'),
     eventiConfini: one('SELECT COUNT(*) AS n FROM border_event'),
+    accessiNazione: one('SELECT COUNT(*) AS n FROM nation_access'),
   };
 }
 
@@ -899,5 +960,6 @@ module.exports = {
   deltaRicchezzaPerMu, totaliRicchezzaPerMu,
   leggiStatoConfini, salvaStatoConfini, registraEventiConfini, eventiConfini,
   potaEventiConfini, inizioSorveglianzaConfini,
+  accessiNazione, haAccessoNazione, aggiungiAccessoNazione, togliAccessoNazione,
   audit, dbStatus,
 };

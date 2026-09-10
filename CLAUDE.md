@@ -726,8 +726,14 @@ amministrazione restano identici. Tre cose da sapere prima di crederla rotta:
   i bonifici. Discord solo per accensioni e costruzioni, sul canale
   `confini` (separato da quello dei contratti), e solo se il governo l'ha
   configurato;
-- ⚠️ `activeUpgradeLevels` delle regioni NON combacia con `upgradesV2`
-  (misurato) e non si usa: vedi la testata di `confini.js`;
+- ⚠️ basi e bunker si leggono da `upgrade.getUpgradeByTypeAndEntity`, NON
+  da `upgradesV2` della regione, che è fermo a metà 2025 (Ticino col bunker
+  al 5 spento risultava "livello 1 attivo"). `activeUpgradeLevels` è giusto
+  ma dice solo cosa è ACCESO. Vedi la testata di `confini.js`;
+- la pagina la vedono il **governo** per carica (presidente, vice, ministri)
+  e i **cittadini che il governo aggiunge** (tabella `nation_access`, sempre
+  con Discord + personaggio collegato); agli altri cittadini il server
+  risponde 403 con i nomi del governo, a cui chiedere;
 - il **potenziale** dei nemici è danno dei GIOCATORI (vita + barra della
   fame col pasto migliore del gioco), senza bonus di battaglia né armatura
   del bersaglio: un tetto dichiarato, non una previsione. Il danno

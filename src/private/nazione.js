@@ -16,6 +16,14 @@
      4. ATTIVITÀ     le nostre battaglie, le ultime 48 ore, i bonifici
      5. REGIONI      le nostre, e quelle straniere che le toccano, con
                      basi e bunker
+     6. ACCESSI      solo al governo: chi altro vede questa pagina, e
+                     la ricerca per aggiungere un cittadino
+
+   ── CHI LA VEDE ────────────────────────────────────────────────────
+   Il governo per carica, i cittadini che il governo sceglie, gli
+   amministratori (vedi server/plusApi/nazione.js). Agli altri il server
+   risponde 403 `accesso_nazione_negato` con dentro i nomi del governo,
+   e la scheda diventa "chiedi a loro" invece di un errore.
 
    ── "NUOVO" SI RICORDA NEL BROWSER ─────────────────────────────────
    Quali allarmi uno ha già visto è una comodità di chi guarda, non uno
@@ -26,7 +34,10 @@
 
 import { nzT } from './i18nNazione.js';
 import { pvT, pvErr } from './i18n.js';
-import { leggiNazione, leggiNemici, impostaCanaleConfini, ApiError } from './api.js';
+import {
+  leggiNazione, leggiNemici, impostaCanaleConfini, ApiError,
+  leggiAccessi, cercaCittadini, aggiungiAccesso, togliAccesso,
+} from './api.js';
 import { nomeNazione, urlBandiera, coloreNazione } from './battles.js';
 import { getLang } from '../shared/i18n.js';
 
@@ -90,6 +101,19 @@ function gettonePaese(countryId, extra) {
   return g;
 }
 
+/** Faccia e nome di un giocatore, con un'etichetta accanto. */
+function personaEl(avatar, nome, extra) {
+  const chi = el('span', 'wp-pv-nz-gov-chi');
+  if (avatar) {
+    const a = el('img', 'wp-pv-nz-avatar'); a.src = avatar; a.alt = ''; a.loading = 'lazy';
+    a.addEventListener('error', () => { a.style.display = 'none'; });
+    chi.appendChild(a);
+  }
+  chi.appendChild(el('strong', null, nome || '?'));
+  if (extra) chi.appendChild(el('span', 'wp-pv-suggerimento', extra));
+  return chi;
+}
+
 function badgeRelazione(rel) {
   return el('span', `wp-pv-nz-rel wp-pv-nz-rel-${rel}`, nzT(`rel_${rel}`));
 }
@@ -123,12 +147,27 @@ export function creaQuadroNazione(ctx) {
   let occupato = false;
   let esitoCanale = null;
   const topAperti = new Set();
+  // Il 403 di chi non ha accesso, con dentro i nomi del governo.
+  let negato = null;
+  // Chi altro vede la pagina: lo legge solo il governo.
+  let accessi = null;
+  let erroreAccessi = null;
+  // La ricerca è un nodo che sopravvive ai ridisegni: ricrearla ad ogni
+  // render le toglierebbe il fuoco a metà parola.
+  let cercaWidget = null;
 
   async function carica() {
     caricamento = true; errore = null; ctx.ridisegna();
     try {
       dati = await leggiNazione({ asAccount: ctx.lente(), paese: paeseScelto });
+      negato = null;
     } catch (err) {
+      if (err instanceof ApiError && err.codice === 'accesso_nazione_negato') {
+        // Non è un guasto: è la regola. Si dice a chi chiedere.
+        negato = err.dati || {};
+        dati = null;
+        return;
+      }
       // Un server che la rotta non ce l'ha ancora (rideploy di
       // warera-plus-api non fatto) risponde 404 `rotta_sconosciuta`: detto
       // come "errore del server" sembrava un guasto, ed è solo un'attesa.
@@ -142,6 +181,33 @@ export function creaQuadroNazione(ctx) {
     // I nemici dopo, e senza aspettarli: sono la parte lenta (giocatori
     // letti dal vivo) e il resto del quadro non deve restare in bianco.
     if (dati) caricaNemici();
+    if (dati && (dati.governa || dati.amministra)) caricaAccessi();
+  }
+
+  async function caricaAccessi() {
+    try {
+      accessi = (await leggiAccessi({ asAccount: ctx.lente(), paese: paeseScelto })).accessi || [];
+      erroreAccessi = null;
+    } catch (err) { erroreAccessi = messaggioErrore(err); }
+    ctx.ridisegna();
+  }
+
+  /** Aggiunge o toglie, e rilegge l'elenco dalla risposta. Vero se è
+   *  andata: la ricerca si svuota solo allora, così un errore non fa
+   *  perdere quello che si stava cercando. */
+  async function azioneAccessi(fn) {
+    if (occupato) return false;
+    occupato = true; erroreAccessi = null; ctx.ridisegna();
+    try { accessi = (await fn()).accessi || []; return true; }
+    catch (err) { erroreAccessi = messaggioErrore(err); return false; }
+    finally { occupato = false; ctx.ridisegna(); }
+  }
+
+  function messaggioErrore(err) {
+    if (!(err instanceof ApiError)) return pvT('errErrore_server');
+    const k = `accErr_${err.codice}`;
+    const t = nzT(k);
+    return t !== k ? t : pvErr(err.codice);
   }
 
   async function caricaNemici() {
@@ -172,7 +238,9 @@ export function creaQuadroNazione(ctx) {
 
   function disegna() {
     const frag = document.createDocumentFragment();
-    if (!dati && !caricamento && !errore) carica();
+    if (!dati && !caricamento && !errore && !negato) carica();
+
+    if (negato) { frag.appendChild(cardNegato()); return frag; }
 
     if (!dati) {
       const card = el('div', 'wp-pv-card');
@@ -194,7 +262,137 @@ export function creaQuadroNazione(ctx) {
     frag.appendChild(cardNemici());
     frag.appendChild(cardAttivita());
     frag.appendChild(cardRegioni());
+    if (dati.governa || dati.amministra) frag.appendChild(cardAccessi());
     return frag;
+  }
+
+  // ── 0. Senza accesso ──────────────────────────────────────────────
+  function cardNegato() {
+    const card = el('div', 'wp-pv-card');
+    card.appendChild(el('h2', 'wp-pv-h2', nzT('natTitle')));
+    card.appendChild(el('p', 'wp-pv-body', nzT('natDenied')));
+    const persone = (negato.governo?.cariche || []).filter((c) => c.persona);
+    if (persone.length) {
+      card.appendChild(el('p', 'wp-pv-note', nzT('natDeniedAsk')));
+      const lista = el('div', 'wp-pv-nz-chips');
+      for (const { carica, persona } of persone) {
+        lista.appendChild(personaEl(persona.avatar, persona.nome, nzT(`gov_${carica}`)));
+      }
+      card.appendChild(lista);
+    }
+    card.appendChild(el('p', 'wp-pv-note', nzT('natDeniedHow')));
+    return card;
+  }
+
+  // ── 6. Chi vede questa pagina ─────────────────────────────────────
+  function cardAccessi() {
+    const card = el('div', 'wp-pv-card wp-pv-nz-card');
+    card.appendChild(el('h2', 'wp-pv-h2', nzT('accTitle')));
+    card.appendChild(el('p', 'wp-pv-body', nzT('accBody')));
+
+    // Il governo non si aggiunge né si toglie: c'è per carica, e lo si
+    // mostra accanto perché l'elenco risponda per intero a "chi la vede".
+    const carica = el('div', 'wp-pv-nz-sezione');
+    carica.appendChild(el('h3', 'wp-pv-h3', nzT('accByOffice')));
+    const chips = el('div', 'wp-pv-nz-chips');
+    for (const { carica: c, persona } of dati.governo?.cariche || []) {
+      if (persona) chips.appendChild(personaEl(persona.avatar, persona.nome, nzT(`gov_${c}`)));
+    }
+    carica.appendChild(chips);
+    card.appendChild(carica);
+
+    const sez = el('div', 'wp-pv-nz-sezione');
+    sez.appendChild(el('h3', 'wp-pv-h3', nzT('accDelegates')));
+    if (erroreAccessi) sez.appendChild(el('p', 'wp-pv-error', erroreAccessi));
+    if (accessi == null) sez.appendChild(el('p', 'wp-pv-note', '…'));
+    else if (!accessi.length) sez.appendChild(el('p', 'wp-pv-note', nzT('accNone')));
+    else {
+      const lista = el('div', 'wp-pv-nz-acc-lista');
+      for (const a of accessi) {
+        const r = el('div', 'wp-pv-nz-acc-riga');
+        r.appendChild(personaEl(a.avatar, a.nome || a.warUserId));
+        // "Non ancora entrato" risponde in anticipo a "gliel'ho dato e non
+        // vede niente": l'accesso c'è, manca il suo login.
+        r.appendChild(el('span', `wp-pv-nz-tag${a.entrato ? '' : ' wp-pv-nz-tag-avviso'}`,
+          a.entrato ? nzT('accSignedIn') : nzT('accNotSignedIn')));
+        r.appendChild(el('span', 'wp-pv-suggerimento',
+          [a.aggiuntoDa ? `${nzT('accAddedBy')} ${a.aggiuntoDa}` : null, a.aggiuntoIl ? quando(a.aggiuntoIl) : null]
+            .filter(Boolean).join(' · ')));
+        if (!ctx.lente()) {
+          const via = bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('remove'),
+            () => azioneAccessi(() => togliAccesso(a.warUserId, { paese: paeseScelto })));
+          via.disabled = occupato;
+          r.appendChild(via);
+        }
+        lista.appendChild(r);
+      }
+      sez.appendChild(lista);
+    }
+    card.appendChild(sez);
+
+    if (!ctx.lente()) card.appendChild(widgetRicerca());
+    return card;
+  }
+
+  /** La ricerca dei cittadini da aggiungere. Aggiorna i suoi risultati sul
+   *  posto, senza ridisegnare la vista: è il modo per non perdere il fuoco
+   *  del campo a ogni tasto (vedi il filtro di board.js). */
+  function widgetRicerca() {
+    if (cercaWidget) return cercaWidget;
+    const wrap = el('div', 'wp-pv-nz-acc-cerca');
+    const input = el('input', 'wp-pv-input');
+    input.type = 'search'; input.placeholder = nzT('accSearchPh'); input.autocomplete = 'off';
+    input.maxLength = 40;
+    const nota = el('p', 'wp-pv-note');
+    const lista = el('div', 'wp-pv-nz-acc-lista');
+
+    let tick = null;
+    let ultimo = '';
+    const esegui = async () => {
+      const q = input.value.trim();
+      ultimo = q;
+      if (q.length < 2) { lista.textContent = ''; nota.textContent = ''; return; }
+      let r;
+      try { r = await cercaCittadini(q, { paese: paeseScelto }); }
+      catch (err) {
+        if (q !== ultimo) return;
+        lista.textContent = ''; nota.textContent = messaggioErrore(err);
+        return;
+      }
+      // Una risposta lenta non deve scrivere sopra quella di una ricerca
+      // più recente.
+      if (q !== ultimo) return;
+      disegnaTrovati(r);
+    };
+    input.addEventListener('input', () => { clearTimeout(tick); tick = setTimeout(esegui, 350); });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+
+    function disegnaTrovati(r) {
+      lista.textContent = '';
+      nota.textContent = (r.noti != null && r.censiti != null && r.noti < r.censiti) ? nzT('accPartial') : '';
+      if (!r.trovati?.length) { lista.appendChild(el('p', 'wp-pv-note', nzT('accNoResults'))); return; }
+      for (const c of r.trovati) {
+        const riga = el('div', 'wp-pv-nz-acc-riga');
+        riga.appendChild(personaEl(c.avatar, c.nome, c.livello != null ? `${nzT('lv')}${c.livello}` : null));
+        if (c.perCarica) riga.appendChild(el('span', 'wp-pv-nz-tag', nzT('accByOfficeTag')));
+        else if (c.delegato) riga.appendChild(el('span', 'wp-pv-nz-tag', nzT('accAlready')));
+        else {
+          const b = bottone('wp-pv-btn-primary wp-pv-btn-small', nzT('accGive'), async () => {
+            b.disabled = true;
+            const ok = await azioneAccessi(() => aggiungiAccesso(c.id, { paese: paeseScelto }));
+            if (ok) { input.value = ''; lista.textContent = ''; nota.textContent = ''; } else b.disabled = false;
+          });
+          riga.appendChild(b);
+        }
+        lista.appendChild(riga);
+      }
+    }
+
+    wrap.appendChild(input);
+    wrap.appendChild(nota);
+    wrap.appendChild(lista);
+    cercaWidget = wrap;
+    return wrap;
   }
 
   // ── 1. La nazione ─────────────────────────────────────────────────
@@ -221,6 +419,9 @@ export function creaQuadroNazione(ctx) {
     meta.appendChild(agg);
     testa.appendChild(meta);
     card.appendChild(testa);
+    // Un accesso che qualcuno ha dato si può togliere: chi lo usa deve
+    // saperlo, e sapere da chi viene.
+    if (dati.via === 'delega') card.appendChild(el('p', 'wp-pv-note', nzT('accYouDelegate')));
 
     card.appendChild(tessereNumeri(p));
     card.appendChild(bloccoRelazioni(p));
@@ -237,7 +438,11 @@ export function creaQuadroNazione(ctx) {
       if (id === dati.paese.id) o.selected = true;
       s.appendChild(o);
     }
-    s.addEventListener('change', () => { paeseScelto = s.value; nemici = null; topAperti.clear(); carica(); });
+    s.addEventListener('change', () => {
+      paeseScelto = s.value; nemici = null; topAperti.clear();
+      accessi = null; cercaWidget = null;
+      carica();
+    });
     return s;
   }
 
@@ -769,7 +974,10 @@ export function creaQuadroNazione(ctx) {
   }
 
   function chipDifesa(tipo, d, pendingOre) {
-    const assente = !d || d.stato === 'assente';
+    // 'ignoto' arriva per le nazioni fuori sorveglianza, dove si sa solo
+    // cosa è acceso: una costruzione spenta lì non si vede, e non la si
+    // spaccia per "nessuna costruzione".
+    const assente = !d || d.stato === 'assente' || d.stato === 'ignoto';
     const cls = assente ? 'none' : d.inCostruzione && !d.stato ? 'building' : (d.stato || 'none');
     const chip = el('span', `wp-pv-nz-df wp-pv-nz-df-${cls}`);
     chip.appendChild(el('span', 'wp-pv-nz-df-tipo', nzT(`tipo_${tipo}`)));
@@ -778,7 +986,10 @@ export function creaQuadroNazione(ctx) {
       let testo = `${nzT('lv')}${d.livello} ${nzT(`df_${cls === 'building' ? 'building' : (d.stato || 'none')}`)}`;
       if (d.bonus) testo += ` +${d.bonus}%`;
       if (d.inCostruzione && d.stato) testo += ` · ${nzT('df_building')}`;
-      if (d.stato === 'pending' && d.dal) testo += ` → ${ora(d.dal + pendingOre * 3600_000)}`;
+      // L'ora in cui si accende la scrive il gioco (willBeActiveAt); la
+      // stima da "cambio di stato + 12 ore" resta solo come ripiego.
+      const acceso = d.attivoDal || (d.dal ? d.dal + pendingOre * 3600_000 : null);
+      if (d.stato === 'pending' && acceso) testo += ` → ${ora(acceso)}`;
       chip.appendChild(el('span', null, testo));
     }
     chip.title = nzT(tipo === 'base' ? 'baseEffect' : 'bunkerEffect');

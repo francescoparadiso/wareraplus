@@ -2,9 +2,9 @@
    AREA RISERVATA — sorveglianza dei confini
    ----------------------------------------------------------------------
    La domanda: «qualcuno alla nostra frontiera sta accendendo una base
-   militare o un bunker?». Il gioco la sa — ogni regione porta le sue
-   costruzioni in `upgradesV2` — ma non la dice a nessuno: bisognerebbe
-   aprire le quattordici regioni confinanti una per una, tutti i giorni.
+   militare o un bunker?». Il gioco la sa, ma non la dice a nessuno:
+   bisognerebbe aprire le quattordici regioni confinanti una per una,
+   tutti i giorni.
 
    Le due costruzioni che contano, e perché non sono la stessa notizia
    (gameConfig.upgradesConfig, letto dal vivo il 2026-09-10):
@@ -16,26 +16,33 @@
                  Un bunker che si accende è qualcuno che si prepara a
                  essere attaccato — da noi, magari.
 
+   ── LA FONTE: upgrade.getUpgradeByTypeAndEntity, NON la regione ──────
+   ⚠️ La prima versione leggeva `upgradesV2` dentro la regione, e sbagliava
+   tutto: è un campo FERMO a metà 2025 (nessuna data dentro è del 2026).
+   Segnalato guardando il gioco: Ticino col bunker al 5 spento, e il tool
+   che diceva "livello 1 attivo". La verità sta in un'altra collezione:
+
+       upgrade.getUpgradeByTypeAndEntity { upgradeType, regionId }
+         → { level, status: 'active'|'disabled', statusChangedAt,
+             willBeActiveAt, lastUpgradeAt, lastDowngradeAt, … }
+         → NOT_FOUND se in quella regione quella costruzione non esiste
+
+   Pubblica, e accetta il batch: venti chiamate per URL (~2,7 KB), una
+   sessantina in tutto per le regioni sorvegliate, quattro richieste ogni
+   dieci minuti. Un batch con qualche NOT_FOUND risponde HTTP 207.
+
+   `activeUpgradeLevels` della regione invece è GIUSTO, ma dice solo i
+   livelli ACCESI (Tunis bunker 4 attivo → {bunker:4}; Ticino, bunker 5
+   spento → {}). Serve da ripiego per le nazioni fuori sorveglianza, dove
+   si vede cosa è acceso ma non cosa è spento.
+
    ── PERCHÉ UN AVVISO ARRIVA IN TEMPO ──────────────────────────────────
-   Accendere una costruzione non è istantaneo: lo stato passa a `pending`
-   per `pendingDurationHours` (12 ore) prima di diventare `active`. Un
-   controllo ogni dieci minuti vede quindi l'accensione con ~11 ore e
-   mezza di anticipo sul momento in cui il bonus conta davvero. È questo
-   che rende l'avviso utile e non cronaca.
-
-   ── COSA SI GUARDA ────────────────────────────────────────────────────
-   Per ogni nazione a cui l'area è aperta (nazioni.js): le sue regioni e
-   quelle straniere che le toccano (`neighbors`). Chi possiede cosa e chi
-   confina con chi arriva dalla cache oraria del cache-server; le DIFESE
-   invece si leggono in diretta con `region.getById` in batch — una
-   settantina di regioni in due richieste ogni dieci minuti, contro i
-   768 KB di region.getRegionsObject.
-
-   ⚠️ `activeUpgradeLevels` NON si usa. È un secondo campo per le stesse
-   costruzioni e non combacia con `upgradesV2` (misurato: Tunis bunker
-   livello 1 attivo in upgradesV2, 4 in activeUpgradeLevels; Libia sud-est
-   5 senza nessuna voce in upgradesV2). Finché non si capisce cosa misura,
-   avvisare su quel campo vorrebbe dire avvisare su qualcosa di ignoto.
+   Accendere una costruzione non è istantaneo: il gioco scrive in
+   `willBeActiveAt` l'ora ESATTA in cui il bonus comincerà a contare
+   (~12 ore dopo la richiesta, `pendingDurationHours`, arrotondate alla
+   fine dell'ora). Un `willBeActiveAt` nel futuro vuol dire "si sta
+   accendendo", e un controllo ogni dieci minuti lo vede con ~11 ore e
+   mezza di anticipo. È questo che rende l'avviso utile e non cronaca.
 
    ── IL PRIMO GIRO NON AVVISA ──────────────────────────────────────────
    Una regione mai vista prima si fotografa e basta: al primo avvio, o
@@ -43,13 +50,12 @@
    che c'è sembrerebbe "appena acceso". Si avvisa solo su un CAMBIO fra due
    letture vere, e la vista dichiara da quando in qua si guarda.
 
-   E si confronta SOLO ciò che è stato letto in diretta in questo giro: se
-   una regione non risponde, si salta invece di confrontarla con la cache
-   oraria, che direbbe "spento" di una base accesa venti minuti fa e
-   produrrebbe un falso allarme al giro dopo.
+   E si confronta SOLO ciò che è stato letto in questo giro: una chiamata
+   fallita per rete non è un NOT_FOUND, e scambiarle produrrebbe un
+   "smantellato" falso seguito da un "costruito" falso al giro dopo.
    ══════════════════════════════════════════════════════════════════════ */
 
-const { trpcBatch } = require('./wareraApi');
+const { API } = require('./wareraApi');
 const { regioniMappa, paesiMappa, configGioco } = require('./fonti');
 const { nazioniAmmesse } = require('./nazioni');
 const {
@@ -59,7 +65,7 @@ const {
 const { avvisa, testoConfini } = require('./notify');
 
 const CONTROLLO_MS = 10 * 60_000;
-const CHUNK = 40;                 // regioni per batch: ~40 caratteri l'una, URL sotto i 2 KB
+const CHIAMATE_PER_BATCH = 20;    // ~2,7 KB di URL, misurato
 const TIPI = ['base', 'bunker'];
 const RETENTION_EVENTI_MS = 60 * 24 * 3600_000;
 const PENDING_H_DEFAULT = 12;     // ultimo valore noto, se gameConfig non risponde
@@ -73,49 +79,98 @@ const EVENTI_DA_AVVISARE = new Set(['attivazione', 'attivo', 'costruzione', 'liv
 // una: la più importante per chi deve decidere.
 const PRIORITA = ['attivazione', 'attivo', 'costruzione', 'livello_su', 'disattivazione', 'disattivato', 'rimosso', 'livello_giu'];
 
-let _live = new Map();            // regionId → regione letta in diretta all'ultimo giro
+let _difese = new Map();          // regionId → { base, bunker } (documenti upgrade letti all'ultimo giro)
 let _stato = { ultimoGiro: null, regioni: 0, eventi: 0, errore: null, durataMs: null };
 let _inCorso = false;
+
+// ---------------------------------------------------------------------------
+// Lettura
+// ---------------------------------------------------------------------------
+
+/**
+ * Le costruzioni di un gruppo di regioni, in batch da venti chiamate.
+ * NON passa da trpcBatch di wareraApi.js apposta: quello restituisce null
+ * sia per NOT_FOUND sia per un errore qualunque, e qui la differenza è
+ * tutto (vedi la testata).
+ *
+ * @param {string[]} regionIds
+ * @returns {Promise<Map<string, {base?: object|null, bunker?: object|null}>>}
+ *   solo le coppie lette davvero; null = la costruzione non esiste.
+ */
+async function leggiCostruzioni(regionIds) {
+  const coppie = [];
+  for (const id of regionIds) for (const tipo of TIPI) coppie.push([id, tipo]);
+  const out = new Map();
+  for (let i = 0; i < coppie.length; i += CHIAMATE_PER_BATCH) {
+    const pezzo = coppie.slice(i, i + CHIAMATE_PER_BATCH);
+    const input = Object.fromEntries(pezzo.map(([regionId, upgradeType], k) => [k, { upgradeType, regionId }]));
+    const url = `${API}/${pezzo.map(() => 'upgrade.getUpgradeByTypeAndEntity').join(',')}`
+      + `?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`;
+    let risposte;
+    try {
+      const res = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
+      // 207 = qualche costruzione inesistente in mezzo alle altre: normale.
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      risposte = await res.json();
+    } catch (err) {
+      console.warn('[confini] lettura costruzioni fallita:', err.message);
+      continue;
+    }
+    (Array.isArray(risposte) ? risposte : [risposte]).forEach((x, k) => {
+      const [id, tipo] = pezzo[k] || [];
+      if (!id) return;
+      let valore;
+      if (x?.result) valore = x.result.data ?? null;
+      else if (x?.error?.data?.code === 'NOT_FOUND') valore = null;
+      else return; // errore vero: questa coppia non si è letta
+      if (!out.has(id)) out.set(id, {});
+      out.get(id)[tipo] = valore;
+    });
+  }
+  return out;
+}
 
 // ---------------------------------------------------------------------------
 // Forma di una costruzione
 // ---------------------------------------------------------------------------
 
-/** Una costruzione come la guarda questo file: livello, stato, cantiere. */
-function statoCostruzione(u) {
-  if (!u) return { livello: 0, stato: 'assente', inCostruzione: false, dal: null };
+/** Una costruzione come la guarda questo file. `pending` non è
+ *  un'etichetta del gioco ma nostra: un `willBeActiveAt` nel futuro. */
+function statoCostruzione(u, ora = Date.now()) {
+  if (!u) return { livello: 0, stato: 'assente', dal: null, attivoDal: null };
+  const attivoDal = Date.parse(u.willBeActiveAt || '') || null;
   return {
     livello: Number(u.level) || 0,
-    // Una costruzione appena avviata non ha ancora `status`: e' solo un
-    // cantiere. null e non 'assente', perche' qualcosa c'e'.
-    stato: u.status || null,
-    inCostruzione: Boolean(u.isUnderConstruction),
-    dal: Date.parse(u.statusChangedAt || u.constructionEndedAt || u.constructionStartedAt || '') || null,
-    puntiCostruzione: Number(u.constructionPoints) || 0,
+    stato: attivoDal && attivoDal > ora ? 'pending' : (u.status || null),
+    dal: Date.parse(u.statusChangedAt || '') || null,
+    attivoDal: attivoDal && attivoDal > ora ? attivoDal : null,
+    potenziatoIl: Date.parse(u.lastUpgradeAt || '') || null,
   };
 }
 
 /**
  * Cosa è cambiato fra due letture. null se niente.
- * @param {{livello:number, stato:string|null, in_costruzione:number}|null} p  riga del db
+ * @param {{livello:number, stato:string|null}|null} p  riga del db
  * @param {ReturnType<typeof statoCostruzione>} c
  */
 function classifica(p, c) {
   if (!p) return null;
+  const eraAssente = p.stato === 'assente';
+  if (eraAssente && c.stato === 'assente') return null;
+  if (!eraAssente && c.stato === 'assente') return 'rimosso';
+
   const trovati = [];
-  if (p.stato === 'assente' && c.stato === 'assente') return null;
-  if (p.stato !== 'assente' && c.stato === 'assente') trovati.push('rimosso');
+  // Una costruzione che prima non c'era: è una costruzione, non un
+  // "potenziamento da 0 a 1" né uno "spegnimento" da niente a spento.
+  if (eraAssente) trovati.push('costruzione');
   else {
-    if (!p.in_costruzione && c.inCostruzione) trovati.push('costruzione');
     if (c.livello > p.livello) trovati.push('livello_su');
     if (c.livello < p.livello) trovati.push('livello_giu');
-    if ((p.stato || null) !== (c.stato || null)) {
-      // `pending` e' il passaggio in corso, in un verso o nell'altro: lo
-      // dice lo stato di prima. Da spento (o da niente) si sta accendendo.
-      if (c.stato === 'pending') trovati.push(p.stato === 'active' ? 'disattivazione' : 'attivazione');
-      else if (c.stato === 'active') trovati.push('attivo');
-      else if (c.stato === 'disabled') trovati.push('disattivato');
-    }
+  }
+  if ((p.stato || null) !== (c.stato || null)) {
+    if (c.stato === 'pending') trovati.push(p.stato === 'active' ? 'disattivazione' : 'attivazione');
+    else if (c.stato === 'active') trovati.push('attivo');
+    else if (c.stato === 'disabled' && !eraAssente) trovati.push('disattivato');
   }
   if (!trovati.length) return null;
   return PRIORITA.find((e) => trovati.includes(e)) || trovati[0];
@@ -172,7 +227,7 @@ async function giro() {
   _inCorso = true;
   const t0 = Date.now();
   try {
-    const [reg, paesi, oreAttesa] = await Promise.all([regioniMappa(), paesiMappa(), pendingOre()]);
+    const [reg, paesi] = await Promise.all([regioniMappa(), paesiMappa()]);
     const ammesse = nazioniAmmesse();
 
     const perPaese = new Map();
@@ -184,20 +239,7 @@ async function giro() {
       for (const id of g.confinanti.keys()) daLeggere.add(id);
     }
 
-    // ── Lettura in diretta ────────────────────────────────────────────
-    const ids = [...daLeggere];
-    const live = new Map();
-    for (let i = 0; i < ids.length; i += CHUNK) {
-      const pezzo = ids.slice(i, i + CHUNK);
-      try {
-        const risp = await trpcBatch(pezzo.map((id) => ['region.getById', { regionId: id }]));
-        risp.forEach((r, k) => { if (r?._id) live.set(pezzo[k], r); });
-      } catch (err) {
-        // Un pezzo che non risponde si salta: vedi la testata sul perché
-        // non si ricade sulla cache oraria per il confronto.
-        console.warn('[confini] lettura regioni fallita:', err.message);
-      }
-    }
+    const lette = await leggiCostruzioni([...daLeggere]);
 
     // ── Confronto ─────────────────────────────────────────────────────
     const now = Date.now();
@@ -206,15 +248,17 @@ async function giro() {
     const righe = [];
     const nuovi = [];
 
-    for (const [rid, r] of live) {
+    for (const [rid, costruzioni] of lette) {
       const maiVista = !regioniViste.has(rid);
+      const ownerId = reg[rid]?.country || null;
       for (const tipo of TIPI) {
-        const c = statoCostruzione(r.upgradesV2?.upgrades?.[tipo]);
-        righe.push({ regionId: rid, tipo, livello: c.livello, stato: c.stato, inCostruzione: c.inCostruzione, ownerId: r.country });
+        if (!(tipo in costruzioni)) continue;  // questa coppia non si è letta
+        const c = statoCostruzione(costruzioni[tipo], now);
+        righe.push({ regionId: rid, tipo, livello: c.livello, stato: c.stato, attivoIl: c.attivoDal, ownerId });
         if (maiVista) continue;
-        const evento = classifica(prima.get(`${rid}:${tipo}`) || null, c);
+        const p = prima.get(`${rid}:${tipo}`) || null;
+        const evento = classifica(p, c);
         if (!evento) continue;
-        const p = prima.get(`${rid}:${tipo}`);
 
         // Una riga per ogni nazione sorvegliata a cui questa regione confina:
         // la stessa base accesa fra Italia e Slovenia e' una notizia per
@@ -225,19 +269,20 @@ async function giro() {
           nuovi.push({
             countryId: cid,
             regionId: rid,
-            regionNome: r.name || reg[rid]?.name || rid,
-            ownerId: r.country,
+            regionNome: reg[rid]?.name || rid,
+            ownerId,
             tipo,
             evento,
             livelloDa: p?.livello ?? 0,
             livelloA: c.livello,
             statoDa: p?.stato ?? null,
             statoA: c.stato,
-            relazione: relazione(paesi.get(cid), r.country),
+            relazione: relazione(paesi.get(cid), ownerId),
             confinaCon: [...tocca].map((id) => reg[id]?.name || id),
             at: now,
-            // Quando il bonus comincia a contare: accensione + 12 ore.
-            effettoIl: evento === 'attivazione' ? (c.dal || now) + oreAttesa * 3600_000 : null,
+            // L'ora esatta in cui il bonus comincia a contare: la scrive il
+            // gioco, non la si stima.
+            effettoIl: evento === 'attivazione' ? c.attivoDal : null,
           });
         }
       }
@@ -260,9 +305,18 @@ async function giro() {
     const nome = (id) => paesi.get(id)?.name || id;
     for (const [cid, eventi] of perAvviso) avvisa('confini', cid, testoConfini(eventi, nome));
 
-    _live = live;
-    _stato = { ultimoGiro: now, regioni: live.size, attese: ids.length, eventi: nuovi.length, errore: null, durataMs: Date.now() - t0 };
-    if (nuovi.length) console.log(`[confini] ${nuovi.length} cambi rilevati su ${live.size} regioni`);
+    // Si sostituisce solo ciò che si è letto: una regione saltata per rete
+    // tiene la lettura di prima invece di sparire dalla vista.
+    for (const [rid, costruzioni] of lette) _difese.set(rid, { ...(_difese.get(rid) || {}), ...costruzioni });
+    _stato = {
+      ultimoGiro: now,
+      regioni: [...lette.values()].filter((x) => TIPI.every((t) => t in x)).length,
+      attese: daLeggere.size,
+      eventi: nuovi.length,
+      errore: null,
+      durataMs: Date.now() - t0,
+    };
+    if (nuovi.length) console.log(`[confini] ${nuovi.length} cambi rilevati su ${lette.size} regioni`);
   } catch (err) {
     _stato = { ..._stato, errore: err.message, durataMs: Date.now() - t0 };
     console.error('[confini] giro fallito:', err.message);
@@ -282,6 +336,7 @@ function initConfini() {
 function statoConfini() {
   return {
     ..._stato,
+    fonte: 'upgrade.getUpgradeByTypeAndEntity',
     ultimoGiro: _stato.ultimoGiro ? new Date(_stato.ultimoGiro).toISOString() : null,
     sorvegliateDal: (() => { const t = inizioSorveglianzaConfini(); return t ? new Date(t).toISOString() : null; })(),
     nazioni: nazioniAmmesse().length,
@@ -292,41 +347,48 @@ function statoConfini() {
 // Lettura per il quadro della nazione
 // ---------------------------------------------------------------------------
 
-/** Le difese di una regione pronte da disegnare, col bonus che danno. */
-function difese(r, cfg) {
+/**
+ * Le difese di una regione pronte da disegnare, col bonus che danno.
+ *
+ * Dalla lettura dell'ultimo giro quando c'è; altrimenti da
+ * `activeUpgradeLevels` della cache oraria, che sa solo cosa è ACCESO: lì
+ * una costruzione spenta non si distingue da nessuna costruzione, e lo
+ * stato esce 'ignoto' invece di un 'assente' che sarebbe una bugia.
+ */
+function difese(id, r, cfg, ora = Date.now()) {
+  const live = _difese.get(id);
   const out = {};
   for (const tipo of TIPI) {
-    const c = statoCostruzione(r?.upgradesV2?.upgrades?.[tipo]);
-    const livelli = cfg?.upgradesConfig?.[tipo]?.levels || {};
-    const stats = livelli[String(c.livello)]?.stats || {};
-    out[tipo] = {
-      ...c,
-      // Il bonus conta solo se la costruzione e' accesa: un bunker di
-      // livello 5 spento difende quanto nessun bunker.
-      bonus: c.stato === 'active' ? (stats.attackBonus ?? stats.defenseBonus ?? null) : null,
-    };
+    let c;
+    if (live && tipo in live) c = statoCostruzione(live[tipo], ora);
+    else {
+      const lv = Number(r?.activeUpgradeLevels?.[tipo]) || 0;
+      c = lv
+        ? { livello: lv, stato: 'active', dal: null, attivoDal: null }
+        : { livello: 0, stato: 'ignoto', dal: null, attivoDal: null };
+    }
+    const stats = cfg?.upgradesConfig?.[tipo]?.levels?.[String(c.livello)]?.stats || {};
+    // Il bonus conta solo se la costruzione e' accesa: un bunker di
+    // livello 5 spento difende quanto nessun bunker.
+    out[tipo] = { ...c, bonus: c.stato === 'active' ? (stats.attackBonus ?? stats.defenseBonus ?? null) : null };
   }
   return out;
 }
 
 /**
  * Le regioni della nazione e quelle che la toccano, con le loro difese e
- * gli eventi degli ultimi 14 giorni.
- *
- * Le difese vengono dalla lettura in diretta dell'ultimo giro quando c'è,
- * dalla cache oraria altrimenti — e `sorvegliata` dice quale dei due: un
- * amministratore che guarda una nazione non abilitata vede lo stato ma
- * non la storia, e deve saperlo.
+ * gli eventi degli ultimi 14 giorni. `sorvegliata` dice se c'è anche la
+ * storia: un amministratore che guarda una nazione non abilitata vede lo
+ * stato (solo le costruzioni accese) ma non gli eventi, e deve saperlo.
  */
 async function quadroConfini(countryId) {
   const [reg, paesi, cfg] = await Promise.all([regioniMappa(), paesiMappa(), configGioco().catch(() => null)]);
   const noi = paesi.get(countryId);
   const g = geografia(reg, countryId);
-  const fonte = (id) => _live.get(id) || reg[id];
   const sorvegliata = nazioniAmmesse().includes(countryId);
 
   const proprie = g.proprie.map((id) => {
-    const r = fonte(id) || {};
+    const r = reg[id] || {};
     return {
       id,
       nome: r.name || id,
@@ -339,12 +401,12 @@ async function quadroConfini(countryId) {
       giacimento: r.deposit?.type ? { tipo: r.deposit.type, bonus: r.deposit.bonusPercent ?? null, fine: Date.parse(r.deposit.endsAt || '') || null } : null,
       risorsa: r.strategicResource || null,
       costa: Boolean(r.hasCoast),
-      difese: difese(r, cfg),
+      difese: difese(id, r, cfg),
     };
   }).sort((a, b) => (b.capitale - a.capitale) || String(a.nome).localeCompare(String(b.nome)));
 
   const confinanti = [...g.confinanti.entries()].map(([id, tocca]) => {
-    const r = fonte(id) || {};
+    const r = reg[id] || {};
     return {
       id,
       nome: r.name || id,
@@ -352,8 +414,8 @@ async function quadroConfini(countryId) {
       relazione: relazione(noi, r.country),
       confinaCon: [...tocca].map((x) => reg[x]?.name || x),
       battaglia: r.activeBattle || null,
-      difese: difese(r, cfg),
-      live: _live.has(id),
+      difese: difese(id, r, cfg),
+      live: _difese.has(id),
     };
   });
 
