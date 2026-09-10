@@ -303,3 +303,29 @@ export async function elencoAlleanze() {
 export function svuotaTavolo() {
   return callOrThrow('/requests/svuota');
 }
+
+// ---------------------------------------------------------------------------
+// La mia nazione
+// ---------------------------------------------------------------------------
+// Quello che un cittadino puo' vedere della sua nazione. Il server decide
+// QUALE nazione (quella del personaggio collegato): `paese` lo ascolta solo
+// da un amministratore senza lente, per tutti gli altri e' ignorato.
+
+function conPaese(path, paese) {
+  return paese ? `${path}${path.includes('?') ? '&' : '?'}paese=${encodeURIComponent(paese)}` : path;
+}
+
+export function leggiNazione({ asAccount = null, paese = null } = {}) {
+  return getJson(conLente(conPaese('/nazione', paese), asAccount));
+}
+
+/** A parte dal quadro perche' e' la parte lenta (giocatori letti dal
+ *  vivo): il quadro si disegna subito, i nemici arrivano dopo. */
+export function leggiNemici({ asAccount = null, paese = null } = {}) {
+  return getJson(conLente(conPaese('/nazione/nemici', paese), asAccount));
+}
+
+/** Il canale Discord degli avvisi di confine. Vuoto = togli. */
+export function impostaCanaleConfini(url, { paese = null } = {}) {
+  return callOrThrow(conPaese('/nazione/canale-confini', paese), { url });
+}

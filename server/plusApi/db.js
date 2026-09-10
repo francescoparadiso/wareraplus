@@ -266,6 +266,46 @@ CREATE TABLE IF NOT EXISTS wealth_snapshot (
   PRIMARY KEY (slot, war_user_id)
 );
 
+-- ── Sorveglianza dei confini (confini.js) ─────────────────────────────
+-- border_state e' l'ULTIMA lettura di ogni costruzione sorvegliata (base,
+-- bunker) su ogni regione: serve solo a sapere cosa e' cambiato al giro
+-- dopo. Una riga anche per le costruzioni assenti ('assente'), cosi' "mai
+-- vista" (nessuna riga) e "vista senza niente sopra" restano distinguibili:
+-- la prima non deve avvisare, la seconda si'.
+CREATE TABLE IF NOT EXISTS border_state (
+  region_id      TEXT    NOT NULL,
+  tipo           TEXT    NOT NULL,   -- 'base' | 'bunker'
+  livello        INTEGER NOT NULL DEFAULT 0,
+  stato          TEXT,               -- 'active' | 'disabled' | 'pending' | 'assente' | NULL (cantiere)
+  in_costruzione INTEGER NOT NULL DEFAULT 0,
+  owner_id       TEXT,
+  primo_il       INTEGER NOT NULL,   -- da quando la si guarda
+  visto_il       INTEGER NOT NULL,
+  PRIMARY KEY (region_id, tipo)
+);
+
+-- Ogni cambio rilevato, una riga per nazione a cui la regione confina.
+-- Come i bonifici e la ricchezza, e' storia che non si ricostruisce: il
+-- gioco dice lo stato di adesso, non quando e' cambiato.
+CREATE TABLE IF NOT EXISTS border_event (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  country_id  TEXT    NOT NULL,
+  region_id   TEXT    NOT NULL,
+  region_nome TEXT,
+  owner_id    TEXT,
+  tipo        TEXT    NOT NULL,
+  evento      TEXT    NOT NULL,
+  livello_da  INTEGER,
+  livello_a   INTEGER,
+  stato_da    TEXT,
+  stato_a     TEXT,
+  relazione   TEXT,
+  confina_con TEXT,                  -- JSON: i nomi delle nostre regioni che tocca
+  effetto_il  INTEGER,               -- quando il bonus comincia a contare
+  at          INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_border_event_paese ON border_event (country_id, at);
+
 -- ⚠️ L'indice su (mu_id, slot) NON sta qui ma in migrate(). SCHEMA gira
 -- PRIMA delle migrazioni: su un database che ha ancora la colonna day
 -- la CREATE TABLE viene saltata (IF NOT EXISTS) ma la CREATE INDEX no, e
@@ -740,6 +780,88 @@ function potaScattiRicchezza(primoGiornoDaTenere) {
   return getDb().prepare('DELETE FROM wealth_snapshot WHERE slot < ?').run(primoGiornoDaTenere).changes || 0;
 }
 
+// ---------------------------------------------------------------------------
+// CONFINI
+// ---------------------------------------------------------------------------
+// La logica sta in confini.js: qui solo scrivere e rileggere.
+
+/** L'ultima lettura di ogni costruzione, per chiave 'regione:tipo'. */
+function leggiStatoConfini() {
+  const righe = getDb().prepare('SELECT region_id, tipo, livello, stato, in_costruzione FROM border_state').all();
+  return new Map(righe.map((r) => [`${r.region_id}:${r.tipo}`, r]));
+}
+
+/** Un giro intero in una transazione: o si aggiorna tutto o niente, cosi'
+ *  un crash a meta' non lascia mezza frontiera alla lettura di prima (che
+ *  al giro dopo produrrebbe una raffica di falsi cambi). */
+function salvaStatoConfini(righe, at) {
+  const d = getDb();
+  const stmt = d.prepare(`
+    INSERT INTO border_state (region_id, tipo, livello, stato, in_costruzione, owner_id, primo_il, visto_il)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(region_id, tipo) DO UPDATE SET
+      livello = excluded.livello, stato = excluded.stato, in_costruzione = excluded.in_costruzione,
+      owner_id = excluded.owner_id, visto_il = excluded.visto_il`);
+  d.exec('BEGIN');
+  try {
+    for (const r of righe) {
+      stmt.run(r.regionId, r.tipo, r.livello || 0, r.stato ?? null, r.inCostruzione ? 1 : 0, r.ownerId || null, at, at);
+    }
+    d.exec('COMMIT');
+  } catch (err) {
+    d.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+function registraEventiConfini(eventi) {
+  const d = getDb();
+  const stmt = d.prepare(`
+    INSERT INTO border_event (country_id, region_id, region_nome, owner_id, tipo, evento,
+      livello_da, livello_a, stato_da, stato_a, relazione, confina_con, effetto_il, at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  d.exec('BEGIN');
+  try {
+    for (const e of eventi) {
+      stmt.run(e.countryId, e.regionId, e.regionNome || null, e.ownerId || null, e.tipo, e.evento,
+        e.livelloDa ?? null, e.livelloA ?? null, e.statoDa ?? null, e.statoA ?? null,
+        e.relazione || null, JSON.stringify(e.confinaCon || []), e.effettoIl ?? null, e.at);
+    }
+    d.exec('COMMIT');
+  } catch (err) {
+    d.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+function eventiConfini(countryId, dal, limite = 200) {
+  return getDb()
+    .prepare('SELECT * FROM border_event WHERE country_id = ? AND at >= ? ORDER BY at DESC, id DESC LIMIT ?')
+    .all(countryId, dal, limite)
+    .map((r) => {
+      let confinaCon = [];
+      try { confinaCon = JSON.parse(r.confina_con || '[]'); } catch { /* riga scritta a mano */ }
+      return {
+        id: r.id, regionId: r.region_id, regionNome: r.region_nome, ownerId: r.owner_id,
+        tipo: r.tipo, evento: r.evento, livelloDa: r.livello_da, livelloA: r.livello_a,
+        statoDa: r.stato_da, statoA: r.stato_a, relazione: r.relazione, confinaCon,
+        effettoIl: r.effetto_il, at: r.at,
+      };
+    });
+}
+
+function potaEventiConfini(prima) {
+  return getDb().prepare('DELETE FROM border_event WHERE at < ?').run(prima).changes || 0;
+}
+
+/** Da quando si guarda: la prima lettura in archivio. Prima di quella data
+ *  "nessun evento" vuol dire "nessuno stava guardando", non "niente e'
+ *  successo". */
+function inizioSorveglianzaConfini() {
+  try { return getDb().prepare('SELECT MIN(primo_il) AS t FROM border_state').get()?.t || null; }
+  catch { return null; }
+}
+
 function dbStatus() {
   const one = (sql) => {
     try { return getDb().prepare(sql).get()?.n ?? 0; } catch { return null; }
@@ -758,6 +880,8 @@ function dbStatus() {
     scattiRicchezza: one('SELECT COUNT(*) AS n FROM wealth_snapshot'),
     momentiRicchezza: one('SELECT COUNT(DISTINCT slot) AS n FROM wealth_snapshot'),
     giorniRicchezza: one('SELECT COUNT(DISTINCT substr(slot, 1, 10)) AS n FROM wealth_snapshot'),
+    costruzioniSorvegliate: one('SELECT COUNT(*) AS n FROM border_state'),
+    eventiConfini: one('SELECT COUNT(*) AS n FROM border_event'),
   };
 }
 
@@ -773,5 +897,7 @@ module.exports = {
   createSession, accountFromToken, destroySession, purgeExpiredSessions,
   salvaScattoRicchezza, scattiRicchezzaDisponibili, scattiRicchezza, ultimoScattoMu, potaScattiRicchezza,
   deltaRicchezzaPerMu, totaliRicchezzaPerMu,
+  leggiStatoConfini, salvaStatoConfini, registraEventiConfini, eventiConfini,
+  potaEventiConfini, inizioSorveglianzaConfini,
   audit, dbStatus,
 };

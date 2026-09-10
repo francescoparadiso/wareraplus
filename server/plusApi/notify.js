@@ -112,7 +112,39 @@ function testoAperta(r, chi) {
     + `Opened by ${chi}. First bid usually lands within ~10 seconds.`;
 }
 
+// ── Confini ─────────────────────────────────────────────────────────────
+// Un messaggio per giro e per nazione (confini.js raggruppa). L'ora in cui
+// il bonus comincia a contare si scrive in UTC e come timestamp Discord
+// (<t:…:R>), che ogni lettore vede nel proprio fuso: un canale ha dentro
+// persone di fusi diversi, e "alle 21" non vuol dire la stessa cosa a tutti.
+
+const COSTRUZIONE_EN = { base: 'Military base', bunker: 'Bunker' };
+const EVENTO_EN = {
+  attivazione: 'switching ON',
+  attivo: 'now ACTIVE',
+  costruzione: 'construction started',
+  livello_su: 'upgraded',
+};
+const RELAZIONE_EN = {
+  guerra: 'at war with us', nemico_giurato: 'sworn enemy', alleato: 'ally',
+  patto: 'defensive pact', nap: 'non-aggression pact', neutrale: 'neutral',
+};
+
+function testoConfini(eventi, nomePaese) {
+  const righe = eventi.slice(0, 10).map((e) => {
+    const quando = e.effettoIl ? ` — active <t:${Math.floor(e.effettoIl / 1000)}:R>` : '';
+    const lv = e.livelloA ? ` lv.${e.livelloA}` : '';
+    return `• **${e.regionNome}** (${nomePaese(e.ownerId)}, ${RELAZIONE_EN[e.relazione] || e.relazione}): `
+      + `${COSTRUZIONE_EN[e.tipo] || e.tipo}${lv} ${EVENTO_EN[e.evento] || e.evento}${quando}\n`
+      + `  borders ${(e.confinaCon || []).join(', ')}`;
+  });
+  const altri = eventi.length > 10 ? `\n…and ${eventi.length - 10} more` : '';
+  return `**Border alert** — ${nomePaese(eventi[0]?.countryId)}\n${righe.join('\n')}${altri}\n`
+    + '_A base gives attackers from that region an attack bonus; a bunker gives its defenders a defence bonus._';
+}
+
 module.exports = {
   avvisa, urlWebhookValido,
   testoNuovaRichiesta, testoApprovata, testoRifiutata, testoAperta,
+  testoConfini,
 };

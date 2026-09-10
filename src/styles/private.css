@@ -1091,3 +1091,204 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
 .wp-pv-nazioni { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .wp-pv-nazioni li { display: flex; align-items: center; gap: 7px; font-size: 13px; }
 .wp-pv-nazione-flag { width: 20px; height: 14px; object-fit: cover; border-radius: 2px; }
+
+/* ══════════════════════════════════════════════════════════════
+   Sezioni apribili (contratti, amministrazione)
+   ──────────────────────────────────────────────────────────────
+   Una riga cliccabile che si apre: chiusa non carica niente e occupa
+   una riga sola, così la nazione resta la prima cosa che si legge.
+   ══════════════════════════════════════════════════════════════ */
+.wp-pv-apribile {
+  border: 1px solid var(--pv-rule); border-radius: 10px;
+  background: var(--pv-surface);
+}
+.wp-pv-apribile-testa {
+  display: flex; align-items: center; gap: .75rem;
+  width: 100%; padding: .9rem 1.1rem;
+  border: none; background: transparent; color: var(--pv-ink);
+  font: inherit; text-align: left; cursor: pointer; border-radius: 10px;
+}
+.wp-pv-apribile-testa:hover { background: var(--pv-hover); }
+.wp-pv-apribile-testa:focus-visible { outline: 2px solid var(--pv-accent); outline-offset: -2px; }
+.wp-pv-apribile-freccia { color: var(--pv-accent); font-size: .85rem; flex: none; }
+.wp-pv-apribile-testi { display: flex; flex-direction: column; gap: .1rem; min-width: 0; flex: 1; }
+.wp-pv-apribile-titolo { font-size: 1rem; }
+.wp-pv-apribile-sotto { font-size: .8rem; color: var(--pv-ink-soft); }
+.wp-pv-apribile-badge {
+  flex: none; padding: .2rem .6rem; border-radius: 999px;
+  background: rgba(240, 180, 41, .16); color: #d99a0b;
+  font-size: .78rem; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.wp-pv-apribile.aperta .wp-pv-apribile-testa {
+  border-bottom: 1px solid var(--pv-rule); border-radius: 10px 10px 0 0;
+}
+.wp-pv-apribile-corpo { display: flex; flex-direction: column; gap: 1rem; padding: 1rem; }
+
+/* ══════════════════════════════════════════════════════════════
+   La mia nazione (src/private/nazione.js)
+   ══════════════════════════════════════════════════════════════ */
+.wp-pv-nz-card, .wp-pv-nz-allarmi { align-items: stretch; }
+
+.wp-pv-nz-testa { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; }
+.wp-pv-nz-flag-grande { width: 44px; height: auto; border-radius: 3px; box-shadow: 0 0 0 1px var(--pv-rule); }
+.wp-pv-nz-testa-nomi { display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
+.wp-pv-nz-nome { font-size: 1.35rem; line-height: 1.15; }
+.wp-pv-nz-meta { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-left: auto; }
+
+.wp-pv-nz-tessere { grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); }
+
+.wp-pv-nz-relazioni { display: flex; flex-direction: column; gap: .45rem; }
+.wp-pv-nz-rel-riga { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: .6rem; align-items: baseline; }
+.wp-pv-nz-chips { display: flex; flex-wrap: wrap; gap: .3rem .7rem; }
+.wp-pv-nz-paese { display: inline-flex; align-items: center; gap: .35rem; font-size: .86rem; white-space: nowrap; }
+.wp-pv-nz-paese-extra { font-size: .72rem; color: var(--pv-ink-soft); }
+.wp-pv-nz-flag { width: 18px; height: 12px; object-fit: cover; border-radius: 2px; flex: none; }
+
+.wp-pv-nz-rel {
+  padding: .1rem .45rem; border-radius: 999px; font-size: .7rem; font-weight: 600;
+  background: var(--pv-surface-2); color: var(--pv-ink-soft); white-space: nowrap;
+}
+.wp-pv-nz-rel-guerra, .wp-pv-nz-rel-nemico_giurato { background: rgba(240, 119, 108, .16); color: var(--pv-danger); }
+.wp-pv-nz-rel-alleato { background: rgba(47, 158, 95, .16); color: #2f9e5f; }
+.wp-pv-nz-rel-patto, .wp-pv-nz-rel-nap { background: rgba(88, 166, 255, .15); color: #4a90d9; }
+
+.wp-pv-nz-governo { border-top: 1px solid var(--pv-rule); padding-top: .8rem; }
+.wp-pv-nz-gov-lista { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .5rem 1rem; margin-top: .4rem; }
+.wp-pv-nz-gov-riga { display: flex; flex-direction: column; gap: .15rem; min-width: 0; }
+.wp-pv-nz-gov-chi { display: flex; align-items: center; gap: .4rem; min-width: 0; }
+.wp-pv-nz-gov-chi strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-pv-nz-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex: none; }
+
+/* ── Allarmi ─────────────────────────────────────────────────── */
+.wp-pv-nz-card-testa { display: flex; align-items: center; gap: .6rem; }
+.wp-pv-nz-allarmi-caldi { border-color: rgba(240, 119, 108, .55); box-shadow: 0 0 0 1px rgba(240, 119, 108, .25); }
+.wp-pv-nz-nuovi, .wp-pv-nz-nuovo {
+  padding: .12rem .5rem; border-radius: 999px;
+  background: var(--pv-danger); color: #fff; font-size: .7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.wp-pv-nz-eventi { display: flex; flex-direction: column; gap: .45rem; }
+.wp-pv-nz-evento {
+  display: flex; flex-direction: column; gap: .2rem;
+  padding: .55rem .7rem; border-left: 3px solid var(--pv-rule);
+  background: var(--pv-surface-2); border-radius: 0 8px 8px 0;
+}
+.wp-pv-nz-peso-alta { border-left-color: var(--pv-danger); }
+.wp-pv-nz-peso-media { border-left-color: #f0b429; }
+.wp-pv-nz-evento-testa { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.wp-pv-nz-evento-quando { font-size: .75rem; color: var(--pv-ink-soft); font-variant-numeric: tabular-nums; }
+.wp-pv-nz-evento-regione { font-size: .92rem; }
+.wp-pv-nz-evento-cosa { font-size: .88rem; }
+.wp-pv-nz-canale { border-top: 1px solid var(--pv-rule); padding-top: .8rem; }
+
+/* ── Nemici ──────────────────────────────────────────────────── */
+.wp-pv-nz-nemici { display: flex; flex-direction: column; gap: .8rem; }
+.wp-pv-nz-nemico {
+  display: flex; flex-direction: column; gap: .55rem;
+  padding: .8rem .9rem; border: 1px solid var(--pv-rule); border-left: 4px solid var(--pv-danger);
+  border-radius: 8px; background: var(--pv-surface-2);
+}
+.wp-pv-nz-nemico-testa { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.wp-pv-nz-nemico-testa .wp-pv-nz-paese { font-size: 1rem; font-weight: 700; }
+
+.wp-pv-nz-pillbar { display: flex; height: 7px; border-radius: 999px; overflow: hidden; background: var(--pv-rule); }
+.wp-pv-nz-pill-buff { background: #f0b429; }
+.wp-pv-nz-pill-malus { background: var(--pv-danger); opacity: .75; }
+.wp-pv-nz-pill-pulito { background: var(--pv-ink-soft); opacity: .35; }
+.wp-pv-nz-pill-righe { display: flex; flex-wrap: wrap; gap: .25rem 1.1rem; font-size: .85rem; }
+.wp-pv-nz-pill-voce strong { font-variant-numeric: tabular-nums; }
+.wp-pv-nz-pv-buff strong { color: #d99a0b; }
+.wp-pv-nz-pv-malus strong { color: var(--pv-danger); }
+
+.wp-pv-nz-numeri { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: .5rem .9rem; }
+.wp-pv-nz-cella { display: flex; flex-direction: column; gap: .05rem; min-width: 0; }
+.wp-pv-nz-cella strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+
+.wp-pv-nz-nemico-piede { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; justify-content: space-between; }
+.wp-pv-nz-top { display: flex; flex-direction: column; gap: .3rem; border-top: 1px solid var(--pv-rule); padding-top: .5rem; }
+.wp-pv-nz-top-riga {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto 4.5rem 7rem 7rem;
+  gap: .6rem; align-items: center; font-size: .84rem;
+}
+.wp-pv-nz-top-chi { display: flex; align-items: center; gap: .4rem; min-width: 0; overflow: hidden; white-space: nowrap; }
+.wp-pv-nz-top-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--pv-ink-soft); }
+.wp-pv-nz-pill-tag { padding: .08rem .45rem; border-radius: 999px; font-size: .7rem; font-weight: 600; white-space: nowrap; }
+.wp-pv-nz-pill-tag-buff { background: rgba(240, 180, 41, .18); color: #d99a0b; }
+.wp-pv-nz-pill-tag-malus { background: rgba(240, 119, 108, .16); color: var(--pv-danger); }
+.wp-pv-nz-pill-tag-pulito { background: var(--pv-surface); color: var(--pv-ink-soft); }
+
+/* ── Attività ────────────────────────────────────────────────── */
+.wp-pv-nz-sezione { display: flex; flex-direction: column; gap: .45rem; border-top: 1px solid var(--pv-rule); padding-top: .8rem; }
+.wp-pv-nz-battaglie { display: flex; flex-direction: column; gap: .6rem; }
+.wp-pv-nz-battaglia {
+  display: flex; flex-direction: column; gap: .3rem;
+  padding: .6rem .75rem; border: 1px solid var(--pv-rule); border-radius: 8px; background: var(--pv-surface-2);
+}
+.wp-pv-nz-battaglia-testa { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.wp-pv-nz-lato { padding: .08rem .45rem; border-radius: 999px; font-size: .7rem; font-weight: 600; }
+.wp-pv-nz-lato-attacker { background: rgba(240, 119, 108, .14); color: var(--pv-danger); }
+.wp-pv-nz-lato-defender { background: rgba(88, 166, 255, .14); color: #4a90d9; }
+.wp-pv-nz-round { margin-left: auto; font-size: .8rem; color: var(--pv-ink-soft); font-variant-numeric: tabular-nums; }
+
+.wp-pv-nz-grafico-wrap { width: 100%; overflow-x: auto; }
+.wp-pv-nz-grafico { display: block; width: 100%; min-width: 30rem; height: auto; }
+.wp-pv-nz-asse { stroke: var(--pv-rule); stroke-width: 1; }
+.wp-pv-nz-tacca { stroke: var(--pv-rule); stroke-width: 1; stroke-dasharray: 2 3; }
+.wp-pv-nz-barra { fill: var(--pv-accent); opacity: .55; }
+.wp-pv-nz-barra:hover { opacity: .9; }
+.wp-pv-nz-linea { fill: none; stroke: #f0b429; stroke-width: 1.8; stroke-linejoin: round; }
+.wp-pv-nz-testo { fill: var(--pv-ink-soft); font-size: 10px; font-family: inherit; }
+.wp-pv-nz-testo-pill { fill: #d99a0b; }
+
+.wp-pv-nz-bonifici { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: .8rem; }
+.wp-pv-nz-bonifici-col { display: flex; flex-direction: column; gap: .3rem; }
+.wp-pv-nz-bonifici-testa { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
+.wp-pv-nz-bonifico {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: .6rem; align-items: baseline;
+  font-size: .84rem; font-variant-numeric: tabular-nums;
+}
+.wp-pv-nz-bonifico .wp-pv-nz-paese { overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Regioni e confini ───────────────────────────────────────── */
+.wp-pv-nz-regioni { display: flex; flex-direction: column; gap: .35rem; }
+.wp-pv-nz-regione {
+  display: grid; grid-template-columns: minmax(10rem, 1.1fr) minmax(0, 1.4fr) auto;
+  gap: .3rem .8rem; align-items: center;
+  padding: .45rem .6rem; border-radius: 8px; background: var(--pv-surface-2);
+}
+.wp-pv-nz-regione-nome { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; min-width: 0; }
+.wp-pv-nz-regione-dett { min-width: 0; }
+.wp-pv-nz-tag {
+  padding: .05rem .4rem; border-radius: 999px; font-size: .66rem; font-weight: 600;
+  background: var(--pv-accent-soft); color: var(--pv-accent);
+}
+.wp-pv-nz-tag-battaglia { background: rgba(240, 119, 108, .16); color: var(--pv-danger); }
+.wp-pv-nz-tag-avviso { background: rgba(240, 180, 41, .16); color: #d99a0b; }
+
+.wp-pv-nz-difese { display: flex; gap: .35rem; flex-wrap: wrap; justify-content: flex-end; }
+.wp-pv-nz-df {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .15rem .5rem; border-radius: 6px; font-size: .74rem; white-space: nowrap;
+  border: 1px solid var(--pv-rule); color: var(--pv-ink-soft);
+}
+.wp-pv-nz-df-tipo { font-weight: 600; color: var(--pv-ink); }
+.wp-pv-nz-df-none { opacity: .5; }
+.wp-pv-nz-df-active { border-color: rgba(47, 158, 95, .5); background: rgba(47, 158, 95, .10); color: #2f9e5f; }
+.wp-pv-nz-df-pending { border-color: rgba(240, 180, 41, .6); background: rgba(240, 180, 41, .12); color: #d99a0b; }
+.wp-pv-nz-df-building { border-color: rgba(88, 166, 255, .5); background: rgba(88, 166, 255, .10); color: #4a90d9; }
+
+.wp-pv-nz-confine { display: flex; flex-direction: column; gap: .3rem; margin-top: .3rem; }
+.wp-pv-nz-confine-testa { display: flex; align-items: center; gap: .5rem; padding: .2rem 0; }
+.wp-pv-nz-confine-testa .wp-pv-nz-paese { font-weight: 700; font-size: .92rem; }
+.wp-pv-nz-confine-guerra .wp-pv-nz-regione,
+.wp-pv-nz-confine-nemico_giurato .wp-pv-nz-regione { box-shadow: inset 3px 0 0 var(--pv-danger); }
+
+@media (max-width: 720px) {
+  .wp-pv-nz-rel-riga { grid-template-columns: minmax(0, 1fr); gap: .2rem; }
+  .wp-pv-nz-regione { grid-template-columns: minmax(0, 1fr); }
+  .wp-pv-nz-difese { justify-content: flex-start; }
+  .wp-pv-nz-top-riga { grid-template-columns: minmax(0, 1fr) auto; }
+  .wp-pv-nz-top-riga > :nth-child(3) { display: none; }
+  .wp-pv-nz-meta { margin-left: 0; }
+  .wp-pv-apribile-testa { flex-wrap: wrap; }
+}

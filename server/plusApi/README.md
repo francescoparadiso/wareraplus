@@ -139,6 +139,33 @@ ora — quel primo intervallo copre meno di 24 ore e la vista lo dichiara.
 l'esito dell'ultimo scatto. Un amministratore puo' forzarne uno con
 `POST /wealth/scatta`.
 
+## La mia nazione (`nazione.js`, `confini.js`, `nemici.js`, `fonti.js`)
+
+Quello che un **cittadino** di una nazione abilitata vede della sua
+nazione, senza bisogno di cariche. Tre rotte, tutte dietro al filtro
+nazione:
+
+- `GET /nazione` — tesoro e classifiche in diretta, governo, battaglie in
+  corso, ultime 48 ore (danno + pillati), bonifici 72 ore, regioni con basi
+  e bunker, confinanti straniere, eventi di confine degli ultimi 14 giorni.
+  Un amministratore può passare `?paese=<id>`.
+- `GET /nazione/nemici` — per ogni nazione in `warsWith` più il nemico
+  giurato: pillole adesso (con le scadenze), danno osservato, potenziale.
+  Legge `user.getUserLite` su 90 giocatori per nemico, in cache 10 minuti.
+- `POST /nazione/canale-confini` — il webhook Discord degli allarmi di
+  confine (`webhook` con `scope_type='confini'`). Solo il governo.
+
+La **sorveglianza dei confini** gira da sola ogni 10 minuti anche se
+nessuno guarda: `region.getById` in batch sulle regioni delle nazioni
+abilitate e su quelle straniere che le toccano (~33 oggi, 1-2 richieste
+pubbliche). Due tabelle nuove, `border_state` e `border_event`, nate dalla
+`CREATE TABLE IF NOT EXISTS` al primo riavvio. Il primo giro fotografa e
+non avvisa. `/health` riporta `confini` con l'ultimo giro e da quando si
+sorveglia.
+
+Nessuna variabile d'ambiente nuova: il cache-server si legge sulla
+loopback come fa già `wealth.js`.
+
 ## Aggiornare
 
 ```bash
@@ -153,7 +180,7 @@ Poi il preflight, e solo se stampa `PREFLIGHT-OK`:
 
 ```bash
 ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 \
-  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && node --check wealth.js && echo PREFLIGHT-OK"
+  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && node --check wealth.js && node --check fonti.js && node --check confini.js && node --check nemici.js && node --check nazione.js && echo PREFLIGHT-OK"
 ```
 
 ```bash

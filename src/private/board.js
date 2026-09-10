@@ -32,7 +32,6 @@ import {
   preparaBattaglie, indicizzaBattaglie, nomeNazione, urlBandiera,
   caricaFinanziatori, finanziatoriDi, finanziamentiRicevuti,
 } from './battles.js';
-import { creaPannelloAdmin } from './admin.js';
 import { creaSelettoreEntita } from './selettori.js';
 
 function el(tag, cls, text) {
@@ -73,8 +72,9 @@ export function creaTavolo(ctx) {
   let occupato = false;
   // Tre sezioni invece di un elenco di schede tutte uguali: si arriva
   // qui per fare UNA cosa, e le altre due non devono essere in mezzo.
-  let sezione = 'battaglie';    // 'battaglie' | 'tavolo' | 'impostazioni' | 'admin'
-  let pannelloAdmin = null;
+  // L'amministrazione stava qui come quarta linguetta; ora è una sezione
+  // apribile a sé in main.js, perché non è una cosa di contratti.
+  let sezione = 'battaglie';    // 'battaglie' | 'tavolo' | 'impostazioni'
   // Le battaglie vive indicizzate per id: il tavolo raggruppa le richieste
   // per battaglia, e per farlo deve sapere se quella battaglia e' ancora
   // aperta e come sta andando.
@@ -197,12 +197,6 @@ export function creaTavolo(ctx) {
     if (puoChiedere) sezioni.push(['battaglie', pvT('battlesTitle')]);
     sezioni.push(['tavolo', pvT('boardTitle')]);
     if (haImpostazioni) sezioni.push(['impostazioni', pvT('settingsTitle')]);
-    // L'amministrazione e' una sezione come le altre, ma compare solo a
-    // chi lo e'. Sta QUI dentro e non in una vista a parte: e' lo stesso
-    // posto, con una porta in piu' che per quasi tutti non esiste.
-    // La voce nascosta non e' il permesso — il server rifiuta comunque —
-    // ma non ha senso mostrare a tutti una porta che si apre per due.
-    if (cap.admin && !dati.lente) sezioni.push(['admin', pvT('adminTitle')]);
 
     // Se la sezione scelta non esiste per questa persona si ricade sulla
     // prima disponibile: un ministro non ha le battaglie, un comandante
@@ -213,7 +207,6 @@ export function creaTavolo(ctx) {
 
     if (sezione === 'battaglie') frag.appendChild(cardBattaglie(cap));
     else if (sezione === 'tavolo') frag.appendChild(cardTavolo(cap));
-    else if (sezione === 'admin') frag.appendChild(cardAdmin());
     else {
       for (const [cid, lista] of liste) frag.appendChild(cardLista(cid, lista));
       if (canali.size) frag.appendChild(cardCanali());
@@ -1197,23 +1190,6 @@ export function creaTavolo(ctx) {
     return form;
   }
 
-  // ── Amministrazione ──────────────────────────────────────────────────
-  function cardAdmin() {
-    if (!pannelloAdmin) {
-      pannelloAdmin = creaPannelloAdmin({
-        ridisegna: ctx.ridisegna,
-        // "Vedi come" e' della vista, non del pannello: cambia l'identita'
-        // di tutta l'area riservata, non solo di questa sezione.
-        apriComeAltri: (id) => ctx.apriComeAltri?.(id),
-        // Una deroga appena concessa cambia i poteri: ruoli e tavolo vanno
-        // riletti, altrimenti restano quelli di un minuto fa. Era un bug
-        // reale — si concedeva una carica e il bottone non compariva.
-        ruoliCambiati: async () => { await ctx.ruoliCambiati?.(); await carica(); },
-      });
-    }
-    return pannelloAdmin.render();
-  }
-
   // ── Canali Discord ───────────────────────────────────────────────────
   function cardCanali() {
     const card = el('div', 'wp-pv-card');
@@ -1283,5 +1259,26 @@ export function creaTavolo(ctx) {
     return { wrap, input };
   }
 
-  return { render, ricarica: carica };
+  // ── Quanto aspetta una firma ─────────────────────────────────────────
+  // La sezione Contratti si apre cliccando, e chiusa non carica niente —
+  // ma "tre richieste aspettano te" deve vedersi anche da chiusa. Si conta
+  // solo quello che QUESTA persona può approvare: le richieste della sua
+  // unità che aspettano un altro non sono lavoro suo.
+  const contaInAttesa = (d) => {
+    const cap = d?.capacita || {};
+    return (d?.richieste || []).filter((r) => r.status === 'pending' && cap.approvaPer?.includes(r.countryId)).length;
+  };
+
+  /** Il conto se il tavolo è già caricato, null altrimenti. */
+  function inAttesa() { return dati ? contaInAttesa(dati) : null; }
+
+  /** Il conto anche a tavolo non caricato: una sola lettura, senza
+   *  battaglie, liste e canali che il tavolo aperto si porta dietro. */
+  async function contaAttesa() {
+    if (dati) return contaInAttesa(dati);
+    try { return contaInAttesa(await leggiTavolo({ asAccount: ctx.lente() })); }
+    catch { return null; }
+  }
+
+  return { render, ricarica: carica, inAttesa, contaAttesa };
 }

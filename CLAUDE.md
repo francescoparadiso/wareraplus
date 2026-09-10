@@ -355,6 +355,24 @@ wareraPlus/
     ├── guide/                    ← NUOVO — Guida "Come si usa": SOLO testo statico
     │   ├── main.js                  (zero fetch, zero stato) + i18n.js a 9 lingue.
     │   └── i18n.js                  È la vista più leggera dell'app, deve restarlo.
+    ├── private/                  ← NUOVO — Area riservata (login Discord + personaggio
+    │   │                            verificato). Parla SOLO con warera-plus-api
+    │   │                            (server/plusApi/, processo separato, vedi il suo README).
+    │   ├── main.js              ← la vista: profilo a sinistra; a destra PRIMA quello che
+    │   │                          ogni cittadino VEDE (la sua nazione), POI quello che si
+    │   │                          FA, in due sezioni apribili chiuse di partenza:
+    │   │                          "Contratti mercenari" (il tavolo, board.js) e
+    │   │                          "Amministrazione" (admin.js). Una sezione chiusa non
+    │   │                          carica niente; Contratti mostra comunque quante richieste
+    │   │                          aspettano la firma di chi guarda.
+    │   ├── nazione.js           ← NUOVO — "La mia nazione": tesoro/classifiche/relazioni/
+    │   │                          governo, allarmi dai confini (salgono in cima se nuovi),
+    │   │                          nemici (pillole, danno fatto, potenziale), battaglie +
+    │   │                          ultime 48 ore + bonifici, regioni con basi e bunker.
+    │   │                          Dati da /nazione e /nazione/nemici (plusApi).
+    │   ├── i18nNazione.js       ← dizionario (9 lingue) di nazione.js e delle sezioni
+    │   ├── board.js, battles.js ← contratti mercenari (tavolo, battaglie, lista permessi)
+    │   └── admin.js, selettori.js, api.js, i18n.js
     ├── panel/                   ← NUOVO
     │   ├── countryPanel.js      ← pannello laterale nazione (+ riepilogo sfere e viste)
     │   ├── viewOverview.js      ← contenuto del riepilogo che si apre entrando in una
@@ -695,6 +713,27 @@ niente". `/health` di plusApi riporta `ricchezza` con i giorni in archivio.
 ⚠️ Il numero è il **saldo netto**, non la spesa militare: entrate meno
 uscite fra due scatti. Chiamarlo "quanto costa la guerra" sarebbe la
 stessa trappola di `rankings.countryBounty` — la vista lo dice in testa.
+
+**La mia nazione** nell'area riservata (`src/private/nazione.js` +
+`server/plusApi/{nazione,confini,nemici,fonti}.js`) dipende anch'essa dal
+redeploy di **warera-plus-api**: finché non lo fai `/nazione` risponde 404
+e la scheda mostra l'errore con "Riprova", mentre contratti e
+amministrazione restano identici. Tre cose da sapere prima di crederla rotta:
+
+- gli **allarmi dai confini** partono vuoti: il primo giro fotografa basi e
+  bunker e NON avvisa (tutto sembrerebbe "appena acceso"); si avvisa solo
+  su un cambio fra due letture, ogni 10 minuti. La storia si accumula, come
+  i bonifici. Discord solo per accensioni e costruzioni, sul canale
+  `confini` (separato da quello dei contratti), e solo se il governo l'ha
+  configurato;
+- ⚠️ `activeUpgradeLevels` delle regioni NON combacia con `upgradesV2`
+  (misurato) e non si usa: vedi la testata di `confini.js`;
+- il **potenziale** dei nemici è danno dei GIOCATORI (vita + barra della
+  fame col pasto migliore del gioco), senza bonus di battaglia né armatura
+  del bersaglio: un tetto dichiarato, non una previsione. Il danno
+  settimanale di una nazione invece È la somma dei suoi cittadini
+  (verificato: Germania 1,405 mld contro 1,403), quindi i due numeri si
+  possono affiancare.
 
 Il **danno ora per ora** e la **curva a 14 giorni** nella scheda nazione
 (`src/nations/damageCurves.js` + `server/damageTimeline.js`) dipendono da

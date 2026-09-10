@@ -47,6 +47,9 @@ const { buildRequestsRouter } = require('./requests');
 const { buildPolicyRouter } = require('./policy');
 const { buildWealthRouter, initWealth, statoRicchezza } = require('./wealth');
 const { initWatcher, statoWatcher } = require('./watcher');
+// La mia nazione: quadro, confini sorvegliati, nemici. Vedi nazione.js.
+const { buildNazioneRouter } = require('./nazione');
+const { initConfini, statoConfini } = require('./confini');
 const { risolviIdentita, bloccaScrittureSottoLente } = require('./identity');
 // A quali nazioni e' aperta l'area riservata. Si SOMMA ai permessi di
 // ruolo, non li sostituisce: vedi il blocco in testa a nazioni.js.
@@ -155,6 +158,11 @@ app.use('/policy', buildPolicyRouter({ requireAuth, risolviIdentita, bloccaScrit
 // tenere allineato.
 app.use('/wealth', buildWealthRouter({ requireAuth, capacitaDi, filtroNazione }));
 
+// Quello che un CITTADINO può vedere della sua nazione: nessun potere di
+// gioco richiesto, solo il filtro nazione. È la parte dell'area che non
+// dipende dall'avere una carica.
+app.use('/nazione', buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione }));
+
 app.use('/auth', buildAuthRouter({
   env: WP_ENV,
   publicBase: PUBLIC_BASE,
@@ -189,6 +197,10 @@ app.get('/health', (req, res) => res.json({
   // controllare dopo il deploy: la serie completa arriva dopo otto giorni
   // di scatti, e prima di allora la vista mostra meno colonne DI PROPOSITO.
   ricchezza: statoRicchezza(),
+  // La sorveglianza dei confini: quando ha guardato l'ultima volta, quante
+  // regioni ha letto in diretta su quante attese, e da quando esiste la
+  // storia. `regioni` molto sotto `attese` = api6 che non risponde.
+  confini: statoConfini(),
   // A quali nazioni e' aperta l'area riservata adesso. Dopo aver cambiato
   // WP_NAZIONI_AMMESSE e' la riga da guardare per sapere se pm2 ha preso
   // davvero la variabile, senza doversi far chiudere fuori per scoprirlo.
@@ -219,6 +231,10 @@ initWatcher({ dataDir: DATA_DIR });
 // non ha ancora niente da mostrare non deve essere anche un giorno di
 // attesa in piu'.
 initWealth();
+
+// La sorveglianza dei confini: ogni dieci minuti, anche quando nessuno ha
+// la pagina aperta — un avviso che arriva solo a chi guarda arriva tardi.
+initConfini();
 
 const promossi = syncAdminsFromEnv(ADMIN_DISCORD_IDS);
 if (promossi) console.log(`[plusApi] ${promossi} account promossi ad admin da ADMIN_DISCORD_IDS`);

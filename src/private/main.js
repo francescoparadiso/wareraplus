@@ -37,8 +37,10 @@ import {
 } from './api.js';
 import { state } from '../diplomacy/state.js';
 import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
-import { renderDeroghe } from './admin.js';
+import { renderDeroghe, creaPannelloAdmin } from './admin.js';
 import { creaTavolo } from './board.js';
+import { creaQuadroNazione } from './nazione.js';
+import { nzT } from './i18nNazione.js';
 
 let rootEl = null;
 let account = null;
@@ -61,13 +63,36 @@ let tickScadenza = null;
 let ruoli = null;
 let comeAltri = null;         // id dell'account che si sta guardando
 let tavolo = null;
+let quadro = null;            // la mia nazione (nazione.js)
+let pannelloAdmin = null;
+
+// Quante richieste aspettano una decisione, per scriverlo sulla sezione
+// Contratti anche quando è chiusa: un presidente che non la apre deve
+// comunque sapere che c'è qualcosa da firmare.
+let attesaContratti = null;
+let attesaChiesta = false;
+
+// Quali sezioni apribili sono aperte: una preferenza di chi guarda, in
+// localStorage come ogni altra comodità per-browser del tool.
+const SEZIONI_KEY = 'wp_pv_sezioni_aperte';
 
 export async function initPrivateView(container, { authError = null, comeAccount = null } = {}) {
   rootEl = container;
   erroreAccesso = authError;
-  if (comeAccount) comeAltri = comeAccount;
+  if (comeAccount && comeAccount !== comeAltri) {
+    // Si arriva qui dall'amministrazione con un'altra persona da guardare:
+    // tavolo e nazione in memoria sono di chi si guardava prima.
+    comeAltri = comeAccount;
+    tavolo = null; quadro = null; azzeraAttesa();
+  }
   render();
   await refresh();
+
+  // Il modulo resta in memoria fra un'apertura e l'altra, e con lui i dati
+  // della nazione: riaprendo la vista dopo un'ora si leggeva ancora il
+  // tesoro di un'ora prima. Si rilegge ad ogni apertura — "aggiornate" è
+  // metà della promessa di questa scheda.
+  if (quadro) quadro.ricarica();
 
   window.addEventListener('wareraplus:langchange', render);
 }
@@ -197,7 +222,8 @@ function disegna() {
     // non ha poteri" e' esattamente l'informazione che si sta cercando.
     colonnaSx.appendChild(cardLente());
     colonnaSx.appendChild(cardProfilo());
-    colonnaDx.appendChild(creaOTavolo().render());
+    colonnaDx.appendChild(creaOQuadro().render());
+    colonnaDx.appendChild(sezioneContratti());
   }
   else {
     colonnaSx.appendChild(cardProfilo());
@@ -217,13 +243,28 @@ function disegna() {
     const nazione = ruoli?.nazione;
     if (account.verificato && nazione && nazione.abilitata === false) {
       colonnaDx.appendChild(cardNazioneNonAbilitata(nazione));
-    } else {
-      // Il tavolo si mostra solo a chi ha almeno un potere: a un cittadino
-      // senza cariche sarebbe una scatola vuota con dentro una spiegazione
-      // di qualcosa che non lo riguarda.
+    } else if (account.verificato || account.admin) {
+      // ── Prima quello che si VEDE, poi quello che si FA ─────────────────
+      // La nazione la vede ogni cittadino, carica o no: è la risposta a
+      // "cosa posso vedere io". I contratti e l'amministrazione sono
+      // mestieri di pochi, e stanno sotto, chiusi finché non si aprono —
+      // prima occupavano tutta la pagina anche a chi voleva solo sapere
+      // come stava la sua nazione.
+      colonnaDx.appendChild(creaOQuadro().render());
+
+      // Il tavolo resta a chi ha almeno un potere: a un cittadino senza
+      // cariche sarebbe una scatola vuota con dentro una spiegazione di
+      // qualcosa che non lo riguarda.
       const cap = ruoli?.capacita;
       if (cap && (cap.chiedePer?.length || cap.approvaPer?.length || cap.gestisceNazione?.length || cap.admin)) {
-        colonnaDx.appendChild(creaOTavolo().render());
+        colonnaDx.appendChild(sezioneContratti());
+      }
+      // L'amministrazione era una linguetta DENTRO il tavolo dei contratti,
+      // ma non è una cosa di contratti: account, deroghe, lente. Sezione
+      // sua, che per quasi tutti non esiste.
+      if (account.admin) {
+        colonnaDx.appendChild(sezioneApribile('admin', nzT('secAdmin'), nzT('secAdminHint'),
+          () => creaOAdmin().render()));
       }
     }
 
@@ -373,7 +414,8 @@ function cardProfilo() {
       })));
     }
     azioni.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('signOut'), async () => {
-      await logout(); account = null; claim = null; passo = 'ricerca'; candidati = []; tavolo = null; render();
+      await logout(); account = null; claim = null; passo = 'ricerca'; candidati = [];
+      tavolo = null; quadro = null; pannelloAdmin = null; azzeraAttesa(); render();
     }));
     card.appendChild(azioni);
   }
@@ -593,8 +635,11 @@ async function guardaCome(accountId) {
   await caricaRuoli();
   // Il tavolo tiene in memoria le righe di CHI stava guardando prima:
   // senza questo, entrando in lente si vedrebbero per un istante le
-  // proprie richieste attribuite a un'altra persona.
+  // proprie richieste attribuite a un'altra persona. Lo stesso vale per
+  // il quadro della nazione: sotto la lente è la SUA nazione.
   tavolo = null;
+  quadro = null;
+  azzeraAttesa();
   render();
 }
 
@@ -605,7 +650,7 @@ function cardLente() {
   if (chi) card.appendChild(el('strong', 'wp-pv-name', chi.warUsername || chi.discordUsername));
   card.appendChild(el('p', 'wp-pv-note', pvT('readOnlyNote')));
   card.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('backToMe'), async () => {
-    comeAltri = null; await caricaRuoli(); tavolo = null; render();
+    comeAltri = null; await caricaRuoli(); tavolo = null; quadro = null; azzeraAttesa(); render();
   }));
   return card;
 }
@@ -624,6 +669,94 @@ function creaOTavolo() {
     });
   }
   return tavolo;
+}
+
+/** Stessa regola del tavolo: costruito una volta, tiene il suo stato
+ *  (dati letti, nemici aperti) fra un ridisegno e l'altro. */
+function creaOQuadro() {
+  if (!quadro) quadro = creaQuadroNazione({ ridisegna: render, lente: () => comeAltri });
+  return quadro;
+}
+
+function creaOAdmin() {
+  if (!pannelloAdmin) {
+    pannelloAdmin = creaPannelloAdmin({
+      ridisegna: render,
+      // "Vedi come" cambia l'identità di tutta l'area, non solo di questa
+      // sezione: per questo vive qui e non nel pannello.
+      apriComeAltri: guardaCome,
+      // Una deroga appena concessa cambia i poteri: ruoli e tavolo vanno
+      // riletti, altrimenti restano quelli di un minuto fa. Era un bug
+      // reale — si concedeva una carica e il bottone non compariva.
+      ruoliCambiati: async () => { await caricaRuoli({ refresh: true }); await tavolo?.ricarica(); render(); },
+    });
+  }
+  return pannelloAdmin;
+}
+
+function azzeraAttesa() { attesaContratti = null; attesaChiesta = false; }
+
+// ---------------------------------------------------------------------------
+// Sezioni apribili
+// ---------------------------------------------------------------------------
+
+function sezioniAperte() {
+  try { return new Set(JSON.parse(localStorage.getItem(SEZIONI_KEY) || '[]')); } catch { return new Set(); }
+}
+
+function impostaAperta(chiave, aperta) {
+  try {
+    const s = sezioniAperte();
+    if (aperta) s.add(chiave); else s.delete(chiave);
+    localStorage.setItem(SEZIONI_KEY, JSON.stringify([...s]));
+  } catch { /* modalità privata: si riapre chiusa, pazienza */ }
+}
+
+/**
+ * Una sezione che si apre cliccando la testa. Il contenuto si costruisce
+ * SOLO se è aperta: una sezione chiusa non scarica niente, che per il
+ * tavolo dei contratti vuol dire battaglie, liste permessi e canali —
+ * mezza dozzina di richieste risparmiate a chi non lo apre.
+ */
+function sezioneApribile(chiave, titolo, sottotitolo, contenuto, { badge = null } = {}) {
+  const aperta = sezioniAperte().has(chiave);
+  const box = el('section', `wp-pv-apribile${aperta ? ' aperta' : ''}`);
+
+  const testa = el('button', 'wp-pv-apribile-testa');
+  testa.type = 'button';
+  testa.setAttribute('aria-expanded', String(aperta));
+  testa.appendChild(el('span', 'wp-pv-apribile-freccia', aperta ? '▾' : '▸'));
+  const testi = el('span', 'wp-pv-apribile-testi');
+  testi.appendChild(el('strong', 'wp-pv-apribile-titolo', titolo));
+  testi.appendChild(el('span', 'wp-pv-apribile-sotto', sottotitolo));
+  testa.appendChild(testi);
+  if (badge) testa.appendChild(el('span', 'wp-pv-apribile-badge', `${badge} · ${nzT('secWaiting')}`));
+  testa.addEventListener('click', () => { impostaAperta(chiave, !aperta); render(); });
+  box.appendChild(testa);
+
+  if (aperta) {
+    const corpo = el('div', 'wp-pv-apribile-corpo');
+    corpo.appendChild(contenuto());
+    box.appendChild(corpo);
+  }
+  return box;
+}
+
+/** I contratti mercenari, chiusi di partenza. Il conteggio di cosa aspetta
+ *  una firma si chiede una volta sola anche a sezione chiusa: è l'unico
+ *  pezzo del tavolo che deve farsi vedere senza essere aperto. */
+function sezioneContratti() {
+  const t = creaOTavolo();
+  let n = t.inAttesa();
+  if (n == null) {
+    n = attesaContratti;
+    if (attesaContratti === null && !attesaChiesta) {
+      attesaChiesta = true;
+      t.contaAttesa().then((x) => { attesaContratti = x; render(); });
+    }
+  }
+  return sezioneApribile('contratti', nzT('secContracts'), nzT('secContractsHint'),
+    () => t.render(), { badge: n || null });
 }
 
 function cardIndisponibile() {
