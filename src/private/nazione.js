@@ -129,7 +129,13 @@ export function creaQuadroNazione(ctx) {
     try {
       dati = await leggiNazione({ asAccount: ctx.lente(), paese: paeseScelto });
     } catch (err) {
-      errore = err instanceof ApiError ? (err.codice === 'nazione_sconosciuta' ? nzT('natNoCountry') : pvErr(err.codice)) : pvT('errErrore_server');
+      // Un server che la rotta non ce l'ha ancora (rideploy di
+      // warera-plus-api non fatto) risponde 404 `rotta_sconosciuta`: detto
+      // come "errore del server" sembrava un guasto, ed è solo un'attesa.
+      errore = !(err instanceof ApiError) ? pvT('errErrore_server')
+        : err.codice === 'nazione_sconosciuta' ? nzT('natNoCountry')
+          : err.codice === 'rotta_sconosciuta' ? nzT('natServerOld')
+            : pvErr(err.codice);
     } finally {
       caricamento = false; ctx.ridisegna();
     }
