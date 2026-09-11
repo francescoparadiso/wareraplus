@@ -316,6 +316,17 @@ CREATE INDEX IF NOT EXISTS idx_border_event_paese ON border_event (country_id, a
 -- nazione di cui è cittadino adesso. Per id di gioco e non per account:
 -- si può dare accesso a chi non è ancora entrato, e comincia a valere il
 -- giorno in cui entra con Discord e collega quel personaggio.
+-- ── Fotografie orarie dei numeri di una nazione (istantanee.js) ────────
+-- Servono alle frecce "su/giù rispetto a 24 ore fa" della scheda nazione.
+-- Il gioco dà solo il valore di ADESSO di sviluppo, classifiche, tasse,
+-- disordini: la storia non esiste da nessuna parte e si accumula da qui.
+CREATE TABLE IF NOT EXISTS nation_snapshot (
+  country_id TEXT    NOT NULL,
+  at         INTEGER NOT NULL,
+  dati       TEXT    NOT NULL,   -- JSON: i numeri della scheda in quel momento
+  PRIMARY KEY (country_id, at)
+);
+
 CREATE TABLE IF NOT EXISTS nation_access (
   country_id   TEXT    NOT NULL,
   war_user_id  TEXT    NOT NULL,
@@ -895,6 +906,36 @@ function inizioSorveglianzaConfini() {
 }
 
 // ---------------------------------------------------------------------------
+// FOTOGRAFIE ORARIE DELLE NAZIONI
+// ---------------------------------------------------------------------------
+
+function salvaIstantanea(countryId, at, dati) {
+  getDb().prepare('INSERT OR REPLACE INTO nation_snapshot (country_id, at, dati) VALUES (?, ?, ?)')
+    .run(countryId, at, JSON.stringify(dati));
+}
+
+/** La fotografia più vicina a `target` entro `tolleranza`, o null. */
+function istantaneaVicina(countryId, target, tolleranza) {
+  const r = getDb().prepare(`
+    SELECT at, dati FROM nation_snapshot
+    WHERE country_id = ? AND at BETWEEN ? AND ?
+    ORDER BY ABS(at - ?) LIMIT 1`).get(countryId, target - tolleranza, target + tolleranza, target);
+  return r ? { at: r.at, dati: JSON.parse(r.dati) } : null;
+}
+
+/** La più vecchia fotografia prima di `prima`: il riferimento finché la
+ *  storia non arriva a 24 ore. */
+function istantaneaPiuVecchia(countryId, prima) {
+  const r = getDb().prepare('SELECT at, dati FROM nation_snapshot WHERE country_id = ? AND at <= ? ORDER BY at ASC LIMIT 1')
+    .get(countryId, prima);
+  return r ? { at: r.at, dati: JSON.parse(r.dati) } : null;
+}
+
+function potaIstantanee(prima) {
+  return getDb().prepare('DELETE FROM nation_snapshot WHERE at < ?').run(prima).changes || 0;
+}
+
+// ---------------------------------------------------------------------------
 // ACCESSI ALLA "MIA NAZIONE"
 // ---------------------------------------------------------------------------
 
@@ -943,6 +984,7 @@ function dbStatus() {
     costruzioniSorvegliate: one('SELECT COUNT(*) AS n FROM border_state'),
     eventiConfini: one('SELECT COUNT(*) AS n FROM border_event'),
     accessiNazione: one('SELECT COUNT(*) AS n FROM nation_access'),
+    fotografieNazioni: one('SELECT COUNT(*) AS n FROM nation_snapshot'),
   };
 }
 
@@ -961,5 +1003,6 @@ module.exports = {
   leggiStatoConfini, salvaStatoConfini, registraEventiConfini, eventiConfini,
   potaEventiConfini, inizioSorveglianzaConfini,
   accessiNazione, haAccessoNazione, aggiungiAccessoNazione, togliAccessoNazione,
+  salvaIstantanea, istantaneaVicina, istantaneaPiuVecchia, potaIstantanee,
   audit, dbStatus,
 };

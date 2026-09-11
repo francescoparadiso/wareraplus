@@ -166,6 +166,16 @@ sorveglia.
 Nessuna variabile d'ambiente nuova: il cache-server si legge sulla
 loopback come fa già `wealth.js`.
 
+Le **frecce** sulle tessere ("di quanto è cambiato, rispetto a quando")
+leggono tesoro e giocatori attivi dal ticker del cache-server (14 giorni)
+e il danno di oggi dalla curva oraria (ieri alla stessa ora). Per tutto il
+resto — sviluppo, danno per cittadino, bonus, disordini, tasse, posizioni
+in classifica — il gioco non ha storia: `istantanee.js` fotografa i numeri
+delle nazioni abilitate ogni ora alle :15 (tabella `nation_snapshot`,
+35 giorni). Si accumula dal primo avvio: per un giorno le frecce di quei
+numeri confrontano con la fotografia più vecchia e scrivono quale.
+`/health` riporta `istantanee` con l'ultima fotografia.
+
 ## Aggiornare
 
 ```bash
@@ -180,7 +190,7 @@ Poi il preflight, e solo se stampa `PREFLIGHT-OK`:
 
 ```bash
 ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 \
-  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && node --check wealth.js && node --check fonti.js && node --check confini.js && node --check nemici.js && node --check nazione.js && echo PREFLIGHT-OK"
+  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && node --check wealth.js && node --check fonti.js && node --check confini.js && node --check nemici.js && node --check nazione.js && node --check istantanee.js && echo PREFLIGHT-OK"
 ```
 
 ```bash

@@ -50,6 +50,8 @@ const { initWatcher, statoWatcher } = require('./watcher');
 // La mia nazione: quadro, confini sorvegliati, nemici. Vedi nazione.js.
 const { buildNazioneRouter } = require('./nazione');
 const { initConfini, statoConfini } = require('./confini');
+// Le fotografie orarie per le frecce "rispetto a 24 ore fa" della scheda.
+const { initIstantanee, statoIstantanee } = require('./istantanee');
 const { risolviIdentita, bloccaScrittureSottoLente } = require('./identity');
 // A quali nazioni e' aperta l'area riservata. Si SOMMA ai permessi di
 // ruolo, non li sostituisce: vedi il blocco in testa a nazioni.js.
@@ -201,6 +203,7 @@ app.get('/health', (req, res) => res.json({
   // regioni ha letto in diretta su quante attese, e da quando esiste la
   // storia. `regioni` molto sotto `attese` = api6 che non risponde.
   confini: statoConfini(),
+  istantanee: statoIstantanee(),
   // A quali nazioni e' aperta l'area riservata adesso. Dopo aver cambiato
   // WP_NAZIONI_AMMESSE e' la riga da guardare per sapere se pm2 ha preso
   // davvero la variabile, senza doversi far chiudere fuori per scoprirlo.
@@ -235,6 +238,7 @@ initWealth();
 // La sorveglianza dei confini: ogni dieci minuti, anche quando nessuno ha
 // la pagina aperta — un avviso che arriva solo a chi guarda arriva tardi.
 initConfini();
+initIstantanee();
 
 const promossi = syncAdminsFromEnv(ADMIN_DISCORD_IDS);
 if (promossi) console.log(`[plusApi] ${promossi} account promossi ad admin da ADMIN_DISCORD_IDS`);

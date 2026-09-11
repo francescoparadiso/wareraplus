@@ -68,6 +68,7 @@ const {
 } = require('./fonti');
 const { quadroConfini, relazione } = require('./confini');
 const { quadroNemici, giocatoriNemico, idNemici } = require('./nemici');
+const { estrai, riferimento } = require('./istantanee');
 
 const FINESTRA_BONIFICI_MS = 72 * 3600_000;
 
@@ -346,6 +347,66 @@ function formaGuerra(archivio, spese, countryId, reg) {
   };
 }
 
+/**
+ * Di quanto è cambiato ogni numero delle tessere, e rispetto a QUANDO.
+ *
+ * Tre fonti, dalla più lunga alla più corta:
+ *   · tesoro e giocatori attivi: il ticker del cache-server, 14 giorni;
+ *   · danno di oggi: la curva oraria, confrontata con IERI alla stessa ora
+ *     (la stessa finestra dalle 02:00 italiane, un giorno prima);
+ *   · tutto il resto (sviluppo, danno per cittadino, bonus, disordini,
+ *     tasse, posizioni): le fotografie orarie di istantanee.js, che si
+ *     accumulano da quando esistono.
+ * Ogni variazione porta `da`, l'istante del valore di confronto: la vista
+ * scrive "rispetto a 24 h fa" solo quando lo è davvero.
+ */
+function formaVariazioni(countryId, paese, storico, orario, oggi) {
+  const ora = Date.now();
+  const adesso = estrai(paese);
+  const out = {};
+
+  const rif = riferimento(countryId, ora);
+  if (rif) {
+    for (const k of Object.keys(adesso)) {
+      if (k.endsWith('R')) continue;
+      const prima = rif.dati[k];
+      if (prima == null || adesso[k] == null) continue;
+      const v = { delta: adesso[k] - prima, prima, da: rif.at };
+      if (adesso[`${k}R`] != null && rif.dati[`${k}R`] != null) v.rank = { prima: rif.dati[`${k}R`], adesso: adesso[`${k}R`] };
+      out[k] = v;
+    }
+  }
+
+  const daSerie = (serie, k) => {
+    if (!serie?.length || adesso[k] == null) return;
+    let base = null;
+    for (const p of serie) { if (p.t <= ora - GIORNO_MS) base = p; else break; }
+    if (base) out[k] = { ...(out[k] || {}), delta: adesso[k] - base.v, prima: base.v, da: base.t };
+  };
+  daSerie(storico?.tesoro, 'tesoro');
+  daSerie(storico?.popolazione, 'attivi');
+
+  // Il cumulato settimanale riparte il lunedì: una "variazione" negativa è
+  // il reset, non un crollo, e non si disegna come freccia in giù.
+  if (out.dannoSett && out.dannoSett.delta < 0) out.dannoSett.reset = true;
+
+  // Danno di oggi contro ieri alla stessa ora: la stessa finestra un giorno
+  // prima, sommata sulle ore misurate. Se ne manca una non si confronta —
+  // un'ora non misurata non è un'ora senza danno.
+  if (oggi?.dal && orario?.serie?.length) {
+    const inizio = oggi.dal - GIORNO_MS;
+    const fine = ora - GIORNO_MS;
+    let somma = 0; let attese = 0; let viste = 0;
+    for (const p of orario.serie) {
+      if (p.t < inizio || p.to > fine) continue;
+      attese += 1;
+      if (p.d != null) { somma += p.d; viste += 1; }
+    }
+    if (attese && viste === attese) out.dannoOggi = { delta: oggi.danno - somma, prima: somma, da: inizio, ieri: true };
+  }
+  return out;
+}
+
 /** Le unità militari della nazione: registrate qui, oppure nostre DI
  *  FATTO (la maggioranza dei membri è nostra, stesso marchio dell'elenco
  *  unità del tool). */
@@ -424,15 +485,24 @@ async function quadroNazione(countryId) {
   let elezioni = null;
   try { elezioni = esito(eleR) ? await formaElezioni(esito(eleR)) : null; } catch { /* una sezione in meno */ }
 
+  const oggi = formaOggi(esito(baseR), paese);
+  const orario = formaOrario(esito(tlR));
+  const storico = esito(tickR) ? formaStorico(esito(tickR), countryId) : null;
+  let variazioni = {};
+  try { variazioni = formaVariazioni(countryId, paese, storico, orario, oggi); } catch (err) {
+    console.warn('[nazione] variazioni non calcolate:', err.message);
+  }
+
   return {
     paese: formaPaese(paese),
     governo: esito(govR),
-    oggi: formaOggi(esito(baseR), paese),
-    orario: formaOrario(esito(tlR)),
+    oggi,
+    orario,
+    variazioni,
     battaglie: esito(battR) ? formaBattaglie(esito(battR), countryId, reg) : null,
     bonifici: esito(bonR) ? formaBonifici(esito(bonR), countryId) : null,
     confini: esito(confR),
-    storico: esito(tickR) ? formaStorico(esito(tickR), countryId) : null,
+    storico,
     cittadini: esito(citR) ? formaCittadini(esito(citR), esito(contR)) : null,
     guerra: esito(archR) ? formaGuerra(esito(archR), esito(speseR), countryId, reg) : null,
     unita: esito(dirR) ? formaUnita(esito(dirR), countryId) : null,

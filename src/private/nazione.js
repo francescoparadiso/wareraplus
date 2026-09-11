@@ -151,13 +151,73 @@ function titoloSvg(n, testo) {
   n.appendChild(t);
 }
 
+// ── Il riquadro che segue il mouse ──────────────────────────────────
+// Richiesta: passando sopra un grafico si deve poter LEGGERE il dato, e
+// sapere cosa si sta guardando. Il `title` nativo dell'SVG non basta:
+// compare dopo un secondo, senza stile, e su una barra sottile da 20px
+// non ci si arriva nemmeno. Un solo riquadro per tutta la pagina, attaccato
+// al body (fuori dagli overflow delle schede), che segue il puntatore e
+// si gira da solo vicino ai bordi. Con i pointer event funziona anche col
+// dito: il tocco lo mostra.
+
+let _tip = null;
+
+function tipEl() {
+  if (_tip && document.body.contains(_tip)) return _tip;
+  _tip = el('div', 'wp-pv-nz-tip');
+  _tip.hidden = true;
+  _tip.setAttribute('role', 'tooltip');
+  document.body.appendChild(_tip);
+  return _tip;
+}
+
+/** `contenuto`: { titolo, righe: [[etichetta, valore, colore?]], nota } */
+function mostraTip(e, contenuto) {
+  const t = tipEl();
+  t.textContent = '';
+  if (contenuto.titolo) t.appendChild(el('strong', 'wp-pv-nz-tip-titolo', contenuto.titolo));
+  for (const [etichetta, valore, colore] of contenuto.righe || []) {
+    const r = el('div', 'wp-pv-nz-tip-riga');
+    if (colore) { const i = el('i', 'wp-pv-nz-tip-colore'); i.style.background = colore; r.appendChild(i); }
+    r.appendChild(el('span', null, etichetta));
+    r.appendChild(el('strong', null, valore));
+    t.appendChild(r);
+  }
+  if (contenuto.nota) t.appendChild(el('span', 'wp-pv-nz-tip-nota', contenuto.nota));
+  t.hidden = false;
+  const pad = 14;
+  const w = t.offsetWidth; const h = t.offsetHeight;
+  let x = e.clientX + pad; let y = e.clientY + pad;
+  if (x + w > window.innerWidth - 8) x = e.clientX - w - pad;
+  if (y + h > window.innerHeight - 8) y = e.clientY - h - pad;
+  t.style.left = `${Math.max(8, x)}px`;
+  t.style.top = `${Math.max(8, y)}px`;
+}
+
+function nascondiTip() { if (_tip) _tip.hidden = true; }
+
+/** Lega il riquadro a un elemento: `contenuto(e)` dice cosa mostrare in
+ *  quel punto (null = niente). */
+function legaTip(nodo, contenuto) {
+  const muovi = (e) => { const c = contenuto(e); if (c) mostraTip(e, c); else nascondiTip(); };
+  nodo.addEventListener('pointermove', muovi);
+  nodo.addEventListener('pointerdown', muovi);
+  nodo.addEventListener('pointerleave', nascondiTip);
+}
+
+const GUIDA_COLORE = 'var(--pv-accent)';
+
 /**
  * Una serie nel tempo, a linea con l'area sotto.
  * `gradino` per le serie che cambiano a scatti (la popolazione attiva
  * arriva solo quando varia): fra due valori il dato resta fermo, e una
  * diagonale inventerebbe un andamento che nessuno ha misurato.
+ *
+ * Al passaggio del mouse: una linea verticale sul punto più vicino, il
+ * punto evidenziato, e il riquadro con quando, quanto, e la differenza
+ * col punto prima.
  */
-function graficoLinea(serie, { etichetta, formato = compatto, gradino = false } = {}) {
+function graficoLinea(serie, { etichetta, nome, formato = compatto, gradino = false } = {}) {
   const wrap = el('div', 'wp-pv-nz-grafico-wrap');
   if (!serie?.length) { wrap.appendChild(el('p', 'wp-pv-note', nzT('histEmpty'))); return wrap; }
   const W = 600; const H = 150; const SU = 14; const GIU = 18; const DX = 4;
@@ -187,17 +247,36 @@ function graficoLinea(serie, { etichetta, formato = compatto, gradino = false } 
   const ultimo = serie[serie.length - 1];
   nodoSvg(s, 'polygon', { points: `${x(t0).toFixed(1)},${H - GIU} ${punti.join(' ')} ${x(ultimo.t).toFixed(1)},${H - GIU}`, class: 'wp-pv-nz-area' });
   nodoSvg(s, 'polyline', { points: punti.join(' '), class: 'wp-pv-nz-linea-serie' });
-  // Un punto invisibile per valore, col suo tooltip: sopra la linea si
-  // legge il numero di quell'ora senza doverlo stimare dall'asse.
-  if (serie.length <= 400) {
-    for (const p of serie) {
-      const c = nodoSvg(s, 'circle', { cx: x(p.t), cy: y(p.v), r: 5, class: 'wp-pv-nz-bersaglio' });
-      titoloSvg(c, `${quando(p.t)} · ${formato(p.v)}`);
-    }
-  }
   nodoSvg(s, 'circle', { cx: x(ultimo.t), cy: y(ultimo.v), r: 3.2, class: 'wp-pv-nz-punto' });
   nodoSvg(s, 'text', { x: DX, y: 11, class: 'wp-pv-nz-testo' }, `max ${formato(Math.max(...vs))}`);
   nodoSvg(s, 'text', { x: DX, y: H - GIU - 3, class: 'wp-pv-nz-testo' }, `min ${formato(Math.min(...vs))}`);
+
+  const guida = nodoSvg(s, 'line', { x1: 0, x2: 0, y1: SU, y2: H - GIU, class: 'wp-pv-nz-guida', visibility: 'hidden' });
+  const segno = nodoSvg(s, 'circle', { cx: 0, cy: 0, r: 4.5, class: 'wp-pv-nz-segno', visibility: 'hidden' });
+  const xs = serie.map((p) => x(p.t));
+  legaTip(s, (e) => {
+    const m = s.getScreenCTM();
+    if (!m) return null;
+    const pt = s.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const loc = pt.matrixTransform(m.inverse());
+    let a = 0; let b = xs.length - 1;
+    while (b - a > 1) { const mid = (a + b) >> 1; if (xs[mid] < loc.x) a = mid; else b = mid; }
+    const i = Math.abs(xs[a] - loc.x) <= Math.abs(xs[b] - loc.x) ? a : b;
+    const p = serie[i];
+    guida.setAttribute('x1', xs[i]); guida.setAttribute('x2', xs[i]); guida.setAttribute('visibility', 'visible');
+    segno.setAttribute('cx', xs[i]); segno.setAttribute('cy', y(p.v)); segno.setAttribute('visibility', 'visible');
+    const prec = i ? serie[i - 1] : null;
+    const diff = prec ? p.v - prec.v : null;
+    return {
+      titolo: nome || etichetta,
+      righe: [[quando(p.t), formato(p.v), GUIDA_COLORE]],
+      nota: prec ? `${diff > 0 ? '▲ +' : diff < 0 ? '▼ −' : '= '}${formato(Math.abs(diff))} ${nzT('tipVsPrev')} ${quando(prec.t)}` : null,
+    };
+  });
+  s.addEventListener('pointerleave', () => {
+    guida.setAttribute('visibility', 'hidden');
+    segno.setAttribute('visibility', 'hidden');
+  });
   wrap.appendChild(s);
   return wrap;
 }
@@ -206,6 +285,10 @@ function graficoLinea(serie, { etichetta, formato = compatto, gradino = false } 
  * Barre, anche impilate: `valori` è un array, una fetta per colore
  * (`classi`). Una barra `parziale` è un giorno misurato solo in parte, e
  * si vede più chiara invece di sembrare un giorno di calma.
+ *
+ * Il riquadro al passaggio del mouse sta su tutta la COLONNA, non solo
+ * sulla barra: una barra bassa alta tre pixel non la prenderebbe nessuno.
+ * `p.suggerimento` = { titolo, righe } dice cosa scriverci.
  */
 function graficoBarre(punti, { etichetta, formato = compatto, classi = ['wp-pv-nz-barra'] } = {}) {
   const wrap = el('div', 'wp-pv-nz-grafico-wrap');
@@ -222,16 +305,20 @@ function graficoBarre(punti, { etichetta, formato = compatto, classi = ['wp-pv-n
     p.valori.forEach((v, k) => {
       if (!v) return;
       const h = (v / max) * (H - SU - GIU);
-      const r = nodoSvg(s, 'rect', {
+      nodoSvg(s, 'rect', {
         x: i * larga + larga * 0.14, y: base - h, width: larga * 0.72, height: h,
         class: `${classi[k] || classi[0]}${p.parziale ? ' wp-pv-nz-parziale' : ''}`,
       });
-      if (p.titolo) titoloSvg(r, p.titolo);
       base -= h;
     });
     if (punti.length <= 16 || i % 2 === 0) {
       nodoSvg(s, 'text', { x: i * larga + larga / 2, y: H - 5, class: 'wp-pv-nz-testo', 'text-anchor': 'middle' }, p.etichetta);
     }
+  });
+  // Le colonne sensibili vanno disegnate DOPO le barre, sopra di loro.
+  punti.forEach((p, i) => {
+    const col = nodoSvg(s, 'rect', { x: i * larga, y: SU, width: larga, height: H - SU - GIU, class: 'wp-pv-nz-colonna' });
+    legaTip(col, () => p.suggerimento || { titolo: p.etichetta, righe: p.valori.map((v) => ['', formato(v)]) });
   });
   nodoSvg(s, 'text', { x: 2, y: 11, class: 'wp-pv-nz-testo' }, formato(max));
   wrap.appendChild(s);
@@ -247,7 +334,7 @@ function barraFette(fette) {
     if (!f.n) continue;
     const s = el('span', f.cls);
     s.style.width = `${(f.n / (tot || 1)) * 100}%`;
-    s.title = `${f.etichetta}: ${num(f.n)}`;
+    legaTip(s, () => ({ titolo: f.etichetta, righe: [[nzT('tipPlayers'), `${num(f.n)} · ${Math.round((f.n / (tot || 1)) * 100)}%`]] }));
     barra.appendChild(s);
   }
   box.appendChild(barra);
@@ -276,10 +363,12 @@ function bloccoPillole(n) {
     .replace('{n}', num(n.attivi72h)).replace('{tot}', num(n.censiti))));
   if (tot) {
     const barra = el('div', 'wp-pv-nz-pillbar');
+    const nomi = { buff: nzT('pillOn'), malus: nzT('pillHangover'), pulito: nzT('pillClean'), ignoto: nzT('pillUnknown') };
     for (const [k, v] of [['buff', pl.buff], ['malus', pl.malus], ['pulito', pl.pulito], ['ignoto', pl.ignoto]]) {
       if (!v) continue;
       const s = el('span', `wp-pv-nz-pill-${k}`);
       s.style.width = `${(v / tot) * 100}%`;
+      legaTip(s, () => ({ titolo: nomi[k], righe: [[nzT('tipPlayers'), `${num(v)} · ${Math.round((v / tot) * 100)}%`]] }));
       barra.appendChild(s);
     }
     frag.appendChild(barra);
@@ -431,6 +520,10 @@ export function creaQuadroNazione(ctx) {
   }
 
   function disegna() {
+    // Il riquadro del mouse sta sul body: se la vista si ridisegna mentre
+    // è aperto, l'elemento sotto il puntatore sparisce senza pointerleave
+    // e il riquadro resterebbe appeso a metà schermo.
+    nascondiTip();
     const frag = document.createDocumentFragment();
     if (!dati && !caricamento && !errore && !negato) carica();
 
@@ -662,31 +755,85 @@ export function creaQuadroNazione(ctx) {
     return s;
   }
 
+  /**
+   * Le tessere in cima alla scheda. Ognuna, se si sa com'era prima, porta
+   * una freccia: di quanto è cambiato il numero e RISPETTO A QUANDO — "24 h
+   * fa", "ieri a quest'ora", oppure l'ora esatta del confronto finché le
+   * fotografie orarie non arrivano a un giorno (vedi formaVariazioni sul
+   * server). Al passaggio del mouse: prima, adesso, differenza, posizione.
+   *
+   * "Taglie incassate" è stata tolta su richiesta: è quanto hanno incassato
+   * i cittadini, e a chi governa non serve (vedi anche la trappola di
+   * countryBounty in CLAUDE.md).
+   */
   function tessereNumeri(p) {
     const box = el('div', 'wp-pv-totali wp-pv-nz-tessere');
-    const voce = (etichetta, valore, sotto, titolo) => {
-      const v = el('div', 'wp-pv-totale-voce');
-      v.appendChild(el('span', 'wp-pv-label', etichetta));
-      const s = el('strong', 'wp-pv-totale-val', valore);
-      if (titolo) s.title = titolo;
-      v.appendChild(s);
-      if (sotto) v.appendChild(el('span', 'wp-pv-suggerimento', sotto));
-      box.appendChild(v);
+    const vv = dati.variazioni || {};
+    const GIORNO = 24 * 3600_000;
+    const rif = (v) => (v.ieri ? nzT('varYesterday')
+      : Math.abs(v.da - (Date.now() - GIORNO)) < 2 * 3600_000 ? nzT('var24h') : `${nzT('varSince')} ${quando(v.da)}`);
+    const segnato = (d, formato) => `${d > 0 ? '+' : d < 0 ? '−' : ''}${formato(Math.abs(d))}`;
+    // La posizione con la sua freccia: ▲ vuol dire SALITA in classifica,
+    // cioè un numero più piccolo.
+    const posizione = (r, v) => {
+      if (!r?.rank) return null;
+      let t = `#${r.rank}`;
+      const prima = v?.rank?.prima;
+      if (prima != null && prima !== r.rank) t += prima > r.rank ? ` ▲${prima - r.rank}` : ` ▼${r.rank - prima}`;
+      return t;
     };
-    const pos = (r) => (r?.rank ? `#${r.rank}` : null);
 
-    voce(nzT('kTreasury'), num(p.tesoro), nzT('kTreasuryHint'));
+    const voce = (etichetta, valore, sotto, { v = null, formato = num, meglioSeSale = true, neutro = false, esatto = null } = {}) => {
+      const t = el('div', 'wp-pv-totale-voce');
+      t.appendChild(el('span', 'wp-pv-label', etichetta));
+      t.appendChild(el('strong', 'wp-pv-totale-val', valore));
+      if (v && v.delta != null && !v.reset) {
+        const su = v.delta > 0; const giu = v.delta < 0;
+        const buono = neutro ? null : su ? meglioSeSale : giu ? !meglioSeSale : null;
+        const d = el('span', `wp-pv-nz-delta ${buono === true ? 'wp-pv-nz-delta-buono' : buono === false ? 'wp-pv-nz-delta-cattivo' : 'wp-pv-nz-delta-piatto'}`);
+        d.appendChild(el('span', 'wp-pv-nz-delta-freccia', su ? '▲' : giu ? '▼' : '='));
+        d.appendChild(el('span', null, segnato(v.delta, formato)));
+        d.appendChild(el('span', 'wp-pv-nz-delta-rif', rif(v)));
+        t.appendChild(d);
+      }
+      if (sotto) t.appendChild(el('span', 'wp-pv-suggerimento', sotto));
+      legaTip(t, () => {
+        const righe = [[nzT('tipNow'), esatto ?? valore]];
+        if (v && v.prima != null) {
+          righe.push([v.ieri ? nzT('varYesterday') : quando(v.da), formato(v.prima)]);
+          if (!v.reset) righe.push([nzT('tipChange'), segnato(v.delta, formato)]);
+        }
+        if (v?.rank) righe.push([nzT('rank'), `#${v.rank.prima} → #${v.rank.adesso}`]);
+        return { titolo: etichetta, righe, nota: v ? null : nzT('varNoHistory') };
+      });
+      box.appendChild(t);
+    };
+
+    voce(nzT('kTreasury'), num(p.tesoro),
+      [posizione(p.tesoroRank, vv.tesoro), nzT('kTreasuryHint')].filter(Boolean).join(' · '), { v: vv.tesoro });
     voce(nzT('kActivePop'), num(p.popolazioneAttiva?.valore),
-      [pos(p.popolazioneAttiva), p.popolazione != null ? `${num(p.popolazione)} ${nzT('kPopulation')}` : null].filter(Boolean).join(' · '));
-    voce(nzT('kDevelopment'), p.sviluppo?.valore != null ? Number(p.sviluppo.valore).toFixed(1) : '—', pos(p.sviluppo));
-    voce(nzT('kDamageToday'), compatto(dati.oggi?.danno), nzT('kDamageTodayHint'), num(dati.oggi?.danno));
-    voce(nzT('kDamageWeek'), compatto(p.dannoSettimana?.valore), pos(p.dannoSettimana), num(p.dannoSettimana?.valore));
-    voce(nzT('kPerCitizen'), compatto(p.dannoPerCittadino?.valore), pos(p.dannoPerCittadino));
-    voce(nzT('kBounty'), compatto(p.taglieIncassate?.valore),
-      [pos(p.taglieIncassate), nzT('kBountyHint')].filter(Boolean).join(' · '));
-    if (p.tasse) voce(nzT('kTaxes'), `${p.tasse.income ?? '—'}% · ${p.tasse.market ?? '—'}% · ${p.tasse.selfWork ?? '—'}%`, nzT('kTaxesHint'));
-    if (p.disordini?.max) voce(nzT('kUnrest'), `${Math.round((p.disordini.barra / p.disordini.max) * 100)}%`);
-    if (p.bonusProduzione?.valore != null) voce(nzT('kProduction'), `${p.bonusProduzione.valore}%`, pos(p.bonusProduzione));
+      [posizione(p.popolazioneAttiva, vv.attivi), p.popolazione != null ? `${num(p.popolazione)} ${nzT('kPopulation')}` : null].filter(Boolean).join(' · '),
+      { v: vv.attivi });
+    voce(nzT('kDevelopment'), p.sviluppo?.valore != null ? Number(p.sviluppo.valore).toFixed(1) : '—',
+      posizione(p.sviluppo, vv.sviluppo), { v: vv.sviluppo, formato: (x) => Number(x).toFixed(1) });
+    voce(nzT('kDamageToday'), compatto(dati.oggi?.danno), nzT('kDamageTodayHint'),
+      { v: vv.dannoOggi, formato: compatto, esatto: num(dati.oggi?.danno) });
+    voce(nzT('kDamageWeek'), compatto(p.dannoSettimana?.valore), posizione(p.dannoSettimana, vv.dannoSett),
+      { v: vv.dannoSett, formato: compatto, esatto: num(p.dannoSettimana?.valore) });
+    voce(nzT('kPerCitizen'), compatto(p.dannoPerCittadino?.valore), posizione(p.dannoPerCittadino, vv.perCitt),
+      { v: vv.perCitt, formato: compatto });
+    if (p.tasse) {
+      voce(nzT('kTaxes'), `${p.tasse.income ?? '—'}% · ${p.tasse.market ?? '—'}% · ${p.tasse.selfWork ?? '—'}%`, nzT('kTaxesHint'),
+        { v: vv.tassaReddito, formato: (x) => `${x} pp`, neutro: true });
+    }
+    if (p.disordini?.max) {
+      voce(nzT('kUnrest'), `${Math.round((p.disordini.barra / p.disordini.max) * 100)}%`, null,
+        { v: vv.disordini, formato: (x) => `${Number(x).toFixed(1)} pp`, meglioSeSale: false });
+    }
+    if (p.bonusProduzione?.valore != null) {
+      voce(nzT('kProduction'), `${p.bonusProduzione.valore}%`, posizione(p.bonusProduzione, vv.bonusProd),
+        { v: vv.bonusProd, formato: (x) => `${x} pp` });
+    }
     return box;
   }
 
@@ -1091,7 +1238,14 @@ export function creaQuadroNazione(ctx) {
         etichetta: giornoBreve(g.giorno),
         valori: [g.d || 0],
         parziale: g.parziale,
-        titolo: `${giornoBreve(g.giorno)} · ${num(g.d)}${g.parziale ? ` · ${g.ore}/24 ${nzT('hours')}` : ''}`,
+        suggerimento: {
+          titolo: `${nzT('histDailyDamage')} · ${giornoBreve(g.giorno)}`,
+          righe: [
+            [nzT('tipDamage'), g.d == null ? nzT('tipNotMeasured') : num(g.d), 'var(--pv-accent)'],
+            [nzT('tipMeasured'), `${g.ore}/24 ${nzT('hours')}`],
+          ],
+          nota: g.parziale ? nzT('tipPartialDay') : null,
+        },
       })), { etichetta: nzT('histDailyDamage') })));
 
     card.appendChild(tre);
@@ -1126,7 +1280,10 @@ export function creaQuadroNazione(ctx) {
     const isto = el('div', 'wp-pv-nz-isto');
     for (const l of c.livelli) {
       const col = el('div', 'wp-pv-nz-isto-col');
-      col.title = `${nzT('lv')}${l.da}${l.a ? `–${l.a}` : '+'}: ${num(l.n)}`;
+      legaTip(col, () => ({
+        titolo: `${nzT('citLevels')} ${l.da}${l.a ? `–${l.a}` : '+'}`,
+        righe: [[nzT('tipPlayers'), `${num(l.n)} · ${Math.round((l.n / (c.censiti || 1)) * 100)}%`]],
+      }));
       col.appendChild(el('span', 'wp-pv-nz-isto-n', num(l.n)));
       const b = el('span', 'wp-pv-nz-isto-barra');
       b.style.height = `${Math.round((l.n / max) * 100)}%`;
@@ -1168,7 +1325,17 @@ export function creaQuadroNazione(ctx) {
       riga.appendChild(chi);
       // Due barre sovrapposte: piena = adesso, chiara = con la pillola.
       const barra = el('div', 'wp-pv-nz-confronto-barra');
-      barra.title = `${nzT('volleyNow')} ${num(r.salva?.adesso)} · ${nzT('volleyMax')} ${num(r.salva?.massimo)}`;
+      legaTip(riga, () => ({
+        titolo: nomeNazione(r.id) || '?',
+        righe: [
+          [nzT('volleyNow'), num(r.salva?.adesso), 'var(--pv-accent)'],
+          [nzT('volleyMax'), num(r.salva?.massimo)],
+          [nzT('pillOn'), num(r.pillole?.buff), '#f0b429'],
+          [nzT('pillHangover'), num(r.pillole?.malus), 'var(--pv-danger)'],
+          [nzT('citActive'), num(r.attivi72h)],
+        ],
+        nota: nzT('volleyNowHint'),
+      }));
       const pieno = el('span', 'wp-pv-nz-confronto-max');
       pieno.style.width = `${((r.salva?.massimo || 0) / max) * 100}%`;
       const ora2 = el('span', 'wp-pv-nz-confronto-ora');
@@ -1261,7 +1428,6 @@ export function creaQuadroNazione(ctx) {
       ['kDamageWeek', p.dannoSettimana, compatto],
       ['kPerCitizen', p.dannoPerCittadino, compatto],
       ['rkDamageTotal', p.dannoTotale, compatto],
-      ['kBounty', p.taglieIncassate, compatto],
       ['kProduction', p.bonusProduzione, (v) => `${v}%`],
       ['rkRegions', p.regioniDiff, (v) => `${v > 0 ? '+' : ''}${v}`],
     ];
@@ -1327,7 +1493,14 @@ export function creaQuadroNazione(ctx) {
         const noi = el('span', 'wp-pv-nz-scontro-noi'); noi.style.width = `${(a.dannoNoi / tot) * 100}%`;
         const loro = el('span', 'wp-pv-nz-scontro-loro'); loro.style.width = `${(a.dannoLoro / tot) * 100}%`;
         const col = coloreNazione(a.paese); if (col) loro.style.background = col;
-        barra.title = `${compatto(a.dannoNoi)} / ${compatto(a.dannoLoro)}`;
+        legaTip(r, () => ({
+          titolo: `${nzT('warOpponents')}: ${nomeNazione(a.paese) || '?'}`,
+          righe: [
+            [nzT('warBattles'), `${num(a.battaglie)} · ${num(a.vinte)} ${nzT('warWon')} · ${num(a.battaglie - a.vinte)} ${nzT('warLost')}`],
+            [nzT('forceUs'), num(a.dannoNoi), 'var(--pv-accent)'],
+            [nomeNazione(a.paese) || '?', num(a.dannoLoro), col || 'var(--pv-danger)'],
+          ],
+        }));
         barra.appendChild(noi); barra.appendChild(loro);
         r.appendChild(barra);
         sez.appendChild(r);
@@ -1340,7 +1513,14 @@ export function creaQuadroNazione(ctx) {
     spese.appendChild(graficoBarre(g.spese.giorni.map((d) => ({
       etichetta: giornoBreve(d.giorno),
       valori: [d.taglie, d.contratti],
-      titolo: `${giornoBreve(d.giorno)} · ${nzT('warBounty')} ${num(d.taglie)} · ${nzT('warContracts')} ${num(d.contratti)} (${d.nContratti})`,
+      suggerimento: {
+        titolo: `${nzT('warSpend')} · ${giornoBreve(d.giorno)}`,
+        righe: [
+          [nzT('warBounty'), num(d.taglie), '#d99a0b'],
+          [`${nzT('warContracts')} (${num(d.nContratti)})`, num(d.contratti), 'var(--pv-accent)'],
+          [nzT('warBattles'), num(d.battaglie)],
+        ],
+      },
     })), { etichetta: nzT('warSpend'), classi: ['wp-pv-nz-barra-taglie', 'wp-pv-nz-barra-contratti'] }));
     const leg = el('div', 'wp-pv-nz-legenda');
     for (const [cls, t] of [['wp-pv-nz-barra-taglie', nzT('warBounty')], ['wp-pv-nz-barra-contratti', nzT('warContracts')]]) {
@@ -1493,14 +1673,11 @@ export function creaQuadroNazione(ctx) {
 
     for (const p of serie) {
       if (p.d == null) continue;
-      const r = nodo('rect', {
+      nodo('rect', {
         x: x(p.t) + 0.5, y: y(p.d, maxD),
         width: Math.max(1, x(p.to) - x(p.t) - 1), height: Math.max(0, H - GIU - y(p.d, maxD)),
         class: 'wp-pv-nz-barra',
       });
-      const t = document.createElementNS(NS, 'title');
-      t.textContent = `${ora(p.t)}–${ora(p.to)} · ${num(p.d)}${p.p != null ? ` · ${p.p} ${nzT('pillOn')}` : ''}`;
-      r.appendChild(t);
     }
 
     // La linea si spezza dove manca la misura: congiungere due punti
@@ -1524,6 +1701,19 @@ export function creaQuadroNazione(ctx) {
     }
     nodo('text', { x: 2, y: 10, class: 'wp-pv-nz-testo' }, compatto(maxD));
     nodo('text', { x: W - 2, y: 10, class: 'wp-pv-nz-testo wp-pv-nz-testo-pill', 'text-anchor': 'end' }, `${maxP} ${nzT('pillOn')}`);
+
+    // Una colonna sensibile per ora, sopra tutto il resto: al passaggio del
+    // mouse la finestra, il danno e i pillati di QUELL'ora.
+    for (const p of serie) {
+      const col = nodo('rect', { x: x(p.t), y: SU, width: Math.max(1, x(p.to) - x(p.t)), height: H - SU - GIU, class: 'wp-pv-nz-colonna' });
+      legaTip(col, () => ({
+        titolo: `${quando(p.t)} – ${ora(p.to)}`,
+        righe: [
+          [nzT('tipDamage'), p.d == null ? nzT('tipNotMeasured') : num(p.d), 'var(--pv-accent)'],
+          ...(p.p != null ? [[nzT('pillOn'), num(p.p), '#f0b429']] : []),
+        ],
+      }));
+    }
 
     const wrap = el('div', 'wp-pv-nz-grafico-wrap');
     wrap.appendChild(svg);

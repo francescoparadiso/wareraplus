@@ -1278,6 +1278,55 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
 .wp-pv-nz-confine-guerra .wp-pv-nz-regione,
 .wp-pv-nz-confine-nemico_giurato .wp-pv-nz-regione { box-shadow: inset 3px 0 0 var(--pv-danger); }
 
+/* ── Il riquadro che segue il mouse ──────────────────────────────
+   Sta sul BODY (fuori da #wp-private-root, per non essere tagliato dagli
+   overflow delle schede), quindi le variabili della vista qui non
+   arrivano: le sue le dichiara da sé, anche per i quadratini colorati
+   delle righe, che usano var(--pv-accent) e var(--pv-danger). */
+.wp-pv-nz-tip {
+  --pv-accent: #818cf8; --pv-danger: #f0776c;
+  position: fixed; z-index: 100000; pointer-events: none;
+  min-width: 10rem; max-width: 21rem; padding: .55rem .7rem;
+  display: flex; flex-direction: column; gap: .2rem;
+  border-radius: 8px; border: 1px solid rgba(129, 140, 248, .35);
+  background: rgba(13, 17, 23, .96); color: #e6edf3;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+  font: 12.5px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.wp-pv-nz-tip[hidden] { display: none; }
+.wp-pv-nz-tip-titolo { font-size: .8rem; color: #a5b4fc; }
+.wp-pv-nz-tip-riga { display: flex; align-items: center; gap: .5rem; }
+.wp-pv-nz-tip-riga > span { flex: 1; color: #8b949e; }
+.wp-pv-nz-tip-riga > strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wp-pv-nz-tip-colore { width: .6rem; height: .6rem; border-radius: 2px; flex: none; }
+.wp-pv-nz-tip-nota { color: #8b949e; font-size: .74rem; }
+body.light-theme .wp-pv-nz-tip {
+  --pv-accent: #4f46e5; --pv-danger: #b42318;
+  background: rgba(255, 255, 255, .98); color: #1a1a1a;
+  border-color: rgba(79, 70, 229, .35); box-shadow: 0 8px 24px rgba(0, 0, 0, .15);
+}
+body.light-theme .wp-pv-nz-tip-titolo { color: #4f46e5; }
+body.light-theme .wp-pv-nz-tip-riga > span, body.light-theme .wp-pv-nz-tip-nota { color: #4a5560; }
+
+/* Dentro i grafici: linea guida e punto sul valore più vicino, colonne
+   sensibili che si illuminano appena sotto il puntatore. */
+.wp-pv-nz-guida { stroke: var(--pv-accent); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.wp-pv-nz-segno { fill: var(--pv-accent); stroke: var(--pv-ink); stroke-width: 1.5; pointer-events: none; }
+.wp-pv-nz-colonna { fill: var(--pv-accent); fill-opacity: 0; cursor: crosshair; }
+.wp-pv-nz-colonna:hover { fill-opacity: .12; }
+.wp-pv-nz-grafico { cursor: crosshair; }
+.wp-pv-nz-pillbar > span, .wp-pv-nz-isto-col, .wp-pv-nz-confronto-riga, .wp-pv-nz-avversario { cursor: default; }
+
+/* Le frecce sulle tessere: di quanto e rispetto a quando. Verde e rosso
+   dicono MEGLIO e PEGGIO, non su e giù: i disordini che salgono sono
+   rossi, le tasse restano neutre (dipende da cosa si vuole). */
+.wp-pv-nz-delta { display: flex; align-items: baseline; flex-wrap: wrap; gap: .3rem; font-size: .78rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.wp-pv-nz-delta-freccia { font-size: .68rem; }
+.wp-pv-nz-delta-buono { color: #2f9e5f; }
+.wp-pv-nz-delta-cattivo { color: var(--pv-danger); }
+.wp-pv-nz-delta-piatto { color: var(--pv-ink-soft); }
+.wp-pv-nz-delta-rif { font-weight: 400; font-size: .72rem; color: var(--pv-ink-soft); }
+
 /* ── La griglia della nazione ────────────────────────────────── */
 .wp-pv-nz-griglia {
   display: grid;
