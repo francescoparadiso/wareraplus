@@ -168,7 +168,14 @@ function classifica(p, c) {
     if (c.livello < p.livello) trovati.push('livello_giu');
   }
   if ((p.stato || null) !== (c.stato || null)) {
-    if (c.stato === 'pending') trovati.push(p.stato === 'active' ? 'disattivazione' : 'attivazione');
+    // ⚠️ Entrare nell'attesa è SEMPRE un'accensione, anche da 'active'.
+    // Il gioco scrive 'active' nel momento stesso della richiesta e mette
+    // in `willBeActiveAt` quando il bonus comincerà a contare: un bunker
+    // attivo che rientra nell'attesa è stato spento e riacceso fra due
+    // letture. La prima versione lo chiamava "si sta spegnendo" (Tunis e
+    // Baikal, 10-11 settembre: statusChangedAt la sera, willBeActiveAt la
+    // mattina dopo, status 'active' tutto il tempo).
+    if (c.stato === 'pending') trovati.push('attivazione');
     else if (c.stato === 'active') trovati.push('attivo');
     else if (c.stato === 'disabled' && !eraAssente) trovati.push('disattivato');
   }
