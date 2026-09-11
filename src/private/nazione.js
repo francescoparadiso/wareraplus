@@ -466,7 +466,7 @@ export function creaQuadroNazione(ctx) {
     };
     const pos = (r) => (r?.rank ? `#${r.rank}` : null);
 
-    voce(nzT('kTreasury'), num(p.tesoro));
+    voce(nzT('kTreasury'), num(p.tesoro), nzT('kTreasuryHint'));
     voce(nzT('kActivePop'), num(p.popolazioneAttiva?.valore),
       [pos(p.popolazioneAttiva), p.popolazione != null ? `${num(p.popolazione)} ${nzT('kPopulation')}` : null].filter(Boolean).join(' · '));
     voce(nzT('kDevelopment'), p.sviluppo?.valore != null ? Number(p.sviluppo.valore).toFixed(1) : '—', pos(p.sviluppo));
@@ -724,7 +724,8 @@ export function creaQuadroNazione(ctx) {
     box.appendChild(griglia);
 
     const piede = el('div', 'wp-pv-nz-nemico-piede');
-    piede.appendChild(el('span', 'wp-pv-note', nzT('sourceNote')));
+    piede.appendChild(el('span', 'wp-pv-note', nzT('sourceNote')
+      .replace('{n}', num(n.live)).replace('{ora}', ora(n.letto))));
     const aperto = tabelleAperte.has(n.id);
     piede.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small',
       aperto ? nzT('hidePlayers') : `${nzT('allPlayers')} (${num(n.censiti)})`, () => {
@@ -828,9 +829,9 @@ export function creaQuadroNazione(ctx) {
   function rigaGiocatore(g) {
     const r = el('div', 'wp-pv-nz-tab-riga');
     const chi = personaEl(g.avatar, g.nome, g.livello != null ? `${nzT('lv')}${g.livello}` : null);
-    // Chi è stato letto dal vivo ha la pillola esatta a questo minuto; gli
-    // altri al massimo di due ore fa, e la differenza si vede.
-    if (g.fonte === 'live') chi.appendChild(el('span', 'wp-pv-nz-tag', nzT('liveTag')));
+    // Tutti si leggono dal vivo; chi non ha risposto viene dal censimento,
+    // che può avere ore, e si segna: la sua pillola potrebbe essere cambiata.
+    if (g.fonte === 'censimento') chi.appendChild(el('span', 'wp-pv-nz-tag wp-pv-nz-tag-avviso', nzT('censusTag')));
     r.appendChild(chi);
 
     const pill = el('span', 'wp-pv-nz-tab-pill');

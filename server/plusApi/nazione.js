@@ -98,7 +98,15 @@ function formaPaese(n) {
     codice: n.code,
     fonte: n._fonte || 'cache',
     letto: n._letto || null,
-    tesoro: n.money ?? null,
+    // ⚠️ Il tesoro è `rankings.countryWealth`, NON `money`. `money` è un
+    // campo FERMO: 398,2651000000014 identico al decimale per più di un
+    // giorno, mentre il tesoro incassa la tassa sul reddito ogni ora.
+    // Verificato l'11/09 alle 15:03 UTC: countryWealth 5.213,18 = la voce
+    // "Inventario 5.213K" della pagina Account del governo in gioco. Il
+    // gioco lo ricalcola una volta all'ora (verso le hh:01), come tutte le
+    // classifiche. Il resto del tool leggeva già così (countryPanel,
+    // blocStats, metrics): era solo questa scheda a sbagliare.
+    tesoro: r.countryWealth?.value ?? null,
     tasse: n.taxes || null,
     popolazione: n.currentPopulation ?? null,
     popolazioneAttiva: rk(r.countryActivePopulation),
@@ -106,7 +114,6 @@ function formaPaese(n) {
     dannoSettimana: rk(r.weeklyCountryDamages),
     dannoPerCittadino: rk(r.weeklyCountryDamagesPerCitizen),
     dannoTotale: rk(r.countryDamages),
-    ricchezza: rk(r.countryWealth),
     // ⚠️ Incassato dai cittadini, NON speso dal governo: vedi
     // country-bounty-is-earned-not-spent e battleArchive.js.
     taglieIncassate: rk(r.countryBounty),

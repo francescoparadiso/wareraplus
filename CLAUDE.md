@@ -172,7 +172,11 @@ wareraPlus/
 │   ├── damageTimeline.js       ← NUOVO — danno ORA PER ORA per nazione + quanti
 │   │                              giocatori erano sotto pillola in quell'ora.
 │   │                              Zero fetch proprie: campiona la cache `countries`
-│   │                              una volta all'ora (:02) e legge `buffs` dentro le
+│   │                              una volta all'ora alle :12 (il gioco ricalcola le
+│   │                              classifiche verso le hh:01: prima si campionava alle
+│   │                              :02 e il danno finiva sull'ora DOPO, e la mezz'ora
+│   │                              dava denti di sega — lo storico si riallinea in
+│   │                              lettura, vedi `lag` delle epoche) e legge `buffs` dentro le
 │   │                              risposte getUserLite che il giro cittadini scarica
 │   │                              già. ⚠️ le due metà si comportano in modo OPPOSTO —
 │   │                              il danno ACCUMULA dal primo avvio (è la differenza
