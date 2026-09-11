@@ -72,9 +72,11 @@ let pannelloAdmin = null;
 let attesaContratti = null;
 let attesaChiesta = false;
 
-// Quali sezioni apribili sono aperte: una preferenza di chi guarda, in
+// Quale pagina dell'area è aperta: "La mia nazione", "Contratti
+// mercenari", "Amministrazione". Una preferenza di chi guarda, in
 // localStorage come ogni altra comodità per-browser del tool.
-const SEZIONI_KEY = 'wp_pv_sezioni_aperte';
+const SCHEDA_KEY = 'wp_pv_scheda';
+let schedaAttiva = (() => { try { return localStorage.getItem(SCHEDA_KEY) || 'nazione'; } catch { return 'nazione'; } })();
 
 export async function initPrivateView(container, { authError = null, comeAccount = null } = {}) {
   rootEl = container;
@@ -222,8 +224,7 @@ function disegna() {
     // non ha poteri" e' esattamente l'informazione che si sta cercando.
     colonnaSx.appendChild(cardLente());
     colonnaSx.appendChild(cardProfilo());
-    colonnaDx.appendChild(creaOQuadro().render());
-    colonnaDx.appendChild(sezioneContratti());
+    colonnaDx.appendChild(areaSchede(['nazione', 'contratti']));
   }
   else {
     colonnaSx.appendChild(cardProfilo());
@@ -244,28 +245,23 @@ function disegna() {
     if (account.verificato && nazione && nazione.abilitata === false) {
       colonnaDx.appendChild(cardNazioneNonAbilitata(nazione));
     } else if (account.verificato || account.admin) {
-      // ── Prima quello che si VEDE, poi quello che si FA ─────────────────
-      // La nazione la vede ogni cittadino, carica o no: è la risposta a
-      // "cosa posso vedere io". I contratti e l'amministrazione sono
-      // mestieri di pochi, e stanno sotto, chiusi finché non si aprono —
-      // prima occupavano tutta la pagina anche a chi voleva solo sapere
-      // come stava la sua nazione.
-      colonnaDx.appendChild(creaOQuadro().render());
-
-      // Il tavolo resta a chi ha almeno un potere: a un cittadino senza
-      // cariche sarebbe una scatola vuota con dentro una spiegazione di
-      // qualcosa che non lo riguarda.
+      // ── Tre pagine, un bottone ciascuna ──────────────────────────────
+      // La nazione, i contratti mercenari e l'amministrazione sono tre
+      // mestieri diversi, e ognuno ha la sua pagina: una alla volta, scelta
+      // dai bottoni in cima. Prima stavano uno sotto l'altro, poi i due
+      // secondi come sezioni apribili sotto la nazione — richiesta
+      // esplicita di separarli del tutto.
+      //
+      // Il tavolo compare solo a chi ha almeno un potere: a un cittadino
+      // senza cariche sarebbe una scatola vuota con dentro una spiegazione
+      // di qualcosa che non lo riguarda. L'amministrazione solo a chi lo è.
       const cap = ruoli?.capacita;
+      const chiavi = ['nazione'];
       if (cap && (cap.chiedePer?.length || cap.approvaPer?.length || cap.gestisceNazione?.length || cap.admin)) {
-        colonnaDx.appendChild(sezioneContratti());
+        chiavi.push('contratti');
       }
-      // L'amministrazione era una linguetta DENTRO il tavolo dei contratti,
-      // ma non è una cosa di contratti: account, deroghe, lente. Sezione
-      // sua, che per quasi tutti non esiste.
-      if (account.admin) {
-        colonnaDx.appendChild(sezioneApribile('admin', nzT('secAdmin'), nzT('secAdminHint'),
-          () => creaOAdmin().render()));
-      }
+      if (account.admin) chiavi.push('admin');
+      colonnaDx.appendChild(areaSchede(chiavi));
     }
 
   }
@@ -697,66 +693,82 @@ function creaOAdmin() {
 function azzeraAttesa() { attesaContratti = null; attesaChiesta = false; }
 
 // ---------------------------------------------------------------------------
-// Sezioni apribili
+// Le pagine dell'area
 // ---------------------------------------------------------------------------
 
-function sezioniAperte() {
-  try { return new Set(JSON.parse(localStorage.getItem(SEZIONI_KEY) || '[]')); } catch { return new Set(); }
-}
-
-function impostaAperta(chiave, aperta) {
-  try {
-    const s = sezioniAperte();
-    if (aperta) s.add(chiave); else s.delete(chiave);
-    localStorage.setItem(SEZIONI_KEY, JSON.stringify([...s]));
-  } catch { /* modalità privata: si riapre chiusa, pazienza */ }
-}
-
 /**
- * Una sezione che si apre cliccando la testa. Il contenuto si costruisce
- * SOLO se è aperta: una sezione chiusa non scarica niente, che per il
- * tavolo dei contratti vuol dire battaglie, liste permessi e canali —
- * mezza dozzina di richieste risparmiate a chi non lo apre.
+ * I bottoni in cima e la pagina scelta. Si costruisce SOLO la pagina
+ * aperta: il tavolo dei contratti non aperto non scarica battaglie, liste
+ * permessi e canali — mezza dozzina di richieste risparmiate.
+ *
+ * Due numeri però devono vedersi dal bottone, a pagina chiusa: quante
+ * richieste aspettano la firma di chi guarda, e quanti allarmi nuovi sono
+ * arrivati dai confini. Per il secondo la nazione si carica comunque: è
+ * la pagina di partenza, e un allarme che si vede solo entrandoci arriva
+ * tardi.
  */
-function sezioneApribile(chiave, titolo, sottotitolo, contenuto, { badge = null } = {}) {
-  const aperta = sezioniAperte().has(chiave);
-  const box = el('section', `wp-pv-apribile${aperta ? ' aperta' : ''}`);
-
-  const testa = el('button', 'wp-pv-apribile-testa');
-  testa.type = 'button';
-  testa.setAttribute('aria-expanded', String(aperta));
-  testa.appendChild(el('span', 'wp-pv-apribile-freccia', aperta ? '▾' : '▸'));
-  const testi = el('span', 'wp-pv-apribile-testi');
-  testi.appendChild(el('strong', 'wp-pv-apribile-titolo', titolo));
-  testi.appendChild(el('span', 'wp-pv-apribile-sotto', sottotitolo));
-  testa.appendChild(testi);
-  if (badge) testa.appendChild(el('span', 'wp-pv-apribile-badge', `${badge} · ${nzT('secWaiting')}`));
-  testa.addEventListener('click', () => { impostaAperta(chiave, !aperta); render(); });
-  box.appendChild(testa);
-
-  if (aperta) {
-    const corpo = el('div', 'wp-pv-apribile-corpo');
-    corpo.appendChild(contenuto());
-    box.appendChild(corpo);
-  }
-  return box;
+function areaSchede(chiavi) {
+  const frag = document.createDocumentFragment();
+  if (!chiavi.includes(schedaAttiva)) schedaAttiva = chiavi[0];
+  const q = creaOQuadro();
+  q.precarica();
+  if (chiavi.length > 1) frag.appendChild(barraSchede(chiavi));
+  if (schedaAttiva === 'contratti') frag.appendChild(creaOTavolo().render());
+  else if (schedaAttiva === 'admin') frag.appendChild(creaOAdmin().render());
+  else frag.appendChild(q.render());
+  return frag;
 }
 
-/** I contratti mercenari, chiusi di partenza. Il conteggio di cosa aspetta
- *  una firma si chiede una volta sola anche a sezione chiusa: è l'unico
- *  pezzo del tavolo che deve farsi vedere senza essere aperto. */
-function sezioneContratti() {
-  const t = creaOTavolo();
-  let n = t.inAttesa();
-  if (n == null) {
-    n = attesaContratti;
-    if (attesaContratti === null && !attesaChiesta) {
-      attesaChiesta = true;
-      t.contaAttesa().then((x) => { attesaContratti = x; render(); });
+function barraSchede(chiavi) {
+  const nav = el('nav', 'wp-pv-schede');
+  nav.setAttribute('role', 'tablist');
+  const voci = {
+    nazione: [nzT('natTitle'), null],
+    contratti: [nzT('secContracts'), nzT('secContractsHint')],
+    admin: [nzT('secAdmin'), nzT('secAdminHint')],
+  };
+  for (const k of chiavi) {
+    const [testo, suggerimento] = voci[k];
+    const attiva = schedaAttiva === k;
+    const b = el('button', `wp-pv-scheda${attiva ? ' attiva' : ''}`);
+    b.type = 'button';
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', String(attiva));
+    if (suggerimento) b.title = suggerimento;
+    b.appendChild(el('span', null, testo));
+    if (k === 'contratti') {
+      const n = contrattiInAttesa();
+      if (n) {
+        const c = el('span', 'wp-pv-scheda-n', String(n));
+        c.title = nzT('secWaiting');
+        b.appendChild(c);
+      }
     }
+    if (k === 'nazione') {
+      const n = quadro?.nuovi() || 0;
+      if (n) b.appendChild(el('span', 'wp-pv-scheda-n wp-pv-scheda-n-allarme', String(n)));
+    }
+    b.addEventListener('click', () => {
+      schedaAttiva = k;
+      try { localStorage.setItem(SCHEDA_KEY, k); } catch { /* resta per questa apertura */ }
+      render();
+    });
+    nav.appendChild(b);
   }
-  return sezioneApribile('contratti', nzT('secContracts'), nzT('secContractsHint'),
-    () => t.render(), { badge: n || null });
+  return nav;
+}
+
+/** Quante richieste aspettano la firma di chi guarda. Chiesto una volta
+ *  sola a pagina chiusa: una lettura, senza il resto del tavolo. */
+function contrattiInAttesa() {
+  const t = creaOTavolo();
+  const n = t.inAttesa();
+  if (n != null) return n;
+  if (attesaContratti === null && !attesaChiesta) {
+    attesaChiesta = true;
+    t.contaAttesa().then((x) => { attesaContratti = x; render(); });
+  }
+  return attesaContratti;
 }
 
 function cardIndisponibile() {

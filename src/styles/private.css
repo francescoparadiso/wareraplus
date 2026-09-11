@@ -1093,36 +1093,30 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
 .wp-pv-nazione-flag { width: 20px; height: 14px; object-fit: cover; border-radius: 2px; }
 
 /* ══════════════════════════════════════════════════════════════
-   Sezioni apribili (contratti, amministrazione)
+   Le pagine dell'area: La mia nazione · Contratti · Amministrazione
    ──────────────────────────────────────────────────────────────
-   Una riga cliccabile che si apre: chiusa non carica niente e occupa
-   una riga sola, così la nazione resta la prima cosa che si legge.
+   Bottoni pieni e non linguette sottolineate: dentro i Contratti c'è
+   già una fila di linguette (battaglie / tavolo / impostazioni), e due
+   file con la stessa grafica una sopra l'altra si leggono come una sola.
    ══════════════════════════════════════════════════════════════ */
-.wp-pv-apribile {
-  border: 1px solid var(--pv-rule); border-radius: 10px;
-  background: var(--pv-surface);
+.wp-pv-schede { display: flex; gap: .45rem; flex-wrap: wrap; }
+.wp-pv-scheda {
+  display: inline-flex; align-items: center; gap: .45rem;
+  padding: .55rem 1.05rem;
+  border: 1px solid var(--pv-rule); border-radius: 999px;
+  background: var(--pv-surface); color: var(--pv-ink-soft);
+  font: inherit; font-size: .92rem; font-weight: 600; cursor: pointer;
 }
-.wp-pv-apribile-testa {
-  display: flex; align-items: center; gap: .75rem;
-  width: 100%; padding: .9rem 1.1rem;
-  border: none; background: transparent; color: var(--pv-ink);
-  font: inherit; text-align: left; cursor: pointer; border-radius: 10px;
+.wp-pv-scheda:hover { color: var(--pv-ink); border-color: var(--pv-accent); }
+.wp-pv-scheda.attiva { background: var(--pv-accent); border-color: var(--pv-accent); color: #fff; }
+.wp-pv-scheda:focus-visible { outline: 2px solid var(--pv-accent); outline-offset: 2px; }
+.wp-pv-scheda-n {
+  min-width: 1.35rem; padding: .05rem .4rem; border-radius: 999px;
+  background: rgba(240, 180, 41, .2); color: #d99a0b;
+  font-size: .74rem; text-align: center; font-variant-numeric: tabular-nums;
 }
-.wp-pv-apribile-testa:hover { background: var(--pv-hover); }
-.wp-pv-apribile-testa:focus-visible { outline: 2px solid var(--pv-accent); outline-offset: -2px; }
-.wp-pv-apribile-freccia { color: var(--pv-accent); font-size: .85rem; flex: none; }
-.wp-pv-apribile-testi { display: flex; flex-direction: column; gap: .1rem; min-width: 0; flex: 1; }
-.wp-pv-apribile-titolo { font-size: 1rem; }
-.wp-pv-apribile-sotto { font-size: .8rem; color: var(--pv-ink-soft); }
-.wp-pv-apribile-badge {
-  flex: none; padding: .2rem .6rem; border-radius: 999px;
-  background: rgba(240, 180, 41, .16); color: #d99a0b;
-  font-size: .78rem; font-weight: 600; font-variant-numeric: tabular-nums;
-}
-.wp-pv-apribile.aperta .wp-pv-apribile-testa {
-  border-bottom: 1px solid var(--pv-rule); border-radius: 10px 10px 0 0;
-}
-.wp-pv-apribile-corpo { display: flex; flex-direction: column; gap: 1rem; padding: 1rem; }
+.wp-pv-scheda.attiva .wp-pv-scheda-n { background: rgba(255, 255, 255, .25); color: #fff; }
+.wp-pv-scheda-n.wp-pv-scheda-n-allarme { background: var(--pv-danger); color: #fff; }
 
 /* ══════════════════════════════════════════════════════════════
    La mia nazione (src/private/nazione.js)
@@ -1206,13 +1200,9 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
 .wp-pv-nz-cella strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
 
 .wp-pv-nz-nemico-piede { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; justify-content: space-between; }
-.wp-pv-nz-top { display: flex; flex-direction: column; gap: .3rem; border-top: 1px solid var(--pv-rule); padding-top: .5rem; }
-.wp-pv-nz-top-riga {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto 4.5rem 7rem 7rem;
-  gap: .6rem; align-items: center; font-size: .84rem;
-}
-.wp-pv-nz-top-chi { display: flex; align-items: center; gap: .4rem; min-width: 0; overflow: hidden; white-space: nowrap; }
-.wp-pv-nz-top-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--pv-ink-soft); }
+.wp-pv-nz-tab-riga .wp-pv-nz-gov-chi { overflow: hidden; white-space: nowrap; }
+.wp-pv-nz-pill-tag-ignoto { background: var(--pv-surface); color: var(--pv-ink-soft); opacity: .7; }
+.wp-pv-nz-pv-ignoto strong { color: var(--pv-ink-soft); }
 .wp-pv-nz-pill-tag { padding: .08rem .45rem; border-radius: 999px; font-size: .7rem; font-weight: 600; white-space: nowrap; }
 .wp-pv-nz-pill-tag-buff { background: rgba(240, 180, 41, .18); color: #d99a0b; }
 .wp-pv-nz-pill-tag-malus { background: rgba(240, 119, 108, .16); color: var(--pv-danger); }
@@ -1298,8 +1288,29 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
   .wp-pv-nz-rel-riga { grid-template-columns: minmax(0, 1fr); gap: .2rem; }
   .wp-pv-nz-regione { grid-template-columns: minmax(0, 1fr); }
   .wp-pv-nz-difese { justify-content: flex-start; }
-  .wp-pv-nz-top-riga { grid-template-columns: minmax(0, 1fr) auto; }
-  .wp-pv-nz-top-riga > :nth-child(3) { display: none; }
   .wp-pv-nz-meta { margin-left: 0; }
-  .wp-pv-apribile-testa { flex-wrap: wrap; }
+  .wp-pv-nz-tab-riga { grid-template-columns: minmax(0, 1fr) auto 4.8rem; }
+  .wp-pv-nz-tab-riga > :nth-child(n+4) { display: none; }
 }
+
+/* ── Tutti i giocatori di un nemico ──────────────────────────── */
+.wp-pv-nz-pill-ignoto { background: var(--pv-rule); }
+.wp-pv-nz-tab { display: flex; flex-direction: column; gap: .5rem; border-top: 1px solid var(--pv-rule); padding-top: .6rem; }
+.wp-pv-nz-tab-barra { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.wp-pv-nz-tab-barra .wp-pv-input { flex: 1 1 11rem; min-width: 0; }
+.wp-pv-nz-tab-lista { display: flex; flex-direction: column; max-height: 34rem; overflow-y: auto; }
+.wp-pv-nz-tab-riga {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(7.5rem, 1fr) 5.6rem 5.6rem 5.6rem 5.4rem;
+  gap: .6rem; align-items: center;
+  padding: .3rem .45rem; border-radius: 6px; font-size: .83rem;
+}
+.wp-pv-nz-tab-riga:nth-child(even) { background: var(--pv-surface); }
+.wp-pv-nz-tab-testa {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--pv-surface-2) !important;
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--pv-ink-soft);
+}
+.wp-pv-nz-tab-num { text-align: right; font-variant-numeric: tabular-nums; }
+.wp-pv-nz-tab-pill { display: flex; align-items: center; gap: .35rem; white-space: nowrap; }
+.wp-pv-nz-tab-piede { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }

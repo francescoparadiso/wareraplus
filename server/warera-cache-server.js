@@ -1567,6 +1567,37 @@ function citizenStats(u) {
     // pool — molto meglio che rimandare tutti nella coda degli `unknown`
     // per un dato che non cambia quasi mai.
     u.leveling?.prestigeLevel ?? null,
+    // [11..16] WarEra+ area riservata, scheda NEMICI (server/plusApi/nemici.js):
+    // pillola e danno per colpo di OGNI cittadino. Stavano già in questa
+    // risposta e si buttavano; tenerli costa zero chiamate, mentre leggerli
+    // dal plusApi vorrebbe dire 38 getUserLite per la sola Germania ogni
+    // dieci minuti, sullo stesso IP di questo server.
+    //   [11] fine del buff della pillola (ms) · [12] fine del malus (ms):
+    //        timestamp FISSI, quindi lo stato di adesso si calcola esatto
+    //        anche da una lettura di due ore fa (vedi damageTimeline.js);
+    //   [13] attacco SENZA la pillola: `attack.total` la contiene già
+    //        (verificato: (valore+arma+overflow) × grado × munizioni ×
+    //        pillola = 986 esatto), e si divide via per poterla rimettere
+    //        com'è ADESSO invece di com'era alla lettura;
+    //   [14] precisione · [15] probabilità critico · [16] danno critico.
+    // Stesso patto del [10]: in coda, nessuna migrazione, si riempie da sé
+    // entro REFRESH_WINDOW_MS.
+    ...colpoEPillola(u),
+  ];
+}
+
+function colpoEPillola(u) {
+  const b = u.buffs || {};
+  const fine = (codici, quando) => ((codici || []).includes('cocain') ? (Date.parse(quando || '') || null) : null);
+  const a = u.skills?.attack || {};
+  const mult = a.buffsPercent ? 1 + a.buffsPercent / 100 : a.debuffsPercent ? 1 - a.debuffsPercent / 100 : 1;
+  return [
+    fine(b.buffCodes, b.buffEndAt),
+    fine(b.debuffCodes, b.debuffEndAt),
+    a.total != null && mult > 0 ? Math.round(a.total / mult) : null,
+    u.skills?.precision?.total ?? null,
+    u.skills?.criticalChance?.total ?? null,
+    u.skills?.criticalDamages?.total ?? null,
   ];
 }
 
@@ -2293,6 +2324,10 @@ app.get('/country-citizens', (req, res) => {
   const countryId = String(req.query.countryId || '');
   if (!countryId) return res.status(400).json({ error: 'countryId mancante' });
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 500, 1), 5000);
+  // I campi di combattimento ([11..16] di citizenStats) solo a chi li
+  // chiede: la vista Statistiche nazioni non li usa, e sono ~60 byte a riga
+  // in più su elenchi che arrivano a 3.500 righe.
+  const combat = req.query.fields === 'combat';
 
   const census = readCache(CITIZENS_FILE, { fetchedAt: null, data: {} });
   const row = census.data?.[countryId];
@@ -2321,6 +2356,8 @@ app.get('/country-citizens', (req, res) => {
       // 'm'/'u', vedi muPlaystyle), non l'oggetto della gemella client:
       // si espande al nome che il client usa.
       ps: PS_CODE[entry[2]] || null,
+      // Assenti (undefined → null) finché il giro non ha riletto quell'utente.
+      ...(combat ? { bE: st[11] ?? null, dE: st[12] ?? null, aC: st[13] ?? null, pc: st[14] ?? null, cc: st[15] ?? null, cd: st[16] ?? null } : {}),
     });
   }
   out.sort((a, b) => (b.wk || 0) - (a.wk || 0));

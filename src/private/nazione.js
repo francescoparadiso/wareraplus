@@ -36,7 +36,7 @@ import { nzT } from './i18nNazione.js';
 import { pvT, pvErr } from './i18n.js';
 import {
   leggiNazione, leggiNemici, impostaCanaleConfini, ApiError,
-  leggiAccessi, cercaCittadini, aggiungiAccesso, togliAccesso,
+  leggiAccessi, cercaCittadini, aggiungiAccesso, togliAccesso, leggiGiocatoriNemico,
 } from './api.js';
 import { nomeNazione, urlBandiera, coloreNazione } from './battles.js';
 import { getLang } from '../shared/i18n.js';
@@ -146,7 +146,10 @@ export function creaQuadroNazione(ctx) {
   let paeseScelto = null;         // solo l'amministratore lo cambia
   let occupato = false;
   let esitoCanale = null;
-  const topAperti = new Set();
+  // Le tabelle "tutti i giocatori" aperte, per nemico, e i loro nodi (che
+  // sopravvivono ai ridisegni: vedi tabellaGiocatori).
+  const tabelleAperte = new Set();
+  const tabelle = new Map();
   // Il 403 di chi non ha accesso, con dentro i nomi del governo.
   let negato = null;
   // Chi altro vede la pagina: lo legge solo il governo.
@@ -157,7 +160,11 @@ export function creaQuadroNazione(ctx) {
   let cercaWidget = null;
 
   async function carica() {
-    caricamento = true; errore = null; ctx.ridisegna();
+    caricamento = true; errore = null;
+    // Le tabelle dei giocatori si rileggono con tutto il resto: una tabella
+    // di un'ora fa accanto a un riepilogo di adesso direbbe due cose diverse.
+    tabelle.clear();
+    ctx.ridisegna();
     try {
       dati = await leggiNazione({ asAccount: ctx.lente(), paese: paeseScelto });
       negato = null;
@@ -439,7 +446,7 @@ export function creaQuadroNazione(ctx) {
       s.appendChild(o);
     }
     s.addEventListener('change', () => {
-      paeseScelto = s.value; nemici = null; topAperti.clear();
+      paeseScelto = s.value; nemici = null; tabelleAperte.clear();
       accessi = null; cercaWidget = null;
       carica();
     });
@@ -656,19 +663,18 @@ export function creaQuadroNazione(ctx) {
 
     if (n.errore && !n.pillole) { box.appendChild(el('p', 'wp-pv-note', nzT('enemiesError'))); return box; }
 
-    // ── Pillole ──────────────────────────────────────────────────────
-    // ⚠️ Due popolazioni diverse, e la vista deve dire quale è quale: la
-    // barra e i tre conti sono i giocatori ANALIZZATI (i più forti, letti
-    // dal vivo), la riga sotto è TUTTA la nazione dal censimento, dove si
-    // vede solo chi è sotto pillola. Scritti uno accanto all'altro senza
-    // etichetta ("42 sotto pillola… 152 sotto pillola") sembravano un conto
-    // che non tornava — segnalato così.
+    // ── Pillole: TUTTI i giocatori attivi ────────────────────────────
+    // Una popolazione sola: i giocatori visti nelle ultime 72 ore, ognuno
+    // col suo stato. La prima versione mescolava i 90 più forti con un
+    // conto nazionale fatto in un altro modo, e i numeri sembravano non
+    // tornare (segnalato: "42 sotto pillola… 152 in tutta la nazione").
     const pl = n.pillole || {};
-    const tot = (pl.buff || 0) + (pl.malus || 0) + (pl.pulito || 0);
-    if (tot) box.appendChild(el('p', 'wp-pv-nz-pill-titolo', nzT('pillTopTitle').replace('{n}', String(tot))));
+    const tot = (pl.buff || 0) + (pl.malus || 0) + (pl.pulito || 0) + (pl.ignoto || 0);
+    box.appendChild(el('p', 'wp-pv-nz-pill-titolo', nzT('enemyActiveTitle')
+      .replace('{n}', num(n.attivi72h)).replace('{tot}', num(n.censiti))));
     if (tot) {
       const barra = el('div', 'wp-pv-nz-pillbar');
-      for (const [k, v] of [['buff', pl.buff], ['malus', pl.malus], ['pulito', pl.pulito]]) {
+      for (const [k, v] of [['buff', pl.buff], ['malus', pl.malus], ['pulito', pl.pulito], ['ignoto', pl.ignoto]]) {
         if (!v) continue;
         const s = el('span', `wp-pv-nz-pill-${k}`);
         s.style.width = `${(v / tot) * 100}%`;
@@ -679,7 +685,7 @@ export function creaQuadroNazione(ctx) {
     const pill = el('div', 'wp-pv-nz-pill-righe');
     const vocePill = (cls, n2, etichetta, dettaglio) => {
       const v = el('span', `wp-pv-nz-pill-voce wp-pv-nz-pv-${cls}`);
-      v.appendChild(el('strong', null, String(n2 ?? 0)));
+      v.appendChild(el('strong', null, num(n2 ?? 0)));
       v.appendChild(el('span', null, ` ${etichetta}`));
       if (dettaglio) v.appendChild(el('span', 'wp-pv-suggerimento', ` · ${dettaglio}`));
       pill.appendChild(v);
@@ -688,15 +694,12 @@ export function creaQuadroNazione(ctx) {
     vocePill('buff', pl.buff, nzT('pillOn'), primo(pl.fineBuff) && `${nzT('pillFirstEnd')} ${primo(pl.fineBuff)}`);
     vocePill('malus', pl.malus, nzT('pillHangover'), primo(pl.fineMalus) && `${nzT('pillFirstClean')} ${primo(pl.fineMalus)}`);
     vocePill('pulito', pl.pulito, nzT('pillClean'));
+    // Chi il censimento non ha ancora riletto dopo che ha cominciato a
+    // tenere pillola e abilità: un buco dichiarato, mai un "pulito".
+    if (pl.ignoto) vocePill('ignoto', pl.ignoto, nzT('pillUnknown'));
     box.appendChild(pill);
-    const pn = n.osservato?.pillatiNazione;
-    if (pn) {
-      const testo = nzT('pillNation')
-        .replace('{n}', num(pn.n)).replace('{tot}', num(n.censiti)).replace('{top}', String(pl.buff ?? 0));
-      box.appendChild(el('p', 'wp-pv-note', pn.assestato ? testo : `${testo} ${nzT('pillSettling')}.`));
-    }
 
-    // ── Danno fatto, danno possibile ─────────────────────────────────
+    // ── Danno fatto, colpo di tutti ──────────────────────────────────
     const griglia = el('div', 'wp-pv-nz-numeri');
     const cella = (etichetta, valore, sotto, titolo) => {
       const c = el('div', 'wp-pv-nz-cella');
@@ -715,52 +718,135 @@ export function creaQuadroNazione(ctx) {
       cella(nzT('dmgPeak'), compatto(oss.piccoOra.allOra), `${quando(oss.piccoOra.t)} · ${nzT('dmgPeakHint')}`, num(oss.piccoOra.allOra));
     }
     if (oss.giornoMax) cella(nzT('dmgBestDay'), compatto(oss.giornoMax.d), giornoBreve(oss.giornoMax.giorno), num(oss.giornoMax.d));
-    const pot = n.potenziale || {};
-    cella(nzT('potNow'), compatto(pot.adesso), nzT('potNowHint'), num(pot.adesso));
-    cella(nzT('potMax'), compatto(pot.massimo), nzT('potMaxHint'), num(pot.massimo));
+    const salva = n.salva || {};
+    cella(nzT('volleyNow'), compatto(salva.adesso), nzT('volleyNowHint'), num(salva.adesso));
+    cella(nzT('volleyMax'), compatto(salva.massimo), nzT('volleyMaxHint'), num(salva.massimo));
     box.appendChild(griglia);
 
     const piede = el('div', 'wp-pv-nz-nemico-piede');
-    piede.appendChild(el('span', 'wp-pv-note',
-      `${n.analizzati ?? 0} ${nzT('analysed')} · ${n.attivi72h ?? '—'} ${nzT('active72')}`));
-    if (n.top?.length) {
-      const aperto = topAperti.has(n.id);
-      piede.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', aperto ? nzT('hideTop') : nzT('showTop'), () => {
-        if (aperto) topAperti.delete(n.id); else topAperti.add(n.id);
+    piede.appendChild(el('span', 'wp-pv-note', nzT('sourceNote')));
+    const aperto = tabelleAperte.has(n.id);
+    piede.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small',
+      aperto ? nzT('hidePlayers') : `${nzT('allPlayers')} (${num(n.censiti)})`, () => {
+        if (aperto) tabelleAperte.delete(n.id); else tabelleAperte.add(n.id);
         ctx.ridisegna();
       }));
-    }
     box.appendChild(piede);
-    if (topAperti.has(n.id)) box.appendChild(elencoTop(n.top));
+    if (aperto) box.appendChild(tabellaGiocatori(n.id));
     return box;
   }
 
-  function elencoTop(top) {
-    const lista = el('div', 'wp-pv-nz-top');
-    for (const g of top) {
-      const r = el('div', 'wp-pv-nz-top-riga');
-      const chi = el('span', 'wp-pv-nz-top-chi');
-      if (g.avatar) {
-        const a = el('img', 'wp-pv-nz-avatar'); a.src = g.avatar; a.alt = ''; a.loading = 'lazy';
-        a.addEventListener('error', () => { a.style.display = 'none'; });
-        chi.appendChild(a);
+  /**
+   * Tutti i giocatori di un nemico, in una tabella che si cerca, si filtra
+   * e si ordina. È un nodo che sopravvive ai ridisegni della vista e
+   * ridisegna solo sé stesso: ricrearlo a ogni render toglierebbe il fuoco
+   * al campo di ricerca a metà parola, e rileggerebbe centinaia di righe.
+   * L'elenco arriva solo quando la si apre (la Germania ha 1.131 cittadini).
+   */
+  function tabellaGiocatori(nemicoId) {
+    if (tabelle.has(nemicoId)) return tabelle.get(nemicoId);
+    const PAGINA = 60;
+    const st = { dati: null, errore: null, filtro: 'attivi', pill: 'tutte', ordine: 'colpo', q: '', mostra: PAGINA };
+    const nodo = el('div', 'wp-pv-nz-tab');
+
+    const barra = el('div', 'wp-pv-nz-tab-barra');
+    const cerca = el('input', 'wp-pv-input');
+    cerca.type = 'search'; cerca.placeholder = nzT('searchPlayer'); cerca.autocomplete = 'off'; cerca.maxLength = 40;
+    const scelta = (opzioni, valore, imposta) => {
+      const s = el('select', 'wp-pv-select wp-pv-select-piccola');
+      for (const [v, t] of opzioni) {
+        const o = el('option', null, t); o.value = v;
+        if (v === valore) o.selected = true;
+        s.appendChild(o);
       }
-      chi.appendChild(el('strong', null, g.nome || '?'));
-      if (g.livello != null) chi.appendChild(el('span', 'wp-pv-suggerimento', ` ${nzT('lv')}${g.livello}`));
-      r.appendChild(chi);
+      s.addEventListener('change', () => { imposta(s.value); st.mostra = PAGINA; disegnaCorpo(); });
+      return s;
+    };
+    barra.appendChild(cerca);
+    barra.appendChild(scelta([['attivi', nzT('fltActive72')], ['tutti', nzT('fltAllPlayers')]], st.filtro, (v) => { st.filtro = v; }));
+    barra.appendChild(scelta([['tutte', nzT('fltPillAny')], ['buff', nzT('pillOn')], ['malus', nzT('pillHangover')], ['pulito', nzT('pillClean')]],
+      st.pill, (v) => { st.pill = v; }));
+    barra.appendChild(scelta([['colpo', nzT('sortHit')], ['danno', nzT('sortWeek')], ['pillola', nzT('sortPill')]],
+      st.ordine, (v) => { st.ordine = v; }));
+    const corpo = el('div');
+    nodo.appendChild(barra);
+    nodo.appendChild(corpo);
 
-      const stato = el('span', `wp-pv-nz-pill-tag wp-pv-nz-pill-tag-${g.pillola}`,
-        g.pillola === 'buff' ? nzT('pillOn') : g.pillola === 'malus' ? nzT('pillHangover') : nzT('pillClean'));
-      if (g.fine) stato.title = `${ora(g.fine)} (${relativo(g.fine)})`;
-      r.appendChild(stato);
-      if (g.fine) r.appendChild(el('span', 'wp-pv-suggerimento', `→ ${ora(g.fine)}`));
-      else r.appendChild(el('span'));
+    let tick = null;
+    cerca.addEventListener('input', () => {
+      clearTimeout(tick);
+      tick = setTimeout(() => { st.q = cerca.value.trim().toLowerCase(); st.mostra = PAGINA; disegnaCorpo(); }, 150);
+    });
+    cerca.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
 
-      r.appendChild(el('span', 'wp-pv-nz-top-num', `${num(g.perColpo)} ${nzT('perHit')}`));
-      r.appendChild(el('span', 'wp-pv-nz-top-num', `${g.colpi} ${nzT('hitsLeft')}`));
-      lista.appendChild(r);
+    const PESO = { buff: 0, malus: 1, pulito: 2, ignoto: 3 };
+    const ORDINI = {
+      colpo: (a, b) => (b.perColpo ?? -1) - (a.perColpo ?? -1),
+      danno: (a, b) => (b.settimana ?? -1) - (a.settimana ?? -1),
+      // Prima chi è sotto pillola, dalla scadenza più vicina: è chi cambia
+      // forza per primo. Poi i malus, dal primo che torna normale.
+      pillola: (a, b) => ((PESO[a.pillola] ?? 9) - (PESO[b.pillola] ?? 9)) || ((a.fine ?? Infinity) - (b.fine ?? Infinity)),
+    };
+
+    function disegnaCorpo() {
+      corpo.textContent = '';
+      if (st.errore) { corpo.appendChild(el('p', 'wp-pv-error', st.errore)); return; }
+      if (!st.dati) { corpo.appendChild(el('p', 'wp-pv-note', '…')); return; }
+      let righe = st.dati.giocatori || [];
+      if (st.filtro === 'attivi') righe = righe.filter((g) => g.attivo);
+      if (st.pill !== 'tutte') righe = righe.filter((g) => g.pillola === st.pill);
+      if (st.q) righe = righe.filter((g) => String(g.nome || '').toLowerCase().includes(st.q));
+      righe = [...righe].sort(ORDINI[st.ordine] || ORDINI.colpo);
+
+      const lista = el('div', 'wp-pv-nz-tab-lista');
+      const testa = el('div', 'wp-pv-nz-tab-riga wp-pv-nz-tab-testa');
+      for (const [t, numerica] of [[nzT('colPlayer')], [nzT('colPill')], [nzT('colHit'), 1],
+        [nzT('colHitMax'), 1], [nzT('colWeek'), 1], [nzT('colSeen'), 1]]) {
+        testa.appendChild(el('span', numerica ? 'wp-pv-nz-tab-num' : null, t));
+      }
+      lista.appendChild(testa);
+      for (const g of righe.slice(0, st.mostra)) lista.appendChild(rigaGiocatore(g));
+      corpo.appendChild(lista);
+
+      const piede = el('div', 'wp-pv-nz-tab-piede');
+      piede.appendChild(el('span', 'wp-pv-note', nzT('shownOf')
+        .replace('{n}', num(Math.min(st.mostra, righe.length))).replace('{tot}', num(righe.length))));
+      if (righe.length > st.mostra) {
+        piede.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', nzT('showMore'), () => { st.mostra += PAGINA * 2; disegnaCorpo(); }));
+      }
+      corpo.appendChild(piede);
     }
-    return lista;
+
+    leggiGiocatoriNemico(nemicoId, { asAccount: ctx.lente(), paese: paeseScelto })
+      .then((d) => { st.dati = d; disegnaCorpo(); })
+      .catch((err) => { st.errore = messaggioErrore(err); disegnaCorpo(); });
+    disegnaCorpo();
+    tabelle.set(nemicoId, nodo);
+    return nodo;
+  }
+
+  function rigaGiocatore(g) {
+    const r = el('div', 'wp-pv-nz-tab-riga');
+    const chi = personaEl(g.avatar, g.nome, g.livello != null ? `${nzT('lv')}${g.livello}` : null);
+    // Chi è stato letto dal vivo ha la pillola esatta a questo minuto; gli
+    // altri al massimo di due ore fa, e la differenza si vede.
+    if (g.fonte === 'live') chi.appendChild(el('span', 'wp-pv-nz-tag', nzT('liveTag')));
+    r.appendChild(chi);
+
+    const pill = el('span', 'wp-pv-nz-tab-pill');
+    const etichette = { buff: nzT('pillOn'), malus: nzT('pillHangover'), pulito: nzT('pillClean'), ignoto: nzT('pillUnknown') };
+    pill.appendChild(el('span', `wp-pv-nz-pill-tag wp-pv-nz-pill-tag-${g.pillola}`, etichette[g.pillola] || g.pillola));
+    if (g.fine) {
+      const f = el('span', 'wp-pv-suggerimento', `→ ${ora(g.fine)}`);
+      f.title = relativo(g.fine);
+      pill.appendChild(f);
+    }
+    r.appendChild(pill);
+    r.appendChild(el('span', 'wp-pv-nz-tab-num', g.perColpo == null ? '—' : num(g.perColpo)));
+    r.appendChild(el('span', 'wp-pv-nz-tab-num', g.perColpoMax == null ? '—' : num(g.perColpoMax)));
+    r.appendChild(el('span', 'wp-pv-nz-tab-num', compatto(g.settimana)));
+    r.appendChild(el('span', 'wp-pv-nz-tab-num wp-pv-suggerimento', g.visto ? relativo(g.visto) : '—'));
+    return r;
   }
 
   // ── 4. Attività: battaglie, ore, bonifici ─────────────────────────
@@ -1005,5 +1091,11 @@ export function creaQuadroNazione(ctx) {
     return chip;
   }
 
-  return { render, ricarica: carica, nuovi: () => (dati ? nuovi().length : 0) };
+  /** Carica senza disegnare: main.js la chiama quando si guarda un'altra
+   *  pagina dell'area, perché gli allarmi nuovi compaiano sul bottone. */
+  function precarica() {
+    if (!dati && !caricamento && !errore && !negato) carica();
+  }
+
+  return { render, ricarica: carica, precarica, nuovi: () => (dati ? nuovi().length : 0) };
 }

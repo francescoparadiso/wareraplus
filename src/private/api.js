@@ -328,6 +328,12 @@ export function leggiNemici({ asAccount = null, paese = null } = {}) {
   return getJson(conLente(conPaese('/nazione/nemici', paese), asAccount));
 }
 
+/** Tutti i giocatori di un nemico (pillola, colpo, danno della settimana).
+ *  Pesa centinaia di righe: si chiede solo quando la tabella si apre. */
+export function leggiGiocatoriNemico(nemicoId, { asAccount = null, paese = null } = {}) {
+  return getJson(conLente(conPaese(`/nazione/nemici/${encodeURIComponent(nemicoId)}/giocatori`, paese), asAccount));
+}
+
 /** Chi altro vede la pagina della nazione (oltre al governo, per carica).
  *  Leggerlo e cambiarlo è del governo. */
 export function leggiAccessi({ asAccount = null, paese = null } = {}) {

@@ -66,7 +66,7 @@ const {
   battaglieVive, baseDannoGiornaliero, bonifici, timeline, dalCache, memo,
 } = require('./fonti');
 const { quadroConfini, relazione } = require('./confini');
-const { quadroNemici } = require('./nemici');
+const { quadroNemici, giocatoriNemico, idNemici } = require('./nemici');
 
 const FINESTRA_BONIFICI_MS = 72 * 3600_000;
 
@@ -341,6 +341,22 @@ function buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSotto
       res.json(await quadroNemici(ctx.countryId));
     } catch (err) {
       console.error('[nazione] nemici falliti:', err.message);
+      res.status(502).json({ error: 'gioco_non_raggiungibile' });
+    }
+  });
+
+  /** Tutti i giocatori di UN nemico. Solo dei nemici di adesso: la pagina
+   *  è la scheda di guerra di questa nazione, non un censimento del mondo. */
+  router.get('/nemici/:id/giocatori', async (req, res) => {
+    try {
+      const ctx = await contesto(req);
+      if (!ctx.countryId) return res.status(404).json({ error: 'nazione_sconosciuta' });
+      if (!ctx.accesso) return negato(res, ctx.countryId);
+      const noi = (await paesiMappa()).get(ctx.countryId);
+      if (!idNemici(noi).includes(req.params.id)) return res.status(403).json({ error: 'non_nemico' });
+      res.json(await giocatoriNemico(req.params.id));
+    } catch (err) {
+      console.error('[nazione] giocatori nemici falliti:', err.message);
       res.status(502).json({ error: 'gioco_non_raggiungibile' });
     }
   });

@@ -1,152 +1,154 @@
 /* ══════════════════════════════════════════════════════════════════════
-   AREA RISERVATA — i nemici: pillole, danno, potenziale
+   AREA RISERVATA — i nemici: pillole, danno, danno per colpo
    ----------------------------------------------------------------------
    Per ogni nazione con cui siamo in guerra (`warsWith`) più il nemico
-   giurato (`enemy`), tre domande che il gioco non fa:
+   giurato (`enemy`), tre domande che il gioco non fa — su TUTTI i suoi
+   giocatori, non su un campione:
 
-     1. PILLOLE   Quanti dei loro sono sotto pillola adesso, quanti nel
-                  dopo-sbornia, e QUANDO cambia. La pillola (`cocain`) dà
-                  +60% d'attacco per 8 ore e poi −60% per 15,5: un nemico
-                  appena pillato è il peggior momento per attaccarlo, uno
-                  in malus il migliore, e l'ora in cui si passa dall'uno
-                  all'altro è scritta nei suoi `buffs` (buffEndAt /
-                  debuffEndAt). Vedi server/damageTimeline.js.
+     1. PILLOLE   Chi è sotto pillola adesso, chi nel dopo-sbornia, e
+                  QUANDO cambia. La pillola (`cocain`) dà +60% d'attacco
+                  per 8 ore e poi −60% per 15,5: un nemico appena pillato
+                  è il peggior momento per attaccarlo, uno in malus il
+                  migliore. L'ora del cambio è scritta nei suoi `buffs`
+                  (buffEndAt / debuffEndAt), timestamp FISSI: lo stato di
+                  adesso si calcola esatto anche da una lettura vecchia.
      2. DANNO     Quanto hanno fatto davvero: settimana, ultime 24 ore, la
                   loro ora migliore e il loro giorno migliore degli ultimi
                   14 — dall'archivio /damage-timeline, che accumula.
-     3. POTENZIALE Quanto POTREBBERO fare adesso con quello che hanno.
+     3. COLPO     Quanto fa ciascuno a ogni colpo, adesso e con la pillola.
 
-   ── IL POTENZIALE, E COSA NON È ───────────────────────────────────────
+   ── DA DOVE, PER TUTTI ────────────────────────────────────────────────
+   Il cache-server rilegge `user.getUserLite` di OGNI cittadino di ogni
+   nazione almeno ogni 2 ore (lo fa già per stile di gioco e statistiche),
+   e da lì tiene anche pillola e abilità di combattimento
+   (/country-citizens?fields=combat, vedi citizenStats [11..16]). Qui
+   quindi TUTTI i giocatori costano zero chiamate a WarEra.
+
+   In più, i ROSTER_LIVE giocatori attivi che fanno più danno si rileggono
+   in diretta, a blocchi di 30 (a 100 l'URL supera il limite): sono quelli
+   che pesano, e per loro una pillola presa venti minuti fa deve già
+   vedersi. Per gli altri il dato ha al massimo ~2 ore, e la vista lo dice.
+
+   ── IL COLPO, E COSA NON È ────────────────────────────────────────────
    Danno atteso per colpo, dal codex (ENGINE, verificato sui profili):
 
        attacco × (0,5 + 0,5·precisione + precisione·critico·danno critico)
 
-   con `skills.attack.total`, che contiene GIÀ grado, munizioni e pillola
-   (verificato: 289 × 1,27 × 0,4 = 147 su un giocatore in malus). Poi:
+   con l'attacco come lo dà il gioco (grado, munizioni e pillola dentro),
+   ma la pillola rimessa com'è ADESSO. La somma su tutti i giocatori
+   attivi è "un colpo a testa": la forza della nazione in questo momento,
+   confrontabile fra nemici e fra un'ora e l'altra.
 
-     · adesso   i colpi che hanno in canna × danno per colpo. I colpi
-                sono la vita attuale PIÙ quella che la barra della fame
-                permette di rimettere mangiando: ogni punto fame è un
-                pasto, e un pasto rende `healthRegenPercent` della vita
-                massima (pane 10, bistecca 15, pesce cotto 20 —
-                gameConfig.items, letti dal vivo). Il tutto diviso per
-                `battle.healthCost` (10).
-     · massimo  come sopra, ma chi è pulito prende la pillola adesso.
-                Chi è in malus resta in malus: è il tetto realistico dei
-                prossimi minuti, non una fantasia con tutti al +60%.
+   ⚠️ Un "quanto possono fare in una giornata" NON c'è, e non per
+   dimenticanza: dipende dal cibo che hanno in inventario, che il gioco
+   non mostra a nessuno (né getUserById né inventory.fetchCurrentEquipment
+   lo portano, misurato il 2026-09-11). Due tentativi scartati:
+     · dalla sola rigenerazione della vita: dieci volte sotto il danno
+       osservato (e `currentBarValue` non si muove fra due letture a 90 s);
+     · vita + barra della fame col pasto migliore: "2,3 milioni in canna"
+       per una nazione che nelle 24 ore ne aveva fatti 471. Vero e inutile.
+   Il ritmo lo dice il danno OSSERVATO (24 ore, ora migliore), che sta
+   accanto. Restano fuori armatura e schivata di chi riceve e i bonus di
+   battaglia (ordini, alleanza, patriottico, basi).
 
-   ⚠️ Un "all'ora" NON c'è, e non per dimenticanza. Si è provato a
-   ricavarlo da `hourlyBarRegen` e dava un ritmo dieci volte sotto il
-   danno osservato; misurato dal vivo (60 giocatori letti due volte a 90
-   secondi, 2026-09-10) `currentBarValue` non si muove mai fra due
-   letture: il gioco aggiorna vita e fame a scatti o sulle azioni, e da
-   fuori il ritmo vero non si vede. Il ritmo che reggono lo dice meglio il
-   danno OSSERVATO (ultime 24 ore, ora migliore), che sta accanto.
-
-   ⚠️ La prima versione contava la sola vita, e diceva 0,7 milioni "in
-   canna" per una nazione che nelle 24 ore prima ne aveva fatti 348: i
-   giocatori la vita la rimettono mangiando, e senza la fame il numero
-   era vero e inutile. Il cibo si conta col pasto MIGLIORE del gioco:
-   l'inventario non è pubblico, quindi è un tetto, e la vista lo dice.
-
-   Restano fuori armatura e schivata di chi riceve e i bonus di
-   battaglia (ordini, alleanza, patriottico, basi, munizioni non
-   impugnate). Sono il danno dei giocatori, non della battaglia.
-
-   ── SU CHI SI CALCOLA ─────────────────────────────────────────────────
-   Sui ROSTER giocatori che hanno fatto più danno questa settimana e che
-   si sono visti nelle ultime 72 ore, da /country-citizens (il cache-server
-   li ha già). Per quelli si legge `user.getUserLite` in diretta — è lì
-   che stanno pillola e vita di adesso — a blocchi di 30 (a 100 l'URL
-   supera il limite, vedi CHUNK_UTENTI in wealth.js).
-
-   Costo: tre richieste per nemico ogni dieci minuti, e solo se qualcuno
-   guarda. Tutte pubbliche.
+   Costo: una lettura della cache sulla loopback e tre richieste pubbliche
+   per nemico ogni dieci minuti, e solo se qualcuno guarda.
    ══════════════════════════════════════════════════════════════════════ */
 
 const { trpcBatch } = require('./wareraApi');
-const { paesiMappa, cittadini, timeline, configGioco, memo } = require('./fonti');
+const { paesiMappa, timeline, configGioco, memo, dalCache } = require('./fonti');
 const { relazione } = require('./confini');
 
-const ROSTER = 90;
+const ROSTER_LIVE = 90;
 const CHUNK_UTENTI = 30;
 const ATTIVO_MS = 72 * 3600_000;
-const TOP = 8;
 const PILLOLA = 'cocain';
-
-const HEALTH_COST_DEFAULT = 10;
 const PILL_PCT_DEFAULT = 60;
-const CIBO_PCT_DEFAULT = 20;      // pesce cotto, misurato il 2026-09-10
+const ORA_MS = 3600_000;
 
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const frazione = (v) => Math.min(Math.max((num(v) ?? 0) / 100, 0), 1);
 
-/** Quanto la pillola sta moltiplicando l'attacco di adesso. */
-function moltiplicatorePillola(atk) {
-  if (atk?.buffsPercent) return 1 + atk.buffsPercent / 100;
-  if (atk?.debuffsPercent) return 1 - atk.debuffsPercent / 100;
-  return 1;
+async function parametri() {
+  try {
+    const g = await configGioco();
+    const fs = g?.items?.[PILLOLA]?.flatStats || {};
+    return {
+      pillPct: Number(fs.percentAttack) || PILL_PCT_DEFAULT,
+      buffH: Number(fs.buffDurationHours) || 8,
+      debuffH: Number(fs.debuffDurationHours) || 15.5,
+    };
+  } catch {
+    return { pillPct: PILL_PCT_DEFAULT, buffH: 8, debuffH: 15.5 };
+  }
 }
 
-function giocatore(u, cfg) {
+/** Il moltiplicatore del colpo per precisione e critici. Il danno critico
+ *  NON si tronca a 1: 255 vuol dire +255%. */
+function fattoreColpo(precisione, critico, dannoCritico) {
+  const p = frazione(precisione);
+  const c = frazione(critico);
+  const d = Math.max((num(dannoCritico) ?? 0) / 100, 0);
+  return 0.5 + 0.5 * p + p * c * d;
+}
+
+/**
+ * Lo stato della pillola ADESSO, dai timestamp di fine.
+ * Un buff visto dal censimento e poi scaduto è un malus adesso: il malus
+ * comincia quando il buff finisce, e dura `debuffH`.
+ */
+function statoPillola(buffEnd, debuffEnd, cfg, ora) {
+  if (buffEnd && ora < buffEnd) return { pillola: 'buff', fine: buffEnd };
+  const malusDaBuff = buffEnd ? buffEnd + cfg.debuffH * ORA_MS : null;
+  if (malusDaBuff && ora < malusDaBuff) return { pillola: 'malus', fine: malusDaBuff };
+  if (debuffEnd && ora < debuffEnd) return { pillola: 'malus', fine: debuffEnd };
+  return { pillola: 'pulito', fine: null };
+}
+
+function colpi(attaccoPulito, fattore, pillola, cfg) {
+  const su = 1 + cfg.pillPct / 100;
+  const giu = 1 - cfg.pillPct / 100;
+  const adesso = attaccoPulito * (pillola === 'buff' ? su : pillola === 'malus' ? giu : 1) * fattore;
+  // Con la pillola: chi è pulito la prende; chi è in malus resta in malus
+  // (non può prenderne un'altra che conti), chi è in buff ce l'ha già.
+  const massimo = pillola === 'pulito' ? attaccoPulito * su * fattore : adesso;
+  return { perColpo: Math.round(adesso), perColpoMax: Math.round(massimo) };
+}
+
+/** Un giocatore letto in diretta con getUserLite. */
+function daLive(u, cfg, ora) {
   const s = u.skills || {};
-  const atk = num(s.attack?.total) ?? 0;
-  const mult = moltiplicatorePillola(s.attack);
-  const pulito = mult > 0 ? atk / mult : atk;
-
-  const prec = frazione(s.precision?.total);
-  const cc = frazione(s.criticalChance?.total);
-  // Il danno critico NON si tronca a 1: 255 vuol dire +255%.
-  const cd = Math.max((num(s.criticalDamages?.total) ?? 0) / 100, 0);
-  const fattore = 0.5 + 0.5 * prec + prec * cc * cd;
-
-  const buffFine = (u.buffs?.buffCodes || []).includes(PILLOLA) ? Date.parse(u.buffs.buffEndAt || '') : NaN;
-  const malusFine = (u.buffs?.debuffCodes || []).includes(PILLOLA) ? Date.parse(u.buffs.debuffEndAt || '') : NaN;
-  const pillola = Number.isFinite(buffFine) ? 'buff' : Number.isFinite(malusFine) ? 'malus' : 'pulito';
-
-  const perColpo = atk * fattore;
-  const perColpoMax = pillola === 'pulito' ? pulito * (1 + cfg.pillPct / 100) * fattore : perColpo;
-
-  // La vita si rimette mangiando: ogni punto fame è un pasto, e un pasto
-  // rende una percentuale della vita MASSIMA (vedi la testata).
-  const vita = num(s.health?.currentBarValue) ?? 0;
-  const vitaMax = num(s.health?.value) ?? num(s.health?.total) ?? 0;
-  const pasto = (vitaMax * cfg.ciboPct) / 100;
-  const fame = num(s.hunger?.currentBarValue) ?? 0;
-  const colpi = Math.floor((vita + fame * pasto) / cfg.healthCost);
-
+  const a = s.attack || {};
+  const mult = a.buffsPercent ? 1 + a.buffsPercent / 100 : a.debuffsPercent ? 1 - a.debuffsPercent / 100 : 1;
+  const attaccoPulito = (num(a.total) ?? 0) / (mult > 0 ? mult : 1);
+  const b = u.buffs || {};
+  const fine = (codici, quando) => ((codici || []).includes(PILLOLA) ? (Date.parse(quando || '') || null) : null);
+  const p = statoPillola(fine(b.buffCodes, b.buffEndAt), fine(b.debuffCodes, b.debuffEndAt), cfg, ora);
   return {
     id: u._id,
     nome: u.username || null,
     avatar: u.avatarUrl || null,
     livello: u.leveling?.level ?? null,
-    pillola,
-    fine: pillola === 'buff' ? buffFine : pillola === 'malus' ? malusFine : null,
-    perColpo: Math.round(perColpo),
-    colpi,
-    vita,
-    adesso: colpi * perColpo,
-    massimo: colpi * perColpoMax,
-    settimana: num(u.rankings?.weeklyUserDamages?.value) ?? null,
+    settimana: num(u.rankings?.weeklyUserDamages?.value),
+    visto: Date.parse(u.dates?.lastConnectionAt || '') || null,
+    ...p,
+    ...colpi(attaccoPulito, fattoreColpo(s.precision?.total, s.criticalChance?.total, s.criticalDamages?.total), p.pillola, cfg),
+    fonte: 'live',
+    letto: ora,
   };
 }
 
-async function parametri() {
-  try {
-    const g = await configGioco();
-    // Il pasto migliore del gioco, qualunque sia: se domani arriva un
-    // cibo nuovo che rende il 25%, il tetto sale da solo.
-    const ciboPct = Math.max(0, ...Object.values(g?.items || {})
-      .map((it) => Number(it?.flatStats?.healthRegenPercent) || 0));
-    return {
-      healthCost: Number(g?.battle?.healthCost) || HEALTH_COST_DEFAULT,
-      pillPct: Number(g?.items?.[PILLOLA]?.flatStats?.percentAttack) || PILL_PCT_DEFAULT,
-      buffH: Number(g?.items?.[PILLOLA]?.flatStats?.buffDurationHours) || 8,
-      ciboPct: ciboPct || CIBO_PCT_DEFAULT,
-    };
-  } catch {
-    return { healthCost: HEALTH_COST_DEFAULT, pillPct: PILL_PCT_DEFAULT, buffH: 8, ciboPct: CIBO_PCT_DEFAULT };
-  }
+/** Un giocatore dal censimento del cache-server. Senza i campi di
+ *  combattimento (non ancora riletto dopo il deploy) resta 'ignoto':
+ *  meglio un buco dichiarato che un "pulito" inventato. */
+function daCensimento(c, cfg, ora) {
+  const base = {
+    id: c.id, nome: c.u || null, avatar: c.a || null, livello: c.lv ?? null,
+    settimana: c.wk ?? null, visto: c.seen || null, letto: c.ts || null, fonte: 'censimento',
+  };
+  if (c.aC == null) return { ...base, pillola: 'ignoto', fine: null, perColpo: null, perColpoMax: null };
+  const p = statoPillola(c.bE, c.dE, cfg, ora);
+  return { ...base, ...p, ...colpi(c.aC, fattoreColpo(c.pc, c.cc, c.cd), p.pillola, cfg) };
 }
 
 /** Il danno osservato, dall'archivio che accumula. Un'ora non misurata è
@@ -158,7 +160,7 @@ function dannoOsservato(tl) {
   let picco = null;
   for (const p of serie) {
     if (p.d == null) continue;
-    if (p.to > ora - 24 * 3600_000) { ultime24 += p.d; misurate24 += (p.min || 60); }
+    if (p.to > ora - 24 * ORA_MS) { ultime24 += p.d; misurate24 += (p.min || 60); }
     // Il picco si confronta A PARITÀ DI DURATA: un secchio da un'ora
     // (l'archivio vecchio) contro uno da mezz'ora non sono la stessa
     // misura, quindi si confronta il ritmo orario.
@@ -167,75 +169,73 @@ function dannoOsservato(tl) {
   }
   const giorni = (tl?.daily || []).filter((g) => g.d != null && !g.partial);
   const giornoMax = giorni.reduce((m, g) => (!m || g.d > m.d ? g : m), null);
-
-  // Pillati in tutta la nazione, dal censimento: l'ultimo secchio. Le
-  // ultime ore possono ancora crescere (il giro completo dei cittadini
-  // dura ~2 ore), e il campo `assestato` lo dice.
-  const conP = serie.filter((p) => p.p != null);
-  const ultimo = conP[conP.length - 1] || null;
-
   return {
     ultime24h: misurate24 ? ultime24 : null,
     oreMisurate24h: Math.round(misurate24 / 6) / 10,
     piccoOra: picco,
     giornoMax: giornoMax ? { giorno: giornoMax.day, d: giornoMax.d } : null,
-    pillatiNazione: ultimo ? { n: ultimo.p, t: ultimo.t, assestato: ultimo.t <= (tl?.pill?.settledUntil ?? 0) } : null,
     coverageFrom: tl?.coverageFrom ?? null,
   };
 }
 
+/** Tutti i giocatori di un nemico, più il riepilogo. Dieci minuti in
+ *  memoria: la stessa scheda la vedono tutti i ministri della nazione. */
 const schedaNemico = memo(10 * 60_000, async (countryId) => {
   const [cfg, tl, cit] = await Promise.all([
     parametri(),
     timeline(`${countryId}|336`).catch(() => null),
-    cittadini(countryId).catch(() => null),
+    dalCache(`/country-citizens?countryId=${encodeURIComponent(countryId)}&limit=5000&fields=combat`).catch(() => null),
   ]);
 
   const ora = Date.now();
-  const elenco = (cit?.data || []).filter((c) => c.seen && ora - c.seen < ATTIVO_MS);
-  const roster = elenco.slice(0, ROSTER).map((c) => c.id);
+  const censimento = cit?.data || [];     // già ordinato per danno settimanale
+  const attivi = new Set(censimento.filter((c) => c.seen && ora - c.seen < ATTIVO_MS).map((c) => c.id));
 
-  const giocatori = [];
+  const roster = censimento.filter((c) => attivi.has(c.id)).slice(0, ROSTER_LIVE).map((c) => c.id);
+  const live = new Map();
   for (let i = 0; i < roster.length; i += CHUNK_UTENTI) {
     const pezzo = roster.slice(i, i + CHUNK_UTENTI);
     try {
       const risp = await trpcBatch(pezzo.map((userId) => ['user.getUserLite', { userId }]));
-      for (const u of risp) if (u?._id) giocatori.push(giocatore(u, cfg));
+      for (const u of risp) if (u?._id) live.set(u._id, daLive(u, cfg, ora));
     } catch (err) {
       console.warn('[nemici] lettura giocatori fallita:', err.message);
     }
   }
 
-  const somma = (k) => giocatori.reduce((t, g) => t + (g[k] || 0), 0);
-  const conta = (stato) => giocatori.filter((g) => g.pillola === stato).length;
-  const fini = (stato) => giocatori.filter((g) => g.pillola === stato && g.fine).map((g) => g.fine).sort((a, b) => a - b);
+  const giocatori = censimento.map((c) => ({
+    ...(live.get(c.id) || daCensimento(c, cfg, ora)),
+    attivo: attivi.has(c.id),
+  }));
+  giocatori.sort((a, b) => (b.perColpo ?? -1) - (a.perColpo ?? -1));
+
+  const inGioco = giocatori.filter((g) => g.attivo);
+  const conta = (s) => inGioco.filter((g) => g.pillola === s).length;
+  const fini = (s) => inGioco.filter((g) => g.pillola === s && g.fine).map((g) => g.fine).sort((a, b) => a - b).slice(0, 20);
+  const somma = (k) => inGioco.reduce((t, g) => t + (g[k] || 0), 0);
 
   return {
-    letto: ora,
-    censiti: cit?.total ?? null,
-    attivi72h: elenco.length,
-    analizzati: giocatori.length,
-    pillole: {
-      buff: conta('buff'),
-      malus: conta('malus'),
-      pulito: conta('pulito'),
-      // Le scadenze: è il "quando" che serve a decidere, più del quanti.
-      fineBuff: fini('buff'),
-      fineMalus: fini('malus'),
-      durataBuffOre: cfg.buffH,
+    sommario: {
+      letto: ora,
+      censiti: cit?.total ?? null,
+      attivi72h: inGioco.length,
+      live: live.size,
+      pillole: {
+        buff: conta('buff'), malus: conta('malus'), pulito: conta('pulito'), ignoto: conta('ignoto'),
+        // Le scadenze: è il "quando" che serve a decidere, più del quanti.
+        fineBuff: fini('buff'), fineMalus: fini('malus'),
+        durataBuffOre: cfg.buffH,
+      },
+      // Un colpo a testa, tutti gli attivi: adesso e con la pillola.
+      salva: { adesso: Math.round(somma('perColpo')), massimo: Math.round(somma('perColpoMax')) },
+      osservato: dannoOsservato(tl),
     },
-    potenziale: {
-      adesso: Math.round(somma('adesso')),
-      massimo: Math.round(somma('massimo')),
-      colpi: somma('colpi'),
-    },
-    osservato: dannoOsservato(tl),
-    top: [...giocatori].sort((a, b) => b.perColpo - a.perColpo).slice(0, TOP),
+    giocatori,
   };
 });
 
 /**
- * I nemici di una nazione con le loro schede. Le nazioni si decidono qui,
+ * I nemici di una nazione con i loro riepiloghi. Le nazioni si decidono qui,
  * sui dati di adesso: una pace firmata stamattina toglie una scheda.
  */
 async function quadroNemici(countryId) {
@@ -243,11 +243,10 @@ async function quadroNemici(countryId) {
   const noi = paesi.get(countryId);
   if (!noi) return { nemici: [] };
 
-  const ids = [...new Set([...(noi.warsWith || []), noi.enemy].filter(Boolean))];
-  const nemici = await Promise.all(ids.map(async (id) => {
+  const nemici = await Promise.all(idNemici(noi).map(async (id) => {
     const loro = paesi.get(id);
     let scheda = null; let errore = null;
-    try { scheda = await schedaNemico(id); } catch (err) { errore = err.message; }
+    try { scheda = (await schedaNemico(id)).sommario; } catch (err) { errore = err.message; }
     return {
       id,
       relazione: relazione(noi, id),
@@ -260,7 +259,6 @@ async function quadroNemici(countryId) {
         settimanaRank: loro?.rankings?.weeklyCountryDamages?.rank ?? null,
         perCittadino: loro?.rankings?.weeklyCountryDamagesPerCitizen?.value ?? null,
       },
-      popolazioneAttiva: loro?.rankings?.countryActivePopulation?.value ?? null,
       ...(scheda || {}),
       errore,
     };
@@ -271,4 +269,16 @@ async function quadroNemici(countryId) {
   return { nemici };
 }
 
-module.exports = { quadroNemici, giocatore, dannoOsservato };
+function idNemici(noi) {
+  return [...new Set([...(noi?.warsWith || []), noi?.enemy].filter(Boolean))];
+}
+
+/** L'elenco completo dei giocatori di UN nemico, per la tabella. A parte
+ *  dal riepilogo perché pesa (la Germania ha 1.131 cittadini) e lo apre
+ *  solo chi lo chiede. */
+async function giocatoriNemico(countryId) {
+  const s = await schedaNemico(countryId);
+  return { letto: s.sommario.letto, censiti: s.sommario.censiti, attivi72h: s.sommario.attivi72h, giocatori: s.giocatori };
+}
+
+module.exports = { quadroNemici, giocatoriNemico, idNemici, statoPillola, colpi, fattoreColpo, dannoOsservato };
