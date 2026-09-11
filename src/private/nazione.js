@@ -657,8 +657,15 @@ export function creaQuadroNazione(ctx) {
     if (n.errore && !n.pillole) { box.appendChild(el('p', 'wp-pv-note', nzT('enemiesError'))); return box; }
 
     // ── Pillole ──────────────────────────────────────────────────────
+    // ⚠️ Due popolazioni diverse, e la vista deve dire quale è quale: la
+    // barra e i tre conti sono i giocatori ANALIZZATI (i più forti, letti
+    // dal vivo), la riga sotto è TUTTA la nazione dal censimento, dove si
+    // vede solo chi è sotto pillola. Scritti uno accanto all'altro senza
+    // etichetta ("42 sotto pillola… 152 sotto pillola") sembravano un conto
+    // che non tornava — segnalato così.
     const pl = n.pillole || {};
     const tot = (pl.buff || 0) + (pl.malus || 0) + (pl.pulito || 0);
+    if (tot) box.appendChild(el('p', 'wp-pv-nz-pill-titolo', nzT('pillTopTitle').replace('{n}', String(tot))));
     if (tot) {
       const barra = el('div', 'wp-pv-nz-pillbar');
       for (const [k, v] of [['buff', pl.buff], ['malus', pl.malus], ['pulito', pl.pulito]]) {
@@ -681,11 +688,13 @@ export function creaQuadroNazione(ctx) {
     vocePill('buff', pl.buff, nzT('pillOn'), primo(pl.fineBuff) && `${nzT('pillFirstEnd')} ${primo(pl.fineBuff)}`);
     vocePill('malus', pl.malus, nzT('pillHangover'), primo(pl.fineMalus) && `${nzT('pillFirstClean')} ${primo(pl.fineMalus)}`);
     vocePill('pulito', pl.pulito, nzT('pillClean'));
+    box.appendChild(pill);
     const pn = n.osservato?.pillatiNazione;
     if (pn) {
-      vocePill('nazione', pn.n, nzT('pillNation'), pn.assestato ? null : nzT('pillSettling'));
+      const testo = nzT('pillNation')
+        .replace('{n}', num(pn.n)).replace('{tot}', num(n.censiti)).replace('{top}', String(pl.buff ?? 0));
+      box.appendChild(el('p', 'wp-pv-note', pn.assestato ? testo : `${testo} ${nzT('pillSettling')}.`));
     }
-    box.appendChild(pill);
 
     // ── Danno fatto, danno possibile ─────────────────────────────────
     const griglia = el('div', 'wp-pv-nz-numeri');

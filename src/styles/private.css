@@ -1191,6 +1191,7 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
 .wp-pv-nz-nemico-testa { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .wp-pv-nz-nemico-testa .wp-pv-nz-paese { font-size: 1rem; font-weight: 700; }
 
+.wp-pv-nz-pill-titolo { margin: 0; font-size: .78rem; color: var(--pv-ink-soft); }
 .wp-pv-nz-pillbar { display: flex; height: 7px; border-radius: 999px; overflow: hidden; background: var(--pv-rule); }
 .wp-pv-nz-pill-buff { background: #f0b429; }
 .wp-pv-nz-pill-malus { background: var(--pv-danger); opacity: .75; }
