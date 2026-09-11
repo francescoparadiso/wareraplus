@@ -63,7 +63,8 @@ const { urlWebhookValido } = require('./notify');
 const { trpcGet } = require('./wareraApi');
 const {
   regioniMappa, paesiMappa, paeseLive, governo, nomiUtenti,
-  battaglieVive, baseDannoGiornaliero, bonifici, timeline, dalCache, memo,
+  battaglieVive, baseDannoGiornaliero, bonifici, timeline,
+  cittadiniTutti, conteggiCittadini, eventiTicker, archivioBattaglie, speseGuerra, direttorioMu, elezioniDi,
 } = require('./fonti');
 const { quadroConfini, relazione } = require('./confini');
 const { quadroNemici, giocatoriNemico, idNemici } = require('./nemici');
@@ -114,6 +115,7 @@ function formaPaese(n) {
     dannoSettimana: rk(r.weeklyCountryDamages),
     dannoPerCittadino: rk(r.weeklyCountryDamagesPerCitizen),
     dannoTotale: rk(r.countryDamages),
+    tesoroRank: rk(r.countryWealth),
     // ⚠️ Incassato dai cittadini, NON speso dal governo: vedi
     // country-bounty-is-earned-not-spent e battleArchive.js.
     taglieIncassate: rk(r.countryBounty),
@@ -181,6 +183,18 @@ function formaBonifici(body, countryId) {
   const entrati = righe.filter((x) => x.t === countryId).map((x) => ({ paese: x.f, soldi: x.m, at: x.a }));
   const usciti = righe.filter((x) => x.f === countryId).map((x) => ({ paese: x.t, soldi: x.m, at: x.a }));
   const tot = (l) => l.reduce((t, x) => t + (x.soldi || 0), 0);
+  // Due settimane per nazione: con chi scambiamo soldi, non solo le ultime
+  // righe. L'archivio copre dal 30/08 (coverageFrom): prima non si sa.
+  const da14 = Date.now() - 14 * 24 * 3600_000;
+  const perPaese = new Map();
+  for (const x of body?.data || []) {
+    if (!(x.a >= da14) || (x.f !== countryId && x.t !== countryId)) continue;
+    const altro = x.f === countryId ? x.t : x.f;
+    const p = perPaese.get(altro) || { paese: altro, entrati: 0, usciti: 0 };
+    if (x.t === countryId) p.entrati += x.m || 0; else p.usciti += x.m || 0;
+    perPaese.set(altro, p);
+  }
+  const partner = [...perPaese.values()].sort((a, b) => (b.entrati + b.usciti) - (a.entrati + a.usciti));
   return {
     finestraOre: FINESTRA_BONIFICI_MS / 3600_000,
     coverageFrom: body?.coverageFrom ?? null,
@@ -188,6 +202,11 @@ function formaBonifici(body, countryId) {
     usciti: usciti.sort((a, b) => b.at - a.at),
     totaleEntrati: tot(entrati),
     totaleUsciti: tot(usciti),
+    quattordici: {
+      entrati: partner.reduce((t, p) => t + p.entrati, 0),
+      usciti: partner.reduce((t, p) => t + p.usciti, 0),
+      partner: partner.slice(0, 8),
+    },
   };
 }
 
@@ -208,11 +227,180 @@ function formaOrario(tl) {
     coverageFrom: tl.coverageFrom ?? null,
     pill: tl.pill || null,
     serie: (tl.series || []).map((p) => ({ t: p.t, to: p.to, min: p.min, d: p.d, p: p.p })),
+    // Il danno GIORNO per giorno degli ultimi 14: la stessa griglia oraria
+    // sommata, con `hours` a dire su quante ore è calcolato ogni giorno.
+    giorni: (tl.daily || []).map((g) => ({ giorno: g.day, d: g.d, ore: g.hours, parziale: Boolean(g.partial), pPicco: g.pPeak })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Le sezioni aggiunte l'11/09: storia, cittadini, guerra, unità, elezioni
+// ---------------------------------------------------------------------------
+// Tutte da cache che il cache-server tiene già per altre viste: nessuna
+// chiamata nuova a WarEra. Ognuna fallisce per conto suo (null), e la
+// vista al posto suo scrive "non disponibile".
+
+const GIORNO_MS = 24 * 3600_000;
+
+/** Il tesoro ora per ora e la popolazione attiva, dagli eventi del ticker.
+ *  Il tesoro è `countryWealth` (vedi formaPaese), che il ticker registra a
+ *  ogni ricalcolo orario del gioco: è la sua storia vera, non una stima. */
+function formaStorico(eventi, countryId) {
+  const da = Date.now() - 14 * GIORNO_MS;
+  const tesoro = []; const popolazione = [];
+  for (const e of eventi || []) {
+    if (e?.countryId !== countryId || !(e.timestamp >= da)) continue;
+    if (e.category === 'wealth' && e.value != null) tesoro.push({ t: e.timestamp, v: e.value });
+    else if (e.category === 'population' && e.value != null) popolazione.push({ t: e.timestamp, v: e.value });
+  }
+  tesoro.sort((a, b) => a.t - b.t);
+  popolazione.sort((a, b) => a.t - b.t);
+  // La variazione su una finestra: ultimo valore meno l'ultimo valore
+  // registrato PRIMA dell'inizio della finestra. Senza un punto così
+  // vecchio la variazione non si sa, e resta null invece di uno zero.
+  const variazione = (serie, ms) => {
+    if (!serie.length) return null;
+    const ultimo = serie[serie.length - 1];
+    let base = null;
+    for (const p of serie) { if (p.t <= ultimo.t - ms) base = p; else break; }
+    return base ? ultimo.v - base.v : null;
+  };
+  return {
+    tesoro, popolazione,
+    tesoro24h: variazione(tesoro, GIORNO_MS),
+    tesoro7g: variazione(tesoro, 7 * GIORNO_MS),
+    popolazione7g: variazione(popolazione, 7 * GIORNO_MS),
+  };
+}
+
+/** I cittadini in numeri, dal censimento: chi c'è, chi gioca, come. */
+function formaCittadini(cit, conteggi) {
+  const ora = Date.now();
+  const d = cit?.data || [];
+  const visti = (ms) => d.filter((c) => c.seen && ora - c.seen < ms).length;
+  const fasce = [[1, 9], [10, 19], [20, 29], [30, 39], [40, Infinity]];
+  const livelli = fasce.map(([a, b]) => ({ da: a, a: Number.isFinite(b) ? b : null, n: d.filter((c) => c.lv >= a && c.lv <= b).length }));
+  const stile = { war: 0, eco: 0, mixed: 0, undecided: 0 };
+  for (const c of d) if (c.ps && c.ps in stile) stile[c.ps] += 1;
+  const somma = (k) => d.reduce((t, c) => t + (c[k] || 0), 0);
+  const persona = (c) => ({ id: c.id, nome: c.u, avatar: c.a || null, livello: c.lv ?? null, settimana: c.wk ?? null, ricchezza: c.w ?? null, stile: c.ps || null });
+  return {
+    censiti: cit?.total ?? d.length,
+    letti: cit?.known ?? d.length,
+    nuovi24h: conteggi?.new24h ?? null,
+    nuovi7g: conteggi?.new7d ?? null,
+    attivi24h: visti(GIORNO_MS),
+    attivi72h: visti(3 * GIORNO_MS),
+    attivi7g: visti(7 * GIORNO_MS),
+    livelli,
+    stile,
+    ricchezzaTotale: somma('w'),
+    ricchezzaMedia: d.length ? somma('w') / d.length : null,
+    topDanno: d.slice(0, 10).map(persona),            // il censimento arriva già per danno settimanale
+    topRicchezza: [...d].sort((a, b) => (b.w || 0) - (a.w || 0)).slice(0, 8).map(persona),
+    aggiornatoIl: cit?.fetchedAt ?? null,
+  };
+}
+
+/** Trenta giorni di guerra dall'archivio battaglie, e le spese giorno per
+ *  giorno. ⚠️ ab/db sono la taglia INCASSATA dai due lati, non spesa:
+ *  la spesa vera sta in war-expenses (vedi battleArchive.js). */
+function formaGuerra(archivio, spese, countryId, reg) {
+  const da = Date.now() - 30 * GIORNO_MS;
+  const mie = (archivio || []).filter((b) => b.e >= da && (b.ac === countryId || b.dc === countryId));
+  const perAvversario = new Map();
+  let vinte = 0; let attacchi = 0; let dannoFatto = 0; let dannoSubito = 0;
+  const righe = mie.map((b) => {
+    const lato = b.ac === countryId ? 'attacker' : 'defender';
+    const vinta = b.w === lato;
+    const noi = lato === 'attacker' ? b.ad : b.dd;
+    const loro = lato === 'attacker' ? b.dd : b.ad;
+    const avversario = lato === 'attacker' ? b.dc : b.ac;
+    if (vinta) vinte += 1;
+    if (lato === 'attacker') attacchi += 1;
+    dannoFatto += noi || 0; dannoSubito += loro || 0;
+    if (avversario) {
+      const a = perAvversario.get(avversario) || { paese: avversario, battaglie: 0, vinte: 0, dannoNoi: 0, dannoLoro: 0 };
+      a.battaglie += 1; if (vinta) a.vinte += 1; a.dannoNoi += noi || 0; a.dannoLoro += loro || 0;
+      perAvversario.set(avversario, a);
+    }
+    return { id: b.i, fine: b.e, regione: reg?.[b.r]?.name || null, lato, vinta, avversario, dannoNoi: noi || 0, dannoLoro: loro || 0 };
+  });
+
+  const giorni = [];
+  for (let k = 13; k >= 0; k -= 1) {
+    const g = new Date(Date.now() - k * GIORNO_MS).toISOString().slice(0, 10);
+    const s = spese?.byDay?.[g]?.[countryId];
+    giorni.push({ giorno: g, taglie: s?.bounty ?? 0, contratti: s?.contracts ?? 0, nContratti: s?.contractCount ?? 0, battaglie: s?.battles ?? 0 });
+  }
+  const somma = (n) => Object.entries(spese?.byDay || {})
+    .filter(([g]) => g >= new Date(Date.now() - (n - 1) * GIORNO_MS).toISOString().slice(0, 10))
+    .reduce((t, [, per]) => t + (per?.[countryId]?.bounty || 0) + (per?.[countryId]?.contracts || 0), 0);
+
+  return {
+    battaglie: mie.length, vinte, perse: mie.length - vinte, attacchi, difese: mie.length - attacchi,
+    dannoFatto, dannoSubito,
+    avversari: [...perAvversario.values()].sort((a, b) => b.battaglie - a.battaglie).slice(0, 6),
+    ultime: righe.sort((a, b) => b.fine - a.fine).slice(0, 8),
+    spese: { giorni, ultimi7g: somma(7), ultimi30g: somma(30) },
+  };
+}
+
+/** Le unità militari della nazione: registrate qui, oppure nostre DI
+ *  FATTO (la maggioranza dei membri è nostra, stesso marchio dell'elenco
+ *  unità del tool). */
+function formaUnita(dir, countryId) {
+  const mie = (dir || []).filter((m) => m.country === countryId || m.composition?.top?.[0]?.country === countryId);
+  const righe = mie.map((m) => ({
+    id: m._id, nome: m.name, avatar: m.avatarUrl || null,
+    membri: m.memberCount ?? 0, livello: m.level ?? null,
+    registrata: m.country === countryId,
+    dannoSettimana: m.rankings?.muWeeklyDamages?.value ?? 0,
+    ricchezza: m.rankings?.muWealth?.value ?? null,
+    guerra: m.playstyle?.war ?? 0, eco: m.playstyle?.eco ?? 0,
+  })).sort((a, b) => b.dannoSettimana - a.dannoSettimana);
+  return {
+    n: righe.length,
+    registrate: righe.filter((u) => u.registrata).length,
+    deFatto: righe.filter((u) => !u.registrata).length,
+    membri: righe.reduce((t, u) => t + u.membri, 0),
+    dannoSettimana: righe.reduce((t, u) => t + u.dannoSettimana, 0),
+    top: righe.slice(0, 10),
+  };
+}
+
+/** Ultime elezioni e le prossime. Le prossime sono una STIMA dal ciclo
+ *  mensile del gioco (presidenziali il 2, congresso il 6, misurato sugli
+ *  archivi) e la vista la chiama così. */
+async function formaElezioni(lista) {
+  const ordinate = [...(lista || [])].sort((a, b) => Date.parse(b.votesStartAt || 0) - Date.parse(a.votesStartAt || 0));
+  const ultima = (tipo) => ordinate.find((e) => e.type === tipo) || null;
+  const pres = ultima('president');
+  const cong = ultima('congress');
+  const vincitore = pres?.candidates?.find((c) => c.isElected)?.user || null;
+  const nomi = await nomiUtenti([vincitore].filter(Boolean));
+  const meseDopo = (iso) => {
+    const t = Date.parse(iso || ''); if (!t) return null;
+    const d = new Date(t); d.setUTCMonth(d.getUTCMonth() + 1); return d.getTime();
+  };
+  const forma = (e) => e && ({
+    tipo: e.type, inizio: Date.parse(e.votesStartAt || '') || null, fine: Date.parse(e.votesEndAt || '') || null,
+    stato: e.status || null, attiva: Boolean(e.isActive), voti: e.votesCount ?? null,
+    candidati: (e.candidates || []).length, eletti: e.electedCount ?? null,
+  });
+  return {
+    presidente: pres && {
+      ...forma(pres),
+      vincitore: vincitore ? { id: vincitore, nome: nomi[vincitore]?.username || null, avatar: nomi[vincitore]?.avatarUrl || null, voti: pres.votes?.[vincitore] ?? null } : null,
+    },
+    congresso: forma(cong),
+    inCorso: ordinate.filter((e) => e.isActive || (e.status && e.status !== 'finished')).map(forma),
+    prossime: { presidente: meseDopo(pres?.votesStartAt), congresso: meseDopo(cong?.votesStartAt) },
   };
 }
 
 async function quadroNazione(countryId) {
-  const [paeseR, govR, battR, baseR, tlR, bonR, regR, confR] = await Promise.allSettled([
+  const [paeseR, govR, battR, baseR, tlR, bonR, regR, confR, tickR, citR, contR, archR, speseR, dirR, eleR] = await Promise.allSettled([
     paeseLive(countryId),
     formaGoverno(countryId),
     battaglieVive(),
@@ -221,11 +409,20 @@ async function quadroNazione(countryId) {
     bonifici(),
     regioniMappa(),
     quadroConfini(countryId),
+    eventiTicker(),
+    cittadiniTutti(countryId),
+    conteggiCittadini(countryId),
+    archivioBattaglie(),
+    speseGuerra(),
+    direttorioMu(),
+    elezioniDi(countryId),
   ]);
 
   const paese = esito(paeseR);
   if (!paese) throw new Error('nazione_non_leggibile');
   const reg = esito(regR);
+  let elezioni = null;
+  try { elezioni = esito(eleR) ? await formaElezioni(esito(eleR)) : null; } catch { /* una sezione in meno */ }
 
   return {
     paese: formaPaese(paese),
@@ -235,6 +432,11 @@ async function quadroNazione(countryId) {
     battaglie: esito(battR) ? formaBattaglie(esito(battR), countryId, reg) : null,
     bonifici: esito(bonR) ? formaBonifici(esito(bonR), countryId) : null,
     confini: esito(confR),
+    storico: esito(tickR) ? formaStorico(esito(tickR), countryId) : null,
+    cittadini: esito(citR) ? formaCittadini(esito(citR), esito(contR)) : null,
+    guerra: esito(archR) ? formaGuerra(esito(archR), esito(speseR), countryId, reg) : null,
+    unita: esito(dirR) ? formaUnita(esito(dirR), countryId) : null,
+    elezioni,
     generatoIl: Date.now(),
   };
 }
@@ -246,8 +448,7 @@ async function quadroNazione(countryId) {
 /** L'elenco completo dei cittadini, per cercarne uno per nome. Tutti e non
  *  i primi 400 come per i nemici: chi il governo vuole aggiungere è spesso
  *  proprio uno che fa poco danno (un diplomatico, un economista). */
-const tuttiICittadini = memo(10 * 60_000, (countryId) =>
-  dalCache(`/country-citizens?countryId=${encodeURIComponent(countryId)}&limit=5000`));
+const tuttiICittadini = cittadiniTutti;
 
 async function formaAccessi(countryId) {
   const righe = accessiNazione(countryId);
@@ -360,7 +561,11 @@ function buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSotto
       if (!ctx.countryId) return res.status(404).json({ error: 'nazione_sconosciuta' });
       if (!ctx.accesso) return negato(res, ctx.countryId);
       const noi = (await paesiMappa()).get(ctx.countryId);
-      if (!idNemici(noi).includes(req.params.id)) return res.status(403).json({ error: 'non_nemico' });
+      // I nostri giocatori sì (la scheda "la nostra forza" apre la stessa
+      // tabella), quelli di nazioni che non ci riguardano no.
+      if (req.params.id !== ctx.countryId && !idNemici(noi).includes(req.params.id)) {
+        return res.status(403).json({ error: 'non_nemico' });
+      }
       res.json(await giocatoriNemico(req.params.id));
     } catch (err) {
       console.error('[nazione] giocatori nemici falliti:', err.message);

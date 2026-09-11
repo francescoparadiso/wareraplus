@@ -57,12 +57,16 @@
    perche' e' il contesto di tutto il resto. A destra COSA PUOI FARE:
    battaglie, tavolo, cose di governo. Prima era tutto in una colonna da
    42rem e su un monitor grande diventava una striscia in mezzo al vuoto. */
+/* Tutta la larghezza dello schermo (richiesta: "non solo una striscia su
+   desktop"). La testata resta leggibile perché ha il suo max-width; le
+   schede della nazione si dispongono in una griglia a 12 colonne che su
+   un monitor largo affianca tre o quattro riquadri per riga. */
 .wp-pv {
-  max-width: 84rem;
+  max-width: none;
   margin: 0 auto;
-  padding: 2rem 1.5rem 5rem;
+  padding: 2rem clamp(1rem, 2vw, 2.25rem) 5rem;
   display: grid;
-  grid-template-columns: 21rem minmax(0, 1fr);
+  grid-template-columns: 19rem minmax(0, 1fr);
   grid-template-areas: 'testata testata' 'sx dx';
   gap: 1rem 1.5rem;
   align-items: start;
@@ -1273,6 +1277,138 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
 .wp-pv-nz-confine-testa .wp-pv-nz-paese { font-weight: 700; font-size: .92rem; }
 .wp-pv-nz-confine-guerra .wp-pv-nz-regione,
 .wp-pv-nz-confine-nemico_giurato .wp-pv-nz-regione { box-shadow: inset 3px 0 0 var(--pv-danger); }
+
+/* ── La griglia della nazione ────────────────────────────────── */
+.wp-pv-nz-griglia {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-flow: row dense;
+  gap: 1rem;
+  align-items: start;
+}
+.wp-pv-nz-griglia > .wp-pv-card { min-width: 0; }
+.wp-pv-nz-span-12 { grid-column: span 12; }
+.wp-pv-nz-span-8 { grid-column: span 8; }
+.wp-pv-nz-span-6 { grid-column: span 6; }
+.wp-pv-nz-span-4 { grid-column: span 4; }
+@media (max-width: 1500px) {
+  .wp-pv-nz-span-4 { grid-column: span 6; }
+}
+@media (max-width: 1100px) {
+  .wp-pv-nz-span-8, .wp-pv-nz-span-6, .wp-pv-nz-span-4 { grid-column: span 12; }
+}
+
+/* Due o tre blocchi affiancati dentro una scheda, a colonna sotto i 900px. */
+.wp-pv-nz-due { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 1.5rem; align-items: start; }
+.wp-pv-nz-tre { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem 1.5rem; }
+@media (max-width: 900px) {
+  .wp-pv-nz-due, .wp-pv-nz-tre { grid-template-columns: minmax(0, 1fr); }
+}
+.wp-pv-nz-due > .wp-pv-nz-governo, .wp-pv-nz-sezione-affiancata { border-top: none; padding-top: 0; }
+.wp-pv-nz-tessere-strette { grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); }
+
+/* Grafici: si stirano con la scheda, altezza fissa. */
+.wp-pv-nz-pannello { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+.wp-pv-nz-pannello-testa { display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+.wp-pv-nz-pannello-val { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.wp-pv-nz-var { font-size: .78rem; font-variant-numeric: tabular-nums; color: var(--pv-ink-soft); }
+.wp-pv-nz-var-su { color: #2f9e5f; }
+.wp-pv-nz-var-giu { color: var(--pv-danger); }
+.wp-pv-nz-pannello .wp-pv-nz-grafico, .wp-pv-nz-card .wp-pv-nz-sezione .wp-pv-nz-grafico { min-width: 0; }
+.wp-pv-nz-area { fill: var(--pv-accent); opacity: .14; }
+.wp-pv-nz-linea-serie { fill: none; stroke: var(--pv-accent); stroke-width: 1.8; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.wp-pv-nz-punto { fill: var(--pv-accent); }
+.wp-pv-nz-bersaglio { fill: transparent; }
+.wp-pv-nz-bersaglio:hover { fill: var(--pv-accent); opacity: .5; }
+.wp-pv-nz-parziale { opacity: .3; }
+.wp-pv-nz-barra-taglie { fill: #d99a0b; opacity: .8; }
+.wp-pv-nz-barra-contratti { fill: var(--pv-accent); opacity: .7; }
+.wp-pv-nz-grafico .wp-pv-nz-tacca, .wp-pv-nz-grafico .wp-pv-nz-asse { vector-effect: non-scaling-stroke; }
+
+/* Fette e legenda (stile di gioco, spese). */
+.wp-pv-nz-fette { display: flex; flex-direction: column; gap: .35rem; }
+.wp-pv-nz-legenda { display: flex; flex-wrap: wrap; gap: .25rem .9rem; font-size: .78rem; color: var(--pv-ink-soft); }
+.wp-pv-nz-legenda-voce { display: inline-flex; align-items: center; gap: .35rem; }
+.wp-pv-nz-legenda-voce i { width: .7rem; height: .7rem; border-radius: 2px; display: inline-block; }
+.wp-pv-nz-f-guerra { background: var(--pv-danger); }
+.wp-pv-nz-f-misto { background: #d99a0b; }
+.wp-pv-nz-f-eco { background: #2f9e5f; }
+.wp-pv-nz-f-nessuno { background: var(--pv-rule); }
+i.wp-pv-nz-barra-taglie { background: #d99a0b; }
+i.wp-pv-nz-barra-contratti { background: var(--pv-accent); }
+
+/* Istogramma dei livelli. */
+.wp-pv-nz-isto { display: grid; grid-template-columns: repeat(5, 1fr); gap: .5rem; height: 7rem; align-items: end; }
+.wp-pv-nz-isto-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: .2rem; height: 100%; min-width: 0; }
+.wp-pv-nz-isto-barra { width: 70%; min-height: 2px; border-radius: 3px 3px 0 0; background: var(--pv-accent); opacity: .7; }
+.wp-pv-nz-isto-n { font-size: .72rem; font-variant-numeric: tabular-nums; color: var(--pv-ink-soft); }
+.wp-pv-nz-isto-et { font-size: .7rem; color: var(--pv-ink-soft); }
+
+/* Noi contro loro. */
+.wp-pv-nz-confronto { display: flex; flex-direction: column; gap: .25rem; }
+.wp-pv-nz-confronto-riga {
+  display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(0, 2.4fr) 4.5rem 4.5rem 4.5rem;
+  gap: .6rem; align-items: center; padding: .3rem .4rem; border-radius: 6px; font-size: .84rem;
+}
+.wp-pv-nz-confronto-testa { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--pv-ink-soft); }
+.wp-pv-nz-confronto-testa > :nth-child(n+3) { text-align: right; }
+.wp-pv-nz-noi { background: var(--pv-accent-soft); }
+.wp-pv-nz-confronto-cella { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+.wp-pv-nz-confronto-cella .wp-pv-nz-tab-num { white-space: nowrap; }
+.wp-pv-nz-confronto-barra { position: relative; flex: 1; height: .7rem; border-radius: 999px; background: var(--pv-rule); overflow: hidden; }
+.wp-pv-nz-confronto-max, .wp-pv-nz-confronto-ora { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; }
+.wp-pv-nz-confronto-max { background: var(--pv-accent); opacity: .25; }
+.wp-pv-nz-confronto-ora { background: var(--pv-accent); }
+@media (max-width: 720px) {
+  .wp-pv-nz-confronto-riga { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
+  .wp-pv-nz-confronto-riga > :nth-child(n+3) { display: none; }
+}
+
+/* Classifiche compatte: posizione, nome, valore. */
+.wp-pv-nz-classifica { display: flex; flex-direction: column; gap: .2rem; }
+.wp-pv-nz-classifica-riga {
+  display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) auto;
+  gap: .55rem; align-items: center; padding: .25rem .35rem; border-radius: 6px; font-size: .85rem;
+}
+.wp-pv-nz-classifica-riga:nth-child(odd) { background: var(--pv-surface); }
+.wp-pv-nz-classifica-nome { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-pv-nz-pos { font-variant-numeric: tabular-nums; color: var(--pv-ink-soft); text-align: right; font-size: .78rem; }
+.wp-pv-nz-tier { padding: .05rem .35rem; border-radius: 6px; font-size: .72rem; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.wp-pv-nz-tier-diamond { background: rgba(88, 166, 255, .18); color: #4a90d9; }
+.wp-pv-nz-tier-platinum { background: rgba(160, 160, 190, .2); color: var(--pv-ink); }
+.wp-pv-nz-tier-gold { background: rgba(240, 180, 41, .2); color: #d99a0b; }
+.wp-pv-nz-tier-silver { background: var(--pv-surface-2); color: var(--pv-ink-soft); }
+.wp-pv-nz-tier-bronze { background: rgba(176, 120, 70, .16); color: #b07846; }
+
+/* Guerra: avversari, ultime battaglie. */
+.wp-pv-nz-avversario { display: grid; grid-template-columns: minmax(7rem, 1fr) 3rem minmax(0, 1.4fr); gap: .6rem; align-items: center; font-size: .84rem; padding: .2rem 0; }
+.wp-pv-nz-scontro { display: flex; height: .6rem; border-radius: 999px; overflow: hidden; background: var(--pv-rule); }
+.wp-pv-nz-scontro-noi { background: var(--pv-accent); }
+.wp-pv-nz-scontro-loro { background: var(--pv-danger); opacity: .8; }
+.wp-pv-nz-ultima {
+  display: grid; grid-template-columns: 6.5rem minmax(0, 1fr) auto minmax(0, 1fr) auto auto;
+  gap: .5rem; align-items: center; font-size: .82rem; padding: .25rem .35rem; border-radius: 6px;
+}
+.wp-pv-nz-ultima:nth-child(odd) { background: var(--pv-surface); }
+.wp-pv-nz-ultima strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-pv-nz-esito { padding: .05rem .45rem; border-radius: 999px; font-size: .7rem; font-weight: 700; }
+.wp-pv-nz-esito-v { background: rgba(47, 158, 95, .16); color: #2f9e5f; }
+.wp-pv-nz-esito-p { background: rgba(240, 119, 108, .16); color: var(--pv-danger); }
+@media (max-width: 720px) {
+  .wp-pv-nz-ultima { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .wp-pv-nz-ultima > :nth-child(1), .wp-pv-nz-ultima > :nth-child(4) { display: none; }
+}
+
+/* Elezioni. */
+.wp-pv-nz-elezione { display: flex; flex-direction: column; gap: .3rem; padding: .55rem .65rem; border-radius: 8px; background: var(--pv-surface-2); }
+.wp-pv-nz-elezione-testa { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
+.wp-pv-nz-in-corso { margin: 0; padding: .45rem .6rem; border-radius: 8px; background: rgba(47, 158, 95, .14); color: #2f9e5f; font-weight: 600; font-size: .85rem; }
+
+.wp-pv-nz-bonifici-14 { display: flex; flex-direction: column; gap: .35rem; margin-top: .3rem; }
+
+/* I nemici su due colonne quando lo schermo lo permette. */
+.wp-pv-nz-nemici { display: grid; grid-template-columns: repeat(auto-fit, minmax(34rem, 1fr)); gap: .8rem; }
+@media (max-width: 720px) { .wp-pv-nz-nemici { grid-template-columns: minmax(0, 1fr); } }
 
 /* ── Chi vede la pagina ──────────────────────────────────────── */
 .wp-pv-nz-acc-lista { display: flex; flex-direction: column; gap: .35rem; }

@@ -369,11 +369,18 @@ wareraPlus/
     │   │                          "Amministrazione" (admin.js). Una sezione chiusa non
     │   │                          carica niente; Contratti mostra comunque quante richieste
     │   │                          aspettano la firma di chi guarda.
-    │   ├── nazione.js           ← NUOVO — "La mia nazione": tesoro/classifiche/relazioni/
-    │   │                          governo, allarmi dai confini (salgono in cima se nuovi),
-    │   │                          nemici (pillole, danno fatto, potenziale), battaglie +
-    │   │                          ultime 48 ore + bonifici, regioni con basi e bunker.
-    │   │                          Dati da /nazione e /nazione/nemici (plusApi).
+    │   ├── nazione.js           ← NUOVO — "La mia nazione", cruscotto a TUTTA LARGHEZZA
+    │   │                          (griglia a 12 colonne, span per scheda, una colonna sotto
+    │   │                          i 1100px): tesoro/classifiche/relazioni/governo, ultimi 14
+    │   │                          giorni (tesoro orario dal ticker, giocatori attivi, danno
+    │   │                          al giorno), allarmi dai confini, elezioni, la nostra
+    │   │                          forza contro ogni nemico (pillole + un colpo a testa, tutti
+    │   │                          letti dal vivo), cittadini (attività, stile, livelli),
+    │   │                          nemici, battaglie + 48 ore + bonifici 14 gg, guerra 30 gg
+    │   │                          (vinte/perse, avversari, spese), migliori giocatori, unità
+    │   │                          (anche "di fatto"), classifiche, regioni e confini.
+    │   │                          Grafici in SVG a mano. Dati da /nazione e /nazione/nemici:
+    │   │                          tutto da cache del cache-server, nessuna chiamata nuova.
     │   ├── i18nNazione.js       ← dizionario (9 lingue) di nazione.js e delle sezioni
     │   ├── board.js, battles.js ← contratti mercenari (tavolo, battaglie, lista permessi)
     │   └── admin.js, selettori.js, api.js, i18n.js

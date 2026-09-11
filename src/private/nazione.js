@@ -39,6 +39,7 @@ import {
   leggiAccessi, cercaCittadini, aggiungiAccesso, togliAccesso, leggiGiocatoriNemico,
 } from './api.js';
 import { nomeNazione, urlBandiera, coloreNazione } from './battles.js';
+import { state } from '../diplomacy/state.js';
 import { getLang } from '../shared/i18n.js';
 
 const CHIAVE_VISTI = 'wp_pv_confini_visti';
@@ -117,6 +118,192 @@ function personaEl(avatar, nome, extra) {
 function badgeRelazione(rel) {
   return el('span', `wp-pv-nz-rel wp-pv-nz-rel-${rel}`, nzT(`rel_${rel}`));
 }
+
+// ── Grafici in SVG scritto a mano ───────────────────────────────────
+// Come quelli di Statistiche nazioni: niente Chart.js per una linea e
+// quattordici barre. Tutte le misure stanno nel viewBox, la larghezza la
+// decide il riquadro: il grafico si stira con lo schermo.
+
+const NS_SVG = 'http://www.w3.org/2000/svg';
+
+function svgVuoto(W, H, etichetta) {
+  const s = document.createElementNS(NS_SVG, 'svg');
+  s.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  // Proporzioni fisse (niente preserveAspectRatio none): stirato, il
+  // testo dentro l'SVG si deformerebbe con la larghezza della scheda.
+  s.setAttribute('class', 'wp-pv-nz-grafico');
+  s.setAttribute('role', 'img');
+  if (etichetta) s.setAttribute('aria-label', etichetta);
+  return s;
+}
+
+function nodoSvg(s, tag, attrs, testo) {
+  const n = document.createElementNS(NS_SVG, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (testo != null) n.textContent = testo;
+  s.appendChild(n);
+  return n;
+}
+
+function titoloSvg(n, testo) {
+  const t = document.createElementNS(NS_SVG, 'title');
+  t.textContent = testo;
+  n.appendChild(t);
+}
+
+/**
+ * Una serie nel tempo, a linea con l'area sotto.
+ * `gradino` per le serie che cambiano a scatti (la popolazione attiva
+ * arriva solo quando varia): fra due valori il dato resta fermo, e una
+ * diagonale inventerebbe un andamento che nessuno ha misurato.
+ */
+function graficoLinea(serie, { etichetta, formato = compatto, gradino = false } = {}) {
+  const wrap = el('div', 'wp-pv-nz-grafico-wrap');
+  if (!serie?.length) { wrap.appendChild(el('p', 'wp-pv-note', nzT('histEmpty'))); return wrap; }
+  const W = 600; const H = 150; const SU = 14; const GIU = 18; const DX = 4;
+  const t0 = serie[0].t; const t1 = Math.max(serie[serie.length - 1].t, t0 + 1);
+  const vs = serie.map((p) => p.v);
+  let lo = Math.min(...vs); let hi = Math.max(...vs);
+  if (hi === lo) { hi += 1; lo -= 1; }
+  const margine = (hi - lo) * 0.08; lo -= margine; hi += margine;
+  const x = (t) => DX + ((t - t0) / (t1 - t0)) * (W - DX * 2);
+  const y = (v) => SU + (1 - (v - lo) / (hi - lo)) * (H - SU - GIU);
+  const s = svgVuoto(W, H, etichetta);
+
+  // Una tacca per giorno (ogni due se la finestra è lunga), sulla
+  // mezzanotte UTC: il giorno di gioco comincia lì.
+  const G = 86400000;
+  const passo = t1 - t0 > 8 * G ? 2 * G : G;
+  for (let t = Math.ceil(t0 / G) * G; t < t1; t += passo) {
+    nodoSvg(s, 'line', { x1: x(t), x2: x(t), y1: SU, y2: H - GIU, class: 'wp-pv-nz-tacca' });
+    nodoSvg(s, 'text', { x: x(t) + 2, y: H - 5, class: 'wp-pv-nz-testo' }, giornoBreve(new Date(t).toISOString().slice(0, 10)));
+  }
+
+  const punti = [];
+  serie.forEach((p, i) => {
+    if (gradino && i) punti.push(`${x(p.t).toFixed(1)},${y(serie[i - 1].v).toFixed(1)}`);
+    punti.push(`${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`);
+  });
+  const ultimo = serie[serie.length - 1];
+  nodoSvg(s, 'polygon', { points: `${x(t0).toFixed(1)},${H - GIU} ${punti.join(' ')} ${x(ultimo.t).toFixed(1)},${H - GIU}`, class: 'wp-pv-nz-area' });
+  nodoSvg(s, 'polyline', { points: punti.join(' '), class: 'wp-pv-nz-linea-serie' });
+  // Un punto invisibile per valore, col suo tooltip: sopra la linea si
+  // legge il numero di quell'ora senza doverlo stimare dall'asse.
+  if (serie.length <= 400) {
+    for (const p of serie) {
+      const c = nodoSvg(s, 'circle', { cx: x(p.t), cy: y(p.v), r: 5, class: 'wp-pv-nz-bersaglio' });
+      titoloSvg(c, `${quando(p.t)} · ${formato(p.v)}`);
+    }
+  }
+  nodoSvg(s, 'circle', { cx: x(ultimo.t), cy: y(ultimo.v), r: 3.2, class: 'wp-pv-nz-punto' });
+  nodoSvg(s, 'text', { x: DX, y: 11, class: 'wp-pv-nz-testo' }, `max ${formato(Math.max(...vs))}`);
+  nodoSvg(s, 'text', { x: DX, y: H - GIU - 3, class: 'wp-pv-nz-testo' }, `min ${formato(Math.min(...vs))}`);
+  wrap.appendChild(s);
+  return wrap;
+}
+
+/**
+ * Barre, anche impilate: `valori` è un array, una fetta per colore
+ * (`classi`). Una barra `parziale` è un giorno misurato solo in parte, e
+ * si vede più chiara invece di sembrare un giorno di calma.
+ */
+function graficoBarre(punti, { etichetta, formato = compatto, classi = ['wp-pv-nz-barra'] } = {}) {
+  const wrap = el('div', 'wp-pv-nz-grafico-wrap');
+  if (!punti?.length || !punti.some((p) => p.valori.some((v) => v))) {
+    wrap.appendChild(el('p', 'wp-pv-note', nzT('histEmpty')));
+    return wrap;
+  }
+  const W = 600; const H = 150; const SU = 14; const GIU = 18;
+  const max = Math.max(1, ...punti.map((p) => p.valori.reduce((t, v) => t + (v || 0), 0)));
+  const larga = W / punti.length;
+  const s = svgVuoto(W, H, etichetta);
+  punti.forEach((p, i) => {
+    let base = H - GIU;
+    p.valori.forEach((v, k) => {
+      if (!v) return;
+      const h = (v / max) * (H - SU - GIU);
+      const r = nodoSvg(s, 'rect', {
+        x: i * larga + larga * 0.14, y: base - h, width: larga * 0.72, height: h,
+        class: `${classi[k] || classi[0]}${p.parziale ? ' wp-pv-nz-parziale' : ''}`,
+      });
+      if (p.titolo) titoloSvg(r, p.titolo);
+      base -= h;
+    });
+    if (punti.length <= 16 || i % 2 === 0) {
+      nodoSvg(s, 'text', { x: i * larga + larga / 2, y: H - 5, class: 'wp-pv-nz-testo', 'text-anchor': 'middle' }, p.etichetta);
+    }
+  });
+  nodoSvg(s, 'text', { x: 2, y: 11, class: 'wp-pv-nz-testo' }, formato(max));
+  wrap.appendChild(s);
+  return wrap;
+}
+
+/** Barra divisa in fette colorate con la sua legenda sotto. */
+function barraFette(fette) {
+  const box = el('div', 'wp-pv-nz-fette');
+  const tot = fette.reduce((t, f) => t + (f.n || 0), 0);
+  const barra = el('div', 'wp-pv-nz-pillbar');
+  for (const f of fette) {
+    if (!f.n) continue;
+    const s = el('span', f.cls);
+    s.style.width = `${(f.n / (tot || 1)) * 100}%`;
+    s.title = `${f.etichetta}: ${num(f.n)}`;
+    barra.appendChild(s);
+  }
+  box.appendChild(barra);
+  const legenda = el('div', 'wp-pv-nz-legenda');
+  for (const f of fette) {
+    const v = el('span', 'wp-pv-nz-legenda-voce');
+    v.appendChild(el('i', f.cls));
+    v.appendChild(el('span', null, `${f.etichetta} ${num(f.n)}${tot ? ` · ${Math.round((f.n / tot) * 100)}%` : ''}`));
+    legenda.appendChild(v);
+  }
+  box.appendChild(legenda);
+  return box;
+}
+
+/** Le pillole di una nazione: titolo, barra e conti con le scadenze.
+ *  La stessa per i nemici e per noi, così si confrontano a colpo d'occhio. */
+function bloccoPillole(n) {
+  const frag = document.createDocumentFragment();
+  // Una popolazione sola: i giocatori visti nelle ultime 72 ore, ognuno
+  // col suo stato. La prima versione mescolava i 90 più forti con un
+  // conto nazionale fatto in un altro modo, e i numeri sembravano non
+  // tornare (segnalato: "42 sotto pillola… 152 in tutta la nazione").
+  const pl = n.pillole || {};
+  const tot = (pl.buff || 0) + (pl.malus || 0) + (pl.pulito || 0) + (pl.ignoto || 0);
+  frag.appendChild(el('p', 'wp-pv-nz-pill-titolo', nzT('enemyActiveTitle')
+    .replace('{n}', num(n.attivi72h)).replace('{tot}', num(n.censiti))));
+  if (tot) {
+    const barra = el('div', 'wp-pv-nz-pillbar');
+    for (const [k, v] of [['buff', pl.buff], ['malus', pl.malus], ['pulito', pl.pulito], ['ignoto', pl.ignoto]]) {
+      if (!v) continue;
+      const s = el('span', `wp-pv-nz-pill-${k}`);
+      s.style.width = `${(v / tot) * 100}%`;
+      barra.appendChild(s);
+    }
+    frag.appendChild(barra);
+  }
+  const pill = el('div', 'wp-pv-nz-pill-righe');
+  const vocePill = (cls, n2, etichetta, dettaglio) => {
+    const v = el('span', `wp-pv-nz-pill-voce wp-pv-nz-pv-${cls}`);
+    v.appendChild(el('strong', null, num(n2 ?? 0)));
+    v.appendChild(el('span', null, ` ${etichetta}`));
+    if (dettaglio) v.appendChild(el('span', 'wp-pv-suggerimento', ` · ${dettaglio}`));
+    pill.appendChild(v);
+  };
+  const primo = (l) => (l?.length ? `${ora(l[0])} (${relativo(l[0])})` : null);
+  vocePill('buff', pl.buff, nzT('pillOn'), primo(pl.fineBuff) && `${nzT('pillFirstEnd')} ${primo(pl.fineBuff)}`);
+  vocePill('malus', pl.malus, nzT('pillHangover'), primo(pl.fineMalus) && `${nzT('pillFirstClean')} ${primo(pl.fineMalus)}`);
+  vocePill('pulito', pl.pulito, nzT('pillClean'));
+  // Chi non si è riusciti a leggere né dal vivo né dal censimento: un
+  // buco dichiarato, mai un "pulito".
+  if (pl.ignoto) vocePill('ignoto', pl.ignoto, nzT('pillUnknown'));
+  frag.appendChild(pill);
+  return frag;
+}
+
+const TIER_ORDINE = ['diamond', 'platinum', 'gold', 'silver', 'bronze'];
 
 // ── Allarmi già visti (per nazione, in questo browser) ─────────────
 function leggiVisti() {
@@ -260,16 +447,34 @@ export function creaQuadroNazione(ctx) {
       return frag;
     }
 
+    // ── Una griglia a 12 colonne, a tutta larghezza ───────────────────
+    // Era una colonna di schede una sotto l'altra, e su un monitor largo
+    // restava una striscia in mezzo allo schermo (segnalato così). Ora le
+    // schede si affiancano: il numero accanto a ogni scheda è quante delle
+    // 12 colonne prende. Sotto i 900px diventano tutte larghe (CSS), e
+    // `grid-auto-flow: dense` riempie i buchi quando una manca.
+    const griglia = el('div', 'wp-pv-nz-griglia');
+    const metti = (card, span) => { card.classList.add(`wp-pv-nz-span-${span}`); griglia.appendChild(card); };
+
     // Un allarme nuovo passa davanti a tutto: è l'unica cosa di questa
     // pagina che può non aspettare.
     const daVedere = nuovi();
-    if (daVedere.length) frag.appendChild(cardAllarmi(true));
-    frag.appendChild(cardNazione());
-    if (!daVedere.length) frag.appendChild(cardAllarmi(false));
-    frag.appendChild(cardNemici());
-    frag.appendChild(cardAttivita());
-    frag.appendChild(cardRegioni());
-    if (dati.governa || dati.amministra) frag.appendChild(cardAccessi());
+    if (daVedere.length) metti(cardAllarmi(true), 12);
+    metti(cardNazione(), 12);
+    metti(cardStorico(), 12);
+    if (!daVedere.length) metti(cardAllarmi(false), 8);
+    metti(cardElezioni(), 4);
+    metti(cardForza(), 8);
+    metti(cardCittadini(), 4);
+    metti(cardNemici(), 12);
+    metti(cardAttivita(), 6);
+    metti(cardGuerra(), 6);
+    metti(cardTop(), 4);
+    metti(cardUnita(), 4);
+    metti(cardClassifiche(), 4);
+    metti(cardRegioni(), 12);
+    if (dati.governa || dati.amministra) metti(cardAccessi(), 12);
+    frag.appendChild(griglia);
     return frag;
   }
 
@@ -431,8 +636,12 @@ export function creaQuadroNazione(ctx) {
     if (dati.via === 'delega') card.appendChild(el('p', 'wp-pv-note', nzT('accYouDelegate')));
 
     card.appendChild(tessereNumeri(p));
-    card.appendChild(bloccoRelazioni(p));
-    if (dati.governo) card.appendChild(bloccoGoverno(dati.governo));
+    // Relazioni e governo affiancati: su uno schermo largo, uno sotto
+    // l'altro erano due strisce lunghe con metà riga vuota.
+    const due = el('div', 'wp-pv-nz-due');
+    due.appendChild(bloccoRelazioni(p));
+    if (dati.governo) due.appendChild(bloccoGoverno(dati.governo));
+    card.appendChild(due);
     return card;
   }
 
@@ -663,41 +872,7 @@ export function creaQuadroNazione(ctx) {
 
     if (n.errore && !n.pillole) { box.appendChild(el('p', 'wp-pv-note', nzT('enemiesError'))); return box; }
 
-    // ── Pillole: TUTTI i giocatori attivi ────────────────────────────
-    // Una popolazione sola: i giocatori visti nelle ultime 72 ore, ognuno
-    // col suo stato. La prima versione mescolava i 90 più forti con un
-    // conto nazionale fatto in un altro modo, e i numeri sembravano non
-    // tornare (segnalato: "42 sotto pillola… 152 in tutta la nazione").
-    const pl = n.pillole || {};
-    const tot = (pl.buff || 0) + (pl.malus || 0) + (pl.pulito || 0) + (pl.ignoto || 0);
-    box.appendChild(el('p', 'wp-pv-nz-pill-titolo', nzT('enemyActiveTitle')
-      .replace('{n}', num(n.attivi72h)).replace('{tot}', num(n.censiti))));
-    if (tot) {
-      const barra = el('div', 'wp-pv-nz-pillbar');
-      for (const [k, v] of [['buff', pl.buff], ['malus', pl.malus], ['pulito', pl.pulito], ['ignoto', pl.ignoto]]) {
-        if (!v) continue;
-        const s = el('span', `wp-pv-nz-pill-${k}`);
-        s.style.width = `${(v / tot) * 100}%`;
-        barra.appendChild(s);
-      }
-      box.appendChild(barra);
-    }
-    const pill = el('div', 'wp-pv-nz-pill-righe');
-    const vocePill = (cls, n2, etichetta, dettaglio) => {
-      const v = el('span', `wp-pv-nz-pill-voce wp-pv-nz-pv-${cls}`);
-      v.appendChild(el('strong', null, num(n2 ?? 0)));
-      v.appendChild(el('span', null, ` ${etichetta}`));
-      if (dettaglio) v.appendChild(el('span', 'wp-pv-suggerimento', ` · ${dettaglio}`));
-      pill.appendChild(v);
-    };
-    const primo = (l) => (l?.length ? `${ora(l[0])} (${relativo(l[0])})` : null);
-    vocePill('buff', pl.buff, nzT('pillOn'), primo(pl.fineBuff) && `${nzT('pillFirstEnd')} ${primo(pl.fineBuff)}`);
-    vocePill('malus', pl.malus, nzT('pillHangover'), primo(pl.fineMalus) && `${nzT('pillFirstClean')} ${primo(pl.fineMalus)}`);
-    vocePill('pulito', pl.pulito, nzT('pillClean'));
-    // Chi il censimento non ha ancora riletto dopo che ha cominciato a
-    // tenere pillola e abilità: un buco dichiarato, mai un "pulito".
-    if (pl.ignoto) vocePill('ignoto', pl.ignoto, nzT('pillUnknown'));
-    box.appendChild(pill);
+    box.appendChild(bloccoPillole(n));
 
     // ── Danno fatto, colpo di tutti ──────────────────────────────────
     const griglia = el('div', 'wp-pv-nz-numeri');
@@ -850,6 +1025,385 @@ export function creaQuadroNazione(ctx) {
     return r;
   }
 
+  // ── Schede aggiunte l'11/09: più numeri sulla nazione ─────────────
+  // Tutte da dati che il server ha già (vedi le forma* in nazione.js):
+  // nessuna di queste costa una chiamata al gioco. Ognuna, se il suo pezzo
+  // manca, scrive "non disponibile" al posto suo senza portarsi dietro le
+  // altre.
+
+  const nonDisponibile = (card) => { card.appendChild(el('p', 'wp-pv-note', pvT('errErrore_server'))); return card; };
+
+  function scheda(titolo, corpo) {
+    const card = el('div', 'wp-pv-card wp-pv-nz-card');
+    card.appendChild(el('h2', 'wp-pv-h2', titolo));
+    if (corpo) card.appendChild(el('p', 'wp-pv-body', corpo));
+    return card;
+  }
+
+  function tessere(voci, cls = '') {
+    const box = el('div', `wp-pv-totali wp-pv-nz-tessere ${cls}`);
+    for (const [etichetta, valore, sotto, titolo] of voci) {
+      const v = el('div', 'wp-pv-totale-voce');
+      v.appendChild(el('span', 'wp-pv-label', etichetta));
+      const s = el('strong', 'wp-pv-totale-val', valore);
+      if (titolo) s.title = titolo;
+      v.appendChild(s);
+      if (sotto) v.appendChild(el('span', 'wp-pv-suggerimento', sotto));
+      box.appendChild(v);
+    }
+    return box;
+  }
+
+  /** Tesoro, giocatori attivi e danno al giorno, due settimane. */
+  function cardStorico() {
+    const card = scheda(nzT('histTitle'));
+    const st = dati.storico;
+    const p = dati.paese;
+    const tre = el('div', 'wp-pv-nz-tre');
+
+    const pannello = (titolo, valore, variazioni, grafico) => {
+      const b = el('div', 'wp-pv-nz-pannello');
+      const t = el('div', 'wp-pv-nz-pannello-testa');
+      t.appendChild(el('span', 'wp-pv-label', titolo));
+      t.appendChild(el('strong', 'wp-pv-nz-pannello-val', valore));
+      for (const [etich, v] of variazioni || []) {
+        if (v == null) continue;
+        t.appendChild(el('span', `wp-pv-nz-var${v > 0 ? ' wp-pv-nz-var-su' : v < 0 ? ' wp-pv-nz-var-giu' : ''}`,
+          `${v > 0 ? '+' : ''}${num(v)} ${etich}`));
+      }
+      b.appendChild(t);
+      b.appendChild(grafico);
+      return b;
+    };
+
+    tre.appendChild(pannello(nzT('kTreasury'), num(p.tesoro),
+      [[nzT('in24h'), st?.tesoro24h], [nzT('in7d'), st?.tesoro7g]],
+      graficoLinea(st?.tesoro, { etichetta: nzT('kTreasury'), formato: num })));
+    tre.appendChild(pannello(nzT('kActivePop'), num(p.popolazioneAttiva?.valore),
+      [[nzT('in7d'), st?.popolazione7g]],
+      graficoLinea(st?.popolazione, { etichetta: nzT('kActivePop'), formato: num, gradino: true })));
+
+    const giorni = (dati.orario?.giorni || []).slice(-14);
+    const pieni = giorni.filter((g) => !g.parziale && g.d != null);
+    const media = pieni.length ? pieni.reduce((t, g) => t + g.d, 0) / pieni.length : null;
+    tre.appendChild(pannello(nzT('histDailyDamage'), media != null ? `${compatto(media)} ${nzT('perDay')}` : '—', null,
+      graficoBarre(giorni.map((g) => ({
+        etichetta: giornoBreve(g.giorno),
+        valori: [g.d || 0],
+        parziale: g.parziale,
+        titolo: `${giornoBreve(g.giorno)} · ${num(g.d)}${g.parziale ? ` · ${g.ore}/24 ${nzT('hours')}` : ''}`,
+      })), { etichetta: nzT('histDailyDamage') })));
+
+    card.appendChild(tre);
+    card.appendChild(el('p', 'wp-pv-suggerimento', nzT('histHint')));
+    return card;
+  }
+
+  /** Chi c'è, chi gioca, come: dal censimento. */
+  function cardCittadini() {
+    const c = dati.cittadini;
+    const card = scheda(nzT('citTitle'));
+    if (!c) return nonDisponibile(card);
+    card.appendChild(tessere([
+      [nzT('citTotal'), num(c.censiti), c.nuovi7g != null ? `+${num(c.nuovi24h)} ${nzT('in24h')} · +${num(c.nuovi7g)} ${nzT('in7d')}` : null],
+      [nzT('citActive'), num(c.attivi24h), `${nzT('in24h')} · ${num(c.attivi72h)} ${nzT('in72h')} · ${num(c.attivi7g)} ${nzT('in7d')}`],
+      [nzT('citWealth'), compatto(c.ricchezzaTotale), `${nzT('citWealthAvg')} ${compatto(c.ricchezzaMedia)}`, num(c.ricchezzaTotale)],
+    ], 'wp-pv-nz-tessere-strette'));
+
+    const stile = el('div', 'wp-pv-nz-sezione');
+    stile.appendChild(el('h3', 'wp-pv-h3', nzT('citStyle')));
+    stile.appendChild(barraFette([
+      { n: c.stile.war, etichetta: nzT('ps_war'), cls: 'wp-pv-nz-f-guerra' },
+      { n: c.stile.mixed, etichetta: nzT('ps_mixed'), cls: 'wp-pv-nz-f-misto' },
+      { n: c.stile.eco, etichetta: nzT('ps_eco'), cls: 'wp-pv-nz-f-eco' },
+      { n: c.stile.undecided, etichetta: nzT('ps_undecided'), cls: 'wp-pv-nz-f-nessuno' },
+    ]));
+    card.appendChild(stile);
+
+    const liv = el('div', 'wp-pv-nz-sezione');
+    liv.appendChild(el('h3', 'wp-pv-h3', nzT('citLevels')));
+    const max = Math.max(1, ...c.livelli.map((l) => l.n));
+    const isto = el('div', 'wp-pv-nz-isto');
+    for (const l of c.livelli) {
+      const col = el('div', 'wp-pv-nz-isto-col');
+      col.title = `${nzT('lv')}${l.da}${l.a ? `–${l.a}` : '+'}: ${num(l.n)}`;
+      col.appendChild(el('span', 'wp-pv-nz-isto-n', num(l.n)));
+      const b = el('span', 'wp-pv-nz-isto-barra');
+      b.style.height = `${Math.round((l.n / max) * 100)}%`;
+      col.appendChild(b);
+      col.appendChild(el('span', 'wp-pv-nz-isto-et', l.a ? `${l.da}–${l.a}` : `${l.da}+`));
+      isto.appendChild(col);
+    }
+    liv.appendChild(isto);
+    card.appendChild(liv);
+    if (c.aggiornatoIl) card.appendChild(el('p', 'wp-pv-suggerimento', `${nzT('citCensus')} ${quando(c.aggiornatoIl)}`));
+    return card;
+  }
+
+  /**
+   * La nostra forza accanto a quella di ogni nemico: pillole e un colpo a
+   * testa, letti nello stesso modo e nello stesso momento. È la domanda
+   * che la pagina dei nemici non poteva fare da sola: "tanti" rispetto a
+   * che cosa.
+   */
+  function cardForza() {
+    const card = scheda(nzT('forceTitle'), nzT('forceBody'));
+    if (erroreNemici) { card.appendChild(el('p', 'wp-pv-note', erroreNemici)); return card; }
+    if (!nemici) { card.appendChild(el('p', 'wp-pv-note', caricamentoNemici ? nzT('enemiesLoading') : '…')); return card; }
+    const noi = nemici.noi;
+    if (!noi) { card.appendChild(el('p', 'wp-pv-note', nzT('enemiesError'))); return card; }
+
+    card.appendChild(bloccoPillole(noi));
+
+    const righe = [{ ...noi, noi: true }, ...(nemici.nemici || []).filter((n) => n.salva)];
+    const max = Math.max(1, ...righe.map((r) => r.salva?.massimo || 0));
+    const confronto = el('div', 'wp-pv-nz-confronto');
+    const testa = el('div', 'wp-pv-nz-confronto-riga wp-pv-nz-confronto-testa');
+    for (const t of ['', nzT('volleyNow'), nzT('pillOn'), nzT('pillHangover'), nzT('citActive')]) testa.appendChild(el('span', null, t));
+    confronto.appendChild(testa);
+    for (const r of righe) {
+      const riga = el('div', `wp-pv-nz-confronto-riga${r.noi ? ' wp-pv-nz-noi' : ''}`);
+      const chi = gettonePaese(r.id);
+      if (r.noi) chi.appendChild(el('span', 'wp-pv-nz-tag', nzT('forceUs')));
+      riga.appendChild(chi);
+      // Due barre sovrapposte: piena = adesso, chiara = con la pillola.
+      const barra = el('div', 'wp-pv-nz-confronto-barra');
+      barra.title = `${nzT('volleyNow')} ${num(r.salva?.adesso)} · ${nzT('volleyMax')} ${num(r.salva?.massimo)}`;
+      const pieno = el('span', 'wp-pv-nz-confronto-max');
+      pieno.style.width = `${((r.salva?.massimo || 0) / max) * 100}%`;
+      const ora2 = el('span', 'wp-pv-nz-confronto-ora');
+      ora2.style.width = `${((r.salva?.adesso || 0) / max) * 100}%`;
+      const col = r.noi ? null : coloreNazione(r.id);
+      if (col) ora2.style.background = col;
+      barra.appendChild(pieno); barra.appendChild(ora2);
+      const cella = el('div', 'wp-pv-nz-confronto-cella');
+      cella.appendChild(barra);
+      cella.appendChild(el('span', 'wp-pv-nz-tab-num', `${compatto(r.salva?.adesso)} → ${compatto(r.salva?.massimo)}`));
+      riga.appendChild(cella);
+      riga.appendChild(el('span', 'wp-pv-nz-tab-num wp-pv-nz-pv-buff', num(r.pillole?.buff)));
+      riga.appendChild(el('span', 'wp-pv-nz-tab-num wp-pv-nz-pv-malus', num(r.pillole?.malus)));
+      riga.appendChild(el('span', 'wp-pv-nz-tab-num', num(r.attivi72h)));
+      confronto.appendChild(riga);
+    }
+    card.appendChild(confronto);
+    card.appendChild(el('p', 'wp-pv-suggerimento', `${nzT('volleyNowHint')} · ${nzT('volleyMax')}: ${nzT('volleyMaxHint')}`));
+
+    const piede = el('div', 'wp-pv-nz-nemico-piede');
+    piede.appendChild(el('span', 'wp-pv-note', nzT('sourceNote').replace('{n}', num(noi.live)).replace('{ora}', ora(noi.letto))));
+    const aperto = tabelleAperte.has(noi.id);
+    piede.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small',
+      aperto ? nzT('hidePlayers') : `${nzT('ourPlayers')} (${num(noi.censiti)})`, () => {
+        if (aperto) tabelleAperte.delete(noi.id); else tabelleAperte.add(noi.id);
+        ctx.ridisegna();
+      }));
+    card.appendChild(piede);
+    if (aperto) card.appendChild(tabellaGiocatori(noi.id));
+    return card;
+  }
+
+  /** I nostri che fanno più danno, e i più ricchi. */
+  function cardTop() {
+    const c = dati.cittadini;
+    const card = scheda(nzT('topTitle'));
+    if (!c) return nonDisponibile(card);
+    const elenco = (titolo, righe, valore) => {
+      const sez = el('div', 'wp-pv-nz-sezione');
+      sez.appendChild(el('h3', 'wp-pv-h3', titolo));
+      const lista = el('div', 'wp-pv-nz-classifica');
+      righe.forEach((g, i) => {
+        const r = el('div', 'wp-pv-nz-classifica-riga');
+        r.appendChild(el('span', 'wp-pv-nz-pos', String(i + 1)));
+        r.appendChild(personaEl(g.avatar, g.nome, g.livello != null ? `${nzT('lv')}${g.livello}` : null));
+        r.appendChild(el('span', 'wp-pv-nz-tab-num', valore(g)));
+        lista.appendChild(r);
+      });
+      sez.appendChild(lista);
+      return sez;
+    };
+    card.appendChild(elenco(nzT('topDamage'), c.topDanno, (g) => compatto(g.settimana)));
+    card.appendChild(elenco(nzT('topWealth'), c.topRicchezza, (g) => compatto(g.ricchezza)));
+    return card;
+  }
+
+  /** Le unità militari: registrate da noi e nostre di fatto. */
+  function cardUnita() {
+    const u = dati.unita;
+    const card = scheda(nzT('muTitle'));
+    if (!u) return nonDisponibile(card);
+    card.appendChild(tessere([
+      [nzT('muUnits'), num(u.n), `${num(u.registrate)} ${nzT('muRegistered')} · ${num(u.deFatto)} ${nzT('muDeFacto')}`],
+      [nzT('muMembers'), num(u.membri), `${compatto(u.dannoSettimana)} ${nzT('dmgWeek')}`],
+    ], 'wp-pv-nz-tessere-strette'));
+    const lista = el('div', 'wp-pv-nz-classifica');
+    u.top.forEach((m, i) => {
+      const r = el('div', 'wp-pv-nz-classifica-riga');
+      r.appendChild(el('span', 'wp-pv-nz-pos', String(i + 1)));
+      const chi = personaEl(m.avatar, m.nome, `${num(m.membri)} ${nzT('muMembers')}`);
+      // "Di fatto": registrata altrove ma coi membri in maggioranza nostri.
+      if (!m.registrata) chi.appendChild(el('span', 'wp-pv-nz-tag', nzT('deFactoTag')));
+      r.appendChild(chi);
+      r.appendChild(el('span', 'wp-pv-nz-tab-num', compatto(m.dannoSettimana)));
+      lista.appendChild(r);
+    });
+    card.appendChild(lista);
+    return card;
+  }
+
+  /** Tutte le classifiche della nazione, e le risorse strategiche. */
+  function cardClassifiche() {
+    const p = dati.paese;
+    const card = scheda(nzT('rankTitle'));
+    const totale = state_nazioni();
+    const voci = [
+      ['kTreasury', p.tesoroRank, num],
+      ['kActivePop', p.popolazioneAttiva, num],
+      ['kDevelopment', p.sviluppo, (v) => Number(v).toFixed(1)],
+      ['kDamageWeek', p.dannoSettimana, compatto],
+      ['kPerCitizen', p.dannoPerCittadino, compatto],
+      ['rkDamageTotal', p.dannoTotale, compatto],
+      ['kBounty', p.taglieIncassate, compatto],
+      ['kProduction', p.bonusProduzione, (v) => `${v}%`],
+      ['rkRegions', p.regioniDiff, (v) => `${v > 0 ? '+' : ''}${v}`],
+    ];
+    const lista = el('div', 'wp-pv-nz-classifica');
+    for (const [chiave, r, formato] of voci) {
+      if (!r) continue;
+      const riga = el('div', 'wp-pv-nz-classifica-riga');
+      riga.appendChild(el('span', `wp-pv-nz-tier wp-pv-nz-tier-${TIER_ORDINE.includes(r.tier) ? r.tier : 'bronze'}`, r.rank ? `#${r.rank}` : '—'));
+      riga.appendChild(el('span', 'wp-pv-nz-classifica-nome', nzT(chiave)));
+      riga.appendChild(el('span', 'wp-pv-nz-tab-num', r.valore != null ? formato(r.valore) : '—'));
+      if (totale && r.rank) riga.title = `#${r.rank} / ${totale}`;
+      lista.appendChild(riga);
+    }
+    card.appendChild(lista);
+
+    const ris = el('div', 'wp-pv-nz-sezione');
+    ris.appendChild(el('h3', 'wp-pv-h3', nzT('resTitle')));
+    const chips = el('div', 'wp-pv-nz-chips');
+    for (const [codice, n] of Object.entries(p.risorse || {})) {
+      if (n) chips.appendChild(el('span', 'wp-pv-nz-tag', `${codice} ×${n}`));
+    }
+    if (!chips.childElementCount) chips.appendChild(el('span', 'wp-pv-note', nzT('relNone')));
+    ris.appendChild(chips);
+    const bonus = p.bonusStrategici || {};
+    const righe = [];
+    if (bonus.productionPercent) righe.push(`${nzT('kProduction')} +${bonus.productionPercent}%`);
+    if (bonus.developmentPercent) righe.push(`${nzT('kDevelopment')} +${bonus.developmentPercent}%`);
+    if (p.specializzazione) righe.push(`${nzT('specialized')}: ${p.specializzazione}`);
+    if (righe.length) ris.appendChild(el('p', 'wp-pv-suggerimento', righe.join(' · ')));
+    card.appendChild(ris);
+    return card;
+  }
+
+  // Quante nazioni ci sono, per scrivere "#9 su 180": già in memoria dal
+  // boot della mappa, nessuna richiesta.
+  function state_nazioni() {
+    return state.nationMap?.size || null;
+  }
+
+  /** Trenta giorni di guerra: come sono andate, contro chi, quanto è costata. */
+  function cardGuerra() {
+    const g = dati.guerra;
+    const card = scheda(nzT('warTitle'));
+    if (!g) return nonDisponibile(card);
+    card.appendChild(tessere([
+      [nzT('warBattles'), num(g.battaglie), `${num(g.vinte)} ${nzT('warWon')} · ${num(g.perse)} ${nzT('warLost')}`],
+      [nzT('warAttacks'), num(g.attacchi), `${num(g.difese)} ${nzT('warDefenses')}`],
+      [nzT('warDmgDone'), compatto(g.dannoFatto), `${compatto(g.dannoSubito)} ${nzT('warDmgTaken')}`, num(g.dannoFatto)],
+      [nzT('warSpend'), compatto(g.spese.ultimi30g), `${compatto(g.spese.ultimi7g)} ${nzT('warSpend7')}`, num(g.spese.ultimi30g)],
+    ], 'wp-pv-nz-tessere-strette'));
+
+    if (g.avversari.length) {
+      const sez = el('div', 'wp-pv-nz-sezione');
+      sez.appendChild(el('h3', 'wp-pv-h3', nzT('warOpponents')));
+      for (const a of g.avversari) {
+        const r = el('div', 'wp-pv-nz-avversario');
+        r.appendChild(gettonePaese(a.paese));
+        r.appendChild(el('span', 'wp-pv-nz-tab-num', `${a.vinte}–${a.battaglie - a.vinte}`));
+        // Il danno dei due lati in una barra sola: dove sta il confine fra
+        // i due colori è chi ha picchiato di più.
+        const tot = (a.dannoNoi + a.dannoLoro) || 1;
+        const barra = el('div', 'wp-pv-nz-scontro');
+        const noi = el('span', 'wp-pv-nz-scontro-noi'); noi.style.width = `${(a.dannoNoi / tot) * 100}%`;
+        const loro = el('span', 'wp-pv-nz-scontro-loro'); loro.style.width = `${(a.dannoLoro / tot) * 100}%`;
+        const col = coloreNazione(a.paese); if (col) loro.style.background = col;
+        barra.title = `${compatto(a.dannoNoi)} / ${compatto(a.dannoLoro)}`;
+        barra.appendChild(noi); barra.appendChild(loro);
+        r.appendChild(barra);
+        sez.appendChild(r);
+      }
+      card.appendChild(sez);
+    }
+
+    const spese = el('div', 'wp-pv-nz-sezione');
+    spese.appendChild(el('h3', 'wp-pv-h3', nzT('warSpend')));
+    spese.appendChild(graficoBarre(g.spese.giorni.map((d) => ({
+      etichetta: giornoBreve(d.giorno),
+      valori: [d.taglie, d.contratti],
+      titolo: `${giornoBreve(d.giorno)} · ${nzT('warBounty')} ${num(d.taglie)} · ${nzT('warContracts')} ${num(d.contratti)} (${d.nContratti})`,
+    })), { etichetta: nzT('warSpend'), classi: ['wp-pv-nz-barra-taglie', 'wp-pv-nz-barra-contratti'] }));
+    const leg = el('div', 'wp-pv-nz-legenda');
+    for (const [cls, t] of [['wp-pv-nz-barra-taglie', nzT('warBounty')], ['wp-pv-nz-barra-contratti', nzT('warContracts')]]) {
+      const v = el('span', 'wp-pv-nz-legenda-voce'); v.appendChild(el('i', cls)); v.appendChild(el('span', null, t)); leg.appendChild(v);
+    }
+    spese.appendChild(leg);
+    card.appendChild(spese);
+
+    if (g.ultime.length) {
+      const sez = el('div', 'wp-pv-nz-sezione');
+      sez.appendChild(el('h3', 'wp-pv-h3', nzT('warLast')));
+      for (const b of g.ultime) {
+        const r = el('div', 'wp-pv-nz-ultima');
+        r.appendChild(el('span', 'wp-pv-suggerimento', quando(b.fine)));
+        r.appendChild(el('strong', null, b.regione || '?'));
+        r.appendChild(el('span', `wp-pv-nz-lato wp-pv-nz-lato-${b.lato}`, b.lato === 'attacker' ? nzT('weAttack') : nzT('weDefend')));
+        r.appendChild(gettonePaese(b.avversario));
+        r.appendChild(el('span', `wp-pv-nz-esito ${b.vinta ? 'wp-pv-nz-esito-v' : 'wp-pv-nz-esito-p'}`, b.vinta ? nzT('warWin') : nzT('warLoss')));
+        r.appendChild(el('span', 'wp-pv-nz-tab-num', `${compatto(b.dannoNoi)} / ${compatto(b.dannoLoro)}`));
+        sez.appendChild(r);
+      }
+      card.appendChild(sez);
+    }
+    return card;
+  }
+
+  /** Le ultime elezioni, quelle in corso e le prossime (stimate). */
+  function cardElezioni() {
+    const e = dati.elezioni;
+    const card = scheda(nzT('elTitle'));
+    if (!e) return nonDisponibile(card);
+    for (const x of e.inCorso || []) {
+      card.appendChild(el('p', 'wp-pv-nz-in-corso',
+        `${nzT('elNow')}: ${x.tipo === 'president' ? nzT('elPresident') : nzT('elCongress')} · ${quando(x.inizio)} → ${quando(x.fine)}`));
+    }
+    const blocco = (titolo, x, righe) => {
+      const b = el('div', 'wp-pv-nz-elezione');
+      const t = el('div', 'wp-pv-nz-elezione-testa');
+      t.appendChild(el('strong', null, titolo));
+      if (x?.inizio) t.appendChild(el('span', 'wp-pv-suggerimento', giornoBreve(new Date(x.inizio).toISOString().slice(0, 10))));
+      b.appendChild(t);
+      for (const r of righe) if (r) b.appendChild(r);
+      return b;
+    };
+    if (e.presidente) {
+      const v = e.presidente.vincitore;
+      card.appendChild(blocco(nzT('elPresident'), e.presidente, [
+        v ? personaEl(v.avatar, v.nome, `${nzT('elWinner')} · ${num(v.voti)} / ${num(e.presidente.voti)} ${nzT('elVotes')}`) : null,
+        el('span', 'wp-pv-suggerimento', `${num(e.presidente.candidati)} ${nzT('elCandidates')}`),
+      ]));
+    }
+    if (e.congresso) {
+      card.appendChild(blocco(nzT('elCongress'), e.congresso, [
+        el('span', null, `${num(e.congresso.eletti)} ${nzT('elElected')} · ${num(e.congresso.voti)} ${nzT('elVotes')} · ${num(e.congresso.candidati)} ${nzT('elCandidates')}`),
+      ]));
+    }
+    const prossime = [];
+    if (e.prossime?.presidente) prossime.push(`${nzT('elPresident')} ${quando(e.prossime.presidente)}`);
+    if (e.prossime?.congresso) prossime.push(`${nzT('elCongress')} ${quando(e.prossime.congresso)}`);
+    if (prossime.length) card.appendChild(el('p', 'wp-pv-note', `${nzT('elNext')}: ${prossime.join(' · ')}`));
+    return card;
+  }
+
   // ── 4. Attività: battaglie, ore, bonifici ─────────────────────────
   function cardAttivita() {
     const card = el('div', 'wp-pv-card wp-pv-nz-card');
@@ -981,6 +1535,7 @@ export function creaQuadroNazione(ctx) {
     box.appendChild(el('h3', 'wp-pv-h3', `${nzT('transfersTitle')} · ${b.finestraOre} ${nzT('hours')}`));
     if (!b.entrati.length && !b.usciti.length) {
       box.appendChild(el('p', 'wp-pv-note', nzT('transfersNone')));
+      box.appendChild(bloccoQuattordici(b));
       return box;
     }
     const due = el('div', 'wp-pv-nz-bonifici');
@@ -1003,7 +1558,25 @@ export function creaQuadroNazione(ctx) {
       due.appendChild(col);
     }
     box.appendChild(due);
+    box.appendChild(bloccoQuattordici(b));
     return box;
+  }
+
+  /** Due settimane di bonifici per nazione: con chi scambiamo soldi, non
+   *  solo le ultime righe. */
+  function bloccoQuattordici(b) {
+    const q = el('div', 'wp-pv-nz-bonifici-14');
+    const t = b.quattordici;
+    if (!t) return q;
+    q.appendChild(el('span', 'wp-pv-label',
+      `${nzT('trf14')} · ${nzT('transfersIn')} ${num(t.entrati)} · ${nzT('transfersOut')} ${num(t.usciti)}`));
+    const chips = el('div', 'wp-pv-nz-chips');
+    for (const p of t.partner || []) {
+      chips.appendChild(gettonePaese(p.paese,
+        [p.usciti ? `→ ${num(p.usciti)}` : null, p.entrati ? `← ${num(p.entrati)}` : null].filter(Boolean).join(' ')));
+    }
+    q.appendChild(chips);
+    return q;
   }
 
   // ── 5. Regioni e confini ──────────────────────────────────────────
@@ -1013,11 +1586,15 @@ export function creaQuadroNazione(ctx) {
     card.appendChild(el('h2', 'wp-pv-h2', nzT('regionsTitle')));
     if (!conf) { card.appendChild(el('p', 'wp-pv-note', pvT('errErrore_server'))); return card; }
 
+    // Le nostre a sinistra, le confinanti a destra: è la frontiera vista
+    // dai due lati, e sullo schermo largo sta tutta in una schermata.
+    const due = el('div', 'wp-pv-nz-due');
     const proprie = el('div', 'wp-pv-nz-regioni');
     for (const r of conf.proprie) proprie.appendChild(rigaRegione(r, conf.pendingOre));
-    card.appendChild(proprie);
+    due.appendChild(proprie);
+    card.appendChild(due);
 
-    const sez = el('div', 'wp-pv-nz-sezione');
+    const sez = el('div', 'wp-pv-nz-sezione wp-pv-nz-sezione-affiancata');
     sez.appendChild(el('h3', 'wp-pv-h3', nzT('bordersTitle')));
     sez.appendChild(el('p', 'wp-pv-suggerimento', nzT('bordersBody')));
 
@@ -1041,7 +1618,7 @@ export function creaQuadroNazione(ctx) {
       for (const r of g.regioni) gr.appendChild(rigaRegione(r, conf.pendingOre, true));
       sez.appendChild(gr);
     }
-    card.appendChild(sez);
+    due.appendChild(sez);
     return card;
   }
 

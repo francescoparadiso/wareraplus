@@ -341,6 +341,19 @@ async function quadroNemici(countryId) {
   const noi = paesi.get(countryId);
   if (!noi) return { nemici: [] };
 
+  // ── Noi, letti come loro ──────────────────────────────────────────
+  // La forza di un nemico si legge solo accanto alla propria: "80 sotto
+  // pillola" non vuol dire niente finché non si sa quanti sono i nostri.
+  // Stessa lettura, stessa fila, stessa memoria — Italia 439 cittadini,
+  // 15 richieste ogni dieci minuti mentre qualcuno guarda.
+  let nostri = null;
+  try {
+    const s = await leggiScheda(countryId);
+    nostri = { ...s.sommario, top: s.giocatori.filter((g) => g.attivo).slice(0, 10) };
+  } catch (err) {
+    console.warn('[nemici] lettura dei nostri fallita:', err.message);
+  }
+
   const nemici = await Promise.all(idNemici(noi).map(async (id) => {
     const loro = paesi.get(id);
     let scheda = null; let errore = null;
@@ -364,7 +377,14 @@ async function quadroNemici(countryId) {
 
   // Prima chi picchia di più: è quello che arriva per primo alla porta.
   nemici.sort((a, b) => (b.danno.settimana || 0) - (a.danno.settimana || 0));
-  return { nemici };
+  return {
+    noi: nostri && {
+      id: countryId,
+      danno: { settimana: noi.rankings?.weeklyCountryDamages?.value ?? null, settimanaRank: noi.rankings?.weeklyCountryDamages?.rank ?? null },
+      ...nostri,
+    },
+    nemici,
+  };
 }
 
 /** L'elenco completo dei giocatori di UN nemico, per la tabella. A parte

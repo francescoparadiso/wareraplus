@@ -133,6 +133,38 @@ const timeline = memo(5 * 60_000, (chiave) => {
 const cittadini = memo(10 * 60_000, (countryId) =>
   dalCache(`/country-citizens?countryId=${encodeURIComponent(countryId)}&limit=400`));
 
+/** TUTTI i cittadini (il cache-server taglia a 500 se non lo si chiede). */
+const cittadiniTutti = memo(10 * 60_000, (countryId) =>
+  dalCache(`/country-citizens?countryId=${encodeURIComponent(countryId)}&limit=5000`));
+
+/** Quanti cittadini e quanti nuovi (24 ore, 7 giorni), dal censimento. */
+const conteggiCittadini = memo(10 * 60_000, async (countryId) =>
+  (await dalCache(`/citizens?countryId=${encodeURIComponent(countryId)}`))?.data?.[countryId] || null);
+
+// ── Storia e guerra: tutto già sul cache-server, qui solo letto ─────────
+
+/** Gli eventi del ticker: il tesoro ogni ora (categoria `wealth`, dal
+ *  28/08) e la popolazione attiva ad ogni variazione. ~1,4 MB, ma sulla
+ *  loopback e una volta ogni dieci minuti per tutte le nazioni. */
+const eventiTicker = memo(10 * 60_000, async () => {
+  const b = await dalCache('/ticker', 30_000);
+  return b?.data || b?.events || (Array.isArray(b) ? b : []);
+});
+
+/** Le battaglie concluse degli ultimi 90 giorni, forma compatta di
+ *  battleArchive.js: i id, e fine, w lato vincitore, r regione, ac/dc
+ *  nazioni, ad/dd danno, ab/db taglia incassata dai due lati. */
+const archivioBattaglie = memo(10 * 60_000, async () => (await dalCache('/battle-archive', 30_000))?.data || []);
+
+/** Le spese di guerra per giorno e nazione: taglie pagate e contratti. */
+const speseGuerra = memo(10 * 60_000, () => dalCache('/war-expenses', 30_000));
+
+/** Le unità militari, con la composizione per nazionalità dei membri. */
+const direttorioMu = memo(30 * 60_000, async () => (await dalCache('/mu-directory', 30_000))?.data || []);
+
+const elezioniDi = memo(10 * 60_000, async (countryId) =>
+  (await dalCache(`/elections?countryId=${encodeURIComponent(countryId)}`))?.data || []);
+
 /** Nome e avatar di un gruppo di giocatori. Il cache-server li tiene già
  *  per i grafici del parlamento; qui non si memorizza niente in più. */
 async function nomiUtenti(ids) {
@@ -152,4 +184,5 @@ module.exports = {
   CACHE_BASE, dalCache, memo,
   regioniMappa, paesiMappa, paeseLive, governo, configGioco,
   battaglieVive, baseDannoGiornaliero, bonifici, timeline, cittadini, nomiUtenti,
+  cittadiniTutti, conteggiCittadini, eventiTicker, archivioBattaglie, speseGuerra, direttorioMu, elezioniDi,
 };
