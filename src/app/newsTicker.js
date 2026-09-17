@@ -43,7 +43,7 @@
 import { state } from '../diplomacy/state.js';
 import { trpcBatch, fmtNumber } from '../diplomacy/utils.js';
 import { fetchActiveBattles } from '../diplomacy/battleHeatmap.js';
-import { fetchTickerEventsViaCache, fetchTickerSummaryViaCache } from '../diplomacy/cacheClient.js';
+import { fetchTickerEventsViaCache, fetchTickerSummaryViaCache, fetchOpenElectionsViaCache } from '../diplomacy/cacheClient.js';
 import { t } from '../shared/i18n.js';
 
 const TOP_N = 15;
@@ -136,6 +136,16 @@ function formatBattleMessages(battles, topIds = null, refreshedAt = null) {
    sempre, indipendentemente dalla popolazione della nazione).
    Anche qui separata in fetch + format, stesso motivo di cui sopra. ── */
 async function fetchElectionsRaw(allNations) {
+  // WarEra+: prima dal server di cache, che le elezioni le tiene già
+  // aggiornate ogni 3 minuti — una richiesta leggera con le sole elezioni
+  // aperte, invece di ~180 getElections a WarEra ad ogni giro di ogni
+  // browser. Il batch tRPC sotto resta come fallback.
+  try {
+    const open = await fetchOpenElectionsViaCache();
+    return allNations.map(nation => ({ nation, items: open[nation._id] || [] }));
+  } catch (_) {
+    // server giù o vecchio: sotto
+  }
   try {
     const calls = allNations.map(n => ['election.getElections', { countryId: n._id }]);
     // trpcBatch chunka automaticamente oltre i 50 per POST (vedi utils.js),

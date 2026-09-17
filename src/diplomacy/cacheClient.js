@@ -289,6 +289,20 @@ export async function fetchElectionsForCountriesViaCache(countryIds) {
   return data;
 }
 
+/** WarEra+: solo le elezioni NON ancora chiuse, di tutte le nazioni, in una
+ *  richiesta leggera — per i due ticker, che non guardano lo storico.
+ *  Ritorna { countryId: [elezioni aperte] }; le nazioni senza elezioni
+ *  aperte sono assenti. Un server vecchio che `open` non lo conosce
+ *  risponde con un array (nessun countryId): si lancia, e il chiamante
+ *  ricade sul batch tRPC come prima. */
+export async function fetchOpenElectionsViaCache() {
+  const json = await _fetchCacheJson('/elections?open=1');
+  if (!json?.open || !json.data || Array.isArray(json.data)) {
+    throw new Error('cache /elections: open non supportato');
+  }
+  return json.data;
+}
+
 /** election.getElection — dettaglio pieno di una elezione (candidati,
  *  votes{}, votesCount, votesStartAt/votesEndAt). Chiusa → dato permanente
  *  dalla cache, mai una chiamata a WarEra. Candidatura/voto → l'ultimo dato

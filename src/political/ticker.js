@@ -10,7 +10,7 @@
 
 import { localFetch } from './api.js';
 import { getAllCountries } from '../shared/countries.js';
-import { fetchElectionsForCountriesViaCache } from '../diplomacy/cacheClient.js';
+import { fetchElectionsForCountriesViaCache, fetchOpenElectionsViaCache } from '../diplomacy/cacheClient.js';
 import { trpcBatch } from '../diplomacy/utils.js';
 
 let _tickerMessages = [];
@@ -98,6 +98,15 @@ function _rebuildTickerContent() {
  *      traduceva in ~120 richieste al Worker tutte insieme — la ragione
  *      per cui il path "singolo" dominava le statistiche Cloudflare. */
 async function _fetchElectionsByCountry(countryIds) {
+  // WarEra+: il ticker guarda solo candidature e voti in corso (Fase 2
+  // sotto), quindi basta la lista leggera delle elezioni aperte invece
+  // dello storico completo di tutte le nazioni (~650 KB compressi).
+  try {
+    const open = await fetchOpenElectionsViaCache();
+    return countryIds.map(id => open[id] || []);
+  } catch (_) {
+    // server vecchio senza `open`: lista completa, sotto
+  }
   try {
     const byCountry = await fetchElectionsForCountriesViaCache(countryIds);
     return countryIds.map(id => byCountry[id] || []);

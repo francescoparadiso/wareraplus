@@ -2259,9 +2259,31 @@ app.get('/parties-detail', (req, res) => res.json(readCache('parties-detail', { 
 // lentamente di quando la stessa fase passava da un solo batch tRPC.
 // Il file di cache è già tutto in memoria qui: servirne venti fette o una
 // costa lo stesso.
+// WarEra+: `?open=1` — solo le elezioni NON ancora chiuse (candidatura o
+// voto in corso), per tutte le nazioni. È quello che serve ai due ticker
+// (mappa e Political), che prima chiedevano a WarEra le elezioni di tutte
+// e ~180 le nazioni ad ogni giro, tutte insieme, passando dal proxy /trpc:
+// erano la maggior parte dei timeout nel log. La lista completa con lo
+// storico pesa ~5,5 MB (650 KB gzip) e ai ticker ne serve una manciata;
+// quelle chiuse non cambiano più, quindi qui non servono affatto.
+function _electionTs(s) {
+  if (!s) return NaN;
+  const iso = /Z$|[+-]\d\d:?\d\d$/.test(s) ? s : s + 'Z';
+  return Date.parse(iso);
+}
+
 app.get('/elections', (req, res) => {
-  const { countryId, countryIds } = req.query;
+  const { countryId, countryIds, open } = req.query;
   const cache = readCache('elections-by-country', { fetchedAt: null, data: {} });
+  if (open) {
+    const now = Date.now();
+    const out = {};
+    for (const [id, list] of Object.entries(cache.data || {})) {
+      const aperte = (list || []).filter(e => _electionTs(e.votesEndAt) >= now);
+      if (aperte.length) out[id] = aperte;
+    }
+    return res.json({ fetchedAt: cache.fetchedAt, open: true, data: out });
+  }
   if (countryIds) {
     const out = {};
     for (const id of String(countryIds).split(',').map(s => s.trim()).filter(Boolean)) {
