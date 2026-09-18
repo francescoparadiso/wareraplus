@@ -192,15 +192,24 @@ wareraPlus/
 │   │                              conviene ADESSO perché il gioco non pubblica altro;
 │   │                              da qui in poi sa anche da dove viene quel prezzo.
 │   │                              Endpoint: /price-history?days=N.
+│   ├── dayHistory.js           ← NUOVO — la giornata storica: diplomazia (patti,
+│   │                              guerre, nemico giurato, tesoro) e battaglie aperte,
+│   │                              giorno per giorno. Toglie alla time machine il suo
+│   │                              limite dichiarato — mostrava solo l'ownership perché
+│   │                              nient'altro era salvato nel tempo, e adesso questi
+│   │                              campi lo sono. Zero fetch: lo scatto delle 02:05
+│   │                              legge le cache countries/diplomacy/battles.
+│   │                              Endpoint: /day-history?day=YYYY-MM-DD.
 │   ├── import/                 ← NUOVO — import UNA TANTUM da un archivio esterno
 │   │   ├── bonifici.js            (il dump PostgreSQL di un altro tool della
 │   │   ├── ricchezza.js            comunità, passato dal suo autore). Servono solo
-│   │   ├── prezzi.js               per i tre dati che WarEra NON espone a ritroso:
-│   │   └── README.md               bonifici fra tesori, ricchezza giornaliera dei
-│   │                               giocatori, prezzi. Vedi il suo README per la
-│   │                               procedura e per le due retention allargate
-│   │                               (senza, il primo giro di manutenzione pota
-│   │                               quello che l'import ha appena scritto).
+│   │   ├── prezzi.js               per i dati che WarEra NON espone a ritroso:
+│   │   ├── diplomazia.js           bonifici fra tesori, ricchezza giornaliera dei
+│   │   ├── battaglie.js            giocatori, prezzi, diplomazia, battaglie aperte.
+│   │   └── README.md               Vedi il suo README per la procedura e per le due
+│   │                               retention allargate (senza, il primo giro di
+│   │                               manutenzione pota quello che l'import ha appena
+│   │                               scritto).
 │   └── README.md               ← deploy a mano (scp + pm2 restart), vedi ⚠️ in fondo
 ├── public/
 │   ├── icons/
@@ -460,6 +469,13 @@ wareraPlus/
     │   │                         (dati dal server: keyframe + replay lato VPS). Scope
     │   │                         volutamente ridotto: solo ownership + nome + bandiera.
     │   │                         Deep-link ?tm=<epoch ms>.
+    │   ├── timeMachineDay.js   ← NUOVO — la giornata storica per la time machine
+    │   │                         (/day-history): patti, guerre, nemico giurato nel
+    │   │                         popup del click e battaglie aperte sotto la
+    │   │                         classifica del territorio. Una fetch per giorno
+    │   │                         FERMATO, mai una per fotogramma di playback, e
+    │   │                         nessun fallback: se il server non ce l'ha, le
+    │   │                         sezioni non compaiono.
     │   ├── timeMachineMap.js   ← SECONDA mappa MapLibre dedicata e alleggerita (3 layer)
     │   │                         usata dalla time machine; la principale viene nascosta,
     │   │                         non toccata. timeMachine.js tiene tutta la logica.
@@ -575,7 +591,8 @@ Node su VPS esterno (`WARERA_CACHE_BASE`), gestito con pm2. Polla le API
 WarEra una volta per tutti invece di lasciare che lo faccia ogni browser —
 serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`,
 `/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
-`/daily-damage`, `/damage-timeline`, `/price-history`, `/ticker` + `/ticker/summary`,
+`/daily-damage`, `/damage-timeline`, `/price-history`, `/day-history`,
+`/ticker` + `/ticker/summary`,
 `/region-history/{at,range,events,contested,war-intensity}`, `/alliances`,
 `/battles`, `/elections`, `/parties`, `/users-lite`, `/credit-profiles`,
 `/visits`, `/health`.
@@ -815,6 +832,15 @@ settembre 2026) ci sono subito solo se si lancia anche `import/prezzi.js`,
 perché `itemTrading.getPrices` dice quanto costa ADESSO e ieri non esiste da
 nessuna parte. Stesso vincolo di bonifici e ricchezza, stessa soluzione: un
 archivio di terzi importato una volta sola.
+
+La **time machine** mostrava solo l'ownership per una ragione scritta in
+testa a `src/app/timeMachine.js`: gli altri dati «non sono mai stati salvati
+nel tempo, mostrarli sarebbe fuorviante». Per patti difensivi, guerre,
+nemico giurato e battaglie aperte non vale più — `server/dayHistory.js` li
+salva, e l'import ne porta cinque mesi. Tutto il resto (popolazione,
+sviluppo, ricchezza di una regione) resta fuori per il motivo originale.
+Senza rideploy `/day-history` non esiste e la time machine torna esattamente
+com'era: popup con nome, bandiera e "dal —", nessuna sezione battaglie.
 
 ⚠️ **Tre import, tre retention da non riabbassare.** `import/` (vedi il suo
 README) ha senso solo con le retention allargate che lo accompagnano:

@@ -1,44 +1,50 @@
 # Import una tantum da un archivio esterno
 
-Due cose che WarEra+ **non può ricostruire da sola**, e che un archivio di
-terzi aveva già registrate:
+Cinque cose che WarEra+ **non può ricostruire da sola**, e che un archivio
+di terzi aveva già registrate:
 
-| Cosa | Da dove | Copertura |
-|---|---|---|
-| Bonifici da tesoro a tesoro | `state_transactions` (`countryMoneyTransfer`) | 1.267 righe, dal 25 apr 2026 |
-| Ricchezza giornaliera dei giocatori | `ranking_snapshot` (`userWealth`) | 1.545.772 righe, 91 giorni consecutivi, 19 giu → 17 set 2026 |
+| Script | Cosa | Da dove | Copertura |
+|---|---|---|---|
+| `bonifici.js` | Bonifici da tesoro a tesoro | `state_transactions` (`countryMoneyTransfer`) | 1.267 righe, dal 25 apr 2026 |
+| `ricchezza.js` | Ricchezza giornaliera dei giocatori | `ranking_snapshot` (`userWealth`) | 1.545.772 righe, 91 giorni consecutivi, 19 giu → 17 set 2026 |
+| `prezzi.js` | Prezzi di mercato | `price_daily` | 3.605 candele, 24 risorse, dal 9 apr 2026 |
+| `diplomazia.js` | Patti, guerre, nemico giurato | `country_diplomacy` | 28.440 righe, 158 giorni, dal 13 apr 2026 |
+| `battaglie.js` | Battaglie aperte giorno per giorno | `battle_snapshot` | 6.405 righe, 162 giorni, dal 9 apr 2026 |
 
 La sorgente è il dump PostgreSQL di un altro tool della comunità
 (`warera_pg_20260917_204055.dump`), passato dal suo autore. Dal dump
 vengono estratti file di scambio già nella forma che serve qui — l'import
-non parla con PostgreSQL, legge un JSON e un CSV.
+non parla con PostgreSQL, legge JSON e CSV.
 
-Il motivo per cui questi due dati valgono l'import, mentre tutto il resto
-si potrebbe rifare: **il gioco non li espone all'indietro.** I bonifici
-hanno una finestra scorrevole di ~70 ore (`moneyTransfers.js`), la
-ricchezza esiste solo come "quanto ha adesso" (`wealth_snapshot` in
-`plusApi/db.js`). Un giorno non guardato è perso per sempre — a meno che
+Il motivo per cui questi dati valgono l'import, mentre tutto il resto si
+potrebbe rifare: **il gioco non li espone all'indietro.** I bonifici hanno
+una finestra scorrevole di ~70 ore (`moneyTransfers.js`), la ricchezza
+esiste solo come "quanto ha adesso" (`wealth_snapshot` in `plusApi/db.js`),
+i prezzi solo come "quanto costa adesso", e la diplomazia di ieri non è
+interrogabile in nessun modo. Un giorno non guardato è perso per sempre — a meno che
 non lo stesse guardando qualcun altro.
 
 ## Prima di importare
 
-Entrambi gli import muoiono al primo giro di manutenzione se il codice sul
-VPS è quello vecchio: le retention erano tarate su archivi che si
-accumulano da soli, e potano quello che arriva da qui.
+Gli import di bonifici e ricchezza muoiono al primo giro di manutenzione se
+il codice sul VPS è quello vecchio: le retention erano tarate su archivi
+che si accumulano da soli, e potano quello che arriva da qui. Prezzi,
+diplomazia e battaglie hanno invece bisogno di moduli e rotte che sul VPS
+non esistono ancora affatto.
 
 Quindi **prima** si schiera il codice, **poi** si importa. Le due metà
 vivono in due cartelle diverse sul VPS (`~/warera-cache-server/` e
 `~/warera-plus-api/`), quindi sono due scp distinti:
 
 ```bash
-scp -i ../serverOracle/ssh-key-2026-08-18.key server/moneyTransfers.js server/import/bonifici.js ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
+scp -i ../serverOracle/ssh-key-2026-08-18.key server/warera-cache-server.js server/moneyTransfers.js server/priceHistory.js server/dayHistory.js server/import/bonifici.js server/import/prezzi.js server/import/diplomazia.js server/import/battaglie.js ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
 ```
 
 ```bash
 scp -i ../serverOracle/ssh-key-2026-08-18.key server/plusApi/wealth.js server/plusApi/db.js server/import/ricchezza.js ubuntu@79.72.45.17:/home/ubuntu/warera-plus-api/
 ```
 
-⚠️ I due script finiscono **accanto** ai moduli, non in una sottocartella
+⚠️ Gli script finiscono **accanto** ai moduli, non in una sottocartella
 `import/`: entrambi i deploy sono cartelle piatte. Lanciandoli da lì i
 percorsi di default (`cache/` e `data/plus.sqlite`) sono già giusti.
 
@@ -55,11 +61,18 @@ Cosa è cambiato nel codice, e perché:
 - `plusApi/db.js`: nuovo indice `idx_wealth_user_slot (war_user_id, slot)`
   — la chiave primaria comincia da `slot`, e la serie di un'unità cercava
   per giocatore. Misurato su 1,5 M di righe: 14 ms con l'indice.
+- `priceHistory.js` (nuovo): campione orario dei prezzi alle :27 e rotta
+  `/price-history`.
+- `dayHistory.js` (nuovo): scatto giornaliero alle 02:05 di diplomazia e
+  battaglie aperte (zero fetch, legge le cache già scritte) e rotta
+  `/day-history`.
+- `warera-cache-server.js`: aggancio dei due moduli (require, init, cron,
+  rotte, `/health`).
 
 ## Importare
 
 ```bash
-scp -i ../serverOracle/ssh-key-2026-08-18.key money-transfers-import.json ranking_userWealth.csv.gz ubuntu@79.72.45.17:/tmp/
+scp -i ../serverOracle/ssh-key-2026-08-18.key money-transfers-import.json ranking_userWealth.csv.gz price_daily.csv.gz country_diplomacy.csv.gz battle_snapshot.csv.gz ubuntu@79.72.45.17:/tmp/
 ```
 
 Bonifici, da `~/warera-cache-server/` (il file viene riletto ad ogni
@@ -89,9 +102,28 @@ serve se sul VPS lo spazio è poco, perché **l'import completo porta il
 database di plusApi a ~290 MB** (misurato: 1,5 M di righe più i due
 indici). Con i soli membri delle unità italiane sono pochi MB.
 
-Nessuno dei due script sovrascrive dati nostri: i bonifici si deduplicano
-sull'id del gioco, la ricchezza entra con `INSERT OR IGNORE` e lo scatto
-del server vince sempre.
+Prezzi, diplomazia e battaglie, da `~/warera-cache-server/` (anche questi
+si rileggono ad ogni richiesta, nessun restart):
+
+```bash
+node prezzi.js /tmp/price_daily.csv.gz
+node diplomazia.js /tmp/country_diplomacy.csv.gz
+node battaglie.js /tmp/battle_snapshot.csv.gz
+```
+
+Tutti e tre accettano `--prova`. Nessuno sovrascrive un giorno che il
+server ha già fotografato da sé: i suoi valori vengono dalla stessa fonte
+di oggi, e per la diplomazia hanno anche il tesoro vero (il dump porta il
+campo `money`, che è un'altra cosa e resta fuori — vedi il ⚠️ in testa a
+`diplomazia.js`).
+
+`battaglie.js` scarta le battaglie di tipo `tournament`: sono fra
+giocatori, non fra nazioni, e il dump ci mette "Unknown" al posto dei due
+nomi (1.732 righe su 8.137).
+
+Nessuno degli script sovrascrive dati nostri: i bonifici si deduplicano
+sull'id del gioco, la ricchezza entra con `INSERT OR IGNORE`, e prezzi,
+diplomazia e battaglie saltano i giorni che il server ha già scattato.
 
 ## Cosa si vede dopo
 
@@ -100,6 +132,14 @@ del server vince sempre.
   mostrano chi ha versato.
 - **Bilancio unità**: i sette giorni della serie ci sono da subito invece
   che dopo una settimana, per ogni giocatore presente nella ladder.
+- **Rendite di produzione**: nella riga aperta di ogni risorsa compare
+  l'andamento del prezzo, con le variazioni a 7 e 30 giorni.
+- **Time machine**: cliccando una nazione il popup dice con chi era in
+  guerra QUEL giorno, che patti difensivi aveva e chi era il nemico
+  giurato; sotto la classifica del territorio compaiono le battaglie
+  aperte quel giorno. Prima del 13 aprile (diplomazia) e del 9 aprile
+  (battaglie) la vista dice "prima dell'inizio dell'archivio" invece di
+  mostrare un mondo in pace.
 
 ⚠️ Le righe importate hanno **`mu_id` vuoto** (il dump non dice in quale
 unità stava il giocatore quel giorno, e riempirlo con l'unità di oggi
@@ -113,6 +153,8 @@ continua a contare solo gli scatti veri del server, perché aggrega su
 ```bash
 curl -s https://warera-oracle.duckdns.org/warera-cache/money-transfers | head -c 300
 curl -s https://warera-oracle.duckdns.org/warera-plus-api/health | python3 -m json.tool | grep -A8 ricchezza
+curl -s "https://warera-oracle.duckdns.org/warera-cache/day-history?day=2026-07-10" | head -c 200
+curl -s https://warera-oracle.duckdns.org/warera-cache/health | python3 -m json.tool | grep -A12 dayHistory
 ```
 
 `coverageFrom` deve essere aprile, e `giorniInArchivio` ~91 più i giorni

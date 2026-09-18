@@ -161,6 +161,14 @@ const {
 const {
   initPriceHistory, pollPrices, readPriceHistory, statoPriceHistory,
 } = require('./priceHistory');
+// WarEra+ la giornata storica: diplomazia (patti, guerre, nemico giurato,
+// tesoro) e battaglie aperte, giorno per giorno. Nasce per togliere alla
+// time machine il suo limite dichiarato - mostrava solo l'ownership perche'
+// nient'altro era mai stato salvato nel tempo. Adesso questi quattro campi
+// lo sono. Zero fetch: legge le cache che il server riempie gia'.
+const {
+  initDayHistory, snapshotDay, readDay, statoDayHistory,
+} = require('./dayHistory');
 
 const app = express();
 const PORT = 3001;
@@ -273,6 +281,9 @@ initPriceHistory({
   trpcBatch: (...args) => trpcBatch(...args),
   readCache, writeCache,
 });
+
+// La giornata storica: solo cache, nessuna chiamata.
+initDayHistory({ readCache, writeCache });
 
 initMoneyTransfers({
   readCache, writeCache,
@@ -2198,6 +2209,13 @@ cron.schedule('40 */6 * * *', () => { refreshPillConfig().catch(() => {}); });
 // tutte le risorse: ventiquattro al giorno in totale.
 cron.schedule('27 * * * *', pollPrices);
 
+// La giornata storica: uno scatto al giorno alle 02:05 italiane. Dopo il
+// cambio giorno di gioco (02:00) e dopo il poll delle nazioni delle :00,
+// cosi' legge la cache appena riscritta invece di quella di ieri.
+cron.schedule('5 2 * * *', () => {
+  try { snapshotDay(); } catch (err) { console.error('[day-history] scatto fallito:', err.message); }
+}, { timezone: DAILY_DAMAGE_TZ });
+
 // Primo giro completo all'avvio (in ordine: countries prima, perché tutto
 // il resto dipende dalla cache delle nazioni), così non si parte a vuoto.
 (async () => {
@@ -2627,6 +2645,14 @@ app.get('/price-history', (req, res) => {
   res.json(readPriceHistory(days));
 });
 
+// La giornata storica (server/dayHistory.js): diplomazia e battaglie aperte
+// di UN giorno. Uno alla volta e non un blocco unico perche' il client ne
+// chiede uno per posizione dello slider che l'utente ferma, non uno per
+// fotogramma. `coverageFrom` dice da quando in qua c'e' qualcosa: prima di
+// li' una risposta vuota vuol dire "non stavo guardando", non "nessuna
+// guerra".
+app.get('/day-history', (req, res) => res.json(readDay(req.query.day)));
+
 // Radar dei proxy: punteggio completo per nazione, con le evidenze che lo
 // compongono. Il client lo innesta su quello che ha calcolato da solo
 // (src/proxy/radar.js: applyServerIndex) e se questo non risponde resta il
@@ -2911,6 +2937,11 @@ app.get('/health', (req, res) => res.json({
   // (vedi server/import/prezzi.js): la vista funziona lo stesso, ma la
   // linea comincia dal deploy.
   priceHistory: statoPriceHistory(),
+  // Quanti giorni di diplomazia e di battaglie storiche ci sono. Se
+  // `primo` e' recente l'import non e' mai stato fatto (import/diplomazia.js,
+  // import/battaglie.js) e la time machine mostra la fascia "fuori portata"
+  // per i giorni precedenti.
+  dayHistory: statoDayHistory(),
 }));
 
 app.listen(PORT, '127.0.0.1', () => {

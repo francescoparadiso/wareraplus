@@ -49,6 +49,11 @@ import {
 } from './timeMachineMap.js';
 import { trackEvent } from '../shared/analytics.js';
 import { t } from '../shared/i18n.js';
+// WarEra+ la giornata storica: patti, guerre, nemico giurato e battaglie
+// aperte di QUEL giorno. Vedi il blocco in testa a timeMachineDay.js per
+// il motivo per cui questi quattro campi non cadono piu' sotto il limite
+// dichiarato qui sopra.
+import { dayKey, fetchDay, cachedDay, fuoriPortata } from './timeMachineDay.js';
 
 // Passo di uno "step" discreto (frecce tastiera) — un giorno di gioco.
 const STEP_MS = 24 * 60 * 60 * 1000;
@@ -121,7 +126,7 @@ let _playBtn, _prevEventBtn, _nextEventBtn, _speedBtn, _shareBtn;
 // Indicatore "sei nella time machine" (badge + orologio analogico + data) e
 // classifica territorio ("hall of fame" + lista regioni per nazione).
 let _indicator, _clockHour, _clockMin, _clockHM, _clockDate;
-let _standings, _standingsList, _standingsBtn;
+let _standings, _standingsList, _standingsBtn, _dayBattlesEl;
 let _standingsVisible = !window.matchMedia('(max-width: 768px)').matches; // di default aperta su desktop, chiusa su mobile (poco spazio)
 
 // Nettrix ha reso possibile lo storico della time machine (server di cache):
@@ -130,6 +135,11 @@ const NETTRIX_URL = 'https://app.warera.io/user/69baf405edc9a346931b27c5';
 let _active = false;
 let _range = null;
 let _debounceTimer = null;
+// Giornata storica: il giorno mostrato adesso, il suo timer e l'ultimo
+// click (per riempire il popup quando i dati arrivano dopo l'apertura).
+let _dayTimer = null;
+let _dayShown = null;
+let _lastClick = null;   // { countryId, point, nation, since }
 let _lastRegions = null; // { regionId: countryId } della posizione slider corrente, per il click
 let _labelRegionId = null; // Map: indice in state.labelsData -> regionId "sotto" quella label (calcolato una volta, posizione fissa — sola lettura, non muta più state.labelsData)
 
@@ -231,6 +241,13 @@ function _deactivate() {
   if (_indicator) _indicator.classList.remove('open');
   if (_standings) _standings.classList.remove('open');
   _hidePopup();
+  // La giornata storica: si spegne con la vista. La cache dei giorni in
+  // timeMachineDay.js resta (riaprire la time machine sullo stesso giorno
+  // non deve ripagare la richiesta), ma quello che e' a schermo no.
+  clearTimeout(_dayTimer);
+  _dayShown = null;
+  _lastClick = null;
+  if (_dayBattlesEl) _dayBattlesEl.innerHTML = '';
   document.removeEventListener('keydown', _onKeydown);
   resumeShipAnimationDark();
   resumeShipAnimationAntique();
@@ -479,9 +496,11 @@ function _buildStandingsIfNeeded() {
   _standings.innerHTML = `
     <div class="wp-tm-st-title">🏆 <span data-i18n="tm_hall_of_fame">${t('tm_hall_of_fame')}</span></div>
     <div class="wp-tm-st-list"></div>
+    <div class="wp-tm-day-battles"></div>
   `;
   document.body.appendChild(_standings);
   _standingsList = _standings.querySelector('.wp-tm-st-list');
+  _dayBattlesEl = _standings.querySelector('.wp-tm-day-battles');
 }
 
 function _flagImg(nation) {
@@ -522,6 +541,75 @@ function _updateStandings(regionsMap) {
     </div>`).join('');
 
   _standingsList.innerHTML = `<div class="wp-tm-st-podium">${podium}</div>${list}`;
+}
+
+/* Le battaglie APERTE quel giorno, sotto la classifica del territorio.
+   Non e' l'archivio battaglie (quello ha danno, taglie e contratti, e sta
+   in Approfondimenti): qui c'e' "chi stava combattendo chi", che e' la
+   domanda che viene guardando la mappa di un giorno passato.
+
+   Le due meta' della serie portano colonne diverse — i giorni importati
+   hanno i colpi, i nostri scatti il danno — quindi si mostra quello che la
+   riga ha davvero, e il resto non si scrive. */
+const DAY_BATTLES_TOP = 8;
+
+function _updateDayBattles(giorno) {
+  if (!_dayBattlesEl) return;
+  const dati = cachedDay(giorno);
+
+  // Mai chiesto o server che non ce l'ha: nessuna sezione. Un blocco
+  // vuoto direbbe "quel giorno non si combatteva".
+  if (dati === undefined || dati === null || !dati.battles) { _dayBattlesEl.innerHTML = ''; return; }
+
+  const titolo = `<div class="wp-tm-st-title wp-tm-db-title">⚔️ <span>${escapeHtml(t('tm_day_battles'))}</span></div>`;
+
+  if (fuoriPortata(dati, giorno, 'battles')) {
+    _dayBattlesEl.innerHTML = `${titolo}<div class="wp-tm-st-empty">${escapeHtml(t('tm_day_out_of_range'))}</div>`;
+    return;
+  }
+  if (!dati.battles.length) {
+    _dayBattlesEl.innerHTML = `${titolo}<div class="wp-tm-st-empty">${escapeHtml(t('tm_day_no_battles'))}</div>`;
+    return;
+  }
+
+  const bandiera = (code) => (code
+    ? `<img class="wp-tm-st-flag" src="https://media.warera.io/images/flags/${escapeHtml(code)}.svg?v=16" alt="" loading="lazy" onerror="this.style.visibility='hidden'"/>`
+    : '<span class="wp-tm-st-flag"></span>');
+
+  // Per colpi quando ci sono (giorni importati), per danno totale quando
+  // invece c'e' quello (scatti nostri): due ordinamenti per due meta', ma
+  // la domanda e' la stessa — quale battaglia contava di piu'.
+  const peso = (b) => b.hits ?? ((b.attackerDamage || 0) + (b.defenderDamage || 0));
+  const ordinate = [...dati.battles].sort((a, b) => peso(b) - peso(a));
+  const mostrate = ordinate.slice(0, DAY_BATTLES_TOP);
+
+  const righe = mostrate.map(b => {
+    const numero = b.hits != null
+      ? `<span class="wp-tm-db-num">${_fmtCompatto(b.hits)} <span class="wp-tm-db-unit">${escapeHtml(t('tm_day_hits'))}</span></span>`
+      : (peso(b) > 0 ? `<span class="wp-tm-db-num">${_fmtCompatto(peso(b))} <span class="wp-tm-db-unit">${escapeHtml(t('tm_day_damage'))}</span></span>` : '');
+    return `
+      <div class="wp-tm-db-row">
+        <span class="wp-tm-db-side">${bandiera(b.attackerCode)}<span class="wp-tm-db-name">${escapeHtml(b.attackerName || '—')}</span></span>
+        <span class="wp-tm-db-vs">→</span>
+        <span class="wp-tm-db-side">${bandiera(b.defenderCode)}<span class="wp-tm-db-name">${escapeHtml(b.defenderName || '—')}</span></span>
+        ${numero}
+      </div>`;
+  }).join('');
+
+  const resto = ordinate.length > mostrate.length
+    ? `<div class="wp-tm-st-empty">+${ordinate.length - mostrate.length}</div>`
+    : '';
+  _dayBattlesEl.innerHTML = `${titolo}<div class="wp-tm-db-count">${ordinate.length}</div>${righe}${resto}`;
+}
+
+/** Migliaia e milioni accorciati: i colpi di una battaglia grossa sono
+ *  cinque cifre, e qui la colonna e' stretta. */
+function _fmtCompatto(v) {
+  const n = Number(v) || 0;
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}k`;
+  return String(Math.round(n));
 }
 
 function _applyStandingsVisibility() {
@@ -773,7 +861,42 @@ async function _applyAt(ts) {
   _updateClock(ts);
   _hidePopup();
   _syncUrl(ts);
+  _scheduleDay(ts);
   return await _fetchAndRender(ts);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// La giornata storica (patti, guerre, nemico giurato, battaglie aperte).
+//
+// UNA fetch per giorno FERMATO, mai una per fotogramma: durante un playback
+// lo slider attraversa centocinquanta giorni, e il pannello che questi dati
+// riempiono nessuno lo legge mentre scorre. Quindi niente durante il play, e
+// mezzo secondo di quiete dopo un trascinamento.
+// ─────────────────────────────────────────────────────────────────────────
+const DAY_DEBOUNCE_MS = 500;
+
+function _scheduleDay(ts) {
+  const giorno = dayKey(ts);
+  if (giorno === _dayShown && cachedDay(giorno) !== undefined) { _renderDay(giorno); return; }
+  clearTimeout(_dayTimer);
+  if (_playing) return;
+  _dayTimer = setTimeout(() => {
+    if (!_active) return;
+    _dayShown = giorno;
+    // Quello che c'e' gia' si disegna subito; il resto quando arriva, e
+    // solo se nel frattempo l'utente non si e' spostato altrove.
+    _renderDay(giorno);
+    fetchDay(giorno).then(() => { if (_active && _dayShown === giorno) _renderDay(giorno); });
+  }, DAY_DEBOUNCE_MS);
+}
+
+function _renderDay(giorno) {
+  _updateDayBattles(giorno);
+  // Popup aperto su una nazione: si riempie da se' quando i dati arrivano,
+  // senza chiedere all'utente di ricliccare.
+  if (_lastClick && _popup?.classList.contains('visible')) {
+    _renderPopup(_lastClick, giorno);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -914,15 +1037,50 @@ function _onHistoricalClick(e) {
   const countryId = regionId ? _lastRegions[regionId] : null;
   const nation = countryId ? state.nationMap.get(countryId) : null;
   const since = nation ? _ownedSince(regionId, Number(_slider.value)) : null;
-  _showPopup(e.point, nation, since);
+  _lastClick = { countryId, point: e.point, nation, since };
+
+  const giorno = dayKey(Number(_slider.value));
+  _renderPopup(_lastClick, giorno);
+  // Click arrivato prima che il debounce chiedesse il giorno: lo si chiede
+  // qui, altrimenti il popup resterebbe al nome e alla bandiera.
+  if (cachedDay(giorno) === undefined) {
+    _dayShown = giorno;
+    fetchDay(giorno).then(() => { if (_active && _dayShown === giorno) _renderDay(giorno); });
+  }
 }
 
-function _showPopup(point, nation, sinceTs) {
+/** Il nome di una nazione da un id, per le liste del popup. Se non la
+ *  conosciamo resta l'id: e' brutto ma e' vero. */
+function _nomeDi(countryId) {
+  return state.nationMap.get(countryId)?.name || String(countryId);
+}
+
+/** Una riga "etichetta: primi tre nomi (+N)". Vuota se la lista e' vuota —
+ *  chi chiama decide se scrivere "nessuno" o non scrivere niente. */
+function _rigaNazioni(label, ids, classe = '') {
+  if (!ids?.length) return '';
+  const primi = ids.slice(0, 3).map(_nomeDi).map(escapeHtml).join(', ');
+  const resto = ids.length > 3 ? ` <span class="wp-tm-popup-more">+${ids.length - 3}</span>` : '';
+  return `<div class="wp-tm-popup-line ${classe}"><span class="wp-tm-popup-lab">${escapeHtml(label)}</span> ${primi}${resto}</div>`;
+}
+
+/**
+ * Il popup del click. Oltre a nome, bandiera e "dal —", mostra la
+ * diplomazia di QUEL giorno quando il server ce l'ha: guerre in corso,
+ * patti difensivi, nemico giurato.
+ *
+ * Tre stati diversi, che non vanno confusi fra loro:
+ *   • dati non ancora arrivati  → non si scrive niente (arrivano dopo)
+ *   • giorno prima dell'archivio → "fuori portata", dichiarato
+ *   • dati presenti e vuoti      → "nessuna guerra", che e' un'informazione
+ */
+function _renderPopup(click, giorno) {
   if (!_popup) {
     _popup = document.createElement('div');
     _popup.id = 'wp-time-machine-popup';
     document.body.appendChild(_popup);
   }
+  const { nation, since: sinceTs, countryId, point } = click;
   if (!nation) {
     _popup.innerHTML = `<span class="wp-tm-popup-name">${t('tm_no_nation')}</span>`;
   } else {
@@ -933,9 +1091,28 @@ function _showPopup(point, nation, sinceTs) {
     const sinceHtml = sinceTs != null
       ? `<span class="wp-tm-popup-since">${t('tm_since', { date: _fmtDate(sinceTs) })}</span>`
       : '';
+
+    const dati = cachedDay(giorno);
+    let diplHtml = '';
+    if (dati && fuoriPortata(dati, giorno)) {
+      diplHtml = `<div class="wp-tm-popup-line wp-tm-popup-dim">${escapeHtml(t('tm_day_out_of_range'))}</div>`;
+    } else if (dati?.diplomacy) {
+      const d = dati.diplomacy.get(countryId);
+      if (d) {
+        const guerre = d.wars.length
+          ? _rigaNazioni(t('tm_day_wars'), d.wars, 'wp-tm-popup-war')
+          : `<div class="wp-tm-popup-line wp-tm-popup-dim">${escapeHtml(t('tm_day_no_wars'))}</div>`;
+        const sworn = d.sworn
+          ? `<div class="wp-tm-popup-line wp-tm-popup-sworn"><span class="wp-tm-popup-lab">${escapeHtml(t('tm_day_sworn'))}</span> ${escapeHtml(_nomeDi(d.sworn))}</div>`
+          : '';
+        diplHtml = guerre + _rigaNazioni(t('tm_day_pacts'), d.pacts) + sworn;
+      }
+    }
+
     _popup.innerHTML = `
       <div class="wp-tm-popup-main">${flagHtml}<span class="wp-tm-popup-name">${escapeHtml(nation.name)}</span></div>
       ${sinceHtml}
+      ${diplHtml}
     `;
   }
   // Il gap sopra il punto cliccato e il centraggio orizzontale li fa il

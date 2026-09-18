@@ -1437,6 +1437,72 @@ body.light-theme .wp-tm-popup-since {
   color: #666;
 }
 
+/* ── La giornata storica nel popup: guerre, patti, nemico giurato di QUEL
+   giorno (src/app/timeMachineDay.js). Il popup nasce stretto: le liste
+   vanno a capo invece di allargarlo oltre lo schermo su mobile. ── */
+.wp-tm-popup-line {
+  max-width: 260px;
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: #c9d1d9;
+}
+.wp-tm-popup-lab { color: #8b949e; }
+.wp-tm-popup-more { color: #8b949e; }
+.wp-tm-popup-dim { color: #8b949e; font-style: italic; }
+.wp-tm-popup-war { color: #ff7b72; }
+.wp-tm-popup-war .wp-tm-popup-lab { color: #ff7b72; opacity: .75; }
+.wp-tm-popup-sworn { color: #f0883e; }
+.wp-tm-popup-sworn .wp-tm-popup-lab { color: #f0883e; opacity: .75; }
+body.light-theme .wp-tm-popup-line { color: #24292f; }
+body.light-theme .wp-tm-popup-lab,
+body.light-theme .wp-tm-popup-more,
+body.light-theme .wp-tm-popup-dim { color: #57606a; }
+body.light-theme .wp-tm-popup-war { color: #cf222e; }
+body.light-theme .wp-tm-popup-sworn { color: #bc4c00; }
+
+/* ── Battaglie aperte quel giorno, sotto la classifica del territorio ── */
+.wp-tm-day-battles { margin-top: 10px; }
+.wp-tm-db-title { margin-top: 0; }
+.wp-tm-db-count {
+  font-size: 11px;
+  color: #8b949e;
+  margin: 0 0 4px 2px;
+}
+.wp-tm-db-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 2px;
+  font-size: 11.5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.wp-tm-db-row:last-child { border-bottom: 0; }
+.wp-tm-db-side {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 0;
+}
+.wp-tm-db-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wp-tm-db-vs { color: #8b949e; flex: 0 0 auto; }
+.wp-tm-db-num {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: #e3b341;
+}
+.wp-tm-db-unit { color: #8b949e; font-size: 10px; }
+body.light-theme .wp-tm-db-row { border-bottom-color: rgba(0, 0, 0, 0.06); }
+body.light-theme .wp-tm-db-count,
+body.light-theme .wp-tm-db-vs,
+body.light-theme .wp-tm-db-unit { color: #57606a; }
+body.light-theme .wp-tm-db-num { color: #9c6b1f; }
+
 /* ── Indicatore "sei nella time machine": badge + orologio analogico (le
    lancette seguono l'ORA DELL'EVENTO, vedi timeMachine.js:_updateClock) +
    data + card di ringraziamento a Nettrix. In alto a sinistra, scivola da
