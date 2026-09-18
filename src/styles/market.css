@@ -278,6 +278,9 @@ body.light-theme .wp-mkt-num.pos { color: #1a7f37; }
 /* ── Riga espansa ──────────────────────────────────────────── */
 .wp-mkt-detail {
   display: grid;
+  /* Terza colonna (andamento prezzo) solo quando c'e': la sezione
+     compare se il server di cache ha lo storico, e senza di lei le due
+     colonne storiche devono restare esattamente com'erano. */
   grid-template-columns: minmax(240px, .8fr) minmax(320px, 1.6fr);
   gap: 20px;
   padding: 14px 12px 18px;
@@ -323,4 +326,43 @@ body.light-theme .wp-mkt-detail { border-bottom-color: #e3e7ee; }
   .wp-mkt-detail { grid-template-columns: 1fr; }
   .wp-mkt-regrow { grid-template-columns: minmax(120px, 1fr) 56px 76px 50px; }
   .wp-mkt-parts { grid-column: 1 / -1; }
+}
+
+/* ── Andamento del prezzo (src/market/priceChart.js) ──────────────── */
+.wp-mkt-detail:has(.wp-mkt-dchart) {
+  grid-template-columns: minmax(240px, .8fr) minmax(300px, 1.4fr) minmax(240px, 1fr);
+}
+.wp-mkt-chart { width: 100%; height: auto; display: block; overflow: visible; }
+.wp-mkt-line {
+  fill: none;
+  stroke: var(--wp-ov-accent, #e3b341);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+/* La banda massimo/minimo sta DIETRO la linea e non deve competerci:
+   e' il contesto ("quanto ballava dentro la giornata"), non il dato. */
+.wp-mkt-band { fill: color-mix(in srgb, var(--wp-ov-accent, #e3b341) 18%, transparent); stroke: none; }
+.wp-mkt-dot { fill: var(--wp-ov-accent, #e3b341); }
+/* Le etichette cadono sopra la linea quando il prezzo sta in basso a
+   sinistra: un contorno nel colore dello sfondo le tiene leggibili senza
+   riservare margini che ruberebbero altezza al grafico. */
+.wp-mkt-clab {
+  font-size: 8px; fill: var(--wp-ov-text-dim, #8b949e); font-variant-numeric: tabular-nums;
+  paint-order: stroke; stroke: #0d1117; stroke-width: 2.5px; stroke-linejoin: round;
+}
+body.light-theme .wp-mkt-clab { stroke: #ffffff; }
+.wp-mkt-cday { font-size: 7.5px; }
+
+.wp-mkt-chgs { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-top: 6px; font-size: 12px; }
+.wp-mkt-chg { color: var(--wp-ov-text-dim, #8b949e); }
+.wp-mkt-chg b { font-variant-numeric: tabular-nums; }
+.wp-mkt-chg-up b { color: #3fb950; }
+.wp-mkt-chg-down b { color: #e5484d; }
+body.light-theme .wp-mkt-chg-up b { color: #1a7f37; }
+body.light-theme .wp-mkt-chg-down b { color: #cf222e; }
+
+@media (max-width: 900px) {
+  .wp-mkt-detail:has(.wp-mkt-dchart) { grid-template-columns: 1fr; }
 }

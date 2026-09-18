@@ -185,6 +185,22 @@ wareraPlus/
 │   │                              di 23,5 ore da `buffEndAt`/`debuffEndAt`, quindi
 │   │                              quella curva c'è già al primo giro.
 │   │                              Endpoint: /damage-timeline.
+│   ├── priceHistory.js         ← NUOVO — storico dei prezzi: un campione all'ora di
+│   │                              itemTrading.getPrices (PUBBLICA, tutte le risorse
+│   │                              in una richiesta) ridotto a una candela al giorno
+│   │                              per risorsa. Rendite di produzione sa dire cosa
+│   │                              conviene ADESSO perché il gioco non pubblica altro;
+│   │                              da qui in poi sa anche da dove viene quel prezzo.
+│   │                              Endpoint: /price-history?days=N.
+│   ├── import/                 ← NUOVO — import UNA TANTUM da un archivio esterno
+│   │   ├── bonifici.js            (il dump PostgreSQL di un altro tool della
+│   │   ├── ricchezza.js            comunità, passato dal suo autore). Servono solo
+│   │   ├── prezzi.js               per i tre dati che WarEra NON espone a ritroso:
+│   │   └── README.md               bonifici fra tesori, ricchezza giornaliera dei
+│   │                               giocatori, prezzi. Vedi il suo README per la
+│   │                               procedura e per le due retention allargate
+│   │                               (senza, il primo giro di manutenzione pota
+│   │                               quello che l'import ha appena scritto).
 │   └── README.md               ← deploy a mano (scp + pm2 restart), vedi ⚠️ in fondo
 ├── public/
 │   ├── icons/
@@ -313,7 +329,15 @@ wareraPlus/
     │   │                          su api6, TTL 5 min, giro automatico mentre è aperta) e
     │   │                          regioni consigliate (token-gated via ecoBatch → proxy,
     │   │                          TTL 30 min + localStorage). Un refresh completo = 2
-    │   │                          richieste HTTP. Regioni e tasse: zero fetch.
+    │   │                          richieste HTTP. Regioni e tasse: zero fetch. Più una
+    │   │                          terza cosa, sola per sessione: lo STORICO dal server
+    │   │                          di cache (/price-history), senza fallback — il gioco
+    │   │                          non sa dire quanto costava ieri, quindi se il server
+    │   │                          non ce l'ha la sezione non compare e basta.
+    │   ├── priceChart.js         ← NUOVO — la linea delle chiusure (SVG a mano, come
+    │   │                          nations/charts.js) + variazione 7/30 giorni. Un
+    │   │                          giorno senza candela è un BUCO: la linea si spezza,
+    │   │                          mai uno zero.
     │   ├── model.js              ← formule PURE (la stessa di eco/gameData.js, ma con i
     │   │                          prezzi eseguibili) + paga di pareggio, guadagno
     │   │                          giornaliero per paga offerta e bonus FEDELTÀ allo
@@ -551,7 +575,7 @@ Node su VPS esterno (`WARERA_CACHE_BASE`), gestito con pm2. Polla le API
 WarEra una volta per tutti invece di lasciare che lo faccia ogni browser —
 serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`,
 `/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
-`/daily-damage`, `/damage-timeline`, `/ticker` + `/ticker/summary`,
+`/daily-damage`, `/damage-timeline`, `/price-history`, `/ticker` + `/ticker/summary`,
 `/region-history/{at,range,events,contested,war-intensity}`, `/alliances`,
 `/battles`, `/elections`, `/parties`, `/users-lite`, `/credit-profiles`,
 `/visits`, `/health`.
@@ -781,6 +805,22 @@ Il **contatore visite** (`/visits`) invece sì: finché non rideployi, la pill
 semplicemente non compare — è il degrado voluto, non un guasto. Il seme di
 1325 è la misura di Vercel Analytics al 2026-08-31 e vive in `VISITS_SEED`
 nel server, non nel client.
+
+Lo **storico prezzi** in Rendite di produzione (`src/market/priceChart.js` +
+`server/priceHistory.js`) è dello stesso tipo: senza rideploy `/price-history`
+non esiste e la colonna "andamento" non compare nella riga aperta, mentre
+tabella, rendite e simulatore restano identici. Dopo il deploy l'archivio si
+riempie da sé a una candela al giorno — ma i tre mesi indietro (aprile →
+settembre 2026) ci sono subito solo se si lancia anche `import/prezzi.js`,
+perché `itemTrading.getPrices` dice quanto costa ADESSO e ieri non esiste da
+nessuna parte. Stesso vincolo di bonifici e ricchezza, stessa soluzione: un
+archivio di terzi importato una volta sola.
+
+⚠️ **Tre import, tre retention da non riabbassare.** `import/` (vedi il suo
+README) ha senso solo con le retention allargate che lo accompagnano:
+`moneyTransfers.js` a 180 giorni, `plusApi/wealth.js` a 180. Rimetterle a 90
+e 14 "per pulizia" cancella al primo giro di manutenzione dati che non si
+rifanno — sono l'unica copia rimasta di quei mesi.
 
 ⚠️ **L'input tRPC NON va incapsulato in `{"json": ...}`.** Le procedure
 vogliono l'oggetto nudo (`?input={"transactionType":"...","limit":50}`).

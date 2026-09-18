@@ -39,9 +39,15 @@ let deps = null;
 
 const FILE = 'money-transfers';
 
-// Stessa retention dell'archivio battaglie: le due cose si leggono
-// insieme (un finanziamento senza la battaglia che lo spiega non serve).
-const RETENTION_DAYS = 90;
+// Era 90, la stessa dell'archivio battaglie, con la motivazione che le due
+// cose si leggono insieme (un finanziamento senza la battaglia che lo
+// spiega non serve). Vale ancora, ma ora l'archivio battaglie arriva più
+// indietro di così: `import/bonifici.js` ha portato dentro i bonifici di un
+// archivio esterno a partire dal 25 aprile 2026, e potarli a 90 giorni
+// vorrebbe dire cancellare al primo giro quello che non si può rifare.
+// 180 giorni di bonifici sono ~2500 righe, cioè qualche centinaio di KB:
+// il file viaggia intero verso il browser e resta piccolo lo stesso.
+const RETENTION_DAYS = 180;
 const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 const PAGE = 50;

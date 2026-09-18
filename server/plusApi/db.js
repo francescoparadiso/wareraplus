@@ -413,6 +413,11 @@ function migrate() {
   }
   // Qui e non in SCHEMA, per il motivo scritto accanto alla tabella.
   db.exec('CREATE INDEX IF NOT EXISTS idx_wealth_mu_slot ON wealth_snapshot (mu_id, slot)');
+  // WarEra+ - scattiRicchezza() cerca per (war_user_id, slot), e la chiave
+  // primaria comincia da slot: finche' la tabella erano poche migliaia di
+  // righe la scansione non si sentiva, con l'import storico (1,5 milioni)
+  // diventerebbe una scansione piena ad ogni apertura della scheda unita'.
+  db.exec('CREATE INDEX IF NOT EXISTS idx_wealth_user_slot ON wealth_snapshot (war_user_id, slot)');
 
   if (!colonne('request_allow').includes('nome')) {
     db.exec('ALTER TABLE request_allow ADD COLUMN nome TEXT');
@@ -754,11 +759,21 @@ function salvaScattoRicchezza(slot, righe) {
 }
 
 /** Gli scatti presenti, dal più recente. Serve a sapere quanto indietro
- *  si può guardare davvero, che non è quanto si vorrebbe. */
-function scattiRicchezzaDisponibili(limite = 120) {
+ *  si può guardare davvero, che non è quanto si vorrebbe.
+ *
+ *  ⚠️ `dalSlot` non è un vezzo: senza, il GROUP BY passa su TUTTA la
+ *  tabella, e dall'import storico in poi sono 1,5 milioni di righe —
+ *  misurato, 400 ms ad ogni lettura contro i 14 della serie di un'unità.
+ *  Con il filtro il piano usa la chiave primaria (slot per primo) e legge
+ *  solo l'intervallo che serve. Chi guarda una finestra di otto giorni
+ *  passa otto giorni, non tre mesi. */
+function scattiRicchezzaDisponibili(limite = 120, dalSlot = null) {
+  const sql = 'SELECT slot, COUNT(*) AS n, MAX(taken_at) AS taken_at FROM wealth_snapshot'
+    + (dalSlot ? ' WHERE slot >= ?' : '')
+    + ' GROUP BY slot ORDER BY slot DESC LIMIT ?';
   return getDb()
-    .prepare('SELECT slot, COUNT(*) AS n, MAX(taken_at) AS taken_at FROM wealth_snapshot GROUP BY slot ORDER BY slot DESC LIMIT ?')
-    .all(limite)
+    .prepare(sql)
+    .all(...(dalSlot ? [dalSlot, limite] : [limite]))
     .map((r) => ({ slot: r.slot, righe: r.n, presoIl: r.taken_at }));
 }
 

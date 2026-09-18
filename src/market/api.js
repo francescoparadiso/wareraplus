@@ -33,7 +33,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { trpcBatchManual, cacheKey, cacheGet, cacheSet } from '../shared/trpcClient.js';
-import { ECO_PROXY_BASE } from '../diplomacy/config.js';
+import { ECO_PROXY_BASE, WARERA_CACHE_BASE } from '../diplomacy/config.js';
 import { state } from '../diplomacy/state.js';
 import { loadGameData } from '../eco/api.js';
 
@@ -182,4 +182,53 @@ export async function loadMarketData({ force = false, pricesOnly = false } = {})
 /** Quanto sono vecchi i prezzi adesso (ms). -1 se non ce ne sono. */
 export function priceAgeMs() {
   return _mem.pricesTs ? Date.now() - _mem.pricesTs : -1;
+}
+
+/* ── 4. Storico dei prezzi (solo server di cache) ────────────────── */
+/* Una candela al giorno per risorsa, da /price-history. È l'unico pezzo
+   di questa vista che WarEra non sa dare in nessun modo: `getPrices` è
+   il prezzo di adesso, e ieri non esiste da nessuna parte. Quindi qui non
+   c'è fallback — se il server non risponde la sezione "andamento" non
+   compare, e il resto della tabella non se ne accorge.
+
+   Una sola richiesta per apertura della vista: le candele cambiano una
+   volta all'ora, non ogni cinque minuti come i prezzi. */
+
+const HISTORY_TIMEOUT_MS = 4000;
+const HISTORY_DAYS = 90;
+let _history = null;      // { items, coverageFrom, fetchedAt } | null
+let _historyTried = false;
+
+export async function loadPriceHistory() {
+  if (_history || _historyTried) return _history;
+  _historyTried = true;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), HISTORY_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${WARERA_CACHE_BASE}/price-history?days=${HISTORY_DAYS}`, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data || typeof data.items !== 'object') throw new Error('forma inattesa');
+    _history = data;
+    return _history;
+  } catch (err) {
+    // Server vecchio (rotta assente → 404) o VPS giù: nessun grafico,
+    // nessun messaggio d'errore. È una sezione in più, non un guasto.
+    console.warn('[market] storico prezzi non disponibile:', err.message);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Le candele di una risorsa, dal più vecchio: [giorno, o, h, l, c, n].
+ *  Array vuoto se lo storico non c'è o quella risorsa non c'era. */
+export function priceSeries(code) {
+  return _history?.items?.[code] || [];
+}
+
+/** Da che giorno l'archivio guarda davvero (stringa YYYY-MM-DD) o null.
+ *  Serve a non intitolare "90 giorni" una linea che ne copre dodici. */
+export function priceHistoryCoverage() {
+  return _history?.coverageFrom || null;
 }

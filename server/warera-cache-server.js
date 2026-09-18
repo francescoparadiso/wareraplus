@@ -153,6 +153,14 @@ const {
   initDamageTimeline, sampleDamage, refreshPillConfig, recordPills,
   readTimeline, timelineStatus,
 } = require('./damageTimeline');
+// WarEra+ storico dei prezzi: un campione all'ora di `itemTrading.getPrices`
+// (pubblica, tutte le risorse in una richiesta) ridotto a una candela al
+// giorno. Rendite di produzione sa dire cosa conviene ADESSO perche' il
+// gioco non pubblica nient'altro; da qui in poi sa anche da dove viene
+// quel prezzo. Vedi il blocco in testa a server/priceHistory.js.
+const {
+  initPriceHistory, pollPrices, readPriceHistory, statoPriceHistory,
+} = require('./priceHistory');
 
 const app = express();
 const PORT = 3001;
@@ -255,6 +263,13 @@ initProxyIndex({
 // Stesso trattamento per l'archivio battaglie: riceve trpcBatch (con retry,
 // chunking e rate control gia' tarati) invece di rifarsi il suo.
 initBattleArchive({
+  trpcBatch: (...args) => trpcBatch(...args),
+  readCache, writeCache,
+});
+
+// Prezzi: gli bastano trpcBatch (la procedura e' pubblica, niente chiave)
+// e i due attrezzi della cache.
+initPriceHistory({
   trpcBatch: (...args) => trpcBatch(...args),
   readCache, writeCache,
 });
@@ -2177,6 +2192,12 @@ cron.schedule('12 * * * *', () => { try { sampleDamage(); } catch (err) { consol
 // ribilancia +60%/8h, la ricostruzione all'indietro deve seguirlo.
 cron.schedule('40 */6 * * *', () => { refreshPillConfig().catch(() => {}); });
 
+// WarEra+ prezzi: un campione all'ora, alle :27 — un minuto libero fra
+// quelli gia' occupati, e nessun vincolo di orario perche' il mercato non
+// ha un tick di gioco a cui allinearsi. UNA richiesta pubblica che porta
+// tutte le risorse: ventiquattro al giorno in totale.
+cron.schedule('27 * * * *', pollPrices);
+
 // Primo giro completo all'avvio (in ordine: countries prima, perché tutto
 // il resto dipende dalla cache delle nazioni), così non si parte a vuoto.
 (async () => {
@@ -2207,6 +2228,10 @@ cron.schedule('40 */6 * * *', () => { refreshPillConfig().catch(() => {}); });
   // minuto in cui questo modulo non guarda è un pezzo di storico che si
   // perde per sempre (vedi il blocco in testa a moneyTransfers.js).
   await pollMoneyTransfers();
+  // Prezzi: un campione subito. Costa una richiesta pubblica, e su un
+  // riavvio a meta' pomeriggio evita che la candela di oggi si apra solo
+  // alle :27 successive.
+  await pollPrices();
   // Primissimo avvio: senza scatto il "danno di oggi" resterebbe muto fino
   // alle 02:00 successive. Se ne fa uno subito — vale meno (parte da adesso,
   // non dal cambio giorno), e infatti il client mostra l'ora dello scatto
@@ -2593,6 +2618,15 @@ app.get('/damage-timeline', (req, res) => {
   res.json(readTimeline({ countryId: req.query.countryId || null, hours, days }));
 });
 
+// Storico dei prezzi (server/priceHistory.js): una candela al giorno per
+// risorsa. `days` e' la finestra chiesta, `coverageFrom` quella che c'e'
+// davvero — la vista disegna la seconda e dichiara la differenza invece di
+// far sembrare "prezzo fermo" un archivio che non era ancora nato.
+app.get('/price-history', (req, res) => {
+  const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 365);
+  res.json(readPriceHistory(days));
+});
+
 // Radar dei proxy: punteggio completo per nazione, con le evidenze che lo
 // compongono. Il client lo innesta su quello che ha calcolato da solo
 // (src/proxy/radar.js: applyServerIndex) e se questo non risponde resta il
@@ -2872,6 +2906,11 @@ app.get('/health', (req, res) => res.json({
   // dedup. `pillola` riporta le durate: se dice "valori noti" gameConfig
   // non e' stato letto e la ricostruzione all'indietro usa i default.
   damageTimeline: timelineStatus(),
+  // Quante risorse e quante candele di prezzo ci sono, e da che giorno.
+  // Se `primoGiorno` e' recente l'import storico non e' mai stato fatto
+  // (vedi server/import/prezzi.js): la vista funziona lo stesso, ma la
+  // linea comincia dal deploy.
+  priceHistory: statoPriceHistory(),
 }));
 
 app.listen(PORT, '127.0.0.1', () => {

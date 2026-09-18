@@ -92,7 +92,13 @@ const TZ = 'Europe/Rome';
 const ORA_SCATTO = 2;                   // 02:00 italiane, come /daily-damage nel cache-server
 const GIORNI_DELTA = 7;                 // quanti giorni indietro deve poter guardare la vista
 const GIORNI_SCATTO = GIORNI_DELTA + 1; // sette differenze vogliono otto fotografie
-const RETENTION_GIORNI = 14;            // margine: potare stretto è irreversibile
+// WarEra+ — era 14 ("margine: potare stretto è irreversibile"), e per gli
+// scatti che facciamo noi bastavano: la vista ne guarda sette. Da quando
+// `import/ricchezza.js` ha portato dentro tre mesi di classifica userWealth
+// presi da un archivio esterno, potare a 14 giorni vorrebbe dire che il
+// primo scatto notturno butta via l'import — e quello, a differenza dei
+// nostri scatti, non si rifà: è il dump di qualcun altro, fermo a una data.
+const RETENTION_GIORNI = 180;
 const CHUNK_UTENTI = 30;                // getUserLite: a 100 il batch dà HTTP 414 (URL troppo lunga)
 const CHUNK_MU = 20;
 const TTL_LIVE_MS = 3 * 60 * 1000;      // la ricchezza "di adesso", per unità
@@ -355,7 +361,11 @@ async function scatta({ motivo = 'programmato', slot = null } = {}) {
  *      già la sera del primo giorno invece che il giorno dopo.
  */
 function scattoDovuto() {
-  const scatti = scattiRicchezzaDisponibili(RETENTION_GIORNI * 8);
+  // Gira ogni CONTROLLO_MS e guarda solo indietro di pochi giorni: la
+  // domanda è "manca lo scatto di oggi?", e il conto del rodaggio ha una
+  // soglia di due giorni. Il confine tiene la query sull'intervallo
+  // invece che su tutto l'archivio importato.
+  const scatti = scattiRicchezzaDisponibili(RETENTION_GIORNI * 8, giornoMeno(giornoDi(), GIORNI_SCATTO));
   const ultimo = scatti[0] || null;
   // Etichetta di GIORNO e non di ora, anche se non sono le 02:00: è il
   // primo scatto di oggi, cioè quello che d'ora in poi rappresenta oggi
@@ -466,7 +476,10 @@ async function ricchezzaAttuale(muId) {
  */
 function finestra() {
   const dal = giornoMeno(giornoDi(), GIORNI_SCATTO);
-  const tutti = scattiRicchezzaDisponibili(RETENTION_GIORNI * 8)
+  // Il filtro va anche al database, non solo qui: è la lettura più
+  // frequente della vista, e con l'import storico in tabella un GROUP BY
+  // senza confine costa 400 ms invece di pochi (vedi db.js).
+  const tutti = scattiRicchezzaDisponibili(RETENTION_GIORNI * 8, dal)
     .filter((g) => g.slot >= dal)
     .sort((a, b) => (a.slot < b.slot ? -1 : 1));
   const giornalieri = tutti.filter((g) => !g.slot.includes('T'));

@@ -28,7 +28,8 @@
 
 import '../styles/market.css';
 import { mktT } from './i18n.js';
-import { loadMarketData, PRICE_TTL_MS } from './api.js';
+import { loadMarketData, PRICE_TTL_MS, loadPriceHistory, priceSeries, priceHistoryCoverage } from './api.js';
+import { priceChartSvg, variazione } from './priceChart.js';
 import {
   buildRows, sortRows, COLUMNS, THIN_BOOK_QTY,
   workerPointsPerDay, enginePointsPerDay, fidelityConfig, fidelityPercent,
@@ -121,7 +122,22 @@ export async function initMarketView(container) {
   if (!data) await refresh({ first: true });
   else render();
   startAutoRefresh();
+  primeHistory();
   trackEvent('market-open');
+}
+
+/* Lo storico prezzi: UNA richiesta al server di cache, in sottofondo.
+   Non si aspetta — la tabella è già utile senza, e se il VPS non ce
+   l'ha (rotta assente finché non lo si rideploya) la sezione
+   "andamento" semplicemente non compare. Quando arriva si ridisegna,
+   così una riga già aperta se lo ritrova dentro. */
+let historyPrimed = false;
+function primeHistory() {
+  if (historyPrimed) return;
+  historyPrimed = true;
+  loadPriceHistory().then(h => {
+    if (h && rootEl?.isConnected && data) repaint();
+  });
 }
 
 function bindLangChange() {
@@ -441,6 +457,38 @@ function detailHtml(r) {
         <h4>${escapeHtml(mktT('best5'))} <span class="wp-mkt-dim">· ${escapeHtml(mktT('bonusParts'))}</span></h4>
         ${regions || `<span class="wp-mkt-dim">${escapeHtml(mktT('noRegion'))}</span>`}
       </div>
+      ${historyHtml(r)}
+    </div>`;
+}
+
+/* L'andamento del prezzo. Compare solo se il server di cache ha lo
+   storico: senza, questa colonna non c'è affatto — è una sezione in
+   più, non un pezzo mancante da annunciare. */
+function historyHtml(r) {
+  const serie = priceSeries(r.code);
+  const svg = priceChartSvg(serie, { fmt: (v) => gold(v) });
+  if (!svg) return '';
+
+  const cambi = [[7, mktT('chg7')], [30, mktT('chg30')]].map(([giorni, label]) => {
+    const v = variazione(serie, giorni);
+    if (v == null) return '';
+    const segno = v > 0 ? 'up' : v < 0 ? 'down' : 'flat';
+    const testo = `${v > 0 ? '+' : ''}${pct(v)}`;
+    return `<span class="wp-mkt-chg wp-mkt-chg-${segno}">${escapeHtml(label)} <b>${escapeHtml(testo)}</b></span>`;
+  }).join('');
+
+  // Da che giorno guarda l'archivio: una linea che comincia a metà agosto
+  // non deve sembrare "il prezzo prima non esisteva".
+  const da = priceHistoryCoverage();
+  const nota = da
+    ? `<span class="wp-mkt-dim">${escapeHtml(mktT('histFrom', { d: da }))}</span>`
+    : '';
+
+  return `
+    <div class="wp-mkt-dcol wp-mkt-dchart">
+      <h4>${escapeHtml(mktT('histTitle'))} <span class="wp-mkt-dim">· ${escapeHtml(mktT('histDays', { n: serie.length }))}</span></h4>
+      ${svg}
+      <div class="wp-mkt-chgs">${cambi}${nota}</div>
     </div>`;
 }
 
