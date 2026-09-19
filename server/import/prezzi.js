@@ -48,7 +48,20 @@ const valore = (nome) => {
   const i = args.indexOf(nome);
   return i >= 0 ? args[i + 1] : null;
 };
-const CACHE_DIR = valore('--cache') || path.join(__dirname, '..', 'cache');
+// Dove sta la cache del server. Sul VPS il deploy e' una cartella PIATTA
+// (~/warera-cache-server/), quindi qui accanto c'e' gia' `cache/`; nel repo
+// invece questo file sta in server/import/ e la cache e' un piano sopra. Si
+// prova la prima, poi la seconda: lanciarlo dalla cartella sbagliata dava
+// "cartella cache non trovata" a deploy appena fatto, ed e' successo.
+function cartellaCache() {
+  const esplicita = valore('--cache');
+  if (esplicita) return esplicita;
+  const accanto = path.join(process.cwd(), 'cache');
+  if (fs.existsSync(accanto)) return accanto;
+  return path.join(__dirname, '..', 'cache');
+}
+
+const CACHE_DIR = cartellaCache();
 const FILE = path.join(CACHE_DIR, 'price-history.json');
 const sorgente = args.find((a) => !a.startsWith('--') && a !== valore('--cache'));
 

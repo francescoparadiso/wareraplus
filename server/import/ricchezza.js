@@ -34,13 +34,12 @@
    server, vince il nostro — ha mu_id, lo username del momento e un
    taken_at che è un'ora vera invece che una convenzione.
 
-   ── USO (sul VPS, dalla cartella server/) ─────────────────────────────
    ── USO (sul VPS, da ~/warera-plus-api/) ──────────────────────────────
-     node import/ricchezza.js /tmp/ranking_userWealth.csv.gz
-     node import/ricchezza.js <file> --prova            ← conta e non scrive
-     node import/ricchezza.js <file> --da 2026-06-19    ← salta i giorni isolati
-     node import/ricchezza.js <file> --solo utenti.txt  ← un id per riga
-     node import/ricchezza.js <file> --db data-dev/plus.sqlite  ← l'altro deploy
+     node ricchezza.js /tmp/ranking_userWealth.csv.gz
+     node ricchezza.js <file> --prova            ← conta e non scrive
+     node ricchezza.js <file> --da 2026-06-19    ← salta i giorni isolati
+     node ricchezza.js <file> --solo utenti.txt  ← un id per riga
+     node ricchezza.js <file> --db data-dev/plus.sqlite  ← l'altro deploy
 
    Apre il file SQLite direttamente invece di chiedere il database a
    `db.js`: plusApi sul VPS sta in una cartella piatta (~/warera-plus-api)
@@ -116,6 +115,12 @@ function riga(linea) {
 
 async function main() {
   const db = new DatabaseSync(fileDb);
+  // plusApi scrive sullo stesso file mentre questo import gira: lo scatto
+  // della ricchezza alle 02:00, le istantanee ogni ora alle :15. Senza
+  // attesa, SQLite risponde "database is locked" e l'import muore — e' gia'
+  // successo, a un milione e mezzo di righe dall'inizio. Quindici secondi
+  // sono molto piu' di quanto duri una di quelle scritture.
+  db.exec('PRAGMA busy_timeout = 15000');
   // La tabella la crea plusApi al suo avvio: se manca, o si è sbagliato
   // database o quel processo non è mai partito. Crearla qui vorrebbe dire
   // rischiare uno schema diverso da quello vero.

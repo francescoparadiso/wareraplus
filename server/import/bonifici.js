@@ -18,9 +18,9 @@
    dopo la fusione c'è davvero, perché è esattamente ciò che quel campo
    promette al client.
 
-   ── USO (sul VPS, dalla cartella server/) ─────────────────────────────
-     node import/bonifici.js /percorso/money-transfers-import.json
-     node import/bonifici.js /percorso/file.json --prova   ← non scrive
+   ── USO (sul VPS, da ~/warera-cache-server/) ──────────────────────────
+     node bonifici.js /tmp/money-transfers-import.json
+     node bonifici.js /tmp/money-transfers-import.json --prova   ← non scrive
 
    Dopo: `pm2 restart warera-cache` non serve — il file viene riletto ad
    ogni richiesta. Serve invece aver già schierato il `moneyTransfers.js`
@@ -37,10 +37,20 @@ const valore = (nome) => {
   const i = args.indexOf(nome);
   return i >= 0 ? args[i + 1] : null;
 };
-// Default: la `cache/` accanto al server, che è dove sta lanciato da
-// ~/warera-cache-server/import/. `--cache` serve a chi lo lancia da
-// altrove, in locale o su una copia.
-const CACHE_DIR = valore('--cache') || path.join(__dirname, '..', 'cache');
+// Dove sta la cache del server. Sul VPS il deploy e' una cartella PIATTA
+// (~/warera-cache-server/), quindi qui accanto c'e' gia' `cache/`; nel repo
+// invece questo file sta in server/import/ e la cache e' un piano sopra. Si
+// prova la prima, poi la seconda: lanciarlo dalla cartella sbagliata dava
+// "cartella cache non trovata" a deploy appena fatto, ed e' successo.
+function cartellaCache() {
+  const esplicita = valore('--cache');
+  if (esplicita) return esplicita;
+  const accanto = path.join(process.cwd(), 'cache');
+  if (fs.existsSync(accanto)) return accanto;
+  return path.join(__dirname, '..', 'cache');
+}
+
+const CACHE_DIR = cartellaCache();
 const FILE = path.join(CACHE_DIR, 'money-transfers.json');
 const sorgente = args.find((a) => !a.startsWith('--') && a !== valore('--cache'));
 
