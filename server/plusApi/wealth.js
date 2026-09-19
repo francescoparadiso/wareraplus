@@ -70,12 +70,45 @@
    di permessi da tenere aggiornata a mano: se in gioco passi comandante,
    entri; se lasci la carica, esci. Gli amministratori del tool vedono
    tutte le unità dell'elenco, per poter rispondere a «io non la vedo».
+
+   ── L'ARCHIVIO DEL MONDO, E PERCHÉ ORA TOCCA A NOI ────────────────────
+   Fin qui questo file fotografava ~450 giocatori: i membri delle unità
+   italiane, cioè esattamente quelli che la vista mostra. Andava bene
+   finché QUALCUN ALTRO fotografava il resto — l'archivio di terzi da cui
+   viene `import/ricchezza.js` teneva la classifica intera, ~16.500
+   giocatori al giorno. Quel database chiude, quindi dal 2026-09-19 la
+   sola copia di questo dato al mondo è la nostra, e fotografare
+   quattrocento giocatori su diciassettemila vorrebbe dire archiviare il
+   2,6% di quello che c'era il mese scorso.
+
+   La buona notizia è che costa **una richiesta al giorno**:
+   `ranking.getRanking {rankingType:'userWealth'}` è PUBBLICA, ignora
+   `limit`/`page` e risponde con la classifica INTERA in un colpo solo
+   (misurato il 2026-09-19: 17.143 giocatori, 3,0 MB, e ogni riga porta
+   `country`, `mu` e `value`). È la stessa fonte del dump importato —
+   `ranking_snapshot` là dentro è questa.
+
+   Due conseguenze da sapere:
+
+     · la classifica NON porta lo username. Le righe del giro sulle unità
+       sì, quindi la classifica entra con `INSERT OR IGNORE` e non tocca
+       chi c'è già (vedi `salvaScattoRicchezzaSeMancante` in db.js).
+       L'ordine fra i due scatti diventa indifferente;
+     · la classifica invece porta `mu`, che l'import NON aveva (le righe
+       importate hanno `mu_id` vuoto, vedi import/ricchezza.js). Quindi
+       da oggi in poi l'aggregato per unità funziona anche fuori dalle
+       unità italiane — non perché serva alla vista, ma perché un dato
+       buttato via adesso non si recupera più.
+
+   Chi fallisce non blocca l'altro: la classifica sta in un try/catch
+   suo, dopo lo scatto sulle unità, e un suo errore lascia la vista
+   esattamente com'era prima.
    ═══════════════════════════════════════════════════════════════════════ */
 
 const express = require('express');
-const { trpcBatch } = require('./wareraApi');
+const { trpcBatch, trpcGet } = require('./wareraApi');
 const {
-  salvaScattoRicchezza, scattiRicchezzaDisponibili, scattiRicchezza,
+  salvaScattoRicchezza, salvaScattoRicchezzaSeMancante, scattiRicchezzaDisponibili, scattiRicchezza,
   ultimoScattoMu, potaScattiRicchezza, deltaRicchezzaPerMu, totaliRicchezzaPerMu, audit,
 } = require('./db');
 
@@ -92,13 +125,23 @@ const TZ = 'Europe/Rome';
 const ORA_SCATTO = 2;                   // 02:00 italiane, come /daily-damage nel cache-server
 const GIORNI_DELTA = 7;                 // quanti giorni indietro deve poter guardare la vista
 const GIORNI_SCATTO = GIORNI_DELTA + 1; // sette differenze vogliono otto fotografie
-// WarEra+ — era 14 ("margine: potare stretto è irreversibile"), e per gli
-// scatti che facciamo noi bastavano: la vista ne guarda sette. Da quando
-// `import/ricchezza.js` ha portato dentro tre mesi di classifica userWealth
-// presi da un archivio esterno, potare a 14 giorni vorrebbe dire che il
-// primo scatto notturno butta via l'import — e quello, a differenza dei
-// nostri scatti, non si rifà: è il dump di qualcun altro, fermo a una data.
-const RETENTION_GIORNI = 180;
+// ⚠️ NON C'È PIÙ UNA RETENTION A GIORNI, E NON È UNA DIMENTICANZA.
+// Era 14 ("margine: potare stretto è irreversibile"), poi 180 per non far
+// buttare al primo scatto notturno i tre mesi di `import/ricchezza.js`.
+// Ma 180 giorni è comunque una data di scadenza: il 16 dicembre 2026 il
+// giro di manutenzione avrebbe cominciato a cancellare il 19 giugno, un
+// giorno al giorno, in silenzio. Con l'archivio di terzi chiuso quella
+// sarebbe stata la distruzione dell'unica copia rimasta.
+//
+// Quindi si tiene TUTTO da `PAVIMENTO` in poi, e la potatura resta solo
+// come rete contro etichette malformate. Il costo è misurato e sostenibile:
+// ~17.000 righe al giorno, ~180 byte l'una in questo schema, cioè ~3 MB al
+// giorno e ~1,1 GB all'anno — su un disco da 45 GB con 39 liberi.
+// Se un giorno lo spazio stringesse, la risposta NON è rialzare una
+// retention: è esportare gli anni vecchi in un file a parte (vedi il
+// backup in server/README.md) e poi potare quelli, sapendo cosa si sposta.
+const PAVIMENTO = '2026-04-01';   // prima di qualunque riga esistente
+const RETENTION_GIORNI = 180;     // resta solo per le letture: quanto indietro può guardare una query
 const CHUNK_UTENTI = 30;                // getUserLite: a 100 il batch dà HTTP 414 (URL troppo lunga)
 const CHUNK_MU = 20;
 const TTL_LIVE_MS = 3 * 60 * 1000;      // la ricchezza "di adesso", per unità
@@ -287,6 +330,39 @@ async function ricchezzaDi(userIds) {
   return out;
 }
 
+/**
+ * La classifica mondiale della ricchezza, in UNA richiesta pubblica.
+ *
+ * `ranking.getRanking` ignora `limit` e `page` e risponde con tutti gli
+ * iscritti alla ladder (17.143 il 2026-09-19). Niente paginazione da
+ * scrivere, quindi, ma anche niente da cui accorgersi se un giorno ne
+ * tornassero mille: per questo il numero finisce nell'esito e in
+ * `/health`, invece di essere scritto e dimenticato.
+ *
+ * Lo `username` non c'è: chi non è già stato fotografato dal giro sulle
+ * unità entra senza nome. È voluto — vedi il blocco in testa al file.
+ */
+async function scattoClassifica(momento, takenAt) {
+  const d = await trpcGet('ranking.getRanking', { rankingType: 'userWealth' });
+  const items = Array.isArray(d?.items) ? d.items : [];
+  if (!items.length) throw new Error('classifica vuota');
+
+  const righe = [];
+  for (const it of items) {
+    const userId = it.user || null;
+    if (!userId) continue;
+    righe.push({
+      warUserId: userId,
+      wealth: Number(it.value) || 0,
+      username: null,          // la classifica non lo porta: lo mette il giro sulle unità
+      muId: it.mu || null,     // ...e questo invece l'import NON ce l'ha
+      takenAt,
+    });
+  }
+  const scritte = salvaScattoRicchezzaSeMancante(momento, righe);
+  return { letti: righe.length, scritte };
+}
+
 // ---------------------------------------------------------------------------
 // LO SCATTO
 // ---------------------------------------------------------------------------
@@ -324,14 +400,30 @@ async function scatta({ motivo = 'programmato', slot = null } = {}) {
     }
 
     salvaScattoRicchezza(momento, righe);
-    const potate = potaScattiRicchezza(giornoMeno(giornoDi(avvio), RETENTION_GIORNI));
+
+    // E poi il mondo. In un try/catch suo: da qui in poi questo archivio è
+    // l'unica copia esistente della classifica giorno per giorno (vedi il
+    // blocco in testa al file), ma un suo errore non deve togliere alla
+    // vista lo scatto che ha appena salvato.
+    let classifica = null;
+    try {
+      classifica = await scattoClassifica(momento, takenAt);
+    } catch (err) {
+      classifica = { errore: err.message };
+      console.warn(`[wealth] classifica mondiale non archiviata (${err.message}) — restano i ${righe.length} delle unità`);
+    }
+
+    // Pota solo quello che sta PRIMA dell'archivio, cioè niente: vedi il
+    // commento su PAVIMENTO. Resta come rete contro etichette malformate.
+    const potate = potaScattiRicchezza(PAVIMENTO);
 
     _ultimoEsito = {
-      momento, righe: righe.length, unita: dettagli.size, fonte, motivo,
+      momento, righe: righe.length, unita: dettagli.size, fonte, motivo, classifica,
       durataMs: Date.now() - avvio, quando: takenAt, errore: null,
     };
-    console.log(`[wealth] scatto ${momento} (${motivo}): ${righe.length} giocatori in ${dettagli.size} unità, `
-      + `${Date.now() - avvio}ms${potate ? `, ${potate} righe vecchie potate` : ''}`);
+    console.log(`[wealth] scatto ${momento} (${motivo}): ${righe.length} giocatori in ${dettagli.size} unità`
+      + (classifica?.letti ? `, +${classifica.scritte} dalla classifica mondiale (${classifica.letti} in ladder)` : '')
+      + `, ${Date.now() - avvio}ms${potate ? `, ${potate} righe vecchie potate` : ''}`);
     return _ultimoEsito;
   } catch (err) {
     _ultimoEsito = { momento, righe: 0, motivo, durataMs: Date.now() - avvio, quando: Date.now(), errore: err.message };
@@ -420,6 +512,10 @@ function statoRicchezza() {
     giorniInArchivio: giorni.size,
     primoScatto: scatti.at(-1)?.slot || null,
     ultimoScatto: scatti[0]?.slot || null,
+    // Quanti giocatori c'erano nell'ultimo scatto: è il numero da guardare
+    // per sapere se la classifica mondiale sta entrando davvero (decine di
+    // migliaia) o se è rimasto solo il giro sulle unità (qualche centinaio).
+    giocatoriUltimoScatto: scatti[0]?.righe ?? null,
     scattoDiOggi: giorni.has(giornoDi()),
     serieCompleta: giorni.size >= GIORNI_SCATTO,
     // Finché è vero si scatta anche in mezzo alla giornata: serve a non

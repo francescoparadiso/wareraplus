@@ -39,16 +39,25 @@ let deps = null;
 
 const FILE = 'money-transfers';
 
-// Era 90, la stessa dell'archivio battaglie, con la motivazione che le due
-// cose si leggono insieme (un finanziamento senza la battaglia che lo
-// spiega non serve). Vale ancora, ma ora l'archivio battaglie arriva più
-// indietro di così: `import/bonifici.js` ha portato dentro i bonifici di un
-// archivio esterno a partire dal 25 aprile 2026, e potarli a 90 giorni
-// vorrebbe dire cancellare al primo giro quello che non si può rifare.
-// 180 giorni di bonifici sono ~2500 righe, cioè qualche centinaio di KB:
-// il file viaggia intero verso il browser e resta piccolo lo stesso.
+// ⚠️ NON SI POTA PIÙ A GIORNI, E NON È UNA DIMENTICANZA.
+// Era 90 (la stessa dell'archivio battaglie: un finanziamento senza la
+// battaglia che lo spiega non serve), poi 180 per non cancellare al primo
+// giro i bonifici che `import/bonifici.js` ha portato dentro dal 25 aprile
+// 2026. Ma 180 giorni restava una data di scadenza: il 22 ottobre 2026 la
+// manutenzione avrebbe iniziato a cancellare aprile, un giorno al giorno e
+// in silenzio — e l'archivio di terzi da cui venivano ha chiuso, quindi
+// quella sarebbe stata la distruzione dell'unica copia rimasta.
+//
+// Da qui in poi si tiene tutto dal PAVIMENTO in poi. Il costo è noto e non
+// spaventa: sono ~36 bonifici al giorno in tutto il mondo, cioè ~13.000
+// righe all'anno, qualche centinaio di KB — e il file viaggia intero verso
+// il browser, quindi quando arriverà a pesare si taglia in lettura (un
+// `?days=`), non in scrittura. Cancellare è irreversibile, non mandare è
+// un parametro.
+const PAVIMENTO = Date.UTC(2026, 3, 1);   // 1 aprile 2026: prima di qualunque riga esistente
+// Resta solo per dire al browser quanto indietro può sperare di trovare
+// roba, e come rete contro timestamp malformati.
 const RETENTION_DAYS = 180;
-const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 const PAGE = 50;
 // Rete di sicurezza: in regime normale il giro si ferma alla prima pagina
@@ -147,9 +156,8 @@ async function pollMoneyTransfers() {
     if (!fresh.length) return;
   }
 
-  const cutoff = Date.now() - RETENTION_MS;
   const merged = [...fresh, ...store.data]
-    .filter(r => r.a >= cutoff)
+    .filter(r => r.a >= PAVIMENTO)
     .sort((a, b) => b.a - a.a);
 
   writeCache(FILE, {
@@ -185,6 +193,8 @@ function readMoneyTransfersStatus() {
     copreDa: store.startedAt ? new Date(store.startedAt).toISOString() : null,
     piuVecchio: oldest ? new Date(oldest).toISOString() : null,
     retentionDays: RETENTION_DAYS,
+    // Niente potatura a giorni: si tiene tutto (vedi PAVIMENTO in testa).
+    pavimento: new Date(PAVIMENTO).toISOString(),
   };
 }
 

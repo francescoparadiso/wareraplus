@@ -40,10 +40,21 @@ let deps = null;
 const FILE = 'price-history';
 const TZ = 'Europe/Rome';
 
-// Un anno di candele: ~40 risorse × 365 giorni × una manciata di byte
-// stanno in meno di un megabyte, e il file lo legge solo questo processo
-// (la route serve una finestra, non tutto).
-const RETENTION_GIORNI = 365;
+// ⚠️ Non si pota più a un anno. Era 365 ("un anno di candele sta in meno di
+// un megabyte"), che è vero, ma il 9 aprile 2027 avrebbe cominciato a
+// cancellare le candele che `import/prezzi.js` ha portato dentro — e
+// l'archivio di terzi da cui vengono ha chiuso, quindi quelle non si
+// rifanno. Una candela è quanto costava una risorsa in un giorno: da tenere
+// finché il gioco esiste, non per un anno.
+// Il costo resta quello di prima moltiplicato per gli anni: ~40 risorse ×
+// 365 giorni × una manciata di byte, meno di un MB all'anno, e il file lo
+// legge solo questo processo (la route serve una finestra, non tutto).
+const PAVIMENTO = '2026-04-01';   // prima di qualunque candela esistente
+// Il tetto di quanto può chiedere la route in un colpo solo. Serve a non
+// far spedire dieci anni di candele a chi sbaglia un parametro, non a
+// nascondere l'archivio: era RETENTION_GIORNI, e lasciarlo lì avrebbe reso
+// invisibile dal browser tutto quello che passa l'anno.
+const MAX_FINESTRA_GIORNI = 3650;
 
 /** Chiamato una volta dal server principale, prima di qualunque poll. */
 function initPriceHistory(tools) {
@@ -110,7 +121,9 @@ async function pollPrices() {
     toccate++;
   }
 
-  const taglio = giornoMeno(oggi, RETENTION_GIORNI);
+  // Si butta solo quello che sta PRIMA dell'archivio, cioè niente: resta
+  // come rete contro etichette malformate. Vedi PAVIMENTO in testa.
+  const taglio = PAVIMENTO;
   for (const serie of Object.values(store.items)) {
     for (const giorno of Object.keys(serie)) if (giorno < taglio) delete serie[giorno];
   }
@@ -134,7 +147,7 @@ async function pollPrices() {
  */
 function readPriceHistory(giorni = 90) {
   const store = _read();
-  const dal = giornoMeno(giornoDi(), Math.max(1, Math.min(giorni, RETENTION_GIORNI)));
+  const dal = giornoMeno(giornoDi(), Math.max(1, Math.min(giorni, MAX_FINESTRA_GIORNI)));
   const items = {};
   let piuVecchio = null;
 
@@ -156,7 +169,7 @@ function readPriceHistory(giorni = 90) {
     // vista non deve promettere tre mesi quando ne ha dodici giorni.
     coverageFrom: piuVecchio,
     tz: TZ,
-    retentionDays: RETENTION_GIORNI,
+    retentionDays: null,   // niente potatura a giorni: vedi PAVIMENTO in testa
     items,
   };
 }
@@ -181,7 +194,7 @@ function statoPriceHistory() {
     primoGiorno: primo,
     ultimoGiorno: ultimo,
     ultimoCampione: store.fetchedAt ? new Date(store.fetchedAt).toISOString() : null,
-    retentionDays: RETENTION_GIORNI,
+    retentionDays: null,   // niente potatura a giorni: vedi PAVIMENTO in testa
   };
 }
 

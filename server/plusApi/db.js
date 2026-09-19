@@ -758,6 +758,33 @@ function salvaScattoRicchezza(slot, righe) {
   return righe.length;
 }
 
+/** Lo stesso scatto, ma per le righe che arrivano dalla CLASSIFICA mondiale
+ *  invece che dal giro sulle unita' italiane: `INSERT OR IGNORE` e non
+ *  `OR REPLACE`, cosi' una riga gia' scritta dal giro sulle unita' resta
+ *  com'e'. Non e' un dettaglio: quella porta lo `username`, la classifica
+ *  no, e sovrascriverla svuoterebbe i nomi nella vista. L'ordine fra i due
+ *  scatti diventa cosi' indifferente.
+ *
+ *  Vedi il blocco "L'ARCHIVIO DEL MONDO" in testa a wealth.js. */
+function salvaScattoRicchezzaSeMancante(slot, righe) {
+  const d = getDb();
+  const stmt = d.prepare(`
+    INSERT OR IGNORE INTO wealth_snapshot (slot, war_user_id, wealth, username, mu_id, taken_at)
+    VALUES (?, ?, ?, ?, ?, ?)`);
+  let scritte = 0;
+  d.exec('BEGIN');
+  try {
+    for (const r of righe) {
+      scritte += stmt.run(slot, r.warUserId, Math.round(r.wealth), r.username || null, r.muId || null, r.takenAt).changes;
+    }
+    d.exec('COMMIT');
+  } catch (err) {
+    d.exec('ROLLBACK');
+    throw err;
+  }
+  return scritte;
+}
+
 /** Gli scatti presenti, dal più recente. Serve a sapere quanto indietro
  *  si può guardare davvero, che non è quanto si vorrebbe.
  *
@@ -1013,7 +1040,8 @@ module.exports = {
   creaRichiesta, getRichiesta, listaRichieste, aggiornaRichiesta,
   getWebhook, setWebhook, deleteWebhook,
   createSession, accountFromToken, destroySession, purgeExpiredSessions,
-  salvaScattoRicchezza, scattiRicchezzaDisponibili, scattiRicchezza, ultimoScattoMu, potaScattiRicchezza,
+  salvaScattoRicchezza, salvaScattoRicchezzaSeMancante, scattiRicchezzaDisponibili, scattiRicchezza,
+  ultimoScattoMu, potaScattiRicchezza,
   deltaRicchezzaPerMu, totaliRicchezzaPerMu,
   leggiStatoConfini, salvaStatoConfini, registraEventiConfini, eventiConfini,
   potaEventiConfini, inizioSorveglianzaConfini,

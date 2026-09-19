@@ -520,3 +520,99 @@ cambiarlo è un `pm2 restart`, non un deploy su Vercel.
 curl -s "https://warera-oracle.duckdns.org/warera-cache/visits?id=tizio&count=0"
 # {"total":1331,"today":6,"online":8,"heartbeatMs":60000,"seed":1325,"countedHere":6}
 ```
+
+---
+
+## Backup: da oggi siamo l'unica copia (`backup.sh`)
+
+Fino al **2026-09-19** una buona metà degli archivi qui sopra esisteva
+anche altrove: il database di un altro tool della comunità, quello da cui
+viene tutto `import/`. Quel database **chiude**. Da qui in poi il VPS è
+l'unica copia al mondo di:
+
+| Archivio | Da quando | Si rifà? |
+|---|---|---|
+| Bonifici fra tesori | 25 apr 2026 | no — l'API tiene ~70 ore |
+| Ricchezza giornaliera | 19 giu 2026 | no — esiste solo "quanto ha adesso" |
+| Prezzi di mercato | 9 apr 2026 | no — esiste solo "quanto costa adesso" |
+| Diplomazia giorno per giorno | 13 apr 2026 | no — ieri non è interrogabile |
+| Battaglie aperte per giorno | 9 apr 2026 | no — stessa ragione |
+| Salari e tasse | 29 lug → 17 set 2026 | no, e non cresce più (archivio chiuso) |
+
+Perdere quel disco non è un disservizio di qualche ora: è la cancellazione
+di cinque mesi di storia di WarEra che nessuno potrà riscrivere.
+
+### Sul server
+
+```bash
+chmod +x ~/warera-cache-server/backup.sh
+~/warera-cache-server/backup.sh          # una copia in ~/backup/, tiene le ultime 4
+```
+
+Salva `cache/` (senza `bootstrap-raw-battles.json`: 244 MB che il bootstrap
+notturno rifà da solo) e i due `plus.sqlite` con `VACUUM INTO`, che è
+l'unico modo di copiarli **mentre plusApi scrive** senza prendersi un
+database a metà. Dentro ogni copia c'è un `CONTENUTO.txt` che dice quante
+righe e da quando, leggibile senza scompattare niente.
+
+Da cron, la domenica alle 04:00 (gioco vuoto, bootstrap battaglie finito):
+
+```bash
+crontab -e
+# 0 4 * * 0 /home/ubuntu/warera-cache-server/backup.sh >> /home/ubuntu/backup/backup.log 2>&1
+```
+
+### ⚠️ Il passo che conta davvero
+
+Una copia sullo stesso disco protegge da un bug di potatura o da un import
+sbagliato, **non dalla perdita della macchina**. Da qui, ogni tanto:
+
+```bash
+rsync -avz -e "ssh -i ../serverOracle/ssh-key-2026-08-18.key" ubuntu@79.72.45.17:/home/ubuntu/backup/ ./backup-vps/
+```
+
+### Non c'è più una scadenza (i "pavimenti")
+
+Le retention a giorni sono state tolte dove l'archivio non si rifà, perché
+erano date di scadenza silenziose: il **22 ottobre 2026** i bonifici
+avrebbero iniziato a cancellare aprile, il **16 dicembre** la ricchezza
+avrebbe iniziato a cancellare giugno, un giorno al giorno e senza dirlo.
+Al loro posto c'è un `PAVIMENTO` (una data prima di qualunque riga
+esistente): si tiene tutto, e la potatura resta solo come rete contro
+etichette malformate.
+
+- `moneyTransfers.js` — ~36 bonifici al giorno nel mondo, ~13.000 righe
+  all'anno: qualche centinaio di KB.
+- `plusApi/wealth.js` — ~17.000 righe al giorno, **~1,1 GB all'anno** per
+  deploy. Misurato su 45 GB di disco con 39 liberi.
+- `priceHistory.js` — meno di 1 MB all'anno.
+
+**L'unico rimasto con una scadenza è `dayHistory.js` (400 giorni, cioè
+maggio 2027)**, e la ragione è la RAM, non il disco: quel modulo tiene
+l'archivio intero in memoria per non riparsare megabyte ad ogni richiesta,
+e il VPS ha 954 MB totali con ~335 liberi. Alzarlo e basta sposterebbe il
+problema su una risorsa più scarsa. La strada giusta, quando servirà, è
+tenere caldi in memoria solo gli ultimi mesi e leggere i vecchi da disco a
+richiesta.
+
+## La ricchezza mondiale, e perché lo scatto è cambiato
+
+`plusApi/wealth.js` fotografava ~450 giocatori: i membri delle unità
+italiane, cioè quelli che la vista mostra. Andava bene finché la
+classifica intera la teneva qualcun altro (~16.500 giocatori al giorno
+nell'archivio importato). Con quel database chiuso, archiviare 450
+giocatori su 17.000 vorrebbe dire tenere il 2,6% di quello che c'era il
+mese prima.
+
+Costa **una richiesta al giorno**: `ranking.getRanking
+{rankingType:'userWealth'}` è pubblica, ignora `limit`/`page` e risponde
+con la classifica intera in un colpo (misurato: 17.143 giocatori, 3,0 MB).
+Entra con `INSERT OR IGNORE` subito dopo il giro sulle unità, così non
+sovrascrive le righe che hanno lo `username` (la classifica non ce l'ha) —
+ma porta il `mu`, che le righe importate non avevano.
+
+```bash
+curl -s https://warera-oracle.duckdns.org/warera-plus-api/health | python3 -m json.tool | grep -A6 ricchezza
+# `giocatoriUltimoScatto` è il numero da guardare: decine di migliaia = la
+# classifica sta entrando, qualche centinaio = è rimasto solo il giro unità.
+```
