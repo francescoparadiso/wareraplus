@@ -95,6 +95,37 @@ export async function fetchDamageTimeline(countryId, { hours = 48, days = 14 } =
   return p;
 }
 
+/* ── Lavoro e tasse (archivio chiuso) ────────────────────────── */
+
+const _labour = new Map();   // countryId → risposta | null
+
+/**
+ * Salari, tasse e partner di lavoro di una nazione, dal server di cache.
+ *
+ * ⚠️ È un archivio CHIUSO: copre 29 luglio → 17 settembre 2026 e non
+ * cresce (i ~550.000 pagamenti di salario al giorno del gioco non si
+ * possono sfogliare, vedi server/labourHistory.js). La risposta porta
+ * `from`/`to` e chi la disegna li DEVE dichiarare: senza, una curva che
+ * finisce a settembre si legge come "hanno smesso di lavorare".
+ *
+ * `null` se il server non ce l'ha: la sezione non compare, come per le
+ * curve del danno.
+ */
+export async function fetchLabour(countryId) {
+  if (_labour.has(countryId)) return _labour.get(countryId);
+  const p = (async () => {
+    try {
+      const json = await cacheJson(`/labour-history?countryId=${encodeURIComponent(countryId)}`);
+      return json && Array.isArray(json.days) && json.days.length ? json : null;
+    } catch (err) {
+      console.warn('WarEra+ nations: /labour-history non disponibile:', err.message);
+      return null;
+    }
+  })();
+  _labour.set(countryId, p);
+  return p;
+}
+
 /* ── Elenco cittadini di una nazione ─────────────────────────── */
 
 const _citizensByCountry = new Map();   // countryId → { rows, total, known, partial }

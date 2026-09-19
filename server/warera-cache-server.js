@@ -169,6 +169,14 @@ const {
 const {
   initDayHistory, snapshotDay, readDay, statoDayHistory,
 } = require('./dayHistory');
+// WarEra+ lavoro e tasse: ogni pagamento di salario del gioco, aggregato per
+// nazione. Archivio CHIUSO (29 lug - 17 set 2026) e senza poll: sono ~550.000
+// pagamenti al giorno, sfogliarli vorrebbe dire undicimila pagine al giorno.
+// Due serie che non si sommano mai: per nazione del lavoratore e per nazione
+// dove opera l'azienda, che e' quella che incassa la tassa.
+const {
+  initLabourHistory, readLabour, statoLabour,
+} = require('./labourHistory');
 
 const app = express();
 const PORT = 3001;
@@ -284,6 +292,9 @@ initPriceHistory({
 
 // La giornata storica: solo cache, nessuna chiamata.
 initDayHistory({ readCache, writeCache });
+
+// Lavoro e tasse: legge soltanto, non scrive niente.
+initLabourHistory({ readCache });
 
 initMoneyTransfers({
   readCache, writeCache,
@@ -2653,6 +2664,12 @@ app.get('/price-history', (req, res) => {
 // guerra".
 app.get('/day-history', (req, res) => res.json(readDay(req.query.day)));
 
+// Lavoro e tasse (server/labourHistory.js): una nazione per volta, piu' il
+// totale mondiale come metro di paragone. `from`/`to` viaggiano sempre:
+// l'archivio e' chiuso al 17 settembre 2026 e la vista deve dirlo invece di
+// far sembrare "oggi" un dato di settembre.
+app.get('/labour-history', (req, res) => res.json(readLabour(req.query.countryId || null)));
+
 // Radar dei proxy: punteggio completo per nazione, con le evidenze che lo
 // compongono. Il client lo innesta su quello che ha calcolato da solo
 // (src/proxy/radar.js: applyServerIndex) e se questo non risponde resta il
@@ -2942,6 +2959,9 @@ app.get('/health', (req, res) => res.json({
   // import/battaglie.js) e la time machine mostra la fascia "fuori portata"
   // per i giorni precedenti.
   dayHistory: statoDayHistory(),
+  // Lavoro e tasse: archivio chiuso, `archivioChiuso: true` lo dichiara.
+  // Se `nazioni` e' 0 l'import non e' mai stato fatto (import/lavoro.js).
+  labour: statoLabour(),
 }));
 
 app.listen(PORT, '127.0.0.1', () => {

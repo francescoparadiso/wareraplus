@@ -1,6 +1,6 @@
 # Import una tantum da un archivio esterno
 
-Cinque cose che WarEra+ **non può ricostruire da sola**, e che un archivio
+Sei cose che WarEra+ **non può ricostruire da sola**, e che un archivio
 di terzi aveva già registrate:
 
 | Script | Cosa | Da dove | Copertura |
@@ -10,6 +10,7 @@ di terzi aveva già registrate:
 | `prezzi.js` | Prezzi di mercato | `price_daily` | 3.605 candele, 24 risorse, dal 9 apr 2026 |
 | `diplomazia.js` | Patti, guerre, nemico giurato | `country_diplomacy` | 28.440 righe, 158 giorni, dal 13 apr 2026 |
 | `battaglie.js` | Battaglie aperte giorno per giorno | `battle_snapshot` | 6.405 righe, 162 giorni, dal 9 apr 2026 |
+| `lavoro.js` | Salari, tasse e partner di lavoro | `wage_hourly_rollups` + `wage_events` | 51 giorni, 29 lug → 17 set 2026 |
 
 La sorgente è il dump PostgreSQL di un altro tool della comunità
 (`warera_pg_20260917_204055.dump`), passato dal suo autore. Dal dump
@@ -129,6 +130,29 @@ di oggi, e per la diplomazia hanno anche il tesoro vero (il dump porta il
 campo `money`, che è un'altra cosa e resta fuori — vedi il ⚠️ in testa a
 `diplomazia.js`).
 
+Lavoro e tasse, da `~/warera-cache-server/` — qui i file di scambio sono
+due, e non sono CSV grezzi: le tabelle di partenza (9,4 milioni di eventi
+salario e 1,7 milioni di rollup orari) si aggregano UNA volta in locale,
+dove il dump c'è, e sul VPS arrivano già i due JSON compatti.
+
+```bash
+node lavoro.js /tmp/labour-history-import.json /tmp/labour-tax-import.json
+pm2 restart warera-cache
+```
+
+⚠️ Questo archivio è **chiuso e resta chiuso**: 29 luglio → 17 settembre
+2026. Non c'è un poll che lo continui, e non è una dimenticanza — il gioco
+paga ~550.000 salari al giorno, cioè undicimila pagine da sfogliare ogni
+giorno. La vista lo dichiara in una fascia invece di far sembrare "oggi" un
+dato di settembre.
+
+⚠️ I due file sono due NUMERI diversi e non si sommano: `labour-history`
+aggrega per nazione del lavoratore (quanto hanno incassato i suoi
+cittadini), `labour-tax` per nazione dove opera l'azienda (quanto ha
+incassato lo Stato). Per l'Italia, nel periodo: 272k trattenute sui salari
+dei suoi contro 149k incassati sul suo territorio — i suoi lavorano fuori
+più di quanto gli stranieri lavorino da lei.
+
 `battaglie.js` scarta le battaglie di tipo `tournament`: sono fra
 giocatori, non fra nazioni, e il dump ci mette "Unknown" al posto dei due
 nomi (1.732 righe su 8.137).
@@ -146,6 +170,10 @@ diplomazia e battaglie saltano i giorni che il server ha già scattato.
   che dopo una settimana, per ogni giocatore presente nella ladder.
 - **Rendite di produzione**: nella riga aperta di ogni risorsa compare
   l'andamento del prezzo, con le variazioni a 7 e 30 giorni.
+- **Statistiche nazioni**: nella scheda di ogni nazione compare "Lavoro e
+  tasse" — salari incassati dai cittadini, quota guadagnata fuori casa,
+  tasse trattenute, gettito vero dello Stato, chi li paga e per cosa
+  lavorano.
 - **Time machine**: cliccando una nazione il popup dice con chi era in
   guerra QUEL giorno, che patti difensivi aveva e chi era il nemico
   giurato; sotto la classifica del territorio compaiono le battaglie
@@ -167,6 +195,7 @@ curl -s https://warera-oracle.duckdns.org/warera-cache/money-transfers | head -c
 curl -s https://warera-oracle.duckdns.org/warera-plus-api/health | python3 -m json.tool | grep -A8 ricchezza
 curl -s "https://warera-oracle.duckdns.org/warera-cache/day-history?day=2026-07-10" | head -c 200
 curl -s https://warera-oracle.duckdns.org/warera-cache/health | python3 -m json.tool | grep -A12 dayHistory
+curl -s "https://warera-oracle.duckdns.org/warera-cache/labour-history?countryId=6813b6d446e731854c7ac7b8" | head -c 200
 ```
 
 `coverageFrom` deve essere aprile, e `giorniInArchivio` ~91 più i giorni

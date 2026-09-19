@@ -597,3 +597,51 @@ body.light-theme .wp-nat-curve-range button.active { background: var(--wp-ov-sur
 /* Prime ore dopo un deploy: pillole gia' complete, danno ancora da
    accumulare. Spiega perche' il riquadro ha una linea e nessuna barra. */
 .wp-nat-curve-pending { margin: 6px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--wp-ov-text-dim, #8b949e); }
+
+/* ══ Lavoro e tasse (src/nations/labourSection.js) ═════════════════════
+   Archivio chiuso: la fascia in cima riusa .wp-nat-curve-note, cosi' le
+   due sezioni che dichiarano una copertura si somigliano invece di
+   inventarsi ognuna il suo riquadro. */
+.wp-nat-labour { display: flex; flex-direction: column; gap: 12px; }
+
+.wp-nat-lab-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.wp-nat-lab-tile {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 9px 11px;
+  background: var(--wp-ov-surface, #161b22);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 10px;
+}
+.wp-nat-lab-lab { font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-nat-lab-val { font-size: 17px; font-variant-numeric: tabular-nums; color: var(--wp-ov-text, #e6edf3); }
+.wp-nat-lab-note { margin: 0; font-size: 12px; color: var(--wp-ov-text-dim, #8b949e); }
+
+.wp-nat-lab-chart { width: 100%; height: auto; display: block; }
+.wp-nat-lab-axis { font-size: 9px; fill: var(--wp-ov-text-dim, #8b949e); font-variant-numeric: tabular-nums; }
+
+.wp-nat-lab-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.wp-nat-lab-col {
+  padding: 12px 14px;
+  background: var(--wp-ov-surface, #161b22);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 12px;
+}
+.wp-nat-lab-sub { margin: 2px 0 8px; font-size: 11.5px; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-nat-lab-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.wp-nat-lab-row { display: flex; align-items: center; gap: 7px; font-size: 12.5px; }
+.wp-nat-lab-flag { width: 17px; height: 12px; object-fit: cover; border-radius: 2px; flex: 0 0 auto; }
+.wp-nat-lab-name { flex: 0 0 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-nat-lab-bar { flex: 1 1 auto; height: 6px; border-radius: 3px; background: var(--wp-ov-bg, #0d1117); overflow: hidden; }
+.wp-nat-lab-bar > span { display: block; height: 100%; background: #e3b341; border-radius: 3px; }
+.wp-nat-lab-num { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: var(--wp-ov-text-dim, #8b949e); }
+
+body.light-theme .wp-nat-lab-bar { background: var(--wp-ov-bg-light, #f4f6fa); }
+body.light-theme .wp-nat-lab-bar > span { background: #9c6b1f; }

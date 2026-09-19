@@ -26,6 +26,7 @@ import { barsHtml, donutHtml } from './charts.js';
 import { classifyPlaystyle } from '../mu/playstyle.js';
 import { renderLevelPlaystyle } from './levelPlaystyle.js';
 import { renderDamageCurves } from './damageCurves.js';
+import { renderLabour } from './labourSection.js';
 import { avatarImg, escapeHtml, flagImg, fmtCompact, fmtRelative } from '../mu/ui.js';
 import { countryDamageToday, dailyDamageLabel, ensureDailyDamage } from '../shared/dailyDamage.js';
 import { t as sharedT } from '../shared/i18n.js';
@@ -97,6 +98,8 @@ export function renderNationDetail(host, nation, ctx) {
 
     <section class="wp-nat-curves" id="wp-nat-curves"></section>
 
+    <section class="wp-nat-labour" id="wp-nat-labour"></section>
+
     <section class="wp-nat-citizens">
       <h3 class="wp-nat-section-title">
         ${escapeHtml(natT('citizenList'))}
@@ -134,6 +137,7 @@ export function renderNationDetail(host, nation, ctx) {
 
   paintToday(nation);
   paintCurves(nation);
+  paintLabour(nation);
   loadCitizens(nation);
 }
 
@@ -178,6 +182,19 @@ function paintCurves(nation) {
   if (!el) return;
   renderDamageCurves(el, nation).catch(err => {
     console.warn('WarEra+ nations: curve del danno non disegnate:', err.message);
+    el.innerHTML = '';
+  });
+}
+
+/* Lavoro e tasse: archivio CHIUSO (29 lug - 17 set 2026), nessun poll che
+   lo alimenti — vedi src/nations/labourSection.js. Come le curve: se il
+   server non ce l'ha, la sezione resta vuota e la scheda e' quella di
+   prima. */
+function paintLabour(nation) {
+  const el = _host?.querySelector('#wp-nat-labour');
+  if (!el) return;
+  renderLabour(el, nation).catch(err => {
+    console.warn('WarEra+ nations: sezione lavoro non disegnata:', err.message);
     el.innerHTML = '';
   });
 }

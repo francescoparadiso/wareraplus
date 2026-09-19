@@ -200,12 +200,21 @@ wareraPlus/
 │   │                              campi lo sono. Zero fetch: lo scatto delle 02:05
 │   │                              legge le cache countries/diplomacy/battles.
 │   │                              Endpoint: /day-history?day=YYYY-MM-DD.
+│   ├── labourHistory.js        ← NUOVO — lavoro e tasse: ogni pagamento di salario
+│   │                              del gioco, aggregato per nazione. Archivio CHIUSO
+│   │                              (29 lug → 17 set 2026) e senza poll: sono ~550.000
+│   │                              pagamenti al giorno, undicimila pagine da sfogliare.
+│   │                              ⚠️ DUE serie che non si sommano mai: per nazione del
+│   │                              LAVORATORE (salari incassati, tasse trattenute) e per
+│   │                              nazione dove OPERA l'azienda (il gettito vero, che è
+│   │                              chi incassa davvero). Endpoint: /labour-history.
 │   ├── import/                 ← NUOVO — import UNA TANTUM da un archivio esterno
 │   │   ├── bonifici.js            (il dump PostgreSQL di un altro tool della
 │   │   ├── ricchezza.js            comunità, passato dal suo autore). Servono solo
 │   │   ├── prezzi.js               per i dati che WarEra NON espone a ritroso:
 │   │   ├── diplomazia.js           bonifici fra tesori, ricchezza giornaliera dei
-│   │   ├── battaglie.js            giocatori, prezzi, diplomazia, battaglie aperte.
+│   │   ├── battaglie.js            giocatori, prezzi, diplomazia, battaglie aperte,
+│   │   ├── lavoro.js               salari e tasse.
 │   │   └── README.md               Vedi il suo README per la procedura e per le due
 │   │                               retention allargate (senza, il primo giro di
 │   │                               manutenzione pota quello che l'import ha appena
@@ -309,6 +318,13 @@ wareraPlus/
     │   ├── metrics.js           ← le metriche in un posto solo (panoramica, 1vs2 e scheda
     │   │                          leggono le stesse definizioni)
     │   ├── charts.js            ← ciambelle/barre in SVG scritto a mano, niente Chart.js
+    │   ├── labourSection.js     ← NUOVO — "Lavoro e tasse" nella scheda nazione:
+    │   │                          salari incassati dai cittadini, quota guadagnata
+    │   │                          fuori casa, tasse trattenute, gettito dello Stato,
+    │   │                          chi li paga e per cosa lavorano. ⚠️ trattenute e
+    │   │                          gettito NON si sommano: le prime le incassa la
+    │   │                          nazione dove opera l'azienda. Archivio chiuso, e la
+    │   │                          fascia in cima lo dichiara.
     │   ├── damageCurves.js      ← NUOVO — nella scheda nazione: il danno ORA PER ORA
     │   │                          con sopra, sullo stesso riquadro e su un secondo
     │   │                          asse, la linea dei giocatori PILLATI (item `cocain`,
@@ -592,6 +608,7 @@ WarEra una volta per tutti invece di lasciare che lo faccia ogni browser —
 serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`,
 `/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
 `/daily-damage`, `/damage-timeline`, `/price-history`, `/day-history`,
+`/labour-history`,
 `/ticker` + `/ticker/summary`,
 `/region-history/{at,range,events,contested,war-intensity}`, `/alliances`,
 `/battles`, `/elections`, `/parties`, `/users-lite`, `/credit-profiles`,
@@ -841,6 +858,13 @@ salva, e l'import ne porta cinque mesi. Tutto il resto (popolazione,
 sviluppo, ricchezza di una regione) resta fuori per il motivo originale.
 Senza rideploy `/day-history` non esiste e la time machine torna esattamente
 com'era: popup con nome, bandiera e "dal —", nessuna sezione battaglie.
+
+**Lavoro e tasse** (`src/nations/labourSection.js` + `server/labourHistory.js`)
+è l'unica sezione del progetto costruita su un archivio **chiuso**: 51 giorni
+(29 lug → 17 set 2026) che non cresceranno mai, perché il gioco paga ~550.000
+salari al giorno e non esiste modo di sfogliarli. Non aggiungere un poll
+"per completezza": darebbe un campione storto spacciato per un totale. Senza
+rideploy la sezione non compare.
 
 ⚠️ **Tre import, tre retention da non riabbassare.** `import/` (vedi il suo
 README) ha senso solo con le retention allargate che lo accompagnano:
