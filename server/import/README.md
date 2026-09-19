@@ -92,8 +92,12 @@ node --disable-warning=ExperimentalWarning ricchezza.js /tmp/ranking_userWealth.
 node --disable-warning=ExperimentalWarning ricchezza.js /tmp/ranking_userWealth.csv.gz --da 2026-06-19 --db data-dev/plus.sqlite
 ```
 
-Misurato in locale su Node 24: ~1,5 M di righe in poco più di un minuto,
-rilanciarlo non duplica niente (`0 inserite, già presenti`).
+Misurato sul VPS: ~1,5 M di righe in poco più di un minuto, e rilanciarlo
+non duplica niente (`0 inserite, già presenti`) — utile, perché **può
+interrompersi**: se plusApi sta scrivendo (scatto ricchezza alle 02:00,
+istantanee alle :15) SQLite risponde `database is locked`. Lo script
+aspetta fino a 15 secondi, ma se capita basta rilanciarlo e riprende da
+dove si era fermato.
 
 `--prova` conta e non scrive. `--da 2026-06-19` salta i due giorni isolati
 (1 maggio, 1 giugno) che da soli non fanno un intervallo leggibile.
@@ -102,14 +106,22 @@ serve se sul VPS lo spazio è poco, perché **l'import completo porta il
 database di plusApi a ~290 MB** (misurato: 1,5 M di righe più i due
 indici). Con i soli membri delle unità italiane sono pochi MB.
 
-Prezzi, diplomazia e battaglie, da `~/warera-cache-server/` (anche questi
-si rileggono ad ogni richiesta, nessun restart):
+Prezzi, diplomazia e battaglie, da `~/warera-cache-server/`:
 
 ```bash
 node prezzi.js /tmp/price_daily.csv.gz
 node diplomazia.js /tmp/country_diplomacy.csv.gz
 node battaglie.js /tmp/battle_snapshot.csv.gz
+pm2 restart warera-cache
 ```
+
+⚠️ **Il restart dopo `diplomazia.js` e `battaglie.js` serve davvero.**
+`dayHistory.js` tiene una copia in memoria dei due file (sono megabyte, e
+riparsarli ad ogni richiesta del client sarebbe uno spreco): un processo
+già avviato non vede l'import, e allo scatto delle 02:05 riscriverebbe su
+disco la sua copia vecchia più il giorno nuovo — cancellando quello che
+l'import aveva appena messo. `prezzi.js` non ha questo problema (il file
+si rilegge ad ogni campione), ma il restart li copre tutti e tre.
 
 Tutti e tre accettano `--prova`. Nessuno sovrascrive un giorno che il
 server ha già fotografato da sé: i suoi valori vengono dalla stessa fonte
