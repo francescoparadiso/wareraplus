@@ -2,7 +2,7 @@
    WarEra+ — Overlay Unità Militari
    ------------------------------------------------------------------
    Stessa meccanica degli overlay Political / Eco / News
-   (politicalOverlay.js, ecoOverlay.js, newsOverlay.js): full-screen
+   (politicalOverlay.js, economyOverlay.js, newsOverlay.js): full-screen
    sopra la mappa, aperto da "Approfondimenti → Unità Militari". La vista
    vera (src/mu/main.js) si carica via import() dinamico alla PRIMA
    apertura, così il suo chunk non pesa sul boot. Riaperture successive

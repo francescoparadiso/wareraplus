@@ -198,18 +198,30 @@ const HISTORY_TIMEOUT_MS = 4000;
 const HISTORY_DAYS = 90;
 let _history = null;      // { items, coverageFrom, fetchedAt } | null
 let _historyTried = false;
+// Quanti giorni copre quello che abbiamo già chiesto. La riga espansa
+// delle Rendite ne vuole 90; la scheda Prezzi della sezione Economia
+// lascia scegliere fino a "tutto". Si tiene il RAGGIO PIÙ LARGO già
+// scaricato: chiedere 30 dopo aver chiesto 365 non deve buttare via
+// l'anno per poi ricomprarlo al clic dopo.
+let _historyDays = 0;
 
-export async function loadPriceHistory() {
-  if (_history || _historyTried) return _history;
+/**
+ * @param {number} days quanti giorni indietro servono (default 90, come
+ *   prima). Una richiesta nuova parte solo se si chiede più indietro di
+ *   quanto già in mano.
+ */
+export async function loadPriceHistory(days = HISTORY_DAYS) {
+  if (_historyTried && (days <= _historyDays || _history === null)) return _history;
   _historyTried = true;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), HISTORY_TIMEOUT_MS);
   try {
-    const res = await fetch(`${WARERA_CACHE_BASE}/price-history?days=${HISTORY_DAYS}`, { signal: ctrl.signal });
+    const res = await fetch(`${WARERA_CACHE_BASE}/price-history?days=${days}`, { signal: ctrl.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (!data || typeof data.items !== 'object') throw new Error('forma inattesa');
     _history = data;
+    _historyDays = days;
     return _history;
   } catch (err) {
     // Server vecchio (rotta assente → 404) o VPS giù: nessun grafico,

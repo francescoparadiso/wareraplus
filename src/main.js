@@ -34,11 +34,10 @@ initAnalytics();
 
 import { initCountryPanel, selectNationInPanel } from './panel/countryPanel.js';
 import { initPoliticalOverlay, openPoliticalView } from './app/politicalOverlay.js';
-import { initEcoOverlay, openEcoView } from './app/ecoOverlay.js';
+import { initEconomyOverlay, openEconomyView } from './app/economyOverlay.js';
 import { initNewsOverlay, openNewsView } from './app/newsOverlay.js';
 import { initMuOverlay, openMuView } from './app/muOverlay.js';
 import { initNationsOverlay, openNationsView } from './app/nationsOverlay.js';
-import { initMarketOverlay } from './app/marketOverlay.js';
 import { initBattlesOverlay } from './app/battlesOverlay.js';
 import { initGuideOverlay } from './app/guideOverlay.js';
 import { initPrivateOverlay } from './app/privateOverlay.js';
@@ -83,11 +82,10 @@ function handleIncomingDeepLink() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initPoliticalOverlay();
-  initEcoOverlay();
+  initEconomyOverlay();
   initNewsOverlay();
   initMuOverlay();
   initNationsOverlay();
-  initMarketOverlay();
   initBattlesOverlay();
   initGuideOverlay();
   initPrivateOverlay();
@@ -144,7 +142,7 @@ function restoreAfterChunkReload() {
   const open = {
     'bloc-stats': () => document.getElementById('bloc-stats-btn')?.click(),
     political: () => openPoliticalView(),
-    eco: () => openEcoView(),
+    economy: () => openEconomyView(),
     news: () => openNewsView(),
     mu: () => openMuView(),
     nations: () => openNationsView(),

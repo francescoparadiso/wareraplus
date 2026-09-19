@@ -488,5 +488,5 @@
   .wp-political-topbar { display: none !important; }
   #bloc-stats-page { padding-top: calc(var(--wp-mbar-h) + 12px) !important; }
   #bloc-stats-close { display: none !important; }
-  #wp-eco-overlay { padding-top: var(--wp-mbar-h); }
+  #wp-economy-overlay { padding-top: var(--wp-mbar-h); }
 }

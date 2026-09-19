@@ -24,8 +24,11 @@ ed è poi cresciuto ben oltre quei due:
 - **WarEra Eco Optimizer di ArgusIA** (esistente, di terzi) — bot Discord
   portato a moduli ES in `src/eco/` come "Ottimizzatore industriale". Stessa
   logica (Competenze / Posizione / Lavoratori), più una sezione Assunzioni
-  nuova e una veste grafica al posto degli embed Discord.
-  ⚠️ **L'attribuzione ad ArgusIA (card in cima alla vista) non va rimossa.**
+  nuova e una veste grafica al posto degli embed Discord. Dal 2026-09-19 è
+  una **scheda** della sezione Economia (`src/economy/`), insieme alle
+  Rendite di produzione e alla scheda Prezzi.
+  ⚠️ **L'attribuzione ad ArgusIA (card in cima alla vista) non va rimossa**,
+  nemmeno ora che è "solo" una scheda di una sezione più grande.
 
 Tutto il resto è **nuovo di WarEra+**: pannello nazione, Unità Militari,
 Statistiche nazioni, Rendite di produzione, News + ticker, Time machine,
@@ -336,14 +339,60 @@ wareraPlus/
     │   │                          ⚠️ un'ora senza misura è `d: null` e si disegna come
     │   │                          BUCO (barra assente, linea spezzata), mai come zero.
     │   ├── nationList.js, nationCompare.js, nationDetail.js, i18n.js (9 lingue)
+    ├── economy/                  ← NUOVO — Economia: UNA voce di Approfondimenti,
+    │   │                            TRE schede. Prima erano due voci separate
+    │   │                            ("Ottimizzatore industriale" e "Rendite di
+    │   │                            produzione") e i prezzi non avevano casa: erano
+    │   │                            separate per come sono NATE, non per come si
+    │   │                            usano. Le tre domande sono un discorso solo, e
+    │   │                            nell'ordine in cui si fanno — quanto vale la
+    │   │                            roba, cosa conviene produrre, come sistemo la
+    │   │                            MIA azienda.
+    │   │                            ⚠️ Per AFFIANCAMENTO, non per fusione:
+    │   │                            src/market/* e src/eco/* non sono toccati
+    │   │                            dentro. Ogni scheda ha il suo contenitore, ci si
+    │   │                            monta la vista di prima con la sua
+    │   │                            init*(container), e cambiare scheda NASCONDE
+    │   │                            invece di smontare — tornare sulle Rendite
+    │   │                            ritrova paga, giorni e riga aperta com'erano.
+    │   │                            Restano quindi TRE dizionari (economy/i18n.js,
+    │   │                            market/i18n.js, testi interni di eco/main.js) e
+    │   │                            TRE fogli di stile: è voluto.
+    │   ├── main.js               ← initEconomyView(container, {tab}) +
+    │   │                          stopEconomyView(). import() per scheda alla prima
+    │   │                          apertura: chi entra per i prezzi non si scarica
+    │   │                          anche l'Ottimizzatore. Cambiando scheda ferma il
+    │   │                          timer di quella che si lascia e lo riattacca
+    │   │                          rientrando (le tre init* sono riapribili).
+    │   ├── prices.js             ← NUOVO — la scheda PREZZI, l'unica parte davvero
+    │   │                          nuova: elenco di tutte le risorse con prezzo,
+    │   │                          denaro/lettera del libro ordini e variazioni
+    │   │                          24h/7g/30g, e per ognuna la sua scheda col
+    │   │                          grafico. ZERO fetch proprie — prezzi e libro
+    │   │                          ordini li chiede a market/api.js (stessa cache,
+    │   │                          stesso TTL: aprire questa scheda dopo le Rendite
+    │   │                          non ricompra niente), lo storico a /price-history.
+    │   └── candleChart.js        ← NUOVO — le candele (SVG a mano). ⚠️ NON sostituisce
+    │                              market/priceChart.js: quello disegna le sole
+    │                              chiusure perché sta in una riga alta 88px, questo
+    │                              massimo/minimo/corpo perché ha una pagina. Un
+    │                              giorno senza candela è un BUCO in entrambi.
     ├── eco/                      ← NUOVO — Ottimizzatore industriale (port del bot Discord
     │   │                            "WarEra Eco Optimizer" di ArgusIA — attribuzione
-    │   │                            obbligatoria in cima alla vista)
+    │   │                            obbligatoria in cima alla vista). Dal 2026-09-19
+    │   │                            è la TERZA SCHEDA di src/economy/, non più una
+    │   │                            voce di menù sua: il codice qui dentro non è
+    │   │                            cambiato, cambia solo chi chiama initEcoView().
     │   ├── main.js              ← orchestratore + rendering (era bot.py + embeds.py)
     │   ├── api.js               ← ecoCall via ECO_PROXY_BASE (Worker), dati di gioco
     │   ├── gameData.js, resolve.js, account.js, wage.js
     │   └── skills.js, positioning.js, workers.js, hiring.js  ← logica pura (hiring = nuova)
     ├── market/                   ← NUOVO — Rendite di produzione: la classifica di
+    │   │                            mercato... e dal 2026-09-19 la SECONDA SCHEDA di
+    │   │                            src/economy/, non più una voce di menù sua (il
+    │   │                            codice non è cambiato, cambia chi chiama
+    │   │                            initMarketView()). Sotto, la descrizione di
+    │   │                            sempre:
     │   │                            mercato di tutte le risorse per rendita al punto
     │   │                            produzione. Gemella dell'Ottimizzatore per chi
     │   │                            un'azienda non ce l'ha ancora (cosa produrre, dove
@@ -449,7 +498,11 @@ wareraPlus/
     │   ├── politicalOverlay.js ← apre Political in-page (import() dinamico di src/political/main.js)
     │   ├── muOverlay.js        ← apre Esplora Unità Militari
     │   ├── nationsOverlay.js   ← apre Statistiche nazioni
-    │   ├── ecoOverlay.js       ← apre l'Ottimizzatore industriale
+    │   ├── economyOverlay.js   ← apre Economia (prezzi + rendite + ottimizzatore) e
+    │   │                         alla chiusura ferma i timer di TUTTE le schede
+    │   │                         aperte, non solo di quella in vista. Prende il
+    │   │                         posto di ecoOverlay.js e marketOverlay.js, che
+    │   │                         non esistono più.
     │   ├── battlesOverlay.js   ← apre Battaglie (archivio + spese di guerra) e alla
     │   │                         chiusura ferma il giro delle battaglie in corso
     │   ├── visitorCounter.js   ← NUOVO — pill "N visite · ● M" in #wp-bottom-credits,
@@ -469,8 +522,6 @@ wareraPlus/
     │   │                         due volte nello stesso giorno. Server giù = niente
     │   │                         pill; server vecchio che non manda `online` = pill con
     │   │                         le sole visite. Mai un numero inventato.
-    │   ├── marketOverlay.js    ← apre Rendite di produzione (e alla chiusura ferma
-    │   │                         il suo timer di aggiornamento prezzi)
     │   ├── newsOverlay.js      ← apre la vista News
     │   ├── guideOverlay.js     ← apre la Guida "Come si usa"
     │   ├── newsTicker.js       ← ticker in cima alla mappa: battaglie, elezioni, nuove
@@ -534,6 +585,12 @@ wareraPlus/
         ├── political.css       ← da public/political/style.css, OGNI selettore scopato
         │                          sotto #wp-political-root (c'era una collisione reale
         │                          con .panel, già usata dalla shell)
+        ├── economy.css         ← NUOVO — scheletro della sezione Economia + scheda
+        │                          Prezzi. ⚠️ namespace `wp-ecn-*` e NON `wp-eco-*`:
+        │                          quello se lo tiene eco.css (l'Ottimizzatore, che
+        │                          ora è una scheda della stessa sezione) e i suoi
+        │                          .wp-eco-item/.wp-eco-delta/.wp-eco-note
+        │                          atterravano sulla tabella dei prezzi.
         └── menubar.css, mobile-menubar.css, mu.css, nations.css, news.css,
             eco.css, guide.css, market.css, battles.css
 ```
@@ -550,7 +607,7 @@ completo quando chiedi modifiche — "modifica config.js" da solo è ambiguo tra
 tre file (`src/diplomacy/config.js`, `src/political/config.js`,
 `public/political/config.js`), e `main.js`/`api.js`/`i18n.js` esistono in
 ancora più copie (`src/mu/`, `src/nations/`, `src/eco/`, `src/guide/`,
-`src/market/`).
+`src/market/`, `src/economy/`).
 
 ## Come comunicano Diplomacy, lo shell e Political (in-page dalla Fase 2)
 
@@ -866,11 +923,41 @@ salari al giorno e non esiste modo di sfogliarli. Non aggiungere un poll
 "per completezza": darebbe un campione storto spacciato per un totale. Senza
 rideploy la sezione non compare.
 
-⚠️ **Tre import, tre retention da non riabbassare.** `import/` (vedi il suo
-README) ha senso solo con le retention allargate che lo accompagnano:
-`moneyTransfers.js` a 180 giorni, `plusApi/wealth.js` a 180. Rimetterle a 90
-e 14 "per pulizia" cancella al primo giro di manutenzione dati che non si
-rifanno — sono l'unica copia rimasta di quei mesi.
+⚠️ **Gli archivi importati non si potano più a giorni, e non è una
+dimenticanza.** Il 2026-09-19 l'autore del database di terzi da cui viene
+`server/import/` ha annunciato che lo chiude: da quella data il VPS è
+l'**unica copia al mondo** di bonifici (dal 25 apr), ricchezza giornaliera
+(dal 19 giu), prezzi (dal 9 apr), diplomazia (dal 13 apr), battaglie aperte
+(dal 9 apr) e salari (51 gg chiusi). Le retention allargate che
+accompagnavano l'import erano comunque date di scadenza silenziose — il 22
+ottobre i bonifici avrebbero iniziato a cancellare aprile, il 16 dicembre la
+ricchezza a cancellare giugno — quindi al loro posto c'è un `PAVIMENTO`
+(una data prima di qualunque riga) in `moneyTransfers.js`,
+`plusApi/wealth.js` e `priceHistory.js`: si tiene tutto, e la potatura resta
+solo come rete contro etichette malformate. Costo misurato: ~1,1 GB/anno la
+ricchezza, meno di un MB i prezzi, qualche centinaio di KB i bonifici, su 39
+GB liberi. **Non rimetterci un numero di giorni "per pulizia".**
+
+Nella stessa direzione, due cose sullo stesso giorno:
+
+- `plusApi/wealth.js` fotografa ora la **classifica mondiale intera**
+  (~17.000 giocatori) e non più i soli ~450 membri delle unità italiane.
+  Costa **una richiesta al giorno**: `ranking.getRanking
+  {rankingType:'userWealth'}` è pubblica, ignora `limit`/`page` e risponde
+  con tutta la ladder in un colpo. Entra con `INSERT OR IGNORE` dopo il giro
+  sulle unità (non ha lo `username`, che invece quelle righe portano; in
+  cambio porta il `mu`, che l'import non aveva).
+- `server/backup.sh` — prima non esisteva alcun backup. `VACUUM INTO` per i
+  due sqlite (un `cp` con il WAL acceso prende un database a metà), tar
+  della `cache/` senza `bootstrap-raw-battles.json` (244 MB che il bootstrap
+  notturno rifà da solo), 4 copie a rotazione, cron domenica 04:00, 174 MB a
+  giro. ⚠️ è sullo **stesso disco**: il passo che conta è l'`rsync` che se
+  le porta via, documentato in `server/README.md`.
+
+L'unico archivio rimasto con una scadenza è `dayHistory.js` (400 giorni,
+cioè maggio 2027), e lì il vincolo è la **RAM** e non il disco: tiene
+l'archivio intero in memoria e il VPS ha 954 MB totali. La strada, quando
+servirà, è tenere caldi solo gli ultimi mesi.
 
 ⚠️ **L'input tRPC NON va incapsulato in `{"json": ...}`.** Le procedure
 vogliono l'oggetto nudo (`?input={"transactionType":"...","limit":50}`).

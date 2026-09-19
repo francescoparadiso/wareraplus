@@ -330,19 +330,30 @@
   </div>
 
   <!-- ════════════════════════════════════════════════════════════
-       NUOVO — Overlay Ottimizzatore industriale (src/eco/*)
-       Vista sotto "Approfondimenti": port a moduli ES del bot Discord
-       "WarEra Eco Optimizer" (ideato da ArgusIA). Montata IN-PAGE dentro
-       #wp-eco-root da src/eco/main.js: initEcoView(), aperta da
-       src/app/ecoOverlay.js. Stesso pattern dell'overlay Political.
+       NUOVO — Overlay Economia (src/economy/*)
+       UNA voce di "Approfondimenti", TRE schede, perché sono tre domande
+       che si fanno una dietro l'altra:
+         · Prezzi dei beni    — quanto vale la roba e come si muove
+                                (src/economy/prices.js, candele dal
+                                server di cache + prezzo di adesso)
+         · Rendite di produz. — cosa produrre, dove aprire, quanto resta
+                                dopo tasse e paghe (src/market/*)
+         · Ottimizzatore ind. — la MIA azienda (src/eco/*, port del bot
+                                Discord di ArgusIA — l'attribuzione in
+                                cima alla scheda NON si rimuove)
+       Prima erano due overlay separati (#wp-eco-overlay per
+       l'Ottimizzatore e #wp-market-overlay per le Rendite) e i prezzi
+       non avevano una casa. Montata IN-PAGE dentro #wp-economy-root da
+       src/economy/main.js: initEconomyView(), aperta da
+       src/app/economyOverlay.js. Stesso pattern dell'overlay Political.
        ════════════════════════════════════════════════════════════ -->
-  <div id="wp-eco-overlay" class="wp-political-overlay wp-eco-overlay" aria-hidden="true">
+  <div id="wp-economy-overlay" class="wp-political-overlay wp-economy-overlay" aria-hidden="true">
     <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
     <div class="wp-political-topbar">
-      <button id="wp-eco-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
-      <span class="wp-political-title">Ottimizzatore industriale</span>
+      <button id="wp-economy-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
+      <span class="wp-political-title">Economia</span>
     </div>
-    <div id="wp-eco-root" style="display:none;"></div>
+    <div id="wp-economy-root" style="display:none;"></div>
   </div>
 
   <!-- ════════════════════════════════════════════════════════════
@@ -397,24 +408,6 @@
     <div id="wp-nations-root" style="display:none;"></div>
   </div>
 
-  <!-- ════════════════════════════════════════════════════════════
-       NUOVO — Overlay Rendite di produzione (src/market/*)
-       Vista sotto "Approfondimenti": la classifica di mercato di tutte
-       le risorse per rendita al punto produzione, con miglior regione,
-       bonus, tasse e paga di pareggio. Sorella dell'Ottimizzatore ma
-       SENZA username: risponde a "cosa produco e dove apro", non a
-       "come sistemo le aziende che ho". Montata IN-PAGE dentro
-       #wp-market-root da src/market/main.js: initMarketView(), aperta
-       da src/app/marketOverlay.js.
-       ════════════════════════════════════════════════════════════ -->
-  <div id="wp-market-overlay" class="wp-political-overlay wp-market-overlay" aria-hidden="true">
-    <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
-    <div class="wp-political-topbar">
-      <button id="wp-market-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
-      <span class="wp-political-title">Production yields</span>
-    </div>
-    <div id="wp-market-root" style="display:none;"></div>
-  </div>
 
   <!-- Battaglie (src/battles/*): archivio delle battaglie concluse coi
        loro costi + spese di guerra giornaliere per nazione. Stessa

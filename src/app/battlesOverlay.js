@@ -2,11 +2,11 @@
    WarEra+ — Overlay Battaglie (archivio + spese di guerra)
    ------------------------------------------------------------------
    Stessa meccanica degli altri overlay di "Approfondimenti" (vedi
-   marketOverlay.js): la vista vera (src/battles/main.js) arriva con un
+   economyOverlay.js): la vista vera (src/battles/main.js) arriva con un
    import() dinamico alla PRIMA apertura, poi il DOM montato dentro
    #wp-battles-root viene riusato.
 
-   Come Rendite (marketOverlay.js), alla chiusura c'è un timer da
+   Come Economia (economyOverlay.js), alla chiusura c'è un timer da
    fermare: da quando l'archivio mostra anche le battaglie IN CORSO, la
    vista si riaggiorna da sola ogni quattro minuti. Dietro una mappa
    chiusa quel giro sarebbe consumo puro, quindi si spegne qui — la vista

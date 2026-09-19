@@ -1,0 +1,337 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Economia (src/economy/*) — stile
+   ------------------------------------------------------------------
+   Namespace `wp-ecn-*`. Stessa estetica delle altre sezioni di
+   Approfondimenti: superfici e bordi dai token --wp-ov-* di shell.css,
+   accento della sezione da --wp-ov-accent (qui il verde, che era già
+   quello dell'Ottimizzatore e resta la tinta dell'economia).
+
+   ⚠️ Questo foglio veste lo SCHELETRO della sezione e la scheda Prezzi.
+   Le altre due schede portano il loro CSS da prima — `eco.css` per
+   l'Ottimizzatore e `market.css` per le Rendite — e continuano a
+   caricarsi da sole quando la loro scheda si apre. Non riscrivere qui
+   quei selettori "per uniformità": sono due viste che funzionano, e il
+   diff sarebbe enorme per zero differenze a schermo.
+
+   Due colori portanti, sempre gli stessi in tutta la scheda Prezzi,
+   perché sono la domanda che si fa guardandola: SALE = verde,
+   SCENDE = rosso. Valgono per le candele, le variazioni percentuali e
+   la linea delle chiusure.
+
+   Numeri con `tabular-nums`: qui si confrontano colonne di prezzi, e
+   con le cifre a larghezza variabile il confronto a colpo d'occhio
+   salta.
+   ══════════════════════════════════════════════════════════════ */
+
+#wp-economy-root {
+  flex: 1;
+  width: 100%;
+  overflow-y: auto;
+  background: transparent;
+  color: var(--wp-ov-text, #e6edf3);
+}
+
+.wp-ecn-sec {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 22px 18px 90px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --wp-ecn-up: #3fb950;
+  --wp-ecn-down: #f85149;
+  --wp-ecn-flat: #8b949e;
+}
+body.light-theme .wp-ecn-sec {
+  --wp-ecn-up: #1a7f37;
+  --wp-ecn-down: #cf222e;
+  --wp-ecn-flat: #6e7781;
+}
+
+.wp-ecn-sechead { margin-bottom: 14px; }
+.wp-ecn-sectitle { margin: 0; font-size: clamp(22px, 3.4vw, 30px); font-weight: 800; letter-spacing: .01em; }
+.wp-ecn-secsub { margin: 4px 0 0; font-size: 12.5px; color: var(--wp-ov-text-dim, #8b949e); }
+
+.wp-ecn-loading,
+.wp-ecn-empty { color: var(--wp-ov-text-dim, #8b949e); font-size: 13px; padding: 26px 0; }
+.wp-ecn-dim { color: var(--wp-ov-text-dim, #8b949e); }
+
+/* ── Schede ─────────────────────────────────────────────────── */
+.wp-ecn-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 16px 0 14px;
+  border-bottom: 1px solid var(--wp-ov-border, #30363d);
+  overflow-x: auto;
+  /* Niente barra di scorrimento di sistema: regola globale del progetto
+     (vedi shell.css). Qui la riga delle schede può traboccare su
+     telefono, ed è l'unico punto in cui succede. */
+  scrollbar-width: none;
+}
+.wp-ecn-tabs::-webkit-scrollbar { display: none; }
+
+.wp-ecn-tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--wp-ov-text-dim, #8b949e);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+}
+.wp-ecn-tab:hover { color: var(--wp-ov-text, #e6edf3); }
+.wp-ecn-tab.active {
+  color: var(--wp-ov-accent, #3fb950);
+  border-bottom-color: var(--wp-ov-accent, #3fb950);
+}
+
+/* ── Scheda Prezzi: intestazione e strumenti ─────────────────── */
+.wp-ecn-phead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.wp-ecn-phead h2 { margin: 0; font-size: 17px; font-weight: 700; }
+.wp-ecn-sub { margin: 3px 0 0; font-size: 12px; color: var(--wp-ov-text-dim, #8b949e); }
+
+.wp-ecn-tools { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.wp-ecn-search {
+  appearance: none;
+  background: var(--wp-ov-surface-2, #161b22);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 8px;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 7px 10px;
+  min-width: 190px;
+}
+.wp-ecn-search:focus { outline: none; border-color: var(--wp-ov-accent, #3fb950); }
+
+.wp-ecn-refresh,
+.wp-ecn-chip,
+.wp-ecn-back {
+  appearance: none;
+  background: var(--wp-ov-surface-2, #161b22);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 8px;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 11px;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.wp-ecn-refresh:hover:not(:disabled),
+.wp-ecn-chip:hover,
+.wp-ecn-back:hover { border-color: var(--wp-ov-accent, #3fb950); }
+.wp-ecn-refresh:disabled { opacity: .55; cursor: default; }
+.wp-ecn-chip.active {
+  color: var(--wp-ov-accent, #3fb950);
+  border-color: var(--wp-ov-accent, #3fb950);
+}
+
+.wp-ecn-note {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--wp-ov-text-dim, #8b949e);
+}
+
+/* ── Scheda Prezzi: la tabella ───────────────────────────────── */
+/* Una griglia sola per intestazione e righe: le colonne restano
+   allineate senza misurare niente in JavaScript. */
+.wp-ecn-table { margin-top: 12px; font-variant-numeric: tabular-nums; }
+
+.wp-ecn-thead,
+.wp-ecn-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.4fr) repeat(3, minmax(70px, .8fr)) repeat(3, minmax(58px, .7fr)) minmax(120px, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.wp-ecn-thead {
+  padding: 0 10px 7px;
+  border-bottom: 1px solid var(--wp-ov-border, #30363d);
+}
+.wp-ecn-th {
+  appearance: none;
+  background: none;
+  border: none;
+  color: var(--wp-ov-text-dim, #8b949e);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+.wp-ecn-th.wp-ecn-num { text-align: right; }
+.wp-ecn-th:hover { color: var(--wp-ov-text, #e6edf3); }
+.wp-ecn-th.active { color: var(--wp-ov-accent, #3fb950); }
+
+.wp-ecn-row {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--wp-ov-border-soft, rgba(110, 118, 129, .18));
+  cursor: pointer;
+  font-size: 13px;
+  transition: background .12s;
+}
+.wp-ecn-row:hover { background: var(--wp-ov-surface-2, rgba(110, 118, 129, .09)); }
+.wp-ecn-row:focus-visible { outline: 2px solid var(--wp-ov-accent, #3fb950); outline-offset: -2px; }
+
+.wp-ecn-num { text-align: right; }
+.wp-ecn-price { font-weight: 700; }
+
+.wp-ecn-item { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wp-ecn-code { font-weight: 600; text-transform: capitalize; }
+.wp-ecn-type {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.wp-ecn-type-raw { background: rgba(187, 128, 9, .18); color: #d29922; }
+.wp-ecn-type-product { background: rgba(88, 166, 255, .16); color: #58a6ff; }
+body.light-theme .wp-ecn-type-raw { background: rgba(154, 103, 0, .14); color: #9a6700; }
+body.light-theme .wp-ecn-type-product { background: rgba(9, 105, 218, .12); color: #0969da; }
+
+.wp-ecn-delta { font-weight: 600; }
+.wp-ecn-delta.wp-ecn-up { color: var(--wp-ecn-up); }
+.wp-ecn-delta.wp-ecn-down { color: var(--wp-ecn-down); }
+.wp-ecn-delta.wp-ecn-flat { color: var(--wp-ecn-flat); }
+
+/* Il grafichino di riga è `src/market/priceChart.js`, condiviso con le
+   Rendite — ma `market.css` si carica solo quando si apre QUELLA scheda,
+   e senza le tre righe qui sotto la linea sarebbe nera su nero per chi
+   entra dai Prezzi. Si ridefiniscono scopate dentro `.wp-ecn-spark`
+   invece di importare l'intero market.css nel chunk dei Prezzi. */
+.wp-ecn-spark { display: block; min-width: 0; opacity: .9; }
+.wp-ecn-spark svg { width: 100%; height: 34px; display: block; overflow: visible; }
+.wp-ecn-spark .wp-mkt-line {
+  fill: none;
+  stroke: var(--wp-ov-accent, #3fb950);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.wp-ecn-spark .wp-mkt-band { fill: color-mix(in srgb, var(--wp-ov-accent, #3fb950) 18%, transparent); stroke: none; }
+.wp-ecn-spark .wp-mkt-dot { fill: var(--wp-ov-accent, #3fb950); }
+/* Le etichette di prezzo e data che il grafichino disegna per la riga
+   espansa delle Rendite: in una cella alta 34 pixel sono solo rumore, e
+   il numero preciso è già nelle colonne accanto. */
+.wp-ecn-spark .wp-mkt-clab { display: none; }
+
+/* ── Scheda Prezzi: la risorsa aperta ────────────────────────── */
+.wp-ecn-detail { margin-top: 12px; }
+.wp-ecn-back { margin-bottom: 14px; }
+
+.wp-ecn-dhead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.wp-ecn-dhead h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  text-transform: capitalize;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.wp-ecn-dprice { display: flex; align-items: baseline; gap: 10px; font-variant-numeric: tabular-nums; }
+.wp-ecn-dprice strong { font-size: 22px; font-weight: 800; }
+
+.wp-ecn-book {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin: 14px 0 6px;
+  padding: 11px 14px;
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 10px;
+  background: var(--wp-ov-surface-2, #161b22);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.wp-ecn-book em {
+  display: block;
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--wp-ov-text-dim, #8b949e);
+  margin-bottom: 2px;
+}
+
+.wp-ecn-chartbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 16px 0 8px;
+  font-size: 12px;
+}
+.wp-ecn-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--wp-ov-border, #30363d);
+  margin: 0 5px;
+}
+
+.wp-ecn-chartwrap {
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 10px;
+  background: var(--wp-ov-surface-2, #161b22);
+  padding: 10px 12px;
+}
+/* `preserveAspectRatio="none"` nel viewBox + altezza fissa qui: il
+   grafico riempie la larghezza disponibile senza ricalcolare niente al
+   ridimensionamento della finestra. */
+.wp-ecn-chart { width: 100%; height: 320px; display: block; }
+@media (max-width: 760px) { .wp-ecn-chart { height: 240px; } }
+
+.wp-ecn-grid { stroke: var(--wp-ov-border, #30363d); stroke-width: 1; opacity: .5; }
+.wp-ecn-axis { fill: var(--wp-ov-text-dim, #8b949e); font-size: 10px; font-family: inherit; }
+.wp-ecn-line { fill: none; stroke: var(--wp-ov-accent, #3fb950); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.wp-ecn-body.wp-ecn-up, .wp-ecn-wick.wp-ecn-up { fill: var(--wp-ecn-up); stroke: var(--wp-ecn-up); }
+.wp-ecn-body.wp-ecn-down, .wp-ecn-wick.wp-ecn-down { fill: var(--wp-ecn-down); stroke: var(--wp-ecn-down); }
+.wp-ecn-wick { stroke-width: 1.2; }
+
+/* ── Telefono ────────────────────────────────────────────────── */
+/* Sotto i 900px le tre colonne di variazione e la sparkline sparirebbero
+   in una riga illeggibile: si tolgono 7g/30g e il grafichino, e restano
+   prezzo, denaro e lettera del mercato. L'andamento completo è a un tocco
+   di distanza, nella scheda della risorsa. */
+@media (max-width: 900px) {
+  .wp-ecn-thead,
+  .wp-ecn-row {
+    grid-template-columns: minmax(110px, 1.5fr) repeat(3, minmax(58px, 1fr)) minmax(52px, .8fr);
+  }
+  .wp-ecn-th:nth-child(6),
+  .wp-ecn-th:nth-child(7),
+  .wp-ecn-th:nth-child(8),
+  .wp-ecn-row > *:nth-child(6),
+  .wp-ecn-row > *:nth-child(7),
+  .wp-ecn-row > *:nth-child(8) { display: none; }
+  .wp-ecn-tools { width: 100%; }
+  .wp-ecn-search { flex: 1; min-width: 0; }
+}

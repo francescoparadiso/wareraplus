@@ -164,7 +164,7 @@ async function ensureData() {
    cursore mentre la stai leggendo è solo fastidiosa. Il giro parte solo
    quando la scheda archivio è davvero visibile e si ferma alla chiusura
    dell'overlay (stopBattlesAutoRefresh, chiamato da app/battlesOverlay.js
-   come fa marketOverlay con le rendite) — un timer che continua a girare
+   come fa economyOverlay con l'economia) — un timer che continua a girare
    dietro una mappa è esattamente il consumo che questo progetto ha già
    dovuto togliere una volta.
 

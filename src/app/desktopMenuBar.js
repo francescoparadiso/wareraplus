@@ -27,8 +27,7 @@
 import { state } from '../diplomacy/state.js';
 import { renderMap, setColoringMode } from '../diplomacy/map.js';
 import { openPoliticalView, closePoliticalView } from './politicalOverlay.js';
-import { openEcoView, closeEcoView, isEcoViewOpen } from './ecoOverlay.js';
-import { openMarketView, closeMarketView, isMarketViewOpen } from './marketOverlay.js';
+import { openEconomyView, closeEconomyView, isEconomyViewOpen } from './economyOverlay.js';
 import { openBattlesView, closeBattlesView, isBattlesViewOpen } from './battlesOverlay.js';
 import { openNewsView, closeNewsView, isNewsViewOpen } from './newsOverlay.js';
 import { openMuView, closeMuView, isMuViewOpen } from './muOverlay.js';
@@ -44,15 +43,15 @@ const FLAG_BASE = 'https://media.warera.io/images/flags';
 
 // ══ i18n locale della barra ═══════════════════════════════════════
 const MB_DICT = {
-  en: { views: 'Views', insights: 'Insights', settings: 'Settings', battles: 'Battles', timeMachine: 'Time machine', diplomacy: 'Diplomacy', alliances: 'Alliances', sphere: 'Sphere', damage: 'Weekly Dmg', population: 'Population', production: 'Production', contested: 'Contested', warIntensity: 'War history', playstyle: 'War vs Eco', politics: 'Politics', allianceStats: 'Alliance stats', ecoOptimizer: 'Industrial Optimizer', market: 'Production yields', battleArchive: 'Battle archive', news: 'News', searchPh: 'Search nation or alliance…', groupNations: 'Nations', groupAlliances: 'Alliances', noResults: 'No results', favorites: 'Favorites', back: 'Back', muExplorer: 'Military Units', nationStats: 'Nation stats', howTo: 'How to use', privateArea: 'Reserved area', groupMus: 'Military units', noFavorites: 'No pinned items yet' },
-  it: { views: 'Viste mappa', insights: 'Approfondimenti', settings: 'Impostazioni', battles: 'Battaglie', timeMachine: 'Time machine', diplomacy: 'Diplomazia', alliances: 'Alleanze', sphere: 'Sfera', damage: 'Danni Sett.', population: 'Popolazione', production: 'Produzione', contested: 'Regioni contese', warIntensity: 'Storico bellico', playstyle: 'Guerra vs Eco', politics: 'Politica', allianceStats: 'Statistiche alleanze', ecoOptimizer: 'Ottimizzatore industriale', market: 'Rendite di produzione', battleArchive: 'Archivio battaglie', news: 'News', searchPh: 'Cerca nazione o alleanza…', groupNations: 'Nazioni', groupAlliances: 'Alleanze', noResults: 'Nessun risultato', favorites: 'Preferiti', back: 'Indietro', muExplorer: 'Unità Militari', nationStats: 'Statistiche nazioni', howTo: 'Come si usa', privateArea: 'Area riservata', groupMus: 'Unità militari', noFavorites: 'Nessun elemento salvato' },
-  es: { views: 'Vistas', insights: 'Análisis', settings: 'Ajustes', battles: 'Batallas', timeMachine: 'Time machine', diplomacy: 'Diplomacia', alliances: 'Alianzas', sphere: 'Esfera', damage: 'Daño Sem.', population: 'Población', production: 'Producción', contested: 'Regiones disputadas', warIntensity: 'Histórico bélico', playstyle: 'Guerra vs Eco', politics: 'Política', allianceStats: 'Estadísticas de alianzas', ecoOptimizer: 'Optimizador industrial', market: 'Rendimientos de producción', battleArchive: 'Archivo de batallas', news: 'News', searchPh: 'Buscar nación o alianza…', groupNations: 'Naciones', groupAlliances: 'Alianzas', noResults: 'Sin resultados', favorites: 'Favoritos', back: 'Atrás', muExplorer: 'Unidades Militares', nationStats: 'Estadísticas de naciones', howTo: 'Cómo se usa', privateArea: 'Área reservada', groupMus: 'Unidades militares', noFavorites: 'Aún no hay elementos guardados' },
-  de: { views: 'Ansichten', insights: 'Einblicke', settings: 'Einstellungen', battles: 'Schlachten', timeMachine: 'Zeitmaschine', diplomacy: 'Diplomatie', alliances: 'Bündnisse', sphere: 'Sphäre', damage: 'Wöch. Schaden', population: 'Bevölkerung', production: 'Produktion', contested: 'Umkämpfte Regionen', warIntensity: 'Kriegsgeschichte', playstyle: 'Krieg vs Eco', politics: 'Politik', allianceStats: 'Bündnisstatistiken', ecoOptimizer: 'Industrie-Optimierer', market: 'Produktionserträge', battleArchive: 'Schlachtenarchiv', news: 'News', searchPh: 'Nation oder Bündnis suchen…', groupNations: 'Nationen', groupAlliances: 'Bündnisse', noResults: 'Keine Ergebnisse', favorites: 'Favoriten', back: 'Zurück', muExplorer: 'Militäreinheiten', nationStats: 'Nationsstatistiken', howTo: 'Anleitung', privateArea: 'Geschützter Bereich', groupMus: 'Militäreinheiten', noFavorites: 'Noch nichts angeheftet' },
-  fr: { views: 'Vues', insights: 'Analyses', settings: 'Paramètres', battles: 'Batailles', timeMachine: 'Time machine', diplomacy: 'Diplomatie', alliances: 'Alliances', sphere: 'Sphère', damage: 'Dégâts Hebdo.', population: 'Population', production: 'Production', contested: 'Régions disputées', warIntensity: 'Historique de guerre', playstyle: 'Guerre vs Éco', politics: 'Politique', allianceStats: 'Stats des alliances', ecoOptimizer: 'Optimiseur industriel', market: 'Rendements de production', battleArchive: 'Archives des batailles', news: 'News', searchPh: 'Rechercher nation ou alliance…', groupNations: 'Nations', groupAlliances: 'Alliances', noResults: 'Aucun résultat', favorites: 'Favoris', back: 'Retour', muExplorer: 'Unités Militaires', nationStats: 'Statistiques des nations', howTo: "Mode d'emploi", privateArea: 'Espace réservé', groupMus: 'Unités militaires', noFavorites: 'Aucun élément épinglé' },
-  nl: { views: 'Weergaven', insights: 'Inzichten', settings: 'Instellingen', battles: 'Veldslagen', timeMachine: 'Tijdmachine', diplomacy: 'Diplomatie', alliances: 'Bondgenootschappen', sphere: 'Invloedssfeer', damage: 'Wekel. Schade', population: 'Bevolking', production: 'Productie', contested: 'Betwiste regio’s', warIntensity: 'Oorlogsgeschiedenis', playstyle: 'Oorlog vs Eco', politics: 'Politiek', allianceStats: 'Alliantiestatistieken', ecoOptimizer: 'Industriële optimizer', market: 'Productieopbrengsten', battleArchive: 'Slagarchief', news: 'News', searchPh: 'Zoek natie of alliantie…', groupNations: 'Naties', groupAlliances: 'Bondgenootschappen', noResults: 'Geen resultaten', favorites: 'Favorieten', back: 'Terug', muExplorer: 'Militaire Eenheden', nationStats: 'Natiestatistieken', howTo: 'Uitleg', privateArea: 'Besloten gedeelte', groupMus: 'Militaire eenheden', noFavorites: 'Nog niets vastgezet' },
-  sv: { views: 'Vyer', insights: 'Insikter', settings: 'Inställningar', battles: 'Strider', timeMachine: 'Tidsmaskin', diplomacy: 'Diplomati', alliances: 'Allianser', sphere: 'Sfär', damage: 'Veckoskada', population: 'Befolkning', production: 'Produktion', contested: 'Omstridda regioner', warIntensity: 'Krigshistorik', playstyle: 'Krig vs Eco', politics: 'Politik', allianceStats: 'Alliansstatistik', ecoOptimizer: 'Industrioptimerare', market: 'Produktionsavkastning', battleArchive: 'Stridsarkiv', news: 'News', searchPh: 'Sök nation eller allians…', groupNations: 'Nationer', groupAlliances: 'Allianser', noResults: 'Inga resultat', favorites: 'Favoriter', back: 'Tillbaka', muExplorer: 'Militära Enheter', nationStats: 'Nationsstatistik', howTo: 'Så funkar det', privateArea: 'Slutet område', groupMus: 'Militära enheter', noFavorites: 'Inget fäst ännu' },
-  pt: { views: 'Vistas', insights: 'Análises', settings: 'Definições', battles: 'Batalhas', timeMachine: 'Máquina do tempo', diplomacy: 'Diplomacia', alliances: 'Alianças', sphere: 'Esfera', damage: 'Dano Sem.', population: 'População', production: 'Produção', contested: 'Regiões disputadas', warIntensity: 'Histórico bélico', playstyle: 'Guerra vs Eco', politics: 'Política', allianceStats: 'Estatísticas de alianças', ecoOptimizer: 'Otimizador industrial', market: 'Rendimentos de produção', battleArchive: 'Arquivo de batalhas', news: 'News', searchPh: 'Procurar nação ou aliança…', groupNations: 'Nações', groupAlliances: 'Alianças', noResults: 'Sem resultados', favorites: 'Favoritos', back: 'Voltar', muExplorer: 'Unidades Militares', nationStats: 'Estatísticas das nações', howTo: 'Como usar', privateArea: 'Área reservada', groupMus: 'Unidades militares', noFavorites: 'Nada fixado ainda' },
-  ar: { views: 'العروض', insights: 'رؤى', settings: 'الإعدادات', battles: 'المعارك', timeMachine: 'آلة الزمن', diplomacy: 'الدبلوماسية', alliances: 'التحالفات', sphere: 'النطاق', damage: 'الضرر الأسبوعي', population: 'السكان', production: 'الإنتاج', contested: 'المناطق المتنازع عليها', warIntensity: 'تاريخ الحرب', playstyle: 'حرب مقابل اقتصاد', politics: 'السياسة', allianceStats: 'إحصاءات التحالفات', ecoOptimizer: 'مُحسِّن صناعي', market: 'عوائد الإنتاج', battleArchive: 'أرشيف المعارك', news: 'الأخبار', searchPh: 'ابحث عن دولة أو تحالف…', groupNations: 'الدول', groupAlliances: 'التحالفات', noResults: 'لا نتائج', favorites: 'المفضلة', back: 'رجوع', muExplorer: 'الوحدات العسكرية', nationStats: 'إحصاءات الدول', howTo: 'كيفية الاستخدام', privateArea: 'المنطقة الخاصة', groupMus: 'الوحدات العسكرية', noFavorites: 'لا عناصر مثبتة بعد' },
+  en: { views: 'Views', insights: 'Insights', settings: 'Settings', battles: 'Battles', timeMachine: 'Time machine', diplomacy: 'Diplomacy', alliances: 'Alliances', sphere: 'Sphere', damage: 'Weekly Dmg', population: 'Population', production: 'Production', contested: 'Contested', warIntensity: 'War history', playstyle: 'War vs Eco', politics: 'Politics', allianceStats: 'Alliance stats', economy: 'Economy', battleArchive: 'Battle archive', news: 'News', searchPh: 'Search nation or alliance…', groupNations: 'Nations', groupAlliances: 'Alliances', noResults: 'No results', favorites: 'Favorites', back: 'Back', muExplorer: 'Military Units', nationStats: 'Nation stats', howTo: 'How to use', privateArea: 'Reserved area', groupMus: 'Military units', noFavorites: 'No pinned items yet' },
+  it: { views: 'Viste mappa', insights: 'Approfondimenti', settings: 'Impostazioni', battles: 'Battaglie', timeMachine: 'Time machine', diplomacy: 'Diplomazia', alliances: 'Alleanze', sphere: 'Sfera', damage: 'Danni Sett.', population: 'Popolazione', production: 'Produzione', contested: 'Regioni contese', warIntensity: 'Storico bellico', playstyle: 'Guerra vs Eco', politics: 'Politica', allianceStats: 'Statistiche alleanze', economy: 'Economia', battleArchive: 'Archivio battaglie', news: 'News', searchPh: 'Cerca nazione o alleanza…', groupNations: 'Nazioni', groupAlliances: 'Alleanze', noResults: 'Nessun risultato', favorites: 'Preferiti', back: 'Indietro', muExplorer: 'Unità Militari', nationStats: 'Statistiche nazioni', howTo: 'Come si usa', privateArea: 'Area riservata', groupMus: 'Unità militari', noFavorites: 'Nessun elemento salvato' },
+  es: { views: 'Vistas', insights: 'Análisis', settings: 'Ajustes', battles: 'Batallas', timeMachine: 'Time machine', diplomacy: 'Diplomacia', alliances: 'Alianzas', sphere: 'Esfera', damage: 'Daño Sem.', population: 'Población', production: 'Producción', contested: 'Regiones disputadas', warIntensity: 'Histórico bélico', playstyle: 'Guerra vs Eco', politics: 'Política', allianceStats: 'Estadísticas de alianzas', economy: 'Economía', battleArchive: 'Archivo de batallas', news: 'News', searchPh: 'Buscar nación o alianza…', groupNations: 'Naciones', groupAlliances: 'Alianzas', noResults: 'Sin resultados', favorites: 'Favoritos', back: 'Atrás', muExplorer: 'Unidades Militares', nationStats: 'Estadísticas de naciones', howTo: 'Cómo se usa', privateArea: 'Área reservada', groupMus: 'Unidades militares', noFavorites: 'Aún no hay elementos guardados' },
+  de: { views: 'Ansichten', insights: 'Einblicke', settings: 'Einstellungen', battles: 'Schlachten', timeMachine: 'Zeitmaschine', diplomacy: 'Diplomatie', alliances: 'Bündnisse', sphere: 'Sphäre', damage: 'Wöch. Schaden', population: 'Bevölkerung', production: 'Produktion', contested: 'Umkämpfte Regionen', warIntensity: 'Kriegsgeschichte', playstyle: 'Krieg vs Eco', politics: 'Politik', allianceStats: 'Bündnisstatistiken', economy: 'Wirtschaft', battleArchive: 'Schlachtenarchiv', news: 'News', searchPh: 'Nation oder Bündnis suchen…', groupNations: 'Nationen', groupAlliances: 'Bündnisse', noResults: 'Keine Ergebnisse', favorites: 'Favoriten', back: 'Zurück', muExplorer: 'Militäreinheiten', nationStats: 'Nationsstatistiken', howTo: 'Anleitung', privateArea: 'Geschützter Bereich', groupMus: 'Militäreinheiten', noFavorites: 'Noch nichts angeheftet' },
+  fr: { views: 'Vues', insights: 'Analyses', settings: 'Paramètres', battles: 'Batailles', timeMachine: 'Time machine', diplomacy: 'Diplomatie', alliances: 'Alliances', sphere: 'Sphère', damage: 'Dégâts Hebdo.', population: 'Population', production: 'Production', contested: 'Régions disputées', warIntensity: 'Historique de guerre', playstyle: 'Guerre vs Éco', politics: 'Politique', allianceStats: 'Stats des alliances', economy: 'Économie', battleArchive: 'Archives des batailles', news: 'News', searchPh: 'Rechercher nation ou alliance…', groupNations: 'Nations', groupAlliances: 'Alliances', noResults: 'Aucun résultat', favorites: 'Favoris', back: 'Retour', muExplorer: 'Unités Militaires', nationStats: 'Statistiques des nations', howTo: "Mode d'emploi", privateArea: 'Espace réservé', groupMus: 'Unités militaires', noFavorites: 'Aucun élément épinglé' },
+  nl: { views: 'Weergaven', insights: 'Inzichten', settings: 'Instellingen', battles: 'Veldslagen', timeMachine: 'Tijdmachine', diplomacy: 'Diplomatie', alliances: 'Bondgenootschappen', sphere: 'Invloedssfeer', damage: 'Wekel. Schade', population: 'Bevolking', production: 'Productie', contested: 'Betwiste regio’s', warIntensity: 'Oorlogsgeschiedenis', playstyle: 'Oorlog vs Eco', politics: 'Politiek', allianceStats: 'Alliantiestatistieken', economy: 'Economie', battleArchive: 'Slagarchief', news: 'News', searchPh: 'Zoek natie of alliantie…', groupNations: 'Naties', groupAlliances: 'Bondgenootschappen', noResults: 'Geen resultaten', favorites: 'Favorieten', back: 'Terug', muExplorer: 'Militaire Eenheden', nationStats: 'Natiestatistieken', howTo: 'Uitleg', privateArea: 'Besloten gedeelte', groupMus: 'Militaire eenheden', noFavorites: 'Nog niets vastgezet' },
+  sv: { views: 'Vyer', insights: 'Insikter', settings: 'Inställningar', battles: 'Strider', timeMachine: 'Tidsmaskin', diplomacy: 'Diplomati', alliances: 'Allianser', sphere: 'Sfär', damage: 'Veckoskada', population: 'Befolkning', production: 'Produktion', contested: 'Omstridda regioner', warIntensity: 'Krigshistorik', playstyle: 'Krig vs Eco', politics: 'Politik', allianceStats: 'Alliansstatistik', economy: 'Ekonomi', battleArchive: 'Stridsarkiv', news: 'News', searchPh: 'Sök nation eller allians…', groupNations: 'Nationer', groupAlliances: 'Allianser', noResults: 'Inga resultat', favorites: 'Favoriter', back: 'Tillbaka', muExplorer: 'Militära Enheter', nationStats: 'Nationsstatistik', howTo: 'Så funkar det', privateArea: 'Slutet område', groupMus: 'Militära enheter', noFavorites: 'Inget fäst ännu' },
+  pt: { views: 'Vistas', insights: 'Análises', settings: 'Definições', battles: 'Batalhas', timeMachine: 'Máquina do tempo', diplomacy: 'Diplomacia', alliances: 'Alianças', sphere: 'Esfera', damage: 'Dano Sem.', population: 'População', production: 'Produção', contested: 'Regiões disputadas', warIntensity: 'Histórico bélico', playstyle: 'Guerra vs Eco', politics: 'Política', allianceStats: 'Estatísticas de alianças', economy: 'Economia', battleArchive: 'Arquivo de batalhas', news: 'News', searchPh: 'Procurar nação ou aliança…', groupNations: 'Nações', groupAlliances: 'Alianças', noResults: 'Sem resultados', favorites: 'Favoritos', back: 'Voltar', muExplorer: 'Unidades Militares', nationStats: 'Estatísticas das nações', howTo: 'Como usar', privateArea: 'Área reservada', groupMus: 'Unidades militares', noFavorites: 'Nada fixado ainda' },
+  ar: { views: 'العروض', insights: 'رؤى', settings: 'الإعدادات', battles: 'المعارك', timeMachine: 'آلة الزمن', diplomacy: 'الدبلوماسية', alliances: 'التحالفات', sphere: 'النطاق', damage: 'الضرر الأسبوعي', population: 'السكان', production: 'الإنتاج', contested: 'المناطق المتنازع عليها', warIntensity: 'تاريخ الحرب', playstyle: 'حرب مقابل اقتصاد', politics: 'السياسة', allianceStats: 'إحصاءات التحالفات', economy: 'الاقتصاد', battleArchive: 'أرشيف المعارك', news: 'الأخبار', searchPh: 'ابحث عن دولة أو تحالف…', groupNations: 'الدول', groupAlliances: 'التحالفات', noResults: 'لا نتائج', favorites: 'المفضلة', back: 'رجوع', muExplorer: 'الوحدات العسكرية', nationStats: 'إحصاءات الدول', howTo: 'كيفية الاستخدام', privateArea: 'المنطقة الخاصة', groupMus: 'الوحدات العسكرية', noFavorites: 'لا عناصر مثبتة بعد' },
 };
 function mbT(key) {
   return MB_DICT[getLang()]?.[key] ?? MB_DICT.en[key] ?? key;
@@ -229,8 +228,7 @@ function isStatsOpen() {
 }
 function closeAnySubview() {
   if (isPoliticalOpen()) closePoliticalView();
-  if (isEcoViewOpen()) closeEcoView();
-  if (isMarketViewOpen()) closeMarketView();
+  if (isEconomyViewOpen()) closeEconomyView();
   if (isBattlesViewOpen()) closeBattlesView();
   if (isNewsViewOpen()) closeNewsView();
   if (isMuViewOpen()) closeMuView();
@@ -244,7 +242,7 @@ function closeAnySubview() {
 // spinge la vista sotto la barra.
 function setupSubviewWatch() {
   const pol = document.getElementById('wp-political-overlay');
-  const eco = document.getElementById('wp-eco-overlay');
+  const eco = document.getElementById('wp-economy-overlay');
   const mu = document.getElementById('wp-mu-overlay');
   // News mancava qui (segnalato dall'utente): la sua topbar "← Torna alla
   // mappa" è nascosta da menubar.css come per le altre sotto-viste, ma senza
@@ -255,16 +253,14 @@ function setupSubviewWatch() {
   const stats = document.getElementById('bloc-stats-page');
   const nations = document.getElementById('wp-nations-overlay');
   const guide = document.getElementById('wp-guide-overlay');
-  const market = document.getElementById('wp-market-overlay');
   const battles = document.getElementById('wp-battles-overlay');
-  const update = () => document.body.classList.toggle('wp-subview-open', isPoliticalOpen() || isEcoViewOpen() || isMarketViewOpen() || isBattlesViewOpen() || isMuViewOpen() || isNewsViewOpen() || isNationsViewOpen() || isGuideViewOpen() || isStatsOpen());
+  const update = () => document.body.classList.toggle('wp-subview-open', isPoliticalOpen() || isEconomyViewOpen() || isBattlesViewOpen() || isMuViewOpen() || isNewsViewOpen() || isNationsViewOpen() || isGuideViewOpen() || isStatsOpen());
   if (pol) new MutationObserver(update).observe(pol, { attributes: true, attributeFilter: ['class'] });
   if (eco) new MutationObserver(update).observe(eco, { attributes: true, attributeFilter: ['class'] });
   if (mu) new MutationObserver(update).observe(mu, { attributes: true, attributeFilter: ['class'] });
   if (news) new MutationObserver(update).observe(news, { attributes: true, attributeFilter: ['class'] });
   if (nations) new MutationObserver(update).observe(nations, { attributes: true, attributeFilter: ['class'] });
   if (guide) new MutationObserver(update).observe(guide, { attributes: true, attributeFilter: ['class'] });
-  if (market) new MutationObserver(update).observe(market, { attributes: true, attributeFilter: ['class'] });
   if (battles) new MutationObserver(update).observe(battles, { attributes: true, attributeFilter: ['class'] });
   if (stats) new MutationObserver(update).observe(stats, { attributes: true, attributeFilter: ['style'] });
   update();
@@ -449,31 +445,21 @@ function buildInsightsDropdown() {
   stats.addEventListener('click', () => { closeAnySubview(); document.getElementById('bloc-stats-btn')?.click(); closeAllDropdowns(); });
   panel.appendChild(stats);
 
-  // Ottimizzatore industriale (tool ideato da ArgusIA, vedi src/eco/).
+  // Economia (src/economy/*): UNA voce per tre schede — prezzi, rendite
+  // di produzione, ottimizzatore industriale. Erano due voci separate
+  // ("Ottimizzatore industriale" e "Rendite di produzione") per come
+  // erano NATE, non per come si usano: il perché sta in testa a
+  // src/economy/main.js.
   const ecoItem = el('button', 'wp-mb-item', { type: 'button' });
-  ecoItem.appendChild(iconEl('factory'));
-  ecoItem.appendChild(regSpan('ecoOptimizer'));
+  ecoItem.appendChild(iconEl('scales'));
+  ecoItem.appendChild(regSpan('economy'));
   ecoItem.addEventListener('click', () => {
     closeAnySubview();
-    openEcoView();
-    trackEvent('menubar-open-eco');
+    openEconomyView();
+    trackEvent('menubar-open-economy');
     closeAllDropdowns();
   });
   panel.appendChild(ecoItem);
-
-  // Rendite di produzione (src/market/*): la gemella dell'Ottimizzatore
-  // per chi un'azienda non ce l'ha ancora — cosa produrre e dove aprirla,
-  // letto dal mercato. Nessuno username da inserire, si apre e mostra.
-  const mktItem = el('button', 'wp-mb-item', { type: 'button' });
-  mktItem.appendChild(iconEl('scales'));
-  mktItem.appendChild(regSpan('market'));
-  mktItem.addEventListener('click', () => {
-    closeAnySubview();
-    openMarketView();
-    trackEvent('menubar-open-market');
-    closeAllDropdowns();
-  });
-  panel.appendChild(mktItem);
 
   // Battaglie (src/battles/*): archivio delle battaglie concluse coi loro
   // costi + spese di guerra per nazione. Voce distinta dal bottone

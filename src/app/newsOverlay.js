@@ -2,7 +2,7 @@
    WarEra+ — Overlay News
    ------------------------------------------------------------------
    Stessa meccanica degli overlay Political ed Eco (politicalOverlay.js /
-   ecoOverlay.js): full-screen sopra la mappa, aperto da
+   economyOverlay.js): full-screen sopra la mappa, aperto da
    "Approfondimenti → News". La vista vera (src/app/newsView.js) si carica
    via import() dinamico alla PRIMA apertura, così non pesa sul boot.
    Riaperture successive riusano il DOM già montato dentro #wp-news-root,

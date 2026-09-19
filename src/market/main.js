@@ -20,7 +20,8 @@
       regioni consigliate 30 min) — vedi il commento in testa a quel
       file. Qui si aggiunge solo il giro automatico mentre la vista è
       aperta, che va FERMATO alla chiusura: `stopMarketAutoRefresh()`,
-      chiamata da src/app/marketOverlay.js. Un timer lasciato acceso
+      chiamata da src/economy/main.js quando si cambia scheda e da
+      src/app/economyOverlay.js alla chiusura. Un timer lasciato acceso
       dietro un overlay chiuso è già costato CPU una volta in questo
       progetto (il canvas di Political), non ripetiamolo.
    3. Il bonus è sempre quello che dice il gioco, mai ricalcolato qui.
