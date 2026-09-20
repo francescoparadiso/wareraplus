@@ -17,7 +17,7 @@ cartella `server/` non esiste. La chiave sta una cartella più in su, in
 `warEra/serverOracle/`, da cui il `../` nel percorso.
 
 ```bash
-scp -i ../serverOracle/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/battleArchive.js server/moneyTransfers.js server/damageTimeline.js server/languages.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
+scp -i ../serverOracle/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/languages.js server/battleArchive.js server/moneyTransfers.js server/damageTimeline.js server/priceHistory.js server/dayHistory.js server/labourHistory.js server/citizenMoves.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
 ```
 
 Manda **tutti** i moduli, non il solo `warera-cache-server.js`: i loro
@@ -30,7 +30,7 @@ che si ferma alla sintassi: eseguire il server per provarlo aprirebbe la
 porta 3001 e i cron accanto al processo pm2 gia' vivo.
 
 ```bash
-ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && ls -la proxyIndex.js battleArchive.js moneyTransfers.js damageTimeline.js languages.js package.json && for f in warera-cache-server.js proxyIndex.js battleArchive.js moneyTransfers.js damageTimeline.js languages.js; do node --check \$f || exit 1; done && echo PREFLIGHT-OK"
+ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && for f in warera-cache-server.js proxyIndex.js languages.js battleArchive.js moneyTransfers.js damageTimeline.js priceHistory.js dayHistory.js labourHistory.js citizenMoves.js; do node --check \$f || exit 1; done && echo PREFLIGHT-OK"
 ```
 
 Solo se stampa `PREFLIGHT-OK`:
@@ -39,10 +39,22 @@ Solo se stampa `PREFLIGHT-OK`:
 ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "pm2 restart warera-cache && sleep 20 && pm2 logs warera-cache --lines 40 --nostream"
 ```
 
-⚠️ **Da agosto 2026 i file da copiare sono quattro, non uno.**
-`warera-cache-server.js` fa `require('./proxyIndex')` (radar dei proxy), che a
-sua volta richiede `./languages`: se copi solo il primo, il processo non parte
-proprio. `package.json` dichiara `"type": "commonjs"` — sul VPS non serviva
+⚠️ **I file da copiare sono dieci, non uno.** `warera-cache-server.js`
+richiede otto moduli (`proxyIndex`, `battleArchive`, `moneyTransfers`,
+`damageTimeline`, `priceHistory`, `dayHistory`, `labourHistory`,
+`citizenMoves`) e `proxyIndex` a sua volta richiede `languages`: se ne manca
+uno il processo non parte proprio, e pm2 lo riavvia in loop. L'elenco qui
+sopra si ricava sempre cosi', invece di fidarsi della memoria:
+
+```bash
+grep -o "require('\./[a-zA-Z]*')" server/*.js | sort -u
+```
+
+Prima di copiare, un `md5sum` dei due lati dice quali file sono davvero
+cambiati — e soprattutto se sul VPS c'e' una modifica che il repo non ha,
+che una copia cieca cancellerebbe in silenzio.
+
+`package.json` dichiara `"type": "commonjs"` — sul VPS non serviva
 finché la cartella era senza package.json, ma copiarlo mette al riparo dal
 caso in cui qualcosa ne crei uno.
 
