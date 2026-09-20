@@ -564,6 +564,52 @@ function injectContribStyles() {
     .bfm-spend-total > * { border-top: 1px solid rgba(128,128,128,0.28); padding-top: 4px; margin-top: 2px; font-weight: 700; }
     .bfm-spend-note { font-size: 9.5px; opacity: .7; margin-top: 6px; line-height: 1.35; }
     .bfm-spend-sub { font-size: 9.5px; opacity: .8; }
+
+    /* ── WarEra+ — la stessa spesa, ma NAZIONE PER NAZIONE ──
+       Due colonne affiancate (difesa | attacco), ognuna con le sue
+       nazioni: la domanda è "quanto ci sta mettendo questo paese", e
+       incolonnare i due schieramenti uno sotto l'altro la renderebbe
+       una lista da scorrere invece che un confronto. Sotto i 520px la
+       card è troppo stretta per starci in due, e le colonne si
+       impilano. ── */
+    .bfm-spend-c-title {
+      font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .4px; margin: 8px 0 4px;
+      border-top: 1px solid rgba(128,128,128,0.28); padding-top: 6px;
+    }
+    .bfm-spend-c-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+    .bfm-spend-c-side .bfm-spend-h {
+      font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
+      font-size: 9.5px; padding-bottom: 2px;
+    }
+    .bfm-spend-c-side .bfm-spend-h.def { color: var(--bfm-c-def-ink, #8fc3e8); }
+    .bfm-spend-c-side .bfm-spend-h.atk { color: var(--bfm-c-atk-ink, #ef9269); }
+    .bfm-spend-c-head, .bfm-spend-c-row {
+      display: grid; grid-template-columns: 12px 1fr auto auto;
+      gap: 4px; align-items: center; font-size: 10px;
+    }
+    .bfm-spend-c-head { font-size: 9px; opacity: .75; padding-bottom: 2px; }
+    .bfm-spend-c-row { padding: 1px 0; }
+    /* Su una battaglia grande i paganti sono una decina e gli incassanti
+       centocinquanta: senza questo tetto il tooltip diventava alto 2.100px
+       in una finestra da 900 (misurato). L'elenco scorre, e chi ha PAGATO
+       sta in cima perché è la domanda che si è venuti a fare. Barra nella
+       tinta del progetto, mai quella di sistema. */
+    .bfm-spend-c-list {
+      max-height: 190px; overflow-y: auto;
+      scrollbar-width: thin; scrollbar-color: rgba(128,128,128,.55) transparent;
+    }
+    .bfm-spend-c-list::-webkit-scrollbar { width: 6px; }
+    .bfm-spend-c-list::-webkit-scrollbar-track { background: transparent; }
+    .bfm-spend-c-list::-webkit-scrollbar-thumb {
+      background: rgba(128,128,128,.55); border-radius: 3px;
+    }
+    .bfm-spend-c-row img { width: 12px; height: 9px; object-fit: cover; border-radius: 1px; }
+    .bfm-spend-c-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bfm-spend-c-v { text-align: right; font-variant-numeric: tabular-nums; min-width: 34px; }
+    @media (max-width: 520px) {
+      .bfm-spend-c-wrap { grid-template-columns: 1fr; }
+    }
     .bfm-contrib-mobile-section { display: none; overflow: hidden; }
     @media (max-width: 768px) {
       #battle-tooltip.bfm-contrib-mobile-open .bfm-contrib-mobile-section.bfm-contrib-has-data { display: block; }
@@ -866,10 +912,80 @@ function buildSpendRows(data, subColor, textColor) {
       ${row('💰 Total spent', fmtMoney(totDef), fmtMoney(totAtk), 'bfm-spend-total')}
       ${pendingRow}
     </div>
+    ${buildSpendByCountry(data, subColor, textColor)}
     <div class="bfm-spend-note" style="color:${subColor};">
       Bounty is what each side's pool has already paid out to fighters, so it keeps
       growing while the battle runs. Contracts count only awarded auctions.
       ${data.truncated ? '<br>⚠️ Very large battle — figures are a lower bound (API paging limit).' : ''}
+    </div>`;
+}
+
+/* ── Per NAZIONE, non solo per schieramento (segnalato dall'utente) ──
+   «il costo battaglia è cumulativo, è più utile sapere esattamente quanto
+   sta spendendo un paese per quella battaglia». Il dato c'era già: le due
+   chiamate di battleSpending.js tornano entrambe la ripartizione per
+   nazione, e finiva nel cestino perché il tooltip sommava solo i lati.
+
+   ⚠️ Le due colonne NON sono la stessa cosa, ed è il motivo per cui qui
+   restano due colonne invece di una somma:
+   - CONTRATTI è spesa vera, per davvero di quella nazione: l'asta ha un
+     `country` che è chi paga, e può benissimo non essere la nazione che
+     combatte (un alleato che finanzia il fronte altrui è proprio uno dei
+     casi interessanti).
+   - TAGLIA per nazione è invece INCASSATA, non spesa: è la classifica
+     "money" della battaglia, cioè quanto i cittadini di quella nazione
+     hanno preso dal salvadanaio del loro schieramento. Sommarla al
+     contratto darebbe un numero che non vuol dire niente. Solo il
+     TOTALE DI LATO della taglia è "speso" — ed è quello, sopra.
+   Stessa distinzione già dichiarata in src/battles/battleDetail.js. */
+function spendCountryRows(mercList, bountyList, textColor, subColor) {
+  const merc = new Map(mercList.map(x => [x.countryId, x.value]));
+  const bounty = new Map((bountyList || []).map(x => [x.countryId, x.value]));
+  const ids = [...new Set([...merc.keys(), ...bounty.keys()])]
+    .sort((a, b) => ((merc.get(b) || 0) - (merc.get(a) || 0)) || ((bounty.get(b) || 0) - (bounty.get(a) || 0)));
+  if (!ids.length) return `<div class="bfm-spend-sub" style="color:${subColor}; padding:3px 0;">—</div>`;
+  return ids.map(id => {
+    const n = getNation(id);
+    const code = (n?.code || '').toLowerCase();
+    const flag = code
+      ? `<img src="https://media.warera.io/images/flags/${code}.svg?v=16" onerror="this.style.display='none'">`
+      : '';
+    return `<div class="bfm-spend-c-row">
+        ${flag}<span class="bfm-spend-c-name" style="color:${textColor};">${escapeHtml(n?.name || '—')}</span>
+        <span class="bfm-spend-c-v" style="color:${textColor};">${merc.has(id) ? fmtMoney(merc.get(id)) : '·'}</span>
+        <span class="bfm-spend-c-v bfm-spend-sub" style="color:${subColor};">${bounty.has(id) ? fmtMoney(bounty.get(id)) : '·'}</span>
+      </div>`;
+  }).join('');
+}
+
+function buildSpendByCountry(data, subColor, textColor) {
+  const mercDef = data.merc.won.defender.byCountry;
+  const mercAtk = data.merc.won.attacker.byCountry;
+  const bountyDef = data.bounty.defender?.byCountry;
+  const bountyAtk = data.bounty.attacker?.byCountry;
+  if (!mercDef.length && !mercAtk.length && !bountyDef?.length && !bountyAtk?.length) return '';
+
+  const side = (title, cls, mercList, bountyList) => `
+    <div class="bfm-spend-c-side">
+      <div class="bfm-spend-h ${cls}">${title}</div>
+      <div class="bfm-spend-c-head" style="color:${subColor};">
+        <span></span><span class="bfm-spend-c-name"></span>
+        <span class="bfm-spend-c-v">🤝 paid</span>
+        <span class="bfm-spend-c-v">🎯 earned</span>
+      </div>
+      <div class="bfm-spend-c-list">${spendCountryRows(mercList, bountyList, textColor, subColor)}</div>
+    </div>`;
+
+  return `
+    <div class="bfm-spend-c-title" style="color:${subColor};">By nation</div>
+    <div class="bfm-spend-c-wrap">
+      ${side('🛡️ Defence', 'def', mercDef, bountyDef)}
+      ${side('⚔️ Attack', 'atk', mercAtk, bountyAtk)}
+    </div>
+    <div class="bfm-spend-note" style="color:${subColor};">
+      🤝 <em>paid</em> is real spending by that nation (it signed the contract, even for
+      an ally's front). 🎯 <em>earned</em> is bounty its citizens collected from their
+      side's pool — money coming in, not going out. Don't add the two up.
     </div>`;
 }
 

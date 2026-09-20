@@ -188,6 +188,18 @@ wareraPlus/
 │   │                              di 23,5 ore da `buffEndAt`/`debuffEndAt`, quindi
 │   │                              quella curva c'è già al primo giro.
 │   │                              Endpoint: /damage-timeline.
+│   ├── citizenMoves.js         ← NUOVO — chi e' arrivato e chi se n'e' andato
+│   │                              da una nazione. ZERO fetch: confronta il censimento
+│   │                              cittadini (pollCitizens, gia' orario alle :36) con
+│   │                              quello dell'ora prima — WarEra dice solo dove uno sta
+│   │                              ADESSO, quindi un trasferimento E' per forza una
+│   │                              differenza fra due fotografie. ⚠️ accumula e non
+│   │                              recupera (come i bonifici): 7 giorni pieni una
+│   │                              settimana dopo il deploy, `coverageFrom` lo dichiara.
+│   │                              ⚠️ se il censimento nuovo e' molto piu' piccolo del
+│   │                              precedente il giro si SCARTA intero: una pagina persa
+│   │                              diventerebbe duecento partenze inventate.
+│   │                              Endpoint: /citizen-moves.
 │   ├── priceHistory.js         ← NUOVO — storico dei prezzi: un campione all'ora di
 │   │                              itemTrading.getPrices (PUBBLICA, tutte le risorse
 │   │                              in una richiesta) ridotto a una candela al giorno
@@ -484,6 +496,20 @@ wareraPlus/
     │   └── admin.js, selettori.js, api.js, i18n.js
     ├── panel/                   ← NUOVO
     │   ├── countryPanel.js      ← pannello laterale nazione (+ riepilogo sfere e viste)
+    │   ├── nationWatch.js       ← NUOVO — il blocco "sotto osservazione" in CIMA al
+    │   │                          pannello: proxy (CSV + rilevati dal radar), guerra/eco
+    │   │                          col travaso a 24h, e chi e' arrivato/partito in 7
+    │   │                          giorni. Richiesta dell'utente: e' un problema di
+    │   │                          ORDINE — il pannello apriva col grafico del
+    │   │                          parlamento, che cambia alle elezioni, mentre la roba
+    │   │                          che cambia ogni giorno stava sotto o non c'era.
+    │   │                          ⚠️ la sezione movimenti NON ha ripiego (/citizen-moves,
+    │   │                          nessuna chiamata diretta equivalente esiste): senza
+    │   │                          server non compare, come /damage-timeline.
+    │   │                          ⚠️ la sezione sfera ha un contenitore suo
+    │   │                          (#wp-panel-sphere-watch) perche' il radar arriva dopo:
+    │   │                          rigenerare tutto il blocco staccherebbe dal documento
+    │   │                          il nodo che renderPlaystyle si e' gia' preso.
     │   ├── viewOverview.js      ← contenuto del riepilogo che si apre entrando in una
     │   │                          vista mappa (alleanze, popolazione, danni sett.,
     │   │                          regioni contese, storico bellico, guerra vs eco):
@@ -664,6 +690,7 @@ Node su VPS esterno (`WARERA_CACHE_BASE`), gestito con pm2. Polla le API
 WarEra una volta per tutti invece di lasciare che lo faccia ogni browser —
 serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`,
 `/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
+`/citizen-moves`,
 `/daily-damage`, `/damage-timeline`, `/price-history`, `/day-history`,
 `/labour-history`,
 `/ticker` + `/ticker/summary`,
@@ -891,6 +918,15 @@ a velocità molto diverse, e vale la pena saperlo prima di crederlo rotto:
 di `battleArchive.js` sono il totale di uno schieramento a battaglia
 CONCLUSA, e spalmarli sulle ore produrrebbe una curva credibile e inventata
 (si vedrebbe il picco delle battaglie aperte, non quello dei colpi).
+
+I **movimenti di cittadini** nel pannello nazione (`src/panel/nationWatch.js`
++ `server/citizenMoves.js`) sono della stessa famiglia: senza rideploy
+`/citizen-moves` risponde 404 e la sezione non compare, mentre proxy e
+guerra/eco — che leggono dalla memoria — restano. Dopo il deploy il primo
+censimento è solo la fotografia di partenza (non produce nessun movimento:
+non c'è niente con cui confrontarla) e i sette giorni si riempiono un'ora
+alla volta. ⚠️ Non provare a ricostruirli a ritroso da `user.getUserLite`:
+quella dice dove uno sta **adesso**, e "adesso" non è mai stato "ieri".
 
 Il **contatore visite** (`/visits`) invece sì: finché non rideployi, la pill
 semplicemente non compare — è il degrado voluto, non un guasto. Il seme di

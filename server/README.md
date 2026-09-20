@@ -161,6 +161,49 @@ Cosa cambia a valle:
 - la coda di risoluzione skill copre ora cittadini censiti + membri MU
   (~19k voci): stesso ordine di grandezza di prima, non lavoro in piu'.
 
+### Chi e' arrivato e chi se n'e' andato (`/citizen-moves`)
+
+`server/citizenMoves.js`. Richiesta dell'utente: «una lista di tutti i
+giocatori che si sono trasferiti o che hanno lasciato il paese negli
+ultimi 7 giorni». WarEra non pubblica niente del genere — `getUserLite`
+dice dove uno sta **adesso**, e basta. Un trasferimento quindi non e' un
+dato che si scarica: e' una **differenza fra due fotografie**, e qualcuno
+deve aver scattato la prima.
+
+Le fotografie ci sono gia': e' il censimento qui sopra, che ogni ora
+ricostruisce l'elenco completo dei cittadini di ogni nazione e finora
+buttava via tutto tranne il conteggio. **Zero chiamate nuove.**
+
+Endpoint: `/citizen-moves?countryId=…&days=7` → `{ coverageFrom,
+arrivals: [{u, username, avatarUrl, from, at}], departures: [{…, to}] }`.
+`to: null` = sparito dal censimento (account cancellato), non trasferito.
+I nomi si risolvono solo per gli id che compaiono nella risposta (poche
+decine), via `resolveUsersLite`.
+
+⚠️ **Accumula e non recupera**, come i bonifici fra tesori e il danno
+orario: prima del primo scatto non c'e' niente da confrontare, i sette
+giorni pieni arrivano una settimana dopo il deploy e un'ora saltata e'
+persa. `coverageFrom` dice da quando in qua l'archivio guardava, e il
+client lo dichiara in una fascia invece di mostrare una lista vuota.
+Retention 30 giorni (la vista ne chiede 7: allargare la finestra non
+richiede di riaccumulare).
+
+⚠️ **La guardia contro le partenze finte.** `pollCitizens` sfoglia a
+cursore e una pagina persa viene saltata in silenzio: diffare una
+fotografia monca trasformerebbe duecento cittadini "spariti" in duecento
+partenze inventate — credibili, quindi il tipo di errore peggiore. Se il
+censimento nuovo e' sotto il 90% del precedente nel totale, o sotto il 70%
+in una singola nazione da almeno 25 cittadini, **il giro si scarta intero**
+e la fotografia buona resta quella di prima. Meglio un'ora di buco che una
+lista inventata.
+
+`/health` riporta `citizenMoves` con movimenti in archivio, dimensione
+dell'ultima fotografia e `copreDa`.
+
+Chi la mostra: il blocco "sotto osservazione" in cima al pannello nazione
+(`src/panel/nationWatch.js`). Senza rideploy l'endpoint risponde 404 e la
+sezione non compare — il resto del pannello e' identico.
+
 ### Nome e avatar dei giocatori (`/users-lite`)
 
 I grafici parlamento mostrano faccia e nome di ogni eletto e di ogni membro

@@ -1,7 +1,7 @@
 // ui.js
 import { state } from './state.js';
 import { COLORS, THEMES } from './config.js';
-import { getAllianceAllies, getDualAllyDefensiveIds } from './diplomacy.js';
+import { getAllianceAllies, getDualAllyDefensiveIds, getEnemyAllies, getRelationKey } from './diplomacy.js';
 import { fmtNumber } from './utils.js'; // Aggiunto per formattare i numeri nella legenda
 import { escapeHtml } from './utils.js';
 import { t } from '../shared/i18n.js';
@@ -12,6 +12,7 @@ import { getPlaystyleStats, playstyleLegendGradient } from './playstyleHeatmap.j
 import { activeDeposits, getProductionStats, productionLegendGradient, RESOURCE_TYPES, scaleMax } from './productionHeatmap.js';
 import { getTrendStats, trendLegendGradient } from './playstyleTrendHeatmap.js';
 import { mergedSphereGroups } from '../proxy/radar.js';
+import { flagImgHtml } from '../panel/nationFlag.js';
 
 function _fmtDmg(n) {
   if (!n) return '0';
@@ -526,53 +527,54 @@ export function updateDynamicLegend() {
   }
 
   // Con nazione selezionata
-  const target = state.nationMap.get(state.selectedCountryId);
-  const dipl = state.diplomacyData.get(state.selectedCountryId);
-  const defCount = dipl?.defensivePacts?.length || 0;
-  const swornCount = dipl?.swornEnemy ? 1 : 0;
-  const alliesCnt = getAllianceAllies(state.selectedCountryId).length;
-  const warsCnt = target?.warsWith?.length ?? 0;
-  const napsCnt = state.customNaps.length + _countExternalNaps();
   const dualCnt = getDualAllyDefensiveIds(state.selectedCountryId).length;
 
   let html = '';
+  // `rel` e' la stessa etichetta che getRelationKey (diplomacy.js) assegna
+  // a ogni nazione. E' quello che rende la voce APRIBILE: senza, la
+  // legenda non saprebbe quali nazioni elencare. 'selected' e 'neutral'
+  // restano senza — la prima e' la nazione stessa, la seconda sarebbe
+  // l'elenco di tutte le altre centosessanta.
   const items = [
     { color: COLORS.SELECTED, name: t('legend_selected'), desc: t('legend_selected_desc') },
-    { color: COLORS.NAP, name: t('legend_nap'), desc: t('legend_nap_desc') },
-    { color: COLORS.DEFENSIVE_PACT, name: t('legend_defensive'), desc: t('legend_defensive_desc') },
-    { color: COLORS.SWORN_ENEMY, name: t('legend_sworn'), desc: t('legend_sworn_desc') },
-    { color: COLORS.WAR_DIRECT, name: t('legend_war_direct'), desc: t('legend_war_direct_desc') },
-    { color: COLORS.WAR_INDIRECT, name: t('legend_war_indirect'), desc: t('legend_war_indirect_desc') },
-    { color: COLORS.ALLY_DIRECT, name: t('legend_ally_direct'), desc: t('legend_ally_direct_desc') },
+    { color: COLORS.NAP, name: t('legend_nap'), desc: t('legend_nap_desc'), rel: 'nap' },
+    { color: COLORS.DEFENSIVE_PACT, name: t('legend_defensive'), desc: t('legend_defensive_desc'), rel: 'defensive' },
+    { color: COLORS.SWORN_ENEMY, name: t('legend_sworn'), desc: t('legend_sworn_desc'), rel: 'sworn' },
+    { color: COLORS.WAR_DIRECT, name: t('legend_war_direct'), desc: t('legend_war_direct_desc'), rel: 'war' },
+    { color: COLORS.WAR_INDIRECT, name: t('legend_war_indirect'), desc: t('legend_war_indirect_desc'), rel: 'warIndirect' },
+    { color: COLORS.ALLY_DIRECT, name: t('legend_ally_direct'), desc: t('legend_ally_direct_desc'), rel: 'ally' },
     { color: COLORS.DEFAULT_LAND, name: t('legend_neutral'), desc: t('legend_neutral_desc') },
   ];
 
+  // I conteggi non si contano piu' a mano voce per voce: escono dagli
+  // stessi bucket che alimentano l'elenco, cosi' il numero sulla destra e
+  // le righe che si aprono cliccandolo non possono dire cose diverse.
+  const buckets = relationBuckets();
+
   items.forEach(item => {
-    let cnt = undefined;
-    if (item.color === COLORS.ALLY_DIRECT) cnt = alliesCnt;
-    else if (item.color === COLORS.WAR_DIRECT) cnt = warsCnt;
-    else if (item.color === COLORS.NAP) cnt = napsCnt;
-    else if (item.color === COLORS.DEFENSIVE_PACT) cnt = defCount;
-    else if (item.color === COLORS.SWORN_ENEMY) cnt = swornCount;
+    const cnt = item.rel ? (buckets[item.rel]?.length ?? 0) : undefined;
+    const open = item.rel && cnt ? ' legend-openable' : '';
     html += `
-      <div class="legend-item">
+      <div class="legend-item${open}"${open ? ` data-rel="${item.rel}" role="button" tabindex="0" title="${escapeHtml(t('legend_list_hint'))}"` : ''}>
         <div class="legend-bar" style="background:${item.color};${item.color === COLORS.DEFAULT_LAND ? 'opacity:0.6;' : ''}"></div>
         <div class="legend-info">
           <div class="legend-name">${item.name}</div>
           <div class="legend-desc">${item.desc}</div>
         </div>
         ${cnt !== undefined ? `<div class="legend-count">${cnt}</div>` : ''}
+        ${open ? '<div class="legend-caret">&#9662;</div>' : ''}
       </div>`;
 
     if (item.color === COLORS.ALLY_DIRECT && dualCnt > 0) {
       html += `
-        <div class="legend-item">
+        <div class="legend-item legend-openable" data-rel="dual" role="button" tabindex="0" title="${escapeHtml(t('legend_list_hint'))}">
           <div class="legend-bar" style="background:linear-gradient(180deg,${COLORS.ALLY_DIRECT} 50%,${COLORS.DEFENSIVE_PACT} 50%);"></div>
           <div class="legend-info">
             <div class="legend-name">Ally + Defensive Pact</div>
             <div class="legend-desc">Same bloc, also defensive pact</div>
           </div>
           <div class="legend-count">${dualCnt}</div>
+          <div class="legend-caret">&#9662;</div>
         </div>`;
     }
   });
@@ -581,6 +583,130 @@ export function updateDynamicLegend() {
     html += '<div class="legend-note">Showing original territory borders</div>';
   }
   box.innerHTML = html;
+  wireLegendRelations(box, buckets);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Legenda cliccabile (segnalato dall'utente)
+   ------------------------------------------------------------------
+   «queste label sono evidenziate se ci passo sopra col mouse, quindi mi
+   aspetto che siano cliccabili»: era vero, .legend-item aveva sempre
+   avuto un :hover e nessun click. E la domanda che viene guardando
+   "ALLEATO DIRETTO · 7" e' esattamente quale sia quel sette.
+
+   Ogni voce ora apre l'elenco delle nazioni di QUEL colore, e ogni riga
+   dell'elenco apre il pannello di quella nazione. Zero fetch: le nazioni
+   stanno in state.nationMap e la classificazione e' la stessa funzione
+   che dipinge la mappa (getRelationKey), quindi l'elenco non puo'
+   contraddire il territorio colorato che gli sta sotto.
+   ══════════════════════════════════════════════════════════════ */
+
+/** Tutte le nazioni divise per relazione con quella selezionata, con la
+ *  scala di priorita' della mappa. `dual` e' l'unico bucket fuori scala:
+ *  e' un sottoinsieme di `ally` (quelle che hanno anche il patto
+ *  difensivo), esattamente come lo e' gia' la sua riga di legenda. */
+function relationBuckets() {
+  const out = { nap: [], defensive: [], sworn: [], war: [], warIndirect: [], ally: [], dual: [] };
+  const sel = state.selectedCountryId;
+  if (!sel || !state.nationMap) return out;
+
+  const target = state.nationMap.get(sel);
+  if (!target) return out;
+  const dipl = state.diplomacyData.get(sel);
+  let directWars = [...(target.warsWith || [])];
+  if (dipl?.swornEnemy) directWars.push(dipl.swornEnemy);
+  directWars = [...new Set(directWars)];
+  const directAllies = getAllianceAllies(sel);
+  const enemyAllies = getEnemyAllies(sel);
+
+  state.nationMap.forEach((nation, id) => {
+    const key = getRelationKey(id, directWars, directAllies, enemyAllies);
+    if (out[key]) out[key].push(id);
+  });
+  out.dual = getDualAllyDefensiveIds(sel);
+
+  const name = id => state.nationMap.get(id)?.name || '';
+  Object.values(out).forEach(list => list.sort((a, b) => name(a).localeCompare(name(b))));
+  return out;
+}
+
+function legendRowsHtml(ids) {
+  return ids.map(id => {
+    const n = state.nationMap.get(id);
+    if (!n) return '';
+    // Stessa bandiera del pannello e del riepilogo viste: flagImgHtml sa
+    // gia' che in vista "Originale" il codice giusto e' un altro.
+    const flag = flagImgHtml(id, n, 'legend-pop-flag') || '<span class="legend-pop-flag"></span>';
+    return `<button type="button" class="legend-pop-row" data-country="${id}">${flag}<span>${escapeHtml(n.name)}</span></button>`;
+  }).join('');
+}
+
+let _legendPop = null;
+function closeLegendPop() {
+  _legendPop?.remove();
+  _legendPop = null;
+  document.querySelectorAll('.legend-item.legend-pop-open').forEach(el => el.classList.remove('legend-pop-open'));
+}
+
+function wireLegendRelations(box, buckets) {
+  closeLegendPop();
+  // La legenda si ridisegna spesso (updateDynamicLegend gira a ogni
+  // refresh): l'elenco e' figlio del riquadro, quindi sparisce insieme
+  // alle voci invece di restare appeso a una voce che non c'e' piu'.
+  box.style.position = 'relative';
+
+  const openFor = (item) => {
+    const rel = item.dataset.rel;
+    const ids = buckets[rel] || [];
+    const wasOpen = item.classList.contains('legend-pop-open');
+    closeLegendPop();
+    if (wasOpen || !ids.length) return;
+
+    item.classList.add('legend-pop-open');
+    const pop = document.createElement('div');
+    pop.className = 'legend-pop';
+    pop.innerHTML = `<div class="legend-pop-head">${escapeHtml(item.querySelector('.legend-name')?.textContent || '')}
+        <span class="legend-pop-n">${ids.length}</span></div>
+      <div class="legend-pop-list">${legendRowsHtml(ids)}</div>`;
+    box.appendChild(pop);
+    // La legenda sta in cima alla finestra (linguetta appesa al ticker):
+    // l'elenco scende, non sale. Se sborda a destra si riallinea al bordo
+    // del riquadro invece di uscire dallo schermo.
+    pop.style.top = `${item.offsetTop + item.offsetHeight + 6}px`;
+    pop.style.left = `${item.offsetLeft}px`;
+    if (pop.offsetLeft + pop.offsetWidth > box.clientWidth) {
+      pop.style.left = `${Math.max(0, box.clientWidth - pop.offsetWidth)}px`;
+    }
+    _legendPop = pop;
+    trackEvent('legend-relation-open', { rel, n: ids.length });
+
+    pop.querySelectorAll('.legend-pop-row').forEach(row => {
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = row.dataset.country;
+        closeLegendPop();
+        const label = state.labelsData?.find(l => l.properties?.countryId === id);
+        if (label && state.map) state.map.flyTo({ center: label.coordinates, zoom: Math.max(state.map.getZoom(), 3) });
+        import('../panel/countryPanel.js').then(m => m.selectNationInPanel(id)).catch(() => {});
+      });
+    });
+  };
+
+  box.querySelectorAll('.legend-item.legend-openable').forEach(item => {
+    item.addEventListener('click', (e) => { e.stopPropagation(); openFor(item); });
+    item.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFor(item); }
+    });
+  });
+
+  // Un solo listener per sessione, non uno per ridisegno della legenda.
+  if (!wireLegendRelations._outside) {
+    wireLegendRelations._outside = true;
+    document.addEventListener('click', (e) => {
+      if (_legendPop && !_legendPop.contains(e.target)) closeLegendPop();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLegendPop(); });
+  }
 }
 
 function _countExternalNaps() {

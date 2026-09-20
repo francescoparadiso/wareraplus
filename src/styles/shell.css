@@ -2363,6 +2363,118 @@ body.light-theme .wp-legend-clickable:hover {
   background: rgba(0, 0, 0, 0.05);
 }
 
+/* ── Voci di legenda che APRONO un elenco (WarEra+) ──────────────
+   Segnalato dall'utente: le voci si illuminavano al passaggio del mouse
+   ma non facevano niente, e il numero accanto a "alleato diretto" non
+   diceva CHI. Ora ogni voce con un elenco dietro porta un chevron e lo
+   apre sotto di se'; l'elenco e' figlio di #dynamic-legend (che qui
+   prende position:relative da JS) e si posiziona verso il basso, perche'
+   in WarEra+ la legenda pende dal ticker in cima alla finestra. */
+.legend-item.legend-openable {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.legend-item.legend-openable:hover,
+.legend-item.legend-pop-open {
+  background: rgba(255, 255, 255, 0.09);
+}
+body.light-theme .legend-item.legend-openable:hover,
+body.light-theme .legend-item.legend-pop-open {
+  background: rgba(0, 0, 0, 0.06);
+}
+.legend-caret {
+  font-size: 9px;
+  line-height: 1;
+  color: #8b949e;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+.legend-item.legend-pop-open .legend-caret {
+  transform: rotate(180deg);
+}
+
+.legend-pop {
+  position: absolute;
+  z-index: 5;
+  min-width: 190px;
+  max-width: 280px;
+  padding: 6px;
+  border-radius: 9px;
+  background: rgba(8, 10, 16, 0.98);
+  border: 1px solid rgba(0, 212, 255, 0.28);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+}
+body.light-theme .legend-pop {
+  background: rgba(255, 252, 244, 0.99);
+  border-color: rgba(0, 98, 255, 0.28);
+  box-shadow: 0 10px 26px rgba(62, 47, 28, 0.2);
+}
+.legend-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 5px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  color: #e6edf3;
+}
+body.light-theme .legend-pop-head { color: #3e2f1c; }
+.legend-pop-n {
+  font-size: 10px;
+  font-weight: 700;
+  color: #00d4ff;
+}
+body.light-theme .legend-pop-n { color: #0062ff; }
+/* Sopra le ~11 righe l'elenco scorre invece di allungarsi oltre lo
+   schermo. La barra e' quella del progetto, mai quella di sistema. */
+.legend-pop-list {
+  max-height: 44vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 212, 255, 0.45) transparent;
+}
+.legend-pop-list::-webkit-scrollbar { width: 6px; }
+.legend-pop-list::-webkit-scrollbar-track { background: transparent; }
+.legend-pop-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 212, 255, 0.45);
+  border-radius: 3px;
+}
+body.light-theme .legend-pop-list { scrollbar-color: rgba(0, 98, 255, 0.4) transparent; }
+body.light-theme .legend-pop-list::-webkit-scrollbar-thumb { background: rgba(0, 98, 255, 0.4); }
+
+.legend-pop-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  color: #e6edf3;
+  text-align: left;
+  cursor: pointer;
+}
+.legend-pop-row:hover { background: rgba(255, 255, 255, 0.08); }
+body.light-theme .legend-pop-row { color: #3e2f1c; }
+body.light-theme .legend-pop-row:hover { background: rgba(0, 0, 0, 0.06); }
+.legend-pop-flag {
+  width: 18px;
+  height: 13px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 2px;
+}
+@media (max-width: 768px) {
+  .legend-pop { max-width: calc(100vw - 60px); }
+  .legend-pop-list { max-height: 38vh; }
+}
+
 /* ══════════════════════════════════════════════════════════════
    Estetica "mappa antica", SOLO tema chiaro — vedi antiqueTheme.js
    per pattern pergamena/easter egg (layer mappa) e labels.js per il
@@ -2825,6 +2937,168 @@ body.light-theme .wp-proxy-badge.csv { background: rgba(47, 111, 181, .14); colo
 body.light-theme .wp-proxy-badge.radar { background: rgba(31, 122, 51, .14); color: #1f7a33; }
 body.light-theme .wp-proxy-badge.radar.weak { background: rgba(0, 0, 0, .06); color: #6b5a47; }
 body.light-theme .wp-proxy-conflict { color: #8a6100; }
+
+/* ══════════════════════════════════════════════════════════════
+   Blocco "sotto osservazione" del pannello nazione (src/panel/
+   nationWatch.js): sfera e proxy, guerra/eco, chi entra e chi esce.
+   Sta in cima al pannello perché è la roba che cambia tutti i giorni —
+   il parlamento, che cambia alle elezioni, è sceso sotto.
+   ══════════════════════════════════════════════════════════════ */
+.wp-watch .wp-panel-section-title:first-child { margin-top: 12px; }
+
+.wp-watch-patron {
+  font-size: 11px;
+  color: #8b949e;
+  margin-bottom: 4px;
+}
+.wp-watch-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+.wp-watch-split {
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: .8;
+}
+
+.wp-watch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  margin-bottom: 2px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.03);
+  font: inherit;
+  font-size: 12.5px;
+  color: #e6edf3;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.wp-watch-row:hover { background: rgba(255, 255, 255, 0.08); }
+.wp-watch-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-watch-flag {
+  width: 18px;
+  height: 13px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 2px;
+}
+body.light-theme .wp-watch-row { background: rgba(62, 47, 28, 0.04); color: #3e2f1c; }
+body.light-theme .wp-watch-row:hover { background: rgba(62, 47, 28, 0.09); }
+body.light-theme .wp-watch-patron,
+body.light-theme .wp-watch-sub { color: #6b5a47; }
+
+/* ── Chi è arrivato / chi se n'è andato ──
+   Due colonne affiancate perché la domanda è un saldo ("entrano più di
+   quanti escono?"), non due liste da leggere una dopo l'altra. Sotto i
+   420px di pannello si impilano. */
+.wp-watch-moves-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+.wp-watch-moves-head .in { color: #3fb950; }
+.wp-watch-moves-head .out { color: #f0883e; }
+.wp-watch-moves-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+}
+.wp-watch-moves-col {
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 212, 255, 0.45) transparent;
+}
+.wp-watch-moves-col::-webkit-scrollbar { width: 6px; }
+.wp-watch-moves-col::-webkit-scrollbar-track { background: transparent; }
+.wp-watch-moves-col::-webkit-scrollbar-thumb {
+  background: rgba(0, 212, 255, 0.45);
+  border-radius: 3px;
+}
+.wp-watch-move {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 4px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  min-width: 0;
+}
+.wp-watch-move:hover { background: rgba(255, 255, 255, 0.05); }
+.wp-watch-player {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: #e6edf3;
+  text-decoration: none;
+  overflow: hidden;
+}
+.wp-watch-player:hover { text-decoration: underline; }
+.wp-watch-player span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-watch-avatar {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.wp-watch-arrow { color: #8b949e; flex-shrink: 0; }
+.wp-watch-other {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: #8b949e;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wp-watch-other:hover { color: #e6edf3; }
+.wp-watch-other .wp-watch-flag { width: 14px; height: 10px; }
+.wp-watch-gone { color: #8b949e; font-style: italic; }
+.wp-watch-empty { font-size: 11px; color: #8b949e; padding: 3px 4px; }
+/* Stessa fascia dichiarativa degli altri archivi che accumulano (bonifici
+   fra tesori, danno orario): prima di quella data una lista vuota non è
+   una risposta. */
+.wp-watch-partial {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: #d29922;
+  background: rgba(210, 153, 34, 0.1);
+  border-radius: 6px;
+  padding: 5px 7px;
+  margin-bottom: 7px;
+}
+body.light-theme .wp-watch-player { color: #3e2f1c; }
+body.light-theme .wp-watch-other,
+body.light-theme .wp-watch-gone,
+body.light-theme .wp-watch-empty,
+body.light-theme .wp-watch-arrow { color: #6b5a47; }
+body.light-theme .wp-watch-other:hover { color: #3e2f1c; }
+body.light-theme .wp-watch-partial { color: #8a6100; background: rgba(138, 97, 0, 0.1); }
+body.light-theme .wp-watch-moves-col { scrollbar-color: rgba(0, 98, 255, 0.4) transparent; }
+body.light-theme .wp-watch-moves-col::-webkit-scrollbar-thumb { background: rgba(0, 98, 255, 0.4); }
+
+@media (max-width: 420px) {
+  .wp-watch-moves-cols { grid-template-columns: 1fr; }
+}
 
 /* Il comando che decide cosa finisce sulla mappa sta in testa all'elenco
    che governa, non nelle impostazioni generali: si legge la percentuale e

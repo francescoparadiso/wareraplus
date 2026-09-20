@@ -141,6 +141,14 @@ const {
   initMoneyTransfers, pollMoneyTransfers,
   readMoneyTransfers, readMoneyTransfersStatus,
 } = require('./moneyTransfers');
+// WarEra+ chi e' arrivato e chi se n'e' andato: il censimento cittadini
+// (pollCitizens, gia' orario) confrontato con quello dell'ora prima. Zero
+// chiamate nuove — WarEra non pubblica i trasferimenti, e un trasferimento
+// e' per forza una differenza fra due fotografie. ⚠️ accumula e non
+// recupera, come i bonifici. Vedi il blocco in testa a server/citizenMoves.js.
+const {
+  initCitizenMoves, recordCensus, readCitizenMoves, statoCitizenMoves,
+} = require('./citizenMoves');
 // WarEra+ danno ora per ora + giocatori "pillati": a che ora picchia una
 // nazione, e quanti dei suoi erano sotto pillola in quell'ora. Il danno
 // orario ACCUMULA (e' la differenza fra due letture del cumulato
@@ -292,6 +300,9 @@ initPriceHistory({
 
 // La giornata storica: solo cache, nessuna chiamata.
 initDayHistory({ readCache, writeCache });
+
+// I trasferimenti: solo cache. La fotografia gliela passa pollCitizens.
+initCitizenMoves({ readCache, writeCache });
 
 // Lavoro e tasse: legge soltanto, non scrive niente.
 initLabourHistory({ readCache });
@@ -1555,6 +1566,14 @@ async function pollCitizens() {
       total += ids.length;
     }
     writeCache(CITIZENS_FILE, { fetchedAt: now, data }, { compact: true });
+
+    // WarEra+: la stessa fotografia, confrontata con quella dell'ora prima,
+    // dice chi ha cambiato nazione. Nessuna chiamata in piu': il lavoro e'
+    // gia' tutto fatto qui sopra, finora si buttava via. Non deve poter far
+    // fallire il censimento, che e' il suo mestiere principale.
+    try { recordCensus(idsByCountry, now); }
+    catch (err) { console.error('[citizen-moves] diff fallito:', err.message); }
+
     console.log(`[poll] citizens aggiornato: ${total} cittadini in ${idsByCountry.size} nazioni, ${round} giri`);
   } catch (err) { console.error('[poll] citizens fallito:', err.message); }
 }
@@ -2635,6 +2654,36 @@ app.get('/battle-archive/status', (req, res) => res.json(readArchiveStatus()));
 // lista vuota NON vuol dire "nessun finanziamento", e il client lo dichiara.
 app.get('/money-transfers', (req, res) => res.json(readMoneyTransfers()));
 
+// WarEra+ chi e' arrivato e chi se n'e' andato da una nazione (server/
+// citizenMoves.js). `coverageFrom` nella risposta dice da quando in qua
+// l'archivio guardava: senza, una lista vuota si leggerebbe come "non si e'
+// mosso nessuno" anche il giorno del deploy.
+app.get('/citizen-moves', async (req, res) => {
+  const countryId = String(req.query.countryId || '');
+  if (!countryId) return res.status(400).json({ error: 'countryId mancante' });
+  const days = Math.min(30, Math.max(1, Number(req.query.days) || 7));
+  try {
+    const out = readCitizenMoves(countryId, days);
+    // I nomi si risolvono solo per chi compare davvero nella risposta:
+    // sono poche decine di id, non i diciassettemila del censimento.
+    const ids = [...new Set([
+      ...out.arrivals.map(r => r.u),
+      ...out.departures.map(r => r.u),
+    ])];
+    const names = ids.length ? await resolveUsersLite(ids) : {};
+    const withName = r => ({ ...r, username: names[r.u]?.username || null, avatarUrl: names[r.u]?.avatarUrl || null });
+    res.json({
+      ...out,
+      days,
+      arrivals: out.arrivals.map(withName),
+      departures: out.departures.map(withName),
+    });
+  } catch (err) {
+    console.error('[citizen-moves] richiesta fallita:', err.message);
+    res.status(500).json({ error: 'citizen-moves non disponibile' });
+  }
+});
+
 // Danno ora per ora + giocatori pillati (server/damageTimeline.js).
 // Senza `countryId` risponde col mondo (somma di tutte le nazioni), che e'
 // il metro di paragone della singola: "il picco delle 21 e' suo o e' di
@@ -2944,6 +2993,7 @@ app.get('/health', (req, res) => res.json({
   // Quanto indietro arrivano i finanziamenti. Subito dopo un deploy copre
   // i ~3 giorni che l'API ricorda, e da li' cresce da solo.
   moneyTransfers: readMoneyTransfersStatus(),
+  citizenMoves: statoCitizenMoves(),
   // Quante ore di danno orario sono in archivio (accumulano da qui in
   // avanti, non si recuperano) e quante pillole sono nella finestra di
   // dedup. `pillola` riporta le durate: se dice "valori noti" gameConfig

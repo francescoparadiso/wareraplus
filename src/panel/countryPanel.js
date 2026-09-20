@@ -32,6 +32,10 @@ import { allianceDamageBonus, formatBonus, isPenalty, curveTooltip } from '../sh
 // le usa anche viewOverview.js (import circolare, altrimenti).
 import { getFlagUrl, getNationCode } from './nationFlag.js';
 import { buildViewOverviewHtml, hasViewOverview, trendDaysLabel } from './viewOverview.js';
+// WarEra+ — il blocco "sotto osservazione" in cima al pannello (sfera e
+// proxy, guerra/eco, chi entra e chi esce). Vedi il blocco in testa a
+// nationWatch.js per il perché sta in CIMA e non in fondo.
+import { nationWatchHtml, paintNationWatch, wireNationWatch, refreshSphereWatch } from './nationWatch.js';
 // WarEra+ radar dei proxy: le sfere mostrate non sono più solo quelle del CSV.
 import { mergedSphereGroups, proxiesOfPrimary, patronOf, runRadar, isRadarReady, MAP_THRESHOLD } from '../proxy/radar.js';
 
@@ -385,12 +389,12 @@ function buildPanelHtml(nation) {
       </button>
     </div>
 
+    ${nationWatchHtml(nation._id)}
+
     <div class="wp-panel-section-title">${t('parliament_government')}</div>
     <div class="wp-parliament-embed" id="wp-parliament-container">
       <div class="wp-parliament-loading">${t('loading_parliament')}</div>
     </div>
-
-    <div id="wp-panel-playstyle"></div>
 
     <div class="wp-panel-grid">
       <div class="wp-stat"><div class="wp-stat-label">${t('population_label')}</div><div class="wp-stat-value">${fmt(pop)}</div></div>
@@ -522,6 +526,30 @@ function render(nationId) {
   renderPlaystyle(nationId);
   paintDailyDamage([nation], () => currentNationId === nationId);
   paintCitizens([nationId], () => currentNationId === nationId);
+
+  // WarEra+ — blocco "sotto osservazione". I proxy sono già disegnati
+  // (sono in memoria); qui arrivano i movimenti dal server di cache e si
+  // agganciano i click delle nazioni nominate nel blocco.
+  wireNationWatch(contentEl, (id) => selectNationInPanel(id));
+  paintNationWatch(nationId, () => currentNationId === nationId,
+    (id) => selectNationInPanel(id));
+
+  // Il radar dei proxy finora si accendeva solo entrando in vista Sfera.
+  // Ma i proxy RILEVATI sono metà di quello che questo blocco promette, e
+  // chi apre il pannello di una nazione non passa per forza da quella
+  // vista. Costa una richiesta per SESSIONE (e nel caso normale è
+  // l'indice già calcolato dal VPS, una manciata di KB — la directory MU
+  // da 550 KB è il ripiego); quando finisce si ridisegna il solo blocco,
+  // non tutto il pannello.
+  if (!isRadarReady()) {
+    runRadar().then(detections => {
+      if (!detections?.size || currentNationId !== nationId) return;
+      // Si ridisegna la SOLA sezione sfera, non tutto il blocco: guerra/eco
+      // e movimenti arrivano per conto loro e non c'entrano col radar.
+      // Vedi il ⚠️ su refreshSphereWatch.
+      refreshSphereWatch(nationId, (id) => selectNationInPanel(id));
+    }).catch(() => {});
+  }
 }
 
 /* WarEra+ — "+ N altre" cliccabile (richiesto: la lista alleate si fermava

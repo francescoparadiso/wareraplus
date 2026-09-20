@@ -446,6 +446,8 @@
   .wp-mb-spacer { flex: 1 1 auto; }
 
   /* ══ Brand (logo + nome) in alto a sinistra ══ */
+  /* Da <div> a <button> (il logo ora torna alla mappa): niente sfondo,
+     niente bordo, niente font ereditato dal browser. */
   .wp-mb-brand {
     display: inline-flex;
     align-items: center;
@@ -453,7 +455,15 @@
     padding: 0 6px 0 2px;
     flex-shrink: 0;
     user-select: none;
+    background: none;
+    border: 0;
+    border-radius: 7px;
+    font: inherit;
+    cursor: pointer;
+    transition: background 0.15s ease;
   }
+  .wp-mb-brand:hover { background: rgba(255, 255, 255, 0.08); }
+  body.light-theme .wp-mb-brand:hover { background: rgba(62, 47, 28, 0.08); }
   .wp-mb-logo {
     height: calc(var(--mb-h) - 10px);
     width: auto;
@@ -469,7 +479,7 @@
   }
   body.light-theme .wp-mb-brand-name { color: #3e2f1c; font-family: 'Cinzel', serif; }
 
-  /* ══ Bottone "Indietro": solo dentro Political/Statistiche ══ */
+  /* ══ Bottone "Mappa" (ex "Indietro"): solo dentro una sotto-vista ══ */
   .wp-mb-back { display: none; color: #e6edf3; }
   body.wp-subview-open .wp-mb-back { display: inline-flex; }
   .wp-mb-back:hover { background: rgba(255, 255, 255, 0.08); }

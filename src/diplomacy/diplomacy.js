@@ -52,18 +52,30 @@ export function getEnemyAllies(targetId) {
   return [...enemyAllies];
 }
 
-export function getColorForCountry(cId, directWars, directAllies, enemyAllies, styleMap) {
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — la stessa scala di priorità, ma come ETICHETTA
+   ------------------------------------------------------------------
+   La legenda cliccabile (src/diplomacy/ui.js) deve elencare ESATTAMENTE
+   le nazioni dipinte di un certo colore: se la scala di priorità la
+   riscrivesse per conto suo, prima o poi direbbe una cosa e la mappa
+   un'altra — il caso tipico è una alleata che ha anche un patto
+   difensivo, verde sulla mappa ma facilissima da contare due volte.
+
+   Quindi la scala vive QUI in un posto solo, e getColorForCountry qui
+   sotto non fa altro che tradurre l'etichetta in colore. Comportamento
+   invariato rispetto a prima: stesse condizioni, stesso ordine.
+   ══════════════════════════════════════════════════════════════ */
+export function getRelationKey(cId, directWars, directAllies, enemyAllies) {
   const isManualNap = state.customNaps.includes(cId);
   const excludeExtNaps = document.getElementById('checkExcludeExternalNaps')?.checked || false;
   const isExternalNap = !excludeExtNaps && state.selectedCountryId && (
     state.externalNapsSet.has(`${state.selectedCountryId}-${cId}`) ||
     state.externalNapsSet.has(`${cId}-${state.selectedCountryId}`)
   );
-  const isNap = isManualNap || isExternalNap;
 
-  if (!state.selectedCountryId)        return styleMap[cId] || THEMES[state.theme].NEUTRAL_UNSELECTED;
-  if (cId === state.selectedCountryId) return COLORS.SELECTED;
-  if (isNap)                           return COLORS.NAP;
+  if (!state.selectedCountryId)        return 'unselected';
+  if (cId === state.selectedCountryId) return 'selected';
+  if (isManualNap || isExternalNap)    return 'nap';
 
   const dipl = state.diplomacyData.get(state.selectedCountryId);
   const isDefensive = dipl?.defensivePacts?.includes(cId) || false;
@@ -72,13 +84,28 @@ export function getColorForCountry(cId, directWars, directAllies, enemyAllies, s
   // L'appartenenza allo stesso blocco/alleanza ha priorità sul patto difensivo:
   // una nazione alleata resta verde anche se ha anche un patto difensivo
   // (il doppio colore viene gestito separatamente via pattern overlay).
-  if (isSworn)                         return COLORS.SWORN_ENEMY;
-  if (directAllies.includes(cId))      return COLORS.ALLY_DIRECT;
-  if (isDefensive)                     return COLORS.DEFENSIVE_PACT;
+  if (isSworn)                         return 'sworn';
+  if (directAllies.includes(cId))      return 'ally';
+  if (isDefensive)                     return 'defensive';
 
-  if (directWars.includes(cId))        return COLORS.WAR_DIRECT;
-  if (enemyAllies.includes(cId))       return COLORS.WAR_INDIRECT;
-  return THEMES[state.theme].DEFAULT_LAND;
+  if (directWars.includes(cId))        return 'war';
+  if (enemyAllies.includes(cId))       return 'warIndirect';
+  return 'neutral';
+}
+
+export function getColorForCountry(cId, directWars, directAllies, enemyAllies, styleMap) {
+  const key = getRelationKey(cId, directWars, directAllies, enemyAllies);
+  switch (key) {
+    case 'unselected':  return styleMap[cId] || THEMES[state.theme].NEUTRAL_UNSELECTED;
+    case 'selected':    return COLORS.SELECTED;
+    case 'nap':         return COLORS.NAP;
+    case 'sworn':       return COLORS.SWORN_ENEMY;
+    case 'ally':        return COLORS.ALLY_DIRECT;
+    case 'defensive':   return COLORS.DEFENSIVE_PACT;
+    case 'war':         return COLORS.WAR_DIRECT;
+    case 'warIndirect': return COLORS.WAR_INDIRECT;
+    default:            return THEMES[state.theme].DEFAULT_LAND;
+  }
 }
 
 // ==================== FOCUS SU UN BLOCCO (WarEra+) ====================
