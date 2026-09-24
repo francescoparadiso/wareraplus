@@ -41,6 +41,16 @@
    buona: al giro dopo si riparte da quella. Meglio un'ora di buco
    dichiarata che una lista di partenze finte.
 
+   ⚠️ Ma una pagina persa è un incidente di UN giro, e un calo vero resta.
+   Il 20 set 2026 la Siria è passata davvero da 416 a ~245 cittadini: la
+   guardia, confrontando sempre con la stessa fotografia vecchia, ha
+   scartato ogni giro per quattro giorni e ha fermato l'archivio di TUTTE
+   le nazioni. Per questo la guardia ricorda il calo sospetto (`suspect`
+   nella fotografia) e, se CONFIRM_ROUNDS giri di fila rivedono lo stesso
+   numero (entro CONFIRM_TOLERANCE), lo prende per vero e diffa. I
+   movimenti di quel giro portano l'ora in cui è stato confermato, non
+   quella in cui sono avvenuti: tardi di qualche ora, ma veri.
+
    ── COSA VIENE REGISTRATO, E COSA NO ───────────────────────────────────
    - TRASFERIMENTO: c'era in A, adesso è in B. Ha origine e destinazione.
    - USCITA: c'era in A, adesso non è in NESSUN elenco. Account cancellato
@@ -71,6 +81,11 @@ const MIN_COUNTRY_RATIO = 0.70;
 // nazione da 4 persone che ne perde 2 è a 0,5 senza che sia successo
 // niente di strano): le piccole non fanno scattare la guardia.
 const SMALL_COUNTRY = 25;
+// Un calo che si ripresenta uguale per tre giri di fila (tre ore) non è
+// una pagina persa: è la nazione che si è svuotata davvero. "Uguale" =
+// entro il 10% del numero visto al primo scarto.
+const CONFIRM_ROUNDS = 3;
+const CONFIRM_TOLERANCE = 0.10;
 
 function initCitizenMoves(tools) {
   deps = tools;
@@ -129,16 +144,33 @@ function recordCensus(idsByCountry, now) {
   const prevSizes = prev.sizes || {};
   const prevTotal = Object.values(prevSizes).reduce((s, n) => s + n, 0)
     || Object.keys(prev.map).length;
-  if (prevTotal && total < prevTotal * MIN_TOTAL_RATIO) {
-    console.warn(`[citizen-moves] censimento sospetto (${total} contro ${prevTotal}): giro scartato, fotografia precedente conservata`);
-    return;
-  }
+  // Cosa non torna in questo giro: chiave → numero visto adesso. `*` è il
+  // totale mondiale, le altre chiavi sono nazioni.
+  const drops = {};
+  if (prevTotal && total < prevTotal * MIN_TOTAL_RATIO) drops['*'] = total;
   for (const [countryId, n] of Object.entries(sizes)) {
     const before = prevSizes[countryId] || 0;
-    if (before >= SMALL_COUNTRY && n < before * MIN_COUNTRY_RATIO) {
-      console.warn(`[citizen-moves] ${countryId} passa da ${before} a ${n} cittadini in un giro: pagina probabilmente persa, giro scartato`);
+    if (before >= SMALL_COUNTRY && n < before * MIN_COUNTRY_RATIO) drops[countryId] = n;
+  }
+  if (Object.keys(drops).length) {
+    // Stesso calo del giro prima? Allora la serie continua, altrimenti
+    // riparte da uno. Si confronta col numero del PRIMO scarto, così una
+    // nazione che continua a scendere non viene confermata a metà strada.
+    const s = prev.suspect;
+    const same = s && Object.keys(drops).every(k =>
+      s.sizes[k] != null && Math.abs(drops[k] - s.sizes[k]) <= s.sizes[k] * CONFIRM_TOLERANCE);
+    const streak = same ? s.streak + 1 : 1;
+    const desc = Object.entries(drops).map(([k, n]) =>
+      k === '*' ? `totale ${prevTotal}→${n}` : `${k} ${prevSizes[k]}→${n}`).join(', ');
+    if (streak < CONFIRM_ROUNDS) {
+      writeCache(SNAP_FILE, {
+        ...prev,
+        suspect: { streak, sizes: same ? s.sizes : drops },
+      }, { compact: true });
+      console.warn(`[citizen-moves] calo sospetto (${desc}), giro ${streak}/${CONFIRM_ROUNDS}: scartato, fotografia precedente conservata`);
       return;
     }
+    console.log(`[citizen-moves] calo confermato per ${streak} giri di fila (${desc}): è vero, si diffa`);
   }
 
   // ── Il diff vero ──────────────────────────────────────────────────
