@@ -3201,9 +3201,14 @@ html[data-theme="light"] #wp-political-root .senate-card-hover-party { color: #9
   #wp-political-root .senate-party-cards { grid-template-columns: 1fr; padding: 10px 10px 20px; }
   #wp-political-root .spc-members { max-height: 120px; }
 }/* ── Senate overlay adjustments ── */
+/* WarEra+ qui c'era `inset: 0`, che annullava il `top` sotto la barra menù
+   impostato più sopra (vedi il commento sopra la prima .senate-overlay):
+   essendo dopo, vinceva, e la riga "22 SENATORS · 6 FACTIONS" coi filtri
+   finiva di nuovo dietro la barra. Stesso top, stesso fallback annidato. */
 #wp-political-root .senate-overlay {
   position: fixed;
-  inset: 0;
+  top: var(--wp-bar-h, var(--wp-mbar-h, 0px));
+  right: 0; bottom: 0; left: 0;
   z-index: 40000;
   display: none;
   background: var(--bg-overlay, rgba(7,9,13,0.92));

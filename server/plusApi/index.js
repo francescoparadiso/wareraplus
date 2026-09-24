@@ -55,7 +55,9 @@ const { initIstantanee, statoIstantanee } = require('./istantanee');
 const { risolviIdentita, bloccaScrittureSottoLente } = require('./identity');
 // A quali nazioni e' aperta l'area riservata. Si SOMMA ai permessi di
 // ruolo, non li sostituisce: vedi il blocco in testa a nazioni.js.
-const { costruisciFiltroNazione, nazioniAmmesse, etichette: etichetteNazioni } = require('./nazioni');
+const {
+  costruisciFiltroNazione, nazioniAmmesse, etichette: etichetteNazioni, alleanzaAmmessa, initNazioni,
+} = require('./nazioni');
 
 const WP_ENV = process.env.WP_ENV === 'live' ? 'live' : 'dev';
 const PORT = Number(process.env.PORT) || (WP_ENV === 'live' ? 3002 : 3003);
@@ -204,9 +206,10 @@ app.get('/health', (req, res) => res.json({
   // storia. `regioni` molto sotto `attese` = api6 che non risponde.
   confini: statoConfini(),
   istantanee: statoIstantanee(),
-  // A quali nazioni e' aperta l'area riservata adesso. Dopo aver cambiato
-  // WP_NAZIONI_AMMESSE e' la riga da guardare per sapere se pm2 ha preso
-  // davvero la variabile, senza doversi far chiudere fuori per scoprirlo.
+  // A quali nazioni e' aperta l'area riservata adesso: i membri
+  // dell'alleanza (piu' gli extra di WP_NAZIONI_AMMESSE). `lettaIl` null a
+  // lungo = la rilettura non riesce e vale ancora la lista di partenza.
+  alleanzaAmmessa: alleanzaAmmessa(),
   nazioniAmmesse: etichetteNazioni(),
   db: dbStatus(),
 }));
@@ -237,6 +240,9 @@ initWealth();
 
 // La sorveglianza dei confini: ogni dieci minuti, anche quando nessuno ha
 // la pagina aperta — un avviso che arriva solo a chi guarda arriva tardi.
+// Prima dei giri che leggono la lista (confini, istantanee): la tiene
+// allineata ai membri dell'alleanza. Vedi server/plusApi/nazioni.js.
+initNazioni();
 initConfini();
 initIstantanee();
 

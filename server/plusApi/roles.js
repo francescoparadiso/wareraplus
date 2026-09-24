@@ -36,7 +36,7 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 const express = require('express');
-const { nazioneAmmessa, etichette: etichetteNazioni } = require('./nazioni');
+const { nazioneAmmessa, etichette: etichetteNazioni, alleanzaAmmessa } = require('./nazioni');
 const { trpcGet, trpcBatch } = require('./wareraApi');
 const {
   getAccountById, listRoleOverrides, setRoleOverride, removeRoleOverride,
@@ -243,7 +243,7 @@ function buildRolesRouter({ requireAuth, requireAdmin }) {
       // E' una dichiarazione, non un permesso: il permesso vero resta il
       // filtro sulle rotte, che non si puo' aggirare mentendo al client.
       const { ok, motivo } = nazioneAmmessa(account, dati.derivati);
-      res.json({ ...dati, comeAltri, nazione: { abilitata: ok, motivo, ammesse: etichetteNazioni() } });
+      res.json({ ...dati, comeAltri, nazione: { abilitata: ok, motivo, ammesse: etichetteNazioni(), alleanza: alleanzaAmmessa().nome } });
     } catch (err) {
       console.error('[roles] calcolo fallito:', err.message);
       res.status(502).json({ error: 'gioco_non_raggiungibile' });

@@ -287,6 +287,9 @@ function cardNazioneNonAbilitata(nazione) {
   const card = el('div', 'wp-pv-card');
   card.appendChild(el('h2', 'wp-pv-h2', pvT('natTitle')));
   card.appendChild(el('p', 'wp-pv-body', pvT('natBody')));
+  // Il nome dell'alleanza arriva dal server insieme all'elenco: server
+  // vecchio senza il campo = niente riga, l'elenco resta comunque.
+  if (nazione.alleanza) card.appendChild(el('p', 'wp-pv-body', `⚔ ${nazione.alleanza}`));
 
   const elenco = el('ul', 'wp-pv-nazioni');
   for (const n of nazione.ammesse || []) {

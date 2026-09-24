@@ -54,7 +54,7 @@
 
 const express = require('express');
 const { calcolaEffettivi } = require('./roles');
-const { nazioniAmmesse } = require('./nazioni');
+const { nazioniAmmesse, alleanzaAmmessa, leaderAlleanza } = require('./nazioni');
 const {
   getWebhook, setWebhook, deleteWebhook, audit, getAccountById, findAccountByWarUserId,
   accessiNazione, haAccessoNazione, aggiungiAccessoNazione, togliAccessoNazione,
@@ -578,6 +578,17 @@ function buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSotto
 
   const puoGestire = (ctx) => ctx.governa || ctx.amministra;
 
+  /** Il canale di alleanza lo gestisce il capo dell'alleanza in gioco (e
+   *  l'amministratore). Se il gioco non risponde: no, mai una porta aperta
+   *  per un errore di rete. */
+  async function guidaAlleanza(req, ctx) {
+    if (ctx.amministra) return true;
+    try {
+      const capo = await leaderAlleanza();
+      return Boolean(capo && req.identita?.war_user_id === capo);
+    } catch { return false; }
+  }
+
   /** Il no, con dentro a chi chiedere: nomi pubblici, gli stessi che il
    *  gioco mostra sulla pagina del governo. */
   async function negato(res, countryId) {
@@ -593,6 +604,8 @@ function buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSotto
       if (!ctx.accesso) return negato(res, ctx.countryId);
       const quadro = await quadroNazione(ctx.countryId);
       const w = getWebhook('confini', ctx.countryId);
+      const all = alleanzaAmmessa();
+      const wa = (await guidaAlleanza(req, ctx)) ? getWebhook('confini_alleanza', all.id) : undefined;
       res.json({
         ...quadro,
         governa: ctx.governa,
@@ -604,6 +617,8 @@ function buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSotto
         ammesse: ctx.amministra ? nazioniAmmesse() : null,
         // Mai l'URL del webhook: contiene il token del canale.
         canaleConfini: (ctx.governa || ctx.amministra) ? { configurato: Boolean(w), creatoIl: w?.created_at || null } : null,
+        // Solo a chi guida l'alleanza (undefined = non la guida).
+        canaleAlleanza: wa !== undefined ? { configurato: Boolean(wa), creatoIl: wa?.created_at || null, alleanza: all.nome } : null,
       });
     } catch (err) {
       console.error('[nazione] quadro fallito:', err.message);
@@ -660,6 +675,24 @@ function buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSotto
     if (!urlWebhookValido(url)) return res.status(400).json({ error: 'url_non_valido' });
     setWebhook({ scopeType: 'confini', scopeId: ctx.countryId, url, createdBy: req.account.id });
     audit(req.account.id, 'webhook.set', `confini:${ctx.countryId}`, null);
+    res.json({ configurato: true });
+  });
+
+  /** Il canale Discord di ALLEANZA: un messaggio per giro con quello che
+   *  si muove ai confini di tutti i membri, fuori dall'alleanza. */
+  router.post('/canale-alleanza', async (req, res) => {
+    const ctx = await contesto(req);
+    if (!(await guidaAlleanza(req, ctx))) return res.status(403).json({ error: 'non_guidi_l_alleanza' });
+    const all = alleanzaAmmessa();
+    const url = String(req.body?.url || '').trim();
+    if (!url) {
+      deleteWebhook('confini_alleanza', all.id);
+      audit(req.account.id, 'webhook.remove', `confini_alleanza:${all.id}`, null);
+      return res.json({ configurato: false });
+    }
+    if (!urlWebhookValido(url)) return res.status(400).json({ error: 'url_non_valido' });
+    setWebhook({ scopeType: 'confini_alleanza', scopeId: all.id, url, createdBy: req.account.id });
+    audit(req.account.id, 'webhook.set', `confini_alleanza:${all.id}`, null);
     res.json({ configurato: true });
   });
 

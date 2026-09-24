@@ -352,6 +352,12 @@ export function togliAccesso(warUserId, { paese = null } = {}) {
   return callOrThrow(conPaese('/nazione/accessi/remove', paese), { warUserId });
 }
 
+/** Il canale Discord di ALLEANZA per gli avvisi di confine (solo chi guida
+ *  l'alleanza in gioco). Vuoto = togli. */
+export function impostaCanaleAlleanza(url, { paese = null } = {}) {
+  return callOrThrow(conPaese('/nazione/canale-alleanza', paese), { url });
+}
+
 /** Il canale Discord degli avvisi di confine. Vuoto = togli. */
 export function impostaCanaleConfini(url, { paese = null } = {}) {
   return callOrThrow(conPaese('/nazione/canale-confini', paese), { url });

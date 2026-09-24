@@ -2104,6 +2104,41 @@ body.light-theme .wp-bloc-member-header {
   color: #1a1a1a;
 }
 
+/* WarEra+ barra della mobilitazione (unrest) sotto il nome della nazione
+   nel pannello blocco. */
+.wp-mobilization {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: #8b949e;
+}
+.wp-mobilization-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.wp-mobilization-value {
+  font-variant-numeric: tabular-nums;
+  color: #c9d1d9;
+}
+.wp-mobilization-track {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(139, 148, 158, 0.18);
+  overflow: hidden;
+}
+.wp-mobilization-fill {
+  height: 100%;
+  border-radius: 3px;
+  min-width: 2px;
+}
+.wp-mobilization-low  { background: #d4a72c; }
+.wp-mobilization-mid  { background: #e8803a; }
+.wp-mobilization-high { background: #e05252; }
+body.light-theme .wp-mobilization { color: #57606a; }
+body.light-theme .wp-mobilization-value { color: #1a1a1a; }
+body.light-theme .wp-mobilization-track { background: rgba(0, 0, 0, 0.08); }
+
 /* Stato "in coda" dei parlamenti nel pannello blocco — visivamente più
    discreto del messaggio di caricamento attivo, per distinguere "sto
    aspettando il mio turno" da "sto effettivamente scaricando ora". */

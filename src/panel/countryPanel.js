@@ -1359,6 +1359,7 @@ function buildBlocPanelHtml(allianceId) {
             ${flagUrl ? `<img class="wp-bloc-member-flag" src="${flagUrl}" alt="" onerror="this.style.display='none'">` : ''}
             <span>${escapeHtml(m.name)}</span>
           </div>
+          ${mobilizationBarHtml(m)}
           <div class="wp-parliament-embed" id="wp-parliament-bloc-${m._id}">
             <div class="wp-parliament-loading wp-parliament-queued">⏳ ${t('queued_parliament')}</div>
           </div>
@@ -1366,6 +1367,26 @@ function buildBlocPanelHtml(allianceId) {
       }).join('')}
     </div>
   `;
+}
+
+// WarEra+: barra della mobilitazione di una nazione del blocco. È la barra
+// `unrest` del gioco (bar/barMax): i cittadini la riempiono donando salute
+// e quando è piena può partire una rivoluzione. Arriva già dentro
+// country.getAllCountries, quindi zero fetch: si legge da state. Nazione
+// senza il campo = niente barra, mai uno 0% inventato.
+function mobilizationBarHtml(nation) {
+  const u = nation?.unrest;
+  if (!u || !(u.barMax > 0)) return '';
+  const pct = Math.max(0, Math.min(100, (u.bar / u.barMax) * 100));
+  const level = pct >= 75 ? 'high' : pct >= 40 ? 'mid' : 'low';
+  return `
+    <div class="wp-mobilization" title="${escapeHtml(t('mobilization_hint'))}">
+      <div class="wp-mobilization-head">
+        <span>🔥 ${t('mobilization_label')}</span>
+        <span class="wp-mobilization-value">${fmt(u.bar)} / ${fmt(u.barMax)} · ${pct < 1 && pct > 0 ? '<1' : pct.toFixed(0)}%</span>
+      </div>
+      <div class="wp-mobilization-track"><div class="wp-mobilization-fill wp-mobilization-${level}" style="width:${pct}%"></div></div>
+    </div>`;
 }
 
 // WarEra+: caricamento a gruppi dei parlamenti del blocco. Prima versione

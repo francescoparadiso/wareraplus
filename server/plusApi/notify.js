@@ -143,8 +143,27 @@ function testoConfini(eventi, nomePaese) {
     + '_A base gives attackers from that region an attack bonus; a bunker gives its defenders a defence bonus._';
 }
 
+/** Il messaggio del canale di ALLEANZA: una riga per regione (non una per
+ *  nazione sorvegliata), con accanto QUALI membri tocca e cosa è per
+ *  ciascuno. confini.js passa solo regioni fuori dall'alleanza. */
+function testoConfiniAlleanza(eventi, nomePaese, nomeAlleanza) {
+  const righe = eventi.slice(0, 12).map((e) => {
+    const quando = e.effettoIl ? ` — active <t:${Math.floor(e.effettoIl / 1000)}:R>` : '';
+    const lv = e.livelloA ? ` lv.${e.livelloA}` : '';
+    // "with us" qui sarebbe ambiguo: il "noi" è il membro fra parentesi.
+    const chi = e.membri.map((m) =>
+      `${nomePaese(m.countryId)} (${(RELAZIONE_EN[m.relazione] || m.relazione).replace(' with us', '')})`).join(', ');
+    return `• **${e.regionNome}** (${nomePaese(e.ownerId)}): `
+      + `${COSTRUZIONE_EN[e.tipo] || e.tipo}${lv} ${EVENTO_EN[e.evento] || e.evento}${quando}\n`
+      + `  borders ${chi}`;
+  });
+  const altri = eventi.length > 12 ? `\n…and ${eventi.length - 12} more` : '';
+  return `**Alliance border alert** — ${nomeAlleanza || 'alliance'}\n${righe.join('\n')}${altri}\n`
+    + '_A base gives attackers from that region an attack bonus; a bunker gives its defenders a defence bonus._';
+}
+
 module.exports = {
   avvisa, urlWebhookValido,
   testoNuovaRichiesta, testoApprovata, testoRifiutata, testoAperta,
-  testoConfini,
+  testoConfini, testoConfiniAlleanza,
 };

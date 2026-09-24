@@ -57,12 +57,12 @@
 
 const { API } = require('./wareraApi');
 const { regioniMappa, paesiMappa, configGioco } = require('./fonti');
-const { nazioniAmmesse } = require('./nazioni');
+const { nazioniAmmesse, alleanzaAmmessa } = require('./nazioni');
 const {
   leggiStatoConfini, salvaStatoConfini, registraEventiConfini, eventiConfini,
   potaEventiConfini, inizioSorveglianzaConfini,
 } = require('./db');
-const { avvisa, testoConfini } = require('./notify');
+const { avvisa, testoConfini, testoConfiniAlleanza } = require('./notify');
 
 const CONTROLLO_MS = 10 * 60_000;
 const CHIAMATE_PER_BATCH = 20;    // ~2,7 KB di URL, misurato
@@ -311,6 +311,27 @@ async function giro() {
     }
     const nome = (id) => paesi.get(id)?.name || id;
     for (const [cid, eventi] of perAvviso) avvisa('confini', cid, testoConfini(eventi, nome));
+
+    // Il canale di ALLEANZA (scope 'confini_alleanza', id dell'alleanza).
+    // Stessi eventi, due differenze volute:
+    // - solo regioni di nazioni FUORI dall'alleanza. Un bunker acceso in
+    //   Slovenia è una notizia per l'Italia (lo vede nel canale suo), non
+    //   per l'alleanza, che vuole sapere cosa si muove intorno a lei;
+    // - una riga per regione, non una per membro toccato: la stessa base
+    //   fra Italia e Slovenia qui sarebbe altrimenti scritta due volte.
+    const ammesseSet = new Set(ammesse);
+    const perRegione = new Map();
+    for (const e of nuovi) {
+      if (!EVENTI_DA_AVVISARE.has(e.evento)) continue;
+      if (ammesseSet.has(e.ownerId)) continue;
+      const k = `${e.regionId}:${e.tipo}:${e.evento}`;
+      if (!perRegione.has(k)) perRegione.set(k, { ...e, membri: [] });
+      perRegione.get(k).membri.push({ countryId: e.countryId, relazione: e.relazione });
+    }
+    if (perRegione.size) {
+      const all = alleanzaAmmessa();
+      avvisa('confini_alleanza', all.id, testoConfiniAlleanza([...perRegione.values()], nome, all.nome));
+    }
 
     // Si sostituisce solo ciò che si è letto: una regione saltata per rete
     // tiene la lettura di prima invece di sparire dalla vista.

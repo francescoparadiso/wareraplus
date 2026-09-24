@@ -883,6 +883,13 @@ amministrazione restano identici. Tre cose da sapere prima di crederla rotta:
   da `upgradesV2` della regione, che è fermo a metà 2025 (Ticino col bunker
   al 5 spento risultava "livello 1 attivo"). `activeUpgradeLevels` è giusto
   ma dice solo cosa è ACCESO. Vedi la testata di `confini.js`;
+- l'area riservata è aperta alle **nazioni dell'alleanza P.A.S.T.A.**,
+  rilette ogni 10 minuti da `allianceId` (`server/plusApi/nazioni.js`,
+  `alleanzaAmmessa` in `/health`): chi entra nell'alleanza entra, chi esce
+  esce. Gli allarmi dai confini hanno DUE canali Discord: uno per nazione
+  (lo imposta il suo governo) e uno di alleanza (scope `confini_alleanza`,
+  lo imposta il capo dell'alleanza in gioco), che riceve solo le regioni
+  di nazioni FUORI dall'alleanza, una riga per regione;
 - la pagina la vedono il **governo** per carica (presidente, vice, ministri)
   e i **cittadini che il governo aggiunge** (tabella `nation_access`, sempre
   con Discord + personaggio collegato); agli altri cittadini il server

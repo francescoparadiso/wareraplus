@@ -35,7 +35,7 @@
 import { nzT } from './i18nNazione.js';
 import { pvT, pvErr } from './i18n.js';
 import {
-  leggiNazione, leggiNemici, impostaCanaleConfini, ApiError,
+  leggiNazione, leggiNemici, impostaCanaleConfini, impostaCanaleAlleanza, ApiError,
   leggiAccessi, cercaCittadini, aggiungiAccesso, togliAccesso, leggiGiocatoriNemico,
 } from './api.js';
 import { nomeNazione, urlBandiera, coloreNazione } from './battles.js';
@@ -921,7 +921,10 @@ export function creaQuadroNazione(ctx) {
       }));
     }
 
-    if (dati.canaleConfini && !ctx.lente()) card.appendChild(bloccoCanale());
+    if (dati.canaleConfini && !ctx.lente()) card.appendChild(bloccoCanale('canaleConfini'));
+    // Il canale di alleanza: solo a chi la guida in gioco (il server manda
+    // `canaleAlleanza` null a tutti gli altri).
+    if (dati.canaleAlleanza && !ctx.lente()) card.appendChild(bloccoCanale('canaleAlleanza'));
     return card;
   }
 
@@ -952,14 +955,19 @@ export function creaQuadroNazione(ctx) {
     return r;
   }
 
-  function bloccoCanale() {
+  // Due canali con la stessa forma: quello della nazione (governo) e quello
+  // dell'alleanza (chi la guida). `chiave` è il campo di `dati`.
+  function bloccoCanale(chiave) {
+    const diAlleanza = chiave === 'canaleAlleanza';
+    const canale = dati[chiave];
     const box = el('div', 'wp-pv-canale wp-pv-nz-canale');
     const testa = el('div', 'wp-pv-canale-testa');
-    testa.appendChild(el('strong', null, nzT('channelTitle')));
-    testa.appendChild(el('span', `wp-pv-badge${dati.canaleConfini.configurato ? ' wp-pv-badge-ok' : ''}`,
-      dati.canaleConfini.configurato ? pvT('channelSet') : pvT('channelNone')));
+    const titolo = diAlleanza && canale.alleanza ? `${nzT('allyChannelTitle')} — ${canale.alleanza}` : nzT(diAlleanza ? 'allyChannelTitle' : 'channelTitle');
+    testa.appendChild(el('strong', null, titolo));
+    testa.appendChild(el('span', `wp-pv-badge${canale.configurato ? ' wp-pv-badge-ok' : ''}`,
+      canale.configurato ? pvT('channelSet') : pvT('channelNone')));
     box.appendChild(testa);
-    box.appendChild(el('p', 'wp-pv-suggerimento', nzT('channelBody')));
+    box.appendChild(el('p', 'wp-pv-suggerimento', nzT(diAlleanza ? 'allyChannelBody' : 'channelBody')));
 
     const form = el('form', 'wp-pv-riga');
     const url = el('input', 'wp-pv-input');
@@ -970,21 +978,22 @@ export function creaQuadroNazione(ctx) {
       if (occupato) return;
       occupato = true; esitoCanale = null; ctx.ridisegna();
       try {
-        const r = await impostaCanaleConfini(valore, { paese: paeseScelto });
-        dati.canaleConfini = { ...dati.canaleConfini, configurato: Boolean(r.configurato) };
+        const imposta = diAlleanza ? impostaCanaleAlleanza : impostaCanaleConfini;
+        const r = await imposta(valore, { paese: paeseScelto });
+        dati[chiave] = { ...dati[chiave], configurato: Boolean(r.configurato) };
       } catch (err) {
-        esitoCanale = err instanceof ApiError ? pvErr(err.codice) : pvT('errErrore_server');
+        esitoCanale = { chiave, msg: err instanceof ApiError ? pvErr(err.codice) : pvT('errErrore_server') };
       } finally { occupato = false; ctx.ridisegna(); }
     };
     form.addEventListener('submit', (ev) => { ev.preventDefault(); invia(url.value.trim()); });
     form.appendChild(url); form.appendChild(salva);
-    if (dati.canaleConfini.configurato) {
+    if (canale.configurato) {
       const via = bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('channelClear'), () => invia(''));
       via.disabled = occupato;
       form.appendChild(via);
     }
     box.appendChild(form);
-    if (esitoCanale) box.appendChild(el('p', 'wp-pv-error', esitoCanale));
+    if (esitoCanale?.chiave === chiave) box.appendChild(el('p', 'wp-pv-error', esitoCanale.msg));
     return box;
   }
 
