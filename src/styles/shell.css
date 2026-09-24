@@ -1480,6 +1480,9 @@ body.light-theme #wp-tm-day {
 .wp-tm-focus-chip:hover { border-color: #d4a72c; }
 .wp-tm-focus-chip img { width: 14px; height: auto; border-radius: 2px; }
 .wp-tm-focus-batt { color: #c9d1d9; }
+.wp-tm-focus-allname { color: #e6edf3; }
+.wp-tm-focus-allname .wp-tm-focus-dim { font-size: 11px; }
+body.light-theme .wp-tm-focus-allname { color: #1f2328; }
 .wp-tm-focus-dim { color: #8b949e; font-style: italic; }
 .wp-tm-focus-hint { color: #6e7681; font-size: 10.5px; border-top: 1px solid #21262d; padding-top: 6px; }
 body.light-theme #wp-tm-focus { background: rgba(255, 255, 255, 0.97); border-color: #d0d7de; color: #1f2328; }

@@ -215,6 +215,15 @@ wareraPlus/
 │   │                              campi lo sono. Zero fetch: lo scatto delle 02:05
 │   │                              legge le cache countries/diplomacy/battles.
 │   │                              Endpoint: /day-history?day=YYYY-MM-DD.
+│   ├── allianceHistory.js      ← NUOVO — le alleanze nel tempo, per la time machine,
+│   │                              dal registro eventi del gioco (PUBBLICO, completo dal
+│   │                              lancio): BILATERALI dal 1 mag 2025 al 10 giu 2026, poi
+│   │                              a BLOCCO. ⚠️ il campo `allies` delle nazioni e' un
+│   │                              fossile del 10 giugno. ⚠️ i blocchi si rigiocano
+│   │                              ALL'INDIETRO da oggi (chi fonda non riceve "joined"),
+│   │                              e i cambi di nome non sono nel registro: si mostra il
+│   │                              nome di oggi + "allora si chiamava". Endpoint:
+│   │                              /alliance-history.
 │   ├── labourHistory.js        ← NUOVO — lavoro e tasse: ogni pagamento di salario
 │   │                              del gioco, aggregato per nazione. Archivio CHIUSO
 │   │                              (29 lug → 17 set 2026) e senza poll: sono ~550.000
@@ -692,6 +701,7 @@ serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`
 `/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
 `/citizen-moves`,
 `/daily-damage`, `/damage-timeline`, `/price-history`, `/day-history`,
+`/alliance-history`,
 `/labour-history`,
 `/ticker` + `/ticker/summary`,
 `/region-history/{at,range,events,contested,war-intensity}`, `/alliances`,

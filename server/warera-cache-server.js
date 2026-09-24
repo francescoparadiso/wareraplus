@@ -141,6 +141,12 @@ const {
   initMoneyTransfers, pollMoneyTransfers,
   readMoneyTransfers, readMoneyTransfersStatus,
 } = require('./moneyTransfers');
+// WarEra+ storia delle alleanze (bilaterali fino al 10 giugno 2026, poi a
+// blocco) dal registro eventi del gioco, per la time machine. Vedi il
+// blocco in testa a server/allianceHistory.js.
+const {
+  initAllianceHistory, pollAllianceHistory, readAllianceHistory, statoAllianceHistory,
+} = require('./allianceHistory');
 // WarEra+ chi e' arrivato e chi se n'e' andato: il censimento cittadini
 // (pollCitizens, gia' orario) confrontato con quello dell'ora prima. Zero
 // chiamate nuove — WarEra non pubblica i trasferimenti, e un trasferimento
@@ -306,6 +312,10 @@ initCitizenMoves({ readCache, writeCache });
 
 // Lavoro e tasse: legge soltanto, non scrive niente.
 initLabourHistory({ readCache });
+
+// Registro eventi: pubblico su api6, nessuna chiave. Getter per riferimento
+// tardivo come sotto (API_BASE_URL e' dichiarata piu' in basso).
+initAllianceHistory({ readCache, writeCache, get apiBase() { return API_BASE_URL; } });
 
 initMoneyTransfers({
   readCache, writeCache,
@@ -2214,7 +2224,8 @@ cron.schedule('* 2-6 * * *', pollMercArchiveBootstrap, { timezone: BOOT_ARCHIVE_
 // Finanziamenti fra nazioni: ~36 al giorno in tutto il mondo, e il giro si
 // ferma al primo id gia' visto — cioe' quasi sempre UNA richiesta. Offset
 // :11 per non cadere addosso ai due giri dell'archivio (:06 e :16).
-cron.schedule('11,31,51 * * * *', pollMoneyTransfers);       // ogni 20 min, :11
+cron.schedule('11,31,51 * * * *', pollMoneyTransfers);
+cron.schedule('48 * * * *', pollAllianceHistory);           // ogni ora, :48       // ogni 20 min, :11
 cron.schedule('45 */6 * * *', pollProxyIndex);               // ogni 6 ore, :45 (radar dei proxy)
 // Cambio giorno di gioco: 02:00 italiane, non UTC — da cui il fuso
 // esplicito (il server può stare ovunque). Minuto :01 per essere sicuri di
@@ -2280,6 +2291,10 @@ cron.schedule('5 2 * * *', () => {
   // riavvio a meta' pomeriggio evita che la candela di oggi si apra solo
   // alle :27 successive.
   await pollPrices();
+  // Alleanze: senza await. Il primo giro della vita del file sfoglia ~115
+  // pagine (un paio di minuti) e non deve ritardare il resto dell'avvio;
+  // dopo, e' una richiesta per famiglia.
+  pollAllianceHistory().catch(err => console.error('[alliance-history] avvio:', err.message));
   // Primissimo avvio: senza scatto il "danno di oggi" resterebbe muto fino
   // alle 02:00 successive. Se ne fa uno subito — vale meno (parte da adesso,
   // non dal cambio giorno), e infatti il client mostra l'ora dello scatto
@@ -2654,6 +2669,9 @@ app.get('/battle-archive/status', (req, res) => res.json(readArchiveStatus()));
 // lista vuota NON vuol dire "nessun finanziamento", e il client lo dichiara.
 app.get('/money-transfers', (req, res) => res.json(readMoneyTransfers()));
 
+// Storia delle alleanze per la time machine (server/allianceHistory.js).
+app.get('/alliance-history', (req, res) => res.json(readAllianceHistory()));
+
 // WarEra+ chi e' arrivato e chi se n'e' andato da una nazione (server/
 // citizenMoves.js). `coverageFrom` nella risposta dice da quando in qua
 // l'archivio guardava: senza, una lista vuota si leggerebbe come "non si e'
@@ -2993,6 +3011,7 @@ app.get('/health', (req, res) => res.json({
   // Quanto indietro arrivano i finanziamenti. Subito dopo un deploy copre
   // i ~3 giorni che l'API ricorda, e da li' cresce da solo.
   moneyTransfers: readMoneyTransfersStatus(),
+  allianceHistory: statoAllianceHistory(),
   citizenMoves: statoCitizenMoves(),
   // Quante ore di danno orario sono in archivio (accumulano da qui in
   // avanti, non si recuperano) e quante pillole sono nella finestra di

@@ -49,6 +49,8 @@ import {
   setTimeMachineFocus,
 } from './timeMachineMap.js';
 import { COLORS } from '../diplomacy/config.js';
+import { BORDER_COLORS } from '../diplomacy/borderStyle.js';
+import { loadAllianceHistory, alliancesAt } from './timeMachineAlliances.js';
 import { trackEvent } from '../shared/analytics.js';
 import { t } from '../shared/i18n.js';
 // WarEra+ la giornata storica: patti, guerre, nemico giurato e battaglie
@@ -1068,6 +1070,9 @@ function _setFocus(countryId, regionId = null) {
   _focusRegion = regionId;
   trackEvent('time-machine-focus');
   _updateFocus(Number(_slider.value));
+  // Le alleanze arrivano con una fetch per sessione (vedi
+  // timeMachineAlliances.js): alla prima selezione, e poi si ridisegna.
+  loadAllianceHistory().then(ok => { if (ok && _focusId) _updateFocus(Number(_slider.value)); });
 }
 
 function _clearFocus() {
@@ -1097,11 +1102,17 @@ function _updateFocus(ts) {
 
   const fuori = dati && fuoriPortata(dati, giorno);
   const d = !fuori ? dati?.diplomacy?.get(_focusId) : null;
-  if (d) setTimeMachineFocus({ self: _focusId, wars: d.wars, pacts: d.pacts, sworn: d.sworn });
-  else if (dati !== undefined) setTimeMachineFocus({ self: _focusId });
+  // Le alleanze hanno il loro registro, completo dal lancio del gioco:
+  // valgono anche prima dell'archivio della diplomazia (13 aprile 2026).
+  const al = alliancesAt(_focusId, ts);
+  const alleati = al?.tipo === 'blocco' ? (al.membri || []) : (al?.alleati || []);
+  const coloreAlleati = al?.tipo === 'blocco' ? BORDER_COLORS.ALLIANCE : COLORS.ALLY_DIRECT;
+  const base = { self: _focusId, allies: alleati, alliesColor: coloreAlleati };
+  if (d) setTimeMachineFocus({ ...base, wars: d.wars, pacts: d.pacts, sworn: d.sworn });
+  else if (dati !== undefined) setTimeMachineFocus(base);
   // dati === undefined: si tengono i colori del giorno prima (vedi testa).
 
-  _renderFocus(ts, giorno, dati, d, fuori);
+  _renderFocus(ts, giorno, dati, d, fuori, al);
 }
 
 /** Bandiera + nome, cliccabile: seleziona quella nazione. */
@@ -1123,7 +1134,7 @@ function _gruppo(label, ids, colore, vuoto = '') {
     </div>`;
 }
 
-function _renderFocus(ts, giorno, dati, d, fuori) {
+function _renderFocus(ts, giorno, dati, d, fuori, al) {
   if (!_focusEl) {
     _focusEl = document.createElement('div');
     _focusEl.id = 'wp-tm-focus';
@@ -1152,6 +1163,23 @@ function _renderFocus(ts, giorno, dati, d, fuori) {
 
   const stats = [`<span><strong>${regioni}</strong> ${escapeHtml(t('tm_focus_regions'))}</span>`];
   if (d?.wealth != null) stats.push(`<span><strong>${_fmtCompatto(d.wealth)}</strong> ${escapeHtml(t('tm_focus_treasury'))}</span>`);
+
+  // L'alleanza, nella forma del sistema in vigore quel giorno. Senza dati
+  // (server vecchio, o prima del lancio del gioco) la sezione non c'e'.
+  let allHtml = '';
+  if (al?.tipo === 'blocco') {
+    if (!al.id) allHtml = _gruppo(t('tm_focus_alliance'), [], BORDER_COLORS.ALLIANCE, t('tm_focus_no_alliance'));
+    else {
+      const allora = al.allora ? ` <span class="wp-tm-focus-dim">${escapeHtml(t('tm_focus_then', { name: al.allora }))}</span>` : '';
+      allHtml = `<div class="wp-tm-focus-group">
+          <div class="wp-tm-focus-lab"><span class="wp-tm-focus-dot" style="background:${BORDER_COLORS.ALLIANCE}"></span>${escapeHtml(t('tm_focus_alliance'))} · ${al.membri.length + 1}</div>
+          <div class="wp-tm-focus-allname"><strong>${escapeHtml(al.nome || '—')}</strong>${allora}</div>
+          ${al.membri.length ? `<div class="wp-tm-focus-chips">${al.membri.map(_chip).join('')}</div>` : ''}
+        </div>`;
+    }
+  } else if (al?.tipo === 'bilaterale') {
+    allHtml = _gruppo(t('tm_focus_allies'), al.alleati, COLORS.ALLY_DIRECT, t('tm_focus_no_allies'));
+  }
 
   let dipl;
   if (fuori) dipl = `<div class="wp-tm-focus-dim">${escapeHtml(t('tm_day_out_of_range'))}</div>`;
@@ -1187,6 +1215,7 @@ function _renderFocus(ts, giorno, dati, d, fuori) {
     <div class="wp-tm-focus-day">${escapeHtml(_fmtDay(ts))}</div>
     ${sinceHtml}
     <div class="wp-tm-focus-stats">${stats.join('')}</div>
+    ${allHtml}
     ${dipl}
     ${battHtml}
     <div class="wp-tm-focus-hint">${escapeHtml(t('tm_focus_hint'))}</div>`;

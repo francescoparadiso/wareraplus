@@ -103,7 +103,10 @@ function _buildBordersGeoJSON(regionsMap) {
 // Gli STESSI colori della vista diplomazia della mappa principale
 // (COLORS), per non dover imparare un secondo vocabolario. null = colori
 // normali delle nazioni. Precedenza in caso di doppioni: lei > nemico
-// giurato > guerra > patto (un'etichetta di 'match' può comparire una volta).
+// giurato > guerra > alleanza > patto, lo stesso ordine dei bordi della mappa
+// principale (un'etichetta di 'match' può comparire una volta).
+// `allies` porta il suo colore (`alliesColor`): blu per i membri di un
+// blocco, verde per gli alleati bilaterali di prima del 10 giugno 2026.
 let _focus = null;
 
 function _focusColorExpr(f) {
@@ -118,6 +121,7 @@ function _focusColorExpr(f) {
   ramo([f.self], COLORS.SELECTED);
   ramo(f.sworn ? [f.sworn] : [], COLORS.SWORN_ENEMY);
   ramo(f.wars || [], COLORS.WAR_DIRECT);
+  ramo(f.allies || [], f.alliesColor || COLORS.ALLY_DIRECT);
   ramo(f.pacts || [], COLORS.DEFENSIVE_PACT);
   expr.push(COLORS.NEUTRAL_UNSELECTED);
   return expr;
@@ -128,7 +132,8 @@ function _applyFill() {
   _map.setPaintProperty(TM_LYR_FILL, 'fill-color', _focus ? _focusColorExpr(_focus) : _fillColorExpr());
 }
 
-/** { self, wars, pacts, sworn } oppure null per tornare ai colori normali. */
+/** { self, wars, pacts, sworn, allies, alliesColor } oppure null per tornare
+ *  ai colori normali. */
 export function setTimeMachineFocus(focus) {
   _focus = focus || null;
   _applyFill();
