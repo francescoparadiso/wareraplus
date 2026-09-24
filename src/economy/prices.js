@@ -72,6 +72,32 @@ function deltaHtml(v) {
   const segno = v > 0 ? '+' : v < 0 ? '−' : '';
   return `<span class="wp-ecn-delta ${cls}">${segno}${Math.abs(v).toFixed(1)}%</span>`;
 }
+/* WarEra+ — Segnalato: nella scheda di una risorsa le tre variazioni
+   stavano in fila senza dire rispetto a cosa (nell'elenco lo dicono le
+   intestazioni delle colonne, qui non c'e' niente sopra). Ora ognuna porta
+   il periodo e il giorno con cui confronta, e nel title il prezzo di
+   partenza. Stesso calcolo di `variazione` (market/priceChart.js): l'ultima
+   chiusura contro quella di N giorni prima, o la prima dopo se quel giorno
+   e' un buco — per questo il giorno si scrive, invece di dare per scontato
+   che "7g" sia esattamente sette giorni fa. */
+function confrontoHtml(serie, giorni, chiave) {
+  const pct = variazione(serie, giorni);
+  const ultimo = serie?.[serie.length - 1];
+  let rif = null;
+  if (ultimo) {
+    const b = new Date(`${ultimo[0]}T12:00:00Z`);
+    b.setUTCDate(b.getUTCDate() - giorni);
+    rif = serie.find(r => r[0] >= b.toISOString().slice(0, 10)) || null;
+  }
+  const giorno = rif ? new Intl.DateTimeFormat(lingua(), { day: 'numeric', month: 'short', timeZone: 'UTC' })
+    .format(new Date(`${rif[0]}T12:00:00Z`)) : null;
+  const title = rif ? ecoT('vsCloseTitle', { date: giorno, price: gold(rif[4]), last: gold(ultimo[4]) }) : '';
+  return `<span class="wp-ecn-dchg"${title ? ` title="${escapeHtml(title)}"` : ''}>
+      <em>${escapeHtml(ecoT(chiave))}</em> ${deltaHtml(pct)}
+      ${giorno && pct != null ? `<small>${escapeHtml(ecoT('sinceDay', { date: giorno }))}</small>` : ''}
+    </span>`;
+}
+
 function eta(ms) {
   if (ms < 0) return '—';
   const m = Math.round(ms / 60000);
@@ -200,7 +226,7 @@ function dettaglioHtml(code) {
         </h3>
         <div class="wp-ecn-dprice">
           <strong>${escapeHtml(gold(r.price))}</strong>
-          ${deltaHtml(r.d1)} ${deltaHtml(r.d7)} ${deltaHtml(r.d30)}
+          ${confrontoHtml(r.serie, 1, 'd1')} ${confrontoHtml(r.serie, 7, 'd7')} ${confrontoHtml(r.serie, 30, 'd30')}
         </div>
       </header>
 

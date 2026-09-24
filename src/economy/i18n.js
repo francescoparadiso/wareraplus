@@ -18,6 +18,8 @@ const DICT = {
     search: 'Search a resource…', loading: 'Loading prices…', empty: 'No resource to show.',
     resource: 'Resource', price: 'Price', buyAt: 'Buy at', sellAt: 'Sell at', spread: 'Spread',
     d1: '24h', d7: '7d', d30: '30d', range: 'Range',
+
+    sinceDay: "since {date}", vsCloseTitle: "Last close {last} against the close of {date} ({price})",
     r30: '30 days', r90: '90 days', r365: '1 year', rAll: 'All',
     candles: 'Candles', line: 'Close', updated: 'Updated', refresh: 'Refresh', refreshing: 'Updating…',
     noHistory: 'The price archive is not reachable right now: only the current price is left.',
@@ -37,6 +39,8 @@ const DICT = {
     search: 'Cerca una risorsa…', loading: 'Carico i prezzi…', empty: 'Nessuna risorsa da mostrare.',
     resource: 'Risorsa', price: 'Prezzo', buyAt: 'Compri a', sellAt: 'Vendi a', spread: 'Forbice',
     d1: '24h', d7: '7g', d30: '30g', range: 'Periodo',
+
+    sinceDay: "dal {date}", vsCloseTitle: "Ultima chiusura {last} contro la chiusura del {date} ({price})",
     r30: '30 giorni', r90: '90 giorni', r365: '1 anno', rAll: 'Tutto',
     candles: 'Candele', line: 'Chiusure', updated: 'Aggiornato', refresh: 'Aggiorna', refreshing: 'Aggiorno…',
     noHistory: "L'archivio dei prezzi non è raggiungibile adesso: resta il prezzo di questo momento.",
@@ -56,6 +60,8 @@ const DICT = {
     search: 'Buscar un recurso…', loading: 'Cargando precios…', empty: 'Ningún recurso que mostrar.',
     resource: 'Recurso', price: 'Precio', buyAt: 'Compras a', sellAt: 'Vendes a', spread: 'Horquilla',
     d1: '24h', d7: '7d', d30: '30d', range: 'Periodo',
+
+    sinceDay: "desde el {date}", vsCloseTitle: "Último cierre {last} frente al cierre del {date} ({price})",
     r30: '30 días', r90: '90 días', r365: '1 año', rAll: 'Todo',
     candles: 'Velas', line: 'Cierres', updated: 'Actualizado', refresh: 'Actualizar', refreshing: 'Actualizando…',
     noHistory: 'El archivo de precios no está disponible ahora: queda el precio actual.',
@@ -75,6 +81,8 @@ const DICT = {
     search: 'Ressource suchen…', loading: 'Preise werden geladen…', empty: 'Keine Ressource anzuzeigen.',
     resource: 'Ressource', price: 'Preis', buyAt: 'Kaufst du für', sellAt: 'Verkaufst du für', spread: 'Spanne',
     d1: '24 Std', d7: '7 T', d30: '30 T', range: 'Zeitraum',
+
+    sinceDay: "seit {date}", vsCloseTitle: "Letzter Schluss {last} gegenüber dem Schluss vom {date} ({price})",
     r30: '30 Tage', r90: '90 Tage', r365: '1 Jahr', rAll: 'Alles',
     candles: 'Kerzen', line: 'Schlusskurse', updated: 'Aktualisiert', refresh: 'Aktualisieren', refreshing: 'Aktualisiere…',
     noHistory: 'Das Preisarchiv ist gerade nicht erreichbar: es bleibt der aktuelle Preis.',
@@ -94,6 +102,8 @@ const DICT = {
     search: 'Chercher une ressource…', loading: 'Chargement des prix…', empty: 'Aucune ressource à afficher.',
     resource: 'Ressource', price: 'Prix', buyAt: 'Tu achètes à', sellAt: 'Tu vends à', spread: 'Écart',
     d1: '24 h', d7: '7 j', d30: '30 j', range: 'Période',
+
+    sinceDay: "depuis le {date}", vsCloseTitle: "Dernière clôture {last} contre la clôture du {date} ({price})",
     r30: '30 jours', r90: '90 jours', r365: '1 an', rAll: 'Tout',
     candles: 'Chandeliers', line: 'Clôtures', updated: 'Mis à jour', refresh: 'Actualiser', refreshing: 'Actualisation…',
     noHistory: "L'archive des prix est injoignable : il reste le prix actuel.",
@@ -113,6 +123,8 @@ const DICT = {
     search: 'Zoek een grondstof…', loading: 'Prijzen laden…', empty: 'Geen grondstof om te tonen.',
     resource: 'Grondstof', price: 'Prijs', buyAt: 'Je koopt voor', sellAt: 'Je verkoopt voor', spread: 'Spread',
     d1: '24u', d7: '7d', d30: '30d', range: 'Periode',
+
+    sinceDay: "sinds {date}", vsCloseTitle: "Laatste slot {last} tegenover de slot van {date} ({price})",
     r30: '30 dagen', r90: '90 dagen', r365: '1 jaar', rAll: 'Alles',
     candles: 'Kaarsen', line: 'Slotkoersen', updated: 'Bijgewerkt', refresh: 'Vernieuwen', refreshing: 'Bijwerken…',
     noHistory: 'Het prijsarchief is nu niet bereikbaar: alleen de huidige prijs blijft over.',
@@ -132,6 +144,8 @@ const DICT = {
     search: 'Sök en resurs…', loading: 'Laddar priser…', empty: 'Ingen resurs att visa.',
     resource: 'Resurs', price: 'Pris', buyAt: 'Du köper för', sellAt: 'Du säljer för', spread: 'Spread',
     d1: '24 tim', d7: '7 d', d30: '30 d', range: 'Period',
+
+    sinceDay: "sedan {date}", vsCloseTitle: "Senaste stängning {last} mot stängningen {date} ({price})",
     r30: '30 dagar', r90: '90 dagar', r365: '1 år', rAll: 'Allt',
     candles: 'Ljus', line: 'Stängning', updated: 'Uppdaterad', refresh: 'Uppdatera', refreshing: 'Uppdaterar…',
     noHistory: 'Prisarkivet går inte att nå nu: bara dagens pris återstår.',
@@ -151,6 +165,8 @@ const DICT = {
     search: 'Procurar um recurso…', loading: 'A carregar preços…', empty: 'Nenhum recurso a mostrar.',
     resource: 'Recurso', price: 'Preço', buyAt: 'Compras a', sellAt: 'Vendes a', spread: 'Diferencial',
     d1: '24h', d7: '7d', d30: '30d', range: 'Período',
+
+    sinceDay: "desde {date}", vsCloseTitle: "Último fecho {last} contra o fecho de {date} ({price})",
     r30: '30 dias', r90: '90 dias', r365: '1 ano', rAll: 'Tudo',
     candles: 'Velas', line: 'Fechos', updated: 'Atualizado', refresh: 'Atualizar', refreshing: 'A atualizar…',
     noHistory: 'O arquivo de preços não está acessível agora: fica o preço atual.',
@@ -170,6 +186,8 @@ const DICT = {
     search: 'ابحث عن مادة…', loading: 'جارٍ تحميل الأسعار…', empty: 'لا توجد مادة لعرضها.',
     resource: 'المادة', price: 'السعر', buyAt: 'تشتري بـ', sellAt: 'تبيع بـ', spread: 'الفارق',
     d1: '٢٤ س', d7: '٧ أيام', d30: '٣٠ يوم', range: 'المدة',
+
+    sinceDay: "منذ {date}", vsCloseTitle: "آخر إغلاق {last} مقابل إغلاق {date} ({price})",
     r30: '٣٠ يوماً', r90: '٩٠ يوماً', r365: 'سنة', rAll: 'الكل',
     candles: 'شموع', line: 'الإغلاق', updated: 'محدَّث', refresh: 'تحديث', refreshing: 'جارٍ التحديث…',
     noHistory: 'أرشيف الأسعار غير متاح الآن: يبقى سعر هذه اللحظة.',

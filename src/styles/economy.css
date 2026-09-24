@@ -316,6 +316,12 @@ body.light-theme .wp-ecn-type-product { background: rgba(9, 105, 218, .12); colo
 .wp-ecn-body.wp-ecn-down, .wp-ecn-wick.wp-ecn-down { fill: var(--wp-ecn-down); stroke: var(--wp-ecn-down); }
 .wp-ecn-wick { stroke-width: 1.2; }
 
+/* Le variazioni nell'intestazione della risorsa: periodo, valore, giorno di
+   confronto. */
+.wp-ecn-dchg { display: inline-flex; align-items: baseline; gap: 4px; margin-right: 10px; cursor: help; }
+.wp-ecn-dchg em { font-style: normal; font-size: 11px; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-ecn-dchg small { font-size: 11px; color: var(--wp-ov-text-dim, #8b949e); }
+
 /* ── Esplorazione del grafico (attachCandleExplorer) ──────────── */
 .wp-ecn-chartwrap { position: relative; }
 .wp-ecn-explorable .wp-ecn-chart { cursor: crosshair; }
