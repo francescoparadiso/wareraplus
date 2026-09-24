@@ -352,8 +352,16 @@ function buildMember(cid) {
     // (rankings.countryDevelopment) che e' lo sviluppo corrente.
     core: n?.coreDevelopment || 0,
     wars:  n?.warsWith?.length || 0,
-    sworn: n?.swornEnemies?.length || 0,
-    allies:n?.allies?.length || 0,
+    // WarEra+ — `allies` e `swornEnemies` della nazione NON sono dati di
+    // oggi. `allies` e' un fossile: le coppie delle alleanze bilaterali
+    // congelate il 10 giugno 2026, quando il gioco e' passato alle alleanze a
+    // blocco (vedi server/allianceHistory.js); `swornEnemies` non esiste
+    // proprio, e dava sempre zero. Si leggono dalla diplomazia della mappa
+    // (countryDiplomacy, gia' in memoria): patti difensivi e nemico giurato
+    // di adesso. Il campo resta `allies` per non toccare chi lo legge, ma
+    // conta i PATTI e ovunque si chiama cosi'.
+    sworn: state.diplomacyData?.get(cid)?.swornEnemy ? 1 : 0,
+    allies: state.diplomacyData?.get(cid)?.defensivePacts?.length || 0,
   };
 }
 
@@ -640,6 +648,17 @@ function injectStyles() {
     .bs-sgrid{background:rgba(13,17,23,.6);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:20px}
     .bs-srow{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}
     .bs-srow:last-child{border:none}
+    /* WarEra+ gruppi nel confronto 1 vs 2 */
+    .bs-sgroup{margin:18px 0 2px;padding-top:12px;border-top:1px solid rgba(255,255,255,.1);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#c9d1d9}
+    .bs-sgroup-note{font-weight:400;text-transform:none;letter-spacing:0;color:#8b949e}
+    .bs-sgroup-wait{padding:8px 0}
+    body.light-theme .bs-sgroup{color:#3e2f1c;border-top-color:rgba(0,0,0,.1)}
+    /* WarEra+ mobilitazione nel dettaglio di un'alleanza */
+    .bs-popup-ps{margin:4px 0 18px}
+    .bs-popup-ps:empty{display:none}
+    .bs-popup-ps-title{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#c9d1d9;margin-bottom:6px}
+    .bs-popup-ps-title span{font-weight:400;text-transform:none;letter-spacing:0;color:#8b949e}
+    body.light-theme .bs-popup-ps-title{color:#3e2f1c}
     .bs-slbl{text-align:center;color:#8b949e;font-size:13px;white-space:nowrap}
     .bs-bwrap{display:flex;align-items:center;gap:10px}
     .bs-btrack{flex:1;height:7px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;min-width:60px}
@@ -944,7 +963,7 @@ function showPopup(nationId) {
       <div class="bs-popup-item">Weekly Damage <span style="color:#58a6ff">${fmt(nationDmg)}</span></div>
       <div class="bs-popup-item">Total Damage <span style="color:#f0ad4e">${fmt(nationAbsDmg)}</span></div>
       <div class="bs-popup-item">Active Wars <span style="color:#f85149">${nation.warsWith?.length || 0}</span></div>
-      <div class="bs-popup-item">Allies <span style="color:#3fb950">${nation.allies?.length || 0}</span></div>
+      <div class="bs-popup-item">Defensive Pacts <span style="color:#3fb950">${state.diplomacyData?.get(nationId)?.defensivePacts?.length || 0}</span></div>
       <div class="bs-popup-item">Development <span>${nation.rankings?.countryDevelopment?.value?.toFixed(1) ?? '—'}</span></div>
       <div class="bs-popup-item">Expansion <span style="color:${regDiffColor(nationRegDiff)}">${signed(nationRegDiff)}</span></div>
       <div class="bs-popup-percent"> ${pct}% of ${blocName} Weekly Damage · ${pctAbs}% Total Damage</div>
@@ -970,8 +989,21 @@ function showBlocPopup(blocId) {
   let sortKey = 'dmg';
   let sortDir = 1; // -1 = decrescente (default: più alto prima)
 
+  // WarEra+ — mobilitazione: quota di giocatori con build da guerra, per
+  // nazione (colonna "War %") e per l'alleanza intera (barra in alto). Stesso
+  // dato della tabella e del pannello alleanza, gia' scaricato: zero fetch.
+  const warPct = (id) => {
+    const c = psByCountry?.[id];
+    return c?.known ? (c.war / c.known) * 100 : null;
+  };
+  const conQuote = () => bloc.members.forEach(m => { m.warPct = warPct(m.id); });
+  conQuote();
+
   function renderRows(key, dir) {
     const sorted = [...bloc.members].sort((a, b) => {
+      // null (build ignota) sempre in fondo, in entrambe le direzioni.
+      if (a[key] == null && b[key] != null) return 1;
+      if (b[key] == null && a[key] != null) return -1;
       const valA = a[key] || 0;
       const valB = b[key] || 0;
       return dir * (valB - valA);
@@ -983,7 +1015,7 @@ function showBlocPopup(blocId) {
         <div class="bs-breakdown-row">
           <div class="flag-name">${flagImg(m.code, '16px')}<span title="${m.name}">${m.name}</span></div>
           <div class="bar-wrap"><div class="bar-fill" style="width:${(m[key] / maxVal) * 100}%;background:${bloc.color}"></div></div>
-          <div class="val" style="color:#58a6ff">${fmt(m[key])}</div>
+          <div class="val" style="color:#58a6ff">${key === 'warPct' ? (m.warPct == null ? '—' : m.warPct.toFixed(0) + '%') : fmt(m[key])}</div>
           ${key === 'dmg' ? `<div class="val pct">${pctDmg}%</div>` : ''}
         </div>
       `;
@@ -1007,12 +1039,13 @@ function showBlocPopup(blocId) {
       <div class="bs-popup-item">Population <span>${fmt(bloc.totalPop)}</span></div>
       <div class="bs-popup-item">Wealth <span style="color:#3fb950">${fmt(bloc.totalMoney)}</span></div>
       <div class="bs-popup-item">Active Wars <span style="color:#f85149">${bloc.totalWars}</span></div>
-      <div class="bs-popup-item">Allies <span>${bloc.totalAllies}</span></div>
+      <div class="bs-popup-item">Defensive Pacts <span>${bloc.totalAllies}</span></div>
       <div class="bs-popup-item">Avg Dmg/Nation <span>${fmt(bloc.countryCount ? bloc.totalDmg / bloc.countryCount : 0)}</span></div>
       <div class="bs-popup-item">Avg Pop/Nation <span>${fmt(bloc.countryCount ? bloc.totalPop / bloc.countryCount : 0)}</span></div>
       <div class="bs-popup-item" title="${bloc.isUnaligned || !bloc.bonus ? '' : curveTooltip()}">Damage Bonus <span style="color:${isPenalty(bloc.bonus?.bonus) ? '#f85149' : '#3fb950'}">${bloc.isUnaligned || !bloc.bonus ? '—' : formatBonus(bloc.bonus.bonus)}</span></div>
       <div class="bs-popup-item">Core Dev Share <span>${bloc.isUnaligned || !bloc.bonus ? '—' : bloc.bonus.share.toFixed(2) + '%'}</span></div>
     </div>
+    <div class="bs-popup-ps" id="bloc-popup-ps"></div>
     <div class="bs-breakdown-header">
       <span style="flex:1">Nation</span>
       <span class="col ${sortKey === 'dmg' ? 'active' : ''}" data-key="dmg" style="flex:1">Wk Dmg</span>
@@ -1020,6 +1053,7 @@ function showBlocPopup(blocId) {
       <span class="col ${sortKey === 'money' ? 'active' : ''}" data-key="money" style="flex:1">Wealth</span>
       <span class="col ${sortKey === 'pop' ? 'active' : ''}" data-key="pop" style="flex:1">Pop</span>
       <span class="col ${sortKey === 'wars' ? 'active' : ''}" data-key="wars" style="min-width:40px">Wars</span>
+      <span class="col ${sortKey === 'warPct' ? 'active' : ''}" data-key="warPct" style="min-width:48px" title="Share of players with a war build">War %</span>
     </div>
     <div class="bs-breakdown-body" id="bloc-popup-rows">${renderRows(sortKey, sortDir)}</div>
   `;
@@ -1042,6 +1076,23 @@ function showBlocPopup(blocId) {
   popup.querySelector('.bs-popup-close').onclick = () => { overlay.remove(); popup.remove(); };
   document.body.appendChild(overlay);
   document.body.appendChild(popup);
+
+  // La barra della mobilitazione: subito se i dati ci sono, altrimenti
+  // quando arrivano (e allora anche la colonna War % si riempie).
+  whenPlaystyle(async () => {
+    if (!popup.isConnected) return;
+    conQuote();
+    const ps = blocPlaystyle(bloc);
+    const host = popup.querySelector('#bloc-popup-ps');
+    if (host && ps) {
+      const { playstyleBarHtml } = await import('../mu/playstyle.js');
+      const labels = { war: 'war', eco: 'economy', mixed: 'hybrid', undecided: 'no points spent' };
+      host.innerHTML = '<div class="bs-popup-ps-title">Mobilization <span>· builds of ' + fmt(ps.known, 0, true) + ' players</span></div>'
+        + playstyleBarHtml(ps, labels);
+    }
+    const rows = popup.querySelector('#bloc-popup-rows');
+    if (rows) rows.innerHTML = renderRows(sortKey, sortDir);
+  });
 }
 
 /* Ordine dei tab. "Alliance Builder" (le schede trascinabili) è stato
@@ -1620,14 +1671,29 @@ function allianceTableHtml() {
 
 /** Una fetch per sessione, poi ridisegno della sola tabella: il resto del
  *  pannello è già a schermo e ridisegnarlo tutto perderebbe lo scroll. */
+// WarEra+ — chi ha bisogno dello stile di gioco e lo trova non ancora
+// arrivato (il confronto 1 vs 2, il dettaglio di un'alleanza) si mette in
+// coda e viene ridisegnato quando arriva, invece di restare vuoto.
+const _psWaiters = new Set();
+function whenPlaystyle(fn) {
+  if (psByCountry) { fn(); return; }
+  _psWaiters.add(fn);
+  ensurePlaystyleData();
+}
+
 function ensurePlaystyleData() {
-  if (psByCountry) return;
+  if (psByCountry || ensurePlaystyleData._inCorso) return;
+  ensurePlaystyleData._inCorso = true;
   import('../mu/api.js')
     .then(m => m.fetchPlaystyleByCountry())
     .then(data => {
       psByCountry = data || {};
       const host = document.getElementById('bs-alliance-table');
       if (host) host.outerHTML = allianceTableHtml();
+      const cmp = document.getElementById('bs-fcmp-stats');
+      if (cmp && currentTab === 'faction1vs2') cmp.outerHTML = cmpStats(aggFaction(faction1Blocs), aggFaction(faction2Blocs));
+      _psWaiters.forEach(fn => { try { fn(); } catch { /* una vista chiusa nel frattempo */ } });
+      _psWaiters.clear();
     })
     .catch(err => {
       psByCountry = {};
@@ -1784,35 +1850,86 @@ function factionSel(n, fst) {
 }
 
 function aggFaction(ids) {
-  if (!ids.length) return { name: '', countryCount: 0, totalPop: 0, totalDmg: 0, totalAbsoluteDmg: 0, totalMoney: 0, totalWars: 0, totalAllies: 0 };
+  // WarEra+ — oltre ai totali di prima, quello che serve ai confronti nuovi
+  // (per cittadino, build, territorio): tutto gia' dentro buildBlocStat,
+  // nessun dato nuovo. `members` serve alla build e al danno di oggi.
+  const vuota = { name: '', countryCount: 0, totalPop: 0, totalDmg: 0, totalAbsoluteDmg: 0, totalMoney: 0, totalWars: 0, totalAllies: 0,
+    totalBounty: 0, totalDev: 0, totalRegDiff: 0, totalSworn: 0, members: [] };
+  if (!ids.length) return vuota;
   return allStats.filter(b => ids.includes(b.id)).reduce((a, b) => ({
     name: a.name ? `${a.name} + ${b.name}` : b.name,
     countryCount: a.countryCount + b.countryCount, totalPop: a.totalPop + b.totalPop,
     totalDmg: a.totalDmg + b.totalDmg, totalAbsoluteDmg: a.totalAbsoluteDmg + b.totalAbsoluteDmg,
     totalMoney: a.totalMoney + b.totalMoney, totalWars: a.totalWars + b.totalWars,
     totalAllies: a.totalAllies + b.totalAllies,
-  }), { name: '', countryCount: 0, totalPop: 0, totalDmg: 0, totalAbsoluteDmg: 0, totalMoney: 0, totalWars: 0, totalAllies: 0 });
+    totalBounty: a.totalBounty + b.totalBounty, totalDev: a.totalDev + b.totalDev,
+    totalRegDiff: a.totalRegDiff + b.totalRegDiff, totalSworn: a.totalSworn + b.totalSworn,
+    members: a.members.concat(b.members),
+  }), vuota);
 }
 
 function cmpRow(v1, v2, lbl, f = v => fmt(v)) {
-  const mx = Math.max(v1, v2) || 1;
+  // WarEra+: le regioni guadagnate possono essere negative; la barra misura
+  // la grandezza, il segno lo dice il numero accanto. null = dato assente,
+  // niente riga (mai uno zero inventato).
+  if (v1 == null || v2 == null) return '';
+  v1 = Number(v1); v2 = Number(v2);
+  const mx = Math.max(Math.abs(v1), Math.abs(v2)) || 1;
   return `<div class="bs-srow">
-    <div class="bs-bwrap"><div class="bs-bval f1">${f(v1)}</div><div class="bs-btrack"><div class="bs-bfill f1" style="width:${(v1 / mx) * 100}%"></div></div></div>
+    <div class="bs-bwrap"><div class="bs-bval f1">${f(v1)}</div><div class="bs-btrack"><div class="bs-bfill f1" style="width:${(Math.abs(v1) / mx) * 100}%"></div></div></div>
     <div class="bs-slbl">${lbl}</div>
-    <div class="bs-bwrap"><div class="bs-btrack"><div class="bs-bfill f2" style="width:${(v2 / mx) * 100}%"></div></div><div class="bs-bval f2">${f(v2)}</div></div>
+    <div class="bs-bwrap"><div class="bs-btrack"><div class="bs-bfill f2" style="width:${(Math.abs(v2) / mx) * 100}%"></div></div><div class="bs-bval f2">${f(v2)}</div></div>
   </div>`;
+}
+
+/** Build di una fazione: la stessa somma di blocPlaystyle, sui membri di
+ *  tutte le alleanze scelte. null se i dati non ci sono ancora. */
+function factionPlaystyle(f) {
+  if (!psByCountry || !f.members.length) return null;
+  return blocPlaystyle({ members: f.members });
 }
 
 function cmpStats(f1, f2) {
   const fi = v => fmt(v, 0, true);
-  return `<div class="bs-sgrid">
+  const pct = v => v.toFixed(1) + '%';
+  const segnato = v => (v > 0 ? '+' : '') + fmt(v, 0, true);
+  const perCit = (f, k) => (f.totalPop ? f[k] / f.totalPop : 0);
+  const media = (f, k) => (f.countryCount ? f[k] / f.countryCount : 0);
+  const gruppo = (titolo, righe, nota = '') => righe.trim()
+    ? '<div class="bs-sgroup">' + titolo + (nota ? ' <span class="bs-sgroup-note">' + nota + '</span>' : '') + '</div>' + righe
+    : '';
+
+  // WarEra+ — build dei giocatori ("mobilitazione"): quanti giocano di
+  // guerra e quanti di economia, dai punti abilita' (src/mu/playstyle.js).
+  const ps1 = factionPlaystyle(f1), ps2 = factionPlaystyle(f2);
+  const quota = (ps, k) => (ps?.known ? (ps[k] / ps.known) * 100 : 0);
+  const build = (ps1 && ps2)
+    ? cmpRow(quota(ps1, 'war'), quota(ps2, 'war'), 'War players %', pct)
+      + cmpRow(quota(ps1, 'eco'), quota(ps2, 'eco'), 'Eco players %', pct)
+      + cmpRow(ps1.war, ps2.war, 'War players', fi)
+      + cmpRow(ps1.eco, ps2.eco, 'Eco players', fi)
+      + cmpRow(ps1.mixed, ps2.mixed, 'Hybrid players', fi)
+    : (f1.countryCount && f2.countryCount && !psByCountry ? '<div class="bs-sgroup-note bs-sgroup-wait">Loading builds…</div>' : '');
+
+  // Danno di oggi: solo se lo scatto giornaliero c'e' (altrimenti niente riga).
+  const oggi = f => (dailyBaseline && f.members.length ? blocDamageToday({ members: f.members }) : null);
+
+  return `<div class="bs-sgrid" id="bs-fcmp-stats">
     ${cmpRow(f1.countryCount, f2.countryCount, 'Countries', fi)}
     ${cmpRow(f1.totalPop, f2.totalPop, 'Population')}
     ${cmpRow(f1.totalDmg, f2.totalDmg, 'Weekly Damage')}
+    ${cmpRow(oggi(f1), oggi(f2), 'Damage Today')}
     ${cmpRow(f1.totalAbsoluteDmg, f2.totalAbsoluteDmg, 'Total Damage')}
     ${cmpRow(f1.totalMoney, f2.totalMoney, 'Wealth')}
-    ${cmpRow(f1.totalAllies, f2.totalAllies, 'Allies', fi)}
+    ${cmpRow(f1.totalAllies, f2.totalAllies, 'Defensive Pacts', fi)}
     ${cmpRow(f1.totalWars, f2.totalWars, 'Active Wars', fi)}
+    ${gruppo('Builds · mobilization', build, 'from the skill points of each player')}
+    ${gruppo('Per citizen', cmpRow(perCit(f1, 'totalDmg'), perCit(f2, 'totalDmg'), 'Weekly Dmg / Citizen')
+      + cmpRow(perCit(f1, 'totalMoney'), perCit(f2, 'totalMoney'), 'Wealth / Citizen')
+      + cmpRow(media(f1, 'totalDev'), media(f2, 'totalDev'), 'Avg Development'))}
+    ${gruppo('Territory & bounty', cmpRow(f1.totalRegDiff, f2.totalRegDiff, 'Regions Gained', segnato)
+      + cmpRow(f1.totalSworn, f2.totalSworn, 'Sworn Enemies', fi)
+      + cmpRow(f1.totalBounty, f2.totalBounty, 'Bounty Earned'))}
   </div>`;
 }
 
@@ -1934,7 +2051,7 @@ function renderWars() {
         ${topBounty.map(m => statRow(m, fmt(m.bounty), '#f0ad4e')).join('')}
       </div>
       <div class="bs-wsec">
-        <h3 style="margin:0 0 10px">Top 10 Allies</h3>
+        <h3 style="margin:0 0 10px">Top 10 Defensive Pacts</h3>
         ${topAllies.map(m => statRow(m, `🤝 ${m.allies}`, '#3fb950')).join('')}
       </div>
     </div>`;
@@ -2151,7 +2268,7 @@ function attachSearchEvent(c) {
               <div class="bs-chip">💥 Tot ${fmt(m.totalDmg)}</div>
               <div class="bs-chip">💰 ${fmt(m.money)}</div>
               <div class="bs-chip">⚔️ Wars: ${m.wars}</div>
-              <div class="bs-chip">🤝 Allies: ${m.allies}</div>
+              <div class="bs-chip">🤝 Pacts: ${m.allies}</div>
             </div>
           </div>`).join('')}</div>`
       : '<p style="color:#8b949e;text-align:center;padding:20px">No nations found</p>';
