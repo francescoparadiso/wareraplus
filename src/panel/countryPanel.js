@@ -630,6 +630,13 @@ async function renderBlocPlaystyle(allianceId, memberIds) {
   const byCountry = await fetchPlaystyleByCountry();
   if (!byCountry || currentBlocId !== allianceId) return;
 
+  // WarEra+ la stessa barra, nazione per nazione, sotto il nome di ogni
+  // membro (richiesta dell'utente). Stesso dato già in memoria: zero fetch.
+  // La legenda resta solo nella barra dell'alleanza qui sopra, ripeterla
+  // tredici volte non aggiunge niente. Un membro senza skill note resta
+  // senza barra, mai uno 0% inventato.
+  paintMemberPlaystyles(memberIds, byCountry);
+
   const counts = sumPlaystyleCounts(memberIds.map(id => byCountry[id]));
   if (!counts.known) return;
 
@@ -638,6 +645,19 @@ async function renderBlocPlaystyle(allianceId, memberIds) {
   const seriesByCountry = await fetchPlaystyleHistoryMany(memberIds, Date.now() - PLAYSTYLE_DELTA_WINDOW_MS);
   if (currentBlocId !== allianceId) return;
   paintPlaystyleDelta(sumPlaystyleDeltas(seriesByCountry), counts.known);
+}
+
+async function paintMemberPlaystyles(memberIds, byCountry) {
+  const { playstyleBarHtml } = await import('../mu/playstyle.js');
+  const labels = {
+    war: t('ps_war'), eco: t('ps_eco'),
+    mixed: t('ps_mixed'), undecided: t('ps_undecided'),
+  };
+  for (const id of memberIds) {
+    const host = document.getElementById(`wp-bloc-ps-${id}`);
+    const counts = byCountry[id];
+    if (host && counts?.known) host.innerHTML = playstyleBarHtml(counts, labels);
+  }
 }
 
 /** Disegno comune a nazione e alleanza: titolo, barra, posto per la
@@ -1359,7 +1379,7 @@ function buildBlocPanelHtml(allianceId) {
             ${flagUrl ? `<img class="wp-bloc-member-flag" src="${flagUrl}" alt="" onerror="this.style.display='none'">` : ''}
             <span>${escapeHtml(m.name)}</span>
           </div>
-          ${mobilizationBarHtml(m)}
+          <div class="wp-bloc-member-ps" id="wp-bloc-ps-${m._id}"></div>
           <div class="wp-parliament-embed" id="wp-parliament-bloc-${m._id}">
             <div class="wp-parliament-loading wp-parliament-queued">⏳ ${t('queued_parliament')}</div>
           </div>
@@ -1367,26 +1387,6 @@ function buildBlocPanelHtml(allianceId) {
       }).join('')}
     </div>
   `;
-}
-
-// WarEra+: barra della mobilitazione di una nazione del blocco. È la barra
-// `unrest` del gioco (bar/barMax): i cittadini la riempiono donando salute
-// e quando è piena può partire una rivoluzione. Arriva già dentro
-// country.getAllCountries, quindi zero fetch: si legge da state. Nazione
-// senza il campo = niente barra, mai uno 0% inventato.
-function mobilizationBarHtml(nation) {
-  const u = nation?.unrest;
-  if (!u || !(u.barMax > 0)) return '';
-  const pct = Math.max(0, Math.min(100, (u.bar / u.barMax) * 100));
-  const level = pct >= 75 ? 'high' : pct >= 40 ? 'mid' : 'low';
-  return `
-    <div class="wp-mobilization" title="${escapeHtml(t('mobilization_hint'))}">
-      <div class="wp-mobilization-head">
-        <span>🔥 ${t('mobilization_label')}</span>
-        <span class="wp-mobilization-value">${fmt(u.bar)} / ${fmt(u.barMax)} · ${pct < 1 && pct > 0 ? '<1' : pct.toFixed(0)}%</span>
-      </div>
-      <div class="wp-mobilization-track"><div class="wp-mobilization-fill wp-mobilization-${level}" style="width:${pct}%"></div></div>
-    </div>`;
 }
 
 // WarEra+: caricamento a gruppi dei parlamenti del blocco. Prima versione
