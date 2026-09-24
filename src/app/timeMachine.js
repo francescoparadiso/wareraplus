@@ -1079,6 +1079,7 @@ function _clearFocus() {
   _focusId = null;
   _focusRegion = null;
   if (_focusEl) _focusEl.classList.remove('visible');
+  document.body.classList.remove('wp-tm-has-focus');
   setTimeMachineFocus(null);
 }
 
@@ -1212,7 +1213,7 @@ function _renderFocus(ts, giorno, dati, d, fuori, al) {
       ${flag}<span class="wp-tm-popup-name">${escapeHtml(nation?.name || _focusId)}</span>
       <button type="button" class="wp-tm-focus-close" aria-label="${escapeHtml(t('tm_focus_close'))}" title="${escapeHtml(t('tm_focus_close'))}">✕</button>
     </div>
-    <div class="wp-tm-focus-day">${escapeHtml(_fmtDay(ts))}</div>
+    <div class="wp-tm-focus-day">${escapeHtml(_fmtDate(ts))}</div>
     ${sinceHtml}
     <div class="wp-tm-focus-stats">${stats.join('')}</div>
     ${allHtml}
@@ -1220,6 +1221,9 @@ function _renderFocus(ts, giorno, dati, d, fuori, al) {
     ${battHtml}
     <div class="wp-tm-focus-hint">${escapeHtml(t('tm_focus_hint'))}</div>`;
   _focusEl.classList.add('visible');
+  // Su telefono la classifica, se aperta, si accorcia per finire sopra la
+  // scheda invece di esserne coperta (vedi shell.css).
+  document.body.classList.add('wp-tm-has-focus');
 }
 
 /** Il nome di una nazione da un id, per le liste del popup. Se non la

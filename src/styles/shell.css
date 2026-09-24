@@ -1497,7 +1497,8 @@ body.light-theme .wp-tm-focus-hint { border-top-color: #d0d7de; color: #57606a; 
     left: 10px;
     right: 10px;
     width: auto;
-    bottom: 210px;
+    /* 8px sopra il pannello dei comandi, che su telefono va su due righe. */
+    bottom: 218px;
     max-height: 32vh;
   }
 }
@@ -3616,4 +3617,36 @@ body.light-theme .wp-ship-tip {
 
 @media (max-width: 768px) {
   #wp-deploy-badge { bottom: 8px; left: 8px; padding: 2px 7px; font-size: 10px; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — audit mobile 2026-09-24: pannello nazione su telefono.
+   In fondo al file apposta: deve vincere sulle regole base sopra.
+   - la maniglia di ridimensionamento serve solo col mouse, e su telefono
+     sporgeva di 4px dal bordo (a pannello aperto E chiuso), dove può
+     prendersi un tocco destinato alla mappa;
+   - stella, righe della sfera e bottoni sotto la soglia di un dito;
+   - cariche di governo e badge proxy a 9px.
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  #wp-panel-resize-handle { display: none; }
+  .wp-panel-pin { min-width: 36px; min-height: 36px; }
+  .wp-watch-row { min-height: 36px; }
+  .wp-gov-member-role { font-size: 10.5px; }
+  .wp-proxy-badge { font-size: 10px; }
+  .wp-panel-back-btn { min-height: 36px; }
+  #border-toggle-container span { font-size: 11px; }
+  #wp-vo-back { min-height: 34px; }
+  .wp-stat-label { font-size: 11px; }
+  #wp-allies-more { min-height: 36px; }
+}
+
+/* WarEra+ — audit mobile 2026-09-24: time machine su telefono. Comandi a
+   28px (sotto la soglia di un dito). Con una nazione seguita, la classifica
+   — se la si apre col trofeo — finisce sopra la scheda invece di finirci
+   sotto coperta. */
+@media (max-width: 768px) {
+  #wp-time-machine-panel .wp-tm-controls button,
+  #wp-tm-date { min-height: 36px; min-width: 36px; }
+  body.wp-tm-has-focus #wp-tm-standings.open { bottom: calc(218px + 32vh + 8px); }
 }

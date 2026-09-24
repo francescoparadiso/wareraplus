@@ -106,7 +106,12 @@ function _nomiA(allianceId, ts) {
   let allora = lista[0]?.[1] || null;
   for (const [t, n] of lista) { if (t <= ts) allora = n; else break; }
   const nome = _dati.current.get(allianceId) || lista[lista.length - 1]?.[1] || allora;
-  return { nome, allora: allora && allora !== nome ? allora : null };
+  // Dopo l'ULTIMO evento dell'alleanza il nome vero non si sa: può essere
+  // quello dell'evento o quello di oggi, perché il cambio di nome non ha
+  // data. Lì non si dice niente (si mostra il nome di oggi, e basta): oggi
+  // la scheda diceva «allora si chiamava The Olive Union», che è falso.
+  const dopoUltimo = lista.length && ts > lista[lista.length - 1][0];
+  return { nome, allora: !dopoUltimo && allora && allora !== nome ? allora : null };
 }
 
 /**
