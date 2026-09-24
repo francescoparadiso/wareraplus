@@ -141,12 +141,12 @@ function rowHtml(b) {
         <span class="wp-btl-type">${typeLabel(b.type)}</span>
       </td>
       <td class="wp-btl-region">${escapeHtml(regionName(b.regionId) || '—')}</td>
-      <td class="wp-btl-num">${fmtNum(b.defender.damages)}<span class="wp-btl-sep">/</span>${fmtNum(b.attacker.damages)}</td>
+      <td class="wp-btl-num wp-btl-dmg" data-label="${escapeHtml(btlT('colDamage'))}">${fmtNum(b.defender.damages)}<span class="wp-btl-sep">/</span>${fmtNum(b.attacker.damages)}</td>
       <td class="wp-btl-num wp-btl-bounty">${knowBounty ? fmtMoney(bounty) : '<span class="wp-btl-unk">?</span>'}</td>
       <td class="wp-btl-num wp-btl-contracts">${knowContracts
         ? `${fmtMoney(b.contracts)}${b.contractCount ? `<span class="wp-btl-sub">×${b.contractCount}</span>` : ''}`
         : '<span class="wp-btl-unk">?</span>'}</td>
-      <td class="wp-btl-num wp-btl-total">${(knowBounty || knowContracts)
+      <td class="wp-btl-num wp-btl-total" data-label="${escapeHtml(btlT('colCost'))}">${(knowBounty || knowContracts)
         ? `${fmtMoney(total)}${b.live ? `<button type="button" class="wp-btl-load wp-btl-load-inline" data-load="${b.id}" data-live="1" title="${btlT('refreshCost')}">↻</button>` : ''}`
         : `<button type="button" class="wp-btl-load" data-load="${b.id}"${b.live ? ' data-live="1"' : ''}>${btlT('loadCost')}</button>`}</td>
     </tr>`;
@@ -200,7 +200,7 @@ export function renderBattleList(archive, presetCountry) {
     </div>
     ${(liveRows.length || visible.length) ? `
       <div class="wp-btl-tablewrap">
-        <table class="wp-btl-table">
+        <table class="wp-btl-table wp-btl-list">
           <thead><tr>
             <th>${liveRows.length ? btlT('colWhenMixed') : btlT('colWhen')}</th>
             <th>${btlT('colBattle')}</th>

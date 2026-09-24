@@ -381,3 +381,38 @@ body.light-theme .wp-ecn-type-product { background: rgba(9, 105, 218, .12); colo
   .wp-ecn-tools { width: 100%; }
   .wp-ecn-search { flex: 1; min-width: 0; }
 }
+
+/* WarEra+ — telefono vero (audit mobile 2026-09-24). A 375px anche le
+   cinque colonne di sopra non ci stavano: i soli minimi facevano 336px più
+   spazi e margini, e la colonna 24h usciva a destra dentro uno scorrimento
+   orizzontale che niente annunciava. Qui restano risorsa, prezzo e 24h:
+   denaro e lettera sono a un tocco, nella scheda della risorsa. */
+@media (max-width: 560px) {
+  .wp-ecn-thead,
+  .wp-ecn-row {
+    grid-template-columns: minmax(0, 1.6fr) minmax(64px, 1fr) minmax(56px, .8fr);
+    gap: 6px;
+  }
+  .wp-ecn-th:nth-child(3),
+  .wp-ecn-th:nth-child(4),
+  .wp-ecn-row > *:nth-child(3),
+  .wp-ecn-row > *:nth-child(4) { display: none; }
+  /* L'etichetta "prodotto / materia prima" sotto il nome invece che
+     accanto: accanto si mangiava metà della colonna. */
+  .wp-ecn-item { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .wp-ecn-type { font-size: 10.5px; }
+  /* Intestazioni ordinabili: alte quanto un dito, non 15px. */
+  .wp-ecn-th { min-height: 32px; }
+  .wp-ecn-refresh { min-height: 36px; }
+  /* Le tre schede non ci stanno comunque: scorrono, ma il bordo destro
+     sfuma e dice che ce n'è ancora. */
+  .wp-ecn-tabs.wp-ecn-tabs-more {
+    -webkit-mask-image: linear-gradient(to right, #000 82%, transparent);
+    mask-image: linear-gradient(to right, #000 82%, transparent);
+  }
+  .wp-ecn-tab { padding: 10px 11px; }
+  /* Prezzo e tre variazioni: vanno a capo invece di uscire. */
+  .wp-ecn-dprice { flex-wrap: wrap; row-gap: 4px; }
+  .wp-ecn-dprice strong { width: 100%; }
+  .wp-ecn-chartbar { flex-wrap: wrap; row-gap: 6px; }
+}

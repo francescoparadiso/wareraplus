@@ -103,7 +103,12 @@ async function apri(id) {
     const on = b.dataset.tab === id;
     b.classList.toggle('active', on);
     b.setAttribute('aria-selected', String(on));
+    // WarEra+ su telefono la riga delle schede scorre: quella attiva va
+    // portata in vista, o si apre l'Ottimizzatore e il suo titolo resta
+    // mezzo fuori dal bordo.
+    if (on) b.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   });
+  aggiornaSfumatura();
 
   const host = document.getElementById(`wp-ecn-panel-${id}`);
   if (!host) return;
@@ -132,6 +137,15 @@ async function apri(id) {
   trackEvent(`economy-tab-${id}`);
 }
 
+/** La sfumatura sul bordo destro delle schede (economy.css) solo quando a
+ *  destra c'è davvero altro da scorrere: sull'ultima scheda sfumerebbe il
+ *  titolo che si sta leggendo. */
+function aggiornaSfumatura() {
+  const nav = _container?.querySelector('.wp-ecn-tabs');
+  if (!nav) return;
+  nav.classList.toggle('wp-ecn-tabs-more', nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 2);
+}
+
 /** Cambio scheda: prima si ferma il giro di quella che si lascia, poi
  *  si apre l'altra. Due giri accesi sono due volte il traffico per una
  *  sola tabella guardata. */
@@ -158,6 +172,9 @@ export async function initEconomyView(container, { tab } = {}) {
     container.querySelectorAll('.wp-ecn-tab').forEach(b => {
       b.addEventListener('click', () => switchTab(b.dataset.tab));
     });
+    const nav = container.querySelector('.wp-ecn-tabs');
+    nav?.addEventListener('scroll', aggiornaSfumatura, { passive: true });
+    requestAnimationFrame(aggiornaSfumatura);
 
     // Ritraduzione a sezione aperta, come le altre viste.
     _langHandler = () => {

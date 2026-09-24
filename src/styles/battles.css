@@ -473,6 +473,64 @@ body.light-theme .wp-btl-row:hover { background: rgba(0, 0, 0, .035); }
   .wp-btl-cards { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
 }
 
+/* WarEra+ — telefono (audit mobile 2026-09-24). Nell'archivio a 375px si
+   vedevano solo "quando" e "battaglia": danno e costo, cioè il motivo per
+   cui l'archivio esiste, stavano fuori a destra. Qui ogni riga diventa una
+   scheda su due righe — chi contro chi, poi quando · danno · costo totale —
+   con le etichette scritte sopra i numeri, perché l'intestazione non c'è
+   più. Taglia e contratti sono già dentro il costo totale, e scomposti
+   nel dettaglio della battaglia. Solo la tabella dell'archivio
+   (.wp-btl-list): spese di guerra e dettaglio hanno colonne loro. */
+@media (max-width: 560px) {
+  .wp-btl-list thead { display: none; }
+  .wp-btl-list,
+  .wp-btl-list tbody { display: block; }
+  .wp-btl-list tr.wp-btl-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: "match match match" "when dmg total";
+    gap: 4px 10px;
+    align-items: end;
+    padding: 9px 4px;
+    border-bottom: 1px solid var(--wp-ov-border, #30363d);
+  }
+  .wp-btl-list tr.wp-btl-row > td { padding: 0; border: 0; }
+  .wp-btl-list .wp-btl-match { grid-area: match; }
+  .wp-btl-list .wp-btl-when { grid-area: when; }
+  .wp-btl-list .wp-btl-dmg { grid-area: dmg; text-align: center; }
+  .wp-btl-list .wp-btl-total { grid-area: total; }
+  .wp-btl-list .wp-btl-region,
+  .wp-btl-list .wp-btl-bounty,
+  .wp-btl-list .wp-btl-contracts { display: none; }
+  .wp-btl-list .wp-btl-dmg::before,
+  .wp-btl-list .wp-btl-total::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--wp-ov-text-dim, #8b949e);
+  }
+  .wp-btl-list tr.wp-btl-divider { display: block; padding: 10px 4px 4px; }
+  .wp-btl-list tr.wp-btl-divider > td { display: block; padding: 0; }
+  /* Filtri e bottoni alti quanto un dito. */
+  .wp-btl-chip { min-height: 34px; }
+  .wp-btl-load { min-height: 32px; }
+  /* Dettaglio: "TAGLIA INCASSATA" su una riga sola teneva la colonna a
+     122px e la tabella usciva di 15px. Le intestazioni vanno a capo. */
+  .wp-btl-xp th,
+  .wp-btl-side-table th { white-space: normal; line-height: 1.2; vertical-align: bottom; }
+  /* Spese di guerra: la colonna per cui la classifica è ordinata, la spesa
+     TOTALE, era tagliata a destra dietro taglia e contratti. Su telefono
+     restano posizione, nazione, totale e al giorno; la scomposizione è a
+     un tocco, aprendo la nazione. */
+  .wp-btl-xp th[data-sort="bounty"],
+  .wp-btl-xp th[data-sort="contracts"],
+  .wp-btl-xp td.wp-btl-bounty,
+  .wp-btl-xp td.wp-btl-contracts { display: none; }
+}
+
 /* ══════════════════════════════════════════════════════════════
    Dettaglio di una battaglia (src/battles/battleDetail.js)
    ------------------------------------------------------------------

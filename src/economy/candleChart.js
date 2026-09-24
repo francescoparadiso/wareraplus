@@ -156,6 +156,13 @@ export function attachCandleExplorer(wrap, serie, { w = 880, h = 320, fmt = (v) 
   const valide = serie.map((r, i) => i).filter(i => Number.isFinite(serie[i][4]));
   if (!valide.length) return;
 
+  // Il contenitore sopravvive ai ridisegni (vedi disegnaAllaMisura in
+  // prices.js): il suo ascoltatore di tastiera va tolto prima di metterne un
+  // altro, o le frecce salterebbero di due, tre candele alla volta.
+  wrap.__candleAbort?.abort();
+  const ctrl = new AbortController();
+  wrap.__candleAbort = ctrl;
+
   const guida = document.createElement('div');
   guida.className = 'wp-ecn-guide';
   const tip = document.createElement('div');
@@ -248,5 +255,5 @@ export function attachCandleExplorer(wrap, serie, { w = 880, h = 320, fmt = (v) 
     // "passaggio" da seguire.
     fissata = k;
     mostra(k);
-  });
+  }, { signal: ctrl.signal });
 }

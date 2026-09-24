@@ -328,6 +328,41 @@ body.light-theme .wp-mkt-detail { border-bottom-color: #e3e7ee; }
   .wp-mkt-parts { grid-column: 1 / -1; }
 }
 
+/* WarEra+ — telefono (audit mobile 2026-09-24). La tabella è larga 1300px e
+   su 375 si vedevano risorsa, prezzo e mezzo costo: la colonna per cui la
+   vista esiste, la rendita per punto, stava fuori a destra dietro uno
+   scorrimento che niente annunciava. Qui restano le tre che rispondono
+   alla domanda — risorsa, rendita/pp, quanto guadagni al giorno — e il
+   resto è a un tocco, nella riga aperta. Ordine delle colonne: vedi il
+   commento su --wp-mkt-cols qui sopra (7 = rendita, 11 = tu /giorno). */
+/* Il riepilogo nella riga aperta esiste solo per il telefono: sopra i
+   560px quei numeri stanno già nelle colonne. */
+.wp-mkt-dsumm { display: none; }
+
+@media (max-width: 560px) {
+  .wp-mkt-dsumm { display: block; }
+  /* Le righe delle regioni nella riga aperta: coi minimi di sopra (302px
+     più spazi) sfondavano i 315px disponibili e facevano scorrere di lato
+     tutta la tabella. */
+  .wp-mkt-regrow { grid-template-columns: minmax(0, 1fr) 50px 58px 40px; gap: 6px; }
+  .wp-mkt-regrow .wp-mkt-region { min-width: 0; overflow: hidden; }
+  .wp-mkt-table {
+    --wp-mkt-cols: minmax(0, 1.4fr) minmax(70px, 1fr) minmax(70px, 1fr);
+    min-width: 0;
+  }
+  .wp-mkt-thead > :is(:nth-child(2), :nth-child(3), :nth-child(4), :nth-child(5), :nth-child(6), :nth-child(8), :nth-child(9), :nth-child(10), :nth-child(12), :nth-child(13)),
+  .wp-mkt-row > :is(:nth-child(2), :nth-child(3), :nth-child(4), :nth-child(5), :nth-child(6), :nth-child(8), :nth-child(9), :nth-child(10), :nth-child(12), :nth-child(13)) {
+    display: none;
+  }
+  .wp-mkt-th { min-height: 32px; white-space: normal; line-height: 1.2; }
+  .wp-mkt-item { flex-direction: column; align-items: flex-start; gap: 2px; }
+  /* Comandi alti quanto un dito. */
+  .wp-mkt-seg button { min-height: 36px; }
+  .wp-mkt-sim input { min-height: 34px; }
+  .wp-mkt-refresh button { min-height: 36px; }
+  .wp-mkt-days input[type="range"] { min-height: 28px; }
+}
+
 /* ── Andamento del prezzo (src/market/priceChart.js) ──────────────── */
 .wp-mkt-detail:has(.wp-mkt-dchart) {
   grid-template-columns: minmax(240px, .8fr) minmax(300px, 1.4fr) minmax(240px, 1fr);

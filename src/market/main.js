@@ -442,8 +442,25 @@ function detailHtml(r) {
     ? r.materials.map(m => `<span class="wp-mkt-mat">${m.qty}× ${escapeHtml(m.code)} @ ${escapeHtml(gold(m.price))} = ${escapeHtml(gold(m.cost))}</span>`).join('')
     : `<span class="wp-mkt-dim">${escapeHtml(mktT('noNeeds'))}</span>`;
 
+  // WarEra+ — solo su telefono (CSS): le colonne che la tabella nasconde
+  // sotto i 560px e che la riga aperta non ripeteva altrove. Senza questo
+  // blocco, su telefono paga di pareggio e guadagno del lavoratore non si
+  // vedevano da nessuna parte. Etichette = intestazioni della tabella.
+  const over = sim.wage > 0 && r.marginPerPoint < 0;
+  const conto = [
+    ['colPp', escapeHtml(String(r.pp))],
+    ['colBase', escapeHtml(gold(r.basePerPoint))],
+    ['colBonus', r.bonus == null ? '—' : '+' + escapeHtml(pct(r.bonus))],
+    ['colBreakEven', `<span class="wp-mkt-break${over ? ' over' : ''}">${escapeHtml(gold(r.breakEven))}</span>`],
+    ['colWorker', escapeHtml(signedGold(r.workerNetPerDay))],
+    ['colTotal', `<span class="${r.ownerTotal < 0 ? 'neg' : 'pos'}">${escapeHtml(signedGold(r.ownerTotal))}</span>`],
+  ].map(([k, v]) => `<span>${escapeHtml(mktT(k, { n: sim.days }))}: <b>${v}</b></span>`).join('');
+
   return `
     <div class="wp-mkt-detail">
+      <div class="wp-mkt-dcol wp-mkt-dsumm">
+        <div class="wp-mkt-dlist">${conto}</div>
+      </div>
       <div class="wp-mkt-dcol">
         <h4>${escapeHtml(mktT('detailPrices'))}</h4>
         <div class="wp-mkt-dlist">

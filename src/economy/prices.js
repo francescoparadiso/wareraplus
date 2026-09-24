@@ -328,11 +328,40 @@ function wire() {
 
   // Il grafico si esplora: passaggio del mouse, clic per fissare, frecce.
   const wrap = root.querySelector('.wp-ecn-chartwrap');
-  if (wrap && _finestra && _aperta) {
-    attachCandleExplorer(wrap, _finestra, { fmt: gold, lingua: lingua(), t: ecoT });
-  }
+  if (wrap && _finestra && _aperta) disegnaAllaMisura(wrap);
 
   wireRows();
+}
+
+/* WarEra+ — audit mobile 2026-09-24. Il grafico nasceva a 880x320 e il
+   browser lo stirava sulla larghezza vera (preserveAspectRatio="none"): su
+   un telefono largo 313px tutto si stringeva al 36% in orizzontale, testo
+   degli assi compreso, che diventava illeggibile. Ora, appena il grafico è
+   nel documento, lo si ridisegna alla misura del suo contenitore (e di
+   nuovo se la finestra cambia), così un pixel del disegno è un pixel dello
+   schermo e le etichette restano etichette. L'esploratore riceve la stessa
+   misura, altrimenti la guida non cadrebbe sulle candele. */
+let _resizeObs = null;
+function disegnaAllaMisura(wrap) {
+  const svg = wrap.querySelector('.wp-ecn-chart');
+  if (!svg) return;
+  const w = Math.round(svg.clientWidth), h = Math.round(svg.clientHeight);
+  if (w > 50 && h > 50) {
+    const nuovo = candleChartSvg(_finestra, { w, h, fmt: gold, lingua: lingua(), mode: _mode });
+    if (nuovo) svg.outerHTML = nuovo;
+  }
+  wrap.querySelectorAll('.wp-ecn-guide, .wp-ecn-tip').forEach(e => e.remove());
+  attachCandleExplorer(wrap, _finestra, { w: w > 50 ? w : 880, h: h > 50 ? h : 320, fmt: gold, lingua: lingua(), t: ecoT });
+
+  _resizeObs?.disconnect();
+  let ultimaW = w;
+  _resizeObs = new ResizeObserver(() => {
+    const nw = Math.round(wrap.querySelector('.wp-ecn-chart')?.clientWidth || 0);
+    if (!nw || Math.abs(nw - ultimaW) < 8 || !wrap.isConnected) return;
+    ultimaW = nw;
+    disegnaAllaMisura(wrap);
+  });
+  _resizeObs.observe(wrap);
 }
 
 function wireRows() {
