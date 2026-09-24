@@ -279,6 +279,9 @@ wareraPlus/
     │   │                        (dato di gioco, mai toccato). Non è un
     │   │                        collegamento vivo: si aggiorna ripremendo il
     │   │                        bottone. Cade da sola uscendo dalla vista.
+    │   ├── blocStatsI18n.js ← NUOVO — traduzioni (9 lingue) di Statistiche
+    │   │                        alleanze: la CHIAVE è il testo inglese, bT('Weekly
+    │   │                        damage'), e ciò che manca ricade sull'inglese.
     │   ├── dualBadges.js, blocStats.js, weeklyDamage.js, population.js,
     │   │   regions.js, nationTooltip.js, utils.js
     │   ├── cacheClient.js       ← NUOVO — client del server di cache: OGNI funzione ha
