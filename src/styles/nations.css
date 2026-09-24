@@ -113,6 +113,31 @@ body.light-theme .wp-nat-row { border-bottom-color: #e3e7ee; }
 }
 .wp-nat-num { text-align: right; }
 .wp-nat-th-name { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+
+/* WarEra+ — audit mobile 2026-09-24. Le due tabelle larghe (nazioni, 15
+   metriche; cittadini, 10) scorrono di lato per scelta: non c'è una colonna
+   "principale" da tenere, si confrontano tutte. Ma scorrendo il nome se ne
+   andava a sinistra, e alla colonna Tasse non si sapeva più di chi fosse la
+   riga. Il nome resta fermo, con fondo opaco (le colonne ci passano sotto)
+   e un filo d'ombra che dice dove finisce. Vale a ogni larghezza. */
+.wp-nat-thead > :first-child,
+.wp-nat-row > :first-child,
+.wp-nat-cthead > :first-child,
+.wp-nat-crow > :first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--wp-ov-bg, #0d1117);
+  box-shadow: 6px 0 6px -6px rgba(0, 0, 0, .6);
+}
+body.light-theme .wp-nat-thead > :first-child,
+body.light-theme .wp-nat-row > :first-child,
+body.light-theme .wp-nat-cthead > :first-child,
+body.light-theme .wp-nat-crow > :first-child {
+  background: var(--wp-ov-bg-light, #f4f6fa);
+  box-shadow: 6px 0 6px -6px rgba(0, 0, 0, .18);
+}
+
 .wp-nat-name { overflow: hidden; text-overflow: ellipsis; }
 .wp-nat-row .wk, .wp-nat-crow .wk { color: #58a6ff; font-weight: 700; }
 .wp-nat-row .money, .wp-nat-crow .money { color: #3fb950; }
@@ -621,7 +646,15 @@ body.light-theme .wp-nat-curve-range button.active { background: var(--wp-ov-sur
 .wp-nat-lab-note { margin: 0; font-size: 12px; color: var(--wp-ov-text-dim, #8b949e); }
 
 .wp-nat-lab-chart { width: 100%; height: auto; display: block; }
-.wp-nat-lab-axis { font-size: 9px; fill: var(--wp-ov-text-dim, #8b949e); font-variant-numeric: tabular-nums; }
+.wp-nat-lab-axisrow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--wp-ov-text-dim, #8b949e);
+  font-variant-numeric: tabular-nums;
+  margin-top: 3px;
+}
+.wp-nat-lab-axis-top { margin: 0 0 3px; }
 
 .wp-nat-lab-cols {
   display: grid;
@@ -645,3 +678,25 @@ body.light-theme .wp-nat-curve-range button.active { background: var(--wp-ov-sur
 
 body.light-theme .wp-nat-lab-bar { background: var(--wp-ov-bg-light, #f4f6fa); }
 body.light-theme .wp-nat-lab-bar > span { background: #9c6b1f; }
+
+/* WarEra+ — telefono (audit mobile 2026-09-24). In FONDO al file apposta:
+   a parità di specificità vince la regola che viene dopo, e scritto più
+   in alto questo blocco perdeva contro le regole base. */
+@media (max-width: 560px) {
+  .wp-nat-table { --wp-nat-cols: minmax(118px, 1.2fr) repeat(14, minmax(68px, .75fr)); }
+  .wp-nat-ctable { --wp-nat-ccols: minmax(118px, 1.3fr) 48px 40px 56px 86px repeat(5, minmax(70px, .8fr)); }
+  .wp-nat-th, .wp-nat-cth { min-height: 32px; }
+  .wp-nat-tab { min-height: 36px; }
+  /* Scheda nazione: etichette delle tessere a 9,5px e comandi dei livelli
+     alti 20-24px, sotto la soglia di un dito. */
+  .wp-nat-statcard-label { font-size: 11px; }
+  #wp-nat-back { min-height: 36px; }
+  #wp-nat-lv-bin button,
+  #wp-nat-lv-mode button { min-height: 34px; }
+  .wp-nat-lv-key { min-height: 30px; }
+  .wp-nat-pick { min-height: 36px; }
+  .wp-nat-curve-range button { min-height: 32px; min-width: 40px; }
+  #wp-nat-lv-add { min-height: 34px; }
+  .wp-nat-tools button,
+  .wp-nat-tools select { min-height: 34px; }
+}

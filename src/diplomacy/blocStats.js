@@ -689,7 +689,19 @@ function injectStyles() {
     .bs-sum-mini .bs-sc{padding:12px 16px}
     .bs-sum-mini .bs-sv{font-size:18px}
     @media(max-width:1200px){.bs-charts{grid-template-columns:repeat(2,1fr)}}
-    @media(max-width:640px){.bs-charts{grid-template-columns:1fr}.bs-sum-mini{grid-template-columns:1fr}}
+    /* WarEra+ audit mobile 2026-09-24: "1fr" vuol dire "almeno largo quanto
+       il contenuto", e i nomi lunghi delle alleanze nella legenda tenevano la
+       scheda a 422px su 287 disponibili: tagliata a destra. minmax(0,1fr)
+       lascia ai nomi l'ellissi che hanno già. */
+    /* WarEra+ audit mobile: le griglie di Wars & Enemies erano stili INLINE
+       (1fr 1fr, repeat(4,1fr)), che battono qualunque media query: su
+       telefono la seconda colonna finiva tutta fuori a destra. Ora classi. */
+    .bs-wgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-bottom:20px}
+    .bs-wgrid-last{margin-bottom:0}
+    .bs-sum.bs-sum-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+    @media(max-width:1024px){.bs-sum.bs-sum-4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:640px){.bs-wgrid{grid-template-columns:minmax(0,1fr);gap:14px}}
+    @media(max-width:640px){.bs-charts{grid-template-columns:minmax(0,1fr)}.bs-sum-mini{grid-template-columns:minmax(0,1fr)}.bs-chart-card{min-width:0}.bsw{padding-left:12px;padding-right:12px}}
 
     /* Tabella riassuntiva alleanze (tutte le alleanze su una riga sola) */
     .bs-tbl-wrap{overflow:auto;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(13,17,23,.6);margin-bottom:20px}
@@ -709,6 +721,12 @@ function injectStyles() {
     .bs-tbl tbody tr{cursor:pointer;transition:background .15s}
     .bs-tbl tbody tr:hover{background:rgba(88,166,255,.08)}
     .bs-tbl .bs-tbl-name{display:flex;align-items:center;gap:8px;font-weight:600;color:#e6edf3}
+    /* WarEra+ audit mobile: la tabella di tutte le alleanze scorre di lato
+       per scelta (17 metriche); il nome resta fermo a sinistra, altrimenti
+       alla colonna BUILD non si sa piu' di quale alleanza sia la riga. */
+    .bs-tbl th:first-child,.bs-tbl td:first-child{position:sticky;left:0;z-index:1;background:#0f141b;box-shadow:6px 0 6px -6px rgba(0,0,0,.6)}
+    .bs-tbl th:first-child{z-index:2}
+    body.light-theme .bs-tbl th:first-child,body.light-theme .bs-tbl td:first-child{background:#f3ead8;box-shadow:6px 0 6px -6px rgba(0,0,0,.18)}
     .bs-tbl .bs-tbl-swatch{width:8px;height:20px;border-radius:3px;flex-shrink:0}
     .bs-tbl .bs-tbl-open{color:#8b949e;font-size:12px}
     .bs-tbl .money{color:#3fb950}
@@ -1844,13 +1862,13 @@ function renderWars() {
   const dev1 = v => v.toFixed(1);
 
   return `
-    <div class="bs-sum" style="grid-template-columns:repeat(4,1fr)">
+    <div class="bs-sum bs-sum-4">
       <div class="bs-sc"><div class="bs-sl">Alliances</div><div class="bs-sv" style="color:#e6edf3">${aligned.length}</div></div>
       <div class="bs-sc"><div class="bs-sl">Nations at War</div><div class="bs-sv" style="color:#f85149">${fmt(wars.length, 0, true)}</div></div>
       <div class="bs-sc"><div class="bs-sl">Avg Dmg / Citizen</div><div class="bs-sv" style="color:#58a6ff">${fmt(globalDpc)}</div></div>
       <div class="bs-sc"><div class="bs-sl">Total Bounty</div><div class="bs-sv" style="color:#f0ad4e">${fmt(gBounty)}</div></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+    <div class="bs-wgrid">
       <div class="bs-wsec">
         <h3 style="margin:0 0 14px">🏆 Alliance Ranking — Weekly Damage</h3>
         ${blocBar('totalDmg', v => fmt(v))}
@@ -1860,7 +1878,7 @@ function renderWars() {
         ${blocBar('totalAbsoluteDmg', v => fmt(v))}
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+    <div class="bs-wgrid">
       <div class="bs-wsec">
         <h3 style="margin:0 0 14px">🏆 Alliance Ranking — Population</h3>
         ${blocBar('totalPop', v => fmt(v))}
@@ -1870,7 +1888,7 @@ function renderWars() {
         ${blocBar('totalMoney', v => fmt(v))}
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+    <div class="bs-wgrid">
       <div class="bs-wsec">
         <h3 style="margin:0 0 14px">🏆 Alliance Ranking — Avg Development</h3>
         ${blocBar('avgDev', dev1)}
@@ -1880,7 +1898,7 @@ function renderWars() {
         ${blocBar('dpc', v => fmt(v))}
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+    <div class="bs-wgrid">
       <div class="bs-wsec">
         <h3 style="margin:0 0 10px">Top 10 Weekly Damage</h3>
         ${topWeekly.map(m => statRow(m, fmt(m.dmg), '#58a6ff')).join('')}
@@ -1890,7 +1908,7 @@ function renderWars() {
         ${topTotal.map(m => statRow(m, fmt(m.totalDmg), '#f0ad4e')).join('')}
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+    <div class="bs-wgrid">
       <div class="bs-wsec">
         <h3 style="margin:0 0 10px">Top 10 Dmg / Citizen</h3>
         ${topDpc.map(m => statRow(m, fmt(m.dpc), '#58a6ff')).join('')}
@@ -1900,7 +1918,7 @@ function renderWars() {
         ${topDev.map(m => statRow(m, m.dev.toFixed(1), '#a371f7')).join('')}
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+    <div class="bs-wgrid">
       <div class="bs-wsec">
         <h3 style="margin:0 0 10px">Top 10 Population</h3>
         ${topPop.map(m => statRow(m, fmt(m.pop), '#e6edf3')).join('')}
@@ -1910,7 +1928,7 @@ function renderWars() {
         ${topWealth.map(m => statRow(m, fmt(m.money), '#3fb950')).join('')}
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    <div class="bs-wgrid bs-wgrid-last">
       <div class="bs-wsec">
         <h3 style="margin:0 0 10px">Top 10 Bounty</h3>
         ${topBounty.map(m => statRow(m, fmt(m.bounty), '#f0ad4e')).join('')}

@@ -152,14 +152,18 @@ function graficoHtml(days) {
   }).join('');
 
   const primo = days[0][0], ultimo = days[days.length - 1][0];
+  // WarEra+ — audit mobile 2026-09-24. Le etichette stavano DENTRO l'SVG
+  // da 640px: su un telefono il disegno si rimpiccioliva a metà e le scritte
+  // con lui, fino a 6px d'altezza. Ora sono HTML sopra e sotto il grafico,
+  // alla loro misura vera qualunque sia la larghezza; le barre invece si
+  // possono stringere senza problemi.
   return `
-    <svg class="wp-nat-lab-chart" viewBox="0 0 ${W} ${H}" role="img"
+    <div class="wp-nat-lab-axisrow wp-nat-lab-axis-top">${escapeHtml(oro(max))}</div>
+    <svg class="wp-nat-lab-chart" viewBox="0 0 ${W} ${H - PAD_B}" role="img"
          aria-label="${escapeHtml(natT('labChart'))}">
       ${barre}
-      <text x="${PAD_L}" y="${PAD_T - 2}" class="wp-nat-lab-axis">${escapeHtml(oro(max))}</text>
-      <text x="${PAD_L}" y="${H - 4}" class="wp-nat-lab-axis">${escapeHtml(fmtData(primo))}</text>
-      <text x="${W - PAD_R}" y="${H - 4}" class="wp-nat-lab-axis" text-anchor="end">${escapeHtml(fmtData(ultimo))}</text>
-    </svg>`;
+    </svg>
+    <div class="wp-nat-lab-axisrow"><span>${escapeHtml(fmtData(primo))}</span><span>${escapeHtml(fmtData(ultimo))}</span></div>`;
 }
 
 /** Le due classifiche in fondo: chi paga, e per cosa si lavora. */

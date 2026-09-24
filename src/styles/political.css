@@ -3322,3 +3322,33 @@ html[data-theme="light"] #wp-political-root .senate-stage {
 #wp-political-root details.panel:hover {
   border-color: var(--bd2);
 }
+
+/* WarEra+ — audit mobile 2026-09-24. "Dettaglio Parlamento" scorre di lato
+   su telefono (sette colonne), ma il nome del partito prendeva 244px su 357
+   e scorreva via col resto: alla colonna Leader non si sapeva più di quale
+   partito fosse la riga. Il partito resta fermo a sinistra, più stretto, e
+   il nome va a capo. */
+@media (max-width: 560px) {
+  #wp-political-root .party-table th:first-child,
+  #wp-political-root .party-table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--s1, #0f141b);
+    box-shadow: 6px 0 6px -6px rgba(0, 0, 0, .6);
+    min-width: 104px;
+    max-width: 128px;
+    white-space: normal;
+  }
+  #wp-political-root .party-table tbody tr:hover td:first-child { background: var(--s2); }
+  /* Comandi sotto la soglia di un dito (15-28px). */
+  #wp-political-root #fullscreenBtn { min-width: 36px; min-height: 36px; }
+  #wp-political-root #exportCsvBtn,
+  #wp-political-root #timelinePartyFilter { min-height: 36px; }
+  #wp-political-root #clearCacheBtn { min-height: 32px; padding-top: 6px; padding-bottom: 6px; }
+  #wp-political-root .party-table .party-name-main {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+  }
+}

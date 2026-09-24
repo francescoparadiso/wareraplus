@@ -985,3 +985,29 @@ body.light-theme .wp-mw-sc-giu { fill: #cf222e; }
   .wp-mw-uthead, .wp-mw-urow { min-width: 660px; font-size: 12px; }
   .wp-mw-somma-nota { margin-left: 0; flex-basis: 100%; }
 }
+
+/* WarEra+ — telefono stretto (audit mobile 2026-09-24). A 375px il nome
+   dell'unità aveva 44px di testo e si leggeva "The E…", "IOBA…". La
+   composizione resta (vedi il blocco a 768px: è la colonna che mostra le
+   "de facto"), ma il nome riprende un po' di spazio, lo stemma si
+   rimpicciolisce e il nome va su due righe invece di troncarsi.
+   In fondo al file: deve vincere sul blocco a 768px. */
+@media (max-width: 480px) {
+  .wp-mu-table {
+    --wp-mu-cols: 18px minmax(0, 1.3fr) minmax(0, 1.1fr) minmax(0, .8fr) 20px 52px;
+  }
+  .wp-mu-cell-name { gap: 5px; align-items: center; }
+  .wp-mu-cell-name .wp-mu-avatar-sm { width: 18px; height: 18px; border-radius: 5px; flex-shrink: 0; }
+  .wp-mu-name-text {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+  }
+  .wp-mu-th { min-height: 32px; }
+  .wp-mu-tab { min-height: 36px; }
+}

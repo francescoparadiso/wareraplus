@@ -297,4 +297,7 @@ body.light-theme .wp-news-paper { color: #1a1208; }
      comprimerlo: su schermo stretto lo spazio serve a scrivere. */
   .wp-news-search { flex-wrap: wrap; }
   .wp-news-search-count { width: 100%; text-align: right; }
+  /* Audit mobile 2026-09-24: bottone e campo di ricerca alti 21-25px. */
+  .wp-news-refresh { min-height: 34px; }
+  .wp-news-search-input { min-height: 34px; }
 }
