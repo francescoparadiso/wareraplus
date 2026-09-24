@@ -7,8 +7,11 @@
    altrove: vedi la nota su `value`/`total` in src/mu/playstyle.js).
 
    Ogni metrica dichiara: chiave, etichetta i18n, come si estrae da una
-   nazione, come si formatta e se è "più alto = meglio" (serve al
-   confronto, dove tasse e malcontento vanno letti al contrario).
+   nazione, come si formatta e il suo VERSO nel confronto 1 vs 2
+   (`cmp`): 1 = di più è meglio (il default), -1 = di meno è meglio
+   (malcontento), 0 = neutra, si mostra ma non ha un vincitore (guerre:
+   averne di più non è né meglio né peggio; tasse: una scelta, non un
+   punteggio).
 
    I dati vengono tutti da `state.nazioniGlobal`, cioè dall'unica
    country.getAllCountries che l'app fa al boot: nessuna metrica qui
@@ -16,6 +19,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { fmtCompact, fmtFull } from '../mu/ui.js';
+import { state } from '../diplomacy/state.js';
 
 const num = v => (Number.isFinite(v) ? v : 0);
 
@@ -31,12 +35,17 @@ export const METRICS = [
   { key: 'dev',     label: 'development', get: n => num(n.currentDevelopment ?? n.rankings?.countryDevelopment?.value), fmt: v => v.toFixed(1) },
   { key: 'coreDev', label: 'coreDev',     get: n => num(n.coreDevelopment), fmt: v => v.toFixed(1) },
   { key: 'regions', label: 'regions',     get: n => num(n.rankings?.countryRegionDiff?.value), fmt: v => signed(v), signed: true },
-  { key: 'wars',    label: 'wars',        get: n => (n.warsWith?.length || 0), fmt: v => String(v), higherIsBetter: false },
-  { key: 'allies',  label: 'allies',      get: n => (n.allies?.length || 0), fmt: v => String(v) },
-  { key: 'taxes',   label: 'taxes',       get: n => num(avgTax(n)), fmt: v => `${v.toFixed(1)}%`, higherIsBetter: false },
+  { key: 'wars',    label: 'wars',        get: n => (n.warsWith?.length || 0), fmt: v => String(v), cmp: 0 },
+  // WarEra+ — `n.allies` è un FOSSILE: le coppie delle alleanze bilaterali
+  // congelate il 10 giugno 2026, quando il gioco è passato ai blocchi (vedi
+  // server/allianceHistory.js). Qui si contano i patti difensivi di adesso,
+  // dalla diplomazia della mappa già in memoria. La chiave resta 'allies'
+  // per non toccare chi la legge; l'etichetta dice "patti difensivi".
+  { key: 'allies',  label: 'allies',      get: n => (state.diplomacyData?.get(n._id)?.defensivePacts?.length || 0), fmt: v => String(v) },
+  { key: 'taxes',   label: 'taxes',       get: n => num(avgTax(n)), fmt: v => `${v.toFixed(1)}%`, cmp: 0 },
   // `unrest` non e' una percentuale ma { bar, barMax }: quanto e' pieno il
   // serbatoio del malcontento. Qui si mostra come quota del massimo.
-  { key: 'unrest',  label: 'unrest',      get: n => unrestPct(n), fmt: v => `${v.toFixed(1)}%`, higherIsBetter: false },
+  { key: 'unrest',  label: 'unrest',      get: n => unrestPct(n), fmt: v => `${v.toFixed(1)}%`, cmp: -1 },
   { key: 'perCit',  label: 'perCitizen',  get: n => num(n.rankings?.weeklyCountryDamagesPerCitizen?.value), fmt: fmtCompact },
   { key: 'bounty',  label: 'bounty',      get: n => num(n.rankings?.countryBounty?.value), fmt: fmtCompact },
   // Bonus produzione dalle risorse strategiche: il gioco lo espone già in

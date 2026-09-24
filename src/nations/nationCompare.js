@@ -28,6 +28,50 @@ import { METRICS, metricValue } from './metrics.js';
 import { versusBarHtml } from './charts.js';
 import { escapeHtml, flagImg, fmtCompact } from '../mu/ui.js';
 
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Chi è in vantaggio (come nel Faction 1 vs 2 delle alleanze)
+   ------------------------------------------------------------------
+   Ogni metrica ha un verso (`cmp` in metrics.js). Chi vince la riga va in
+   grassetto col suo vantaggio (+34%, ×2,3 oltre il doppio, differenza
+   quando c'è uno zero), il perdente si spegne; guerre, tasse e quote di
+   build sono neutre. In cima un tabellone: chi è avanti in quante misure.
+   Sotto, le BUILD dei giocatori (guerra/economia), dal censimento del
+   server di cache: arrivano con una fetch per sessione, e finché non ci
+   sono il gruppo non compare (mai zeri inventati).
+   ══════════════════════════════════════════════════════════════ */
+let _ps = null;          // /mu-playstyle-by-country, o {} se il server manca
+let _psInCorso = false;
+
+function caricaBuild(onReady) {
+  if (_ps || _psInCorso) return;
+  _psInCorso = true;
+  import('../mu/api.js')
+    .then(m => m.fetchPlaystyleByCountry())
+    .then(d => { _ps = d || {}; onReady(); })
+    .catch(() => { _ps = {}; });
+}
+
+function sommaBuild(list) {
+  if (!_ps) return null;
+  const out = { war: 0, eco: 0, mixed: 0, known: 0 };
+  for (const n of list) {
+    const c = _ps[n._id];
+    if (!c?.known) continue;
+    out.war += c.war || 0; out.eco += c.eco || 0; out.mixed += c.mixed || 0; out.known += c.known;
+  }
+  return out.known ? out : null;
+}
+
+function vantaggio(hi, lo, fmt) {
+  if (lo > 0) {
+    const r = hi / lo;
+    return r >= 2 ? '×' + r.toFixed(1) : '+' + ((r - 1) * 100).toFixed(0) + '%';
+  }
+  return '+' + fmt(hi - lo);
+}
+
+const sost = (s, vars) => Object.entries(vars).reduce((t, [k, v]) => t.split('{' + k + '}').join(String(v)), s);
+
 // Percentuali: la somma non ha senso, si fa la media.
 const AVERAGED = new Set(['taxes', 'unrest', 'dev', 'coreDev', 'perCit']);
 // Fuori dal confronto: "regioni" è già un differenziale col segno, sommarlo
@@ -47,9 +91,61 @@ export function renderNationCompare(host, ctx) {
     return AVERAGED.has(m.key) ? sum / list.length : sum;
   };
 
-  const rows = METRICS.filter(m => !SKIPPED.has(m.key))
-    .map(m => versusBarHtml({ label: natT(m.label), a: agg(a, m), b: agg(b, m), fmt: m.fmt }))
+  const tally = { a: 0, b: 0, pari: 0, tot: 0 };
+  const riga = (label, va, vb, fmt, cmp = 1) => {
+    if (cmp === 0) return versusBarHtml({ label, a: va, b: vb, fmt, neutral: true });
+    tally.tot++;
+    // cmp -1: vince il valore più basso (malcontento).
+    const aMeglio = cmp === 1 ? va > vb : va < vb;
+    const bMeglio = cmp === 1 ? vb > va : vb < va;
+    if (!aMeglio && !bMeglio) { tally.pari++; return versusBarHtml({ label, a: va, b: vb, fmt, lowerNote: cmp === -1 ? natT('vsLower') : '' }); }
+    const win = aMeglio ? 'a' : 'b';
+    tally[win]++;
+    const hi = Math.max(va, vb), lo = Math.min(va, vb);
+    // Dove vince il più basso il vantaggio è "quanto meno": differenza.
+    const adv = cmp === -1 ? '−' + fmt(hi - lo) : vantaggio(hi, lo, fmt);
+    return versusBarHtml({ label, a: va, b: vb, fmt, win, adv, lowerNote: cmp === -1 ? natT('vsLower') : '' });
+  };
+
+  const bothSides = a.length && b.length;
+  let rows = METRICS.filter(m => !SKIPPED.has(m.key))
+    .map(m => riga(natT(m.label), agg(a, m), agg(b, m), m.fmt, bothSides ? (m.cmp ?? 1) : 0))
     .join('');
+
+  // Build dei giocatori: le QUOTE sono neutre, i CONTEGGI no (più giocatori
+  // da guerra = più forza militare).
+  if (bothSides) {
+    if (!_ps) caricaBuild(() => { if (host.isConnected) renderNationCompare(host, ctx); });
+    const pa = sommaBuild(a), pb = sommaBuild(b);
+    if (pa && pb) {
+      const pct = v => v.toFixed(1) + '%';
+      const q = (p, k) => (p[k] / p.known) * 100;
+      rows += `<li class="wp-nat-vs-group">${escapeHtml(natT('vsBuilds'))}</li>`
+        + riga(natT('vsWarPct'), q(pa, 'war'), q(pb, 'war'), pct, 0)
+        + riga(natT('vsEcoPct'), q(pa, 'eco'), q(pb, 'eco'), pct, 0)
+        + riga(natT('vsWarN'), pa.war, pb.war, fmtCompact)
+        + riga(natT('vsEcoN'), pa.eco, pb.eco, fmtCompact)
+        + riga(natT('vsHybN'), pa.mixed, pb.mixed, fmtCompact, 0);
+    }
+  }
+
+  const nomeLato = list => list.map(n => n.name).join(' + ');
+  const tabellone = !bothSides
+    ? `<p class="wp-nat-vs-note">${escapeHtml(natT('vsPick'))}</p>`
+    : `<div class="wp-nat-score">
+        ${['a', 'b'].map(l => {
+          const vinte = tally[l], altre = tally[l === 'a' ? 'b' : 'a'];
+          return `<div class="wp-nat-score-side wp-nat-score-${l}${vinte > altre ? ' lead' : ''}">
+            <div class="wp-nat-score-n">${vinte}</div>
+            <div class="wp-nat-score-name">${escapeHtml(nomeLato(l === 'a' ? a : b))}</div>
+            <div class="wp-nat-score-sub">${escapeHtml(sost(natT('vsAhead'), { n: vinte, t: tally.tot }))}</div>
+          </div>`;
+        }).join(`<div class="wp-nat-score-mid">
+            <div class="wp-nat-score-bar"><span class="a" style="width:${(tally.a / tally.tot) * 100}%"></span><span class="pari" style="width:${(tally.pari / tally.tot) * 100}%"></span><span class="b" style="width:${(tally.b / tally.tot) * 100}%"></span></div>
+            ${tally.pari ? `<div class="wp-nat-score-even">${escapeHtml(natT('vsEven'))} · ${tally.pari}</div>` : ''}
+          </div>`)}
+      </div>
+      <p class="wp-nat-vs-note">${escapeHtml(sost(natT('vsNote'), { t: tally.tot }))}</p>`;
 
   const chip = n => `
     <button type="button" class="wp-nat-chip wp-nat-chip-${sides.get(n._id)}" data-country="${escapeHtml(n._id)}">
@@ -98,7 +194,7 @@ export function renderNationCompare(host, ctx) {
       <button type="button" class="wp-nat-reset" id="wp-nat-reset">${escapeHtml(natT('reset'))}</button>
     </div>
 
-    ${(a.length || b.length) ? `<ul class="wp-nat-vs">${rows}</ul>` : ''}
+    ${(a.length || b.length) ? `${tabellone}<ul class="wp-nat-vs">${rows}</ul>` : ''}
 
     <div class="wp-nat-pickers">
       ${pickerHtml('a')}

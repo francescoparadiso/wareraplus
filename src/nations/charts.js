@@ -86,17 +86,26 @@ export function barsHtml({ title, rows, fmt = fmtCompact, color = CHART_COLORS[0
 }
 
 /** Barra a due estremi per il confronto 1vs2: quota di A contro quota di B. */
-export function versusBarHtml({ label, a, b, fmt = fmtCompact }) {
+/* WarEra+ — `win` ('a' | 'b' | null) e `adv` (il vantaggio già scritto,
+   "+34%" o "×2.3") dicono chi vince la riga: il vincitore in grassetto col
+   vantaggio accanto e una freccia verso di lui, il perdente spento. `neutral`
+   = riga senza vincitore (guerre, tasse, quote di build), in corsivo.
+   `lowerNote` = etichetta breve per le righe dove vince il più basso. */
+export function versusBarHtml({ label, a, b, fmt = fmtCompact, win = null, adv = '', neutral = false, lowerNote = '' }) {
   const total = a + b;
   const pctA = total > 0 ? (a / total) * 100 : 50;
+  const cls = neutral ? ' wp-nat-vs-neutral' : win ? ` wp-nat-vs-win-${win}` : '';
+  const badge = adv ? `<span class="wp-nat-vs-adv">${escapeHtml(adv)}</span>` : '';
+  const freccia = win === 'a' ? '◀ ' : '';
+  const frecciaB = win === 'b' ? ' ▶' : '';
   return `
-    <li class="wp-nat-vs-row">
-      <span class="wp-nat-vs-label">${escapeHtml(label)}</span>
-      <span class="wp-nat-vs-a">${escapeHtml(fmt(a))}</span>
+    <li class="wp-nat-vs-row${cls}">
+      <span class="wp-nat-vs-label">${freccia}${escapeHtml(label)}${frecciaB}${lowerNote ? ` <span class="wp-nat-vs-lower">${escapeHtml(lowerNote)}</span>` : ''}</span>
+      <span class="wp-nat-vs-a">${win === 'a' ? badge + ' ' : ''}${escapeHtml(fmt(a))}</span>
       <span class="wp-nat-vs-track">
         <span class="wp-nat-vs-fill-a" style="width:${pctA.toFixed(1)}%"></span>
         <span class="wp-nat-vs-fill-b" style="width:${(100 - pctA).toFixed(1)}%"></span>
       </span>
-      <span class="wp-nat-vs-b">${escapeHtml(fmt(b))}</span>
+      <span class="wp-nat-vs-b">${escapeHtml(fmt(b))}${win === 'b' ? ' ' + badge : ''}</span>
     </li>`;
 }
