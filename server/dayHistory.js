@@ -64,12 +64,37 @@ function initDayHistory(tools) {
   deps = tools;
 }
 
+// Un patto è un id di nazione. `countryDiplomacy.getByCountry` però li manda
+// come oggetti { partner, bonusPercent, damagesDealt } (il client della mappa
+// li riduceva già a `p.partner`, questo scatto no): dal 19 settembre i giorni
+// scattati da noi avevano oggetti, quelli importati id, e la time machine
+// stampava "[object Object]". Si normalizza in scrittura E in lettura, così
+// anche i giorni già salvati male si sistemano da soli.
+const idPatto = (p) => (typeof p === 'string' ? p : p?.partner || null);
+
 function _read(nome) {
   if (_mem.has(nome)) return _mem.get(nome);
   const store = deps.readCache(nome, { fetchedAt: null, startedAt: null, days: {} });
   if (!store.days) store.days = {};
   _mem.set(nome, store);
+  if (nome === FILE_DIPL && _riparaPatti(store)) _write(nome, store);
   return store;
+}
+
+/** Riscrive a id i patti salvati come oggetti. true se ha cambiato qualcosa. */
+function _riparaPatti(store) {
+  let giorni = 0;
+  for (const righe of Object.values(store.days)) {
+    let toccato = false;
+    for (const r of righe || []) {
+      if (!Array.isArray(r?.[2]) || r[2].every((p) => typeof p === 'string')) continue;
+      r[2] = r[2].map(idPatto).filter(Boolean).sort();
+      toccato = true;
+    }
+    if (toccato) giorni += 1;
+  }
+  if (giorni) console.log(`[day-history] patti riportati a id in ${giorni} giorni`);
+  return giorni > 0;
 }
 
 function _write(nome, store) {
@@ -118,7 +143,7 @@ function snapshotDay() {
   const righeDipl = countries.map(n => [
     n._id,
     [...(n.warsWith || [])].sort(),
-    [...(diplByCountry.get(n._id)?.defensivePacts || [])].sort(),
+    (diplByCountry.get(n._id)?.defensivePacts || []).map(idPatto).filter(Boolean).sort(),
     diplByCountry.get(n._id)?.swornEnemy?.enemy || null,
     // Il tesoro è countryWealth, non `money`: quest'ultimo è fermo da
     // mesi (vedi la nota nel README del server).

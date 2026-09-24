@@ -69,7 +69,11 @@ export function fetchDay(day) {
       // una volta sola, invece che ad ogni apertura del popup.
       const diplomacy = new Map();
       for (const r of data?.diplomacy || []) {
-        diplomacy.set(r[0], { wars: r[1] || [], pacts: r[2] || [], sworn: r[3] || null, wealth: r[4] ?? null });
+        // WarEra+ un patto può arrivare come oggetto { partner, … } da un
+        // server non ancora aggiornato (vedi idPatto in server/dayHistory.js):
+        // qui si tiene solo l'id, altrimenti il popup stampa "[object Object]".
+        const pacts = (r[2] || []).map(p => (typeof p === 'string' ? p : p?.partner)).filter(Boolean);
+        diplomacy.set(r[0], { wars: r[1] || [], pacts, sworn: r[3] || null, wealth: r[4] ?? null });
       }
       const battles = (data?.battles || []).map(r => ({
         id: r[0], type: r[1],

@@ -48,7 +48,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { state } from '../diplomacy/state.js';
-import { THEMES } from '../diplomacy/config.js';
+import { THEMES, COLORS } from '../diplomacy/config.js';
 import maplibregl from 'maplibre-gl';
 import * as topojson from 'topojson-client';
 
@@ -95,6 +95,43 @@ function _buildBordersGeoJSON(regionsMap) {
   };
   const mesh = topojson.mesh(topoData, topoData.objects.regions, (a, b) => a !== b && ownerOf(a.properties) !== ownerOf(b.properties));
   return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: mesh }] };
+}
+
+// WarEra+ la diplomazia della nazione selezionata, dipinta sulla mappa del
+// giorno: lei in giallo, chi è in guerra con lei rosso scuro, il nemico
+// giurato rosso acceso, i patti difensivi viola, tutti gli altri spenti.
+// Gli STESSI colori della vista diplomazia della mappa principale
+// (COLORS), per non dover imparare un secondo vocabolario. null = colori
+// normali delle nazioni. Precedenza in caso di doppioni: lei > nemico
+// giurato > guerra > patto (un'etichetta di 'match' può comparire una volta).
+let _focus = null;
+
+function _focusColorExpr(f) {
+  const expr = ['match', ['get', 'countryId']];
+  const visti = new Set();
+  const ramo = (ids, colore) => {
+    const nuovi = [...new Set(ids)].filter(id => id && !visti.has(id));
+    if (!nuovi.length) return;
+    nuovi.forEach(id => visti.add(id));
+    expr.push(nuovi, colore);
+  };
+  ramo([f.self], COLORS.SELECTED);
+  ramo(f.sworn ? [f.sworn] : [], COLORS.SWORN_ENEMY);
+  ramo(f.wars || [], COLORS.WAR_DIRECT);
+  ramo(f.pacts || [], COLORS.DEFENSIVE_PACT);
+  expr.push(COLORS.NEUTRAL_UNSELECTED);
+  return expr;
+}
+
+function _applyFill() {
+  if (!_map?.getLayer(TM_LYR_FILL)) return;
+  _map.setPaintProperty(TM_LYR_FILL, 'fill-color', _focus ? _focusColorExpr(_focus) : _fillColorExpr());
+}
+
+/** { self, wars, pacts, sworn } oppure null per tornare ai colori normali. */
+export function setTimeMachineFocus(focus) {
+  _focus = focus || null;
+  _applyFill();
 }
 
 function _fillColorExpr() {
@@ -245,6 +282,7 @@ export async function activateTimeMachineMap() {
 }
 
 export function deactivateTimeMachineMap() {
+  _focus = null;
   const container = document.getElementById(CONTAINER_ID);
   if (container) container.classList.remove('open');
 
@@ -267,7 +305,7 @@ export function renderTimeMachineFrame(regionsMap, labelEntries) {
 
   fillSrc.setData(_buildFillGeoJSON(regionsMap));
   borderSrc.setData(_buildBordersGeoJSON(regionsMap));
-  _map.setPaintProperty(TM_LYR_FILL, 'fill-color', _fillColorExpr());
+  _applyFill();
   const theme = THEMES[state.theme];
   _map.setPaintProperty(TM_LYR_BORDER, 'line-color', theme.BORDER_COLOR);
 

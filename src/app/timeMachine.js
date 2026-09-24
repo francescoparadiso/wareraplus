@@ -46,7 +46,9 @@ import {
   captureFrame,
   getTimeMachineMap,
   TM_LYR_FILL,
+  setTimeMachineFocus,
 } from './timeMachineMap.js';
+import { COLORS } from '../diplomacy/config.js';
 import { trackEvent } from '../shared/analytics.js';
 import { t } from '../shared/i18n.js';
 // WarEra+ la giornata storica: patti, guerre, nemico giurato e battaglie
@@ -121,7 +123,7 @@ function _syncDateInput(ts) {
   if (_dateInput.value !== v) _dateInput.value = v;
 }
 
-let _btn, _panel, _slider, _label, _dayLabel, _popup, _dateInput;
+let _btn, _panel, _slider, _label, _dayLabel, _dateInput;
 let _playBtn, _prevEventBtn, _nextEventBtn, _speedBtn, _shareBtn;
 // Indicatore "sei nella time machine" (badge + orologio analogico + data) e
 // classifica territorio ("hall of fame" + lista regioni per nazione).
@@ -136,10 +138,8 @@ let _active = false;
 let _range = null;
 let _debounceTimer = null;
 // Giornata storica: il giorno mostrato adesso, il suo timer e l'ultimo
-// click (per riempire il popup quando i dati arrivano dopo l'apertura).
 let _dayTimer = null;
 let _dayShown = null;
-let _lastClick = null;   // { countryId, point, nation, since }
 let _lastRegions = null; // { regionId: countryId } della posizione slider corrente, per il click
 let _labelRegionId = null; // Map: indice in state.labelsData -> regionId "sotto" quella label (calcolato una volta, posizione fissa — sola lettura, non muta più state.labelsData)
 
@@ -240,13 +240,12 @@ function _deactivate() {
   if (_panel) _panel.classList.remove('open');
   if (_indicator) _indicator.classList.remove('open');
   if (_standings) _standings.classList.remove('open');
-  _hidePopup();
+  _clearFocus();
   // La giornata storica: si spegne con la vista. La cache dei giorni in
   // timeMachineDay.js resta (riaprire la time machine sullo stesso giorno
   // non deve ripagare la richiesta), ma quello che e' a schermo no.
   clearTimeout(_dayTimer);
   _dayShown = null;
-  _lastClick = null;
   if (_dayBattlesEl) _dayBattlesEl.innerHTML = '';
   document.removeEventListener('keydown', _onKeydown);
   resumeShipAnimationDark();
@@ -697,7 +696,6 @@ async function _playLoop() {
     _dayLabel.textContent = _fmtDay(target);
     _updateClock(target);
     _syncUrl(target);
-    _hidePopup();
   }
   if (atEnd) { _stopPlay(); return; }
   if (!_playing) return; // l'utente può aver premuto pausa MENTRE aspettavamo la fetch
@@ -724,6 +722,7 @@ function _onKeydown(e) {
   if (e.key === 'ArrowLeft') { e.preventDefault(); _stopPlay(); _stepBy(-STEP_MS); }
   else if (e.key === 'ArrowRight') { e.preventDefault(); _stopPlay(); _stepBy(STEP_MS); }
   else if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); _togglePlay(); }
+  else if (e.key === 'Escape' && _focusId) { e.preventDefault(); _clearFocus(); }
 }
 
 function _stepBy(deltaMs) {
@@ -828,6 +827,7 @@ async function _fetchAndRender(ts) {
     _lastRegions = regions;
     renderTimeMachineFrame(regions, _buildLabelEntries(regions));
     _updateStandings(regions);
+    _updateFocus(ts);
     return true;
   } catch (err) {
     console.warn('WarEra+ time machine: ricostruzione fallita:', err.message);
@@ -859,7 +859,6 @@ async function _applyAt(ts) {
   _dayLabel.textContent = _fmtDay(ts);
   _syncDateInput(ts);
   _updateClock(ts);
-  _hidePopup();
   _syncUrl(ts);
   _scheduleDay(ts);
   return await _fetchAndRender(ts);
@@ -892,11 +891,9 @@ function _scheduleDay(ts) {
 
 function _renderDay(giorno) {
   _updateDayBattles(giorno);
-  // Popup aperto su una nazione: si riempie da se' quando i dati arrivano,
-  // senza chiedere all'utente di ricliccare.
-  if (_lastClick && _popup?.classList.contains('visible')) {
-    _renderPopup(_lastClick, giorno);
-  }
+  // Nazione selezionata: si riempie da se' quando i dati arrivano, senza
+  // chiedere all'utente di ricliccare.
+  if (_focusId && dayKey(Number(_slider.value)) === giorno) _updateFocus(Number(_slider.value));
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1031,22 +1028,169 @@ function _buildLabelEntries(regionsMap) {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// WarEra+ — La nazione selezionata (richiesta dell'utente: «cliccando sulla
+// nazione mi dia i dati che ho in quel giorno, e la diplomazia relativa, in
+// modo che posso vedere la diplomazia cambiare mentre il tempo va avanti»).
+//
+// Prima era un popup attaccato al punto cliccato, che si chiudeva a ogni
+// mossa dello slider: andava bene per UN giorno fermo, non per guardare una
+// nazione attraverso il tempo. Ora un click SELEZIONA: una scheda fissa in
+// basso a sinistra segue la nazione giorno dopo giorno (playback compreso),
+// e la mappa si ricolora sulla sua diplomazia di quel giorno — la vedi
+// cambiare mentre il tempo scorre. Click sul mare, ✕ o Esc la deselezionano.
+//
+// Costo: la giornata storica (/day-history, 7-15 KB gzip) si chiede anche
+// durante il play, ma SOLO con una nazione selezionata, con tre giorni di
+// anticipo, e senza che il playback aspetti mai la rete. Senza selezione
+// resta la regola di prima: una fetch per giorno fermato.
+//
+// Finché il giorno nuovo non è arrivato la mappa tiene i colori del giorno
+// prima invece di spegnersi: un lampo grigio a ogni giorno si leggerebbe
+// come "ha perso tutti gli alleati".
+// ─────────────────────────────────────────────────────────────────────────
+let _focusEl = null;
+let _focusId = null;      // countryId selezionato
+let _focusRegion = null;  // regione cliccata, per la riga "sua dal —"
+const DAY_MS = 24 * 60 * 60 * 1000;
+const PREFETCH_DAYS = 3;
+
 function _onHistoricalClick(e) {
   if (!e.features?.length || !_lastRegions) return;
   const regionId = e.features[0].properties?.regionId;
   const countryId = regionId ? _lastRegions[regionId] : null;
-  const nation = countryId ? state.nationMap.get(countryId) : null;
-  const since = nation ? _ownedSince(regionId, Number(_slider.value)) : null;
-  _lastClick = { countryId, point: e.point, nation, since };
+  if (!countryId || !state.nationMap.get(countryId)) { _clearFocus(); return; }
+  _setFocus(countryId, regionId);
+}
 
-  const giorno = dayKey(Number(_slider.value));
-  _renderPopup(_lastClick, giorno);
-  // Click arrivato prima che il debounce chiedesse il giorno: lo si chiede
-  // qui, altrimenti il popup resterebbe al nome e alla bandiera.
-  if (cachedDay(giorno) === undefined) {
-    _dayShown = giorno;
-    fetchDay(giorno).then(() => { if (_active && _dayShown === giorno) _renderDay(giorno); });
+function _setFocus(countryId, regionId = null) {
+  _focusId = countryId;
+  _focusRegion = regionId;
+  trackEvent('time-machine-focus');
+  _updateFocus(Number(_slider.value));
+}
+
+function _clearFocus() {
+  _focusId = null;
+  _focusRegion = null;
+  if (_focusEl) _focusEl.classList.remove('visible');
+  setTimeMachineFocus(null);
+}
+
+/** Chiamata a ogni fotogramma applicato (_fetchAndRender) e quando arriva
+ *  un giorno: aggiorna scheda e colori per l'istante `ts`. */
+function _updateFocus(ts) {
+  if (!_focusId || !_active) return;
+  const giorno = dayKey(ts);
+  const dati = cachedDay(giorno);
+  if (dati === undefined) {
+    fetchDay(giorno).then(() => {
+      if (_focusId && dayKey(Number(_slider.value)) === giorno) _updateFocus(Number(_slider.value));
+    });
   }
+  if (_playing) {
+    for (let k = 1; k <= PREFETCH_DAYS; k++) {
+      const g = dayKey(ts + k * DAY_MS);
+      if (cachedDay(g) === undefined) fetchDay(g);
+    }
+  }
+
+  const fuori = dati && fuoriPortata(dati, giorno);
+  const d = !fuori ? dati?.diplomacy?.get(_focusId) : null;
+  if (d) setTimeMachineFocus({ self: _focusId, wars: d.wars, pacts: d.pacts, sworn: d.sworn });
+  else if (dati !== undefined) setTimeMachineFocus({ self: _focusId });
+  // dati === undefined: si tengono i colori del giorno prima (vedi testa).
+
+  _renderFocus(ts, giorno, dati, d, fuori);
+}
+
+/** Bandiera + nome, cliccabile: seleziona quella nazione. */
+function _chip(countryId) {
+  const n = state.nationMap.get(countryId);
+  const code = n?.code?.toLowerCase();
+  const flag = code ? `<img src="https://media.warera.io/images/flags/${code}.svg?v=16" alt="" />` : '';
+  return `<button type="button" class="wp-tm-focus-chip" data-cid="${escapeHtml(countryId)}">${flag}${escapeHtml(_nomeDi(countryId))}</button>`;
+}
+
+function _gruppo(label, ids, colore, vuoto = '') {
+  if (!ids?.length && !vuoto) return '';
+  const corpo = ids?.length
+    ? `<div class="wp-tm-focus-chips">${ids.map(_chip).join('')}</div>`
+    : `<div class="wp-tm-focus-dim">${escapeHtml(vuoto)}</div>`;
+  return `<div class="wp-tm-focus-group">
+      <div class="wp-tm-focus-lab"><span class="wp-tm-focus-dot" style="background:${colore}"></span>${escapeHtml(label)}${ids?.length ? ` · ${ids.length}` : ''}</div>
+      ${corpo}
+    </div>`;
+}
+
+function _renderFocus(ts, giorno, dati, d, fuori) {
+  if (!_focusEl) {
+    _focusEl = document.createElement('div');
+    _focusEl.id = 'wp-tm-focus';
+    _focusEl.addEventListener('click', (ev) => {
+      if (ev.target.closest('.wp-tm-focus-close')) { _clearFocus(); return; }
+      const chip = ev.target.closest('.wp-tm-focus-chip');
+      if (chip?.dataset.cid) _setFocus(chip.dataset.cid);
+    });
+    document.body.appendChild(_focusEl);
+  }
+  const nation = state.nationMap.get(_focusId);
+  const code = nation?.code?.toLowerCase();
+  const flag = code ? `<img class="wp-tm-popup-flag" src="https://media.warera.io/images/flags/${code}.svg?v=16" alt="" />` : '';
+
+  // Quante regioni aveva IN QUEL MOMENTO: dall'ownership del fotogramma.
+  let regioni = 0;
+  for (const cid of Object.values(_lastRegions || {})) if (cid === _focusId) regioni += 1;
+
+  // "Sua dal —" solo se la regione cliccata e' ancora sua in questo istante.
+  let sinceHtml = '';
+  if (_focusRegion && _lastRegions?.[_focusRegion] === _focusId) {
+    const since = _ownedSince(_focusRegion, ts);
+    const nomeReg = state.regionData?.[_focusRegion]?.name;
+    if (since != null) sinceHtml = `<div class="wp-tm-focus-dim">${nomeReg ? `${escapeHtml(nomeReg)} · ` : ''}${escapeHtml(t('tm_since', { date: _fmtDate(since) }))}</div>`;
+  }
+
+  const stats = [`<span><strong>${regioni}</strong> ${escapeHtml(t('tm_focus_regions'))}</span>`];
+  if (d?.wealth != null) stats.push(`<span><strong>${_fmtCompatto(d.wealth)}</strong> ${escapeHtml(t('tm_focus_treasury'))}</span>`);
+
+  let dipl;
+  if (fuori) dipl = `<div class="wp-tm-focus-dim">${escapeHtml(t('tm_day_out_of_range'))}</div>`;
+  else if (dati === undefined) dipl = '<div class="wp-tm-focus-dim">…</div>';
+  else if (!d) dipl = '';
+  else {
+    dipl = _gruppo(t('tm_day_wars'), d.wars, COLORS.WAR_DIRECT, t('tm_day_no_wars'))
+      + _gruppo(t('tm_day_sworn'), d.sworn ? [d.sworn] : [], COLORS.SWORN_ENEMY)
+      + _gruppo(t('tm_day_pacts'), d.pacts, COLORS.DEFENSIVE_PACT);
+  }
+
+  // Le battaglie aperte quel giorno in cui c'era lei, da una parte o dall'altra.
+  let battHtml = '';
+  if (code && dati?.battles && !fuoriPortata(dati, giorno, 'battles')) {
+    const sue = dati.battles.filter(b => b.attackerCode === code || b.defenderCode === code);
+    const righe = sue.slice(0, 6).map(b => {
+      const attacca = b.attackerCode === code;
+      const altro = attacca ? b.defenderName : b.attackerName;
+      return `<div class="wp-tm-focus-batt">${attacca ? '⚔' : '🛡'} ${escapeHtml(altro || '—')}</div>`;
+    }).join('');
+    const resto = sue.length > 6 ? `<div class="wp-tm-focus-dim">+${sue.length - 6}</div>` : '';
+    battHtml = `<div class="wp-tm-focus-group">
+        <div class="wp-tm-focus-lab">${escapeHtml(t('tm_day_battles'))}${sue.length ? ` · ${sue.length}` : ''}</div>
+        ${sue.length ? righe + resto : `<div class="wp-tm-focus-dim">${escapeHtml(t('tm_day_no_battles'))}</div>`}
+      </div>`;
+  }
+
+  _focusEl.innerHTML = `
+    <div class="wp-tm-focus-head">
+      ${flag}<span class="wp-tm-popup-name">${escapeHtml(nation?.name || _focusId)}</span>
+      <button type="button" class="wp-tm-focus-close" aria-label="${escapeHtml(t('tm_focus_close'))}" title="${escapeHtml(t('tm_focus_close'))}">✕</button>
+    </div>
+    <div class="wp-tm-focus-day">${escapeHtml(_fmtDay(ts))}</div>
+    ${sinceHtml}
+    <div class="wp-tm-focus-stats">${stats.join('')}</div>
+    ${dipl}
+    ${battHtml}
+    <div class="wp-tm-focus-hint">${escapeHtml(t('tm_focus_hint'))}</div>`;
+  _focusEl.classList.add('visible');
 }
 
 /** Il nome di una nazione da un id, per le liste del popup. Se non la
@@ -1055,79 +1199,6 @@ function _nomeDi(countryId) {
   return state.nationMap.get(countryId)?.name || String(countryId);
 }
 
-/** Una riga "etichetta: primi tre nomi (+N)". Vuota se la lista e' vuota —
- *  chi chiama decide se scrivere "nessuno" o non scrivere niente. */
-function _rigaNazioni(label, ids, classe = '') {
-  if (!ids?.length) return '';
-  const primi = ids.slice(0, 3).map(_nomeDi).map(escapeHtml).join(', ');
-  const resto = ids.length > 3 ? ` <span class="wp-tm-popup-more">+${ids.length - 3}</span>` : '';
-  return `<div class="wp-tm-popup-line ${classe}"><span class="wp-tm-popup-lab">${escapeHtml(label)}</span> ${primi}${resto}</div>`;
-}
-
-/**
- * Il popup del click. Oltre a nome, bandiera e "dal —", mostra la
- * diplomazia di QUEL giorno quando il server ce l'ha: guerre in corso,
- * patti difensivi, nemico giurato.
- *
- * Tre stati diversi, che non vanno confusi fra loro:
- *   • dati non ancora arrivati  → non si scrive niente (arrivano dopo)
- *   • giorno prima dell'archivio → "fuori portata", dichiarato
- *   • dati presenti e vuoti      → "nessuna guerra", che e' un'informazione
- */
-function _renderPopup(click, giorno) {
-  if (!_popup) {
-    _popup = document.createElement('div');
-    _popup.id = 'wp-time-machine-popup';
-    document.body.appendChild(_popup);
-  }
-  const { nation, since: sinceTs, countryId, point } = click;
-  if (!nation) {
-    _popup.innerHTML = `<span class="wp-tm-popup-name">${t('tm_no_nation')}</span>`;
-  } else {
-    const code = nation.code?.toLowerCase();
-    const flagHtml = code ? `<img src="https://media.warera.io/images/flags/${code}.svg?v=16" alt="" class="wp-tm-popup-flag" />` : '';
-    // "dal —" solo se _loadEvents() è già arrivato (sinceTs non-null) — vedi
-    // _ownedSince: null significa "dato non ancora disponibile", non "sconosciuto".
-    const sinceHtml = sinceTs != null
-      ? `<span class="wp-tm-popup-since">${t('tm_since', { date: _fmtDate(sinceTs) })}</span>`
-      : '';
-
-    const dati = cachedDay(giorno);
-    let diplHtml = '';
-    if (dati && fuoriPortata(dati, giorno)) {
-      diplHtml = `<div class="wp-tm-popup-line wp-tm-popup-dim">${escapeHtml(t('tm_day_out_of_range'))}</div>`;
-    } else if (dati?.diplomacy) {
-      const d = dati.diplomacy.get(countryId);
-      if (d) {
-        const guerre = d.wars.length
-          ? _rigaNazioni(t('tm_day_wars'), d.wars, 'wp-tm-popup-war')
-          : `<div class="wp-tm-popup-line wp-tm-popup-dim">${escapeHtml(t('tm_day_no_wars'))}</div>`;
-        const sworn = d.sworn
-          ? `<div class="wp-tm-popup-line wp-tm-popup-sworn"><span class="wp-tm-popup-lab">${escapeHtml(t('tm_day_sworn'))}</span> ${escapeHtml(_nomeDi(d.sworn))}</div>`
-          : '';
-        diplHtml = guerre + _rigaNazioni(t('tm_day_pacts'), d.pacts) + sworn;
-      }
-    }
-
-    _popup.innerHTML = `
-      <div class="wp-tm-popup-main">${flagHtml}<span class="wp-tm-popup-name">${escapeHtml(nation.name)}</span></div>
-      ${sinceHtml}
-      ${diplHtml}
-    `;
-  }
-  // Il gap sopra il punto cliccato e il centraggio orizzontale li fa il
-  // CSS (transform: translate(-50%, calc(-100% - 8px))) — qui solo il
-  // punto esatto, in coordinate viewport (getContainer() è relativo al
-  // canvas della mappa DEDICATA, non più quella principale).
-  const mapContainer = getTimeMachineMap().getContainer().getBoundingClientRect();
-  _popup.style.left = `${mapContainer.left + point.x}px`;
-  _popup.style.top = `${mapContainer.top + point.y}px`;
-  _popup.classList.add('visible');
-}
-
-function _hidePopup() {
-  if (_popup) _popup.classList.remove('visible');
-}
 
 // ─────────────────────────────────────────────────────────────────────────
 // Share (📤): esporta "quel momento" come PNG — la cattura vera e propria
