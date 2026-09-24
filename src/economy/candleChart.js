@@ -129,3 +129,124 @@ export function candleChartSvg(serie, { w = 880, h = 320, fmt = (v) => String(v)
     ${griglia}${corpo}${assex}
   </svg>`;
 }
+
+/* ── Esplorare il grafico (WarEra+) ────────────────────────────────
+   Segnalato: le candele si guardavano e basta. Ora:
+   - al passaggio del mouse una guida verticale si aggancia alla candela
+     più vicina e un riquadro dice giorno, apertura, massimo, minimo,
+     chiusura, variazione dalla chiusura PRECEDENTE (con la sua data: dopo
+     un buco "ieri" non è il giorno prima) e da quanti campioni è fatta;
+   - un clic la FISSA, per leggerla con calma o confrontarla; un secondo
+     clic (o Esc) la libera;
+   - con il grafico a fuoco, ← → passano da una candela all'altra.
+   La candela più vicina si trova dalla sola x del puntatore: l'SVG è
+   stirato sulla larghezza (preserveAspectRatio="none"), quindi basta la
+   stessa proporzione usata per disegnare, senza un rettangolo invisibile
+   per candela. Guida e riquadro sono HTML sopra l'SVG, così non si
+   deformano con lo stiramento. */
+export function attachCandleExplorer(wrap, serie, { w = 880, h = 320, fmt = (v) => String(v), lingua = 'it', t = (k) => k } = {}) {
+  const svg = wrap?.querySelector('.wp-ecn-chart');
+  if (!svg || !serie || serie.length < 2) return;
+
+  const x0 = PAD_L, x1 = w - PAD_R;
+  const gio = serie.map(r => giornoNum(r[0]));
+  const arco = Math.max(1, gio[gio.length - 1] - gio[0]);
+  const X = (g) => x0 + ((g - gio[0]) / arco) * (x1 - x0);
+  // Solo le candele con una chiusura: un buco non si esplora, non c'è niente.
+  const valide = serie.map((r, i) => i).filter(i => Number.isFinite(serie[i][4]));
+  if (!valide.length) return;
+
+  const guida = document.createElement('div');
+  guida.className = 'wp-ecn-guide';
+  const tip = document.createElement('div');
+  tip.className = 'wp-ecn-tip';
+  wrap.append(guida, tip);
+  wrap.tabIndex = 0;
+  wrap.classList.add('wp-ecn-explorable');
+
+  let fissata = null;   // indice in `valide`, o null
+  let attuale = null;
+
+  const dataLunga = (g) => new Intl.DateTimeFormat(lingua, {
+    weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+  }).format(new Date(`${g}T12:00:00Z`));
+
+  function contenuto(k) {
+    const i = valide[k];
+    const [g, o, hi, lo, c, n] = serie[i];
+    const prec = k > 0 ? serie[valide[k - 1]] : null;
+    let delta = '';
+    if (prec && Number.isFinite(prec[4]) && prec[4] !== 0) {
+      const pct = ((c - prec[4]) / prec[4]) * 100;
+      const cls = pct > 0 ? 'wp-ecn-up' : pct < 0 ? 'wp-ecn-down' : '';
+      const segno = pct > 0 ? '▲' : pct < 0 ? '▼' : '=';
+      delta = `<div class="wp-ecn-tip-delta ${cls}">${segno} ${Math.abs(pct).toFixed(2)}% <span>${t('vsDay', { date: fmtGiorno(prec[0], lingua) })}</span></div>`;
+    }
+    const riga = (k2, v) => `<span>${t(k2)}</span><strong>${Number.isFinite(v) ? fmt(v) : '—'}</strong>`;
+    return `
+      <div class="wp-ecn-tip-day">${dataLunga(g)}</div>
+      <div class="wp-ecn-tip-grid">${riga('open', o)}${riga('high', hi)}${riga('low', lo)}${riga('close', c)}</div>
+      ${delta}
+      ${Number.isFinite(n) ? `<div class="wp-ecn-tip-n">${n} ${t('samples')}</div>` : ''}`;
+  }
+
+  function mostra(k) {
+    attuale = k;
+    const sr = svg.getBoundingClientRect();
+    const wr = wrap.getBoundingClientRect();
+    const px = sr.left - wr.left + (X(gio[valide[k]]) / w) * sr.width;
+    guida.style.left = `${px}px`;
+    guida.style.top = `${sr.top - wr.top + (PAD_T / h) * sr.height}px`;
+    guida.style.height = `${((h - PAD_T - PAD_B) / h) * sr.height}px`;
+    guida.classList.add('visible');
+    tip.innerHTML = contenuto(k);
+    tip.classList.toggle('pinned', fissata === k);
+    // A destra della guida, o a sinistra se non ci sta.
+    const tw = tip.offsetWidth || 180;
+    const sinistra = px + 12 + tw > wr.width;
+    tip.style.left = `${sinistra ? px - 12 - tw : px + 12}px`;
+    tip.style.top = `${sr.top - wr.top + 8}px`;
+    tip.classList.add('visible');
+  }
+
+  function nascondi() {
+    if (fissata != null) { mostra(fissata); return; }
+    attuale = null;
+    guida.classList.remove('visible');
+    tip.classList.remove('visible');
+  }
+
+  function piuVicina(clientX) {
+    const sr = svg.getBoundingClientRect();
+    const vx = ((clientX - sr.left) / sr.width) * w;
+    if (vx < x0 - 12 || vx > x1 + 12) return null;
+    let best = 0, dist = Infinity;
+    valide.forEach((i, k) => { const d = Math.abs(X(gio[i]) - vx); if (d < dist) { dist = d; best = k; } });
+    return best;
+  }
+
+  svg.addEventListener('pointermove', (e) => {
+    if (fissata != null) return;
+    const k = piuVicina(e.clientX);
+    if (k == null) nascondi(); else mostra(k);
+  });
+  svg.addEventListener('pointerleave', nascondi);
+  svg.addEventListener('click', (e) => {
+    const k = piuVicina(e.clientX);
+    if (k == null) return;
+    fissata = fissata === k ? null : k;
+    mostra(k);
+    if (fissata == null) tip.classList.remove('pinned');
+  });
+  wrap.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && fissata != null) { fissata = null; nascondi(); return; }
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const da = fissata ?? attuale ?? (valide.length - 1);
+    const k = Math.min(valide.length - 1, Math.max(0, da + (e.key === 'ArrowRight' ? 1 : -1)));
+    // Con la tastiera la candela resta fissata: senza mouse non c'è un
+    // "passaggio" da seguire.
+    fissata = k;
+    mostra(k);
+  });
+}

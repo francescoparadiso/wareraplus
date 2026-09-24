@@ -32,7 +32,7 @@
 
 import { escapeHtml } from '../mu/ui.js';
 import { ecoT } from './i18n.js';
-import { candleChartSvg } from './candleChart.js';
+import { candleChartSvg, attachCandleExplorer } from './candleChart.js';
 import { variazione, priceChartSvg } from '../market/priceChart.js';
 import {
   loadMarketData, loadPriceHistory, priceSeries, priceHistoryCoverage,
@@ -167,7 +167,12 @@ function elencoHtml() {
 }
 
 // ── Disegno: la risorsa aperta ──────────────────────────────────────
+// La finestra disegnata per ultima: wire() ci aggancia l'esploratore dopo
+// che il grafico e' nel documento (vedi attachCandleExplorer).
+let _finestra = null;
+
 function dettaglioHtml(code) {
+  _finestra = null;
   const r = righe().find(x => x.code === code);
   if (!r) return elencoHtml();
 
@@ -181,6 +186,7 @@ function dettaglioHtml(code) {
   const grafico = finestra.length > 1
     ? candleChartSvg(finestra, { fmt: gold, lingua: lingua(), mode: _mode })
     : '';
+  if (grafico) _finestra = finestra;
 
   const spread = (r.ask != null && r.bid != null) ? r.ask - r.bid : null;
 
@@ -219,7 +225,7 @@ function dettaglioHtml(code) {
           <button type="button" class="wp-ecn-chip${_mode === 'line' ? ' active' : ''}" data-mode="line">${escapeHtml(ecoT('line'))}</button>
         </div>
         <div class="wp-ecn-chartwrap">${grafico || `<p class="wp-ecn-note">${escapeHtml(ecoT('noSeries'))}</p>`}</div>
-        <p class="wp-ecn-note">${escapeHtml(ecoT('gap'))}</p>`
+        <p class="wp-ecn-note">${grafico ? `${escapeHtml(ecoT('exploreHint'))} ` : ''}${escapeHtml(ecoT('gap'))}</p>`
       : `<p class="wp-ecn-note">${escapeHtml(ecoT('noHistory'))}</p>`}
     </div>`;
 }
@@ -293,6 +299,12 @@ function wire() {
   root.querySelectorAll('[data-mode]').forEach(b => {
     b.addEventListener('click', () => { _mode = b.dataset.mode; paint(); });
   });
+
+  // Il grafico si esplora: passaggio del mouse, clic per fissare, frecce.
+  const wrap = root.querySelector('.wp-ecn-chartwrap');
+  if (wrap && _finestra && _aperta) {
+    attachCandleExplorer(wrap, _finestra, { fmt: gold, lingua: lingua(), t: ecoT });
+  }
 
   wireRows();
 }

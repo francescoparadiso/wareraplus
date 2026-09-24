@@ -316,6 +316,46 @@ body.light-theme .wp-ecn-type-product { background: rgba(9, 105, 218, .12); colo
 .wp-ecn-body.wp-ecn-down, .wp-ecn-wick.wp-ecn-down { fill: var(--wp-ecn-down); stroke: var(--wp-ecn-down); }
 .wp-ecn-wick { stroke-width: 1.2; }
 
+/* ── Esplorazione del grafico (attachCandleExplorer) ──────────── */
+.wp-ecn-chartwrap { position: relative; }
+.wp-ecn-explorable .wp-ecn-chart { cursor: crosshair; }
+.wp-ecn-explorable:focus-visible { outline: 2px solid var(--wp-ov-accent, #3fb950); outline-offset: 2px; }
+.wp-ecn-guide {
+  position: absolute;
+  width: 1px;
+  background: var(--wp-ov-text-dim, #8b949e);
+  opacity: .7;
+  pointer-events: none;
+  display: none;
+}
+.wp-ecn-guide.visible { display: block; }
+.wp-ecn-tip {
+  position: absolute;
+  z-index: 3;
+  min-width: 170px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--wp-ov-border, #30363d);
+  background: var(--wp-ov-surface, #0d1117);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .45);
+  font-size: 12px;
+  color: var(--wp-ov-text, #e6edf3);
+  pointer-events: none;
+  display: none;
+}
+.wp-ecn-tip.visible { display: block; }
+.wp-ecn-tip.pinned { border-color: var(--wp-ov-accent, #3fb950); }
+.wp-ecn-tip-day { font-weight: 700; margin-bottom: 6px; }
+.wp-ecn-tip-day::first-letter { text-transform: uppercase; }
+.wp-ecn-tip-grid { display: grid; grid-template-columns: auto auto; gap: 2px 14px; }
+.wp-ecn-tip-grid span { color: var(--wp-ov-text-dim, #8b949e); }
+.wp-ecn-tip-grid strong { text-align: right; font-variant-numeric: tabular-nums; }
+.wp-ecn-tip-delta { margin-top: 6px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.wp-ecn-tip-delta.wp-ecn-up { color: var(--wp-ecn-up); }
+.wp-ecn-tip-delta.wp-ecn-down { color: var(--wp-ecn-down); }
+.wp-ecn-tip-delta span { font-weight: 400; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-ecn-tip-n { margin-top: 4px; font-size: 11px; color: var(--wp-ov-text-dim, #8b949e); }
+
 /* ── Telefono ────────────────────────────────────────────────── */
 /* Sotto i 900px le tre colonne di variazione e la sparkline sparirebbero
    in una riga illeggibile: si tolgono 7g/30g e il grafichino, e restano

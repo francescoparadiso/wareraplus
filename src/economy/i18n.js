@@ -24,6 +24,8 @@ const DICT = {
     coverage: 'The archive starts on {d} — before that nobody was recording.',
     noSeries: 'Not enough candles yet to draw a trend.',
     open: 'Open', high: 'High', low: 'Low', close: 'Close', samples: 'samples',
+
+    vsDay: "vs {date}", exploreHint: "Hover to read a day, click to pin it, ← → to move.",
     raw: 'Raw', product: 'Product', thin: 'Only {n} units at this price',
     gap: 'A day with no candle is a gap, never a zero: the line breaks.',
     backToList: 'All resources', sortBy: 'Sort by', noBook: 'No orders',
@@ -41,6 +43,8 @@ const DICT = {
     coverage: "L'archivio parte dal {d} — prima di allora non stava guardando nessuno.",
     noSeries: 'Non ci sono ancora abbastanza candele per disegnare un andamento.',
     open: 'Apertura', high: 'Massimo', low: 'Minimo', close: 'Chiusura', samples: 'campioni',
+
+    vsDay: "rispetto al {date}", exploreHint: "Passa sopra per leggere un giorno, clic per fissarlo, ← → per spostarti.",
     raw: 'Materia prima', product: 'Prodotto', thin: 'Solo {n} pezzi a questo prezzo',
     gap: 'Un giorno senza candela è un buco, mai uno zero: la linea si spezza.',
     backToList: 'Tutte le risorse', sortBy: 'Ordina per', noBook: 'Nessun ordine',
@@ -58,6 +62,8 @@ const DICT = {
     coverage: 'El archivo empieza el {d} — antes nadie estaba mirando.',
     noSeries: 'Aún no hay suficientes velas para dibujar una tendencia.',
     open: 'Apertura', high: 'Máximo', low: 'Mínimo', close: 'Cierre', samples: 'muestras',
+
+    vsDay: "vs. {date}", exploreHint: "Pasa el ratón para leer un día, clic para fijarlo, ← → para moverte.",
     raw: 'Materia prima', product: 'Producto', thin: 'Solo {n} unidades a este precio',
     gap: 'Un día sin vela es un hueco, nunca un cero: la línea se corta.',
     backToList: 'Todos los recursos', sortBy: 'Ordenar por', noBook: 'Sin órdenes',
@@ -75,6 +81,8 @@ const DICT = {
     coverage: 'Das Archiv beginnt am {d} — davor hat niemand mitgeschrieben.',
     noSeries: 'Noch zu wenige Kerzen für einen Verlauf.',
     open: 'Eröffnung', high: 'Hoch', low: 'Tief', close: 'Schluss', samples: 'Messungen',
+
+    vsDay: "ggü. {date}", exploreHint: "Überfahren zum Lesen, Klick zum Fixieren, ← → zum Wechseln.",
     raw: 'Rohstoff', product: 'Produkt', thin: 'Nur {n} Stück zu diesem Preis',
     gap: 'Ein Tag ohne Kerze ist eine Lücke, nie eine Null: die Linie bricht ab.',
     backToList: 'Alle Ressourcen', sortBy: 'Sortieren nach', noBook: 'Keine Aufträge',
@@ -92,6 +100,8 @@ const DICT = {
     coverage: "L'archive commence le {d} — avant, personne ne regardait.",
     noSeries: 'Pas encore assez de chandeliers pour tracer une tendance.',
     open: 'Ouverture', high: 'Haut', low: 'Bas', close: 'Clôture', samples: 'relevés',
+
+    vsDay: "vs {date}", exploreHint: "Survole pour lire un jour, clic pour le fixer, ← → pour te déplacer.",
     raw: 'Matière première', product: 'Produit', thin: 'Seulement {n} unités à ce prix',
     gap: 'Un jour sans chandelier est un trou, jamais un zéro : la ligne se coupe.',
     backToList: 'Toutes les ressources', sortBy: 'Trier par', noBook: 'Aucun ordre',
@@ -109,6 +119,8 @@ const DICT = {
     coverage: 'Het archief begint op {d} — daarvoor keek niemand mee.',
     noSeries: 'Nog te weinig kaarsen voor een verloop.',
     open: 'Open', high: 'Hoog', low: 'Laag', close: 'Slot', samples: 'metingen',
+
+    vsDay: "t.o.v. {date}", exploreHint: "Beweeg erover om een dag te lezen, klik om vast te zetten, ← → om te verschuiven.",
     raw: 'Grondstof', product: 'Product', thin: 'Maar {n} stuks tegen deze prijs',
     gap: 'Een dag zonder kaars is een gat, nooit een nul: de lijn breekt.',
     backToList: 'Alle grondstoffen', sortBy: 'Sorteer op', noBook: 'Geen orders',
@@ -126,6 +138,8 @@ const DICT = {
     coverage: 'Arkivet börjar {d} — innan dess tittade ingen.',
     noSeries: 'Ännu för få ljus för att rita en trend.',
     open: 'Öppning', high: 'Högsta', low: 'Lägsta', close: 'Stängning', samples: 'mätningar',
+
+    vsDay: "mot {date}", exploreHint: "För muspekaren över för att läsa en dag, klicka för att låsa, ← → för att flytta.",
     raw: 'Råvara', product: 'Produkt', thin: 'Bara {n} enheter till det här priset',
     gap: 'En dag utan ljus är ett hål, aldrig en nolla: linjen bryts.',
     backToList: 'Alla resurser', sortBy: 'Sortera efter', noBook: 'Inga order',
@@ -143,6 +157,8 @@ const DICT = {
     coverage: 'O arquivo começa a {d} — antes disso ninguém estava a registar.',
     noSeries: 'Ainda não há velas suficientes para desenhar uma tendência.',
     open: 'Abertura', high: 'Máximo', low: 'Mínimo', close: 'Fecho', samples: 'amostras',
+
+    vsDay: "vs. {date}", exploreHint: "Passa por cima para ler um dia, clica para fixar, ← → para mudar.",
     raw: 'Matéria-prima', product: 'Produto', thin: 'Apenas {n} unidades a este preço',
     gap: 'Um dia sem vela é um buraco, nunca um zero: a linha parte-se.',
     backToList: 'Todos os recursos', sortBy: 'Ordenar por', noBook: 'Sem ordens',
@@ -160,6 +176,8 @@ const DICT = {
     coverage: 'يبدأ الأرشيف في {d} — قبل ذلك لم يكن أحد يسجّل.',
     noSeries: 'لا توجد شموع كافية بعد لرسم الاتجاه.',
     open: 'الافتتاح', high: 'الأعلى', low: 'الأدنى', close: 'الإغلاق', samples: 'عيّنات',
+
+    vsDay: "مقارنة بـ {date}", exploreHint: "مرّر المؤشر لقراءة يوم، انقر لتثبيته، ← → للتنقل.",
     raw: 'مادة خام', product: 'منتج', thin: 'فقط {n} قطعة بهذا السعر',
     gap: 'يوم بلا شمعة هو فجوة وليس صفراً: الخط ينقطع.',
     backToList: 'كل المواد', sortBy: 'ترتيب حسب', noBook: 'لا أوامر',
