@@ -251,7 +251,8 @@ export function resumeTicker() {
 function _startTickerData() {
   if (_tickerDataTimer) return;
   if (Date.now() - _lastTickerFetchAt >= TICKER_REFRESH_MS) fetchAllElectionsOnce();
-  _tickerDataTimer = setInterval(fetchAllElectionsOnce, TICKER_REFRESH_MS);
+  // WarEra+ perf: a scheda del browser nascosta il giro si salta.
+  _tickerDataTimer = setInterval(() => { if (!document.hidden) fetchAllElectionsOnce(); }, TICKER_REFRESH_MS);
 }
 
 /* ── INIT ── */

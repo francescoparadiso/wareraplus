@@ -750,7 +750,15 @@ export function startNewsTicker() {
   initVisitAnchor(); // PRIMA di refreshNews: decide da quando scaricare gli eventi
   requestAnimationFrame(_tickerLoop);
   refreshNews();
-  setInterval(refreshNews, REFRESH_MS);
+  // WarEra+ perf: a scheda nascosta il giro si salta (nessuno legge il
+  // ticker, e ogni giro sono richieste a server di cache e WarEra); al
+  // ritorno in primo piano si recupera subito se il dato e' ormai vecchio.
+  let lastRefresh = Date.now();
+  const tick = () => { if (document.hidden) return; lastRefresh = Date.now(); refreshNews(); };
+  setInterval(tick, REFRESH_MS);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && Date.now() - lastRefresh >= REFRESH_MS) tick();
+  });
 
   // Senza questo, cambiando lingua i messaggi già mostrati restavano
   // nella lingua precedente fino al prossimo ciclo di aggiornamento (5

@@ -23,6 +23,21 @@ let battleMarkersTimer = null;
 // esistente finché nessuno le chiama.
 let _battleMarkersPaused = false;
 
+// ── WarEra+ perf: niente polling a scheda del browser nascosta ────────
+// Il giro dei marker (elenco battaglie + un batch di dati live) partiva
+// ogni 30s anche con la scheda in secondo piano: una scheda dimenticata
+// aperta per un giorno faceva ~2.900 giri che nessuno guardava, sullo
+// stesso budget di richieste del Worker/proxy. Qui si salta il giro e,
+// al ritorno in primo piano, se ne fa uno subito (come resumeBattle
+// MarkersPolling) invece di lasciare i marker fermi fino a 30s.
+function _tickBattleMarkers() {
+  if (document.hidden) return;
+  updateBattleMarkers();
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && battleMarkersTimer) updateBattleMarkers();
+});
+
 export function pauseBattleMarkersPolling() {
   if (!battleMarkersTimer) return;   // Diplomacy non ancora avviata
   clearInterval(battleMarkersTimer);
@@ -36,7 +51,7 @@ export function resumeBattleMarkersPolling() {
   // Giro immediato: i marker sono fermi ai dati di quando l'overlay si è
   // aperto, aspettare altri 30s renderebbe visibile il buco.
   updateBattleMarkers();
-  battleMarkersTimer = setInterval(updateBattleMarkers, 30000);
+  battleMarkersTimer = setInterval(_tickBattleMarkers, 30000);
 }
 
 // ==================== CARICAMENTO DATI ====================
@@ -184,7 +199,7 @@ async function refreshData() {
     // Timer unico (prima ce n'erano due sovrapposti: 60s + 30s -> richieste
     // doppie e 429). Viene azzerato se refreshData viene rieseguita.
     if (battleMarkersTimer) clearInterval(battleMarkersTimer);
-    battleMarkersTimer = setInterval(updateBattleMarkers, 30000);
+    battleMarkersTimer = setInterval(_tickBattleMarkers, 30000);
 
     showToast('Strategic data loaded', 'success');
 

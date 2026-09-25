@@ -163,3 +163,15 @@ export async function fetchWithProxyChain(resolvedBase, buildUrl, doFetch) {
 
   throw lastErr || new Error('trpcProxy: nessuna base disponibile');
 }
+
+/**
+ * GET "da Worker" gia' incatenata: VPS prima, Worker come rete.
+ * WarEra+: per le poche fetch dirette al Worker rimaste fuori da
+ * trpcBatch/trpcClient (lista battaglie di ripiego, dati live singoli,
+ * fallback di cacheClient.js). Prima andavano dritte al Worker e quindi,
+ * a tetto giornaliero raggiunto, rispondevano 429 anche col VPS sano.
+ * @param {string} pathAndQuery  es. `/trpc/battle.getById?input=...`
+ */
+export function workerGet(pathAndQuery) {
+  return fetchWithProxyChain(WORKER_API_BASE, base => `${base}${pathAndQuery}`, url => fetch(url));
+}

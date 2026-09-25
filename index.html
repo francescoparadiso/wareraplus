@@ -12,7 +12,10 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@800&family=Cinzel:wght@500;700&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <!-- WarEra+: il CSS di MapLibre arriva gia' nel bundle
+       (src/diplomacy/main.js lo importa da node_modules). Il vecchio <link>
+       a unpkg lo scaricava una seconda volta, bloccando il primo render su
+       un CDN di terzi. -->
 
   <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="/icons/favicon-64.png" sizes="64x64" type="image/png" />

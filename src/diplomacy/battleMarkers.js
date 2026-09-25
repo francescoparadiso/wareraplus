@@ -3,7 +3,8 @@
 import { state } from './state.js';
 import maplibregl from 'maplibre-gl';
 import { fetchActiveBattles, setBattleHeatmap } from './battleHeatmap.js';
-import { API_BASE_URL, WORKER_API_BASE } from './config.js';
+import { API_BASE_URL } from './config.js';
+import { workerGet } from '../shared/trpcProxy.js'; // WarEra+: VPS prima del Worker
 import { trpcBatch, escapeHtml, getNation } from './utils.js';
 import { highlightBattleRegion, clearBattleRegionHighlight } from './map.js';
 import { trackEvent } from '../shared/analytics.js';
@@ -1216,8 +1217,7 @@ async function fetchRegionDataBatch(regionIds) {
 async function fetchLiveBattleData(battleId) {
   try {
     const input = { battleId };
-    const url = `${WORKER_API_BASE}/trpc/battle.getLiveBattleData?input=${encodeURIComponent(JSON.stringify(input))}`;
-    const res = await fetch(url);
+    const res = await workerGet(`/trpc/battle.getLiveBattleData?input=${encodeURIComponent(JSON.stringify(input))}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const live = data?.result?.data || data;

@@ -21,6 +21,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { WARERA_CACHE_BASE, WORKER_API_BASE } from './config.js';
+import { workerGet } from '../shared/trpcProxy.js'; // WarEra+: VPS prima del Worker
 import { trpcBatch } from './utils.js'; // WarEra+: solo per il fallback di fetchPartiesDetailViaCache
 
 // Oltre questa età il dato in cache è considerato inaffidabile (server
@@ -137,6 +138,12 @@ export async function fetchRegionsViaCache() {
 export async function fetchActiveBattlesViaCache() {
   const json = await _fetchCacheJson('/battles');
   if (!Array.isArray(json.data)) throw new Error('cache /battles: forma inattesa');
+  // WarEra+: zero battaglie attive in tutto il mondo non succede; un elenco
+  // vuoto e' quasi sempre il server che ha preso un 429 (visto il
+  // 2026-09-25: mappa senza marker per tutti per ore). Si tratta come
+  // "cache non disponibile" e si passa al ripiego diretto, che costa una
+  // richiesta sola e passa dal proxy.
+  if (!json.data.length) throw new Error('cache /battles: elenco vuoto');
   return json.data;
 }
 
@@ -199,8 +206,7 @@ export async function fetchPartiesForCountryViaCache(countryId) {
     if (!Array.isArray(json.data)) throw new Error('cache /parties: forma inattesa');
     return json.data;
   } catch (err) {
-    const url = `${WORKER_API_BASE}/trpc/party.getManyPaginated?input=${encodeURIComponent(JSON.stringify({ countryId, page: 1, limit: 100 }))}`;
-    const res = await fetch(url);
+    const res = await workerGet(`/trpc/party.getManyPaginated?input=${encodeURIComponent(JSON.stringify({ countryId, page: 1, limit: 100 }))}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const raw = (await res.json())?.result?.data;
     return Array.isArray(raw) ? raw : (raw?.items || raw?.docs || raw?.results || raw?.data || []);
@@ -263,8 +269,7 @@ export async function fetchElectionsForCountryViaCache(countryId) {
     return json.data;
   } catch (err) {
     const input = JSON.stringify({ countryId, limit: ELECTIONS_API_MAX_LIMIT });
-    const url = `${WORKER_API_BASE}/trpc/election.getElections?input=${encodeURIComponent(input)}`;
-    const res = await fetch(url);
+    const res = await workerGet(`/trpc/election.getElections?input=${encodeURIComponent(input)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const raw = (await res.json())?.result?.data;
     return Array.isArray(raw) ? raw : (raw?.items || raw?.docs || raw?.results || raw?.data || []);
@@ -340,8 +345,7 @@ export async function fetchElectionDetailViaCache(electionId) {
     if (json.data) throw new Error(`cache /election: snapshot incoerente (chiusa ma status "${json.data.status}")`);
     throw new Error('cache /election: non ancora disponibile'); // mai vista dal server, poll non ancora passato
   } catch (err) {
-    const url = `${WORKER_API_BASE}/trpc/election.getElection?input=${encodeURIComponent(JSON.stringify({ electionId }))}`;
-    const res = await fetch(url);
+    const res = await workerGet(`/trpc/election.getElection?input=${encodeURIComponent(JSON.stringify({ electionId }))}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return (await res.json())?.result?.data ?? null;
   }
@@ -748,8 +752,7 @@ const CREDIT_PROFILE_USER_IDS = {
 };
 
 async function _fallbackCreditProfile(userId) {
-  const url = `${WORKER_API_BASE}/trpc/user.getUserLite?input=${encodeURIComponent(JSON.stringify({ userId }))}`;
-  const res = await fetch(url);
+  const res = await workerGet(`/trpc/user.getUserLite?input=${encodeURIComponent(JSON.stringify({ userId }))}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return (await res.json())?.result?.data ?? null;
 }

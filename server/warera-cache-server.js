@@ -204,6 +204,20 @@ const API_BASE_URL = 'https://api6.warera.io';
 // più alto, 500/min invece di 100). Se in futuro cambia URL nel progetto,
 // va aggiornato anche qui.
 const WORKER_API_BASE = 'https://politicalview-proxy.fra-paradiso2.workers.dev';
+// WarEra+: le chiamate "da Worker" DEL SERVER non passano piu' dal Worker.
+// Il server ha gia' la key (WARERA_API_TOKEN, la stessa della route /trpc
+// piu' sotto), quindi puo' fare da se' quello che il Worker fa per lui:
+// api2 + X-API-Key. Motivo misurato il 2026-09-25: il Worker era al tetto
+// giornaliero (429 su tutto), pollActiveBattles riceveva 429 alla prima
+// pagina e scriveva in cache una lista VUOTA — zero battaglie sulla mappa,
+// nel ticker e nell'archivio per tutti gli utenti, fino a mezzanotte UTC.
+// Il server consumava cosi' lo stesso budget che il proxy /trpc esiste per
+// risparmiare. Senza token si torna al Worker, come prima.
+const SERVER_API_TOKEN = process.env.WARERA_API_TOKEN || '';
+const PRIVILEGED_API_BASE = SERVER_API_TOKEN ? 'https://api2.warera.io' : WORKER_API_BASE;
+function privilegedFetch(url) {
+  return SERVER_API_TOKEN ? fetch(url, { headers: { 'X-API-Key': SERVER_API_TOKEN } }) : fetch(url);
+}
 // WarEra+: "crediti" statici del tool (userId fisso, sempre lo stesso) —
 // prima ognuno faceva la sua chiamata separata al Worker da OGNI browser
 // (src/app/authorPill.js, src/eco/main.js:enrichCreditCard). Generalizzato
@@ -271,6 +285,39 @@ function readCache(name, fallback) {
 // migliaia di eventi, riletti e riscritti ad ogni poll) — l'indentazione lì
 // è il ~35% del file, cioè lettura, parse e scrittura più lenti ad ogni giro
 // in cambio di una leggibilità che su quel file non usa nessuno.
+// WarEra+ perf: le route che restituiscono un file di cache TALE E QUALE
+// (/countries, /map, /battles, ...) facevano ad ogni richiesta lettura
+// sincrona + JSON.parse + JSON.stringify + gzip: /map sono 3,3 MB, cioe'
+// quasi un secondo di event loop bloccato per ogni utente che apre la
+// mappa, su un processo unico che intanto deve anche pollare. Qui il file
+// si legge e si comprime UNA volta per versione (mtime+size) e poi si
+// servono i byte gia' pronti. Il contenuto e' identico: il file E' il JSON
+// che res.json avrebbe riprodotto.
+const _fileResponseMemo = new Map(); // name -> { key, raw, gz }
+
+function sendCacheFile(req, res, name, fallback) {
+  const file = path.join(CACHE_DIR, `${name}.json`);
+  let st;
+  try { st = fs.statSync(file); } catch { return res.json(fallback); }
+  const key = `${st.mtimeMs}:${st.size}`;
+  let memo = _fileResponseMemo.get(name);
+  if (!memo || memo.key !== key) {
+    let raw;
+    try { raw = fs.readFileSync(file); JSON.parse(raw); }
+    catch (err) { console.error(`Errore leggendo cache ${name}:`, err.message); return res.json(fallback); }
+    memo = { key, raw, gz: raw.length >= GZIP_MIN_BYTES ? zlib.gzipSync(raw) : null };
+    _fileResponseMemo.set(name, memo);
+  }
+  res.set('Content-Type', 'application/json; charset=utf-8');
+  res.set('Vary', 'Accept-Encoding');
+  const wantsGzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
+  if (wantsGzip && memo.gz) {
+    res.set('Content-Encoding', 'gzip');
+    return res.send(memo.gz);
+  }
+  return res.send(memo.raw);
+}
+
 function writeCache(name, data, { compact = false } = {}) {
   const json = compact ? JSON.stringify(data) : JSON.stringify(data, null, 2);
   fs.writeFileSync(path.join(CACHE_DIR, `${name}.json`), json);
@@ -359,12 +406,12 @@ async function trpcBatch(calls, { useWorker = false, _attempt = 1 } = {}) {
     return results;
   }
   try {
-    const base = useWorker ? WORKER_API_BASE : API_BASE_URL;
+    const base = useWorker ? PRIVILEGED_API_BASE : API_BASE_URL;
     const procedureNames = calls.map(([proc]) => proc).join(',');
     const batchInput = {};
     calls.forEach(([, params], idx) => { batchInput[idx] = params || {}; });
     const url = `${base}/trpc/${procedureNames}?batch=1&input=${encodeURIComponent(JSON.stringify(batchInput))}`;
-    const res = await fetch(url);
+    const res = useWorker ? await privilegedFetch(url) : await fetch(url);
 
     if (res.status === 429) {
       if (_attempt <= MAX_RETRY_ATTEMPTS) {
@@ -417,9 +464,16 @@ async function fetchActiveBattles() {
   let guard = 0;
   do {
     const input = { isActive: true, limit: 100, ...(cursor ? { cursor } : {}) };
-    const url = `${WORKER_API_BASE}/trpc/battle.getBattles?input=${encodeURIComponent(JSON.stringify(input))}`;
-    const res = await fetch(url);
-    if (res.status === 429) { console.warn('battle.getBattles: 429, mi fermo con quello che ho'); break; }
+    const url = `${PRIVILEGED_API_BASE}/trpc/battle.getBattles?input=${encodeURIComponent(JSON.stringify(input))}`;
+    const res = await privilegedFetch(url);
+    // WarEra+: un 429 alla PRIMA pagina non e' "nessuna battaglia": prima
+    // si usciva col vettore vuoto e pollBattles lo scriveva in cache, e la
+    // mappa di tutti restava senza battaglie. Senza niente in mano si lancia,
+    // cosi' resta valida l'ultima lista buona (regola in testa ai poll).
+    if (res.status === 429) {
+      if (!all.length) throw new Error('battle.getBattles: 429 alla prima pagina');
+      console.warn('battle.getBattles: 429, mi fermo con quello che ho'); break;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const items = data?.result?.data?.items || data?.items || [];
@@ -474,7 +528,11 @@ async function pollAlliances() {
 
     const calls = allianceIds.map(id => ['alliance.getById', { allianceId: id }]);
     const results = await trpcBatch(calls);
-    const alliances = allianceIds.map((id, i) => ({ allianceId: id, data: results[i] })).filter(a => a.data);
+    // WarEra+: un chunk 429-ato torna `null` per ogni call — si tiene il
+    // dato del giro prima invece di far sparire l'alleanza (stesso fix di
+    // pollParties/pollElections).
+    const prevAll = new Map((readCache('alliances', { data: [] }).data || []).map(a => [a.allianceId, a.data]));
+    const alliances = allianceIds.map((id, i) => ({ allianceId: id, data: results[i] || prevAll.get(id) })).filter(a => a.data);
     writeCache('alliances', { fetchedAt: Date.now(), data: alliances });
     console.log(`[poll] alliances aggiornato (${alliances.length})`);
   } catch (err) { console.error('[poll] alliances fallito:', err.message); }
@@ -546,7 +604,12 @@ async function pollDiplomacy() {
 
     const calls = countries.map(n => ['countryDiplomacy.getByCountry', { countryId: n._id }]);
     const results = await trpcBatch(calls);
-    const diplomacy = countries.map((n, i) => ({ countryId: n._id, data: results[i] })).filter(d => d.data);
+    // WarEra+: come pollAlliances — senza questo un 429 su un chunk
+    // toglieva quelle nazioni dalla cache, e pollTickerEvents qui sotto
+    // leggeva la differenza col giro prima come patti sciolti e guerre
+    // finite (e al giro dopo come patti e guerre nuove): notizie inventate.
+    const prevDip = new Map((readCache('diplomacy', { data: [] }).data || []).map(d => [d.countryId, d.data]));
+    const diplomacy = countries.map((n, i) => ({ countryId: n._id, data: results[i] || prevDip.get(n._id) })).filter(d => d.data);
     writeCache('diplomacy', { fetchedAt: Date.now(), data: diplomacy });
     console.log(`[poll] diplomacy aggiornato (${diplomacy.length})`);
 
@@ -616,8 +679,8 @@ async function fetchAllMus() {
   let guard = 0;
   do {
     const input = { limit: 100, ...(cursor ? { cursor } : {}) };
-    const url = `${WORKER_API_BASE}/trpc/mu.getManyPaginated?input=${encodeURIComponent(JSON.stringify(input))}`;
-    const res = await fetch(url);
+    const url = `${PRIVILEGED_API_BASE}/trpc/mu.getManyPaginated?input=${encodeURIComponent(JSON.stringify(input))}`;
+    const res = await privilegedFetch(url);
     if (res.status === 429) { console.warn('mu.getManyPaginated: 429, mi fermo con quello che ho'); break; }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -1970,8 +2033,8 @@ function computeHistoricalWarIntensity() {
 
 async function _fetchResolvedBattlesPage(cursor) {
   const input = { isActive: false, limit: 100, ...(cursor ? { cursor } : {}) };
-  const url = `${WORKER_API_BASE}/trpc/battle.getBattles?input=${encodeURIComponent(JSON.stringify(input))}`;
-  const res = await fetch(url);
+  const url = `${PRIVILEGED_API_BASE}/trpc/battle.getBattles?input=${encodeURIComponent(JSON.stringify(input))}`;
+  const res = await privilegedFetch(url);
   if (res.status === 429) throw new Error('429 su battle.getBattles(isActive:false) — riprovo al prossimo minuto');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
@@ -2325,10 +2388,10 @@ cron.schedule('5 2 * * *', () => {
 // ---------------------------------------------------------------------------
 // ENDPOINT esposti al tool WarEra+ (nginx li smista da /warera-cache/*)
 // ---------------------------------------------------------------------------
-app.get('/countries', (req, res) => res.json(readCache('countries', { fetchedAt: null, data: [] })));
-app.get('/map', (req, res) => res.json(readCache('map', { fetchedAt: null, data: [] })));
-app.get('/regions', (req, res) => res.json(readCache('regions', { fetchedAt: null, data: [] })));
-app.get('/alliances', (req, res) => res.json(readCache('alliances', { fetchedAt: null, data: [] })));
+app.get('/countries', (req, res) => sendCacheFile(req, res, 'countries', { fetchedAt: null, data: [] }));
+app.get('/map', (req, res) => sendCacheFile(req, res, 'map', { fetchedAt: null, data: [] }));
+app.get('/regions', (req, res) => sendCacheFile(req, res, 'regions', { fetchedAt: null, data: [] }));
+app.get('/alliances', (req, res) => sendCacheFile(req, res, 'alliances', { fetchedAt: null, data: [] }));
 
 app.get('/parties', (req, res) => {
   const { countryId } = req.query;
@@ -2480,12 +2543,12 @@ app.get('/country-citizens', (req, res) => {
   });
 });
 
-app.get('/diplomacy', (req, res) => res.json(readCache('diplomacy', { fetchedAt: null, data: [] })));
-app.get('/battles', (req, res) => res.json(readCache('battles', { fetchedAt: null, data: [] })));
-app.get('/battle-regions', (req, res) => res.json(readCache('battle-regions', { fetchedAt: null, data: [] })));
+app.get('/diplomacy', (req, res) => sendCacheFile(req, res, 'diplomacy', { fetchedAt: null, data: [] }));
+app.get('/battles', (req, res) => sendCacheFile(req, res, 'battles', { fetchedAt: null, data: [] }));
+app.get('/battle-regions', (req, res) => sendCacheFile(req, res, 'battle-regions', { fetchedAt: null, data: [] }));
 
-app.get('/mu-directory', (req, res) => res.json(readCache('mu-directory', { fetchedAt: null, data: [] })));
-app.get('/mu-playstyle-by-country', (req, res) => res.json(readCache('mu-playstyle-by-country', { fetchedAt: null, data: {} })));
+app.get('/mu-directory', (req, res) => sendCacheFile(req, res, 'mu-directory', { fetchedAt: null, data: [] }));
+app.get('/mu-playstyle-by-country', (req, res) => sendCacheFile(req, res, 'mu-playstyle-by-country', { fetchedAt: null, data: {} }));
 // Scatto del danno settimanale al cambio giorno di gioco — vedi
 // snapshotDailyDamage. { takenAt, tz, byCountry: {countryId: danno} }
 app.get('/daily-damage', (req, res) => res.json(readCache(DAILY_DAMAGE_FILE, { takenAt: null, tz: DAILY_DAMAGE_TZ, byCountry: {}, byMu: {} })));

@@ -1,5 +1,6 @@
 import { state } from './state.js';
-import { API_BASE_URL, WORKER_API_BASE, COLORS } from './config.js';
+import { API_BASE_URL, COLORS } from './config.js';
+import { workerGet } from '../shared/trpcProxy.js'; // WarEra+: VPS prima del Worker
 import { showRateLimitTooltip, trpcBatch } from './utils.js';
 import { renderMap, captureHeatmapFadeFrom, startHeatmapFadeIn, clearHeatmapFade } from './map.js';
 import { updateDynamicLegend } from './ui.js';
@@ -45,7 +46,24 @@ let savedColoringMode = 'diplomacy';
 let lastSuccessfulBattlesCache = [];
 let isRateLimited = false;
 
-export async function fetchActiveBattles() {
+// WarEra+: marker della mappa, ticker e archivio battaglie chiamano
+// fetchActiveBattles() ognuno per conto suo, e all'avvio i primi due partono
+// nello stesso istante: due richieste identiche per lo stesso elenco. Chi
+// arriva mentre una richiesta e' in volo, o entro pochi secondi dalla sua
+// risposta, riceve quella — i polling veri (30s mappa, 4 min archivio)
+// stanno ben oltre la finestra e ricevono sempre un elenco nuovo.
+const SHARED_FETCH_MS = 15 * 1000;
+let _sharedFetch = null;
+let _sharedFetchAt = 0;
+
+export function fetchActiveBattles() {
+  if (_sharedFetch && Date.now() - _sharedFetchAt < SHARED_FETCH_MS) return _sharedFetch;
+  _sharedFetchAt = Date.now();
+  _sharedFetch = _fetchActiveBattlesUncached();
+  return _sharedFetch;
+}
+
+async function _fetchActiveBattlesUncached() {
   // WarEra+: il server di cache tiene già lui l'elenco completo (poll
   // periodico via Worker), quindi qui basta una fetch sola invece della
   // paginazione a cursore sotto — che resta come fallback se il server di
@@ -70,8 +88,7 @@ export async function fetchActiveBattles() {
       // WarEra+: instradato tramite il Worker (rate limit 500/min invece
       // di 100) — battaglie, insieme alle elezioni, erano la fonte
       // principale dei 429 segnalati.
-      const url = `${WORKER_API_BASE}/trpc/battle.getBattles?input=${encodeURIComponent(JSON.stringify(input))}`;
-      const res = await fetch(url);
+      const res = await workerGet(`/trpc/battle.getBattles?input=${encodeURIComponent(JSON.stringify(input))}`);
       
       if (res.status === 429) {
         isRateLimited = true;
@@ -120,8 +137,7 @@ export function resetBattlesCache() {
 export async function fetchBattleDetails(battleId) {
   try {
     const input = { battleId };
-    const url = `${WORKER_API_BASE}/trpc/battle.getById?input=${encodeURIComponent(JSON.stringify(input))}`;
-    const res = await fetch(url);
+    const res = await workerGet(`/trpc/battle.getById?input=${encodeURIComponent(JSON.stringify(input))}`);
     
     if (res.status === 429) {
       showRateLimitTooltip('battle-details-fetch');
@@ -482,6 +498,7 @@ function startLiveUpdates(battleId) {
       stopLiveUpdates();
       return;
     }
+    if (document.hidden) return; // WarEra+ perf: nessuno sta guardando
     try {
       const rankingData = await fetchBattleRanking(battleId);
       if (rankingData && rankingData.length) {
