@@ -529,6 +529,10 @@ body.light-theme .wp-btl-row:hover { background: rgba(0, 0, 0, .035); }
   .wp-btl-xp th[data-sort="contracts"],
   .wp-btl-xp td.wp-btl-bounty,
   .wp-btl-xp td.wp-btl-contracts { display: none; }
+  /* Dettaglio per nazione: i contratti incassati sono gia' dentro al
+     "pagato per 1k", e con sei colonne la tabella usciva dallo schermo. */
+  .wp-btl-side-table .wp-btl-col-ctr,
+  .wp-btl-side-table.wp-btl-has-pay .wp-btl-pct { display: none; }
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -557,7 +561,10 @@ body.light-theme .wp-btl { --wp-btl-def: #1a5fb4; --wp-btl-atk: #b02026; }
 
 .wp-btl-sides {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  /* 460px e non 300: con "pagato per 1k" la tabella per nazione ne vuole
+     ~460, e sotto quella soglia i due lati vanno uno sotto l'altro invece
+     di uscire dal riquadro. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr));
   gap: 14px;
   align-items: start;
 }
@@ -595,6 +602,15 @@ body.light-theme .wp-btl { --wp-btl-def: #1a5fb4; --wp-btl-atk: #b02026; }
 /* La tabella dentro la colonna non ha bordo suo (ce l'ha il contenitore)
    e può scorrere in orizzontale sui telefoni stretti. */
 .wp-btl-side-table { white-space: nowrap; }
+/* Prezzo per 1k danno: oro = ben sopra la media dello schieramento,
+   grigio = ben sotto (vedi payPerK in battleDetail.js). */
+/* Con "contratti incassati" e "pagato per 1k" le intestazioni su una
+   riga sola facevano uscire la tabella di ~40px anche a 1280: vanno a capo
+   (le celle numeriche restano su una riga). */
+.wp-btl-side-table th { white-space: normal; line-height: 1.2; vertical-align: bottom; }
+.wp-btl-perk { font-variant-numeric: tabular-nums; }
+.wp-btl-perk-hi { color: var(--wp-btl-bounty); font-weight: 600; }
+.wp-btl-perk-lo { color: var(--wp-ov-text-dim, #8b949e); }
 .wp-btl-side-col .wp-btl-side-table { display: table; width: 100%; }
 .wp-btl-side-table tfoot td {
   border-top: 1px solid var(--wp-ov-border, #30363d);

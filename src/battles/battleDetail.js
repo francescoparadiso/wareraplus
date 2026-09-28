@@ -125,13 +125,16 @@ function typeLabel(t) {
    sbilanciati la quota sul totale non risponderebbe. */
 function sideTable(rows, sideKey, battle, opts) {
   const { label, color, countryId, expanded, entityName, entityFlag, truncated, entityHeader,
-          entityCell, sentBy } = opts;
+          entityCell, sentBy, pay } = opts;
   // entityCell: cella già in HTML (unità militari, che sono cliccabili).
   // Senza, si resta al comportamento originale nome+bandiera come testo.
   const cell = entityCell || ((id) => `${entityFlag(id)}${escapeHtml(entityName(id) || '—')}`);
   const totDmg = rows.reduce((s, r) => s + r.damage, 0);
   const totMoney = rows.reduce((s, r) => s + r.money, 0);
   const shown = expanded ? rows : rows.slice(0, TOP);
+  // Solo per le nazioni (vedi payPerK): contratti incassati + prezzo per 1k.
+  const withContracts = pay && pay.totContracts > 0;
+  const avgK = pay ? perK(totMoney + (pay.totContracts || 0), totDmg) : null;
 
   return `
     <div class="wp-btl-side-col wp-btl-side-${sideKey}">
@@ -141,12 +144,14 @@ function sideTable(rows, sideKey, battle, opts) {
         <span class="wp-btl-side-role">${label}</span>
         ${battle.wonBy === sideKey ? `<span class="wp-btl-winner">🏆</span>` : ''}
       </div>
-      <table class="wp-btl-table wp-btl-side-table">
+      <table class="wp-btl-table wp-btl-side-table${pay ? ' wp-btl-has-pay' : ''}">
         <thead><tr>
           <th>${entityHeader}</th>
           <th class="wp-btl-num">${btlT('colDamage')}</th>
-          <th class="wp-btl-num">%</th>
+          <th class="wp-btl-num wp-btl-pct">%</th>
           <th class="wp-btl-num" title="${btlT('earnedHint')}">${btlT('colEarned')}</th>
+          ${withContracts ? `<th class="wp-btl-num wp-btl-col-ctr" title="${btlT('ctrEarnedHint')}">${btlT('colCtrEarned')}</th>` : ''}
+          ${pay ? `<th class="wp-btl-num" title="${btlT('paidPerKHint')}">${btlT('colPaidPerK')}</th>` : ''}
         </tr></thead>
         <tbody>
           ${shown.map(r => `
@@ -155,13 +160,17 @@ function sideTable(rows, sideKey, battle, opts) {
               <td class="wp-btl-num">${fmtNum(r.damage)}</td>
               <td class="wp-btl-num wp-btl-pct">${totDmg ? (r.damage / totDmg * 100).toFixed(1) : '0.0'}%</td>
               <td class="wp-btl-num wp-btl-bounty">${r.money ? fmtMoney(r.money) : '—'}${sentHtml(sentBy, r.id)}</td>
+              ${withContracts ? `<td class="wp-btl-num wp-btl-contracts wp-btl-col-ctr">${pay.byCountry.get(r.id) ? fmtMoney(pay.byCountry.get(r.id)) : '—'}</td>` : ''}
+              ${pay ? perKCell(perK(r.money + (pay.byCountry.get(r.id) || 0), r.damage), avgK) : ''}
             </tr>`).join('')}
         </tbody>
         <tfoot><tr>
           <td>${btlT('colTotalRow', { n: rows.length })}</td>
           <td class="wp-btl-num">${fmtNum(totDmg)}</td>
-          <td class="wp-btl-num">100%</td>
+          <td class="wp-btl-num wp-btl-pct">100%</td>
           <td class="wp-btl-num wp-btl-bounty">${fmtMoney(totMoney)}</td>
+          ${withContracts ? `<td class="wp-btl-num wp-btl-contracts wp-btl-col-ctr">${fmtMoney(pay.totContracts)}</td>` : ''}
+          ${pay ? `<td class="wp-btl-num wp-btl-perk">${fmtPerK(avgK)}</td>` : ''}
         </tr></tfoot>
       </table>
       ${truncated ? `<p class="wp-btl-foot wp-btl-foot-tight wp-btl-side-note">${btlT('rankTruncated')}</p>` : ''}
@@ -170,6 +179,57 @@ function sideTable(rows, sideKey, battle, opts) {
             expanded ? btlT('showTop', { n: TOP }) : btlT('showAll', { n: rows.length })}</button>`
         : ''}
     </div>`;
+}
+
+/* ── Quanto è stato PAGATO il danno, nazione per nazione ──
+   (taglia incassata + contratti incassati) ÷ danno × 1000: quanti soldi
+   sono entrati in tasca ai cittadini di quella nazione per ogni mille
+   danni fatti su questo schieramento. Sommare le due voci è corretto
+   perché sono portafogli disgiunti — i colpi fatti per un contratto non
+   prendono anche la taglia (vedi src/diplomacy/battleSpending.js).
+
+   ⚠️ Il contratto lo vince un'UNITÀ, non una nazione: qui il compenso va
+   alla nazione dell'unità (`mu.country`). Chi nell'unità ha un'altra
+   cittadinanza viene così contato sotto quella dell'unità — un'approssimazione
+   dichiarata nella nota, non un dato del gioco.
+   ⚠️ Un contratto conta per il compenso PATTUITO appena è aggiudicato,
+   anche se su una battaglia in corso il danno non è ancora stato
+   consegnato: finché non finisce, il prezzo per 1k di chi ha contratti
+   aperti è gonfiato. La nota lo dice.
+
+   Il confronto è con la media del PROPRIO schieramento, non con un costo
+   "di pareggio": quello richiede il costo di un colpo, che non è ancora
+   calibrato. Sopra la media = pagato meglio degli altri sullo stesso lato. ── */
+function payPerK(sideKey) {
+  const byCountry = new Map();
+  let totContracts = 0;
+  let unresolved = 0;
+  for (const c of _detail?.contracts || []) {
+    if (c.side !== sideKey) continue;
+    totContracts += c.payout;
+    const country = _muInfo.get(c.mu)?.country;
+    if (!country) { unresolved += c.payout; continue; }
+    byCountry.set(country, (byCountry.get(country) || 0) + c.payout);
+  }
+  return { byCountry, totContracts, unresolved };
+}
+
+function perK(money, damage) {
+  return damage > 0 ? money / damage * 1000 : null;
+}
+function fmtPerK(v) {
+  if (v == null || !Number.isFinite(v)) return '—';
+  return v >= 1 ? v.toFixed(2) : v.toFixed(3);
+}
+// ±15% dalla media: sotto quella soglia la differenza è rumore (un
+// membro di governo col +50% di taglia basta a spostare una nazione piccola).
+function perKCell(v, avg) {
+  let cls = '';
+  if (v != null && avg) {
+    if (v > avg * 1.15) cls = ' wp-btl-perk-hi';
+    else if (v < avg * 0.85) cls = ' wp-btl-perk-lo';
+  }
+  return `<td class="wp-btl-num wp-btl-perk${cls}">${fmtPerK(v)}</td>`;
 }
 
 /** Quanto quella nazione aveva VERSATO a questo schieramento, accanto a
@@ -364,6 +424,9 @@ export function renderBattleDetail(battle) {
   const sentDef = sentTotals(battle.defender.countryId, wFrom, wTo);
   const sentAtk = sentTotals(battle.attacker.countryId, wFrom, wTo);
   const anySent = sentDef.size || sentAtk.size;
+  const payDef = payPerK('defender');
+  const payAtk = payPerK('attacker');
+  const anyCtr = payDef.totContracts > 0 || payAtk.totContracts > 0;
   return `
     <div class="wp-btl-detail">
       ${head}
@@ -374,14 +437,16 @@ export function renderBattleDetail(battle) {
       <div class="wp-btl-sides">
         ${sideTable(_detail.sides.defender, 'defender', battle, {
           label: btlT('defender'), color: 'var(--wp-btl-def)', countryId: battle.defender.countryId,
-          expanded: _expanded.defender, entityName: nm, entityFlag: flagHtml, sentBy: sentDef,
+          expanded: _expanded.defender, entityName: nm, entityFlag: flagHtml, sentBy: sentDef, pay: payDef,
           entityHeader: btlT('colNation'), truncated: _detail.truncated?.defender })}
         ${sideTable(_detail.sides.attacker, 'attacker', battle, {
           label: btlT('attacker'), color: 'var(--wp-btl-atk)', countryId: battle.attacker.countryId,
-          expanded: _expanded.attacker, entityName: nm, entityFlag: flagHtml, sentBy: sentAtk,
+          expanded: _expanded.attacker, entityName: nm, entityFlag: flagHtml, sentBy: sentAtk, pay: payAtk,
           entityHeader: btlT('colNation'), truncated: _detail.truncated?.attacker })}
       </div>
       ${anySent ? `<p class="wp-btl-foot wp-btl-foot-tight">${btlT('sentNote')}</p>` : ''}
+      <p class="wp-btl-foot wp-btl-foot-tight">${btlT('paidPerKNote')}${anyCtr ? ' ' + btlT('paidPerKCtrNote') : ''}${
+        anyCtr && battle.live ? ' ' + btlT('paidPerKLiveNote') : ''}</p>
 
       <h3 class="wp-btl-h3">${btlT('byMu')}</h3>
       ${muSectionHtml(battle)}

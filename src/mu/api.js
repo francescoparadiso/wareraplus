@@ -274,7 +274,7 @@ export async function fetchMuBriefs(muIds) {
     if (_nameCache.has(id)) { out.set(id, _nameCache.get(id)); continue; }
     const fromDir = getCachedMu(id);
     if (fromDir?.name) {
-      const brief = { name: fromDir.name, avatarUrl: fromDir.avatarUrl || null };
+      const brief = { name: fromDir.name, avatarUrl: fromDir.avatarUrl || null, country: fromDir.country || null };
       _nameCache.set(id, brief);
       out.set(id, brief);
       continue;
@@ -290,7 +290,7 @@ export async function fetchMuBriefs(muIds) {
     ));
     res.forEach((mu, k) => {
       if (!mu?.name) return; // id irrisolto: fuori dalla mappa, mai un nome finto
-      const brief = { name: mu.name, avatarUrl: mu.avatarUrl || null };
+      const brief = { name: mu.name, avatarUrl: mu.avatarUrl || null, country: mu.country || null };
       _nameCache.set(chunk[k], brief);
       out.set(chunk[k], brief);
     });
