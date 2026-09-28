@@ -38,9 +38,9 @@ import { initEconomyOverlay, openEconomyView } from './app/economyOverlay.js';
 import { initNewsOverlay, openNewsView } from './app/newsOverlay.js';
 import { initMuOverlay, openMuView } from './app/muOverlay.js';
 import { initNationsOverlay, openNationsView } from './app/nationsOverlay.js';
-import { initBattlesOverlay } from './app/battlesOverlay.js';
-import { initGuideOverlay } from './app/guideOverlay.js';
-import { initPrivateOverlay } from './app/privateOverlay.js';
+import { initBattlesOverlay, openBattlesView } from './app/battlesOverlay.js';
+import { initGuideOverlay, openGuideView } from './app/guideOverlay.js';
+import { initPrivateOverlay, openPrivateView } from './app/privateOverlay.js';
 import { takeReloadIntent } from './shared/lazyModule.js';
 import { initThemeSync } from './app/themeSync.js';
 import { initLangSync } from './app/langSync.js';
@@ -146,6 +146,13 @@ function restoreAfterChunkReload() {
     news: () => openNewsView(),
     mu: () => openMuView(),
     nations: () => openNationsView(),
+    // Mancavano: chi apriva Battaglie, Guida o Area riservata subito dopo
+    // un deploy si ritrovava sulla mappa, come se il tool fosse ripartito
+    // da zero. 'mu-wealth' riapre la vista unita', che e' dove sta.
+    battles: () => openBattlesView(),
+    guide: () => openGuideView(),
+    private: () => openPrivateView(),
+    'mu-wealth': () => openMuView(),
   }[intent];
 
   if (open) open();
