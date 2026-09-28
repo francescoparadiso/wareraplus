@@ -658,6 +658,11 @@ body.light-theme .wp-nat-lv-tip { box-shadow: 0 8px 22px rgba(0, 0, 0, .16); }
    Con la sola max-width si rimpicciolirebbe in larghezza tenendo l'altezza,
    cioè due bande vuote sopra e sotto; così scala in proporzione. */
 .wp-nat-curve-svg { display: block; max-width: 100%; height: auto; }
+/* Nelle curve del danno la colonna sotto il mouse si deve VEDERE (il .05
+   generico di .wp-nat-lv-hit quasi spariva): fascia piu' chiara + bordo. */
+.wp-nat-curve-svg .wp-nat-lv-hit { cursor: crosshair; }
+.wp-nat-curve-svg .wp-nat-lv-hit:hover { fill: rgba(255, 255, 255, .1); stroke: rgba(255, 255, 255, .22); stroke-width: 1; }
+body.light-theme .wp-nat-curve-svg .wp-nat-lv-hit:hover { fill: rgba(0, 0, 0, .08); stroke: rgba(0, 0, 0, .2); }
 .wp-nat-curve-bar { transition: opacity .12s; }
 .wp-nat-curve-slot:hover .wp-nat-curve-bar { opacity: .78; }
 /* Ora del reset settimanale: il valore c'è ma è parziale (manca il pezzo

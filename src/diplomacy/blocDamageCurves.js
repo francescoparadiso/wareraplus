@@ -484,6 +484,11 @@ function injectStyles() {
     .bs-cv-svg{display:block;max-width:100%}
     .bs-cv-grid{stroke:rgba(255,255,255,.07);stroke-width:1}
     .bs-cv-axis{fill:#8b949e;font-size:10px}
+    /* La colonna (ora o giorno) sotto il mouse: una fascia chiara, cosi' si
+       vede a colpo d'occhio a quale ora si riferisce il tooltip. */
+    .bs-cv-hit{cursor:crosshair}
+    .bs-cv-hit:hover{fill:rgba(255,255,255,.1);stroke:rgba(255,255,255,.22);stroke-width:1}
+    body.light-theme .bs-cv-hit:hover{fill:rgba(0,0,0,.08);stroke:rgba(0,0,0,.2)}
     .bs-cv-note,.bs-cv-empty,.bs-cv-loading{font-size:12px;color:#8b949e;margin:4px 0 8px}
     .bs-cv-peak{list-style:none;margin:6px 0 0;padding:0;font-size:12px;color:#c9d1d9;display:grid;gap:3px}
     .bs-cv-peak li{display:flex;align-items:center;gap:6px}
