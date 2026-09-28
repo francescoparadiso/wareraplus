@@ -21,8 +21,10 @@
    risposta RIPETE `countryIds`, ed è l'unico modo di riconoscere un
    server vecchio: quello ignora il parametro e risponde col MONDO, che
    disegnato qui passerebbe per il danno dell'alleanza. Se l'eco manca si
-   ricade sulle nazioni una per una, sommate qui — solo fino a
-   FALLBACK_MAX nazioni, oltre (gli Unaligned) la sezione non compare.
+   ricade sulle nazioni una per una, sommate qui: ogni nazione si
+   scarica UNA volta per sessione (tre alleanze per lato sono facilmente
+   quaranta nazioni, e aggiungerne una quarta deve scaricare solo le sue),
+   al massimo FALLBACK_PARALLEL richieste per volta.
 
    ── LE STESSE REGOLE DELLA VISTA NAZIONE ─────────────────────────
      · un'ora senza misura (`d: null`) è un BUCO, la linea si spezza —
@@ -40,7 +42,7 @@ const HOUR_MS = 3600 * 1000;
 const RANGES = [24, 48, 72];
 const RANGE_KEY = 'we_bloc_curve_hours';
 const PILL_COLOR = '#a371f7';
-const FALLBACK_MAX = 30;
+const FALLBACK_PARALLEL = 6;
 const TIMEOUT_MS = 8000;
 
 let _hours = (() => {
@@ -69,7 +71,7 @@ async function cacheJson(path) {
 const qs = (extra) => new URLSearchParams({ hours: String(Math.max(...RANGES)), days: '14', ...extra });
 
 /** Serie sommata di un gruppo di nazioni, o null (server giù, gruppo
- *  sconosciuto, server vecchio con troppe nazioni per il ripiego). */
+ *  sconosciuto). */
 export function fetchGroupTimeline(ids) {
   const list = [...new Set((ids || []).filter(Boolean))].sort();
   if (!list.length) return Promise.resolve(null);
@@ -98,11 +100,30 @@ export function fetchGroupTimeline(ids) {
 /** Ripiego per un server non ancora rideployato: una richiesta per
  *  nazione, sommate qui. Stesse regole del server: un'ora è misurata
  *  solo se lo è per TUTTE le nazioni note. */
+const _one = new Map();   // countryId → Promise<timeline|null>, per la sessione
+
+function fetchOne(id) {
+  if (!_one.has(id)) {
+    const p = cacheJson(`/damage-timeline?${qs({ countryId: id })}`).catch(() => null);
+    _one.set(id, p);
+    p.then(v => { if (!v) _one.delete(id); });
+  }
+  return _one.get(id);
+}
+
 async function sumOneByOne(list) {
-  if (list.length > FALLBACK_MAX) return null;
-  const parts = (await Promise.all(list.map(id =>
-    cacheJson(`/damage-timeline?${qs({ countryId: id })}`).catch(() => null))))
-    .filter(tl => tl && tl.known && Array.isArray(tl.series));
+  // Coda a FALLBACK_PARALLEL: gli Unaligned sono oltre cento nazioni, e
+  // cento richieste insieme sono il modo di farsene rifiutare la metà.
+  const out = new Array(list.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < list.length) {
+      const k = next++;
+      out[k] = await fetchOne(list[k]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(FALLBACK_PARALLEL, list.length) }, worker));
+  const parts = out.filter(tl => tl && tl.known && Array.isArray(tl.series));
   if (!parts.length) return null;
 
   const byT = new Map();
@@ -163,7 +184,11 @@ export async function renderGroupCurves(host, groups) {
 }
 
 function paint(host, groups, asked) {
-  const multi = groups.length > 1;
+  // Conta quanti gruppi sono stati CHIESTI, non quanti hanno risposto: nel
+  // 1 vs 2 con un lato senza dati l'altro deve restare disegnato da
+  // confronto (colore della sua fazione, nome in legenda), non passare
+  // per la scheda di un'alleanza sola.
+  const multi = asked > 1;
   const missing = asked > groups.length;
   host.innerHTML = `
     <div class="bs-cv">

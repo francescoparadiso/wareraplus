@@ -286,7 +286,7 @@ wareraPlus/
     │   │                        `countryIds` nella risposta: ⚠️ un server vecchio
     │   │                        ignora il parametro e manda il MONDO, quindi senza
     │   │                        quell'eco si ricade sulle nazioni una per una
-    │   │                        (max 30; oltre, es. Unaligned, niente sezione).
+    │   │                        (una volta per sessione ciascuna, 6 alla volta).
     │   ├── blocStatsI18n.js ← NUOVO — traduzioni (9 lingue) di Statistiche
     │   │                        alleanze: la CHIAVE è il testo inglese, bT('Weekly
     │   │                        damage'), e ciò che manca ricade sull'inglese.
