@@ -1091,6 +1091,7 @@ function showBlocPopup(blocId) {
       <div class="bs-popup-item">${bT('Core Dev Share')} <span>${bloc.isUnaligned || !bloc.bonus ? '—' : bloc.bonus.share.toFixed(2) + '%'}</span></div>
     </div>
     <div class="bs-popup-ps" id="bloc-popup-ps"></div>
+    <div id="bloc-popup-curves"></div>
     <div class="bs-breakdown-header">
       <span style="flex:1">${bT('Nation')}</span>
       <span class="col ${sortKey === 'dmg' ? 'active' : ''}" data-key="dmg" style="flex:1">${bT('Wk Dmg')}</span>
@@ -1121,6 +1122,16 @@ function showBlocPopup(blocId) {
   popup.querySelector('.bs-popup-close').onclick = () => { overlay.remove(); popup.remove(); };
   document.body.appendChild(overlay);
   document.body.appendChild(popup);
+
+  // WarEra+ — danno ora per ora e pillati dell'alleanza, sommati sulle sue
+  // nazioni (src/diplomacy/blocDamageCurves.js). Modulo a parte, caricato
+  // alla prima scheda aperta; senza server la sezione non compare.
+  const curvesHost = popup.querySelector('#bloc-popup-curves');
+  if (curvesHost && bloc.members.length) {
+    import('./blocDamageCurves.js')
+      .then(m => m.renderGroupCurves(curvesHost, [{ label: bloc.name, color: bloc.color, ids: bloc.members.map(x => x.id) }]))
+      .catch(() => { curvesHost.innerHTML = ''; });
+  }
 
   // La barra della mobilitazione: subito se i dati ci sono, altrimenti
   // quando arrivano (e allora anche la colonna War % si riempie).
@@ -1171,6 +1182,7 @@ function buildUI() {
   else html += renderFactions();
   html += '</div>';
   c.innerHTML = html;
+  if (currentTab === 'faction1vs2') mountFactionCurves();
   // Ogni modifica del builder passa da qui prima di ridisegnare.
   persistBuilder();
   fitAllianceTable();
@@ -1868,7 +1880,26 @@ function render1vs1() {
     <div class="bs-vs">VS</div>
     <div class="bs-fcard f2"><div style="font-size:18px;font-weight:700">${f2.name || bT('Select blocs')}</div><div style="color:#8b949e;font-size:13px">${bT('{n} nations', { n: f2.countryCount })}</div></div>
   </div>
-  ${cmpStats(f1, f2)}`;
+  ${cmpStats(f1, f2)}
+  <div id="bs-fcmp-curves"></div>`;
+}
+
+/* WarEra+ — le curve orarie delle due fazioni SOVRAPPOSTE (richiesta
+   dell'utente: «voglio poter sovrapporre i grafici di due alleanze»).
+   Stessi colori dei due lati del confronto. Si monta dopo ogni buildUI:
+   le serie stanno in cache per gruppo di nazioni, quindi ridisegnare dopo
+   un clic non rifà la richiesta. */
+const FACTION_COLORS = ['#58a6ff', '#3fb950'];
+function mountFactionCurves() {
+  const host = document.getElementById('bs-fcmp-curves');
+  if (!host) return;
+  const groups = [aggFaction(faction1Blocs), aggFaction(faction2Blocs)]
+    .map((f, i) => ({ label: f.name, color: FACTION_COLORS[i], ids: f.members.map(m => m.id) }))
+    .filter(g => g.ids.length);
+  if (!groups.length) { host.innerHTML = ''; return; }
+  import('./blocDamageCurves.js')
+    .then(m => m.renderGroupCurves(host, groups))
+    .catch(() => { host.innerHTML = ''; });
 }
 
 function factionSel(n, fst) {

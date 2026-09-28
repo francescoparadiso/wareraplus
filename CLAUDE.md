@@ -279,6 +279,14 @@ wareraPlus/
     │   │                        (dato di gioco, mai toccato). Non è un
     │   │                        collegamento vivo: si aggiorna ripremendo il
     │   │                        bottone. Cade da sola uscendo dalla vista.
+    │   ├── blocDamageCurves.js ← NUOVO — danno ora per ora + pillati di un
+    │   │                        GRUPPO di nazioni: nella scheda di un'alleanza e,
+    │   │                        sovrapposti, nel Fazione 1 vs 2. Il server somma
+    │   │                        con /damage-timeline?countryIds=a,b,c e ripete
+    │   │                        `countryIds` nella risposta: ⚠️ un server vecchio
+    │   │                        ignora il parametro e manda il MONDO, quindi senza
+    │   │                        quell'eco si ricade sulle nazioni una per una
+    │   │                        (max 30; oltre, es. Unaligned, niente sezione).
     │   ├── blocStatsI18n.js ← NUOVO — traduzioni (9 lingue) di Statistiche
     │   │                        alleanze: la CHIAVE è il testo inglese, bT('Weekly
     │   │                        damage'), e ciò che manca ricade sull'inglese.

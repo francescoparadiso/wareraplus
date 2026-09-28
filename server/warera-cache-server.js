@@ -2774,7 +2774,12 @@ app.get('/citizen-moves', async (req, res) => {
 app.get('/damage-timeline', (req, res) => {
   const hours = Math.min(Math.max(Number(req.query.hours) || 48, 1), 24 * 16);
   const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 16);
-  res.json(readTimeline({ countryId: req.query.countryId || null, hours, days }));
+  // `countryIds=a,b,c`: un gruppo sommato (Statistiche alleanze). Tetto a
+  // 200 id, piu' di tutte le nazioni del gioco: oltre e' una richiesta rotta.
+  const countryIds = req.query.countryIds
+    ? String(req.query.countryIds).split(',').map(x => x.trim()).filter(Boolean).slice(0, 200)
+    : null;
+  res.json(readTimeline({ countryId: req.query.countryId || null, countryIds, hours, days }));
 });
 
 // Storico dei prezzi (server/priceHistory.js): una candela al giorno per

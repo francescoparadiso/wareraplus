@@ -494,7 +494,7 @@ function _prune(st, now) {
  * L'ora IN CORSO non c'è: si chiude col campione successivo, e mostrarla
  * a metà farebbe sembrare che il danno sia crollato nell'ultima ora.
  */
-function readTimeline({ countryId = null, hours = 48, days = 14 } = {}) {
+function readTimeline({ countryId = null, countryIds = null, hours = 48, days = 14 } = {}) {
   const st = _readState();
   const cfg = _pillCfg;
   const now = Date.now();
@@ -520,8 +520,26 @@ function readTimeline({ countryId = null, hours = 48, days = 14 } = {}) {
     },
   };
 
-  const i = countryId ? st.ids.indexOf(countryId) : -1;
-  if (countryId && i === -1) return { ...meta, known: false, series: [], daily: [] };
+  // WarEra+ — un GRUPPO di nazioni (un'alleanza, o una fazione del 1 vs 2
+  // di Statistiche alleanze) sommato qui, in una risposta sola: dal client
+  // sarebbero venti richieste per un'alleanza e cento per gli Unaligned.
+  // Le ore sono le stesse per tutte (un campione unico per il mondo),
+  // quindi la somma non mescola ore diverse e un buco resta un buco.
+  // `countryIds` torna nella risposta: e' cosi' che il client distingue
+  // questo server da uno vecchio che ignora il parametro e gli
+  // manderebbe il MONDO spacciato per l'alleanza.
+  let idx = null;
+  if (Array.isArray(countryIds) && countryIds.length) {
+    const found = countryIds.filter(id => st.ids.includes(id));
+    if (!found.length) return { ...meta, countryIds: [], known: false, series: [], daily: [] };
+    idx = found.map(id => st.ids.indexOf(id));
+    meta.countryIds = found;
+  } else if (countryId) {
+    const i = st.ids.indexOf(countryId);
+    if (i === -1) return { ...meta, known: false, series: [], daily: [] };
+    idx = [i];
+  }
+  const pick = (arr) => (idx ? idx.reduce((s, i) => s + (arr[i] || 0), 0) : arr.reduce((s, x) => s + (x || 0), 0));
 
   const keys = Object.keys(st.hours).map(Number).sort((a, b) => a - b);
 
@@ -534,7 +552,7 @@ function readTimeline({ countryId = null, hours = 48, days = 14 } = {}) {
   // errore che `coverageFrom` esiste per evitare, un livello più in basso.
   const dmgAt = (b) => {
     if (!b.d || !b.d.length) return null;
-    return i >= 0 ? (b.d[i] || 0) : b.d.reduce((s, x) => s + (x || 0), 0);
+    return pick(b.d);
   };
   // Per le pillole il criterio è il tempo, non l'array: un'ora senza
   // nessuna pillola resta con `p` vuoto ed è uno zero legittimo, purché
@@ -542,7 +560,7 @@ function readTimeline({ countryId = null, hours = 48, days = 14 } = {}) {
   const pillAt = (b, h) => {
     if (pillsSeenFrom == null || h < pillsSeenFrom) return null;
     if (!b.p || !b.p.length) return 0;
-    return i >= 0 ? (b.p[i] || 0) : b.p.reduce((s, x) => s + (x || 0), 0);
+    return pick(b.p);
   };
 
   // ── Tutto si rilegge PER ORA ──────────────────────────────────────
