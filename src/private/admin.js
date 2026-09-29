@@ -135,6 +135,14 @@ export function creaPannelloAdmin(ctx) {
     // presidente" suona come se lo facesse.
     form.appendChild(el('p', 'wp-pv-note', pvT('grantHint')));
 
+    // A cosa si applica: nazione, unita' o alleanza, scelte per NOME.
+    // Il selettore e' condiviso con la lista permessi — due copie della
+    // stessa cosa divergono sempre, e la seconda resta indietro.
+    // PRIMA dei ruoli: riempiRuoli() lo legge subito, e dichiararlo dopo
+    // mandava in errore l'apertura di ogni account ("Cannot access ... before
+    // initialization").
+    const chi = creaSelettoreEntita({ tipi: ['country', 'mu', 'alliance'] });
+
     const ruolo = el('select', 'wp-pv-select');
     const riempiRuoli = () => {
       ruolo.textContent = '';
@@ -149,11 +157,6 @@ export function creaPannelloAdmin(ctx) {
     for (const [v, t] of [['grant', pvT('grant')], ['revoke', pvT('revoke')]]) {
       const o = el('option', null, t); o.value = v; tipo.appendChild(o);
     }
-
-    // A cosa si applica: nazione, unita' o alleanza, scelte per NOME.
-    // Il selettore e' condiviso con la lista permessi — due copie della
-    // stessa cosa divergono sempre, e la seconda resta indietro.
-    const chi = creaSelettoreEntita({ tipi: ['country', 'mu', 'alliance'] });
 
     const motivo = el('input', 'wp-pv-input');
     motivo.type = 'text';
