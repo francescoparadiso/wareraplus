@@ -804,6 +804,34 @@ function scattiRicchezzaDisponibili(limite = 120, dalSlot = null) {
     .map((r) => ({ slot: r.slot, righe: r.n, presoIl: r.taken_at }));
 }
 
+/** Tutti gli slot in archivio, dal più vecchio, SENZA scorrere le righe.
+ *
+ *  ⚠️ 2026-09-29: con l'import storico e la classifica mondiale (16.000
+ *  giocatori al giorno) la tabella ha passato 1,7 milioni di righe, e ogni
+ *  COUNT(*) / COUNT(DISTINCT slot) / GROUP BY senza confine costava 6-8
+ *  secondi. `node:sqlite` è SINCRONO: per quei secondi il processo non
+ *  risponde a nessuno. /health ne faceva quattro (~35 s a chiamata) e il
+ *  client la chiama a ogni apertura dell'area riservata — sintomo: area
+ *  riservata "giù" per tutti. Misurato sul VPS.
+ *
+ *  Questa invece salta da uno slot al successivo lungo la chiave primaria
+ *  (slot, war_user_id): una ricerca d'indice per slot, ~60 ms per 106 slot.
+ *  Qualunque statistica sull'archivio intero deve passare da qui. */
+function slotRicchezza() {
+  return getDb().prepare(`
+    WITH RECURSIVE d(s) AS (
+      SELECT MIN(slot) FROM wealth_snapshot
+      UNION ALL
+      SELECT (SELECT MIN(slot) FROM wealth_snapshot WHERE slot > d.s) FROM d WHERE d.s IS NOT NULL
+    )
+    SELECT s AS slot FROM d WHERE s IS NOT NULL`).all().map((r) => r.slot);
+}
+
+/** Righe di UNO scatto: intervallo sulla chiave primaria, ~1 ms. */
+function righeScattoRicchezza(slot) {
+  return getDb().prepare('SELECT COUNT(*) AS n FROM wealth_snapshot WHERE slot = ?').get(slot)?.n ?? 0;
+}
+
 /** Le righe di un gruppo di giocatori dal giorno indicato in poi. Una
  *  query sola per l'intera unità: N query per N membri sarebbe la stessa
  *  cosa scritta peggio. */
@@ -1020,9 +1048,19 @@ function dbStatus() {
     inAttesa: one("SELECT COUNT(*) AS n FROM request WHERE status = 'pending'"),
     webhook: one('SELECT COUNT(*) AS n FROM webhook'),
     sessioniAttive: one(`SELECT COUNT(*) AS n FROM session WHERE expires_at > ${Date.now()}`),
-    scattiRicchezza: one('SELECT COUNT(*) AS n FROM wealth_snapshot'),
-    momentiRicchezza: one('SELECT COUNT(DISTINCT slot) AS n FROM wealth_snapshot'),
-    giorniRicchezza: one('SELECT COUNT(DISTINCT substr(slot, 1, 10)) AS n FROM wealth_snapshot'),
+    // Niente COUNT sull'intera wealth_snapshot: 6-8 s di processo fermo a
+    // ogni /health (vedi slotRicchezza). Il totale delle righe non serve a
+    // niente che la dimensione del file non dica già.
+    ...(() => {
+      try {
+        const slots = slotRicchezza();
+        return {
+          momentiRicchezza: slots.length,
+          giorniRicchezza: new Set(slots.map((x) => x.slice(0, 10))).size,
+          righeUltimoScattoRicchezza: slots.length ? righeScattoRicchezza(slots[slots.length - 1]) : 0,
+        };
+      } catch { return { momentiRicchezza: null, giorniRicchezza: null, righeUltimoScattoRicchezza: null }; }
+    })(),
     costruzioniSorvegliate: one('SELECT COUNT(*) AS n FROM border_state'),
     eventiConfini: one('SELECT COUNT(*) AS n FROM border_event'),
     accessiNazione: one('SELECT COUNT(*) AS n FROM nation_access'),
@@ -1040,7 +1078,7 @@ module.exports = {
   creaRichiesta, getRichiesta, listaRichieste, aggiornaRichiesta,
   getWebhook, setWebhook, deleteWebhook,
   createSession, accountFromToken, destroySession, purgeExpiredSessions,
-  salvaScattoRicchezza, salvaScattoRicchezzaSeMancante, scattiRicchezzaDisponibili, scattiRicchezza,
+  salvaScattoRicchezza, salvaScattoRicchezzaSeMancante, scattiRicchezzaDisponibili, scattiRicchezza, slotRicchezza, righeScattoRicchezza,
   ultimoScattoMu, potaScattiRicchezza,
   deltaRicchezzaPerMu, totaliRicchezzaPerMu,
   leggiStatoConfini, salvaStatoConfini, registraEventiConfini, eventiConfini,

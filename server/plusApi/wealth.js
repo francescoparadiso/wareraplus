@@ -108,7 +108,7 @@
 const express = require('express');
 const { trpcBatch, trpcGet } = require('./wareraApi');
 const {
-  salvaScattoRicchezza, salvaScattoRicchezzaSeMancante, scattiRicchezzaDisponibili, scattiRicchezza,
+  salvaScattoRicchezza, salvaScattoRicchezzaSeMancante, scattiRicchezzaDisponibili, scattiRicchezza, slotRicchezza, righeScattoRicchezza,
   ultimoScattoMu, potaScattiRicchezza, deltaRicchezzaPerMu, totaliRicchezzaPerMu, audit,
 } = require('./db');
 
@@ -504,18 +504,22 @@ function initWealth() {
 
 /** Per /health: dice se lo storico si sta riempiendo, e da quando. */
 function statoRicchezza() {
-  const scatti = scattiRicchezzaDisponibili(RETENTION_GIORNI * 8);
-  const giorni = new Set(scatti.map((x) => giornoDelSlot(x.slot)));
+  // Gli slot dall'indice, non un GROUP BY sull'archivio intero: quello
+  // costava ~6 s a processo fermo, e questa funzione la chiamano /health e
+  // l'elenco del Bilancio (vedi slotRicchezza in db.js).
+  const slots = slotRicchezza();
+  const ultimo = slots.at(-1) || null;
+  const giorni = new Set(slots.map((x) => giornoDelSlot(x)));
   return {
     paese: PAESE_CODICE,
-    scattiInArchivio: scatti.length,
+    scattiInArchivio: slots.length,
     giorniInArchivio: giorni.size,
-    primoScatto: scatti.at(-1)?.slot || null,
-    ultimoScatto: scatti[0]?.slot || null,
+    primoScatto: slots[0] || null,
+    ultimoScatto: ultimo,
     // Quanti giocatori c'erano nell'ultimo scatto: è il numero da guardare
     // per sapere se la classifica mondiale sta entrando davvero (decine di
     // migliaia) o se è rimasto solo il giro sulle unità (qualche centinaio).
-    giocatoriUltimoScatto: scatti[0]?.righe ?? null,
+    giocatoriUltimoScatto: ultimo ? righeScattoRicchezza(ultimo) : null,
     scattoDiOggi: giorni.has(giornoDi()),
     serieCompleta: giorni.size >= GIORNI_SCATTO,
     // Finché è vero si scatta anche in mezzo alla giornata: serve a non
