@@ -3170,10 +3170,14 @@ app.use('/trpc', _trpcProxy);
    giorni: quelli piu' vecchi servivano solo a non contare due volte lo
    stesso giorno, e quel giorno e' passato.
    ══════════════════════════════════════════════════════════════ */
-// Visitatori misurati da Vercel Analytics dalla messa online fino al
-// 2026-08-31, giorno in cui questo contatore ha cominciato a contare da
-// se'. Non e' una stima: e' il numero letto sul cruscotto.
-const VISITS_SEED = 1325;
+// Punto di partenza, da Vercel Analytics. Era 1325 (misura al 2026-08-31),
+// ma il contatore da solo non ha contato niente fino al 2026-09-29: il
+// client che lo chiama esisteva solo sul branch dev, e conta solo sul live
+// (IS_LIVE), mentre il live era fermo a una versione del 29 agosto senza
+// contatore. Un mese di visite perso. Rimesso a 3345 il 2026-09-29, il
+// numero indicato dall'utente: da li' si conta da qui (`own`, che include
+// le poche visite gia' contate quel giorno dopo il rilascio).
+const VISITS_SEED = 3345;
 const VISITS_KEEP_DAYS = 3;
 const VISITS_MAX_IDS_PER_DAY = 50000; // tetto anti-abuso: oltre, si conta e basta
 
