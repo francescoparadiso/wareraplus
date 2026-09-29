@@ -50,6 +50,7 @@ let _muInfo = new Map();
 // Finanziamenti fra tesori. Lista unica per la sessione (vedi
 // moneyTransfers.js), filtrata qui sulla finestra della battaglia.
 let _money = null;
+let _spend = null;   // taglia stimata + contratti (src/diplomacy/battleSpending.js), per la testata
 
 function fmtNum(n) {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -134,7 +135,10 @@ function sideTable(rows, sideKey, battle, opts) {
   const shown = expanded ? rows : rows.slice(0, TOP);
   // Solo per le nazioni (vedi payPerK): contratti incassati + prezzo per 1k.
   const withContracts = pay && pay.totContracts > 0;
-  const avgK = pay ? perK(totMoney + (pay.totContracts || 0), totDmg) : null;
+  // Incassato ÷ danno: la classifica "money" contiene GIÀ la paga dei
+  // contratti (vedi il ⚠️ in src/diplomacy/battleSpending.js). Sommarci i
+  // contratti li contava due volte — l'Italia risultava a 0,107 per 1k.
+  const avgK = pay ? perK(totMoney, totDmg) : null;
 
   return `
     <div class="wp-btl-side-col wp-btl-side-${sideKey}">
@@ -161,7 +165,7 @@ function sideTable(rows, sideKey, battle, opts) {
               <td class="wp-btl-num wp-btl-pct">${totDmg ? (r.damage / totDmg * 100).toFixed(1) : '0.0'}%</td>
               <td class="wp-btl-num wp-btl-bounty">${r.money ? fmtMoney(r.money) : '—'}${sentHtml(sentBy, r.id)}</td>
               ${withContracts ? `<td class="wp-btl-num wp-btl-contracts wp-btl-col-ctr">${pay.byCountry.get(r.id) ? fmtMoney(pay.byCountry.get(r.id)) : '—'}</td>` : ''}
-              ${pay ? perKCell(perK(r.money + (pay.byCountry.get(r.id) || 0), r.damage), avgK) : ''}
+              ${pay ? perKCell(perK(r.money, r.damage), avgK) : ''}
             </tr>`).join('')}
         </tbody>
         <tfoot><tr>
@@ -182,11 +186,13 @@ function sideTable(rows, sideKey, battle, opts) {
 }
 
 /* ── Quanto è stato PAGATO il danno, nazione per nazione ──
-   (taglia incassata + contratti incassati) ÷ danno × 1000: quanti soldi
-   sono entrati in tasca ai cittadini di quella nazione per ogni mille
-   danni fatti su questo schieramento. Sommare le due voci è corretto
-   perché sono portafogli disgiunti — i colpi fatti per un contratto non
-   prendono anche la taglia (vedi src/diplomacy/battleSpending.js).
+   incassato ÷ danno × 1000: quanti soldi sono entrati in tasca ai
+   cittadini di quella nazione per ogni mille danni fatti su questo
+   schieramento. L'incassato è la classifica "money", che contiene GIÀ sia
+   la taglia sia la paga dei contratti (misurato il 2026-09-29, vedi
+   src/diplomacy/battleSpending.js): prima ci si sommavano anche i
+   contratti, e venivano contati due volte. La colonna contratti resta, ma
+   come "di cui", informativa.
 
    ⚠️ Il contratto lo vince un'UNITÀ, non una nazione: qui il compenso va
    alla nazione dell'unità (`mu.country`). Chi nell'unità ha un'altra
@@ -393,7 +399,32 @@ function fundersHtml(battle) {
     </div>`;
 }
 
+/* ── Taglia, contratti e costo in testa alla scheda ──
+   Dalla STESSA fonte del tooltip sulla mappa (fetchBattleSpending), che
+   stima la taglia unità per unità: su una battaglia in corso l'archivio non
+   ha ancora niente (la riga viva porta bounty/contracts null) e prima la
+   testata mostrava 0,00. Finché quella risposta non arriva vale la riga
+   dell'archivio, dove la taglia è già separata dai contratti (api.js). */
+function headCost(battle) {
+  if (_spend) {
+    const b = [_spend.bounty.defender?.total, _spend.bounty.attacker?.total];
+    const won = _spend.merc.won;
+    return {
+      bounty: b.every(x => x == null) ? null : (b[0] || 0) + (b[1] || 0),
+      contracts: won.defender.total + won.attacker.total,
+      count: won.defender.count + won.attacker.count,
+    };
+  }
+  const known = battle.defender.bounty != null || battle.attacker.bounty != null;
+  return {
+    bounty: known ? (battle.defender.bounty ?? 0) + (battle.attacker.bounty ?? 0) : null,
+    contracts: battle.contracts,
+    count: battle.contractCount,
+  };
+}
+
 export function renderBattleDetail(battle) {
+  const cost = headCost(battle);
   const head = `
     <button type="button" class="wp-btl-back" id="wp-btl-detail-back">← ${btlT('backToList')}</button>
     <h2 class="wp-btl-dtitle">
@@ -408,10 +439,10 @@ export function renderBattleDetail(battle) {
         ? `<span class="wp-btl-livedot"></span>${btlT('liveNow')}`
         : fmtDate(battle.endedAt)}</strong></div>
       <div class="wp-btl-card"><span>${btlT('colDamage')}</span><strong>${fmtNum((battle.defender.damages || 0) + (battle.attacker.damages || 0))}</strong></div>
-      <div class="wp-btl-card"><span>${btlT('colBounty')}</span><strong>${fmtMoney((battle.defender.bounty ?? 0) + (battle.attacker.bounty ?? 0))}</strong></div>
-      <div class="wp-btl-card"><span>${btlT('colContracts')}</span><strong>${fmtMoney(battle.contracts ?? 0)}</strong>
-        <em>${btlT('contractsCount', { n: battle.contractCount ?? 0 })}</em></div>
-      <div class="wp-btl-card"><span>${btlT('colCost')}</span><strong>${fmtMoney((battle.defender.bounty ?? 0) + (battle.attacker.bounty ?? 0) + (battle.contracts ?? 0))}</strong></div>
+      <div class="wp-btl-card"><span>${btlT('colBounty')}</span><strong>${fmtMoney(cost.bounty)}</strong></div>
+      <div class="wp-btl-card"><span>${btlT('colContracts')}</span><strong>${fmtMoney(cost.contracts)}</strong>
+        <em>${btlT('contractsCount', { n: cost.count ?? 0 })}</em></div>
+      <div class="wp-btl-card"><span>${btlT('colCost')}</span><strong>${fmtMoney(cost.bounty == null && cost.contracts == null ? null : (cost.bounty || 0) + (cost.contracts || 0))}</strong></div>
     </div>`;
 
   if (!_detail) {
@@ -462,6 +493,7 @@ export async function loadBattleDetail(battle, repaint) {
   _detail = null;
   _mu = null;
   _money = null;
+  _spend = null;
   _muState = 'closed';
   _expanded = { attacker: false, defender: false };
   repaint();
@@ -475,6 +507,8 @@ export async function loadBattleDetail(battle, repaint) {
   await Promise.all([
     resolveMuBriefs((_detail?.contracts || []).map(c => c.mu)),
     fetchMoneyTransfers().then(d => { _money = d; }).catch(() => {}),
+    import('../diplomacy/battleSpending.js').then(m => m.fetchBattleSpending(battle.id))
+      .then(d => { _spend = d; }).catch(() => {}),
   ]);
   repaint();
 }

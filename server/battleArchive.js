@@ -236,7 +236,7 @@ function _mergeRows(existing, incoming) {
     const prev = byId.get(r.i);
     // Una battaglia già archiviata non cambia più: si conservano i contratti
     // già attribuiti (mc/mn) invece di azzerarli con la riga nuova.
-    if (prev) byId.set(r.i, { ...r, mc: prev.mc || r.mc, mn: prev.mn || r.mn });
+    if (prev) byId.set(r.i, { ...r, mc: prev.mc || r.mc, mn: prev.mn || r.mn, mca: prev.mca, mcd: prev.mcd });
     else byId.set(r.i, r);
   }
   return [...byId.values()];
@@ -379,6 +379,12 @@ function _foldAuctionsInto(store, items) {
     if (a.battle) {
       const b = store.byBattle[a.battle] = store.byBattle[a.battle] || { c: 0, n: 0 };
       b.c += amount; b.n += 1;
+      // Per lato, dal 2026-09-29: serve a separare la taglia dalla paga dei
+      // contratti (vedi _splitBounty). Le battaglie gia' aggregate prima non
+      // ce l'hanno, e per quelle ca+cd non torna con c: _splitBounty lo vede
+      // e ripiega sulla proporzione.
+      if (a.forCountrySide === 'defender') b.cd = (b.cd || 0) + amount;
+      else b.ca = (b.ca || 0) + amount;
     }
   }
   store.seen = [...seen];
@@ -417,7 +423,13 @@ function _applyMercToArchive() {
       const m = merc.byBattle[row.i];
       const c = m ? m.c : 0;
       const n = m ? m.n : 0;
-      if (row.mc !== c || row.mn !== n) { row.mc = c; row.mn = n; touched++; }
+      const ca = m && m.ca != null ? m.ca : null;
+      const cd = m && m.cd != null ? m.cd : null;
+      if (row.mc !== c || row.mn !== n || (row.mca ?? null) !== ca || (row.mcd ?? null) !== cd) {
+        row.mc = c; row.mn = n;
+        if (ca != null || cd != null) { row.mca = ca || 0; row.mcd = cd || 0; }
+        touched++;
+      }
     }
     if (touched) _writeArchive(archive.data);
   } catch (err) {
@@ -518,6 +530,26 @@ function readBattleArchive() {
  *  al giorno in cui è finita. Con battaglie che durano poche ore è
  *  praticamente esatto; per le rare che scavallano la mezzanotte UTC il
  *  giorno di chiusura si prende tutto. Il client lo dice in chiaro. */
+/* ⚠️ 2026-09-29 — ab/db NON sono la taglia. Sono la classifica "money"
+   di ogni lato, che il gioco riempie con la taglia E con la paga dei
+   contratti mercenari (misurato su Regno Unito–Olanda: le unita' senza
+   contratti incassano la tariffa della taglia, quelle con contratti circa
+   il compenso). Prima qui si sommavano ab/db come taglia e i contratti a
+   parte: i contratti contati due volte nelle Spese di guerra.
+   Taglia di un lato = incasso − contratti di quel lato. Sulle battaglie
+   concluse (tutto l'archivio) e' quasi esatto. Per le righe senza la
+   divisione per lato (mca/mcd, aggregate prima del 2026-09-29) i contratti
+   della battaglia si dividono in proporzione all'incasso. Gemella di
+   splitArchiveBounty in src/diplomacy/battleSpending.js: se cambi una,
+   cambia l'altra. */
+function _splitBounty(r) {
+  const a = r.ab || 0, d = r.db || 0, c = r.mc || 0;
+  const exact = r.mca != null && r.mcd != null && Math.abs((r.mca + r.mcd) - c) < 0.01;
+  const ca = exact ? r.mca : (a + d > 0 ? c * a / (a + d) : 0);
+  const cd = exact ? r.mcd : (a + d > 0 ? c * d / (a + d) : 0);
+  return { atk: Math.max(0, a - ca), def: Math.max(0, d - cd) };
+}
+
 function readWarExpenses() {
   const archive = _readArchive();
   const merc = _readMerc();
@@ -534,8 +566,9 @@ function readWarExpenses() {
     // (hanno `tournamentTeam` al posto di `country`): fuori da qui.
     if (r.t === 'tournament') continue;
     const d = _day(r.e);
-    if (r.ac) { const k = cell(d, r.ac); k.bounty += r.ab || 0; k.battles += 1; }
-    if (r.dc) { const k = cell(d, r.dc); k.bounty += r.db || 0; k.battles += 1; }
+    const b = _splitBounty(r);
+    if (r.ac) { const k = cell(d, r.ac); k.bounty += b.atk; k.battles += 1; }
+    if (r.dc) { const k = cell(d, r.dc); k.bounty += b.def; k.battles += 1; }
   }
 
   for (const [d, byCountry] of Object.entries(merc.byDay)) {

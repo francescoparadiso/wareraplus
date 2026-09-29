@@ -30,6 +30,7 @@ import { escapeHtml } from '../diplomacy/utils.js';
 import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 import { btlT } from './i18n.js';
 import { getBattleBounty, getBattleContracts } from './api.js';
+import { splitArchiveBounty } from '../diplomacy/battleSpending.js';
 
 // Righe mostrate per blocco: stessa scelta dell'elenco MU (60 righe), che
 // tiene la tabella scorrevole senza impaginare a mano.
@@ -278,8 +279,11 @@ export function wireBattleList(root, archive, repaint, onOpenDetail) {
       const row = findRow(id);
       const tr = btn.closest('tr');
       if (!row || !tr) return;
-      row.attacker.bounty = bounty.atk;
-      row.defender.bounty = bounty.def;
+      // Le classifiche "money" contengono anche la paga dei contratti: la
+      // taglia vera è quello che resta togliendoli (vedi battleSpending.js).
+      const split = splitArchiveBounty({ ab: bounty.atk, db: bounty.def, mc: contracts.total });
+      row.attacker.bounty = split.atk;
+      row.defender.bounty = split.def;
       row.contracts = contracts.total;
       row.contractCount = contracts.count;
       row.partial = false;

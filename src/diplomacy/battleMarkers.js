@@ -916,7 +916,9 @@ function buildSpendRows(data, subColor, textColor, sides = {}) {
     ${buildSpendByCountry(data, subColor, textColor, sides)}
     <div class="bfm-spend-note" style="color:${subColor};">
       Bounty is what each side's pool has already paid out to fighters, so it keeps
-      growing while the battle runs. Contracts count only awarded auctions.
+      growing while the battle runs. The game's ranking mixes it with contract pay, so it is
+      estimated unit by unit: what fighters collected minus their unit's contract payouts.
+      Contracts count only awarded auctions.
       ${data.truncated ? '<br>⚠️ Very large battle — figures are a lower bound (API paging limit).' : ''}
     </div>`;
 }
@@ -938,8 +940,9 @@ function buildSpendRows(data, subColor, textColor, sides = {}) {
      colonna non tornava col totale (Olanda 27.790 contro 55.378).
    - EARNED per nazione è invece INCASSATA, non spesa: è la classifica
      "money" della battaglia, cioè quanto i cittadini di quella nazione
-     hanno preso dal salvadanaio del loro schieramento. Sommarla al
-     pagato darebbe un numero che non vuol dire niente.
+     hanno preso — taglia E paga dei contratti insieme, perché il gioco le
+     mette nella stessa classifica (vedi il ⚠️ in battleSpending.js).
+     Sommarla al pagato darebbe un numero che non vuol dire niente.
    Stessa distinzione già dichiarata in src/battles/battleDetail.js. */
 function spendCountryRows(mercList, bountyList, textColor, subColor, belligerent, bountyTotal) {
   const merc = new Map(mercList.map(x => [x.countryId, x.value]));
@@ -982,7 +985,7 @@ function buildSpendByCountry(data, subColor, textColor, sides = {}) {
       <div class="bfm-spend-c-head" style="color:${subColor};">
         <span></span><span class="bfm-spend-c-name"></span>
         <span class="bfm-spend-c-v">💰 paid</span>
-        <span class="bfm-spend-c-v">🎯 earned</span>
+        <span class="bfm-spend-c-v">💵 earned</span>
       </div>
       <div class="bfm-spend-c-list">${spendCountryRows(mercList, bountyList, textColor, subColor, belligerent, bountyTotal)}</div>
     </div>`;
@@ -996,8 +999,9 @@ function buildSpendByCountry(data, subColor, textColor, sides = {}) {
     <div class="bfm-spend-note" style="color:${subColor};">
       💰 <em>paid</em> is real spending by that nation: the contracts it signed (even for
       an ally's front) and, for the nation fighting that side (🎯), the side's bounty —
-      only the belligerent can fund it. 🎯 <em>earned</em> is bounty its citizens collected
-      from their side's pool — money coming in, not going out. Don't add the two up.
+      only the belligerent can fund it. 💵 <em>earned</em> is what its citizens collected in
+      this battle — bounty and contract pay together, as the game ranks them: money coming
+      in, not going out. Don't add the two up.
     </div>`;
 }
 

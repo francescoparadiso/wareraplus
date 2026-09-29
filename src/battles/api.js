@@ -22,6 +22,7 @@
    tempo a evitare. Su richiesta di una riga sola, invece, sono due.
    ══════════════════════════════════════════════════════════════ */
 
+import { splitArchiveBounty } from '../diplomacy/battleSpending.js';
 import { trpcBatch } from '../diplomacy/utils.js';
 import {
   fetchBattleArchiveViaCache,
@@ -51,14 +52,17 @@ const TTL_MS = 5 * 60 * 1000;
  *  Le chiavi corte esistono per far viaggiare meno byte (vedi _toRow lato
  *  server), non per essere lette qui dentro. */
 function _expand(r) {
+  // ab/db sono l'incasso di ogni lato, che contiene anche la paga dei
+  // contratti: la taglia vera si ricava togliendoli (splitArchiveBounty).
+  const bounty = splitArchiveBounty(r);
   return {
     id: r.i,
     type: r.t,
     endedAt: r.e,
     wonBy: r.w,
     regionId: r.r,
-    attacker: { countryId: r.ac, damages: r.ad || 0, bounty: r.ab },
-    defender: { countryId: r.dc, damages: r.dd || 0, bounty: r.db },
+    attacker: { countryId: r.ac, damages: r.ad || 0, bounty: bounty.atk },
+    defender: { countryId: r.dc, damages: r.dd || 0, bounty: bounty.def },
     contracts: r.mc || 0,
     contractCount: r.mn || 0,
     // Il fallback non conosce i contratti né, all'inizio, le taglie: la
