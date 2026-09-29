@@ -206,7 +206,15 @@ function fmt(n) {
    ~1,07 volte gli attivi — più quanti si sono registrati oggi.
 
    Come per il danno di oggi la casella nasce vuota e si riempie quando la
-   risposta arriva: il resto del pannello viene da `state` ed è già pronto. */
+   risposta arriva: il resto del pannello viene da `state` ed è già pronto.
+
+   Dal 2026-09-29 (richiesta dell'utente) il numero è quello dei cittadini
+   di LIVELLO 10 O PIÙ (`n10`, più chi ha fatto il prestigio, che azzera il
+   livello): sotto il 10 ci sono soprattutto account appena aperti o
+   abbandonati, e gonfiano le nazioni che ne raccolgono tanti — la stessa
+   trappola di `currentPopulation`. Il totale degli iscritti resta sotto,
+   in piccolo. Un server che non manda ancora `n10` = niente casella, mai
+   il totale spacciato per i 10+. */
 function citizensStatHtml() {
   return `<div class="wp-stat" id="wp-stat-citizens" hidden>
     <div class="wp-stat-label">${t('citizens_label')}</div>
@@ -222,19 +230,19 @@ function paintCitizens(nationIds, stillCurrent) {
     .then(m => m.fetchCitizensViaCache())
     .then(byCountry => {
       if (!byCountry || !stillCurrent()) return;
-      let n = 0, today = 0, found = 0;
+      let n10 = 0, all = 0, found = 0;
       for (const id of nationIds) {
         const row = byCountry[id];
-        if (!row) continue;
-        found++; n += row.n || 0; today += row.new24h || 0;
+        if (!row || row.n10 == null) continue;
+        found++; n10 += row.n10; all += row.n || 0;
       }
       if (!found) return;
       const box = document.getElementById('wp-stat-citizens');
       const value = document.getElementById('wp-stat-citizens-value');
       const sub = document.getElementById('wp-stat-citizens-new');
       if (!box || !value) return;
-      value.textContent = fmt(n);
-      if (sub) sub.textContent = today ? t('citizens_new_today', { n: today }) : '';
+      value.textContent = fmt(n10);
+      if (sub) sub.textContent = t('citizens_total_sub', { n: fmt(all) });
       box.hidden = false;
     })
     .catch(() => { /* niente casella cittadini, nient'altro cambia */ });

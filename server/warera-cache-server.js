@@ -1650,6 +1650,16 @@ async function pollCitizens() {
     const DAY = 24 * 60 * 60 * 1000;
     const data = {};
     let total = 0;
+    // WarEra+: quanti sono di livello 10 o piu' (richiesta dell'utente: il
+    // pannello nazione conta solo quelli). Il censimento porta solo id e
+    // data di iscrizione; il livello sta nelle statistiche che il giro
+    // della directory MU tiene gia' per ogni cittadino (citizenStats [2],
+    // prestigio [10]). Zero chiamate: un file letto una volta all'ora.
+    // Chi ha fatto il prestigio conta sempre: il prestigio AZZERA il
+    // livello, e un "livello 3" col prestigio e' un veterano.
+    // `known` = cittadini di cui il livello si sa: chi non e' ancora stato
+    // risolto (tipicamente iscritto da poche ore) non conta nei 10+.
+    const userCountries = readCache(MU_USER_COUNTRIES_FILE, { data: {} }).data || {};
     for (const [countryId, ids] of idsByCountry) {
       const dates = newestByCountry.get(countryId) || [];
       let new24h = 0, new7d = 0;
@@ -1658,7 +1668,14 @@ async function pollCitizens() {
         if (age <= DAY) new24h++;
         if (age <= 7 * DAY) new7d++;
       }
-      data[countryId] = { n: ids.length, ids, new24h, new7d };
+      let n10 = 0, known = 0;
+      for (const id of ids) {
+        const st = userCountries[id]?.[4];
+        if (!st || st[2] == null) continue;
+        known++;
+        if (st[2] >= 10 || (st[10] || 0) > 0) n10++;
+      }
+      data[countryId] = { n: ids.length, ids, new24h, new7d, n10, known };
       total += ids.length;
     }
     writeCache(CITIZENS_FILE, { fetchedAt: now, data }, { compact: true });
@@ -2509,7 +2526,9 @@ app.get('/citizens', (req, res) => {
   const out = {};
   for (const [countryId, row] of Object.entries(cache.data || {})) {
     if (req.query.countryId && req.query.countryId !== countryId) continue;
-    out[countryId] = { n: row.n || 0, new24h: row.new24h || 0, new7d: row.new7d || 0 };
+    // n10/known assenti sulle fotografie scattate prima di quel campo:
+    // null, e il client lo tratta come "non ancora" invece che come zero.
+    out[countryId] = { n: row.n || 0, new24h: row.new24h || 0, new7d: row.new7d || 0, n10: row.n10 ?? null, known: row.known ?? null };
   }
   res.json({ fetchedAt: cache.fetchedAt, data: out });
 });
