@@ -58,7 +58,12 @@ async function cacheJson(path, { timeout = TIMEOUT_MS } = {}) {
 
 /* ── Danno ora per ora + giocatori pillati ───────────────────── */
 
-const _timelines = new Map();   // chiave → risposta, per la sessione
+// chiave → { at, p }. Prima valeva per tutta la sessione: il server
+// aggiunge un'ora alla serie ogni hh:12, e una scheda aperta da ore
+// mostrava i grafici fermi all'ora del primo caricamento (segnalato
+// dall'utente, 2026-09-29). Dieci minuti: al massimo un campione di ritardo.
+const _timelines = new Map();
+const TIMELINE_TTL_MS = 10 * 60 * 1000;
 
 /**
  * La serie oraria del danno e dei giocatori sotto pillola, dal server di
@@ -77,7 +82,8 @@ const _timelines = new Map();   // chiave → risposta, per la sessione
  */
 export async function fetchDamageTimeline(countryId, { hours = 48, days = 14 } = {}) {
   const key = `${countryId || '*'}|${hours}|${days}`;
-  if (_timelines.has(key)) return _timelines.get(key);
+  const hit = _timelines.get(key);
+  if (hit && Date.now() - hit.at < TIMELINE_TTL_MS) return hit.p;
 
   const p = (async () => {
     const qs = new URLSearchParams({ hours: String(hours), days: String(days) });
@@ -91,7 +97,9 @@ export async function fetchDamageTimeline(countryId, { hours = 48, days = 14 } =
     }
   })();
 
-  _timelines.set(key, p);
+  _timelines.set(key, { at: Date.now(), p });
+  // Un errore di rete non resta in cache per dieci minuti.
+  p.then(v => { if (!v && _timelines.get(key)?.p === p) _timelines.delete(key); });
   return p;
 }
 

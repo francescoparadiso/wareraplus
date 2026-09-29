@@ -140,6 +140,21 @@ const DEFAULT_DEBUFF_H = 15.5;
 const PILL_CODE = 'cocain';
 const PILL_CONFIG_TTL_MS = 6 * HOUR_MS;
 
+// ⚠️ 2026-09-29 — LA STESSA PILLOLA CONTATA DUE VOLTE. L'ora della presa si
+// ricava in due modi: da `buffEndAt` − 8h mentre il buff è attivo, da
+// `debuffEndAt` − 23,5h durante il malus. Le due strade danno lo stesso
+// istante ma NON allo stesso millisecondo, e la chiave di dedup era
+// `utente|istante esatto`: ogni pillola vista in buff e poi in malus —
+// cioè quasi tutte, il giro dei cittadini passa ogni 2 ore — entrava due
+// volte. Misurato sul VPS: 4.833 voci, 1.517 giocatori con due voci a meno
+// di un minuto l'una dall'altra; un altro tool dava 102 pillati di picco
+// dove noi ne mostravamo circa il doppio. Da qui in poi due prese dello
+// stesso giocatore a meno di SAME_PILL_MS sono la stessa pillola (una
+// nuova non si può prendere prima che finisca il malus, 23,5 ore).
+const SAME_PILL_MS = HOUR_MS;
+// Versione della riparazione dello storico (vedi _repairPillDuplicates).
+const PILL_FIX_VERSION = 1;
+
 let _pillCfg = { buffH: DEFAULT_BUFF_H, debuffH: DEFAULT_DEBUFF_H, fetchedAt: 0, live: false };
 
 function initDamageTimeline(tools) {
@@ -403,6 +418,101 @@ function pillTakenAt(buffs, cfg = _pillCfg) {
  *
  * @param {Array<object|null>} users  risposte getUserLite (buchi ammessi)
  */
+/** I secchi-ora in cui un giocatore conta come pillato: quelli in cui il
+ *  buff è attivo a METÀ dell'ora. Prima bastava un minuto di buff, e una
+ *  pillola da 8 ore finiva in 9 ore (la prima e l'ultima quasi vuote):
+ *  un 12% di troppo sulla curva. Così sono otto, come le ore di buff. */
+function _pillSlots(st, taken, spanMs) {
+  const out = [];
+  const end = taken + spanMs;
+  let h = _floor(taken, _slotAt(st, taken));
+  while (h <= end) {
+    const step = _slotAt(st, h);
+    const mid = h + step / 2;
+    if (mid >= taken && mid < end) out.push(h);
+    h += step;
+  }
+  return out;
+}
+
+/** Nazione di un giocatore dalle cache del server principale: servono alla
+ *  riparazione, perché `seen` ricorda solo chi e quando, non dove. */
+function _countryLookup() {
+  const map = new Map();
+  try {
+    const uc = readCache('mu-user-countries', { data: {} }).data || {};
+    for (const [id, e] of Object.entries(uc)) if (Array.isArray(e) && e[0]) map.set(id, e[0]);
+    const snap = readCache('citizen-snapshot', { map: null }).map || {};
+    for (const [id, c] of Object.entries(snap)) if (c && !map.has(id)) map.set(id, c);
+  } catch { /* senza nazione quel giocatore non si può rimettere */ }
+  return map;
+}
+
+/**
+ * Ripara una volta sola i pillati contati due volte (vedi SAME_PILL_MS).
+ *  · dove `seen` copre ancora ogni pillola che tocca l'ora (le ore da
+ *    DEDUP_MS − 8h in qua), la colonna si RICOSTRUISCE da zero dalle prese
+ *    tolte dei doppioni, con la regola nuova di _pillSlots;
+ *  · prima di lì `seen` è già potato e non si può ricostruire: ogni pillola
+ *    era entrata due volte (in buff e in malus), quindi si DIMEZZA. Tranne il
+ *    primo giorno dell'archivio, quando le pillole prese prima del deploy si
+ *    vedevano solo in malus, cioè una volta: quelle ore restano come sono.
+ */
+function _repairPillDuplicates(st, now, cfg) {
+  if ((st.pillFix || 0) >= PILL_FIX_VERSION) return;
+  const spanMs = cfg.buffH * HOUR_MS;
+
+  // 1. doppioni fuori da `seen`
+  const byUser = new Map();
+  for (const [k, t] of Object.entries(st.seen || {})) {
+    const u = k.split('|')[0];
+    if (!byUser.has(u)) byUser.set(u, []);
+    byUser.get(u).push([k, t]);
+  }
+  const kept = {};
+  let tolte = 0;
+  for (const list of byUser.values()) {
+    list.sort((a, b) => a[1] - b[1]);
+    let last = -Infinity;
+    for (const [k, t] of list) {
+      if (t - last < SAME_PILL_MS) { tolte++; continue; }
+      kept[k] = t; last = t;
+    }
+  }
+  st.seen = kept;
+
+  // 2. le ore ricostruibili, da zero
+  const exactFrom = _floor(now - DEDUP_MS + spanMs, HOUR_MS) + HOUR_MS;
+  for (const [k, b] of Object.entries(st.hours)) {
+    if (Number(k) >= exactFrom && Array.isArray(b.p)) b.p = [];
+  }
+  const country = _countryLookup();
+  let rimesse = 0, senzaNazione = 0;
+  for (const [k, taken] of Object.entries(kept)) {
+    const c = country.get(k.split('|')[0]);
+    if (!c) { senzaNazione++; continue; }
+    const i = _idx(st, c);
+    for (const h of _pillSlots(st, taken, spanMs)) {
+      if (h < exactFrom) continue;
+      _bump(_bucket(st, h).p, i, 1);
+    }
+    rimesse++;
+  }
+
+  // 3. le ore più vecchie, a metà
+  const halfFrom = (st.pillsFrom || 0) + DEDUP_MS;
+  let dimezzate = 0;
+  for (const [k, b] of Object.entries(st.hours)) {
+    const h = Number(k);
+    if (h >= exactFrom || h < halfFrom || !Array.isArray(b.p)) continue;
+    b.p = b.p.map(v => Math.round((v || 0) / 2));
+    dimezzate++;
+  }
+
+  st.pillFix = PILL_FIX_VERSION;
+  console.log(`[damage-timeline] riparati i pillati doppi: ${tolte} doppioni tolti, ${rimesse} pillole ricontate dalle ${new Date(exactFrom).toISOString()} (${senzaNazione} senza nazione), ${dimezzate} ore più vecchie dimezzate`);
+}
+
 function recordPills(users) {
   if (!Array.isArray(users) || !users.length) return;
 
@@ -410,6 +520,8 @@ function recordPills(users) {
   const st = _readState();
   if (!st.startedAt) st.startedAt = now;
   _migrate(st, now);
+  const fixing = (st.pillFix || 0) < PILL_FIX_VERSION;
+  _repairPillDuplicates(st, now, _pillCfg);
   const first = !st.pillsFrom;
   // Quando questo modulo ha guardato le pillole per la prima volta. Da qui
   // readTimeline ricava due date diverse e le espone entrambe, perché
@@ -426,6 +538,15 @@ function recordPills(users) {
   const spanMs = cfg.buffH * HOUR_MS;
   let added = 0;
 
+  // Le prese già viste, per giocatore: il confronto è a SAME_PILL_MS, non
+  // sull'istante esatto (vedi il ⚠️ in testa a SAME_PILL_MS).
+  const takenByUser = new Map();
+  for (const [k, t] of Object.entries(st.seen)) {
+    const u = k.split('|')[0];
+    if (!takenByUser.has(u)) takenByUser.set(u, []);
+    takenByUser.get(u).push(t);
+  }
+
   for (const u of users) {
     if (!u?.country) continue;
     const taken = pillTakenAt(u.buffs, cfg);
@@ -436,7 +557,10 @@ function recordPills(users) {
 
     const key = `${u._id}|${taken}`;
     if (st.seen[key]) continue;
+    const prev = takenByUser.get(u._id) || [];
+    if (prev.some(t => Math.abs(t - taken) < SAME_PILL_MS)) continue;
     st.seen[key] = taken;
+    prev.push(taken); takenByUser.set(u._id, prev);
     added++;
 
     // Un giocatore è "pillato" per tutte le ore coperte dalle 8 ore di
@@ -447,18 +571,13 @@ function recordPills(users) {
     // un'ora fino al taglio e da mezz'ora dopo, senza mai scriverne uno che
     // sta già lì con un altro significato.
     const i = _idx(st, u.country);
-    const end = taken + spanMs;
-    let h = _floor(taken, _slotAt(st, taken));
-    while (h <= end) {
-      _bump(_bucket(st, h).p, i, 1);
-      h += _slotAt(st, h);
-    }
+    for (const h of _pillSlots(st, taken, spanMs)) _bump(_bucket(st, h).p, i, 1);
   }
 
   // `first` anche senza pillole nuove: la data di prima osservazione è
   // essa stessa un dato (è quella che distingue "zero pillole" da "non
   // stavo ancora guardando"), e va persistita comunque.
-  if (!added && !first) return;
+  if (!added && !first && !fixing) return;
   _prune(st, now);
   _writeState(st);
   console.log(`[damage-timeline] ${added} pillole nuove registrate (${Object.keys(st.seen).length} in finestra di dedup)`);

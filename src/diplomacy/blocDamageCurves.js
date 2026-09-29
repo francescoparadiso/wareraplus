@@ -70,7 +70,11 @@ let _hours = (() => {
 
 /* ── Dati ──────────────────────────────────────────────────────── */
 
-const _cache = new Map();   // chiave (id ordinati) → Promise<timeline|null>
+// chiave (id ordinati) → { at, p }. Dieci minuti e non la sessione: il
+// server aggiunge un'ora ogni hh:12, e una pagina aperta da ore restava
+// ferma all'ora del primo caricamento (segnalato dall'utente, 2026-09-29).
+const _cache = new Map();
+const TTL_CURVE_MS = 10 * 60 * 1000;
 
 async function cacheJson(path) {
   const ctrl = new AbortController();
@@ -92,7 +96,8 @@ export function fetchGroupTimeline(ids) {
   const list = [...new Set((ids || []).filter(Boolean))].sort();
   if (!list.length) return Promise.resolve(null);
   const key = list.join(',');
-  if (_cache.has(key)) return _cache.get(key);
+  const hit = _cache.get(key);
+  if (hit && Date.now() - hit.at < TTL_CURVE_MS) return hit.p;
 
   const p = (async () => {
     try {
@@ -107,24 +112,24 @@ export function fetchGroupTimeline(ids) {
       return null;
     }
   })();
-  _cache.set(key, p);
-  // Un errore di rete non resta in cache per tutta la sessione.
-  p.then(v => { if (!v) _cache.delete(key); });
+  _cache.set(key, { at: Date.now(), p });
+  // Un errore di rete non resta in cache.
+  p.then(v => { if (!v && _cache.get(key)?.p === p) _cache.delete(key); });
   return p;
 }
 
 /** Ripiego per un server non ancora rideployato: una richiesta per
  *  nazione, sommate qui. Stesse regole del server: un'ora è misurata
  *  solo se lo è per TUTTE le nazioni note. */
-const _one = new Map();   // countryId → Promise<timeline|null>, per la sessione
+const _one = new Map();   // countryId → { at, p }, stesso TTL delle curve di gruppo
 
 function fetchOne(id) {
-  if (!_one.has(id)) {
-    const p = cacheJson(`/damage-timeline?${qs({ countryId: id })}`).catch(() => null);
-    _one.set(id, p);
-    p.then(v => { if (!v) _one.delete(id); });
-  }
-  return _one.get(id);
+  const hit = _one.get(id);
+  if (hit && Date.now() - hit.at < TTL_CURVE_MS) return hit.p;
+  const p = cacheJson(`/damage-timeline?${qs({ countryId: id })}`).catch(() => null);
+  _one.set(id, { at: Date.now(), p });
+  p.then(v => { if (!v && _one.get(id)?.p === p) _one.delete(id); });
+  return p;
 }
 
 async function sumOneByOne(list) {
