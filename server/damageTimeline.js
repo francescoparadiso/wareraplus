@@ -52,7 +52,7 @@
 //     in debuff → presa = debuffEndAt − 8h − 15,5h  (= debuffEndAt − 23,5h)
 // Cioè: un giocatore osservato in un qualunque momento dei 23,5 ore
 // successive alla pillola ci dice a che ora precisa l'ha presa. Il
-// cache-server rirosolve ogni cittadino con getUserLite almeno ogni 2 ore
+// cache-server rirosolve ogni cittadino con getUserLite almeno ogni ora
 // (REFRESH_WINDOW_MS nel file principale), quindi non ne sfugge nessuno,
 // e — al contrario del danno — la curva delle prime 24 ore c'è già al
 // primo giro, senza aspettare che l'archivio si riempia.
@@ -126,11 +126,12 @@ const LEGACY_LAG_MS = HOUR_MS;
 // ±5 minuti: il cron è al minuto :02/:32 e pollCountries gira ogni 10.
 const SPAN_TOLERANCE_MS = 5 * 60 * 1000;
 // Quanto ci mette il server principale a rirosolvere TUTTI i cittadini una
-// volta: REFRESH_WINDOW_MS in warera-cache-server.js (2 ore), più un giro di
-// margine. È il ritardo con cui una pillola presa adesso entra nel conto,
+// volta: REFRESH_WINDOW_MS in warera-cache-server.js (un'ora dal
+// 2026-09-29, a ritmo fisso; prima due ore e nei fatti 3-3,5), più un giro
+// di margine. È il ritardo con cui una pillola presa adesso entra nel conto,
 // quindi le ultime ore della curva possono ancora crescere e la vista le
 // dichiara "in assestamento" invece di farle leggere come un calo.
-const PILL_SWEEP_MS = 2.5 * HOUR_MS;
+const PILL_SWEEP_MS = 1.5 * HOUR_MS;
 
 // Fallback se gameConfig non risponde: i valori misurati il 2026-09-08.
 // Non sono "costanti del gioco" ma l'ultimo valore noto, per questo il

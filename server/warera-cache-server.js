@@ -777,8 +777,20 @@ const MU_USER_COUNTRIES_FILE = 'mu-user-countries';
 // accorgersi che venti persone hanno spostato le skill sulla guerra mentre
 // sta succedendo, non il giorno dopo. Con 24h, chi apriva il tool alle 16
 // poteva vedere ancora la fotografia delle 15 del giorno prima.
-const REFRESH_WINDOW_MS = 2 * 60 * 60 * 1000;
-const REFRESH_CYCLES_PER_WINDOW = 4;                 // pollMuDirectory gira ogni 30 min: 4 giri in 2 ore
+//
+// ⚠️ 2026-09-29: un'ora, e a RITMO FISSO. Prima la finestra era di due ore
+// e ogni giro prendeva un quarto dei soli utenti GIÀ scaduti: chi scadeva
+// aspettava in coda altri giri, e nei fatti un cittadino veniva riletto
+// ogni 3-3,5 ore (misurato sull'Italia: mediana 66 min, p90 186, max 216).
+// Con le pillole si vedeva: spywarera contava 109 italiani in buff, noi 69
+// — le pillole prese nelle ultime ore non erano ancora state lette.
+// Adesso ogni giro rilegge i più vecchi, metà della popolazione alla volta,
+// scaduti o no: nessuno aspetta in coda e l'età massima di una lettura è
+// una finestra. Costo: ~9.600 getUserLite ogni 30 minuti, cioè ~96 chunk
+// in una trentina di secondi (~200 richieste/min di picco, stessa misura
+// del commento su MU_USER_LOOKUP_BUDGET), a :12/:42 dove non gira altro.
+const REFRESH_WINDOW_MS = 60 * 60 * 1000;
+const REFRESH_CYCLES_PER_WINDOW = 2;                 // pollMuDirectory gira ogni 30 min: 2 giri in un'ora
 // Tetto di sicurezza per giro — NON il vero limitatore: quello è `dailyShare`
 // più sotto, che spalma il refresh dei "liberi" sui 48 giri del giorno a
 // prescindere da questo numero. Questo tetto entra in gioco solo quando
@@ -1032,6 +1044,7 @@ async function pollMuDirectory() {
     // niente e dice ancora una cosa vera — ma non decide più chi si salta.
     const unknown = [];
     const eligibleDue = []; // [id, ultimo controllo] — scaduta la finestra di refresh
+    const known = [];       // [id, ultimo controllo] — tutti quelli già risolti almeno una volta
     const currentMembers = new Set();
     for (const m of mus) {
       for (const id of m.members || []) currentMembers.add(id);
@@ -1046,11 +1059,17 @@ async function pollMuDirectory() {
       // Voci senza il quinto elemento (le statistiche): stessa migrazione
       // automatica delle voci corte di prima, vanno risolte subito.
       if (!entry || entry.length < 5 || !entry[2]) { unknown.push(id); continue; }
+      known.push([id, entry[1]]);
       if (now - entry[1] >= REFRESH_WINDOW_MS) eligibleDue.push([id, entry[1]]);
     }
-    eligibleDue.sort((a, b) => a[1] - b[1]); // i più in ritardo prima
-    const windowShare = Math.max(50, Math.ceil(eligibleDue.length / REFRESH_CYCLES_PER_WINDOW));
-    const dueBatch = eligibleDue.slice(0, windowShare).map(([id]) => id);
+    // Ritmo fisso (vedi il ⚠️ su REFRESH_WINDOW_MS): la quota è una frazione
+    // di TUTTA la popolazione, non dei soli scaduti, e si prendono i più
+    // vecchi. In regime ognuno torna in testa dopo esattamente una finestra.
+    // Gli scaduti entrano comunque tutti (dopo un riavvio o un giro saltato
+    // la coda si riassorbe in un giro invece di trascinarsi).
+    known.sort((a, b) => a[1] - b[1]); // i più vecchi prima
+    const windowShare = Math.max(50, Math.ceil(known.length / REFRESH_CYCLES_PER_WINDOW), eligibleDue.length);
+    const dueBatch = known.slice(0, windowShare).map(([id]) => id);
 
     const toResolve = [...new Set([...unknown, ...dueBatch])].slice(0, MU_USER_LOOKUP_BUDGET);
     if (toResolve.length) {
@@ -1739,7 +1758,7 @@ function citizenStats(u) {
     // In CODA, e senza forzare la migrazione delle voci già in cache: chi
     // è stato risolto prima di questo campo ha un array da 10 e legge
     // `undefined`, che il client tratta come "niente stellina". Si riempie
-    // da sé entro REFRESH_WINDOW_MS (2 ore), che è il giro completo del
+    // da sé entro REFRESH_WINDOW_MS (un'ora), che è il giro completo del
     // pool — molto meglio che rimandare tutti nella coda degli `unknown`
     // per un dato che non cambia quasi mai.
     u.leveling?.prestigeLevel ?? null,
