@@ -199,6 +199,12 @@ wareraPlus/
 │   │                              ⚠️ se il censimento nuovo e' molto piu' piccolo del
 │   │                              precedente il giro si SCARTA intero: una pagina persa
 │   │                              diventerebbe duecento partenze inventate.
+│   │                              ⚠️ user.getUsersByCountry elenca solo gli ATTIVI (3
+│   │                              giorni offline = fuori elenco, ma ancora cittadino):
+│   │                              una sparizione NON è una partenza. /citizen-moves
+│   │                              rilegge dal vivo chi compare (getUserLite, cache 1h):
+│   │                              stessa nazione = inattivo, contato a parte; e mostra
+│   │                              solo livello 10+ (o prestigio).
 │   │                              Endpoint: /citizen-moves.
 │   ├── priceHistory.js         ← NUOVO — storico dei prezzi: un campione all'ora di
 │   │                              itemTrading.getPrices (PUBBLICA, tutte le risorse
