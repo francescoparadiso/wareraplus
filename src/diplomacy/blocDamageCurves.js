@@ -33,10 +33,23 @@
        lo dice finché non ci sono 14 giorni;
      · le ultime ore dei pillati possono ancora crescere (settledUntil):
        quel tratto è attenuato, non spacciato per un calo.
+
+   ── SOLO PER I MEMBRI P.A.S.T.A. VERIFICATI ──────────────────────
+   Richiesta dell'utente (2026-09-29): questi grafici li vede solo chi è
+   entrato con Discord, ha collegato il personaggio ed è di una nazione
+   dell'alleanza — lo stesso criterio dell'area riservata, chiesto al
+   server con /roles/me (`nazione.abilitata`, che vale anche per gli
+   amministratori del tool). Senza token NON parte nessuna richiesta:
+   Statistiche alleanze la apre chiunque, come la vista unità per il
+   Bilancio. Agli altri la sezione semplicemente non c'è.
+   ⚠️ È un cancello di INTERFACCIA: la serie per nazione resta pubblica
+   (/damage-timeline sul cache-server, la usa la scheda nazione), quindi
+   qui si decide cosa mostrare, non si protegge un dato segreto.
    ══════════════════════════════════════════════════════════════ */
 
 import { WARERA_CACHE_BASE } from './config.js';
 import { bT } from './blocStatsI18n.js';
+import { getToken, leggiRuoli } from '../private/api.js';
 
 const HOUR_MS = 3600 * 1000;
 const RANGES = [24, 48, 72];
@@ -162,6 +175,26 @@ async function sumOneByOne(list) {
   return { ...parts[0], known: true, series, daily };
 }
 
+/* ── Chi può vederli ─────────────────────────────────────────────── */
+
+// Una domanda per sessione (e per token: dopo un login o un logout la
+// risposta cambia). Server giù o errore = no, il verso giusto in cui
+// sbagliare per una sezione riservata.
+let _membro = { token: null, p: null };
+function isVerifiedMember() {
+  const token = getToken();
+  if (!token) return Promise.resolve(false);
+  if (_membro.token !== token || !_membro.p) {
+    _membro = {
+      token,
+      p: leggiRuoli()
+        .then(r => Boolean(r?.nazione?.abilitata))
+        .catch(() => { _membro.p = null; return false; }),
+    };
+  }
+  return _membro.p;
+}
+
 /* ── Ingresso ──────────────────────────────────────────────────── */
 
 /**
@@ -170,9 +203,12 @@ async function sumOneByOne(list) {
  * compare: è il degrado voluto, come nella scheda nazione.
  */
 export async function renderGroupCurves(host, groups) {
-  injectStyles();
   const token = Symbol('curves');
   host._wpCurves = token;
+  host.innerHTML = '';
+  if (!(await isVerifiedMember())) return;
+  if (host._wpCurves !== token || !host.isConnected) return;
+  injectStyles();
   host.innerHTML = `<div class="bs-cv-loading">${bT('Loading hourly damage…')}</div>`;
 
   const tls = await Promise.all(groups.map(g => fetchGroupTimeline(g.ids)));

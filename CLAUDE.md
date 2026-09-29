@@ -298,6 +298,11 @@ wareraPlus/
     │   │                        ignora il parametro e manda il MONDO, quindi senza
     │   │                        quell'eco si ricade sulle nazioni una per una
     │   │                        (una volta per sessione ciascuna, 6 alla volta).
+    │   │                        ⚠️ Visibili SOLO ai membri P.A.S.T.A. verificati
+    │   │                        (Discord + personaggio, /roles/me →
+    │   │                        nazione.abilitata): senza token nessuna richiesta
+    │   │                        e la sezione non compare. Cancello di interfaccia,
+    │   │                        la serie per nazione resta pubblica.
     │   ├── blocStatsI18n.js ← NUOVO — traduzioni (9 lingue) di Statistiche
     │   │                        alleanze: la CHIAVE è il testo inglese, bT('Weekly
     │   │                        damage'), e ciò che manca ricade sull'inglese.
