@@ -34,12 +34,15 @@
      · le ultime ore dei pillati possono ancora crescere (settledUntil):
        quel tratto è attenuato, non spacciato per un calo.
 
-   ── SOLO PER I MEMBRI P.A.S.T.A. VERIFICATI ──────────────────────
+   ── SOLO PER I GOVERNI P.A.S.T.A. ───────────────────────────────
    Richiesta dell'utente (2026-09-29): questi grafici li vede solo chi è
-   entrato con Discord, ha collegato il personaggio ed è di una nazione
-   dell'alleanza — lo stesso criterio dell'area riservata, chiesto al
-   server con /roles/me (`nazione.abilitata`, che vale anche per gli
-   amministratori del tool). Senza token NON parte nessuna richiesta:
+   entrato con Discord, ha collegato il personaggio, è di una nazione
+   dell'alleanza (`nazione.abilitata` di /roles/me, il filtro dell'area
+   riservata) E siede nel governo — presidente, vice o ministro, cioè
+   `capacita.gestisceNazione` non vuota, lo stesso criterio che apre "La
+   mia nazione" (il congresso no). Più gli amministratori del tool. Il
+   cittadino comune P.A.S.T.A. no: prima bastava la cittadinanza, poi
+   ristretto lo stesso giorno. Senza token NON parte nessuna richiesta:
    Statistiche alleanze la apre chiunque, come la vista unità per il
    Bilancio. Agli altri la sezione semplicemente non c'è.
    ⚠️ È un cancello di INTERFACCIA: la serie per nazione resta pubblica
@@ -180,15 +183,23 @@ async function sumOneByOne(list) {
 // Una domanda per sessione (e per token: dopo un login o un logout la
 // risposta cambia). Server giù o errore = no, il verso giusto in cui
 // sbagliare per una sezione riservata.
+// Il governo si calcola dal gioco a ogni /roles/me (roles.js): chi decade
+// da ministro smette di vederli alla sessione successiva.
+function puoVedere(r) {
+  if (!r?.nazione?.abilitata) return false;
+  if (r.account?.admin) return true;
+  return (r.capacita?.gestisceNazione || []).length > 0;
+}
+
 let _membro = { token: null, p: null };
-function isVerifiedMember() {
+function isPastaGovernment() {
   const token = getToken();
   if (!token) return Promise.resolve(false);
   if (_membro.token !== token || !_membro.p) {
     _membro = {
       token,
       p: leggiRuoli()
-        .then(r => Boolean(r?.nazione?.abilitata))
+        .then(puoVedere)
         .catch(() => { _membro.p = null; return false; }),
     };
   }
@@ -206,7 +217,7 @@ export async function renderGroupCurves(host, groups) {
   const token = Symbol('curves');
   host._wpCurves = token;
   host.innerHTML = '';
-  if (!(await isVerifiedMember())) return;
+  if (!(await isPastaGovernment())) return;
   if (host._wpCurves !== token || !host.isConnected) return;
   injectStyles();
   host.innerHTML = `<div class="bs-cv-loading">${bT('Loading hourly damage…')}</div>`;
