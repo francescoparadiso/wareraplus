@@ -45,11 +45,12 @@ import { warIntensityRankedList, getWarIntensityStats } from '../diplomacy/warIn
 import { buildPlaystyleScale, getBalanceColor, getPlaystyleStats } from '../diplomacy/playstyleHeatmap.js';
 import { getTrendColor, getTrendStats } from '../diplomacy/playstyleTrendHeatmap.js';
 import { activeDeposits, depositsByCountry, getProductionColor, getProductionStats, productionRankedList, RESOURCE_TYPES } from '../diplomacy/productionHeatmap.js';
+import { openElectionRows, getPoliticsStats, POLITICS_COLORS } from '../diplomacy/politicsHeatmap.js';
 
 /** Le viste che hanno un riepilogo. Chi chiama usa questo elenco per
  *  decidere se aprire il pannello: tenerlo qui evita che countryPanel.js
  *  e map.js abbiano due liste da tenere allineate a mano. */
-export const OVERVIEW_MODES = ['blocs', 'population', 'weeklyDamage', 'production', 'contested', 'warIntensity', 'playstyle'];
+export const OVERVIEW_MODES = ['blocs', 'population', 'weeklyDamage', 'production', 'contested', 'warIntensity', 'playstyle', 'politics'];
 
 export function hasViewOverview(mode) {
   return OVERVIEW_MODES.includes(mode);
@@ -490,6 +491,51 @@ function productionHtml() {
     + depositsHtml(deposits);
 }
 
+// ══════════════════ ELEZIONI (WarEra+) ══════════════════
+
+/* Il calendario del mondo: prima dove si vota (in ordine di chiusura),
+   poi dove si raccolgono le candidature (in ordine di apertura del voto).
+   Una riga apre la situazione politica di quella nazione, non il pannello
+   nazione: è la domanda naturale davanti a un'elezione. */
+function _politicsLeft(ms) {
+  if (ms <= 0) return '0m';
+  const h = Math.floor(ms / 36e5), m = Math.floor((ms % 36e5) / 6e4);
+  if (h >= 48) return `${Math.round(h / 24)}d`;
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+
+function politicsHtml() {
+  const title = t('vo_politics_title');
+  if (!state.openElections) {
+    return headerHtml(title) + aboutHtml(t('vo_politics_about'))
+      + emptyHtml(state.openElectionsError ? t('vo_politics_unavailable') : t('vo_loading'));
+  }
+  const rows = openElectionRows();
+  const s = getPoliticsStats();
+  const now = Date.now();
+  const head = headerHtml(title, rows.length) + aboutHtml(t('vo_politics_about'))
+    + statsHtml([
+      { label: t('vo_stat_voting'), value: fmt(s.voting) },
+      { label: t('vo_stat_candidacy'), value: fmt(s.candidacy) },
+      { label: t('vo_stat_open_elections'), value: fmt(rows.length) },
+      { label: t('vo_stat_votes_cast'), value: fmt(s.votes) },
+    ]);
+  if (!rows.length) return head + emptyHtml(t('vo_politics_empty'));
+  const maxVotes = Math.max(1, ...rows.map(r => r.votes));
+  return head + rows.map((r, i) => rowHtml({
+    rank: i + 1,
+    icon: r.nation ? flagImgHtml(r.countryId, r.nation, 'wp-vo-flag') : '',
+    name: r.nation?.name || '—',
+    value: r.phase === 'voting' ? t('vo_votes_n', { n: fmt(r.votes) }) : t('vo_cand_n', { n: fmt(r.candidates) }),
+    sub: `${r.type === 'president' ? t('vo_pres') : t('vo_cong')} · ${r.phase === 'voting'
+      ? t('vo_closes', { t: _politicsLeft((r.end || 0) - now) })
+      : t('vo_opens', { t: _politicsLeft((r.start || 0) - now) })}`,
+    share: r.phase === 'voting' ? r.votes / maxVotes : 0.04,
+    color: POLITICS_COLORS[r.phase],
+    dataset: ` data-vo-political="${escapeHtml(r.countryId)}"`,
+  })).join('');
+}
+
 /* I GIACIMENTI: l'altro bonus alla produzione, e l'unico che scade.
    `region.deposit` vale +30% su UN item in UNA regione per pochi giorni
    (vedi productionHeatmap.js), quindi la cosa che conta non è la
@@ -556,6 +602,8 @@ export function buildViewOverviewHtml(mode) {
   }
 
   if (mode === 'production') return productionHtml();
+
+  if (mode === 'politics') return politicsHtml();
 
   if (mode === 'contested') {
     const counts = state.contestedCounts;

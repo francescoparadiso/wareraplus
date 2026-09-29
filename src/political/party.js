@@ -25,6 +25,9 @@ import { startHeavyOperation, endHeavyOperation } from './loading.js';
 import { showSkeletonPartyView, hideSkeletonPartyView } from './ui.js';
 import { loadPartiesForCountry } from './congress.js';
 import { initMemberOrganizer } from './organizer.js';
+// WarEra+: composizione del partito e pallino guerra/eco sulle card, dai
+// membri già scaricati qui sotto — zero chiamate in più (src/political/links.js).
+import { renderPartyComposition, psDot, playstyleOf } from './links.js';
 
 /* ── PARTY SELECTOR ── */
 export async function loadPartiesForSelector() {
@@ -86,6 +89,8 @@ export async function loadPartyDetails(partyId) {
     document.getElementById('partyElectedContainer').innerHTML = '';
     document.getElementById('partyLeadershipContainer').innerHTML = '';
     document.getElementById('memberCountBadge').textContent = '—';
+    const compEl = document.getElementById('wpPartyComposition');
+    if (compEl) compEl.innerHTML = '';
     const orgPanel = document.querySelector('#party-view details.panel:has(.member-organizer)');
     if (orgPanel) orgPanel.style.display = 'none';
     return;
@@ -164,6 +169,10 @@ export async function loadPartyDetails(partyId) {
         </div>
       </div>
     `;
+
+    /* WarEra+ COMPOSIZIONE — asincrona solo per i nomi delle unità: non si
+       aspetta, il resto della scheda va avanti. */
+    renderPartyComposition(document.getElementById('wpPartyComposition'), members).catch(() => {});
 
     /* LEADERSHIP */
     const leaderMap = {};
@@ -286,7 +295,7 @@ function _memberCard(m, isActive) {
   return `<div class="member-card">
     <div class="${badgeClass}"></div>
     <img src="${avatarSrc}" class="${avatarClass}" onerror="this.src=''" alt="">
-    <div class="member-card-name"><a href="${APP_BASE}/user/${m._id}" target="_blank">${escapeHtml(m.username)}</a></div>
+    <div class="member-card-name">${psDot(playstyleOf(m))}<a href="${APP_BASE}/user/${m._id}" target="_blank">${escapeHtml(m.username)}</a></div>
     <div class="member-card-seen">${isActive ? '🟢 ' : ''}${lastSeen}</div>
   </div>`;
 }

@@ -360,6 +360,8 @@ body.light-theme .wp-nat-vs-group { color: #1f2328; }
 .wp-nat-head-flag { width: 46px; height: auto; border-radius: 4px; }
 .wp-nat-head-name { margin: 0; font-size: clamp(20px, 3vw, 28px); font-weight: 800; }
 .wp-nat-head-meta { font-size: 12.5px; color: var(--wp-ov-text-dim, #8b949e); }
+/* WarEra+: bottone "Situazione politica", spinto a destra della testata. */
+.wp-nat-head .wp-nat-political { margin: 0 0 0 auto; }
 
 .wp-nat-stats {
   display: grid;

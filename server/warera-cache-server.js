@@ -155,6 +155,17 @@ const {
 const {
   initCitizenMoves, recordCensus, readCitizenMoves, statoCitizenMoves,
 } = require('./citizenMoves');
+// WarEra+ storico politico: elezioni riassunte e presidenti nel tempo
+// (completi dal lancio, sono gia' in `elections-by-country`), piu' tre
+// archivi che ACCUMULANO — iscritti ai partiti, cambi di casacca, governi.
+// Zero chiamate nuove: legge le cache di pollElections e pollParties e
+// riceve i governi che il radar dei proxy scarica gia'. Vedi il blocco in
+// testa a server/politicalHistory.js.
+const {
+  initPoliticalHistory, refreshElections, recordParties, recordGovernments,
+  readPoliticalHistory, readPoliticalOverview, readPresidents, allPresidentIds,
+  statoPoliticalHistory,
+} = require('./politicalHistory');
 // WarEra+ danno ora per ora + giocatori "pillati": a che ora picchia una
 // nazione, e quanti dei suoi erano sotto pillola in quell'ora. Il danno
 // orario ACCUMULA (e' la differenza fra due letture del cumulato
@@ -333,6 +344,9 @@ function writeCache(name, data, { compact = false } = {}) {
 initProxyIndex({
   trpcBatch: (...args) => trpcBatch(...args),
   readCache, writeCache,
+  // WarEra+ storico politico: i governi che il radar scarica ogni 6 ore
+  // finiscono anche nell'archivio dei governi, senza una chiamata in piu'.
+  onGovernments: (countries, results) => recordGovernments(countries, results),
   get apiToken() { return WARERA_API_TOKEN; },
   get trpcUpstream() { return TRPC_UPSTREAM; },
 });
@@ -356,6 +370,10 @@ initDayHistory({ readCache, writeCache });
 
 // I trasferimenti: solo cache. La fotografia gliela passa pollCitizens.
 initCitizenMoves({ readCache, writeCache });
+
+// Storico politico: solo cache. I partiti glieli passa pollParties, i
+// governi il radar dei proxy.
+initPoliticalHistory({ readCache, writeCache });
 
 // Lavoro e tasse: legge soltanto, non scrive niente.
 initLabourHistory({ readCache });
@@ -587,6 +605,11 @@ async function pollParties() {
       .map((id, i) => ({ partyId: id, data: detailResults[i] || prevDetailById.get(id) }))
       .filter(p => p.data);
     writeCache('parties-detail', { fetchedAt: Date.now(), data: parties });
+
+    // WarEra+ storico politico: iscritti nel tempo e cambi di casacca, dallo
+    // stesso array appena scritto. Non deve poter far fallire il poll.
+    try { recordParties(parties); }
+    catch (err) { console.error('[political-history] registrazione partiti fallita:', err.message); }
 
     console.log(`[poll] parties aggiornato (${countries.length} nazioni, ${parties.length}/${ids.length} partiti)`);
   } catch (err) { console.error('[poll] parties fallito:', err.message); }
@@ -2288,6 +2311,7 @@ cron.schedule('* 2-6 * * *', pollMercArchiveBootstrap, { timezone: BOOT_ARCHIVE_
 // ferma al primo id gia' visto — cioe' quasi sempre UNA richiesta. Offset
 // :11 per non cadere addosso ai due giri dell'archivio (:06 e :16).
 cron.schedule('11,31,51 * * * *', pollMoneyTransfers);
+cron.schedule('4,34 * * * *', refreshPoliticalHistory);     // ogni 30 min: riassunti elezioni + nomi dei presidenti
 cron.schedule('48 * * * *', pollAllianceHistory);           // ogni ora, :48       // ogni 20 min, :11
 cron.schedule('45 */6 * * *', pollProxyIndex);               // ogni 6 ore, :45 (radar dei proxy)
 // Cambio giorno di gioco: 02:00 italiane, non UTC — da cui il fuso
@@ -2812,6 +2836,74 @@ app.get('/labour-history', (req, res) => res.json(readLabour(req.query.countryId
 app.get('/proxy-index', (req, res) => res.json(readProxyIndex()));
 
 // ═══════════════════════════════════════════════════════════════════════
+// WarEra+ storico politico (server/politicalHistory.js)
+// -----------------------------------------------------------------------
+// /political-history?countryId=  tutto quello che serve alla scheda
+//     "Storia" di Political: elezioni riassunte, presidenti, iscritti ai
+//     partiti nel tempo, cambi di casacca, governi. I nomi dei giocatori si
+//     risolvono qui (resolveUsersLite, cache su disco), solo per gli id che
+//     compaiono davvero nella risposta.
+// /political-overview  le metriche di confronto di tutte le nazioni.
+// /presidents          presidenti di sempre di tutte le nazioni, con i nomi
+//     GIA' in casa (nessuna fetch per richiesta: li prepara il cron).
+// ═══════════════════════════════════════════════════════════════════════
+async function refreshPoliticalHistory() {
+  try {
+    refreshElections(true);
+    // Nomi dei presidenti in anticipo: resolveUsersLite ne scarica al massimo
+    // USERS_LITE_MAX_FETCH per giro, quindi alla prima accensione il mondo
+    // intero si riempie in qualche mezz'ora, poi resta solo il ricambio.
+    const ids = allPresidentIds();
+    if (ids.length) await resolveUsersLite(ids);
+  } catch (err) { console.error('[political-history] refresh fallito:', err.message); }
+}
+setTimeout(refreshPoliticalHistory, 20_000);
+
+function _namesFromStore(ids) {
+  const store = _loadUsersLite();
+  const out = {};
+  for (const id of ids) if (store[id]?.[0]) out[id] = store[id][0];
+  return out;
+}
+
+app.get('/political-history', async (req, res) => {
+  const countryId = String(req.query.countryId || '');
+  if (!countryId) return res.status(400).json({ error: 'countryId mancante' });
+  const switchDays = Math.min(180, Math.max(1, Number(req.query.days) || 30));
+  try {
+    const out = readPoliticalHistory(countryId, { switchDays });
+    const ids = new Set();
+    out.presidents.forEach(p => ids.add(p.u));
+    out.switches.rows.forEach(r => ids.add(r.u));
+    out.governments.rows.forEach(g => g.r.forEach(u => { if (u) ids.add(u); }));
+    // Con un tetto: i cambi di casacca di una nazione grande in 180 giorni
+    // possono essere migliaia, e i nomi mancanti si mostrano come id.
+    const list = [...ids].slice(0, 400);
+    const names = list.length ? await resolveUsersLite(list) : {};
+    const usernames = {};
+    for (const [id, v] of Object.entries(names)) if (v?.username) usernames[id] = v.username;
+    res.json({ ...out, usernames });
+  } catch (err) {
+    console.error('[political-history] richiesta fallita:', err.message);
+    res.status(500).json({ error: 'political-history non disponibile' });
+  }
+});
+
+app.get('/political-overview', (req, res) => {
+  // I nomi dei presidenti in carica dalla cache su disco, senza fetch: il
+  // cron li prepara (sono un sottoinsieme di allPresidentIds).
+  const { userIds, ...out } = readPoliticalOverview();
+  res.json({ ...out, usernames: _namesFromStore(userIds) });
+});
+
+app.get('/presidents', (req, res) => {
+  const out = readPresidents();
+  const ids = new Set();
+  for (const rows of Object.values(out.data)) for (const r of rows) ids.add(r[1]);
+  res.json({ ...out, names: _namesFromStore(ids) });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 // PROXY tRPC — sostituisce il Worker Cloudflare per le chiamate del CLIENT
 // ═══════════════════════════════════════════════════════════════════════
 // Perche' esiste: il Worker Cloudflare (politicalview-proxy) e' un
@@ -3099,6 +3191,9 @@ app.get('/health', (req, res) => res.json({
   // Lavoro e tasse: archivio chiuso, `archivioChiuso: true` lo dichiara.
   // Se `nazioni` e' 0 l'import non e' mai stato fatto (import/lavoro.js).
   labour: statoLabour(),
+  // Storico politico: elezioni riassunte (complete) e i tre archivi che
+  // accumulano, ognuno col suo `copreDa`.
+  politicalHistory: statoPoliticalHistory(),
 }));
 
 app.listen(PORT, '127.0.0.1', () => {

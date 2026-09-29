@@ -23,9 +23,13 @@ import TomSelect from 'tom-select';
 import 'tom-select/dist/css/tom-select.css';
 import { currentCountryId, countryNamesMap, currentPartyId } from './config.js';
 import { t } from './i18n.js';
+// WarEra+: le viste nuove (Storia, Mondo) si nascondono quando torna una
+// vista originale — unica riga aggiunta in showView/showPartyView.
+import { hideWpPlusViews } from './plusViews.js';
 
 /* ── VIEW HELPERS ── */
 export function showView(which) {
+  hideWpPlusViews();
   document.getElementById('president-view').style.display = which === 'president' ? '' : 'none';
   document.getElementById('congress-view').style.display  = which === 'congress'  ? '' : 'none';
   document.getElementById('candidatesContainer').style.display = 'none';
@@ -42,6 +46,7 @@ export function showView(which) {
 }
 
 export function showPartyView({ loadPartiesForSelector, loadPartyDetails } = {}) {
+  hideWpPlusViews();
   document.getElementById('president-view').style.display = 'none';
   document.getElementById('congress-view').style.display  = 'none';
   document.getElementById('party-view').style.display     = '';
@@ -60,6 +65,7 @@ export function showPartyView({ loadPartiesForSelector, loadPartyDetails } = {})
 }
 
 export function showElectionView() {
+  hideWpPlusViews();
   document.getElementById('party-view').style.display = 'none';
   const pv = document.getElementById('president-view');
   const cv = document.getElementById('congress-view');

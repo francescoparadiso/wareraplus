@@ -224,6 +224,17 @@ wareraPlus/
 │   │                              e i cambi di nome non sono nel registro: si mostra il
 │   │                              nome di oggi + "allora si chiamava". Endpoint:
 │   │                              /alliance-history.
+│   ├── politicalHistory.js     ← NUOVO — storico politico. Elezioni RIASSUNTE e
+│   │                              presidenti nel tempo (completi dal lancio: sono già
+│   │                              in `elections-by-country`), più tre archivi che
+│   │                              ACCUMULANO dal deploy: iscritti ai partiti (un punto
+│   │                              quando il numero cambia, da pollParties), cambi di
+│   │                              casacca (diff orario utente→partito, stessa guardia
+│   │                              anti-giro-monco di citizenMoves) e governi (li passa
+│   │                              il radar dei proxy, che government.getByCountryId lo
+│   │                              chiede già ogni 6 ore). Zero fetch nuove.
+│   │                              Endpoint: /political-history, /political-overview,
+│   │                              /presidents.
 │   ├── labourHistory.js        ← NUOVO — lavoro e tasse: ogni pagamento di salario
 │   │                              del gioco, aggregato per nazione. Archivio CHIUSO
 │   │                              (29 lug → 17 set 2026) e senza poll: sono ~550.000
@@ -301,6 +312,9 @@ wareraPlus/
     │   │                          tinta della nazione, nazionali colorati per relazione
     │   ├── oceanRoutes.js       ← NUOVO — geometria condivisa delle rotte marittime
     │   ├── oceanBackground.js   ← NUOVO — rotte animate, tema scuro
+    │   ├── politicsHeatmap.js   ← NUOVO — vista mappa "Elezioni": dove si vota (rosso)
+    │   │                          e dove sono aperte le candidature (oro), da
+    │   │                          /elections?open=1 (la rotta dei ticker)
     │   ├── antiqueTheme.js      ← NUOVO — estetica "mappa antica", tema chiaro
     │   ├── darkFleetTheme.js    ← NUOVO — easter egg illustrati, tema scuro
     │   ├── oceanImages.js, shipTooltip.js  ← icone delle illustrazioni + tooltip navi
@@ -312,7 +326,19 @@ wareraPlus/
     │   ├── loading.js, i18n.js, ui.js, ticker.js, domTemplate.js, backgroundCanvas.js
     │   ├── parliament.js, senate.js, congress.js, presidential.js, party.js,
     │   │   organizer.js, panels.js
-    │   └── (nessun equivalente di embed.js — era dead code nell'originale, non portato)
+    │   ├── (nessun equivalente di embed.js — era dead code nell'originale, non portato)
+    │   ├── links.js             ← NUOVO — ponti verso Unità Militari e Statistiche
+    │   │                          nazioni: unità + guerra/eco nella scheda giocatore e
+    │   │                          nella "Composizione" del partito, da getUserLite che
+    │   │                          Political scarica GIÀ (porta `mu` e `skills`)
+    │   ├── history.js, world.js ← NUOVO — viste "Storia" (presidenti, affluenza,
+    │   │                          iscritti, cambi di casacca, governi) e "Mondo"
+    │   │                          (calendario elettorale + confronto fra nazioni)
+    │   ├── simUncertainty.js    ← NUOVO — intervallo 80% dei seggi nel simulatore,
+    │   │                          dalla volatilità storica della nazione (mediana delle
+    │   │                          ultime 5 coppie di congressi). Retrotest su 25
+    │   │                          nazioni: copertura 88,8%, larghezza media 4 seggi
+    │   └── plusApi.js, plusCharts.js, plusViews.js, plusI18n.js (9 lingue)
     ├── mu/                       ← NUOVO — Esplora Unità Militari
     │   ├── main.js              ← initMuView(container) + openMuDetail(muId)
     │   ├── api.js               ← directory dal server di cache (/mu-directory) con
@@ -714,6 +740,7 @@ serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`
 `/daily-damage`, `/damage-timeline`, `/price-history`, `/day-history`,
 `/alliance-history`,
 `/labour-history`,
+`/political-history`, `/political-overview`, `/presidents`,
 `/ticker` + `/ticker/summary`,
 `/region-history/{at,range,events,contested,war-intensity}`, `/alliances`,
 `/battles`, `/elections`, `/parties`, `/users-lite`, `/credit-profiles`,
@@ -979,6 +1006,23 @@ salva, e l'import ne porta cinque mesi. Tutto il resto (popolazione,
 sviluppo, ricchezza di una regione) resta fuori per il motivo originale.
 Senza rideploy `/day-history` non esiste e la time machine torna esattamente
 com'era: popup con nome, bandiera e "dal —", nessuna sezione battaglie.
+
+Lo **storico politico** (`src/political/{history,world}.js` +
+`server/politicalHistory.js`) è della stessa famiglia: senza rideploy le
+viste "Storia" e "Mondo" di Political dicono che il dato non è disponibile
+(il calendario del Mondo ricade comunque su /elections?open=1), la time
+machine non mostra il presidente, e il resto di Political è identico.
+Collegamenti, composizione del partito, scheda giocatore e intervallo del
+simulatore NON dipendono dal server. Dopo il deploy presidenti, affluenza e
+confronto ci sono subito (vengono dalle elezioni già archiviate); iscritti,
+cambi di casacca e governi partono vuoti e dichiarano `coverageFrom`. I nomi
+dei presidenti di tutto il mondo si riempiono in qualche mezz'ora (il cron
+ne risolve 300 a giro). ⚠️ Il presidente "da elezione" è quello ELETTO: un
+impeachment fra due elezioni lo vede solo l'archivio dei governi.
+
+⚠️ La scheda giocatore di Political (`openPlayerCard`, parliament.js) NON
+aveva nessuna regola CSS: era un div senza stile appeso a <body>, sotto
+l'overlay, quindi invisibile. Lo stile è in `src/styles/politicalPlus.css`.
 
 **Lavoro e tasse** (`src/nations/labourSection.js` + `server/labourHistory.js`)
 è l'unica sezione del progetto costruita su un archivio **chiuso**: 51 giorni

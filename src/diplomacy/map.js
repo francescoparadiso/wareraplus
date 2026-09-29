@@ -21,6 +21,8 @@ import { buildWarIntensityColorExpression } from './warIntensityHeatmap.js';
 import { buildProductionColorExpression } from './productionHeatmap.js';
 import { buildPlaystyleColorExpression } from './playstyleHeatmap.js';
 import { buildPlaystyleTrendColorExpression } from './playstyleTrendHeatmap.js';
+// WarEra+ vista Elezioni: nazioni dove si vota o si raccolgono candidature.
+import { buildPoliticsColorExpression } from './politicsHeatmap.js';
 import { buildWeeklyDamageColorExpression } from './weeklyDamage.js';
 import { buildSphereColorExpression } from './sphereOfInfluence.js';
 import { buildBattleHeatmapColorExpression } from './battleHeatmap.js';
@@ -633,6 +635,10 @@ export function renderMap() {
     fillExpr = state.playstyleTrendMode
       ? buildPlaystyleTrendColorExpression(state.playstyleTrend, state.mapSource === 'original')
       : buildPlaystyleColorExpression(state.nationPlaystyle || {}, state.mapSource === 'original');
+  } else if (state.coloringMode === 'politics') {
+    // WarEra+: la fase si ricalcola qui dagli orari, a ogni ridisegno —
+    // vedi politicsHeatmap.js.
+    fillExpr = buildPoliticsColorExpression(state.mapSource === 'original');
   } else if (state.coloringMode === 'battleHeatmap') {
     fillExpr = buildBattleHeatmapColorExpression(state.mapSource === 'original');
   } else if (state.mapSource === 'actual') {
@@ -1126,6 +1132,7 @@ function _viewDataReady(mode) {
   if (mode === 'contested')    return !!state.contestedCounts;
   if (mode === 'warIntensity') return !!(state.warIntensityData || state.warIntensityError);
   if (mode === 'playstyle')    return !!state.nationPlaystyle;
+  if (mode === 'politics')     return !!(state.openElections || state.openElectionsError);
   return true;
 }
 
@@ -1404,6 +1411,7 @@ export function setColoringMode(mode) {
   document.getElementById('mode-contested')?.classList.toggle('active', mode === 'contested');
   document.getElementById('mode-warIntensity')?.classList.toggle('active', mode === 'warIntensity');
   document.getElementById('mode-playstyle')?.classList.toggle('active', mode === 'playstyle');
+  document.getElementById('mode-politics')?.classList.toggle('active', mode === 'politics');
   const isThirdRow = mode === 'contested' || mode === 'warIntensity' || mode === 'playstyle';
   
   // Slider prima riga (3 pulsanti: diplomacy, blocs, sphere)
@@ -1416,7 +1424,7 @@ export function setColoringMode(mode) {
       sphereOfInfluence: isMobile ? 'calc(66.66% + 0.5px)' : 'calc(66.66% + 0.6px)'
     };
     // Per i modi delle altre righe, nascondi lo slider o mettilo in una posizione neutra
-    if (mode === 'weeklyDamage' || mode === 'population' || mode === 'production' || isThirdRow) {
+    if (mode === 'weeklyDamage' || mode === 'population' || mode === 'production' || isThirdRow || mode === 'politics') {
       sliderTop.style.opacity = '0.3';
     } else {
       sliderTop.style.opacity = '1';

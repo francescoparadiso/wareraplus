@@ -33,6 +33,14 @@
    ══════════════════════════════════════════════════════════════ */
 
 import '../styles/political.css';
+// WarEra+: le aggiunte di Political — collegamenti, Storia, Mondo — con il
+// loro foglio di stile e il loro dizionario (non toccano quelli originali).
+import '../styles/politicalPlus.css';
+import { initPoliticalLinks } from './links.js';
+import { showHistoryView, isHistoryViewOpen } from './history.js';
+import { showWorldView, isWorldViewOpen } from './world.js';
+import { applyPlusTranslations } from './plusI18n.js';
+import { hideWpPlusViews } from './plusViews.js';
 import { t } from './i18n.js';
 import {
   pendingRequest, setPendingRequest,
@@ -76,6 +84,7 @@ import { loadPartiesForSelector, loadPartyDetails } from './party.js';
 import { initPanelSystem } from './panels.js';
 import { loadPartyColors } from './api.js';
 import { trackEvent } from '../shared/analytics.js';
+import { state } from '../diplomacy/state.js';
 
 let _mounted = false;
 let _listenersWired = false;
@@ -169,6 +178,7 @@ async function _onCountryChange(newCountryId) {
   if (newCountryId === currentCountryId) return;
 
   setCurrentCountryId(newCountryId);
+  const _historyWasOpen = isHistoryViewOpen();
 
   // BUG FIX: quando questa funzione è invocata programmaticamente da
   // initPoliticalView() (riapertura per una nazione diversa da quella già
@@ -216,6 +226,12 @@ async function _onCountryChange(newCountryId) {
     console.error('Error switching country:', err);
     setStatus('Error loading data', 'error');
   }
+
+  // WarEra+: chi stava guardando la Storia resta sulla Storia, della nazione
+  // nuova (loadElectionsHistory qui sopra ha riportato in primo piano le
+  // elezioni, come fa da sempre).
+  if (_historyWasOpen) showHistoryView(newCountryId);
+  _syncTitle(newCountryId);
 
   if (document.getElementById('party-view').style.display !== 'none') {
     loadPartiesForSelector();
@@ -269,6 +285,21 @@ function _wireEventListeners() {
 
   document.getElementById('partyViewBtn')?.addEventListener('click', () => showPartyView({ loadPartiesForSelector, loadPartyDetails }));
 
+  /* WarEra+: Storia, Mondo, e il ponte verso Statistiche nazioni */
+  document.getElementById('wpPolHistoryBtn')?.addEventListener('click', () => {
+    _closeSenateIfOpen();
+    showHistoryView(currentCountryId);
+    trackEvent('political-history-open', { country: currentCountryId });
+  });
+  document.getElementById('wpPolWorldBtn')?.addEventListener('click', () => {
+    _closeSenateIfOpen();
+    showWorldView({ onPick: _pickCountryFromWorld });
+    trackEvent('political-world-open');
+  });
+  document.getElementById('wpPolNationBtn')?.addEventListener('click', () => {
+    import('../app/nationsOverlay.js').then(m => m.openNationsView(currentCountryId)).catch(() => {});
+  });
+
   /* Re-render charts when a collapsed panel is opened */
   document.querySelectorAll('details.panel').forEach(details => {
     details.addEventListener('toggle', function () {
@@ -312,6 +343,7 @@ function _wireEventListeners() {
 
   /* Back to elections */
   document.getElementById('backToElectionsBtn')?.addEventListener('click', () => {
+    hideWpPlusViews();
     document.getElementById('party-view').style.display = 'none';
     document.getElementById('congress-view').style.display = '';
     if (currentCongressElectionId) loadElection(currentCongressElectionId);
@@ -329,6 +361,10 @@ function _wireEventListeners() {
      lingua INTERNA a Political cambia (namespace separato dallo shell,
      vedi i18n.js) — così contenuto già caricato si aggiorna subito. */
   document.addEventListener('langchange', () => {
+    // WarEra+: i testi delle aggiunte hanno il loro dizionario.
+    applyPlusTranslations();
+    if (isHistoryViewOpen()) { showHistoryView(currentCountryId); return; }
+    if (isWorldViewOpen()) { showWorldView({ onPick: _pickCountryFromWorld }); return; }
     if (document.getElementById('senateOverlay')?.classList.contains('active')) {
       SenateView.render(lastElectedParties || []);
     }
@@ -341,6 +377,31 @@ function _wireEventListeners() {
       loadPresidentialElection(lastPresData.election, currentIsLatestPresidential);
     }
   });
+}
+
+/* WarEra+ — dal Mondo (calendario o tabella) a una nazione: la si carica
+   come farebbe il selettore, e si finisce sulle sue elezioni. */
+async function _pickCountryFromWorld(countryId) {
+  if (!countryId) return;
+  trackEvent('political-world-pick', { country: countryId });
+  if (countryId === currentCountryId) {
+    hideWpPlusViews();
+    showElectionView();
+    return;
+  }
+  await _onCountryChange(countryId);
+  hideWpPlusViews();
+  showElectionView();
+}
+
+/* Il titolo dell'overlay ("Political View — Italia") lo scrive
+   politicalOverlay.js solo all'apertura: cambiando nazione da dentro
+   restava quello di prima. */
+function _syncTitle(countryId) {
+  const el = document.getElementById('wp-political-title');
+  if (!el) return;
+  const name = state.nationMap?.get(countryId)?.name;
+  if (name) el.textContent = `— ${name}`;
 }
 
 // toggleTheme (config.js) legge lastAllParties come parametro iniettato:
@@ -382,6 +443,8 @@ export async function initPoliticalView(countryId, options = {}) {
 
   if (isFirstMount) {
     initI18n();
+    applyPlusTranslations();
+    initPoliticalLinks();
     initTheme();
     _stopBackgroundCanvas = initBackgroundCanvas();
     initSenateView();
@@ -399,7 +462,13 @@ export async function initPoliticalView(countryId, options = {}) {
   // (Political resta montata fra un'apertura e l'altra, vedi
   // pausePoliticalRendering). Il senato è un overlay a sé sopra le altre
   // viste: va chiuso esplicitamente quando si sceglie Elezioni o Partiti.
-  if (options.openSenate) {
+  if (options.openHistory) {
+    _closeSenateIfOpen();
+    showHistoryView(currentCountryId);
+  } else if (options.openWorld) {
+    _closeSenateIfOpen();
+    showWorldView({ onPick: _pickCountryFromWorld });
+  } else if (options.openSenate) {
     SenateView.open();
   } else if (options.openParty) {
     _closeSenateIfOpen();

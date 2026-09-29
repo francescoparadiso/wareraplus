@@ -1,0 +1,332 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Political: stile delle aggiunte
+   ------------------------------------------------------------------
+   Collegamenti, composizione del partito, Storia, Mondo, intervallo
+   del simulatore — tutto sotto #wp-political-root come political.css,
+   con prefisso `wp-pol-` per non toccare le classi dell'originale.
+
+   Più la SCHEDA GIOCATORE (.pc-*), che è un caso a parte: openPlayerCard
+   (parliament.js) la appende a <body>, fuori dal root, e le sue classi
+   non avevano NESSUNA regola da nessuna parte — né qui né nello
+   style.css originale. Risultato: un <div> senza stile in fondo al
+   body, sotto l'overlay di Political (fixed, z-index 6000), cioè
+   invisibile. Cliccare un seggio "non faceva niente" e bloccava lo
+   scroll della pagina finché non si premeva Esc. Le regole .pc-* qui
+   sotto sono la scheda che quel codice aveva sempre voluto disegnare.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Navigazione ── */
+#wp-political-root .wp-pol-nav-btn {
+  background: var(--s2);
+  color: var(--text);
+  border: 1px solid var(--bd2);
+  box-shadow: none;
+}
+#wp-political-root .wp-pol-nav-btn:hover { border-color: var(--gold); }
+#wp-political-root .wp-pol-nav-btn.active {
+  background: linear-gradient(135deg, var(--gold), var(--gold2));
+  color: #07090d;
+  border-color: transparent;
+}
+
+/* ── Pezzi comuni ── */
+#wp-political-root .wp-pol-dim { color: var(--text3); }
+#wp-political-root .wp-pol-small { font-size: .72rem; margin: 6px 0 10px; }
+#wp-political-root .wp-pol-num { font-variant-numeric: tabular-nums; }
+#wp-political-root .up { color: var(--green); }
+#wp-political-root .down { color: var(--red); }
+#wp-political-root .wp-pol-note {
+  margin-top: 12px; font-size: .72rem; color: var(--text3); line-height: 1.5;
+}
+#wp-political-root .wp-pol-cov {
+  font-size: .72rem; color: var(--text2); background: var(--s2);
+  border: 1px dashed var(--bd3); border-radius: var(--r2);
+  padding: 6px 10px; margin-bottom: 12px; line-height: 1.45;
+}
+#wp-political-root .wp-pol-tag {
+  display: inline-block; font-size: .64rem; font-weight: 600; letter-spacing: .3px;
+  padding: 1px 7px; border-radius: 20px; background: var(--s3); color: var(--text2);
+  border: 1px solid var(--bd2); vertical-align: middle; white-space: nowrap;
+}
+#wp-political-root .wp-pol-tag.live { color: var(--red); border-color: rgba(224, 82, 82, .45); }
+#wp-political-root .wp-pol-tag.pres { color: #58a6ff; border-color: rgba(88, 166, 255, .45); }
+#wp-political-root .wp-pol-tag.cong { color: var(--gold2); border-color: rgba(197, 150, 74, .45); }
+#wp-political-root .wp-pol-loading,
+#wp-political-root .wp-pol-empty { color: var(--text2); text-align: center; padding: 28px 16px; }
+
+/* ── Stile di gioco ── */
+#wp-political-root .wp-pol-ps-war, .pc-modal-overlay .wp-pol-ps-war { --ps: #f85149; }
+#wp-political-root .wp-pol-ps-eco, .pc-modal-overlay .wp-pol-ps-eco { --ps: #3fb950; }
+#wp-political-root .wp-pol-ps-mixed, .pc-modal-overlay .wp-pol-ps-mixed { --ps: #e3b341; }
+#wp-political-root .wp-pol-ps-undecided, .pc-modal-overlay .wp-pol-ps-undecided { --ps: #8b949e; }
+#wp-political-root .wp-pol-ps-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ps); margin-right: 5px; vertical-align: middle; flex-shrink: 0;
+}
+.pc-modal-overlay .wp-pol-ps-pill,
+#wp-political-root .wp-pol-ps-pill {
+  display: inline-block; font-size: .72rem; font-weight: 600; padding: 2px 9px; border-radius: 20px;
+  color: var(--ps); border: 1px solid color-mix(in srgb, var(--ps) 45%, transparent);
+  background: color-mix(in srgb, var(--ps) 12%, transparent);
+}
+#wp-political-root .wp-pol-ps-bar {
+  display: flex; height: 12px; border-radius: 6px; overflow: hidden; gap: 2px; margin: 6px 0 8px;
+}
+#wp-political-root .wp-pol-ps-seg { background: var(--ps); min-width: 3px; }
+#wp-political-root .wp-pol-ps-legend {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .76rem; color: var(--text2);
+}
+#wp-political-root .wp-pol-ps-legend em { color: var(--text3); font-style: normal; }
+
+/* ── Unità militare ── */
+#wp-political-root .wp-pol-mu, .pc-modal-overlay .wp-pol-mu {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  background: rgba(248, 81, 73, .08); color: inherit;
+  border: 1px solid rgba(248, 81, 73, .35); border-radius: 20px;
+  padding: 2px 10px 2px 3px; font: inherit; font-size: .78rem; cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+#wp-political-root .wp-pol-mu:hover, .pc-modal-overlay .wp-pol-mu:hover {
+  border-color: #f85149; background: rgba(248, 81, 73, .16);
+}
+#wp-political-root .wp-pol-mu img, .pc-modal-overlay .wp-pol-mu img {
+  width: 20px; height: 20px; border-radius: 50%; object-fit: cover;
+}
+#wp-political-root .wp-pol-mu span, .pc-modal-overlay .wp-pol-mu span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#wp-political-root .wp-pol-mu-ico, .pc-modal-overlay .wp-pol-mu-ico {
+  width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* ── Composizione del partito ── */
+#wp-political-root .wp-pol-comp-nums {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 14px;
+}
+#wp-political-root .wp-pol-comp-nums > div,
+#wp-political-root .wp-pol-kpis > div {
+  background: var(--s2); border: 1px solid var(--bd); border-radius: var(--r2); padding: 9px 11px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+#wp-political-root .wp-pol-comp-nums strong,
+#wp-political-root .wp-pol-kpis strong { font-size: 1.05rem; color: var(--gold2); font-variant-numeric: tabular-nums; }
+#wp-political-root .wp-pol-comp-nums span,
+#wp-political-root .wp-pol-kpis span { font-size: .7rem; color: var(--text3); }
+#wp-political-root .wp-pol-comp-title {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .6px; color: var(--text2);
+  margin: 12px 0 6px; font-weight: 600;
+}
+#wp-political-root .wp-pol-mu-list { display: flex; flex-direction: column; gap: 5px; }
+#wp-political-root .wp-pol-mu-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+#wp-political-root .wp-pol-mu-n { font-variant-numeric: tabular-nums; color: var(--text2); font-size: .8rem; }
+
+/* ── Viste Storia / Mondo ── */
+#wp-political-root .wp-pol-view { display: flex; flex-direction: column; gap: 16px; }
+#wp-political-root .wp-pol-hist-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+#wp-political-root .wp-pol-hist-title {
+  font-family: 'Playfair Display', serif; font-size: 1.3rem; color: var(--gold2); margin-bottom: 2px;
+}
+#wp-political-root .wp-pol-grid2 {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;
+}
+#wp-political-root .wp-pol-card { min-width: 0; }
+#wp-political-root .wp-pol-card .panel-head h2 { flex: 1; }
+
+#wp-political-root .wp-pol-ch { width: 100%; height: auto; display: block; }
+#wp-political-root .wp-pol-ch-grid { stroke: var(--bd2); stroke-width: 1; }
+#wp-political-root .wp-pol-ch-lab { fill: var(--text3); font-size: 10px; font-family: 'Sora', sans-serif; }
+#wp-political-root .wp-pol-strip { width: 100%; height: 26px; display: block; border-radius: 4px; }
+#wp-political-root .wp-pol-strip-axis {
+  display: flex; justify-content: space-between; font-size: .66rem; color: var(--text3); margin-top: 3px;
+}
+#wp-political-root .wp-pol-legend { display: flex; gap: 14px; font-size: .74rem; color: var(--text2); margin-bottom: 6px; }
+#wp-political-root .wp-pol-legend i {
+  display: inline-block; width: 12px; height: 3px; border-radius: 2px; margin-right: 5px; vertical-align: middle;
+}
+#wp-political-root .wp-pol-kpis {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-top: 12px;
+}
+
+#wp-political-root .wp-pol-party {
+  display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; max-width: 100%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;
+}
+#wp-political-root .wp-pol-party i {
+  width: 9px; height: 9px; border-radius: 2px; background: var(--pc); flex-shrink: 0;
+}
+#wp-political-root .wp-pol-party-none { color: var(--text3); font-style: italic; }
+
+#wp-political-root .wp-pol-pres-list { display: flex; flex-direction: column; margin-top: 4px; max-height: 360px; overflow-y: auto; }
+#wp-political-root .wp-pol-pres-row {
+  display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 52px minmax(0, .9fr);
+  gap: 8px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--bd); font-size: .8rem;
+}
+#wp-political-root .wp-pol-pres-row.current { background: rgba(197, 150, 74, .07); border-radius: var(--r2); }
+#wp-political-root .wp-pol-pres-row a,
+#wp-political-root .wp-pol-sw-row a,
+#wp-political-root .wp-pol-gov-row a { color: var(--text); text-decoration: none; }
+#wp-political-root .wp-pol-pres-row a:hover,
+#wp-political-root .wp-pol-sw-row a:hover,
+#wp-political-root .wp-pol-gov-row a:hover { color: var(--gold2); text-decoration: underline; }
+#wp-political-root .wp-pol-pres-dates { font-size: .7rem; text-align: right; }
+
+#wp-political-root .wp-pol-mem-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px 18px; margin-top: 10px; }
+#wp-political-root .wp-pol-mem-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; font-size: .8rem; }
+#wp-political-root .wp-pol-mem-row em { font-style: normal; color: var(--text3); font-size: .7rem; }
+
+#wp-political-root .wp-pol-sw-sum { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+#wp-political-root .wp-pol-sw-sum-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 40px 40px 44px; gap: 6px; align-items: center;
+  font-size: .78rem; font-variant-numeric: tabular-nums; text-align: right;
+}
+#wp-political-root .wp-pol-sw-sum-row > :first-child { text-align: left; }
+#wp-political-root .wp-pol-sw-list { display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; }
+#wp-political-root .wp-pol-sw-row {
+  display: grid; grid-template-columns: 56px minmax(0, .8fr) minmax(0, 1.6fr); gap: 8px; align-items: center;
+  padding: 5px 2px; border-bottom: 1px solid var(--bd); font-size: .76rem;
+}
+#wp-political-root .wp-pol-sw-path { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
+#wp-political-root .wp-pol-sw-path b { color: var(--text3); font-weight: 400; }
+
+#wp-political-root .wp-pol-gov-row {
+  display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; padding: 7px 2px;
+  border-bottom: 1px solid var(--bd); font-size: .78rem;
+}
+#wp-political-root .wp-pol-gov-date { color: var(--text2); }
+#wp-political-root .wp-pol-gov-ch { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; }
+#wp-political-root .wp-pol-gov-ch s { opacity: .55; }
+
+/* ── Mondo ── */
+#wp-political-root .wp-pol-cal-block { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+#wp-political-root .wp-pol-cal-block .wp-pol-comp-title { margin-top: 0; }
+#wp-political-root .wp-pol-cal-row {
+  display: grid; grid-template-columns: minmax(0, 1.4fr) auto minmax(0, 1fr) auto; gap: 8px; align-items: center;
+  background: var(--s2); border: 1px solid var(--bd); border-radius: var(--r2); padding: 7px 10px;
+  color: var(--text); font: inherit; font-size: .8rem; text-align: left; cursor: pointer;
+  transition: border-color .15s;
+}
+#wp-political-root .wp-pol-cal-row:hover { border-color: var(--gold); }
+#wp-political-root .wp-pol-cal-block.voting .wp-pol-cal-row { border-left: 3px solid var(--red); }
+#wp-political-root .wp-pol-cal-block.candidacy .wp-pol-cal-row { border-left: 3px solid var(--gold); }
+#wp-political-root .wp-pol-cal-nation { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#wp-political-root .wp-pol-flag { width: 20px; height: 14px; object-fit: cover; border-radius: 2px; flex-shrink: 0; }
+#wp-political-root .wp-pol-search {
+  background: var(--s2); border: 1px solid var(--bd2); border-radius: var(--r2); color: var(--text);
+  padding: 6px 10px; font: inherit; font-size: .8rem; min-width: 180px;
+}
+#wp-political-root .wp-pol-table-wrap { overflow-x: auto; }
+#wp-political-root .wp-pol-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+#wp-political-root .wp-pol-table th {
+  text-align: left; font-weight: 600; color: var(--text2); padding: 7px 8px; border-bottom: 1px solid var(--bd2);
+  cursor: pointer; white-space: nowrap; user-select: none; position: sticky; top: 0; background: var(--s1);
+}
+#wp-political-root .wp-pol-table th.active { color: var(--gold2); }
+#wp-political-root .wp-pol-table th.num,
+#wp-political-root .wp-pol-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+#wp-political-root .wp-pol-table td { padding: 6px 8px; border-bottom: 1px solid var(--bd); white-space: nowrap; }
+#wp-political-root .wp-pol-table td:first-child { display: flex; align-items: center; gap: 7px; }
+#wp-political-root .wp-pol-table tbody tr { cursor: pointer; }
+#wp-political-root .wp-pol-table tbody tr:hover { background: var(--s2); }
+#wp-political-root .wp-pol-cell-party { display: inline-flex; align-items: center; gap: 5px; }
+#wp-political-root .wp-pol-cell-party i { width: 8px; height: 8px; border-radius: 2px; }
+#wp-political-root .wp-pol-more { margin-top: 12px; }
+
+/* ── Simulatore: intervallo ── */
+#wp-political-root .sim-interval-note { font-size: .7rem; color: var(--text3); margin: -4px 0 10px; line-height: 1.45; }
+#wp-political-root .sim-pc-range {
+  font-size: .7rem; font-weight: 500; color: var(--text2); margin-left: 4px;
+  padding: 0 5px; border: 1px solid var(--bd2); border-radius: 10px;
+}
+
+@media (max-width: 900px) {
+  #wp-political-root .wp-pol-grid2 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  /* I tre pulsanti nuovi su UNA riga: gli originali in colonna a tutta
+     larghezza allungavano già la testata, altri tre la raddoppiavano. */
+  #wp-political-root .header-controls .wp-pol-nav-btn {
+    flex: 1 1 0; width: auto; min-width: 0;
+    padding-left: 4px; padding-right: 4px;
+    font-size: .74rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #wp-political-root .wp-pol-pres-row { grid-template-columns: minmax(0, 1fr) 48px; }
+  #wp-political-root .wp-pol-pres-row > :nth-child(2),
+  #wp-political-root .wp-pol-pres-row > :nth-child(4) { grid-column: span 2; }
+  #wp-political-root .wp-pol-cal-row { grid-template-columns: minmax(0, 1fr) auto; }
+  #wp-political-root .wp-pol-sw-row { grid-template-columns: 48px minmax(0, 1fr); }
+  #wp-political-root .wp-pol-sw-path { grid-column: span 2; }
+  #wp-political-root .wp-pol-gov-row { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ══ Scheda giocatore (appesa a <body>, vedi testa) ══ */
+.pc-modal-overlay {
+  --pc-bg: #0e1117; --pc-s2: #141820; --pc-bd: rgba(255, 255, 255, .1);
+  --pc-text: #dde2ec; --pc-text2: #8892a4; --pc-text3: #535e72;
+  position: fixed; inset: 0; z-index: 9500;
+  background: rgba(3, 5, 9, .62); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+  font-family: 'Sora', sans-serif; animation: pc-fade .16s ease;
+}
+html[data-theme="light"] .pc-modal-overlay {
+  --pc-bg: #ffffff; --pc-s2: #f3f4f7; --pc-bd: rgba(0, 0, 0, .1);
+  --pc-text: #1a1e2e; --pc-text2: #4a5568; --pc-text3: #9ca3af;
+  background: rgba(20, 24, 32, .35);
+}
+@keyframes pc-fade { from { opacity: 0; } to { opacity: 1; } }
+.pc-modal-box {
+  position: relative; width: min(380px, 100%); max-height: calc(100vh - 32px); overflow-y: auto;
+  background: var(--pc-bg); color: var(--pc-text); border: 1px solid var(--pc-bd);
+  border-top: 3px solid var(--pc-color, #c5964a); border-radius: 12px;
+  padding: 18px 18px 16px; box-shadow: 0 18px 50px rgba(0, 0, 0, .45);
+  display: flex; flex-direction: column; gap: 14px;
+}
+.pc-modal-close {
+  position: absolute; top: 10px; right: 10px; width: 28px; height: 28px; border-radius: 50%;
+  background: var(--pc-s2); border: 1px solid var(--pc-bd); color: var(--pc-text2); cursor: pointer; font-size: .8rem;
+}
+.pc-modal-close:hover { color: var(--pc-text); }
+.pc-modal-header { display: flex; align-items: center; gap: 12px; padding-right: 30px; }
+.pc-avatar-ring { padding: 2px; border-radius: 50%; border: 2px solid var(--pc-color, #c5964a); flex-shrink: 0; }
+.pc-avatar {
+  width: 54px; height: 54px; border-radius: 50%; object-fit: cover; display: flex;
+  align-items: center; justify-content: center; font-weight: 700; font-size: 1.3rem; border: 1px solid transparent;
+}
+.pc-header-info { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.pc-username { font-weight: 700; font-size: 1.02rem; overflow-wrap: anywhere; }
+.pc-party { font-size: .8rem; font-weight: 600; }
+.pc-rank-badge {
+  align-self: flex-start; font-size: .66rem; color: var(--pc-text2); background: var(--pc-s2);
+  border: 1px solid var(--pc-bd); border-radius: 20px; padding: 1px 8px;
+}
+.pc-vote-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.pc-stat-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .5px; color: var(--pc-text3); }
+.pc-vote-number { font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pc-bar-track { height: 7px; border-radius: 4px; background: var(--pc-s2); overflow: hidden; }
+.pc-bar-fill { height: 100%; border-radius: 4px; transition: width .6s cubic-bezier(.2, .8, .2, 1); }
+.pc-bar-caption { font-size: .7rem; color: var(--pc-text3); margin-top: 5px; min-height: 1em; }
+.pc-stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pc-stat {
+  background: var(--pc-s2); border: 1px solid var(--pc-bd); border-radius: 8px; padding: 7px 9px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.pc-stat-val { font-weight: 600; font-size: .9rem; font-variant-numeric: tabular-nums; }
+.pc-plus {
+  border-top: 1px solid var(--pc-bd); padding-top: 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.pc-plus-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pc-plus-dim { color: var(--pc-text3); font-size: .78rem; }
+.pc-plus-nums { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .76rem; color: var(--pc-text2); }
+.pc-plus-nums strong { color: var(--pc-text); font-variant-numeric: tabular-nums; }
+.pc-plus-nation {
+  align-self: flex-start; background: var(--pc-s2); border: 1px solid var(--pc-bd); color: var(--pc-text);
+  border-radius: 8px; padding: 6px 12px; font: inherit; font-size: .78rem; cursor: pointer;
+}
+.pc-plus-nation:hover { border-color: var(--pc-color, #c5964a); }
+.pc-profile-link {
+  text-align: center; font-size: .8rem; color: var(--pc-color, #c5964a); text-decoration: none;
+  padding: 7px; border-radius: 8px; border: 1px solid var(--pc-bd);
+}
+.pc-profile-link:hover { background: var(--pc-s2); }

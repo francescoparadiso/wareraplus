@@ -10,6 +10,7 @@ import { getContestedStats, contestedLegendGradient } from './contestedHeatmap.j
 import { getWarIntensityStats, warIntensityLegendGradient } from './warIntensityHeatmap.js';
 import { getPlaystyleStats, playstyleLegendGradient } from './playstyleHeatmap.js';
 import { activeDeposits, getProductionStats, productionLegendGradient, RESOURCE_TYPES, scaleMax } from './productionHeatmap.js';
+import { getPoliticsStats, POLITICS_COLORS } from './politicsHeatmap.js';
 import { getTrendStats, trendLegendGradient } from './playstyleTrendHeatmap.js';
 import { mergedSphereGroups } from '../proxy/radar.js';
 import { flagImgHtml } from '../panel/nationFlag.js';
@@ -228,6 +229,30 @@ export function updateDynamicLegend() {
   // avere tutti e sei i tipi di risorsa), più il conto di quante regioni
   // porta ogni risorsa nel mondo: la seconda domanda dopo "quanto" è
   // "quali", e la legenda è il posto dove sta senza aprire nulla.
+  // WarEra+ — Elezioni: due colori e i conti. Stesso inglese fisso delle
+  // altre legende; il riepilogo nel pannello è quello tradotto.
+  if (state.coloringMode === 'politics') {
+    if (!state.openElections) {
+      box.innerHTML = `
+        <div class="legend-section-title">Elections</div>
+        <div class="legend-note">${state.openElectionsError || 'Loading open elections…'}</div>`;
+      return;
+    }
+    const s = getPoliticsStats();
+    box.innerHTML = `
+      <div class="legend-section-title">Elections</div>
+      <div class="legend-item">
+        <div class="legend-bar" style="background:${POLITICS_COLORS.voting};"></div>
+        <div class="legend-info"><div class="legend-name">Voting now</div><div class="legend-desc">${s.voting} nations</div></div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-bar" style="background:${POLITICS_COLORS.candidacy};"></div>
+        <div class="legend-info"><div class="legend-name">Candidacies open</div><div class="legend-desc">${s.candidacy} nations</div></div>
+      </div>
+      <div class="legend-note">${s.presidential} presidential, ${s.congress} congress · ${s.votes.toLocaleString()} votes cast so far · refreshed every 3 minutes · click a nation in the panel to open its political view</div>`;
+    return;
+  }
+
   if (state.coloringMode === 'production') {
     const sub = THEMES[state.theme].TEXT_SECONDARY;
     const stats = getProductionStats();
@@ -866,4 +891,5 @@ export function syncUIToState() {
   document.getElementById('mode-warIntensity')?.classList.toggle('active', state.coloringMode === 'warIntensity');
   document.getElementById('mode-playstyle')?.classList.toggle('active', state.coloringMode === 'playstyle');
   document.getElementById('mode-production')?.classList.toggle('active', state.coloringMode === 'production');
+  document.getElementById('mode-politics')?.classList.toggle('active', state.coloringMode === 'politics');
 }

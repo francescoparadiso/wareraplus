@@ -251,6 +251,11 @@ async function fetchGovernments(countries) {
   countries.forEach((c, i) => {
     if (results[i]) byCountry.set(c._id, governmentMembers(results[i]));
   });
+  // WarEra+ storico politico: la stessa risposta finisce nell'archivio dei
+  // governi (server/politicalHistory.js). Un di piu': non deve poter far
+  // fallire il radar.
+  try { deps.onGovernments?.(countries, results); }
+  catch (err) { console.error('[proxy-index] archivio governi fallito:', err.message); }
   return byCountry;
 }
 

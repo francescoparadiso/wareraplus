@@ -67,6 +67,10 @@ export const state = {
   playstyleTrendDays: 7,      // quanti giorni indietro guarda la variazione (slider del riepilogo, 1-7)
   playstyleHistory: null,     // storico grezzo per nazione, scaricato una volta e ri-affettato dallo slider
   playstyleTrendError: null,  // messaggio se lo storico non è disponibile
+  // WarEra+ vista Elezioni (politicsHeatmap.js): { countryId: [elezioni aperte] }
+  openElections: null,
+  openElectionsAt: 0,         // quando è stata scaricata (si rinfresca ogni 3 min a vista aperta)
+  openElectionsError: null,   // messaggio se il server non risponde
   regionData: null,
   regionCache: new Map(), // regionId → { position: [lng,lat], name: string }
 

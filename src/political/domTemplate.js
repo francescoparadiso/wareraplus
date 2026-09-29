@@ -65,6 +65,12 @@ export function getPoliticalTemplate() {
         <button class="btn-load btn-party-view" id="partyViewBtn" data-i18n="party_view_btn">🎭 Party View</button>
         <button class="btn-load btn-senate-view" id="senateViewBtn" data-i18n="senate_view_btn">🏛️ Senate View</button>
         <button class="btn-load btn-elections" id="backToElectionsBtn" data-i18n="elections_btn">🗳️ Elections</button>
+        <!-- WarEra+: le due viste nuove (src/political/history.js, world.js)
+             e il ponte verso Statistiche nazioni. Testi da plusI18n.js,
+             applicati da main.js (non passano dal dizionario originale). -->
+        <button class="btn-load wp-pol-nav-btn" id="wpPolHistoryBtn" data-view="history">📜 <span data-wp-pt="nav_history">History</span></button>
+        <button class="btn-load wp-pol-nav-btn" id="wpPolWorldBtn" data-view="world">🌍 <span data-wp-pt="nav_world">World</span></button>
+        <button class="btn-load wp-pol-nav-btn" id="wpPolNationBtn">📊 <span data-wp-pt="nav_nation">Nation stats</span></button>
 
         <div class="input-wrap select-wrap" style="margin-right:12px;">
           <select id="countrySelect">
@@ -475,6 +481,9 @@ export function getPoliticalTemplate() {
             %</span>
           <span class="sim-proj-basis" id="simProjBasis"></span>
         </div>
+        <!-- WarEra+: da dove viene l'intervallo "5–9" accanto ai seggi
+             (src/political/simUncertainty.js) — o perché non c'è. -->
+        <div class="sim-interval-note" id="simIntervalNote"></div>
         <div id="simPartyCards" class="sim-party-cards"></div>
 
         <!-- Mini parliament preview -->
@@ -490,6 +499,9 @@ export function getPoliticalTemplate() {
       </details>
 
     </div><!-- /congress-view -->
+    <!-- WarEra+: viste nuove, riempite da src/political/history.js e world.js -->
+    <div id="wp-pol-history-view" class="wp-pol-view" style="display:none;"></div>
+    <div id="wp-pol-world-view" class="wp-pol-view" style="display:none;"></div>
     <div id="party-view" style="display:none;">
       <div class="party-view-grid">
         <!-- Party selector panel -->
@@ -517,6 +529,18 @@ export function getPoliticalTemplate() {
           <div id="partyOverview" class="party-overview">
             <p data-i18n="select_party_hint">Select a party to see details.</p>
           </div>
+        </details>
+
+        <!-- WarEra+: chi c'è dentro il partito — guerra/eco, unità militari,
+             livello e danno — dai membri che la vista scarica già
+             (src/political/links.js: renderPartyComposition). -->
+        <details class="panel" open>
+          <summary>
+            <div class="panel-icon">🧬</div>
+            <h2 data-wp-pt="party_composition">Who is in the party</h2>
+            <span class="details-marker">▼</span>
+          </summary>
+          <div id="wpPartyComposition"></div>
         </details>
 
         <details class="panel" open>

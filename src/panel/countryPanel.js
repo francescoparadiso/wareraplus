@@ -1148,6 +1148,16 @@ export function renderViewOverviewPanel(mode) {
     });
   });
 
+  // WarEra+ vista Elezioni: la riga apre la situazione politica della
+  // nazione, non il suo pannello.
+  contentEl.querySelectorAll('.wp-vo-row[data-vo-political]').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.voPolitical;
+      trackEvent('view-overview-click', { mode, target: 'political' });
+      openPoliticalView(id, state.nationMap.get(id)?.name || '');
+    });
+  });
+
   // WarEra+ — toggle "fotografia / variazione 7 giorni" della vista Guerra
   // vs Eco: cambia insieme la mappa e questo riepilogo, perché sono due
   // letture dello stesso dato, non due viste.

@@ -54,6 +54,10 @@ import { showView, showSkeleton, hideSkeleton, resetStats, fillStat, setStatus, 
 import { render as parliamentRender } from './parliament.js';
 import { observeParliamentResize } from './panels.js';
 import { SenateView } from './senate.js';
+// WarEra+: intervallo di incertezza della proiezione seggi, calibrato sulla
+// volatilità storica della nazione (vedi il blocco in testa al modulo).
+import { volatilityK, seatIntervals } from './simUncertainty.js';
+import { pT } from './plusI18n.js';
 
 // Dipendenze cross-modulo iniettate da main.js (Stage 8) — vedi header.
 let _loadElection = null;
@@ -1238,6 +1242,23 @@ export function renderSimulator(allParties, totalSeatsCurrent, opts = {}) {
   );
   const projSeatsArr = distributeSeats(shares, totalSeats);
 
+  // WarEra+: il numero secco diventa "7 (5–9)". Solo sulle proiezioni da
+  // VOTI: la quota di iscritti è un'altra grandezza, e la volatilità misurata
+  // sulle elezioni non le si applica. Durante lo spoglio l'incertezza si
+  // restringe con la parte di elettorato che ha già votato.
+  const vol = totalVotesAll > 0 ? volatilityK(electionHistory, opts.isLive ? currentCongressElectionId : null) : null;
+  let remaining = 1;
+  if (opts.isLive && !opts.usingPrevVotes && hasVoters && totalVotesAll > 0) {
+    remaining = Math.max(0, 1 - totalVotesAll / expectedVoters);
+  }
+  const intervals = vol ? seatIntervals(shares, totalSeats, vol.k, remaining) : null;
+  const intervalNoteEl = document.getElementById('simIntervalNote');
+  if (intervalNoteEl) {
+    intervalNoteEl.textContent = totalVotesAll > 0
+      ? (vol ? pT('sim_interval_note', { k: vol.k.toFixed(2), pairs: vol.pairs + 1 }) : pT('sim_interval_none'))
+      : '';
+  }
+
   const simParties = allParties.map((p, i) => {
     const votePct  = totalVotesAll > 0 ? ((p.votes || 0) / totalVotesAll * 100) : null;
     const memberPct = totalMembers > 0 ? ((p.members || 0) / totalMembers * 100) : null;
@@ -1245,7 +1266,7 @@ export function renderSimulator(allParties, totalSeatsCurrent, opts = {}) {
     const projVotes = hasVoters && basisPct != null ? Math.round(expectedVoters * basisPct / 100) : null;
     const proj      = projSeatsArr[i];
     const delta     = proj - (p.seats || 0);
-    return { ...p, votePct, memberPct, projVotes, projSeats: proj, delta };
+    return { ...p, votePct, memberPct, projVotes, projSeats: proj, delta, range: intervals?.[i] || null };
   }).sort((a, b) => b.projSeats - a.projSeats);
 
   // Render party cards
@@ -1272,7 +1293,7 @@ export function renderSimulator(allParties, totalSeatsCurrent, opts = {}) {
             <span title="Vote share from last election"><span style="color:var(--text3)">🗳</span> ${votePctStr}</span>
             <span title="${t('projected_votes_title')}">${hasVoters ? `~${projVotesStr} ${t('votes_suffix')}` : ''}</span>
             <span class="sim-pc-seats-now" title="Current seats">${p.seats || 0} now</span>
-            <strong class="sim-pc-seats-proj" style="color:${p.color}">${p.projSeats} seats</strong>
+            <strong class="sim-pc-seats-proj" style="color:${p.color}">${p.projSeats} seats${p.range && p.range.lo !== p.range.hi ? ` <span class="sim-pc-range" title="${pT('sim_interval_title')}">${p.range.lo}–${p.range.hi}</span>` : ''}</strong>
           </div>
         </div>`;
     }).join('');

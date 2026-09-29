@@ -19,6 +19,10 @@
 import * as d3 from 'd3';
 import { t } from './i18n.js';
 import { escapeHtml, APP_BASE } from './config.js';
+// WarEra+: unità militare, stile di gioco e numeri del giocatore nella
+// scheda, da getUserLite (quasi sempre già in cache di Political).
+import { localFetch } from './api.js';
+import { fillPlayerCardPlus } from './links.js';
 
 let _lastRenderData = null;   // salva { parties, container, legendContainer, tooltip }
 
@@ -436,6 +440,7 @@ export function openPlayerCard(d) {
         ${d.partyVotes != null ? `<div class="pc-stat"><span class="pc-stat-label">${t('party_total_votes_label')}</span><span class="pc-stat-val">${Number(d.partyVotes).toLocaleString()}</span></div>` : ''}
       </div>
 
+      <div class="pc-plus"><div class="pc-plus-dim">…</div></div>
       <a class="pc-profile-link" href="${APP_BASE}/user/${d.userId}" target="_blank" rel="noopener">Open profile ↗</a>
     </div>
   `;
@@ -449,6 +454,14 @@ export function openPlayerCard(d) {
     const numEl = overlay.querySelector('.pc-vote-number');
     if (numEl) _animateCount(numEl, 0, parseInt(numEl.dataset.target, 10) || 0, 650);
   });
+
+  // WarEra+: il blocco unità/stile arriva dopo, senza bloccare l'apertura.
+  const plusSlot = overlay.querySelector('.pc-plus');
+  if (d.userId) {
+    localFetch('/user', { id: d.userId })
+      .then(u => fillPlayerCardPlus(plusSlot, u))
+      .catch(() => plusSlot?.remove());
+  } else plusSlot?.remove();
 
   const close = () => closePlayerCard();
   overlay.querySelector('.pc-modal-close').addEventListener('click', close);

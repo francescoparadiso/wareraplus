@@ -58,6 +58,33 @@ import { t } from '../shared/i18n.js';
 // il motivo per cui questi quattro campi non cadono piu' sotto il limite
 // dichiarato qui sopra.
 import { dayKey, fetchDay, cachedDay, fuoriPortata } from './timeMachineDay.js';
+// WarEra+ storico politico: il presidente in carica in quel giorno. Viene
+// dalle elezioni archiviate (server/politicalHistory.js), che sono complete
+// dal lancio del gioco: a differenza della diplomazia, qui non esiste un
+// "fuori portata". Una richiesta per sessione, nessun ripiego.
+import { fetchPresidents } from '../political/plusApi.js';
+
+let _presidents;          // undefined = mai chiesto, null = non disponibile
+
+function _ensurePresidents() {
+  if (_presidents !== undefined) return;
+  _presidents = null;
+  fetchPresidents().then(d => {
+    _presidents = d;
+    if (d && _focusId && _active) _updateFocus(Number(_slider.value));
+  });
+}
+
+/** Il presidente eletto più recente PRIMA di `ts` (in carica fino alla
+ *  successiva elezione). `null` prima della prima elezione. */
+function _presidentAt(countryId, ts) {
+  const rows = _presidents?.data?.[countryId];
+  if (!rows?.length) return null;
+  let cur = null;
+  for (const r of rows) { if (r[0] <= ts) cur = r; else break; }
+  if (!cur) return null;
+  return { id: cur[1], name: _presidents.names?.[cur[1]] || null };
+}
 
 // Passo di uno "step" discreto (frecce tastiera) — un giorno di gioco.
 const STEP_MS = 24 * 60 * 60 * 1000;
@@ -1163,6 +1190,13 @@ function _renderFocus(ts, giorno, dati, d, fuori, al) {
   }
 
   const stats = [`<span><strong>${regioni}</strong> ${escapeHtml(t('tm_focus_regions'))}</span>`];
+
+  // WarEra+: chi era presidente quel giorno (vedi _presidentAt).
+  _ensurePresidents();
+  const pres = _presidentAt(_focusId, ts);
+  const presHtml = pres
+    ? `<div class="wp-tm-focus-dim">👤 ${escapeHtml(t('tm_focus_president'))}: <strong>${escapeHtml(pres.name || `#${String(pres.id).slice(-6)}`)}</strong></div>`
+    : '';
   if (d?.wealth != null) stats.push(`<span><strong>${_fmtCompatto(d.wealth)}</strong> ${escapeHtml(t('tm_focus_treasury'))}</span>`);
 
   // L'alleanza, nella forma del sistema in vigore quel giorno. Senza dati
@@ -1216,6 +1250,7 @@ function _renderFocus(ts, giorno, dati, d, fuori, al) {
     <div class="wp-tm-focus-day">${escapeHtml(_fmtDate(ts))}</div>
     ${sinceHtml}
     <div class="wp-tm-focus-stats">${stats.join('')}</div>
+    ${presHtml}
     ${allHtml}
     ${dipl}
     ${battHtml}

@@ -86,6 +86,9 @@ export function renderNationDetail(host, nation, ctx) {
         <h2 class="wp-nat-head-name">${escapeHtml(nation.name || '—')}</h2>
         <div class="wp-nat-head-meta" id="wp-nat-today"></div>
       </div>
+      <!-- WarEra+: il ponte inverso di quello in Political ("Statistiche
+           nazione"): da qui alle sue elezioni, partiti e storia. -->
+      <button type="button" class="wp-nat-back wp-nat-political" id="wp-nat-political">🏛️ ${escapeHtml(natT('politicalView'))}</button>
     </header>
 
     <section class="wp-nat-stats">
@@ -121,6 +124,13 @@ export function renderNationDetail(host, nation, ctx) {
     </section>`;
 
   host.querySelector('#wp-nat-back').addEventListener('click', () => ctx.onBack());
+  // Political è il PRIMO overlay nel DOM: aprirlo con Statistiche nazioni
+  // ancora aperta lo lascerebbe sotto, invisibile. Si chiude questa prima.
+  host.querySelector('#wp-nat-political').addEventListener('click', async () => {
+    const [nat, pol] = await Promise.all([import('../app/nationsOverlay.js'), import('../app/politicalOverlay.js')]);
+    nat.closeNationsView();
+    pol.openPoliticalView(nation._id, nation.name || '');
+  });
   host.querySelector('#wp-nat-citizen-sort').addEventListener('change', (e) => {
     _sort = e.target.value;
     _sortDir = -1;

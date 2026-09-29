@@ -395,6 +395,41 @@ document.getElementById('mode-warIntensity')?.addEventListener('click', async ()
   }
 });
 
+// WarEra+ vista Elezioni: dove si vota adesso. Una richiesta per tutto il
+// mondo (/elections?open=1, la stessa dei ticker), rinfrescata ogni 3 minuti
+// finché la vista resta accesa e la scheda è visibile — il server ripassa le
+// elezioni con lo stesso ritmo, più spesso non avrebbe niente di nuovo.
+const OPEN_ELECTIONS_TTL = 3 * 60 * 1000;
+let _openElectionsTimer = null;
+
+async function _loadOpenElections(force = false) {
+  if (!force && state.openElections && Date.now() - state.openElectionsAt < OPEN_ELECTIONS_TTL) return;
+  try {
+    const { fetchOpenElectionsViaCache } = await import('./cacheClient.js');
+    state.openElections = await fetchOpenElectionsViaCache();
+    state.openElectionsAt = Date.now();
+    state.openElectionsError = null;
+  } catch (err) {
+    console.warn('[politics] elezioni aperte non disponibili:', err.message);
+    if (!state.openElections) state.openElectionsError = 'Open elections are not available right now (cache server unreachable).';
+  }
+  if (state.coloringMode === 'politics') { renderMap(); _refreshOverview('politics'); }
+}
+
+document.getElementById('mode-politics')?.addEventListener('click', async () => {
+  _dimOtherSliders();
+  const third = document.getElementById('mode-slider-third');
+  if (third) third.style.opacity = '0.3';
+  trackEvent('view-mode-change', { mode: 'politics' });
+  setColoringMode('politics');
+  clearInterval(_openElectionsTimer);
+  _openElectionsTimer = setInterval(() => {
+    if (state.coloringMode !== 'politics') { clearInterval(_openElectionsTimer); _openElectionsTimer = null; return; }
+    if (!document.hidden) _loadOpenElections(true);
+  }, OPEN_ELECTIONS_TTL);
+  await _loadOpenElections();
+});
+
 document.getElementById('mode-playstyle')?.addEventListener('click', async () => {
   _dimOtherSliders();
   trackEvent('view-mode-change', { mode: 'playstyle' });

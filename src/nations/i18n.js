@@ -16,6 +16,8 @@ const N_DICT = {
   en: {
     title: 'Nation Statistics', tabOverview: 'Overview', tabCompare: '1 vs 2', tabCharts: 'Charts',
     nation: 'Nation', nations: 'nations', back: 'Back to the list', search: 'Search a nation…',
+    // WarEra+: ponte verso Political (nationDetail.js)
+    politicalView: 'Political situation',
     citizens: 'Citizens', wealth: 'Wealth', weekly: 'Weekly dmg', today: 'Today', total: 'Total dmg',
     development: 'Development', coreDev: 'Core dev.', regions: 'Regions', wars: 'Wars', allies: 'Defensive pacts',
     taxes: 'Taxes', unrest: 'Unrest', perCitizen: 'per citizen', newCitizens: 'New (7d)',
@@ -73,6 +75,8 @@ const N_DICT = {
   it: {
     title: 'Statistiche nazioni', tabOverview: 'Panoramica', tabCompare: '1 vs 2', tabCharts: 'Grafici',
     nation: 'Nazione', nations: 'nazioni', back: "Torna all'elenco", search: 'Cerca una nazione…',
+    // WarEra+: ponte verso Political (nationDetail.js)
+    politicalView: 'Situazione politica',
     citizens: 'Cittadini', wealth: 'Ricchezza', weekly: 'Danni sett.', today: 'Oggi', total: 'Danni tot.',
     development: 'Sviluppo', coreDev: 'Sviluppo core', regions: 'Regioni', wars: 'Guerre', allies: 'Patti difensivi',
     taxes: 'Tasse', unrest: 'Malcontento', perCitizen: 'per cittadino', newCitizens: 'Nuovi (7g)',
@@ -130,6 +134,8 @@ const N_DICT = {
   es: {
     title: 'Estadísticas de naciones', tabOverview: 'Resumen', tabCompare: '1 vs 2', tabCharts: 'Gráficos',
     nation: 'Nación', nations: 'naciones', back: 'Volver al listado', search: 'Buscar una nación…',
+    // WarEra+: ponte verso Political (nationDetail.js)
+    politicalView: 'Situación política',
     citizens: 'Ciudadanos', wealth: 'Riqueza', weekly: 'Daño sem.', today: 'Hoy', total: 'Daño total',
     development: 'Desarrollo', coreDev: 'Desarrollo core', regions: 'Regiones', wars: 'Guerras', allies: 'Pactos defensivos',
     taxes: 'Impuestos', unrest: 'Descontento', perCitizen: 'por ciudadano', newCitizens: 'Nuevos (7d)',
@@ -187,6 +193,8 @@ const N_DICT = {
   de: {
     title: 'Nationsstatistiken', tabOverview: 'Überblick', tabCompare: '1 vs 2', tabCharts: 'Diagramme',
     nation: 'Nation', nations: 'Nationen', back: 'Zurück zur Liste', search: 'Nation suchen…',
+    // WarEra+: ponte verso Political (nationDetail.js)
+    politicalView: 'Politische Lage',
     citizens: 'Bürger', wealth: 'Vermögen', weekly: 'Wöch. Schaden', today: 'Heute', total: 'Ges. Schaden',
     development: 'Entwicklung', coreDev: 'Kernentwicklung', regions: 'Regionen', wars: 'Kriege', allies: 'Verteidigungspakte',
     taxes: 'Steuern', unrest: 'Unruhe', perCitizen: 'pro Bürger', newCitizens: 'Neu (7T)',
@@ -244,6 +252,8 @@ const N_DICT = {
   fr: {
     title: 'Statistiques des nations', tabOverview: "Vue d'ensemble", tabCompare: '1 vs 2', tabCharts: 'Graphiques',
     nation: 'Nation', nations: 'nations', back: 'Retour à la liste', search: 'Rechercher une nation…',
+    // WarEra+: ponte verso Political (nationDetail.js)
+    politicalView: 'Situation politique',
     citizens: 'Citoyens', wealth: 'Richesse', weekly: 'Dégâts hebdo.', today: "Aujourd'hui", total: 'Dégâts totaux',
     development: 'Développement', coreDev: 'Dév. central', regions: 'Régions', wars: 'Guerres', allies: 'Pactes défensifs',
     taxes: 'Impôts', unrest: 'Mécontentement', perCitizen: 'par citoyen', newCitizens: 'Nouveaux (7j)',
@@ -301,6 +311,8 @@ const N_DICT = {
   nl: {
     title: 'Natiestatistieken', tabOverview: 'Overzicht', tabCompare: '1 vs 2', tabCharts: 'Grafieken',
     nation: 'Natie', nations: 'naties', back: 'Terug naar de lijst', search: 'Zoek een natie…',
+    // WarEra+: ponte verso Political (nationDetail.js)
+    politicalView: 'Politieke situatie',
     citizens: 'Burgers', wealth: 'Rijkdom', weekly: 'Wekel. schade', today: 'Vandaag', total: 'Totale schade',
     development: 'Ontwikkeling', coreDev: 'Kernontwikkeling', regions: 'Regio\'s', wars: 'Oorlogen', allies: 'Verdedigingspacten',
     taxes: 'Belastingen', unrest: 'Onrust', perCitizen: 'per burger', newCitizens: 'Nieuw (7d)',
@@ -358,6 +370,8 @@ const N_DICT = {
   sv: {
     title: 'Nationsstatistik', tabOverview: 'Översikt', tabCompare: '1 mot 2', tabCharts: 'Diagram',
     nation: 'Nation', nations: 'nationer', back: 'Tillbaka till listan', search: 'Sök en nation…',
+    // WarEra+: ponte verso Political (nationDetail.js)
+    politicalView: 'Politiskt läge',
     citizens: 'Medborgare', wealth: 'Förmögenhet', weekly: 'Veckoskada', today: 'Idag', total: 'Total skada',
     development: 'Utveckling', coreDev: 'Kärnutveckling', regions: 'Regioner', wars: 'Krig', allies: 'Försvarspakter',
     taxes: 'Skatter', unrest: 'Oro', perCitizen: 'per medborgare', newCitizens: 'Nya (7d)',
@@ -415,6 +429,8 @@ const N_DICT = {
   pt: {
     title: 'Estatísticas das nações', tabOverview: 'Visão geral', tabCompare: '1 vs 2', tabCharts: 'Gráficos',
     nation: 'Nação', nations: 'nações', back: 'Voltar à lista', search: 'Procurar uma nação…',
+    // WarEra+: ponte verso Political (nationDetail.js)
+    politicalView: 'Situação política',
     citizens: 'Cidadãos', wealth: 'Riqueza', weekly: 'Dano sem.', today: 'Hoje', total: 'Dano total',
     development: 'Desenvolvimento', coreDev: 'Desenv. central', regions: 'Regiões', wars: 'Guerras', allies: 'Pactos defensivos',
     taxes: 'Impostos', unrest: 'Descontentamento', perCitizen: 'por cidadão', newCitizens: 'Novos (7d)',
@@ -472,6 +488,8 @@ const N_DICT = {
   ar: {
     title: 'إحصاءات الدول', tabOverview: 'نظرة عامة', tabCompare: '1 ضد 2', tabCharts: 'الرسوم',
     nation: 'الدولة', nations: 'دول', back: 'العودة إلى القائمة', search: 'ابحث عن دولة…',
+    // WarEra+: ponte verso Political (nationDetail.js)
+    politicalView: 'الوضع السياسي',
     citizens: 'المواطنون', wealth: 'الثروة', weekly: 'الضرر الأسبوعي', today: 'اليوم', total: 'الضرر الإجمالي',
     development: 'التطور', coreDev: 'التطور الأساسي', regions: 'المناطق', wars: 'الحروب', allies: 'اتفاقيات الدفاع',
     taxes: 'الضرائب', unrest: 'الاضطراب', perCitizen: 'لكل مواطن', newCitizens: 'جدد (7 أيام)',
