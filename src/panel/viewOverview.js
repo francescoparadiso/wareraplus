@@ -46,11 +46,12 @@ import { buildPlaystyleScale, getBalanceColor, getPlaystyleStats } from '../dipl
 import { getTrendColor, getTrendStats } from '../diplomacy/playstyleTrendHeatmap.js';
 import { activeDeposits, depositsByCountry, getProductionColor, getProductionStats, productionRankedList, RESOURCE_TYPES } from '../diplomacy/productionHeatmap.js';
 import { openElectionRows, getPoliticsStats, POLITICS_COLORS } from '../diplomacy/politicsHeatmap.js';
+import { travelOverviewHtml } from '../diplomacy/travelDistance.js';
 
 /** Le viste che hanno un riepilogo. Chi chiama usa questo elenco per
  *  decidere se aprire il pannello: tenerlo qui evita che countryPanel.js
  *  e map.js abbiano due liste da tenere allineate a mano. */
-export const OVERVIEW_MODES = ['blocs', 'population', 'weeklyDamage', 'production', 'contested', 'warIntensity', 'playstyle', 'politics'];
+export const OVERVIEW_MODES = ['blocs', 'population', 'weeklyDamage', 'production', 'contested', 'warIntensity', 'playstyle', 'politics', 'travel'];
 
 export function hasViewOverview(mode) {
   return OVERVIEW_MODES.includes(mode);
@@ -604,6 +605,10 @@ export function buildViewOverviewHtml(mode) {
   if (mode === 'production') return productionHtml();
 
   if (mode === 'politics') return politicsHtml();
+
+  // WarEra+ vista Distanze: tutto (numeri, giro delle casse, istogramma) sta
+  // in travelDistance.js, che possiede anche lo stato della vista.
+  if (mode === 'travel') return travelOverviewHtml();
 
   if (mode === 'contested') {
     const counts = state.contestedCounts;

@@ -28,6 +28,7 @@ export const GUIDE_DICT = {
           "Click a nation to open its side panel. The Map views menu changes the colouring: Diplomacy, Alliances, Sphere of influence, Weekly damage, Population, Contested regions, War history, War vs Eco.",
           "Entering a view the panel opens on its summary: the ranking of what you are looking at, and for the less obvious views what the colour is actually counting. On mobile it waits behind the “See details” tab.",
           "The Battles button shows and hides the active fronts, with markers and a heat map. Sea routes are ornamental — hover a moving ship to see what it is carrying.",
+          "Travel distance: click a region and every other region takes the colour of how far away it is — green→red within a full stamina bar (10 regions), purple past it, where each region costs 2 oil barrels. Hover to see the path; the panel plans the best route through up to 5 wooden cases.",
         ],
       },
       panel: {
@@ -116,6 +117,7 @@ export const GUIDE_DICT = {
           "Clicca una nazione per aprire il suo pannello laterale. Il menù Viste mappa cambia la colorazione: Diplomazia, Alleanze, Sfera d'influenza, Danni settimanali, Popolazione, Regioni contese, Storico bellico, Guerra vs Eco.",
           "Entrando in una vista il pannello si apre sul riepilogo: la classifica di quello che stai guardando e, per le viste meno ovvie, cosa sta contando davvero il colore. Su mobile aspetta dietro la linguetta “Vedi dettagli”.",
           "Il bottone Battaglie mostra e nasconde i fronti attivi, con marker e mappa di calore. Le rotte navali sono ornamentali — passa il mouse su una nave per sapere cosa trasporta.",
+          "Distanze: clicca una regione e tutte le altre si colorano per quanto sono lontane — dal verde al rosso dentro una barra di stamina piena (10 regioni), viola oltre, dove ogni regione costa 2 barili di petrolio. Passa il mouse per vedere il percorso; il pannello calcola il giro migliore per raccogliere fino a 5 casse di legno.",
         ],
       },
       panel: {
@@ -204,6 +206,7 @@ export const GUIDE_DICT = {
           "Haz clic en una nación para abrir su panel lateral. El menú Vistas cambia el coloreado: Diplomacia, Alianzas, Esfera de influencia, Daño semanal, Población, Regiones disputadas, Histórico bélico, Guerra vs Eco.",
           "Al entrar en una vista el panel se abre en su resumen: la clasificación de lo que estás mirando y, en las vistas menos obvias, qué está contando el color. En móvil espera detrás de la pestaña “Ver detalles”.",
           "El botón Batallas muestra y oculta los frentes activos, con marcadores y mapa de calor. Las rutas marítimas son ornamentales — pasa el ratón sobre un barco para ver qué lleva.",
+          "Distancias: haz clic en una región y las demás se colorean según lo lejos que están — de verde a rojo dentro de una barra de stamina llena (10 regiones), morado más allá, donde cada región cuesta 2 barriles de petróleo. Pasa el ratón para ver el camino; el panel calcula la mejor ruta por hasta 5 cajas de madera.",
         ],
       },
       panel: {
@@ -292,6 +295,7 @@ export const GUIDE_DICT = {
           "Klicke eine Nation an, um ihr Seitenpanel zu öffnen. Das Menü Ansichten ändert die Einfärbung: Diplomatie, Bündnisse, Sphäre, Wöchentlicher Schaden, Bevölkerung, Umkämpfte Regionen, Kriegsgeschichte, Krieg vs Eco.",
           "Beim Betreten einer Ansicht öffnet das Panel ihre Übersicht: die Rangliste dessen, was du siehst, und bei den weniger offensichtlichen Ansichten, was die Farbe wirklich zählt. Auf dem Handy wartet sie hinter dem Reiter „Details ansehen“.",
           "Die Schaltfläche Schlachten blendet die aktiven Fronten ein und aus, mit Markern und Heatmap. Seerouten sind Zierde — fahre über ein Schiff, um seine Ladung zu sehen.",
+          "Reisen: Klicke auf eine Region, und alle anderen färben sich nach ihrer Entfernung — grün bis rot innerhalb eines vollen Ausdauerbalkens (10 Regionen), lila darüber hinaus, wo jede Region 2 Fässer Öl kostet. Fahre mit der Maus darüber, um den Weg zu sehen; das Panel plant die beste Route über bis zu 5 Holzkisten.",
         ],
       },
       panel: {
@@ -380,6 +384,7 @@ export const GUIDE_DICT = {
           "Clique sur une nation pour ouvrir son panneau latéral. Le menu Vues change la coloration : Diplomatie, Alliances, Sphère d'influence, Dégâts hebdomadaires, Population, Régions disputées, Historique de guerre, Guerre vs Éco.",
           "En entrant dans une vue, le panneau s'ouvre sur son résumé : le classement de ce que tu regardes et, pour les vues les moins évidentes, ce que la couleur compte vraiment. Sur mobile il attend derrière l'onglet « Voir les détails ».",
           "Le bouton Batailles affiche et masque les fronts actifs, avec marqueurs et carte de chaleur. Les routes maritimes sont ornementales — survole un navire pour voir sa cargaison.",
+          "Distances : clique sur une région et toutes les autres prennent la couleur de leur éloignement — du vert au rouge dans une barre d’endurance pleine (10 régions), violet au-delà, où chaque région coûte 2 barils de pétrole. Survole pour voir le trajet ; le panneau planifie la meilleure tournée pour jusqu’à 5 caisses en bois.",
         ],
       },
       panel: {
@@ -468,6 +473,7 @@ export const GUIDE_DICT = {
           "Klik op een natie om haar zijpaneel te openen. Het menu Weergaven verandert de kleuring: Diplomatie, Bondgenootschappen, Invloedssfeer, Wekelijkse schade, Bevolking, Betwiste regio’s, Oorlogsgeschiedenis, Oorlog vs Eco.",
           "Bij het openen van een weergave toont het paneel meteen het overzicht: de ranglijst van wat je bekijkt en, bij de minder voor de hand liggende weergaven, wat de kleur echt telt. Op mobiel wacht het achter het tabje “Bekijk details”.",
           "De knop Veldslagen toont en verbergt de actieve fronten, met markers en een heatmap. Zeeroutes zijn versiering — beweeg over een schip om de lading te zien.",
+          "Afstanden: klik op een regio en alle andere kleuren naar hoe ver ze liggen — groen tot rood binnen een volle staminabalk (10 regio’s), paars daarbuiten, waar elke regio 2 vaten olie kost. Beweeg erover om de route te zien; het paneel plant de beste route langs tot 5 houten kisten.",
         ],
       },
       panel: {
@@ -556,6 +562,7 @@ export const GUIDE_DICT = {
           "Klicka på en nation för att öppna dess sidopanel. Menyn Vyer byter färgläggning: Diplomati, Allianser, Sfär, Veckoskada, Befolkning, Omstridda regioner, Krigshistorik, Krig vs Eco.",
           "När du går in i en vy öppnas panelen på dess översikt: rankningen för det du tittar på och, för de mindre självklara vyerna, vad färgen faktiskt räknar. På mobil väntar den bakom fliken ”Visa detaljer”.",
           "Knappen Strider visar och döljer de aktiva fronterna, med markörer och värmekarta. Sjörutter är dekoration — håll musen över ett fartyg för att se lasten.",
+          "Avstånd: klicka på en region så färgas alla andra efter hur långt bort de ligger — grönt till rött inom en full staminamätare (10 regioner), lila bortom, där varje region kostar 2 fat olja. Hovra för att se vägen; panelen planerar bästa rundan genom upp till 5 trälådor.",
         ],
       },
       panel: {
@@ -644,6 +651,7 @@ export const GUIDE_DICT = {
           "Clica numa nação para abrir o seu painel lateral. O menu Vistas muda a coloração: Diplomacia, Alianças, Esfera de influência, Dano semanal, População, Regiões disputadas, Histórico bélico, Guerra vs Eco.",
           "Ao entrar numa vista o painel abre no resumo: a classificação do que estás a ver e, nas vistas menos óbvias, o que a cor está mesmo a contar. No telemóvel espera atrás do separador “Ver detalhes”.",
           "O botão Batalhas mostra e esconde as frentes ativas, com marcadores e mapa de calor. As rotas marítimas são ornamentais — passa o rato sobre um navio para ver o que transporta.",
+          "Distâncias: clica numa região e todas as outras ganham a cor da sua distância — do verde ao vermelho dentro de uma barra de stamina cheia (10 regiões), roxo para lá disso, onde cada região custa 2 barris de petróleo. Passa o rato para ver o caminho; o painel planeia a melhor rota por até 5 caixas de madeira.",
         ],
       },
       panel: {
@@ -732,6 +740,7 @@ export const GUIDE_DICT = {
           "اضغط على دولة لفتح لوحتها الجانبية. قائمة العروض تغيّر التلوين: الدبلوماسية، التحالفات، النطاق، الضرر الأسبوعي، السكان، المناطق المتنازع عليها، تاريخ الحرب، حرب مقابل اقتصاد.",
           "عند دخول أي عرض تفتح اللوحة على ملخّصه: ترتيب ما تنظر إليه، وفي العروض الأقل وضوحاً ما يقيسه اللون فعلاً. على الهاتف تنتظر خلف لسان “عرض التفاصيل”.",
           "زرّ المعارك يُظهر ويُخفي الجبهات النشطة، مع علامات وخريطة حرارية. الطرق البحرية زخرفية — مرّر المؤشر فوق سفينة لترى حمولتها.",
+          "المسافات: انقر على منطقة فتتلوّن كل المناطق الأخرى حسب بعدها — من الأخضر إلى الأحمر داخل شريط طاقة ممتلئ (10 مناطق)، والبنفسجي بعده حيث تكلف كل منطقة برميلي نفط. مرّر الماوس لرؤية الطريق؛ ويخطط اللوح لأفضل مسار عبر ما يصل إلى 5 صناديق خشبية.",
         ],
       },
       panel: {

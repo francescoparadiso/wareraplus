@@ -317,6 +317,16 @@ wareraPlus/
     │   │                          tinta della nazione, nazionali colorati per relazione
     │   ├── oceanRoutes.js       ← NUOVO — geometria condivisa delle rotte marittime
     │   ├── oceanBackground.js   ← NUOVO — rotte animate, tema scuro
+    │   ├── travelDistance.js    ← NUOVO — vista mappa "Distanze" (idea dal tool di
+    │   │                          nioKi, ni0ki.github.io/warera-distance-map): clic su
+    │   │                          una regione → tutte le altre colorate per numero di
+    │   │                          confini da attraversare (BFS su `neighbors` delle
+    │   │                          geometrie di state.mapDataGlobal, zero fetch), percorso
+    │   │                          col mouse, istogramma e giro ottimale fino a 5 casse di
+    │   │                          legno (Held-Karp, con un ritorno gratis a casa).
+    │   │                          ⚠️ i costi (10 stamina a regione, poi 2 barili) NON
+    │   │                          sono in gameConfig: sono della patch 0.26.1, costanti
+    │   │                          in testa al file. Testi in travelI18n.js (9 lingue).
     │   ├── politicsHeatmap.js   ← NUOVO — vista mappa "Elezioni": dove si vota (rosso)
     │   │                          e dove sono aperte le candidature (oro), da
     │   │                          /elections?open=1 (la rotta dei ticker)

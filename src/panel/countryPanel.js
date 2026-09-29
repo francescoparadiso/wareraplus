@@ -1148,6 +1148,9 @@ export function renderViewOverviewPanel(mode) {
     });
   });
 
+  // WarEra+ vista Distanze: bottoni del giro delle casse.
+  if (mode === 'travel') import('../diplomacy/travelDistance.js').then(m => m.wireTravelOverview(contentEl));
+
   // WarEra+ vista Elezioni: la riga apre la situazione politica della
   // nazione, non il suo pannello.
   contentEl.querySelectorAll('.wp-vo-row[data-vo-political]').forEach(el => {
