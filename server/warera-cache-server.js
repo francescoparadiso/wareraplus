@@ -1589,6 +1589,13 @@ function pollTickerEvents(countries, diplomacy) {
 // stabile a 1,07 — la classifica conta gli ATTIVI, questo conta gli
 // iscritti.
 //
+// ⚠️ 2026-09-29: elenca solo i cittadini ATTIVI. Chi resta 3 giorni senza
+// collegarsi (gameConfig.user.isInactiveAfterDays) esce dall'elenco pur
+// restando cittadino, e ci rientra quando torna. Verificato sull'Italia:
+// 396 in elenco, 100 su 100 del campione con isActive, e 87 "spariti"
+// ancora italiani e inattivi. Quindi `n` sono i cittadini ATTIVI, e una
+// sparizione non e' una partenza (vedi /citizen-moves).
+//
 // Serve a tre cose:
 //   1) il numero di cittadini di adesso, che prima non esisteva come dato
 //      (c'era solo la popolazione attiva della classifica);
@@ -2782,25 +2789,101 @@ app.get('/alliance-history', (req, res) => res.json(readAllianceHistory()));
 // citizenMoves.js). `coverageFrom` nella risposta dice da quando in qua
 // l'archivio guardava: senza, una lista vuota si leggerebbe come "non si e'
 // mosso nessuno" anche il giorno del deploy.
+/* WarEra+ — chi compare fra i movimenti, letto DAL VIVO (2026-09-29).
+   Due scoperte dello stesso giorno, entrambe dall'elenco "usciti"
+   dell'Italia (110 righe, 103 "fuori dal censimento"):
+
+   1) `user.getUsersByCountry` elenca solo i cittadini ATTIVI. Il gioco
+      spegne `isActive` dopo 3 giorni senza collegarsi
+      (gameConfig.user.isInactiveAfterDays), e da quel momento l'utente
+      sparisce dal censimento pur restando cittadino. Verificato: delle
+      103 uscite, 87 erano ancora italiane e inattive, le altre 16 italiane
+      e già tornate attive. NESSUNA aveva lasciato la nazione. Una
+      sparizione quindi non è una partenza: qui si chiede al gioco dove sta
+      l'utente adesso — stessa nazione = inattivo (contato a parte, non in
+      elenco), altra nazione = trasferimento vero.
+   2) richiesta dell'utente: in elenco solo i giocatori di livello 10+ (o
+      col prestigio, che azzera il livello). Sotto ci sono soprattutto
+      account appena aperti e abbandonati — "user_R4JH1N", livello 1.
+      Livello sconosciuto (account cancellato, lettura fallita) = fuori.
+
+   Cache in memoria di un'ora: la nazione di uno cambia, e un'ora è il
+   passo del censimento. Poche decine di id per nazione aperta. */
+const MOVERS_TTL_MS = 60 * 60 * 1000;
+const MOVERS_MAX_FETCH = 300;
+const MOVES_MIN_LEVEL = 10;
+const _movers = new Map();   // userId → { at, username, avatarUrl, level, prestige, country, active }
+
+async function resolveMovers(ids) {
+  const now = Date.now();
+  const missing = ids.filter(id => !_movers.has(id) || now - _movers.get(id).at > MOVERS_TTL_MS)
+    .slice(0, MOVERS_MAX_FETCH);
+  if (missing.length) {
+    try {
+      const results = await trpcBatch(missing.map(id => ['user.getUserLite', { userId: id }]), { useWorker: true });
+      missing.forEach((id, i) => {
+        const u = results[i];
+        _movers.set(id, u ? {
+          at: now, username: u.username || null, avatarUrl: u.avatarUrl || null,
+          level: u.leveling?.level ?? null, prestige: u.leveling?.prestigeLevel || 0,
+          country: u.country || null, active: u.isActive !== false,
+        } : { at: now, username: null, avatarUrl: null, level: null, prestige: 0, country: null, active: false });
+      });
+    } catch (err) {
+      console.error('[citizen-moves] lettura giocatori fallita:', err.message);
+    }
+    if (_movers.size > 20000) {
+      for (const [id, v] of _movers) if (now - v.at > MOVERS_TTL_MS) _movers.delete(id);
+    }
+  }
+  const out = {};
+  for (const id of ids) if (_movers.has(id)) out[id] = _movers.get(id);
+  return out;
+}
+
+const bigEnough = (p) => p && ((p.level ?? -1) >= MOVES_MIN_LEVEL || p.prestige > 0);
+
 app.get('/citizen-moves', async (req, res) => {
   const countryId = String(req.query.countryId || '');
   if (!countryId) return res.status(400).json({ error: 'countryId mancante' });
   const days = Math.min(30, Math.max(1, Number(req.query.days) || 7));
   try {
     const out = readCitizenMoves(countryId, days);
-    // I nomi si risolvono solo per chi compare davvero nella risposta:
-    // sono poche decine di id, non i diciassettemila del censimento.
+    // Si leggono solo quelli che compaiono davvero nella risposta: sono
+    // poche decine di id, non i diciassettemila del censimento.
     const ids = [...new Set([
       ...out.arrivals.map(r => r.u),
       ...out.departures.map(r => r.u),
     ])];
-    const names = ids.length ? await resolveUsersLite(ids) : {};
-    const withName = r => ({ ...r, username: names[r.u]?.username || null, avatarUrl: names[r.u]?.avatarUrl || null });
+    const people = ids.length ? await resolveMovers(ids) : {};
+    const withName = r => ({ ...r, username: people[r.u]?.username || null, avatarUrl: people[r.u]?.avatarUrl || null, level: people[r.u]?.level ?? null });
+
+    // Conteggi per PERSONA: chi si spegne, torna e si rispegne ha due righe.
+    const inactiveIds = new Set(), lowIds = new Set();
+    const departures = [];
+    for (const r of out.departures) {
+      const p = people[r.u];
+      let row = r;
+      if (!r.to && p?.country) {
+        // Sparito dal censimento ma ancora cittadino qui: si è solo spento.
+        if (p.country === countryId) { inactiveIds.add(r.u); continue; }
+        row = { ...r, to: p.country };
+      }
+      if (!bigEnough(p)) { lowIds.add(r.u); continue; }
+      departures.push(withName(row));
+    }
+    const arrivals = [];
+    for (const r of out.arrivals) {
+      if (!bigEnough(people[r.u])) { lowIds.add(r.u); continue; }
+      arrivals.push(withName(r));
+    }
     res.json({
       ...out,
       days,
-      arrivals: out.arrivals.map(withName),
-      departures: out.departures.map(withName),
+      minLevel: MOVES_MIN_LEVEL,
+      hidden: { inactive: inactiveIds.size, lowLevel: lowIds.size },
+      arrivals,
+      departures,
     });
   } catch (err) {
     console.error('[citizen-moves] richiesta fallita:', err.message);

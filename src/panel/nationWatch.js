@@ -169,9 +169,19 @@ function movesHtml(data) {
       })}</div>`
     : '';
 
+  // WarEra+: il server filtra i livelli bassi e toglie chi si è solo
+  // spento (vedi /citizen-moves nel cache-server). Si dice quanti sono
+  // rimasti fuori: un elenco filtrato che non lo dichiara sembra completo.
+  // Un server vecchio non manda `hidden`, e allora la riga non c'è.
+  const h = data.hidden;
+  const hidden = h && data.minLevel
+    ? `<div class="wp-watch-partial">${escapeHtml(t('watch_moves_hidden', { lv: data.minLevel, low: h.lowLevel || 0, inactive: h.inactive || 0 }))}</div>`
+    : '';
+
   return `
     <div class="wp-panel-section-title">${t('watch_moves_title', { d: MOVES_DAYS })}</div>
     ${partial}
+    ${hidden}
     <div class="wp-watch-moves-head">
       <span class="in">↘ ${t('watch_moves_in')} <b>${arrivals.length}</b></span>
       <span class="out">↗ ${t('watch_moves_out')} <b>${departures.length}</b></span>

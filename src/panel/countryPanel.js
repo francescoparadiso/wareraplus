@@ -212,8 +212,9 @@ function fmt(n) {
    di LIVELLO 10 O PIÙ (`n10`, più chi ha fatto il prestigio, che azzera il
    livello): sotto il 10 ci sono soprattutto account appena aperti o
    abbandonati, e gonfiano le nazioni che ne raccolgono tanti — la stessa
-   trappola di `currentPopulation`. Il totale degli iscritti resta sotto,
-   in piccolo. Un server che non manda ancora `n10` = niente casella, mai
+   trappola di `currentPopulation`. Il totale resta sotto, in piccolo: sono
+   i cittadini ATTIVI, perché il censimento del gioco elenca solo quelli
+   (3 giorni offline e si esce dall'elenco, vedi pollCitizens). Un server che non manda ancora `n10` = niente casella, mai
    il totale spacciato per i 10+. */
 function citizensStatHtml() {
   return `<div class="wp-stat" id="wp-stat-citizens" hidden>
