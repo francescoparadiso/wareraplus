@@ -27,6 +27,7 @@
    Qui si legge solo il token già depositato in localStorage.
    ══════════════════════════════════════════════════════════════ */
 
+import { tokenPlusInMemoria, azzeraTokenInMemoria } from '../app/privateOverlay.js';
 import { WARERA_PLUS_API_BASE } from '../diplomacy/config.js';
 
 const TOKEN_KEY = 'wp_plus_token';
@@ -38,9 +39,12 @@ function safeGet(k) { try { return localStorage.getItem(k); } catch { return nul
 function safeSet(k, v) { try { localStorage.setItem(k, v); } catch { /* ignora */ } }
 function safeDel(k) { try { localStorage.removeItem(k); } catch { /* ignora */ } }
 
-export function getToken() { return safeGet(TOKEN_KEY); }
+// Se lo storage era pieno al ritorno da Discord, il token sta solo in
+// memoria (src/app/privateOverlay.js): senza questo ripiego la sessione
+// appena creata sarebbe invisibile alla vista.
+export function getToken() { return safeGet(TOKEN_KEY) || tokenPlusInMemoria(); }
 export function setToken(t) { if (t) safeSet(TOKEN_KEY, t); }
-export function clearToken() { safeDel(TOKEN_KEY); }
+export function clearToken() { safeDel(TOKEN_KEY); azzeraTokenInMemoria(); }
 
 // ---------------------------------------------------------------------------
 // Chiamate
