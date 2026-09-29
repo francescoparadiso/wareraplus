@@ -875,7 +875,7 @@ function fmtMoney(n) {
   return n.toFixed(2);
 }
 
-function buildSpendRows(data, subColor, textColor) {
+function buildSpendRows(data, subColor, textColor, sides = {}) {
   const bountyDef = data.bounty.defender?.total;
   const bountyAtk = data.bounty.attacker?.total;
   const mercDef = data.merc.won.defender;
@@ -913,7 +913,7 @@ function buildSpendRows(data, subColor, textColor) {
       ${row('💰 Total spent', fmtMoney(totDef), fmtMoney(totAtk), 'bfm-spend-total')}
       ${pendingRow}
     </div>
-    ${buildSpendByCountry(data, subColor, textColor)}
+    ${buildSpendByCountry(data, subColor, textColor, sides)}
     <div class="bfm-spend-note" style="color:${subColor};">
       Bounty is what each side's pool has already paid out to fighters, so it keeps
       growing while the battle runs. Contracts count only awarded auctions.
@@ -929,21 +929,25 @@ function buildSpendRows(data, subColor, textColor) {
 
    ⚠️ Le due colonne NON sono la stessa cosa, ed è il motivo per cui qui
    restano due colonne invece di una somma:
-   - CONTRATTI è spesa vera, per davvero di quella nazione: l'asta ha un
-     `country` che è chi paga, e può benissimo non essere la nazione che
-     combatte (un alleato che finanzia il fronte altrui è proprio uno dei
-     casi interessanti).
-   - TAGLIA per nazione è invece INCASSATA, non spesa: è la classifica
+   - PAID è spesa vera di quella nazione: i contratti che ha firmato (l'asta
+     ha un `country` che è chi paga, anche per il fronte di un alleato) e,
+     per la nazione che combatte quel lato, anche la TAGLIA del lato.
+     Regola del gioco (confermata dall'utente, 2026-09-29): la taglia la può
+     mettere SOLO il belligerante di quello schieramento. Prima la taglia
+     restava nel totale di lato e non entrava in nessuna riga, quindi la
+     colonna non tornava col totale (Olanda 27.790 contro 55.378).
+   - EARNED per nazione è invece INCASSATA, non spesa: è la classifica
      "money" della battaglia, cioè quanto i cittadini di quella nazione
      hanno preso dal salvadanaio del loro schieramento. Sommarla al
-     contratto darebbe un numero che non vuol dire niente. Solo il
-     TOTALE DI LATO della taglia è "speso" — ed è quello, sopra.
+     pagato darebbe un numero che non vuol dire niente.
    Stessa distinzione già dichiarata in src/battles/battleDetail.js. */
-function spendCountryRows(mercList, bountyList, textColor, subColor) {
+function spendCountryRows(mercList, bountyList, textColor, subColor, belligerent, bountyTotal) {
   const merc = new Map(mercList.map(x => [x.countryId, x.value]));
   const bounty = new Map((bountyList || []).map(x => [x.countryId, x.value]));
-  const ids = [...new Set([...merc.keys(), ...bounty.keys()])]
-    .sort((a, b) => ((merc.get(b) || 0) - (merc.get(a) || 0)) || ((bounty.get(b) || 0) - (bounty.get(a) || 0)));
+  const paid = new Map(merc);
+  if (belligerent && bountyTotal) paid.set(belligerent, (paid.get(belligerent) || 0) + bountyTotal);
+  const ids = [...new Set([...paid.keys(), ...bounty.keys()])]
+    .sort((a, b) => ((paid.get(b) || 0) - (paid.get(a) || 0)) || ((bounty.get(b) || 0) - (bounty.get(a) || 0)));
   if (!ids.length) return `<div class="bfm-spend-sub" style="color:${subColor}; padding:3px 0;">—</div>`;
   return ids.map(id => {
     const n = getNation(id);
@@ -951,62 +955,125 @@ function spendCountryRows(mercList, bountyList, textColor, subColor) {
     const flag = code
       ? `<img src="https://media.warera.io/images/flags/${code}.svg?v=16" onerror="this.style.display='none'">`
       : '';
+    // Il belligerante porta la scomposizione nel title: "quanto di questo
+    // è taglia" è la prima domanda davanti a un numero che è cresciuto.
+    const title = id === belligerent && bountyTotal
+      ? ` title="🎯 bounty ${fmtMoney(bountyTotal)} + 🤝 contracts ${fmtMoney(merc.get(id) || 0)}"`
+      : '';
+    const mark = id === belligerent ? ' <span class="bfm-spend-sub">🎯</span>' : '';
     return `<div class="bfm-spend-c-row">
-        ${flag}<span class="bfm-spend-c-name" style="color:${textColor};">${escapeHtml(n?.name || '—')}</span>
-        <span class="bfm-spend-c-v" style="color:${textColor};">${merc.has(id) ? fmtMoney(merc.get(id)) : '·'}</span>
+        ${flag}<span class="bfm-spend-c-name" style="color:${textColor};">${escapeHtml(n?.name || '—')}${mark}</span>
+        <span class="bfm-spend-c-v" style="color:${textColor};"${title}>${paid.has(id) ? fmtMoney(paid.get(id)) : '·'}</span>
         <span class="bfm-spend-c-v bfm-spend-sub" style="color:${subColor};">${bounty.has(id) ? fmtMoney(bounty.get(id)) : '·'}</span>
       </div>`;
   }).join('');
 }
 
-function buildSpendByCountry(data, subColor, textColor) {
+function buildSpendByCountry(data, subColor, textColor, sides = {}) {
   const mercDef = data.merc.won.defender.byCountry;
   const mercAtk = data.merc.won.attacker.byCountry;
   const bountyDef = data.bounty.defender?.byCountry;
   const bountyAtk = data.bounty.attacker?.byCountry;
   if (!mercDef.length && !mercAtk.length && !bountyDef?.length && !bountyAtk?.length) return '';
 
-  const side = (title, cls, mercList, bountyList) => `
+  const side = (title, cls, mercList, bountyList, belligerent, bountyTotal) => `
     <div class="bfm-spend-c-side">
       <div class="bfm-spend-h ${cls}">${title}</div>
       <div class="bfm-spend-c-head" style="color:${subColor};">
         <span></span><span class="bfm-spend-c-name"></span>
-        <span class="bfm-spend-c-v">🤝 paid</span>
+        <span class="bfm-spend-c-v">💰 paid</span>
         <span class="bfm-spend-c-v">🎯 earned</span>
       </div>
-      <div class="bfm-spend-c-list">${spendCountryRows(mercList, bountyList, textColor, subColor)}</div>
+      <div class="bfm-spend-c-list">${spendCountryRows(mercList, bountyList, textColor, subColor, belligerent, bountyTotal)}</div>
     </div>`;
 
   return `
     <div class="bfm-spend-c-title" style="color:${subColor};">By nation</div>
     <div class="bfm-spend-c-wrap">
-      ${side('🛡️ Defence', 'def', mercDef, bountyDef)}
-      ${side('⚔️ Attack', 'atk', mercAtk, bountyAtk)}
+      ${side('🛡️ Defence', 'def', mercDef, bountyDef, sides.defender, data.bounty.defender?.total)}
+      ${side('⚔️ Attack', 'atk', mercAtk, bountyAtk, sides.attacker, data.bounty.attacker?.total)}
     </div>
     <div class="bfm-spend-note" style="color:${subColor};">
-      🤝 <em>paid</em> is real spending by that nation (it signed the contract, even for
-      an ally's front). 🎯 <em>earned</em> is bounty its citizens collected from their
-      side's pool — money coming in, not going out. Don't add the two up.
+      💰 <em>paid</em> is real spending by that nation: the contracts it signed (even for
+      an ally's front) and, for the nation fighting that side (🎯), the side's bounty —
+      only the belligerent can fund it. 🎯 <em>earned</em> is bounty its citizens collected
+      from their side's pool — money coming in, not going out. Don't add the two up.
     </div>`;
 }
 
-async function loadSpendingSection(battleId, subColor, textColor) {
+/* ── Chi ha mandato soldi ai belligeranti mentre si combatteva ──
+   Richiesta dell'utente: la taglia la mette solo il belligerante, ma i
+   soldi possono arrivargli da altri — bonifici da tesoro a tesoro
+   (`countryMoneyTransfer`) che poi finiscono nella taglia. Il gioco non
+   lega un bonifico a una battaglia (il tesoro è uno solo), quindi qui si
+   dice "arrivati mentre la battaglia era aperta", mai "spesi qui".
+   Stessa fonte e stessa finestra dei FINANZIATORI della scheda battaglia
+   (src/battles/moneyTransfers.js: una lista per sessione, filtrata in
+   memoria). Una battaglia più vecchia della copertura dice "fuori portata"
+   invece di "nessuno". */
+function fundersHtml(money, battle, sides, subColor, textColor) {
+  const from = Date.parse(battle?.createdAt || '') || null;
+  if (!money || !from || (!sides.attacker && !sides.defender)) return '';
+  const to = battle.isActive === false ? (Date.parse(battle.updatedAt || '') || Date.now()) : Date.now();
+  const short = Boolean(money.coverageFrom && from < money.coverageFrom);
+  const list = (countryId) => {
+    const byFrom = new Map();
+    for (const t of money.transfers) {
+      if (t.to !== countryId || t.at < from || t.at > to) continue;
+      byFrom.set(t.from, (byFrom.get(t.from) || 0) + t.money);
+    }
+    const rows = [...byFrom.entries()].sort((a, b) => b[1] - a[1]);
+    if (!rows.length) {
+      return `<div class="bfm-spend-sub" style="color:${subColor}; padding:3px 0;">${short ? 'out of range' : 'none'}</div>`;
+    }
+    return rows.map(([id, v]) => {
+      const n = getNation(id);
+      const code = (n?.code || '').toLowerCase();
+      const flag = code ? `<img src="https://media.warera.io/images/flags/${code}.svg?v=16" onerror="this.style.display='none'">` : '';
+      return `<div class="bfm-spend-c-row">
+          ${flag}<span class="bfm-spend-c-name" style="color:${textColor};">${escapeHtml(n?.name || '—')}</span>
+          <span class="bfm-spend-c-v" style="color:${textColor};">${fmtMoney(v)}</span>
+        </div>`;
+    }).join('');
+  };
+  const name = (id) => escapeHtml(getNation(id)?.name || '—');
+  const warn = short
+    ? '<br>⚠️ This battle started before our transfer archive begins: an empty list here means “we don’t know”, not “nobody”.'
+    : '';
+  return `
+    <div class="bfm-spend-c-title" style="color:${subColor};">💸 Money sent to the belligerents during the battle</div>
+    <div class="bfm-spend-c-wrap">
+      <div class="bfm-spend-c-side"><div class="bfm-spend-h def">→ ${name(sides.defender)}</div><div class="bfm-spend-c-list">${list(sides.defender)}</div></div>
+      <div class="bfm-spend-c-side"><div class="bfm-spend-h atk">→ ${name(sides.attacker)}</div><div class="bfm-spend-c-list">${list(sides.attacker)}</div></div>
+    </div>
+    <div class="bfm-spend-note" style="color:${subColor};">
+      Treasury-to-treasury transfers received while the battle was open. A treasury is one
+      pot, so this money <em>may</em> have funded the bounty — the game doesn’t say where it went.${warn}
+    </div>`;
+}
+
+async function loadSpendingSection(battle, subColor, textColor) {
+  const battleId = battle?._id;
   const host = document.getElementById('battle-spend-panel');
-  if (!host) return;
+  if (!host || !battleId) return;
   host.innerHTML = `<div class="bfm-spend-note" style="color:${subColor};">Loading…</div>`;
+  const sides = { attacker: battle.attacker?.country || null, defender: battle.defender?.country || null };
   let data = null;
-  try {
-    const mod = await import('./battleSpending.js');
-    data = await mod.fetchBattleSpending(battleId);
-  } catch (err) {
-    console.warn('battle spending: modulo non disponibile', err);
-  }
+  let money = null;
+  // In parallelo: i bonifici sono una lista per sessione (in cache dopo la
+  // prima volta) e non devono far aspettare le cifre della battaglia.
+  await Promise.all([
+    import('./battleSpending.js').then(m => m.fetchBattleSpending(battleId)).then(d => { data = d; })
+      .catch(err => console.warn('battle spending: modulo non disponibile', err)),
+    import('../battles/moneyTransfers.js').then(m => m.fetchMoneyTransfers()).then(d => { money = d; })
+      .catch(() => { /* senza bonifici la sezione resta quella di prima */ }),
+  ]);
   // Il tooltip può essere stato chiuso o spostato su un'altra battaglia
   // mentre la richiesta era in volo: in quel caso non si scrive nulla.
   const stillHere = document.getElementById('battle-spend-panel');
   if (!stillHere || pinnedBattleId !== battleId) return;
   stillHere.innerHTML = data
-    ? buildSpendRows(data, subColor, textColor)
+    ? buildSpendRows(data, subColor, textColor, sides) + fundersHtml(money, battle, sides, subColor, textColor)
     : `<div class="bfm-spend-note" style="color:${subColor};">Spending data unavailable right now.</div>`;
 }
 
@@ -1060,12 +1127,12 @@ function showBattleTooltip(battle, regionName, liveData, totalAttackerDmg, total
     // Rete di sicurezza: se in futuro spendOpen sopravvivesse alla chiusura
     // (oggi hideBattleTooltip lo azzera), il contenuto verrebbe ridisegnato
     // qui invece di restare un pannello aperto e vuoto.
-    if (spendOpen) loadSpendingSection(battle._id, subColor, textColor);
+    if (spendOpen) loadSpendingSection(battle, subColor, textColor);
     el.querySelector('#battle-spend-toggle')?.addEventListener('click', (e) => {
       e.stopPropagation();
       spendOpen = !spendOpen;
       applySpend();
-      if (spendOpen) loadSpendingSection(battle._id, subColor, textColor);
+      if (spendOpen) loadSpendingSection(battle, subColor, textColor);
     });
   }
 
