@@ -91,9 +91,17 @@ const esito = (r) => (r.status === 'fulfilled' ? r.value : null);
 // Il quadro
 // ---------------------------------------------------------------------------
 
-function formaPaese(n) {
+function formaPaese(n, paesi) {
   const r = n.rankings || {};
   const ora = Date.now();
+  // ⚠️ Gli alleati sono chi sta nella stessa ALLEANZA, non il campo
+  // `allies`: quello è fermo al 10 giugno 2026 (vedi relazione() in
+  // confini.js). La nazione letta in diretta porta `allianceId`; se una
+  // risposta vecchia non lo avesse, lo si prende dall'elenco.
+  const alleanza = n.allianceId ?? paesi?.get(n._id)?.allianceId ?? null;
+  const alleati = alleanza && paesi
+    ? [...paesi.values()].filter((x) => x._id !== n._id && x.allianceId === alleanza).map((x) => x._id)
+    : [];
   return {
     id: n._id,
     nome: n.name,
@@ -127,8 +135,8 @@ function formaPaese(n) {
       Object.entries(n.strategicResources.resources).map(([k, v]) => [k, (v || []).length])) : {},
     bonusStrategici: n.strategicResources?.bonuses || null,
     specializzazione: n.specializedItem || null,
-    alleanza: n.allianceId || null,
-    alleati: n.allies || [],
+    alleanza,
+    alleati,
     guerre: n.warsWith || [],
     nemicoGiurato: n.enemy || null,
     patti: n.defensivePacts || [],
@@ -171,7 +179,12 @@ function formaBattaglie(elenco, countryId, reg) {
         avversario: b[altro]?.country || null,
         round: { noi: b[lato]?.wonRoundsCount ?? 0, loro: b[altro]?.wonRoundsCount ?? 0, perVincere: b.roundsToWin ?? null },
         punti: { noi: cr[lato]?.points ?? null, loro: cr[altro]?.points ?? null },
-        danno: { noi: cr[lato]?.damages ?? 0, loro: cr[altro]?.damages ?? 0 },
+        // Il danno di TUTTA la battaglia (`attacker.damages`), non del solo
+        // round in corso: la prima versione leggeva `currentRound` e una
+        // battaglia al terzo round mostrava un terzo del danno, appena
+        // girato il round quasi zero. Quello del round resta a parte.
+        danno: { noi: b[lato]?.damages ?? 0, loro: b[altro]?.damages ?? 0 },
+        dannoRound: { noi: cr[lato]?.damages ?? 0, loro: cr[altro]?.damages ?? 0 },
         inizio: Date.parse(b.createdAt || '') || null,
       };
     })
@@ -435,9 +448,15 @@ function formaUnita(dir, countryId) {
  *  archivi) e la vista la chiama così. */
 async function formaElezioni(lista) {
   const ordinate = [...(lista || [])].sort((a, b) => Date.parse(b.votesStartAt || 0) - Date.parse(a.votesStartAt || 0));
-  const ultima = (tipo) => ordinate.find((e) => e.type === tipo) || null;
-  const pres = ultima('president');
-  const cong = ultima('congress');
+  // L'ULTIMA elezione è l'ultima CONCLUSA: quella in corso sta in
+  // `inCorso`. Prima si prendeva la più recente e basta, e il 6 del mese
+  // la scheda "congresso" mostrava eletti e voti di un'elezione a metà.
+  // Le prossime invece si contano dalla più recente in assoluto: dalla
+  // conclusa, "prossimo congresso" sarebbe oggi.
+  const recente = (tipo) => ordinate.find((e) => e.type === tipo) || null;
+  const conclusa = (tipo) => ordinate.find((e) => e.type === tipo && !e.isActive && e.status === 'finished') || null;
+  const pres = conclusa('president');
+  const cong = conclusa('congress');
   const vincitore = pres?.candidates?.find((c) => c.isElected)?.user || null;
   const nomi = await nomiUtenti([vincitore].filter(Boolean));
   const meseDopo = (iso) => {
@@ -456,12 +475,12 @@ async function formaElezioni(lista) {
     },
     congresso: forma(cong),
     inCorso: ordinate.filter((e) => e.isActive || (e.status && e.status !== 'finished')).map(forma),
-    prossime: { presidente: meseDopo(pres?.votesStartAt), congresso: meseDopo(cong?.votesStartAt) },
+    prossime: { presidente: meseDopo(recente('president')?.votesStartAt), congresso: meseDopo(recente('congress')?.votesStartAt) },
   };
 }
 
 async function quadroNazione(countryId) {
-  const [paeseR, govR, battR, baseR, tlR, bonR, regR, confR, tickR, citR, contR, archR, speseR, dirR, eleR] = await Promise.allSettled([
+  const [paeseR, govR, battR, baseR, tlR, bonR, regR, confR, tickR, citR, contR, archR, speseR, dirR, eleR, paesiR] = await Promise.allSettled([
     paeseLive(countryId),
     formaGoverno(countryId),
     battaglieVive(),
@@ -477,6 +496,7 @@ async function quadroNazione(countryId) {
     speseGuerra(),
     direttorioMu(),
     elezioniDi(countryId),
+    paesiMappa(),
   ]);
 
   const paese = esito(paeseR);
@@ -494,7 +514,7 @@ async function quadroNazione(countryId) {
   }
 
   return {
-    paese: formaPaese(paese),
+    paese: formaPaese(paese, esito(paesiR)),
     governo: esito(govR),
     oggi,
     orario,

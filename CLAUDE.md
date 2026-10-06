@@ -965,12 +965,22 @@ amministrazione restano identici. Tre cose da sapere prima di crederla rotta:
   e i **cittadini che il governo aggiunge** (tabella `nation_access`, sempre
   con Discord + personaggio collegato); agli altri cittadini il server
   risponde 403 con i nomi del governo, a cui chiedere;
-- il **potenziale** dei nemici è danno dei GIOCATORI (vita + barra della
-  fame col pasto migliore del gioco), senza bonus di battaglia né armatura
-  del bersaglio: un tetto dichiarato, non una previsione. Il danno
-  settimanale di una nazione invece È la somma dei suoi cittadini
-  (verificato: Germania 1,405 mld contro 1,403), quindi i due numeri si
-  possono affiancare.
+- il **potenziale** dei nemici (e nostro) si stima dai PILLATI
+  (`modelloPillole` in `server/plusApi/nemici.js`, dal 2026-10-06): su 14
+  giorni di /damage-timeline, danno/ora ≈ fondo + k · pillati (R² ~0,5
+  orario; k fra 100 e 300 mila per pillato all'ora). Due scenari sulla
+  finestra di una pillola — "adesso" e "al loro picco", col danno vero di
+  quella finestra accanto — più un grafico a punti per qualunque altro
+  numero. Provato a ritroso su 30 nazioni: errore mediano ~1/3 su 8 ore,
+  fascia 5°–95° giusta 3 volte su 4. ⚠️ Lo scenario "si pillano tutti" è
+  stato provato e TOLTO: cambiava di sette volte col modo di pesare i
+  puliti. Il vecchio tetto "vita + fame" era stato scartato prima ancora
+  (dieci volte sopra il danno osservato). Il danno settimanale di una
+  nazione È la somma dei suoi cittadini (verificato: Germania 1,405 mld
+  contro 1,403);
+- **alleati** e relazione `alleato` ai confini vengono da `allianceId`
+  (stesso blocco), MAI dal campo `allies`, fossile del 10 giugno: l'Italia
+  vi ha ancora la Francia, con cui è in guerra.
 
 Il **danno ora per ora** e la **curva a 14 giorni** nella scheda nazione
 (`src/nations/damageCurves.js` + `server/damageTimeline.js`) dipendono da

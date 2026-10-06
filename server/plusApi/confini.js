@@ -186,11 +186,17 @@ function classifica(p, c) {
 /** Il rapporto fra la nazione che guarda e quella che possiede la regione.
  *  Si calcola sui dati di adesso: una guerra dichiarata ieri cambia il
  *  peso di una base accesa oggi. */
-function relazione(noi, loro) {
+function relazione(noi, loro, paesi) {
   if (!noi || !loro) return 'neutrale';
   if (noi.enemy === loro) return 'nemico_giurato';
   if ((noi.warsWith || []).includes(loro)) return 'guerra';
-  if ((noi.allies || []).includes(loro)) return 'alleato';
+  // ⚠️ Alleato = stessa ALLEANZA (`allianceId`), NON il campo `allies`:
+  // quello è un fossile del 10 giugno 2026, quando le alleanze bilaterali
+  // sono diventate blocchi (vedi allianceHistory.js). L'Italia lo ha
+  // ancora pieno di nazioni che non sono più sue alleate — Francia
+  // compresa, con cui è in guerra — e la Slovenia, che sta nel suo
+  // blocco, risultava "neutrale" ai confini.
+  if (noi.allianceId && paesi?.get(loro)?.allianceId === noi.allianceId) return 'alleato';
   if ((noi.defensivePacts || []).includes(loro)) return 'patto';
   const nap = Date.parse(noi.nonAggressionUntil?.[loro] || '');
   if (Number.isFinite(nap) && nap > Date.now()) return 'nap';
@@ -284,7 +290,7 @@ async function giro() {
             livelloA: c.livello,
             statoDa: p?.stato ?? null,
             statoA: c.stato,
-            relazione: relazione(paesi.get(cid), ownerId),
+            relazione: relazione(paesi.get(cid), ownerId, paesi),
             confinaCon: [...tocca].map((id) => reg[id]?.name || id),
             at: now,
             // L'ora esatta in cui il bonus comincia a contare: la scrive il
@@ -439,7 +445,7 @@ async function quadroConfini(countryId) {
       id,
       nome: r.name || id,
       ownerId: r.country || null,
-      relazione: relazione(noi, r.country),
+      relazione: relazione(noi, r.country, paesi),
       confinaCon: [...tocca].map((x) => reg[x]?.name || x),
       battaglia: r.activeBattle || null,
       difese: difese(id, r, cfg),

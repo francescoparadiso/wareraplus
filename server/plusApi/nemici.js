@@ -59,6 +59,38 @@
    Il ritmo lo dice il danno OSSERVATO (24 ore, ora migliore), che sta
    accanto. Restano fuori armatura e schivata di chi riceve e i bonus di
    battaglia (ordini, alleanza, patriottico, basi).
+
+   ── IL POTENZIALE, DAI PILLATI (richiesta del 2026-10-06) ─────────────
+   La domanda era: «sapendo che con X pillati hanno fatto Y danno, quanto
+   possono fare adesso?». /damage-timeline la sa già, ora per ora: il
+   danno della nazione e quanti suoi giocatori erano sotto pillola. E le
+   due cose vanno insieme molto più di quanto ci si aspetti — su 14 giorni
+   la retta  danno/ora = fondo + k · pillati  spiega metà della varianza
+   oraria (R² 0,35–0,60 sulle 30 nazioni più forti, 0,55–0,72 su blocchi
+   di tre ore). Chi si pilla è chi combatte: k non è "l'effetto della
+   pillola" ma quanto rende, di fatto, un'ora di un giocatore pillato di
+   quella nazione — col SUO cibo, le sue armi, le sue abitudini. È proprio
+   il numero che il calcolo "dal cibo" (scartato sopra) non poteva dare.
+
+   Due scenari, sulla finestra di una pillola (buffH, 8 ore):
+     · adesso   i pillati di adesso, ognuno per le ore che gli RESTANO;
+     · picco    la loro finestra di 8 ore più pillata dei 14 giorni, col
+                danno che ci hanno fatto davvero accanto (Italia: il
+                modello dice 110,7 M, erano 111,2 M).
+   Per qualunque altro numero di pillati c'è il grafico (vista).
+
+   ⚠️ Un terzo scenario "se si pillassero tutti gli attivi" è stato
+   provato e tolto: pesando i puliti per il danno per colpo la Germania
+   faceva 770 M in 8 ore (più del suo danno di una SETTIMANA: fra gli
+   attivi delle 72 ore molti passano e non combattono); pesandoli per il
+   danno settimanale scendeva SOTTO il suo picco osservato. Un tetto che
+   cambia di sette volte col modo di contarlo non è un dato.
+
+   ⚠️ È una STIMA e lo dice. Prova a ritroso (2026-10-06, 30 nazioni,
+   modello sui primi 10 giorni e previsione degli ultimi 4 a finestre di
+   8 ore): errore mediano 34%, e il danno vero è caduto nella fascia
+   5°–95° percentile 3 volte su 4. È il danno di TUTTI i loro cittadini
+   in TUTTE le battaglie, non quello contro di noi.
    ══════════════════════════════════════════════════════════════════════ */
 
 const { API } = require('./wareraApi');
@@ -221,6 +253,134 @@ function dannoOsservato(tl) {
   };
 }
 
+/**
+ * Quanto rende un pillato, dall'archivio orario (vedi la testata).
+ *
+ * Solo le ore con danno E pillati misurati, da quando la curva dei
+ * pillati è completa (`pill.completeFrom`: prima mancano le pillole
+ * prese prima che il censimento le vedesse). Retta ai minimi quadrati;
+ * se esce un fondo negativo o una pendenza nulla — un fondo negativo
+ * vorrebbe dire che zero pillati fanno danno negativo — si rifà passando
+ * per lo zero. La fascia viene dalle finestre di 8 ore consecutive: lì
+ * il rumore delle singole ore (un round che chiude alle 21:58 invece che
+ * alle 22:02) si compensa, ed è la stessa misura degli scenari.
+ */
+function modelloPillole(tl, finestraH = 8) {
+  const da = tl?.pill?.completeFrom ?? 0;
+  const pts = (tl?.series || []).filter((p) => p.d != null && p.p != null && (p.min ?? 60) === 60 && p.t >= da);
+  if (pts.length < 48) return null;
+  const n = pts.length;
+  const mx = pts.reduce((t, p) => t + p.p, 0) / n;
+  const my = pts.reduce((t, p) => t + p.d, 0) / n;
+  let sxy = 0; let sxx = 0;
+  for (const p of pts) { sxy += (p.p - mx) * (p.d - my); sxx += (p.p - mx) ** 2; }
+  let k = sxx ? sxy / sxx : 0;
+  let fondo = my - k * mx;
+  if (fondo < 0 || !(k > 0)) {
+    let s1 = 0; let s2 = 0;
+    for (const p of pts) { s1 += p.p * p.d; s2 += p.p * p.p; }
+    fondo = 0; k = s2 ? s1 / s2 : 0;
+  }
+  if (!(k > 0)) return null;
+  let res = 0; let tot = 0;
+  for (const p of pts) { res += (p.d - fondo - k * p.p) ** 2; tot += (p.d - my) ** 2; }
+
+  // Finestre di ore CONSECUTIVE: un buco in mezzo ne farebbe una più corta
+  // spacciata per intera. Almeno tre pillati di media, o il rapporto è
+  // rumore diviso quasi zero.
+  const efficienze = [];
+  for (let i = 0; i + finestraH <= n; i += finestraH) {
+    const g = pts.slice(i, i + finestraH);
+    if (g[g.length - 1].t - g[0].t !== (finestraH - 1) * ORA_MS) continue;
+    const P = g.reduce((t, p) => t + p.p, 0);
+    if (P < finestraH * 3) continue;
+    efficienze.push((g.reduce((t, p) => t + p.d, 0) - fondo * finestraH) / P);
+  }
+  // La loro finestra di 8 ore PIÙ PILLATA, scorrendo ora per ora: è lo
+  // scenario "picco". Non "il picco orario × 8": i pillati arrivano a
+  // ondate e il massimo di un'ora non dura otto ore (Italia: 121 al picco,
+  // ma la finestra migliore ne ha avuti 110 di media).
+  let piccoFinestra = null;
+  for (let i = 0; i + finestraH <= n; i += 1) {
+    const g = pts.slice(i, i + finestraH);
+    if (g[g.length - 1].t - g[0].t !== (finestraH - 1) * ORA_MS) continue;
+    const P = g.reduce((t, p) => t + p.p, 0);
+    if (!piccoFinestra || P > piccoFinestra.orePillola) {
+      piccoFinestra = { t: g[0].t, orePillola: P, danno: g.reduce((t, p) => t + p.d, 0) };
+    }
+  }
+  efficienze.sort((a, b) => a - b);
+  const q = (f) => efficienze[Math.min(efficienze.length - 1, Math.max(0, Math.round(f * (efficienze.length - 1))))];
+  const fascia = efficienze.length >= 8 ? [Math.max(0, q(0.05)), q(0.95)] : null;
+
+  return {
+    perPillatoOra: k,
+    fondoOra: fondo,
+    fascia,                      // [basso, alto] del danno per pillato all'ora
+    r2: tot ? Math.max(0, 1 - res / tot) : null,
+    ore: n,
+    finestre: efficienze.length,
+    dal: pts[0].t,
+    piccoPillati: Math.max(...pts.map((p) => p.p)),
+    piccoFinestra,
+    mediaPillati: mx,
+    // Per il grafico a punti: [pillati, danno] di ogni ora misurata.
+    punti: pts.map((p) => [p.p, Math.round(p.d)]),
+  };
+}
+
+/** Uno scenario: `pillati` nell'ora, `orePillola` = ore-giocatore di
+ *  pillola nella finestra (k le moltiplica). */
+function scenario(m, finestraH, pillati, orePillola) {
+  const valuta = (k) => ({
+    ora: m.fondoOra + k * pillati,
+    finestra: m.fondoOra * finestraH + k * orePillola,
+  });
+  const c = valuta(m.perPillatoOra);
+  const lo = m.fascia ? valuta(m.fascia[0]) : null;
+  const hi = m.fascia ? valuta(m.fascia[1]) : null;
+  return {
+    pillati: Math.round(pillati * 10) / 10,
+    ora: Math.round(c.ora),
+    finestra: Math.round(c.finestra),
+    finestraBassa: lo ? Math.round(lo.finestra) : null,
+    finestraAlta: hi ? Math.round(hi.finestra) : null,
+  };
+}
+
+/** I due scenari sui giocatori letti adesso (vedi la testata). */
+function potenziale(m, inGioco, cfg, ora) {
+  if (!m) return null;
+  const W = cfg.buffH || 8;
+  const pillati = inGioco.filter((g) => g.pillola === 'buff');
+  // Le ore di pillola che restano a chi l'ha già presa, ciascuno fino a W.
+  const restanti = pillati.reduce((t, g) => t + (g.fine ? Math.min(Math.max((g.fine - ora) / ORA_MS, 0), W) : W), 0);
+
+  return {
+    finestraOre: W,
+    modello: {
+      perPillatoOra: Math.round(m.perPillatoOra),
+      fondoOra: Math.round(m.fondoOra),
+      fascia: m.fascia && m.fascia.map(Math.round),
+      r2: m.r2 != null ? Math.round(m.r2 * 100) / 100 : null,
+      ore: m.ore, finestre: m.finestre, dal: m.dal,
+      piccoPillati: m.piccoPillati,
+      mediaPillati: Math.round(m.mediaPillati * 10) / 10,
+      punti: m.punti,
+    },
+    scenari: {
+      adesso: scenario(m, W, pillati.length, restanti),
+      // Con accanto quello che hanno fatto DAVVERO in quella finestra: è la
+      // riprova del modello sotto gli occhi di chi legge.
+      picco: m.piccoFinestra && {
+        ...scenario(m, W, m.piccoFinestra.orePillola / W, m.piccoFinestra.orePillola),
+        dal: m.piccoFinestra.t,
+        fatto: Math.round(m.piccoFinestra.danno),
+      },
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // La scheda di un nemico
 // ---------------------------------------------------------------------------
@@ -279,6 +439,7 @@ async function costruisciScheda(countryId) {
       // Un colpo a testa, tutti gli attivi: adesso e con la pillola.
       salva: { adesso: Math.round(somma('perColpo')), massimo: Math.round(somma('perColpoMax')) },
       osservato: dannoOsservato(tl),
+      potenziale: potenziale(modelloPillole(tl, cfg.buffH), inGioco, cfg, ora),
     },
     giocatori,
   };
@@ -360,7 +521,7 @@ async function quadroNemici(countryId) {
     try { scheda = (await leggiScheda(id)).sommario; } catch (err) { errore = err.message; }
     return {
       id,
-      relazione: relazione(noi, id),
+      relazione: relazione(noi, id, paesi),
       // Anche il nemico giurato può essere in guerra con noi: si dice
       // tutte e due le cose, perché cambiano i bonus in battaglia.
       giurato: noi.enemy === id,
@@ -395,4 +556,4 @@ async function giocatoriNemico(countryId) {
   return { letto: s.sommario.letto, censiti: s.sommario.censiti, attivi72h: s.sommario.attivi72h, giocatori: s.giocatori };
 }
 
-module.exports = { quadroNemici, giocatoriNemico, idNemici, statoPillola, colpi, fattoreColpo, dannoOsservato };
+module.exports = { quadroNemici, giocatoriNemico, idNemici, statoPillola, colpi, fattoreColpo, dannoOsservato, modelloPillole, potenziale };

@@ -1053,6 +1053,9 @@ export function creaQuadroNazione(ctx) {
     cella(nzT('volleyNow'), compatto(salva.adesso), nzT('volleyNowHint'), num(salva.adesso));
     cella(nzT('volleyMax'), compatto(salva.massimo), nzT('volleyMaxHint'), num(salva.massimo));
     box.appendChild(griglia);
+    // Un server di prima non manda `potenziale` (undefined): niente
+    // sezione. `null` invece vuol dire "ore misurate troppo poche".
+    if (n.potenziale !== undefined) box.appendChild(bloccoPotenziale(n));
 
     const piede = el('div', 'wp-pv-nz-nemico-piede');
     piede.appendChild(el('span', 'wp-pv-note', nzT('sourceNote')
@@ -1066,6 +1069,130 @@ export function creaQuadroNazione(ctx) {
     box.appendChild(piede);
     if (aperto) box.appendChild(tabellaGiocatori(n.id));
     return box;
+  }
+
+  /**
+   * Il potenziale stimato dai pillati (server/plusApi/nemici.js,
+   * modelloPillole): richiesta del 2026-10-06, «sapendo che con X pillati
+   * hanno fatto Y danno, quanto possono fare?». Una frase col quanto rende
+   * un pillato, il grafico a punti da cui viene quel numero — ogni punto è
+   * un'ora vera, così chi legge vede da sé quanto la retta ci prende — e i
+   * due scenari sulla finestra di una pillola. Per noi e per i nemici, con
+   * lo stesso calcolo.
+   */
+  function bloccoPotenziale(n) {
+    const pot = n.potenziale;
+    const sez = el('div', 'wp-pv-nz-sezione wp-pv-nz-pot');
+    sez.appendChild(el('h3', 'wp-pv-h3', nzT('estTitle')));
+    if (!pot) { sez.appendChild(el('p', 'wp-pv-note', nzT('estNone'))); return sez; }
+    const m = pot.modello;
+    sez.appendChild(el('p', 'wp-pv-body', nzT('estLead')
+      .replace('{k}', compatto(m.perPillatoOra)).replace('{fondo}', compatto(m.fondoOra))));
+    sez.appendChild(graficoDispersione(pot));
+
+    const tab = el('div', 'wp-pv-nz-pot-tab');
+    const testa = el('div', 'wp-pv-nz-pot-riga wp-pv-nz-tab-testa');
+    for (const [t, numerica] of [[nzT('estColScenario')], [nzT('estColPilled'), 1], [nzT('estColHour'), 1],
+      [nzT('estColWindow').replace('{h}', pot.finestraOre), 1]]) {
+      testa.appendChild(el('span', numerica ? 'wp-pv-nz-tab-num' : null, t));
+    }
+    tab.appendChild(testa);
+    const riga = (chiave, s, nota) => {
+      if (!s) return;
+      const r = el('div', `wp-pv-nz-pot-riga wp-pv-nz-pot-${chiave}`);
+      const nome = el('span', 'wp-pv-nz-pot-nome');
+      nome.appendChild(el('strong', null, nzT(`estSc_${chiave}`)));
+      if (nota) nome.appendChild(el('span', 'wp-pv-suggerimento', nota));
+      r.appendChild(nome);
+      r.appendChild(el('span', 'wp-pv-nz-tab-num', num(s.pillati)));
+      r.appendChild(el('span', 'wp-pv-nz-tab-num', compatto(s.ora)));
+      const f = el('span', 'wp-pv-nz-tab-num wp-pv-nz-pot-fin');
+      f.appendChild(el('strong', null, compatto(s.finestra)));
+      if (s.finestraBassa != null) f.appendChild(el('span', 'wp-pv-suggerimento', `${compatto(s.finestraBassa)}–${compatto(s.finestraAlta)}`));
+      r.appendChild(f);
+      legaTip(r, () => ({
+        titolo: nzT(`estSc_${chiave}`),
+        righe: [
+          [nzT('estColPilled'), num(s.pillati), '#f0b429'],
+          [nzT('estColHour'), num(s.ora), 'var(--pv-accent)'],
+          [nzT('estColWindow').replace('{h}', pot.finestraOre), num(s.finestra)],
+          ...(s.finestraBassa != null ? [[nzT('estRange'), `${num(s.finestraBassa)} – ${num(s.finestraAlta)}`]] : []),
+          ...(s.fatto != null ? [[nzT('estDid'), num(s.fatto)]] : []),
+        ],
+        nota: nota || null,
+      }));
+      tab.appendChild(r);
+    };
+    const sc = pot.scenari || {};
+    riga('adesso', sc.adesso, nzT('estSc_adessoHint'));
+    riga('picco', sc.picco, sc.picco ? `${quando(sc.picco.dal)} · ${nzT('estDid')} ${compatto(sc.picco.fatto)}` : null);
+    sez.appendChild(tab);
+    sez.appendChild(el('p', 'wp-pv-suggerimento', nzT('estFit')
+      .replace('{ore}', num(m.ore)).replace('{r2}', m.r2 != null ? m.r2.toFixed(2) : '—')));
+    sez.appendChild(el('p', 'wp-pv-note', nzT('estNote')));
+    return sez;
+  }
+
+  /**
+   * Un punto per ogni ora misurata: quanti erano pillati (x) e quanto
+   * danno ha fatto la nazione (y), con la retta del modello sopra e il
+   * segno di dove sono ADESSO. Al passaggio del mouse, per quel numero di
+   * pillati: la stima, e quante ore vere ci sono state lì vicino con la
+   * loro mediana — il "con X pillati hanno fatto Y" letto direttamente.
+   */
+  function graficoDispersione(pot) {
+    const m = pot.modello;
+    const punti = m.punti || [];
+    const wrap = el('div', 'wp-pv-nz-grafico-wrap');
+    if (!punti.length) return wrap;
+    const W = 600; const H = 170; const SX = 4; const SU = 14; const GIU = 18;
+    const adesso = pot.scenari?.adesso?.pillati ?? null;
+    // Lo scenario "tutti" resta fuori dall'asse: centinaia di pillati mai
+    // visti schiaccerebbero tutti i punti veri in un angolo.
+    const xMax = Math.max(1, ...punti.map((p) => p[0]), adesso || 0) * 1.06;
+    const stima = (x) => m.fondoOra + m.perPillatoOra * x;
+    const yMax = Math.max(1, ...punti.map((p) => p[1]), stima(xMax)) * 1.05;
+    const x = (v) => SX + (v / xMax) * (W - SX * 2);
+    const y = (v) => SU + (1 - v / yMax) * (H - SU - GIU);
+    const s = svgVuoto(W, H, nzT('estTitle'));
+
+    nodoSvg(s, 'line', { x1: SX, x2: W - SX, y1: H - GIU, y2: H - GIU, class: 'wp-pv-nz-asse' });
+    const passo = xMax > 120 ? 50 : xMax > 50 ? 20 : xMax > 20 ? 10 : 5;
+    // Le tacche troppo vicine al bordo destro no: l'etichetta uscirebbe
+    // tagliata a metà ("25" per 250).
+    for (let v = passo; x(v) < W - 18; v += passo) {
+      nodoSvg(s, 'line', { x1: x(v), x2: x(v), y1: SU, y2: H - GIU, class: 'wp-pv-nz-tacca' });
+      nodoSvg(s, 'text', { x: x(v), y: H - 5, class: 'wp-pv-nz-testo', 'text-anchor': 'middle' }, String(v));
+    }
+    for (const [px, py] of punti) nodoSvg(s, 'circle', { cx: x(px).toFixed(1), cy: y(py).toFixed(1), r: 2.4, class: 'wp-pv-nz-disp-punto' });
+    nodoSvg(s, 'line', { x1: x(0), y1: y(stima(0)), x2: x(xMax), y2: y(stima(xMax)), class: 'wp-pv-nz-disp-retta' });
+    if (adesso != null) {
+      nodoSvg(s, 'line', { x1: x(adesso), x2: x(adesso), y1: SU, y2: H - GIU, class: 'wp-pv-nz-disp-adesso' });
+      nodoSvg(s, 'circle', { cx: x(adesso), cy: y(stima(adesso)), r: 4.5, class: 'wp-pv-nz-disp-adesso-punto' });
+      nodoSvg(s, 'text', { x: x(adesso) + 4, y: SU + 9, class: 'wp-pv-nz-testo wp-pv-nz-testo-pill' }, nzT('estSc_adesso'));
+    }
+    nodoSvg(s, 'text', { x: SX, y: 10, class: 'wp-pv-nz-testo' }, `${compatto(yMax)} ${nzT('estChartY')}`);
+    nodoSvg(s, 'text', { x: W - SX, y: H - GIU - 4, class: 'wp-pv-nz-testo', 'text-anchor': 'end' }, nzT('estChartX'));
+
+    const guida = nodoSvg(s, 'line', { x1: 0, x2: 0, y1: SU, y2: H - GIU, class: 'wp-pv-nz-guida', visibility: 'hidden' });
+    legaTip(s, (e) => {
+      const ctm = s.getScreenCTM();
+      if (!ctm) return null;
+      const pt = s.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+      const loc = pt.matrixTransform(ctm.inverse());
+      const nP = Math.max(0, Math.round(((loc.x - SX) / (W - SX * 2)) * xMax));
+      guida.setAttribute('x1', x(nP)); guida.setAttribute('x2', x(nP)); guida.setAttribute('visibility', 'visible');
+      const vicini = punti.filter((p) => Math.abs(p[0] - nP) <= 2).map((p) => p[1]).sort((a, b) => a - b);
+      const righe = [[nzT('estTipFit'), `${num(stima(nP))} / h`, 'var(--pv-accent)']];
+      if (vicini.length) {
+        righe.push([nzT('estTipSeen'), num(vicini.length)]);
+        righe.push([nzT('estTipMedian'), `${num(vicini[vicini.length >> 1])} / h`, '#f0b429']);
+      }
+      return { titolo: `${num(nP)} ${nzT('estChartX')}`, righe, nota: vicini.length ? null : nzT('estTipNone') };
+    });
+    s.addEventListener('pointerleave', () => guida.setAttribute('visibility', 'hidden'));
+    wrap.appendChild(s);
+    return wrap;
   }
 
   /**
@@ -1291,7 +1418,10 @@ export function creaQuadroNazione(ctx) {
       const col = el('div', 'wp-pv-nz-isto-col');
       legaTip(col, () => ({
         titolo: `${nzT('citLevels')} ${l.da}${l.a ? `–${l.a}` : '+'}`,
-        righe: [[nzT('tipPlayers'), `${num(l.n)} · ${Math.round((l.n / (c.censiti || 1)) * 100)}%`]],
+        // Sui LETTI, non sui censiti: le fasce contano solo chi il
+        // cache-server ha già risolto, e con i censiti al denominatore le
+        // percentuali non arrivavano a 100.
+        righe: [[nzT('tipPlayers'), `${num(l.n)} · ${Math.round((l.n / (c.letti || c.censiti || 1)) * 100)}%`]],
       }));
       col.appendChild(el('span', 'wp-pv-nz-isto-n', num(l.n)));
       const b = el('span', 'wp-pv-nz-isto-barra');
@@ -1363,6 +1493,9 @@ export function creaQuadroNazione(ctx) {
     }
     card.appendChild(confronto);
     card.appendChild(el('p', 'wp-pv-suggerimento', `${nzT('volleyNowHint')} · ${nzT('volleyMax')}: ${nzT('volleyMaxHint')}`));
+    // Lo stesso calcolo dei nemici, su di noi: il loro "12 M l'ora" si
+    // legge solo accanto al nostro.
+    if (noi.potenziale !== undefined) card.appendChild(bloccoPotenziale(noi));
 
     const piede = el('div', 'wp-pv-nz-nemico-piede');
     piede.appendChild(el('span', 'wp-pv-note', nzT('sourceNote').replace('{n}', num(noi.live)).replace('{ora}', ora(noi.letto))));
@@ -1643,6 +1776,13 @@ export function creaQuadroNazione(ctx) {
       riga.appendChild(barra);
       riga.appendChild(el('span', 'wp-pv-btl-danno', num(danno)));
       box.appendChild(riga);
+    }
+    // Il danno sopra è di tutta la battaglia; quello del round in corso,
+    // che decide il prossimo punto, a parte. Un server di prima non lo
+    // manda, e lì `danno` era già quello del round.
+    if (b.dannoRound) {
+      box.appendChild(el('span', 'wp-pv-suggerimento',
+        `${nzT('roundNow')}: ${num(b.dannoRound.noi)} / ${num(b.dannoRound.loro)}`));
     }
     return box;
   }

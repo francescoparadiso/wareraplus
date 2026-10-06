@@ -1212,6 +1212,31 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
 .wp-pv-nz-pill-tag-malus { background: rgba(240, 119, 108, .16); color: var(--pv-danger); }
 .wp-pv-nz-pill-tag-pulito { background: var(--pv-surface); color: var(--pv-ink-soft); }
 
+/* Potenziale stimato dai pillati: grafico a punti + tre scenari. */
+.wp-pv-nz-pot .wp-pv-body { margin: 0; }
+.wp-pv-nz-pot .wp-pv-nz-grafico { min-width: 0; }
+.wp-pv-nz-disp-punto { fill: var(--pv-accent); opacity: .35; }
+.wp-pv-nz-disp-retta { stroke: var(--pv-accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.wp-pv-nz-disp-adesso { stroke: #f0b429; stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.wp-pv-nz-disp-adesso-punto { fill: #f0b429; stroke: var(--pv-surface-2); stroke-width: 1.5; }
+.wp-pv-nz-pot-tab { display: flex; flex-direction: column; gap: .15rem; }
+.wp-pv-nz-pot-riga {
+  display: grid; grid-template-columns: minmax(0, 2.2fr) 4rem 5rem minmax(6.5rem, 1.1fr);
+  gap: .6rem; align-items: center; padding: .3rem .4rem; border-radius: 6px; font-size: .84rem;
+}
+.wp-pv-nz-pot-riga:not(.wp-pv-nz-tab-testa):hover { background: var(--pv-surface); }
+.wp-pv-nz-pot-nome { display: flex; flex-direction: column; min-width: 0; }
+.wp-pv-nz-pot-fin { display: flex; flex-direction: column; align-items: flex-end; }
+.wp-pv-nz-pot-adesso .wp-pv-nz-pot-nome strong { color: #d99a0b; }
+@media (max-width: 560px) {
+  /* Il nome dello scenario su una riga sua, i tre numeri sotto: in quattro
+     colonne la prima si riduceva a una parola per riga. */
+  .wp-pv-nz-pot-riga { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .15rem .5rem; font-size: .8rem; }
+  .wp-pv-nz-pot-nome { grid-column: 1 / -1; }
+  .wp-pv-nz-pot-riga.wp-pv-nz-tab-testa > :first-child { display: none; }
+  .wp-pv-nz-pot-fin { min-width: 0; text-align: right; }
+}
+
 /* ── Attività ────────────────────────────────────────────────── */
 .wp-pv-nz-sezione { display: flex; flex-direction: column; gap: .45rem; border-top: 1px solid var(--pv-rule); padding-top: .8rem; }
 .wp-pv-nz-battaglie { display: flex; flex-direction: column; gap: .6rem; }
