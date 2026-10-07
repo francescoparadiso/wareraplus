@@ -724,3 +724,104 @@ body.light-theme .wp-btl { --wp-btl-def: #1a5fb4; --wp-btl-atk: #b02026; }
   white-space: nowrap;
 }
 .wp-btl-sent-dash { opacity: .55; margin: 0 1px 0 3px; }
+
+/* ══════════════════════════════════════════════════════════════
+   Andamento della battaglia (src/battles/battleTimeline.js)
+   ------------------------------------------------------------------
+   Stesse due tinte delle colonne della scheda (difesa azzurra sopra,
+   attacco rossa sotto). Il sorpasso è ambra: deve staccare da tutte e
+   due, ed è il punto su cui l'occhio deve cadere.
+   Il grafico ha una larghezza minima e scorre in orizzontale su
+   telefono: in viewBox le etichette scalerebbero a 4px.
+   ══════════════════════════════════════════════════════════════ */
+.wp-btl { --wp-btl-flip: #e3b341; }
+body.light-theme .wp-btl { --wp-btl-flip: #9a6700; }
+
+.wp-btl-tl-wrap { position: relative; }
+.wp-btl-tl-svg { min-width: 560px; }
+.wp-btl-tl-def { fill: var(--wp-btl-def); opacity: .85; }
+.wp-btl-tl-atk { fill: var(--wp-btl-atk); opacity: .85; }
+.wp-btl-tl-pdef, .wp-btl-tl-patk { fill: none; stroke-width: 1.8; stroke-linejoin: round; }
+.wp-btl-tl-pdef { stroke: var(--wp-btl-def); }
+.wp-btl-tl-patk { stroke: var(--wp-btl-atk); }
+.wp-btl-tl-goal { stroke: var(--wp-ov-border, #30363d); stroke-dasharray: 2 3; }
+.wp-btl-tl-round { stroke: var(--wp-ov-text-dim, #8b949e); stroke-dasharray: 4 3; opacity: .6; }
+.wp-btl-tl-flip { stroke: var(--wp-btl-flip); stroke-width: 1.4; opacity: .9; }
+.wp-btl-tl-flipdot { fill: var(--wp-btl-flip); }
+.wp-btl-tl-flipnum { fill: #0d1117; font-size: 8.5px; font-weight: 700; text-anchor: middle; }
+.wp-btl-tl-cursor { stroke: var(--wp-ov-text, #e6edf3); stroke-width: 1; opacity: .5; pointer-events: none; }
+.wp-btl-tl-hit { cursor: crosshair; }
+
+.wp-btl-tl-tip {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--wp-ov-border, #30363d);
+  background: var(--wp-ov-bg, #0d1117);
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+}
+body.light-theme .wp-btl-tl-tip { background: var(--wp-ov-bg-light, #f4f6fa); }
+.wp-btl-tl-tiphead { font-weight: 700; margin-bottom: 2px; }
+.wp-btl-tl-tip i,
+.wp-btl-legend i.wp-btl-tl-swdef,
+.wp-btl-legend i.wp-btl-tl-swatk,
+.wp-btl-legend i.wp-btl-tl-swflip { width: 9px; height: 9px; border-radius: 2px; display: inline-block; margin-right: 5px; }
+.wp-btl-tl-swdef { background: var(--wp-btl-def); }
+.wp-btl-tl-swatk { background: var(--wp-btl-atk); }
+.wp-btl-tl-swflip { background: var(--wp-btl-flip); }
+.wp-btl-tl-wrap + .wp-btl-legend { flex-wrap: wrap; }
+
+.wp-btl-tl-flips { list-style: none; margin: 0 0 6px; padding: 0; counter-reset: flip; }
+.wp-btl-tl-fliprow {
+  counter-increment: flip;
+  padding: 9px 12px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-left: 3px solid var(--wp-btl-flip);
+  background: var(--wp-ov-surface, rgba(255, 255, 255, .03));
+}
+.wp-btl-tl-fliphead { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; font-size: 13px; }
+.wp-btl-tl-fliphead::before {
+  content: counter(flip);
+  display: inline-grid;
+  place-items: center;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--wp-btl-flip);
+  color: #0d1117;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.wp-btl-tl-fliphead strong { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.wp-btl-tl-attacker .wp-btl-tl-fliphead strong { color: var(--wp-btl-atk); }
+.wp-btl-tl-defender .wp-btl-tl-fliphead strong { color: var(--wp-btl-def); }
+.wp-btl-tl-when { font-variant-numeric: tabular-nums; color: var(--wp-ov-text-dim, #8b949e); font-size: 12px; }
+.wp-btl-tl-who { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 7px; font-size: 12px; }
+.wp-btl-tl-wholbl { color: var(--wp-ov-text-dim, #8b949e); }
+.wp-btl-tl-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--wp-ov-border, #30363d);
+  font-variant-numeric: tabular-nums;
+}
+.wp-btl-tl-chip em { font-style: normal; opacity: .65; }
+.wp-btl-tl-new {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wp-btl-flip) 22%, transparent);
+  color: var(--wp-btl-flip);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.wp-btl-tl-opp { color: var(--wp-ov-text-dim, #8b949e); font-size: 11.5px; }
+.wp-btl-tl-side { font-size: 11.5px; font-weight: 600; }
+.wp-btl-tl-side.wp-btl-tl-attacker { color: var(--wp-btl-atk); }
+.wp-btl-tl-side.wp-btl-tl-defender { color: var(--wp-btl-def); }

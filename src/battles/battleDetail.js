@@ -10,6 +10,9 @@
    2. NAZIONI per schieramento — danno, quota del lato, taglia incassata;
    3. unità militari, stesse colonne, a richiesta (2 chiamate in più);
    4. contratti mercenari: chi paga, quale unità, quanto.
+   Più, sotto ai finanziatori, l'ANDAMENTO minuto per minuto (quando è
+   entrata ogni nazione, dove si è girata) — solo per le battaglie che il
+   server ha registrato, vedi battleTimeline.js.
 
    ── ⚠️ LA PAROLA "TAGLIA" QUI VUOL DIRE UN'ALTRA COSA ──────────────
    Nell'elenco e nelle spese di guerra la taglia è quanto uno
@@ -28,6 +31,7 @@ import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 import { btlT } from './i18n.js';
 import { getBattleDetail, getBattleMuBreakdown } from './api.js';
 import { fetchMoneyTransfers, transfersFor, windowIsShort } from './moneyTransfers.js';
+import { fetchBattleTimeline, timelineSectionHtml, wireTimeline, resetTimeline } from './battleTimeline.js';
 
 // Righe mostrate prima del "mostra tutte": una battaglia grossa ha ~77
 // nazioni per lato, e le prime dieci fanno quasi tutto il danno.
@@ -51,6 +55,9 @@ let _muInfo = new Map();
 // moneyTransfers.js), filtrata qui sulla finestra della battaglia.
 let _money = null;
 let _spend = null;   // taglia stimata + contratti (src/diplomacy/battleSpending.js), per la testata
+// Andamento minuto per minuto (battleTimeline.js). null = il server non
+// l'ha registrata, e la sezione semplicemente non compare.
+let _tl = null;
 
 function fmtNum(n) {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -462,6 +469,7 @@ export function renderBattleDetail(battle) {
     <div class="wp-btl-detail">
       ${head}
       ${fundersHtml(battle)}
+      ${timelineSectionHtml(_tl, { nationName: nm, flagHtml })}
 
       <h3 class="wp-btl-h3">${btlT('byNation')}</h3>
       <p class="wp-btl-foot wp-btl-foot-tight">${btlT('earnedNote')}</p>
@@ -494,6 +502,7 @@ export async function loadBattleDetail(battle, repaint) {
   _mu = null;
   _money = null;
   _spend = null;
+  _tl = null;
   _muState = 'closed';
   _expanded = { attacker: false, defender: false };
   repaint();
@@ -509,6 +518,7 @@ export async function loadBattleDetail(battle, repaint) {
     fetchMoneyTransfers().then(d => { _money = d; }).catch(() => {}),
     import('../diplomacy/battleSpending.js').then(m => m.fetchBattleSpending(battle.id))
       .then(d => { _spend = d; }).catch(() => {}),
+    fetchBattleTimeline(battle.id, { live: Boolean(battle.live) }).then(d => { _tl = d; }),
   ]);
   repaint();
 }
@@ -532,6 +542,7 @@ async function resolveMuBriefs(ids) {
 
 export function wireBattleDetail(root, battle, { onBack, repaint }) {
   root.querySelector('#wp-btl-detail-back')?.addEventListener('click', onBack);
+  wireTimeline(root);
 
   root.querySelectorAll('.wp-btl-side-more').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -584,6 +595,8 @@ export function resetBattleDetail() {
   _detail = null;
   _mu = null;
   _money = null;
+  _tl = null;
+  resetTimeline();
   _muState = 'closed';
   _expanded = { attacker: false, defender: false };
   // _dir NON si azzera: è la cache dei nomi, buona per tutta la sessione.

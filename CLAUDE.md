@@ -249,6 +249,18 @@ wareraPlus/
 │   │                              LAVORATORE (salari incassati, tasse trattenute) e per
 │   │                              nazione dove OPERA l'azienda (il gettito vero, che è
 │   │                              chi incassa davvero). Endpoint: /labour-history.
+│   ├── battleTimeline.js       ← NUOVO — l'andamento di ogni battaglia: un campione
+│   │                              AL MINUTO (danno e punti del round per lato, una
+│   │                              pagina di getBattles per tutte) e il danno PER
+│   │                              NAZIONE a ogni tick (classifiche lette solo per le
+│   │                              battaglie col tick avanzato, un batch). Serve a
+│   │                              vedere QUANDO entra una nazione e se la battaglia si
+│   │                              gira lì. ⚠️ ACCUMULA dal deploy (2026-10-07): il gioco
+│   │                              non lo tiene da nessuna parte (getLastHits = ultimi 5
+│   │                              colpi, roundsHistory = solo i finali). Battaglie vive
+│   │                              in memoria, chiuse in cache/battle-timeline/<id>.json.gz,
+│   │                              nessuna potatura (~250 MB/anno stimati).
+│   │                              Endpoint: /battle-timeline?battleId=.
 │   ├── import/                 ← NUOVO — import UNA TANTUM da un archivio esterno
 │   │   ├── bonifici.js            (il dump PostgreSQL di un altro tool della
 │   │   ├── ricchezza.js            comunità, passato dal suo autore). Servono solo
@@ -534,6 +546,17 @@ wareraPlus/
     │   │                  sezione a farlo. Lo storico copre ~3 giorni: per una
     │   │                  battaglia più vecchia la vista dice "fuori portata", non
     │   │                  "nessun finanziamento".
+    │   ├── battleTimeline.js ← NUOVO — "Andamento della battaglia" nella scheda,
+    │   │                  sotto i finanziatori: danno al minuto per lato + punti
+    │   │                  del round, i SORPASSI (cambio di segno del danno del
+    │   │                  round, con chi ha spinto nei 10 minuti prima e chi era
+    │   │                  "appena entrata") e l'ora d'ingresso di ogni nazione
+    │   │                  (±2 min: il danno per nazione esce solo al tick). Da
+    │   │                  /battle-timeline, nessun fallback: senza server, o per
+    │   │                  una battaglia chiusa prima del deploy, non compare.
+    │   │                  ⚠️ una battaglia già aperta al primo sguardo ha la prima
+    │   │                  lettura come FONDO (`baseAt`): chi c'era non è un
+    │   │                  ingresso. Testi in timelineI18n.js (9 lingue).
     │   ├── main.js, battleList.js, warExpenses.js, i18n.js (9 lingue)
     ├── guide/                    ← NUOVO — Guida "Come si usa": SOLO testo statico
     │   ├── main.js                  (zero fetch, zero stato) + i18n.js a 9 lingue.
@@ -759,7 +782,7 @@ Node su VPS esterno (`WARERA_CACHE_BASE`), gestito con pm2. Polla le API
 WarEra una volta per tutti invece di lasciare che lo faccia ogni browser —
 serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`,
 `/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
-`/citizen-moves`,
+`/citizen-moves`, `/battle-timeline`,
 `/daily-damage`, `/damage-timeline`, `/price-history`, `/day-history`,
 `/alliance-history`,
 `/labour-history`,

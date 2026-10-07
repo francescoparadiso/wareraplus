@@ -202,6 +202,13 @@ const {
 const {
   initLabourHistory, readLabour, statoLabour,
 } = require('./labourHistory');
+// WarEra+ andamento delle battaglie: un campione al minuto (danno e punti
+// del round) e il danno per nazione a ogni tick, per vedere QUANDO una
+// nazione entra e se la battaglia si gira lì. Il gioco non lo tiene: si
+// accumula dal deploy. Vedi il blocco in testa a server/battleTimeline.js.
+const {
+  initBattleTimeline, pollBattleTimeline, readBattleTimeline, statoBattleTimeline,
+} = require('./battleTimeline');
 
 const app = express();
 const PORT = 3001;
@@ -396,6 +403,14 @@ initMoneyTransfers({
 // `countries` e le pillole gliele passa il loop dei cittadini.
 initDamageTimeline({
   trpcBatch: (...args) => trpcBatch(...args),
+  readCache, writeCache,
+});
+
+// Andamento battaglie: riceve anche fetchActiveBattles (paginazione con la
+// chiave del server, stessa di pollBattles) invece di rifarsela.
+initBattleTimeline({
+  trpcBatch: (...args) => trpcBatch(...args),
+  fetchActiveBattles: () => fetchActiveBattles(),
   readCache, writeCache,
 });
 
@@ -2380,6 +2395,13 @@ cron.schedule('40 */6 * * *', () => { refreshPillConfig().catch(() => {}); });
 // tutte le risorse: ventiquattro al giorno in totale.
 cron.schedule('27 * * * *', pollPrices);
 
+// WarEra+ andamento battaglie: ogni minuto, al secondo :40. Il tick dura
+// 2 minuti esatti, quindi un tick su due cade fra due giri e nessuno si
+// perde. Il :40 tiene il giro lontano dallo scatto dei cron al minuto :00
+// (gli altri poll partono tutti lì). Costo: 1 pagina di getBattles + un
+// batch di classifiche solo per le battaglie col tick avanzato.
+cron.schedule('40 * * * * *', pollBattleTimeline);
+
 // La giornata storica: uno scatto al giorno alle 02:05 italiane. Dopo il
 // cambio giorno di gioco (02:00) e dopo il poll delle nazioni delle :00,
 // cosi' legge la cache appena riscritta invece di quella di ieri.
@@ -2927,6 +2949,16 @@ app.get('/damage-timeline', (req, res) => {
   res.json(readTimeline({ countryId: req.query.countryId || null, countryIds, hours, days }));
 });
 
+// Andamento di UNA battaglia (server/battleTimeline.js). 404 se questo
+// archivio non l'ha mai vista — aperta e chiusa prima del deploy — e il
+// client in quel caso non mostra la sezione: non c'è una curva da
+// ricostruire, il gioco non la conserva.
+app.get('/battle-timeline', (req, res) => {
+  const data = readBattleTimeline(String(req.query.battleId || ''));
+  if (!data) return res.status(404).json({ error: 'battaglia non registrata', coverage: statoBattleTimeline() });
+  res.json(data);
+});
+
 // Storico dei prezzi (server/priceHistory.js): una candela al giorno per
 // risorsa. `days` e' la finestra chiesta, `coverageFrom` quella che c'e'
 // davvero — la vista disegna la seconda e dichiara la differenza invece di
@@ -3319,6 +3351,9 @@ app.get('/health', (req, res) => res.json({
   // Storico politico: elezioni riassunte (complete) e i tre archivi che
   // accumulano, ognuno col suo `copreDa`.
   politicalHistory: statoPoliticalHistory(),
+  // Andamento battaglie: da quando registra, quante vive in memoria e
+  // quante chiuse su disco. Accumula dal deploy, non si recupera.
+  battleTimeline: statoBattleTimeline(),
 }));
 
 app.listen(PORT, '127.0.0.1', () => {
