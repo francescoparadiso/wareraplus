@@ -1524,3 +1524,24 @@ i.wp-pv-nz-barra-contratti { background: var(--pv-accent); }
 .wp-pv-nz-tab-num { text-align: right; font-variant-numeric: tabular-nums; }
 .wp-pv-nz-tab-pill { display: flex; align-items: center; gap: .35rem; white-space: nowrap; }
 .wp-pv-nz-tab-piede { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+
+/* ── Danno per livello (cardDannoLivelli) ────────────────────── */
+.wp-pv-nz-lvd { display: flex; flex-direction: column; overflow-x: auto; }
+.wp-pv-nz-lvd-riga {
+  display: grid;
+  grid-template-columns: 4.2rem 6.4rem 6.6rem 5.8rem minmax(8rem, 1.4fr) 5.4rem 5.4rem 6.6rem 6.2rem;
+  gap: .7rem; align-items: center;
+  padding: .32rem .45rem; border-radius: 6px; font-size: .83rem;
+  min-width: 52rem;
+}
+.wp-pv-nz-lvd-riga:nth-child(even) { background: var(--pv-surface); }
+.wp-pv-nz-lvd-stili .wp-pv-nz-lvd-riga {
+  grid-template-columns: minmax(7rem, 1.4fr) 5.6rem 5.6rem 5.6rem 5.6rem 5.6rem;
+  min-width: 32rem;
+}
+.wp-pv-nz-lvd-quota { display: flex; align-items: center; gap: .5rem; }
+.wp-pv-nz-lvd-quota .wp-pv-nz-tab-num { flex: 0 0 2.6rem; }
+.wp-pv-nz-lvd-pista { flex: 1 1 auto; height: .55rem; border-radius: 3px; background: var(--pv-surface-2); overflow: hidden; }
+.wp-pv-nz-lvd-barra { display: block; height: 100%; border-radius: 3px; background: var(--pv-accent); min-width: 2px; }
+.wp-pv-nz-lvd-stile { display: inline-flex; align-items: center; gap: .4rem; }
+.wp-pv-nz-lvd-stile i { width: .6rem; height: .6rem; border-radius: 2px; display: inline-block; }

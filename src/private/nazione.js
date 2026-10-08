@@ -559,6 +559,7 @@ export function creaQuadroNazione(ctx) {
     metti(cardElezioni(), 4);
     metti(cardForza(), 8);
     metti(cardCittadini(), 4);
+    metti(cardDannoLivelli(), 12);
     metti(cardNemici(), 12);
     metti(cardAttivita(), 6);
     metti(cardGuerra(), 6);
@@ -1433,6 +1434,87 @@ export function creaQuadroNazione(ctx) {
     liv.appendChild(isto);
     card.appendChild(liv);
     if (c.aggiornatoIl) card.appendChild(el('p', 'wp-pv-suggerimento', `${nzT('citCensus')} ${quando(c.aggiornatoIl)}`));
+    return card;
+  }
+
+  /**
+   * Il danno della settimana diviso per fascia di livello (richiesta
+   * dell'8/10). Dallo stesso censimento di cardCittadini, calcolato dal
+   * server (formaDannoLivelli in server/plusApi/nazione.js): qui solo la
+   * tabella. Media e mediana affiancate apposta — la loro distanza dice
+   * se una fascia combatte tutta o se la tirano su in pochi.
+   */
+  function cardDannoLivelli() {
+    const L = dati.cittadini?.dannoLivelli;
+    const card = scheda(nzT('lvdTitle'), nzT('lvdBody'));
+    if (!L || !L.fasce?.length) return nonDisponibile(card);
+    const pct = (x) => `${Math.round((x || 0) * 100)}%`;
+    const maxQuota = Math.max(0.01, ...L.fasce.map((f) => f.quota));
+
+    const lista = el('div', 'wp-pv-nz-lvd');
+    const testa = el('div', 'wp-pv-nz-lvd-riga wp-pv-nz-tab-testa');
+    for (const [t, cls] of [[nzT('lvdBand')], [nzT('lvdPlayers'), 1], [nzT('lvdHitters'), 1], [nzT('lvdWeek'), 1],
+      [nzT('lvdShare')], [nzT('lvdAvg'), 1], [nzT('lvdMedian'), 1], [nzT('lvdAllTime'), 1], [nzT('lvdWar'), 1]]) {
+      testa.appendChild(el('span', cls ? 'wp-pv-nz-tab-num' : null, t));
+    }
+    lista.appendChild(testa);
+    for (const f of L.fasce) {
+      const r = el('div', 'wp-pv-nz-lvd-riga');
+      r.appendChild(el('strong', null, f.a ? `${f.da}–${f.a}` : `${f.da}+`));
+      r.appendChild(el('span', 'wp-pv-nz-tab-num', `${num(f.n)} · ${pct(f.n / (L.giocatori || 1))}`));
+      r.appendChild(el('span', 'wp-pv-nz-tab-num', pct(f.n ? f.colpiscono / f.n : 0)));
+      r.appendChild(el('span', 'wp-pv-nz-tab-num', compatto(f.settimana)));
+      // Percentuale a larghezza fissa, poi la barra: col numero dopo la
+      // barra la colonna dei numeri ballava con la lunghezza della barra.
+      const q = el('span', 'wp-pv-nz-lvd-quota');
+      q.appendChild(el('span', 'wp-pv-nz-tab-num', pct(f.quota)));
+      const pista = el('span', 'wp-pv-nz-lvd-pista');
+      const b = el('span', 'wp-pv-nz-lvd-barra');
+      b.style.width = `${Math.round((f.quota / maxQuota) * 100)}%`;
+      pista.appendChild(b);
+      q.appendChild(pista);
+      r.appendChild(q);
+      r.appendChild(el('span', 'wp-pv-nz-tab-num', compatto(f.media)));
+      r.appendChild(el('span', 'wp-pv-nz-tab-num', compatto(f.mediana)));
+      r.appendChild(el('span', 'wp-pv-nz-tab-num', pct(f.quotaStorico)));
+      r.appendChild(el('span', 'wp-pv-nz-tab-num', pct(f.n ? f.guerra / f.n : 0)));
+      lista.appendChild(r);
+    }
+    card.appendChild(lista);
+
+    if (L.stili?.length) {
+      const sez = el('div', 'wp-pv-nz-sezione');
+      sez.appendChild(el('h3', 'wp-pv-h3', nzT('lvdStyleTitle')));
+      const t2 = el('div', 'wp-pv-nz-lvd wp-pv-nz-lvd-stili');
+      const h2 = el('div', 'wp-pv-nz-lvd-riga wp-pv-nz-tab-testa');
+      for (const [t, cls] of [[''], [nzT('lvdPlayers'), 1], [nzT('lvdWeek'), 1], [nzT('lvdShare'), 1], [nzT('lvdAvg'), 1], [nzT('lvdMedian'), 1]]) {
+        h2.appendChild(el('span', cls ? 'wp-pv-nz-tab-num' : null, t));
+      }
+      t2.appendChild(h2);
+      const fetta = { war: 'wp-pv-nz-f-guerra', mixed: 'wp-pv-nz-f-misto', eco: 'wp-pv-nz-f-eco', undecided: 'wp-pv-nz-f-nessuno' };
+      for (const s of L.stili) {
+        const r = el('div', 'wp-pv-nz-lvd-riga');
+        const chi = el('span', 'wp-pv-nz-lvd-stile');
+        chi.appendChild(el('i', fetta[s.stile] || ''));
+        chi.appendChild(el('span', null, nzT(`ps_${s.stile}`)));
+        r.appendChild(chi);
+        r.appendChild(el('span', 'wp-pv-nz-tab-num', num(s.n)));
+        r.appendChild(el('span', 'wp-pv-nz-tab-num', compatto(s.settimana)));
+        r.appendChild(el('span', 'wp-pv-nz-tab-num', pct(s.quota)));
+        r.appendChild(el('span', 'wp-pv-nz-tab-num', compatto(s.media)));
+        r.appendChild(el('span', 'wp-pv-nz-tab-num', compatto(s.mediana)));
+        t2.appendChild(r);
+      }
+      sez.appendChild(t2);
+      card.appendChild(sez);
+    }
+
+    const note = [];
+    if (L.metaDanno) note.push(nzT('lvdHalf').replace('{n}', num(L.metaDanno)));
+    note.push(nzT('lvdMedianHint'));
+    if (L.copertura != null) note.push(nzT('lvdCoverage').replace('{p}', String(Math.round(L.copertura * 100))));
+    if (dati.cittadini.aggiornatoIl) note.push(`${nzT('citCensus')} ${quando(dati.cittadini.aggiornatoIl)}`);
+    card.appendChild(el('p', 'wp-pv-suggerimento', note.join(' ')));
     return card;
   }
 

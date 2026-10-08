@@ -287,6 +287,62 @@ function formaStorico(eventi, countryId) {
   };
 }
 
+/** Il danno della nazione diviso per livello, dallo stesso censimento.
+ *  Le fasce sono più fitte dal 30 in su (di cinque in cinque) perché è lì
+ *  che sta il danno: sotto il 30 c'è un terzo dei giocatori e il 3% del
+ *  danno (Italia, 8 ott 2026). Media E mediana insieme, perché in una
+ *  fascia pochi giocatori fortissimi tirano su la media: la distanza fra
+ *  le due è essa stessa l'informazione.
+ *  Più la stessa cosa per stile di gioco dal 30 in su, che spiega il
+ *  salto fra le fasce meglio del livello in sé, e quanti giocatori fanno
+ *  metà del danno settimanale.
+ *  ⚠️ Solo chi il censimento elenca, cioè gli ATTIVI negli ultimi 3 giorni
+ *  (vedi memoria warera-census-active-only): `copertura` è la somma dei
+ *  censiti contro il settimanale ufficiale, la mette il chiamante. */
+function formaDannoLivelli(d) {
+  const fasce = [[1, 9], [10, 19], [20, 29], [30, 34], [35, 39], [40, 44], [45, 49], [50, Infinity]];
+  const mediana = (v) => {
+    if (!v.length) return null;
+    const s = [...v].sort((a, b) => a - b);
+    const m = s.length >> 1;
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  };
+  const conLv = d.filter((c) => Number.isFinite(c.lv));
+  const settTot = conLv.reduce((t, c) => t + (c.wk || 0), 0);
+  const storTot = conLv.reduce((t, c) => t + (c.dmg || 0), 0);
+  const fasceOut = fasce.map(([a, b]) => {
+    const g = conLv.filter((c) => c.lv >= a && c.lv <= b);
+    const w = g.map((c) => c.wk || 0);
+    const sett = w.reduce((t, x) => t + x, 0);
+    const stor = g.reduce((t, c) => t + (c.dmg || 0), 0);
+    return {
+      da: a, a: Number.isFinite(b) ? b : null,
+      n: g.length,
+      settimana: sett,
+      quota: settTot ? sett / settTot : 0,
+      media: g.length ? sett / g.length : null,
+      mediana: mediana(w),
+      colpiscono: g.filter((c) => (c.wk || 0) > 0).length,
+      storico: stor,
+      quotaStorico: storTot ? stor / storTot : 0,
+      guerra: g.filter((c) => c.ps === 'war').length,
+    };
+  }).filter((f) => f.n > 0);
+
+  const stili = ['war', 'mixed', 'eco', 'undecided'].map((ps) => {
+    const w = conLv.filter((c) => c.lv >= 30 && c.ps === ps).map((c) => c.wk || 0);
+    const somma = w.reduce((t, x) => t + x, 0);
+    return { stile: ps, n: w.length, settimana: somma, quota: settTot ? somma / settTot : 0, media: w.length ? somma / w.length : null, mediana: mediana(w) };
+  }).filter((s) => s.n > 0);
+
+  let acc = 0, meta = 0;
+  for (const w of conLv.map((c) => c.wk || 0).sort((a, b) => b - a)) {
+    acc += w; meta += 1;
+    if (acc >= settTot / 2) break;
+  }
+  return { fasce: fasceOut, stili, giocatori: conLv.length, settimana: settTot, storico: storTot, metaDanno: settTot ? meta : null };
+}
+
 /** I cittadini in numeri, dal censimento: chi c'è, chi gioca, come. */
 function formaCittadini(cit, conteggi) {
   const ora = Date.now();
@@ -310,6 +366,7 @@ function formaCittadini(cit, conteggi) {
     stile,
     ricchezzaTotale: somma('w'),
     ricchezzaMedia: d.length ? somma('w') / d.length : null,
+    dannoLivelli: formaDannoLivelli(d),
     topDanno: d.slice(0, 10).map(persona),            // il censimento arriva già per danno settimanale
     topRicchezza: [...d].sort((a, b) => (b.w || 0) - (a.w || 0)).slice(0, 8).map(persona),
     aggiornatoIl: cit?.fetchedAt ?? null,
@@ -513,6 +570,15 @@ async function quadroNazione(countryId) {
     console.warn('[nazione] variazioni non calcolate:', err.message);
   }
 
+  const cittadini = esito(citR) ? formaCittadini(esito(citR), esito(contR)) : null;
+  // Quanto del settimanale ufficiale coprono i censiti: chi è offline da
+  // più di 3 giorni non è nel censimento, e il suo danno manca dalle fasce.
+  const ufficiale = paese?.rankings?.weeklyCountryDamages?.value;
+  if (cittadini?.dannoLivelli && ufficiale > 0) {
+    cittadini.dannoLivelli.ufficiale = ufficiale;
+    cittadini.dannoLivelli.copertura = Math.min(1, cittadini.dannoLivelli.settimana / ufficiale);
+  }
+
   return {
     paese: formaPaese(paese, esito(paesiR)),
     governo: esito(govR),
@@ -523,7 +589,7 @@ async function quadroNazione(countryId) {
     bonifici: esito(bonR) ? formaBonifici(esito(bonR), countryId) : null,
     confini: esito(confR),
     storico,
-    cittadini: esito(citR) ? formaCittadini(esito(citR), esito(contR)) : null,
+    cittadini,
     guerra: esito(archR) ? formaGuerra(esito(archR), esito(speseR), countryId, reg) : null,
     unita: esito(dirR) ? formaUnita(esito(dirR), countryId) : null,
     elezioni,
