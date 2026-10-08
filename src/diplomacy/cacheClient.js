@@ -560,6 +560,53 @@ export async function fetchVisitsViaCache(visitorId, { count = true } = {}) {
   }
 }
 
+/** WarEra+ — Censimento aziende (server/companyCensus.js): per risorsa
+ *  aziende di proprietari attivi, quante con dipendenti, dipendenti,
+ *  salari e tasse sui salari al giorno. `item` aggiunge il dettaglio per
+ *  nazione, `countryId` restringe a una nazione.
+ *
+ *  Nessun ripiego diretto, e non per pigrizia: dal browser servirebbero
+ *  ~50.000 chiamate e la chiave API. Se il server non ce l'ha (null, o
+ *  `available: false` prima del primo giro) la vista lo dice e basta.
+ *  In memoria per 10 minuti per combinazione: il dato cambia una volta
+ *  al giorno. */
+const _censusMemo = new Map();
+const CENSUS_TTL_MS = 10 * 60 * 1000;
+export async function fetchCompanyCensusViaCache({ item = null, countryId = null, days = 30 } = {}) {
+  const q = new URLSearchParams({ days: String(days) });
+  if (item) q.set('item', item);
+  if (countryId) q.set('countryId', countryId);
+  const key = q.toString();
+  const memo = _censusMemo.get(key);
+  if (memo && Date.now() - memo.at < CENSUS_TTL_MS) return memo.json;
+  try {
+    const json = await _fetchCacheJsonRaw(`/company-census?${key}`);
+    if (!json || typeof json.available !== 'boolean') return null;
+    _censusMemo.set(key, { at: Date.now(), json });
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /company-census non disponibile:', err.message);
+    return null;
+  }
+}
+
+/** WarEra+ — Storico ricchezza di UN giocatore: { userId, username,
+ *  days: [[giorno, ricchezza]], rank, rankBefore, archiveFrom }. Viene
+ *  dall'archivio della classifica mondiale (uno scatto al giorno dal 19
+ *  giugno 2026), che solo il VPS possiede: il gioco dice la ricchezza di
+ *  ADESSO e nient'altro. null se il server non risponde o non ha ancora
+ *  la rotta — la vista mostra comunque la ricchezza di adesso. */
+export async function fetchPlayerWealthViaCache(userId) {
+  try {
+    const json = await _fetchCacheJsonRaw(`/player-wealth?userId=${encodeURIComponent(userId)}`);
+    if (!json || !Array.isArray(json.days)) return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /player-wealth non disponibile:', err.message);
+    return null;
+  }
+}
+
 /** Serie giornaliera per nazione: { fetchedAt, retentionDays, tz, byDay }
  *  con byDay[YYYY-MM-DD][countryId] = {bounty, contracts, contractCount,
  *  battles}. Ritorna null se il server non ce l'ha. */

@@ -846,6 +846,30 @@ function scattiRicchezza(warUserIds, dalMomento) {
     .map((r) => ({ slot: r.slot, warUserId: r.war_user_id, wealth: r.wealth, username: r.username, muId: r.mu_id }));
 }
 
+/** Lo storico di UN giocatore, solo gli scatti giornalieri ('YYYY-MM-DD',
+ *  non quelli di rodaggio con l'ora). Passa dall'indice (war_user_id,
+ *  slot): un giocatore sono un centinaio di righe, ~1 ms anche con la
+ *  classifica mondiale dentro. */
+function storicoRicchezzaGiocatore(warUserId) {
+  return getDb()
+    .prepare(`SELECT slot, wealth, username, mu_id FROM wealth_snapshot
+              WHERE war_user_id = ? AND length(slot) = 10
+              ORDER BY slot ASC`)
+    .all(warUserId)
+    .map((r) => ({ slot: r.slot, wealth: r.wealth, username: r.username, muId: r.mu_id }));
+}
+
+/** Quanti avevano PIÙ di `wealth` in quello scatto, e quanti erano in
+ *  tutto. Intervallo sulla chiave primaria (slot per primo): ~17.000 righe
+ *  di uno scatto, pochi ms. Non va chiamata su tutti gli scatti di fila —
+ *  `node:sqlite` è sincrono (vedi slotRicchezza). */
+function posizioneRicchezza(slot, wealth) {
+  const db = getDb();
+  const sopra = db.prepare('SELECT COUNT(*) AS n FROM wealth_snapshot WHERE slot = ? AND wealth > ?').get(slot, wealth)?.n ?? 0;
+  const tutti = db.prepare('SELECT COUNT(*) AS n FROM wealth_snapshot WHERE slot = ?').get(slot)?.n ?? 0;
+  return { posizione: sopra + 1, su: tutti };
+}
+
 /** Chi era nell'unità all'ultimo scatto. È il ripiego quando la directory
  *  del cache-server non risponde: meglio riscattare gli stessi di ieri che
  *  saltare un giorno, perché un giorno saltato non si recupera. */
@@ -1081,6 +1105,7 @@ module.exports = {
   salvaScattoRicchezza, salvaScattoRicchezzaSeMancante, scattiRicchezzaDisponibili, scattiRicchezza, slotRicchezza, righeScattoRicchezza,
   ultimoScattoMu, potaScattiRicchezza,
   deltaRicchezzaPerMu, totaliRicchezzaPerMu,
+  storicoRicchezzaGiocatore, posizioneRicchezza,
   leggiStatoConfini, salvaStatoConfini, registraEventiConfini, eventiConfini,
   potaEventiConfini, inizioSorveglianzaConfini,
   accessiNazione, haAccessoNazione, aggiungiAccessoNazione, togliAccessoNazione,

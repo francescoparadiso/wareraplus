@@ -144,7 +144,13 @@ export function candleChartSvg(serie, { w = 880, h = 320, fmt = (v) => String(v)
    stessa proporzione usata per disegnare, senza un rettangolo invisibile
    per candela. Guida e riquadro sono HTML sopra l'SVG, così non si
    deformano con lo stiramento. */
-export function attachCandleExplorer(wrap, serie, { w = 880, h = 320, fmt = (v) => String(v), lingua = 'it', t = (k) => k } = {}) {
+/* WarEra+ — `righe` (facoltativo): chi disegna una serie che NON è un
+   prezzo (le tasse della scheda Produzione, la ricchezza di un giocatore)
+   dice quali righe mettere nel riquadro, come [[etichetta, valore già
+   scritto], ...]. Senza, il riquadro è quello di sempre: apertura,
+   massimo, minimo, chiusura e campioni, che su una serie a un valore al
+   giorno ripeterebbero quattro volte lo stesso numero. */
+export function attachCandleExplorer(wrap, serie, { w = 880, h = 320, fmt = (v) => String(v), lingua = 'it', t = (k) => k, righe = null } = {}) {
   const svg = wrap?.querySelector('.wp-ecn-chart');
   if (!svg || !serie || serie.length < 2) return;
 
@@ -190,6 +196,13 @@ export function attachCandleExplorer(wrap, serie, { w = 880, h = 320, fmt = (v) 
       delta = `<div class="wp-ecn-tip-delta ${cls}">${segno} ${Math.abs(pct).toFixed(2)}% <span>${t('vsDay', { date: fmtGiorno(prec[0], lingua) })}</span></div>`;
     }
     const riga = (k2, v) => `<span>${t(k2)}</span><strong>${Number.isFinite(v) ? fmt(v) : '—'}</strong>`;
+    if (righe) {
+      const libere = righe(serie[i]).map(([et, val]) => `<span>${et}</span><strong>${val}</strong>`).join('');
+      return `
+      <div class="wp-ecn-tip-day">${dataLunga(g)}</div>
+      <div class="wp-ecn-tip-grid">${libere}</div>
+      ${delta}`;
+    }
     return `
       <div class="wp-ecn-tip-day">${dataLunga(g)}</div>
       <div class="wp-ecn-tip-grid">${riga('open', o)}${riga('high', hi)}${riga('low', lo)}${riga('close', c)}</div>

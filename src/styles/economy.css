@@ -428,3 +428,164 @@ body.light-theme .wp-ecn-type-product { background: rgba(9, 105, 218, .12); colo
   .wp-ecn-dprice strong { width: 100%; }
   .wp-ecn-chartbar { flex-wrap: wrap; row-gap: 6px; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ 2026-10-08 — schede PRODUZIONE e RICCHEZZA
+   ------------------------------------------------------------------
+   Classi proprie (`wp-ecn-pt*`, `wp-ecn-prow`) e non quelle della
+   tabella Prezzi: le regole del telefono qui sopra nascondono le
+   colonne PER POSIZIONE (nth-child), e su una tabella con altre
+   colonne toglierebbero proprio quella delle tasse.
+   ══════════════════════════════════════════════════════════════ */
+.wp-ecn-select {
+  appearance: none;
+  background: var(--wp-ov-surface-2, #161b22);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 8px;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 7px 10px;
+  max-width: 220px;
+}
+.wp-ecn-select:focus { outline: none; border-color: var(--wp-ov-accent, #3fb950); }
+
+.wp-ecn-ptable { margin-top: 12px; font-variant-numeric: tabular-nums; }
+.wp-ecn-pthead,
+.wp-ecn-prow {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.4fr) repeat(5, minmax(70px, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+.wp-ecn-pthead {
+  padding: 0 10px 7px;
+  border-bottom: 1px solid var(--wp-ov-border, #30363d);
+}
+.wp-ecn-pth {
+  appearance: none;
+  background: none;
+  border: none;
+  color: var(--wp-ov-text-dim, #8b949e);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  text-align: left;
+  padding: 0;
+}
+button.wp-ecn-pth { cursor: pointer; }
+.wp-ecn-pth.wp-ecn-num { text-align: right; }
+button.wp-ecn-pth:hover { color: var(--wp-ov-text, #e6edf3); }
+.wp-ecn-pth.active { color: var(--wp-ov-accent, #3fb950); }
+.wp-ecn-prow {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--wp-ov-border-soft, rgba(110, 118, 129, .18));
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .12s;
+}
+.wp-ecn-prow:hover { background: var(--wp-ov-surface-2, rgba(110, 118, 129, .09)); }
+.wp-ecn-prow:focus-visible { outline: 2px solid var(--wp-ov-accent, #3fb950); outline-offset: -2px; }
+.wp-ecn-prow-static, .wp-ecn-ptotal { cursor: default; }
+.wp-ecn-prow-static:hover, .wp-ecn-ptotal:hover { background: none; }
+.wp-ecn-ptotal { font-weight: 700; border-bottom: none; border-top: 1px solid var(--wp-ov-border, #30363d); }
+.wp-ecn-prow-mine { background: var(--wp-ov-surface-2, rgba(110, 118, 129, .12)); }
+.wp-ecn-pcountry { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.wp-ecn-pcountry span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-ecn-flag { width: 18px; height: 13px; object-fit: cover; border-radius: 2px; flex: 0 0 auto; vertical-align: -2px; }
+.wp-ecn-psec {
+  margin: 18px 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--wp-ov-text-dim, #8b949e);
+}
+
+/* Ricchezza: ricerca, candidati, scheda del giocatore */
+.wp-ecn-wform { margin: 0; }
+.wp-ecn-wcands {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+.wp-ecn-wcand {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 10px;
+  background: var(--wp-ov-surface-2, #161b22);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.wp-ecn-wcand:hover { border-color: var(--wp-ov-accent, #3fb950); }
+.wp-ecn-wcname { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.wp-ecn-wcname small { display: block; font-weight: 400; color: var(--wp-ov-text-dim, #8b949e); font-size: 11.5px; }
+.wp-ecn-wavatar {
+  position: relative;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex: 0 0 auto;
+  background: var(--wp-ov-border, #30363d);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700;
+}
+.wp-ecn-wavatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.wp-ecn-wavatar-lg { width: 52px; height: 52px; font-size: 20px; }
+.wp-ecn-whead { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 6px; }
+.wp-ecn-whead h3 { margin: 0; font-size: 19px; }
+.wp-ecn-wwho { flex: 1; min-width: 0; }
+.wp-ecn-wmine { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--wp-ov-accent, #3fb950); font-weight: 600; }
+.wp-ecn-wstats strong { font-size: 18px; font-weight: 800; }
+.wp-ecn-wstats small { display: block; font-size: 11px; }
+.wp-ecn-wdays { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }
+.wp-ecn-wdays ul { list-style: none; margin: 0; padding: 0; font-variant-numeric: tabular-nums; }
+.wp-ecn-wdays li {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--wp-ov-border-soft, rgba(110, 118, 129, .18));
+  font-size: 12.5px;
+}
+
+@media (max-width: 900px) {
+  .wp-ecn-pthead,
+  .wp-ecn-prow { grid-template-columns: minmax(110px, 1.4fr) repeat(4, minmax(58px, 1fr)); }
+  /* Via "con dipendenti": resta nel dettaglio della risorsa. */
+  .wp-ecn-pthead > *:nth-child(3),
+  .wp-ecn-prow > *:nth-child(3) { display: none; }
+  .wp-ecn-pcountries .wp-ecn-pthead > *:nth-child(3),
+  .wp-ecn-pcountries .wp-ecn-prow > *:nth-child(3) { display: block; }
+  .wp-ecn-pcountries .wp-ecn-pthead > *:nth-child(6),
+  .wp-ecn-pcountries .wp-ecn-prow > *:nth-child(6) { display: none; }
+}
+@media (max-width: 560px) {
+  /* Telefono: risorsa, dipendenti, tasse. Il resto è a un tocco, nella
+     scheda della risorsa. */
+  .wp-ecn-pthead,
+  .wp-ecn-prow { grid-template-columns: minmax(0, 1.5fr) minmax(58px, 1fr) minmax(64px, 1fr); gap: 6px; }
+  .wp-ecn-pthead > *:nth-child(2), .wp-ecn-prow > *:nth-child(2),
+  .wp-ecn-pthead > *:nth-child(5), .wp-ecn-prow > *:nth-child(5) { display: none; }
+  /* Nazioni della risorsa: nazione, dipendenti, tasse. */
+  .wp-ecn-pcountries .wp-ecn-pthead > *:nth-child(2), .wp-ecn-pcountries .wp-ecn-prow > *:nth-child(2),
+  .wp-ecn-pcountries .wp-ecn-pthead > *:nth-child(4), .wp-ecn-pcountries .wp-ecn-prow > *:nth-child(4) { display: none; }
+  .wp-ecn-pcountries .wp-ecn-pthead > *:nth-child(5), .wp-ecn-pcountries .wp-ecn-prow > *:nth-child(5) { display: block; }
+  .wp-ecn-select { max-width: none; flex: 1; min-width: 0; }
+  .wp-ecn-tools { flex-wrap: wrap; }
+  .wp-ecn-wdays { grid-template-columns: 1fr; }
+  /* Nome e nazione si prendono la riga: "il tuo personaggio" va sotto,
+     invece di spezzare "lv 45" su due righe. */
+  .wp-ecn-wwho { flex: 1 1 calc(100% - 64px); }
+  /* Cinque schede: tre sopra e due sotto, sempre tutte in vista (vedi la
+     regola delle tre schede più su, stesso motivo). */
+  .wp-ecn-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

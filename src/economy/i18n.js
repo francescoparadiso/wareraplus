@@ -12,8 +12,8 @@
 
 const DICT = {
   en: {
-    title: 'Economy', subtitle: 'Prices, production yields and the industrial optimizer, in one place.',
-    tabPrices: 'Goods prices', tabYields: 'Production yields', tabOptimizer: 'Industrial optimizer',
+    title: 'Economy', subtitle: 'Prices, production, yields, the industrial optimizer and player wealth, in one place.',
+    tabPrices: 'Goods prices', tabYields: 'Production yields', tabOptimizer: 'Industrial optimizer', tabProduction: 'Production', tabWealth: 'Player wealth',
     pricesTitle: 'Goods prices', pricesSub: 'What every resource is worth now, and where that price comes from.',
     search: 'Search a resource…', loading: 'Loading prices…', empty: 'No resource to show.',
     resource: 'Resource', price: 'Price', buyAt: 'Buy at', sellAt: 'Sell at', spread: 'Spread',
@@ -33,8 +33,8 @@ const DICT = {
     backToList: 'All resources', sortBy: 'Sort by', noBook: 'No orders',
   },
   it: {
-    title: 'Economia', subtitle: 'Prezzi, rendite di produzione e ottimizzatore industriale, in un posto solo.',
-    tabPrices: 'Prezzi dei beni', tabYields: 'Rendite di produzione', tabOptimizer: 'Ottimizzatore industriale',
+    title: 'Economia', subtitle: 'Prezzi, produzione, rendite, ottimizzatore industriale e ricchezza dei giocatori, in un posto solo.',
+    tabPrices: 'Prezzi dei beni', tabYields: 'Rendite di produzione', tabOptimizer: 'Ottimizzatore industriale', tabProduction: 'Produzione', tabWealth: 'Ricchezza',
     pricesTitle: 'Prezzi dei beni', pricesSub: 'Quanto vale adesso ogni risorsa, e da dove viene quel prezzo.',
     search: 'Cerca una risorsa…', loading: 'Carico i prezzi…', empty: 'Nessuna risorsa da mostrare.',
     resource: 'Risorsa', price: 'Prezzo', buyAt: 'Compri a', sellAt: 'Vendi a', spread: 'Forbice',
@@ -54,8 +54,8 @@ const DICT = {
     backToList: 'Tutte le risorse', sortBy: 'Ordina per', noBook: 'Nessun ordine',
   },
   es: {
-    title: 'Economía', subtitle: 'Precios, rendimientos de producción y optimizador industrial, en un solo sitio.',
-    tabPrices: 'Precios de bienes', tabYields: 'Rendimientos de producción', tabOptimizer: 'Optimizador industrial',
+    title: 'Economía', subtitle: 'Precios, producción, rendimientos, optimizador industrial y riqueza de los jugadores, en un solo sitio.',
+    tabPrices: 'Precios de bienes', tabYields: 'Rendimientos de producción', tabOptimizer: 'Optimizador industrial', tabProduction: 'Producción', tabWealth: 'Riqueza',
     pricesTitle: 'Precios de bienes', pricesSub: 'Cuánto vale ahora cada recurso, y de dónde viene ese precio.',
     search: 'Buscar un recurso…', loading: 'Cargando precios…', empty: 'Ningún recurso que mostrar.',
     resource: 'Recurso', price: 'Precio', buyAt: 'Compras a', sellAt: 'Vendes a', spread: 'Horquilla',
@@ -75,8 +75,8 @@ const DICT = {
     backToList: 'Todos los recursos', sortBy: 'Ordenar por', noBook: 'Sin órdenes',
   },
   de: {
-    title: 'Wirtschaft', subtitle: 'Preise, Produktionserträge und Industrie-Optimierer an einem Ort.',
-    tabPrices: 'Warenpreise', tabYields: 'Produktionserträge', tabOptimizer: 'Industrie-Optimierer',
+    title: 'Wirtschaft', subtitle: 'Preise, Produktion, Erträge, Industrie-Optimierer und Vermögen der Spieler, an einem Ort.',
+    tabPrices: 'Warenpreise', tabYields: 'Produktionserträge', tabOptimizer: 'Industrie-Optimierer', tabProduction: 'Produktion', tabWealth: 'Vermögen',
     pricesTitle: 'Warenpreise', pricesSub: 'Was jede Ressource jetzt wert ist – und woher der Preis kommt.',
     search: 'Ressource suchen…', loading: 'Preise werden geladen…', empty: 'Keine Ressource anzuzeigen.',
     resource: 'Ressource', price: 'Preis', buyAt: 'Kaufst du für', sellAt: 'Verkaufst du für', spread: 'Spanne',
@@ -96,8 +96,8 @@ const DICT = {
     backToList: 'Alle Ressourcen', sortBy: 'Sortieren nach', noBook: 'Keine Aufträge',
   },
   fr: {
-    title: 'Économie', subtitle: 'Prix, rendements de production et optimiseur industriel, au même endroit.',
-    tabPrices: 'Prix des biens', tabYields: 'Rendements de production', tabOptimizer: 'Optimiseur industriel',
+    title: 'Économie', subtitle: 'Prix, production, rendements, optimiseur industriel et richesse des joueurs, au même endroit.',
+    tabPrices: 'Prix des biens', tabYields: 'Rendements de production', tabOptimizer: 'Optimiseur industriel', tabProduction: 'Production', tabWealth: 'Richesse',
     pricesTitle: 'Prix des biens', pricesSub: "Ce que vaut chaque ressource maintenant, et d'où vient ce prix.",
     search: 'Chercher une ressource…', loading: 'Chargement des prix…', empty: 'Aucune ressource à afficher.',
     resource: 'Ressource', price: 'Prix', buyAt: 'Tu achètes à', sellAt: 'Tu vends à', spread: 'Écart',
@@ -117,8 +117,8 @@ const DICT = {
     backToList: 'Toutes les ressources', sortBy: 'Trier par', noBook: 'Aucun ordre',
   },
   nl: {
-    title: 'Economie', subtitle: 'Prijzen, productieopbrengsten en de industriële optimizer op één plek.',
-    tabPrices: 'Goederenprijzen', tabYields: 'Productieopbrengsten', tabOptimizer: 'Industriële optimizer',
+    title: 'Economie', subtitle: 'Prijzen, productie, opbrengsten, industriële optimizer en rijkdom van spelers, op één plek.',
+    tabPrices: 'Goederenprijzen', tabYields: 'Productieopbrengsten', tabOptimizer: 'Industriële optimizer', tabProduction: 'Productie', tabWealth: 'Rijkdom',
     pricesTitle: 'Goederenprijzen', pricesSub: 'Wat elke grondstof nu waard is, en waar die prijs vandaan komt.',
     search: 'Zoek een grondstof…', loading: 'Prijzen laden…', empty: 'Geen grondstof om te tonen.',
     resource: 'Grondstof', price: 'Prijs', buyAt: 'Je koopt voor', sellAt: 'Je verkoopt voor', spread: 'Spread',
@@ -138,8 +138,8 @@ const DICT = {
     backToList: 'Alle grondstoffen', sortBy: 'Sorteer op', noBook: 'Geen orders',
   },
   sv: {
-    title: 'Ekonomi', subtitle: 'Priser, produktionsavkastning och industrioptimeraren på ett ställe.',
-    tabPrices: 'Varupriser', tabYields: 'Produktionsavkastning', tabOptimizer: 'Industrioptimerare',
+    title: 'Ekonomi', subtitle: 'Priser, produktion, avkastning, industrioptimerare och spelares förmögenhet, på ett ställe.',
+    tabPrices: 'Varupriser', tabYields: 'Produktionsavkastning', tabOptimizer: 'Industrioptimerare', tabProduction: 'Produktion', tabWealth: 'Förmögenhet',
     pricesTitle: 'Varupriser', pricesSub: 'Vad varje resurs är värd nu, och varifrån priset kommer.',
     search: 'Sök en resurs…', loading: 'Laddar priser…', empty: 'Ingen resurs att visa.',
     resource: 'Resurs', price: 'Pris', buyAt: 'Du köper för', sellAt: 'Du säljer för', spread: 'Spread',
@@ -159,8 +159,8 @@ const DICT = {
     backToList: 'Alla resurser', sortBy: 'Sortera efter', noBook: 'Inga order',
   },
   pt: {
-    title: 'Economia', subtitle: 'Preços, rendimentos de produção e otimizador industrial, num só sítio.',
-    tabPrices: 'Preços dos bens', tabYields: 'Rendimentos de produção', tabOptimizer: 'Otimizador industrial',
+    title: 'Economia', subtitle: 'Preços, produção, rendimentos, otimizador industrial e riqueza dos jogadores, num só lugar.',
+    tabPrices: 'Preços dos bens', tabYields: 'Rendimentos de produção', tabOptimizer: 'Otimizador industrial', tabProduction: 'Produção', tabWealth: 'Riqueza',
     pricesTitle: 'Preços dos bens', pricesSub: 'Quanto vale agora cada recurso, e de onde vem esse preço.',
     search: 'Procurar um recurso…', loading: 'A carregar preços…', empty: 'Nenhum recurso a mostrar.',
     resource: 'Recurso', price: 'Preço', buyAt: 'Compras a', sellAt: 'Vendes a', spread: 'Diferencial',
@@ -180,8 +180,8 @@ const DICT = {
     backToList: 'Todos os recursos', sortBy: 'Ordenar por', noBook: 'Sem ordens',
   },
   ar: {
-    title: 'الاقتصاد', subtitle: 'الأسعار وعوائد الإنتاج والمُحسِّن الصناعي في مكان واحد.',
-    tabPrices: 'أسعار السلع', tabYields: 'عوائد الإنتاج', tabOptimizer: 'مُحسِّن صناعي',
+    title: 'الاقتصاد', subtitle: 'الأسعار والإنتاج والعوائد والمُحسِّن الصناعي وثروة اللاعبين، في مكان واحد.',
+    tabPrices: 'أسعار السلع', tabYields: 'عوائد الإنتاج', tabOptimizer: 'مُحسِّن صناعي', tabProduction: 'الإنتاج', tabWealth: 'الثروة',
     pricesTitle: 'أسعار السلع', pricesSub: 'كم تساوي كل مادة الآن، ومن أين جاء هذا السعر.',
     search: 'ابحث عن مادة…', loading: 'جارٍ تحميل الأسعار…', empty: 'لا توجد مادة لعرضها.',
     resource: 'المادة', price: 'السعر', buyAt: 'تشتري بـ', sellAt: 'تبيع بـ', spread: 'الفارق',

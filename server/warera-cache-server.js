@@ -209,6 +209,13 @@ const {
 const {
   initBattleTimeline, pollBattleTimeline, readBattleTimeline, statoBattleTimeline,
 } = require('./battleTimeline');
+// WarEra+ censimento aziende: per risorsa quante aziende, quanti dipendenti
+// e quante tasse sui salari incassa lo Stato dove operano. Un giro al
+// giorno di notte, partendo dai cittadini attivi del censimento. Vedi il
+// blocco in testa a server/companyCensus.js.
+const {
+  initCompanyCensus, runCompanyCensus, companyCensusDovuto, readCompanyCensus, statoCompanyCensus,
+} = require('./companyCensus');
 
 const app = express();
 const PORT = 3001;
@@ -412,6 +419,16 @@ initBattleTimeline({
   trpcBatch: (...args) => trpcBatch(...args),
   fetchActiveBattles: () => fetchActiveBattles(),
   readCache, writeCache,
+});
+
+// Censimento aziende: trpcBatch (le statistiche di lavoro vogliono la
+// chiave, quindi passano da useWorker = api2 col token del server) e il
+// nome del file del censimento cittadini, da cui prende i proprietari.
+// Getter per riferimento tardivo: CITIZENS_FILE e' dichiarata piu' in basso.
+initCompanyCensus({
+  trpcBatch: (...args) => trpcBatch(...args),
+  readCache, writeCache,
+  get citizensFile() { return CITIZENS_FILE; },
 });
 
 // ---------------------------------------------------------------------------
@@ -2409,6 +2426,13 @@ cron.schedule('5 2 * * *', () => {
   try { snapshotDay(); } catch (err) { console.error('[day-history] scatto fallito:', err.message); }
 }, { timezone: DAILY_DAMAGE_TZ });
 
+// WarEra+ censimento aziende: un giro al giorno alle 03:20 italiane, a
+// gioco vuoto (~1.500 richieste lente, un'ora scarsa). Dopo il cambio
+// giorno di gioco, quindi i salari di ieri sono una giornata intera.
+cron.schedule('20 3 * * *', () => {
+  runCompanyCensus().catch(err => console.error('[company-census] cron:', err.message));
+}, { timezone: DAILY_DAMAGE_TZ });
+
 // Primo giro completo all'avvio (in ordine: countries prima, perché tutto
 // il resto dipende dalla cache delle nazioni), così non si parte a vuoto.
 (async () => {
@@ -2469,6 +2493,13 @@ cron.schedule('5 2 * * *', () => {
   // l'indice c'è già e ci pensa il cron, così un pm2 restart non paga quel
   // conto ogni volta.
   if (!readCache('proxy-index', null)) pollProxyIndex();
+
+  // Censimento aziende: solo se non c'e' mai stata una fotografia, e senza
+  // await (un'ora di giro lento). Ai riavvii successivi ci pensa il cron
+  // delle 03:20, cosi' un pm2 restart a meta' pomeriggio non lo rifa'.
+  if (companyCensusDovuto()) {
+    runCompanyCensus({ motivo: 'primo avvio' }).catch(err => console.error('[company-census] avvio:', err.message));
+  }
 
   if (!readCache('region-contest-counts', null)) recomputeContestCounts();
   if (!readCache('region-war-intensity', null)) computeHistoricalWarIntensity();
@@ -2968,6 +2999,49 @@ app.get('/price-history', (req, res) => {
   res.json(readPriceHistory(days));
 });
 
+// Censimento aziende (server/companyCensus.js): per risorsa aziende,
+// dipendenti, salari e tasse sui salari. `item` aggiunge il dettaglio per
+// nazione di quella risorsa, `countryId` restringe tutto a una nazione.
+// `available: false` finche' il primo giro non e' finito.
+app.get('/company-census', (req, res) => {
+  const item = /^[A-Za-z0-9]{1,40}$/.test(String(req.query.item || '')) ? String(req.query.item) : null;
+  const countryId = /^[a-f0-9]{24}$/.test(String(req.query.countryId || '')) ? String(req.query.countryId) : null;
+  const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
+  res.json(readCompanyCensus({ item, countryId, days }));
+});
+
+// Lo storico ricchezza di un giocatore. L'archivio sta nel database di
+// warera-plus-api (la classifica mondiale fotografata ogni notte, dal 19
+// giugno), che qui si chiede sulla loopback. Sempre all'istanza LIVE, anche
+// dal deploy dev: e' un dato pubblico in sola lettura, e il database dev la
+// classifica mondiale non ce l'ha. Vedi il blocco "storico di un giocatore"
+// in server/plusApi/wealth.js.
+// Memoria di 10 minuti per giocatore: lo scatto e' uno al giorno, e chi
+// apre la vista la ridisegna piu' volte (lingua, periodo).
+const PLUS_API_LOCAL = (process.env.PLUS_API_LOCAL || 'http://127.0.0.1:3002').replace(/\/+$/, '');
+const PLAYER_WEALTH_TTL_MS = 10 * 60 * 1000;
+const PLAYER_WEALTH_MAX = 500;
+const _playerWealth = new Map();   // userId -> { at, body }
+app.get('/player-wealth', async (req, res) => {
+  const userId = String(req.query.userId || '');
+  if (!/^[a-f0-9]{24}$/.test(userId)) return res.status(400).json({ error: 'userId non valido' });
+  const memo = _playerWealth.get(userId);
+  if (memo && Date.now() - memo.at < PLAYER_WEALTH_TTL_MS) return res.json(memo.body);
+  try {
+    const r = await fetch(`${PLUS_API_LOCAL}/pubblico/ricchezza/giocatore/${userId}`, { signal: AbortSignal.timeout(8000) });
+    // 404 = warera-plus-api non ancora rideployato con la rotta: la vista
+    // lo tratta come "archivio non disponibile", non come un errore.
+    if (!r.ok) return res.status(r.status === 404 ? 404 : 502).json({ error: 'archivio ricchezza non disponibile' });
+    const body = await r.json();
+    if (_playerWealth.size >= PLAYER_WEALTH_MAX) _playerWealth.delete(_playerWealth.keys().next().value);
+    _playerWealth.set(userId, { at: Date.now(), body });
+    res.json(body);
+  } catch (err) {
+    console.warn('[player-wealth] area riservata non raggiungibile:', err.message);
+    res.status(502).json({ error: 'archivio ricchezza non disponibile' });
+  }
+});
+
 // La giornata storica (server/dayHistory.js): diplomazia e battaglie aperte
 // di UN giorno. Uno alla volta e non un blocco unico perche' il client ne
 // chiede uno per posizione dello slider che l'utente ferma, non uno per
@@ -3348,6 +3422,10 @@ app.get('/health', (req, res) => res.json({
   // Lavoro e tasse: archivio chiuso, `archivioChiuso: true` lo dichiara.
   // Se `nazioni` e' 0 l'import non e' mai stato fatto (import/lavoro.js).
   labour: statoLabour(),
+  // Censimento aziende: quando ha girato l'ultima volta e su quanto.
+  // `copertura.statsOk` < `statsAsked` vuol dire statistiche perse (di
+  // solito la chiave): i salari di quel giro sono sottostimati.
+  companyCensus: statoCompanyCensus(),
   // Storico politico: elezioni riassunte (complete) e i tre archivi che
   // accumulano, ognuno col suo `copreDa`.
   politicalHistory: statoPoliticalHistory(),

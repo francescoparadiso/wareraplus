@@ -45,7 +45,7 @@ const { buildVerifyRouter } = require('./verify');
 const { buildRolesRouter } = require('./roles');
 const { buildRequestsRouter } = require('./requests');
 const { buildPolicyRouter } = require('./policy');
-const { buildWealthRouter, initWealth, statoRicchezza } = require('./wealth');
+const { buildWealthRouter, buildWealthPublicRouter, initWealth, statoRicchezza } = require('./wealth');
 const { initWatcher, statoWatcher } = require('./watcher');
 // La mia nazione: quadro, confini sorvegliati, nemici. Vedi nazione.js.
 const { buildNazioneRouter } = require('./nazione');
@@ -161,6 +161,11 @@ app.use('/policy', buildPolicyRouter({ requireAuth, risolviIdentita, bloccaScrit
 // guerra. Un secondo elenco di permessi qui sarebbe un secondo elenco da
 // tenere allineato.
 app.use('/wealth', buildWealthRouter({ requireAuth, capacitaDi, filtroNazione }));
+
+// Lo storico ricchezza di un giocatore: PUBBLICO e in sola lettura (la
+// classifica è pubblica nel gioco). Lo chiede il cache-server sulla
+// loopback per servirlo come /player-wealth — vedi il blocco in wealth.js.
+app.use('/pubblico/ricchezza', buildWealthPublicRouter());
 
 // Quello che un CITTADINO può vedere della sua nazione: nessun potere di
 // gioco richiesto, solo il filtro nazione. È la parte dell'area che non

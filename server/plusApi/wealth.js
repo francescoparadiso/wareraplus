@@ -110,6 +110,7 @@ const { trpcBatch, trpcGet } = require('./wareraApi');
 const {
   salvaScattoRicchezza, salvaScattoRicchezzaSeMancante, scattiRicchezzaDisponibili, scattiRicchezza, slotRicchezza, righeScattoRicchezza,
   ultimoScattoMu, potaScattiRicchezza, deltaRicchezzaPerMu, totaliRicchezzaPerMu, audit,
+  storicoRicchezzaGiocatore, posizioneRicchezza,
 } = require('./db');
 
 // Il cache-server sta sulla stessa macchina e ascolta solo sulla loopback:
@@ -927,7 +928,81 @@ function buildWealthRouter({ requireAuth, capacitaDi, filtroNazione }) {
   return router;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   LO STORICO DI UN GIOCATORE — l'unica rotta PUBBLICA di questo modulo
+   -----------------------------------------------------------------------
+   «Come sta andando la MIA ricchezza?». Dal 2026-09-19 qui dentro c'è la
+   classifica mondiale intera, un giorno alla volta (dal 19 giugno grazie
+   all'import), quindi la risposta c'è per chiunque, non solo per i membri
+   delle unità italiane.
+
+   È pubblica, senza login, e non è una svista: `ranking.getRanking
+   {rankingType:'userWealth'}` è pubblico nel gioco, e chiunque può vedere
+   la ricchezza di chiunque in classifica. Qui c'è solo la stessa cosa nel
+   tempo. Quello che resta chiuso — il bilancio delle unità, chi le
+   comanda, i conti dell'area riservata — sta nel router di sopra.
+
+   Il browser NON la chiama direttamente: la serve il cache-server come
+   `/player-wealth`, che la chiede qui sulla loopback. Due motivi: il CORS
+   di questo processo è un elenco corto di origini (e il dev parlerebbe col
+   suo database, che la classifica mondiale non ce l'ha), e il cache-server
+   è già la porta da cui passano tutti i dati pubblici del tool.
+
+   Solo gli scatti GIORNALIERI: quelli di rodaggio ('2026-09-04T16') sono
+   dei soli membri delle unità e renderebbero la curva di un giocatore
+   seghettata per un giorno solo.
+   ═══════════════════════════════════════════════════════════════════════ */
+// Il primo scatto dell'archivio cambia solo con un import: ~60 ms di query
+// ricorsiva (slotRicchezza), quindi una volta ogni tanto e non a richiesta.
+let _archivioDal = { at: 0, slot: null };
+function archivioDal() {
+  if (Date.now() - _archivioDal.at > TTL_ELENCO_MS) _archivioDal = { at: Date.now(), slot: slotRicchezza()[0] || null };
+  return _archivioDal.slot;
+}
+
+function storicoGiocatore(warUserId) {
+  const righe = storicoRicchezzaGiocatore(warUserId);
+  let username = null, muId = null;
+  for (let i = righe.length - 1; i >= 0 && (!username || !muId); i--) {
+    if (!username && righe[i].username) username = righe[i].username;
+    if (!muId && righe[i].muId) muId = righe[i].muId;
+  }
+  const ultimo = righe[righe.length - 1] || null;
+  // La posizione di adesso, e quella di trenta giorni fa per dire se si
+  // sale o si scende. Due sole query: farla per ogni giorno vorrebbe dire
+  // passare tutta la tabella (vedi posizioneRicchezza).
+  const rif = ultimo ? righe.find((r) => r.slot >= giornoMeno(ultimo.slot, 30)) : null;
+  return {
+    userId: warUserId,
+    username,
+    muId,
+    days: righe.map((r) => [r.slot, r.wealth]),
+    from: righe[0]?.slot || null,
+    to: ultimo?.slot || null,
+    rank: ultimo ? { ...posizioneRicchezza(ultimo.slot, ultimo.wealth), slot: ultimo.slot } : null,
+    rankBefore: rif && rif !== ultimo ? { ...posizioneRicchezza(rif.slot, rif.wealth), slot: rif.slot } : null,
+    // Da che giorno l'archivio guarda tutta la classifica, per tutti: chi
+    // ha la curva più corta di così è entrato in classifica dopo.
+    archiveFrom: archivioDal(),
+  };
+}
+
+function buildWealthPublicRouter() {
+  const router = express.Router();
+  router.get('/giocatore/:userId', (req, res) => {
+    const { userId } = req.params;
+    if (!/^[a-f0-9]{24}$/.test(userId)) return res.status(400).json({ error: 'id_non_valido' });
+    try {
+      res.json(storicoGiocatore(userId));
+    } catch (err) {
+      console.error(`[wealth] storico ${userId} fallito:`, err.message);
+      res.status(500).json({ error: 'archivio_non_leggibile' });
+    }
+  });
+  return router;
+}
+
 // `scattoDovuto` esce insieme al resto perché è la sola parte di questo
 // modulo che gira da sola mentre nessuno guarda: poterla interrogare
 // senza far passare le ore è la differenza fra averla provata e sperarci.
-module.exports = { buildWealthRouter, initWealth, statoRicchezza, scatta, scattoDovuto };
+module.exports = { buildWealthRouter, buildWealthPublicRouter, initWealth, statoRicchezza, scatta, scattoDovuto };

@@ -17,7 +17,7 @@ cartella `server/` non esiste. La chiave sta una cartella più in su, in
 `warEra/serverOracle/`, da cui il `../` nel percorso.
 
 ```bash
-scp -i ../serverOracle/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/languages.js server/battleArchive.js server/moneyTransfers.js server/damageTimeline.js server/priceHistory.js server/dayHistory.js server/labourHistory.js server/citizenMoves.js server/allianceHistory.js server/politicalHistory.js server/battleTimeline.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
+scp -i ../serverOracle/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/languages.js server/battleArchive.js server/moneyTransfers.js server/damageTimeline.js server/priceHistory.js server/dayHistory.js server/labourHistory.js server/citizenMoves.js server/allianceHistory.js server/politicalHistory.js server/battleTimeline.js server/companyCensus.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
 ```
 
 Manda **tutti** i moduli, non il solo `warera-cache-server.js`: i loro
@@ -30,7 +30,7 @@ che si ferma alla sintassi: eseguire il server per provarlo aprirebbe la
 porta 3001 e i cron accanto al processo pm2 gia' vivo.
 
 ```bash
-ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && for f in warera-cache-server.js proxyIndex.js languages.js battleArchive.js moneyTransfers.js damageTimeline.js priceHistory.js dayHistory.js labourHistory.js citizenMoves.js allianceHistory.js politicalHistory.js battleTimeline.js; do node --check \$f || exit 1; done && echo PREFLIGHT-OK"
+ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && for f in warera-cache-server.js proxyIndex.js languages.js battleArchive.js moneyTransfers.js damageTimeline.js priceHistory.js dayHistory.js labourHistory.js citizenMoves.js allianceHistory.js politicalHistory.js battleTimeline.js companyCensus.js; do node --check \$f || exit 1; done && echo PREFLIGHT-OK"
 ```
 
 Solo se stampa `PREFLIGHT-OK`:
@@ -671,3 +671,36 @@ curl -s https://warera-oracle.duckdns.org/warera-plus-api/health | python3 -m js
 # `giocatoriUltimoScatto` è il numero da guardare: decine di migliaia = la
 # classifica sta entrando, qualche centinaio = è rimasto solo il giro unità.
 ```
+
+## Round 8 — censimento aziende (`companyCensus.js`) e storico ricchezza (`/player-wealth`)
+
+Due rotte nuove per due schede nuove di Economia (Produzione, Ricchezza).
+
+**`/company-census`** — per risorsa: aziende di proprietari attivi, quante
+con dipendenti, dipendenti, salari e tasse sui salari al giorno; `?item=`
+aggiunge il dettaglio per nazione, `?countryId=` restringe a una nazione.
+Un giro al giorno alle **03:20 italiane** (~1.500 richieste lente, un'ora
+scarsa, tutte da api2 con la chiave): parte dai cittadini del censimento
+orario, chiede le loro aziende e poi `work.getStatsByCompany` per le sole
+aziende con dipendenti. Al **primo avvio** senza fotografia parte subito,
+senza aspettare la notte. Il motivo per cui non si sfoglia l'elenco di
+tutte le aziende (160.000+, ordinato per un campo che non è l'attività)
+sta in testa al file.
+
+⚠️ Le statistiche di lavoro sono **token-gated**: senza `WARERA_API_TOKEN`
+in pm2 i salari restano a zero. Si vede in `/health`:
+
+```bash
+curl -s https://warera-oracle.duckdns.org/warera-cache/health | python3 -m json.tool | grep -A14 companyCensus
+# copertura.statsOk deve essere uguale (o quasi) a copertura.statsAsked.
+```
+
+**`/player-wealth?userId=`** — lo storico ricchezza di un giocatore. Il
+dato non è qui: sta nel database di **warera-plus-api** (la classifica
+mondiale fotografata ogni notte), che il cache-server chiede sulla
+loopback a `http://127.0.0.1:3002/pubblico/ricchezza/giocatore/:id`
+(variabile `PLUS_API_LOCAL` per cambiarlo). Sempre l'istanza LIVE, anche
+per il deploy dev: è un dato pubblico in sola lettura e il database dev la
+classifica mondiale non ce l'ha. Quindi servono **due deploy**: questo
+file e `server/plusApi/` (vedi il suo README). Con uno solo dei due la
+rotta risponde 404/502 e la scheda mostra la sola ricchezza di adesso.

@@ -261,6 +261,20 @@ wareraPlus/
 │   │                              in memoria, chiuse in cache/battle-timeline/<id>.json.gz,
 │   │                              nessuna potatura (~250 MB/anno stimati).
 │   │                              Endpoint: /battle-timeline?battleId=.
+│   ├── companyCensus.js        ← NUOVO — per risorsa: aziende di proprietari
+│   │                              ATTIVI, quante con dipendenti, dipendenti,
+│   │                              salari e TASSE SUI SALARI (salari × taxes.income
+│   │                              della nazione dove opera l'azienda). Un giro al
+│   │                              giorno alle 03:20 italiane: cittadini del censimento
+│   │                              → company.getCompanies {userId} → getById → e solo
+│   │                              per chi ha dipendenti work.getStatsByCompany
+│   │                              (TOKEN-GATED, 31 giorni di salari a ritroso).
+│   │                              ⚠️ NON si sfoglia l'elenco di tutte le aziende:
+│   │                              sono 160.000+ e l'ordine (`movedUpAt`) NON è
+│   │                              l'ultima produzione (~1.000 "mosse" al giorno).
+│   │                              ⚠️ Non conta la tassa sul lavoro in proprio né
+│   │                              quella di mercato, e la vista lo scrive.
+│   │                              Endpoint: /company-census.
 │   ├── import/                 ← NUOVO — import UNA TANTUM da un archivio esterno
 │   │   ├── bonifici.js            (il dump PostgreSQL di un altro tool della
 │   │   ├── ricchezza.js            comunità, passato dal suo autore). Servono solo
@@ -465,11 +479,28 @@ wareraPlus/
     │   │                          ordini li chiede a market/api.js (stessa cache,
     │   │                          stesso TTL: aprire questa scheda dopo le Rendite
     │   │                          non ricompra niente), lo storico a /price-history.
-    │   └── candleChart.js        ← NUOVO — le candele (SVG a mano). ⚠️ NON sostituisce
-    │                              market/priceChart.js: quello disegna le sole
-    │                              chiusure perché sta in una riga alta 88px, questo
-    │                              massimo/minimo/corpo perché ha una pagina. Un
-    │                              giorno senza candela è un BUCO in entrambi.
+    │   ├── candleChart.js        ← NUOVO — le candele (SVG a mano). ⚠️ NON sostituisce
+    │   │                          market/priceChart.js: quello disegna le sole
+    │   │                          chiusure perché sta in una riga alta 88px, questo
+    │   │                          massimo/minimo/corpo perché ha una pagina. Un
+    │   │                          giorno senza candela è un BUCO in entrambi.
+    │   │                          Disegna anche le serie a un valore al giorno
+    │   │                          (mode 'line'): l'esploratore accetta `righe` per
+    │   │                          non mostrare apertura/massimo/minimo di una tassa.
+    │   ├── production.js         ← NUOVO (2026-10-08) — scheda PRODUZIONE: per
+    │   │                          risorsa aziende, dipendenti, salari e tasse sui
+    │   │                          salari al giorno, filtro per nazione, e per ogni
+    │   │                          risorsa in quali nazioni si produce. Tutto da
+    │   │                          /company-census, NESSUN ripiego (servirebbero
+    │   │                          ~50.000 chiamate e la chiave): senza server lo dice.
+    │   ├── playerWealth.js       ← NUOVO (2026-10-08) — scheda RICCHEZZA: cerchi
+    │   │                          un giocatore (search.searchUsers + getUserLite,
+    │   │                          pubbliche) e vedi la sua curva giorno per giorno
+    │   │                          da /player-wealth, giorni migliori e peggiori,
+    │   │                          posizione. "Sono io" salva solo l'id in
+    │   │                          localStorage (`we_my_player`). ⚠️ La differenza
+    │   │                          fra due giorni è il saldo NETTO, non "spese".
+    │   └── i18nPlus.js           ← dizionario (9 lingue) delle due schede nuove
     ├── eco/                      ← NUOVO — Ottimizzatore industriale (port del bot Discord
     │   │                            "WarEra Eco Optimizer" di ArgusIA — attribuzione
     │   │                            obbligatoria in cima alla vista). Dal 2026-09-19
@@ -785,7 +816,7 @@ serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`
 `/citizen-moves`, `/battle-timeline`,
 `/daily-damage`, `/damage-timeline`, `/price-history`, `/day-history`,
 `/alliance-history`,
-`/labour-history`,
+`/labour-history`, `/company-census`, `/player-wealth`,
 `/political-history`, `/political-overview`, `/presidents`,
 `/ticker` + `/ticker/summary`,
 `/region-history/{at,range,events,contested,war-intensity}`, `/alliances`,
@@ -1053,6 +1084,25 @@ settembre 2026) ci sono subito solo se si lancia anche `import/prezzi.js`,
 perché `itemTrading.getPrices` dice quanto costa ADESSO e ieri non esiste da
 nessuna parte. Stesso vincolo di bonifici e ricchezza, stessa soluzione: un
 archivio di terzi importato una volta sola.
+
+Le schede **Produzione** e **Ricchezza** di Economia (`src/economy/production.js`,
+`src/economy/playerWealth.js`) dipendono da DUE deploy diversi, e conviene
+saperlo prima di crederle rotte:
+
+- **Produzione** vuole il cache-server con `server/companyCensus.js`. Senza,
+  la scheda dice "non disponibile" e basta. Dopo il deploy il primo giro
+  parte subito (un'ora scarsa, `available: false` finché non finisce), poi
+  uno a notte alle 03:20. Il primo giro riempie 31 giorni di salari a
+  ritroso, ma solo delle aziende che hanno dipendenti OGGI: quei giorni la
+  vista li dichiara "ricostruiti" (`measuredFrom`). Aziende e dipendenti
+  invece sono una fotografia e la loro storia si accumula dal deploy.
+- **Ricchezza** vuole il cache-server (`/player-wealth`) E warera-plus-api
+  (la rotta pubblica `/pubblico/ricchezza/giocatore/:id`, chiesta sulla
+  loopback all'istanza LIVE anche dal deploy dev). Con uno solo dei due la
+  scheda mostra la ricchezza di adesso (da getUserLite, che funziona sempre)
+  e dichiara che l'archivio manca. Lo storico c'è subito: è la classifica
+  mondiale che plusApi fotografa ogni notte dal 2026-09-19, più l'import dal
+  19 giugno.
 
 La **time machine** mostrava solo l'ownership per una ragione scritta in
 testa a `src/app/timeMachine.js`: gli altri dati «non sono mai stati salvati
