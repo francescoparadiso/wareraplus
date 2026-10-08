@@ -61,6 +61,19 @@
    completare), e ognuno porta il giorno in cui è stato misurato: la vista
    distingue "misurato il giorno dopo" da "ricostruito a ritroso".
 
+   ⚠️ E LA RICOSTRUZIONE SI FERMA A 7 GIORNI (misurato al primo giro, il
+   2026-10-08). Sui giorni che si sovrappongono all'archivio chiuso "Lavoro
+   e tasse" il censimento ricostruito vedeva il 29% dei salari veri (8
+   settembre: 422.000 contro 1.437.000), e non per un errore: i pagamenti
+   di salario sono scesi da ~530.000 al giorno a ~200.000, quindi gran
+   parte delle aziende che pagavano a settembre oggi non ha dipendenti e
+   non viene interrogata. Un mese di ricostruzione disegnava un +70% di
+   gettito in trenta giorni che in buona parte non c'era. I giorni recenti
+   invece tornano (7 ottobre: 711.000 contro ~800.000 stimati dal flusso
+   delle transazioni). Quindi: si ricostruisce al massimo BACKFILL_GIORNI
+   indietro (vale sia per il primo giro sia per una notte saltata), e il
+   resto della curva si accumula un giorno alla volta.
+
    Aziende e dipendenti, invece, sono una fotografia: dicono com'è
    adesso, e la loro storia si ACCUMULA un giorno alla volta dal deploy,
    come i bonifici e la ricchezza.
@@ -99,6 +112,9 @@ const MIN_RISPETTO_PRIMA = 0.7;
 // Fino a quanti giorni la route manda indietro, e quanti ne tiene la media.
 const MAX_GIORNI = 365;
 const GIORNI_MEDIA = 7;
+// Quanto indietro si può RICOSTRUIRE un giorno mai misurato (vedi "la
+// ricostruzione si ferma a 7 giorni" in testa).
+const BACKFILL_GIORNI = 7;
 
 let _inCorso = false;
 let _mem = null;            // copia in memoria del file: lo si rilegge a ogni richiesta
@@ -140,6 +156,13 @@ function _vuoto() {
 function _read() {
   if (_mem) return _mem;
   _mem = { ..._vuoto(), ...deps.readCache(FILE, _vuoto()) };
+  // Pulizia dei giorni ricostruiti troppo indietro, scritti prima che la
+  // regola esistesse (il primo giro del 2026-10-08 ne aveva scritti 30).
+  // In memoria subito; su disco al prossimo giro.
+  for (const g of Object.keys(_mem.wages)) {
+    const m = _mem.measured[g];
+    if (m && g < giornoMeno(m, BACKFILL_GIORNI)) { delete _mem.wages[g]; delete _mem.measured[g]; }
+  }
   return _mem;
 }
 
@@ -277,9 +300,13 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
     // giorno di due settimane fa, ne sa MENO di quello di allora (vedi
     // "sopravvivenza" in testa). L'eccezione è ieri, che nessun giro
     // precedente ha potuto vedere intero.
+    // E un giorno MAI misurato si ricostruisce solo se è abbastanza
+    // recente: più indietro mancano troppe aziende per chiamarlo un dato.
+    const limiteRicostruzione = giornoMeno(oggiUtc, BACKFILL_GIORNI);
     let giorniScritti = 0;
     for (const [g, perCode] of Object.entries(perGiorno)) {
       if (store.wages[g] && g !== ieriUtc) continue;
+      if (!store.wages[g] && g < limiteRicostruzione) continue;
       const giorno = {};
       for (const [code, perCid] of Object.entries(perCode)) {
         const out = giorno[code] = {};
