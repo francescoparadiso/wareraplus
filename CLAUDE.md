@@ -368,7 +368,7 @@ wareraPlus/
     │   ├── migrationFlows.js    ← NUOVO — vista mappa "Migrazioni": saldo dei cambi di
 │   │                          cittadinanza per nazione (rosso perde, verde guadagna,
 │   │                          assoluto o ogni 100 cittadini 10+) e, cliccando una
-│   │                          nazione, frecce curve verso dove vanno i suoi giocatori
+│   │                          nazione, frecce curve DALLA CAPITALE verso dove vanno i suoi giocatori
 │   │                          (arancio) e da dove arrivano (azzurro). Una richiesta a
 │   │                          /migration-flows per tutto il mondo, NESSUN ripiego (non
 │   │                          esiste una chiamata WarEra equivalente). Riepilogo in

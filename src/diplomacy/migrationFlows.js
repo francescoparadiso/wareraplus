@@ -231,19 +231,38 @@ export function focusFlows(id = mig().focus) {
 // ══════════════════ FRECCE ══════════════════
 
 let _anchorsFrom = null;
+let _anchorsRegions = null;
 let _anchors = new Map();
 
-/** Dove parte e arriva una freccia: il punto dell'etichetta della nazione
- *  (sta dentro il territorio principale anche per le nazioni a forma di
- *  mezzaluna), altrimenti il centroide dei marker battaglia. */
+/** Dove parte e arriva una freccia (richiesta dell'utente: «nella
+ *  capitale»), in quest'ordine:
+ *   1. la capitale, se la nazione la possiede ancora — `position` della
+ *      regione con isCapital, cioè la città vera (state.regionData, già
+ *      in memoria, zero fetch);
+ *   2. il punto dell'etichetta della nazione, se la capitale è OCCUPATA:
+ *      la freccia partirebbe da dentro il paese che l'ha presa, e la si
+ *      leggerebbe come sua. Il 10 ott 2026 erano 55 capitali su 180;
+ *   3. la capitale originaria per chi non ha più territorio (niente
+ *      etichetta): è l'unico posto della mappa che è ancora "suo";
+ *   4. il centroide dei marker battaglia. */
 function anchorOf(id) {
-  if (_anchorsFrom !== state.labelsData) {
+  if (_anchorsFrom !== state.labelsData || _anchorsRegions !== state.regionData) {
     _anchorsFrom = state.labelsData;
-    _anchors = new Map();
+    _anchorsRegions = state.regionData;
+    const labels = new Map();
     for (const l of state.labelsData || []) {
       const cId = l.properties?.countryId;
-      if (cId && Array.isArray(l.coordinates) && !_anchors.has(cId)) _anchors.set(cId, l.coordinates);
+      if (cId && Array.isArray(l.coordinates) && !labels.has(cId)) labels.set(cId, l.coordinates);
     }
+    const held = new Map(), original = new Map();
+    for (const r of Object.values(state.regionData || {})) {
+      if (!r?.isCapital || !Array.isArray(r.position)) continue;
+      if (r.country && r.country === r.initialCountry) held.set(r.country, r.position);
+      if (r.initialCountry) original.set(r.initialCountry, r.position);
+    }
+    _anchors = new Map(labels);
+    for (const [cId, pos] of original) if (!_anchors.has(cId)) _anchors.set(cId, pos);
+    for (const [cId, pos] of held) _anchors.set(cId, pos);
   }
   return _anchors.get(id) || state.centroids?.get(id) || null;
 }
