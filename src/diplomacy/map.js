@@ -27,6 +27,8 @@ import { buildPoliticsColorExpression } from './politicsHeatmap.js';
 import { buildTravelColorExpression, syncTravelOverlay, onTravelRegionClick } from './travelDistance.js';
 // WarEra+ vista Migrazioni: saldo per nazione + frecce della nazione cliccata
 import { buildMigrationColorExpression, syncMigrationOverlay, onMigrationCountryClick, clearMigrationFocus } from './migrationFlows.js';
+// WarEra+ frecce del danno sulla battaglia aperta (heatmap battaglia)
+import { syncBattleFlowOverlay } from './battleFlows.js';
 import { buildWeeklyDamageColorExpression } from './weeklyDamage.js';
 import { buildSphereColorExpression } from './sphereOfInfluence.js';
 import { buildBattleHeatmapColorExpression } from './battleHeatmap.js';
@@ -685,6 +687,8 @@ export function renderMap() {
   syncTravelOverlay();
   // WarEra+: stesso patto per le frecce della vista Migrazioni.
   syncMigrationOverlay();
+  // WarEra+: e per quelle del danno sulla battaglia aperta (battleFlows.js).
+  syncBattleFlowOverlay();
 
   // WarEra+ perf: qui c'era una ricostruzione di centinaia di Feature
   // (_buildLabelsWithPopulation) ri-pubblicate su SRC_LABELS nelle modalità

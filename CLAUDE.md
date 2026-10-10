@@ -309,7 +309,17 @@ wareraPlus/
     │   ├── ui.js, diplomacy.js, labels.js, patterns.js
     │   ├── alliances.js, naps.js, sphereOfInfluence.js, blocs.js (dead, vedi sotto)
     │   ├── battleMarkers.js, battleHeatmap.js, battleFront.js, battleFront/
-    │   ├── battleSpending.js  ← NUOVO — quanto è costata una battaglia: taglie
+    │   ├── battleFlows.js     ← NUOVO — al clic su una battaglia: frecce dalla
+│   │                        CAPITALE di ogni nazione (sopra l'1% del suo lato,
+│   │                        come la heatmap) alla regione. Spessore ∝ √danno,
+│   │                        numero = quota di lato (lo stesso delle etichette).
+│   │                        Animazione: trattini che scorrono (line-dasharray
+│   │                        ciclata) + onde d'impatto sulla regione. Zero fetch,
+│   │                        legge state.battleHeatmapData.
+│   ├── flowGeometry.js    ← NUOVO — condivisa da battleFlows e migrationFlows:
+│   │                        punto di aggancio di una nazione (capitale se sua,
+│   │                        se no etichetta) e archi in Mercatore.
+│   ├── battleSpending.js  ← NUOVO — quanto è costata una battaglia: taglie
     │   │                        pagate (classifica "money" per nazione) + contratti
     │   │                        mercenari aggiudicati, per schieramento. Tre procedure
     │   │                        PUBBLICHE su api6 (nessun consumo del Worker), un

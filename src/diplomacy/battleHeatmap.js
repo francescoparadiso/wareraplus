@@ -417,6 +417,8 @@ export async function setBattleHeatmap(battleId) {
       battleId,
       battleName,
       region: regionName,
+      // WarEra+: dove arrivano le frecce del danno (battleFlows.js).
+      regionId: regionId || null,
       nations,
       maxDamage,
       rankingRaw: rankingData,

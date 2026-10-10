@@ -591,6 +591,7 @@ export function updateDynamicLegend() {
           <span style="font-size:10px; color:${THEMES[state.theme].TEXT_SECONDARY};">${fmtNumber(totalDefenderDmg)}</span>
         </div>
         <div style="font-size:10px; color:${THEMES[state.theme].TEXT_SECONDARY}; opacity:.8; margin-top:4px;">Share = nation damage / side total</div>
+        <div style="font-size:10px; color:${THEMES[state.theme].TEXT_SECONDARY}; opacity:.8; margin-top:2px;">Arrows: from each nation's capital to the region · thickness = damage dealt, number = share of its side</div>
       </div>
       <button id="exit-heatmap-btn" style="margin-top:8px; background:#ff4444; border:none; color:#fff; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:600; width:100%; transition:background 0.15s;">✕ Exit Heatmap</button>
     `;

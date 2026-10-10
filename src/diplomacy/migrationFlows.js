@@ -36,6 +36,7 @@
 import { state } from './state.js';
 import { COLORS, WARERA_CACHE_BASE } from './config.js';
 import { trackEvent } from '../shared/analytics.js';
+import { countryAnchor, arc, groundAt, alongArc } from './flowGeometry.js';
 
 export const MIGRATION_DAYS = [1, 7, 30];
 export const OUT_COLOR = '#ff9f43';   // partenze: arancio, non si confonde col rosso del saldo
@@ -230,83 +231,6 @@ export function focusFlows(id = mig().focus) {
 
 // ══════════════════ FRECCE ══════════════════
 
-let _anchorsFrom = null;
-let _anchorsRegions = null;
-let _anchors = new Map();
-
-/** Dove parte e arriva una freccia (richiesta dell'utente: «nella
- *  capitale»), in quest'ordine:
- *   1. la capitale, se la nazione la possiede ancora — `position` della
- *      regione con isCapital, cioè la città vera (state.regionData, già
- *      in memoria, zero fetch);
- *   2. il punto dell'etichetta della nazione, se la capitale è OCCUPATA:
- *      la freccia partirebbe da dentro il paese che l'ha presa, e la si
- *      leggerebbe come sua. Il 10 ott 2026 erano 55 capitali su 180;
- *   3. la capitale originaria per chi non ha più territorio (niente
- *      etichetta): è l'unico posto della mappa che è ancora "suo";
- *   4. il centroide dei marker battaglia. */
-function anchorOf(id) {
-  if (_anchorsFrom !== state.labelsData || _anchorsRegions !== state.regionData) {
-    _anchorsFrom = state.labelsData;
-    _anchorsRegions = state.regionData;
-    const labels = new Map();
-    for (const l of state.labelsData || []) {
-      const cId = l.properties?.countryId;
-      if (cId && Array.isArray(l.coordinates) && !labels.has(cId)) labels.set(cId, l.coordinates);
-    }
-    const held = new Map(), original = new Map();
-    for (const r of Object.values(state.regionData || {})) {
-      if (!r?.isCapital || !Array.isArray(r.position)) continue;
-      if (r.country && r.country === r.initialCountry) held.set(r.country, r.position);
-      if (r.initialCountry) original.set(r.initialCountry, r.position);
-    }
-    _anchors = new Map(labels);
-    for (const [cId, pos] of original) if (!_anchors.has(cId)) _anchors.set(cId, pos);
-    for (const [cId, pos] of held) _anchors.set(cId, pos);
-  }
-  return _anchors.get(id) || state.centroids?.get(id) || null;
-}
-
-// L'arco si calcola in Mercatore, non in gradi: è così che la mappa lo
-// disegna, e una curva fatta in latitudine sembrerebbe storta al nord.
-const D2R = Math.PI / 180;
-const toY = lat => Math.log(Math.tan(Math.PI / 4 + lat * D2R / 2)) / D2R;
-const toLat = y => (2 * Math.atan(Math.exp(y * D2R)) - Math.PI / 2) / D2R;
-
-/** Arco da a a b che piega a SINISTRA del verso di marcia: andata e
- *  ritorno fra le stesse due nazioni stanno così su due lati, non uno
- *  sopra l'altro. Restituisce anche il punto a metà, per il numero. */
-function arc(a, b, steps = 28) {
-  const ax = a[0], ay = toY(a[1]), bx = b[0], by = toY(b[1]);
-  const dx = bx - ax, dy = by - ay;
-  const len = Math.hypot(dx, dy) || 1;
-  const bend = Math.min(0.28, 0.12 + 4 / len) * len;
-  const cx = (ax + bx) / 2 - dy / len * bend;
-  const cy = (ay + by) / 2 + dx / len * bend;
-  const pt = (t) => {
-    const u = 1 - t;
-    return [u * u * ax + 2 * u * t * cx + t * t * bx, toLat(u * u * ay + 2 * u * t * cy + t * t * by)];
-  };
-  const coords = [];
-  for (let i = 0; i <= steps; i++) coords.push(pt(i / steps));
-  return { coords, mid: pt(0.5) };
-}
-
-// Mercatore dritto da a a b, per l'ombra "a terra" di una cometa.
-function groundAt(a, b, t) {
-  const ay = toY(a[1]), by = toY(b[1]);
-  return [a[0] + (b[0] - a[0]) * t, toLat(ay + (by - ay) * t)];
-}
-
-/** Punto a frazione t (0–1) lungo una polilinea a passi uniformi. */
-function alongArc(coords, t) {
-  const f = Math.max(0, Math.min(1, t)) * (coords.length - 1);
-  const i = Math.min(coords.length - 2, Math.floor(f));
-  const k = f - i;
-  const p = coords[i], q = coords[i + 1];
-  return [p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k];
-}
-
 // Gli archi disegnati adesso, per l'animazione: la geometria si calcola
 // una volta sola in overlayFeatures, il giro dei fotogrammi la rilegge.
 let _fxArcs = [];
@@ -315,7 +239,7 @@ function overlayFeatures() {
   const s = mig();
   _fxArcs = [];
   if (!s.focus || !s.data) return [];
-  const home = anchorOf(s.focus);
+  const home = countryAnchor(s.focus);
   if (!home) return [];
   const { out, in: inn } = focusFlows(s.focus);
   const drawOut = s.dir !== 'in' ? out.slice(0, MAX_ARROWS) : [];
@@ -337,8 +261,8 @@ function overlayFeatures() {
     const end = kind === 'out' ? to : from;
     feats.push({ type: 'Feature', properties: { kind, role: 'end' }, geometry: { type: 'Point', coordinates: end } });
   };
-  for (const r of drawOut) add('out', home, anchorOf(r.id), r.n);
-  for (const r of drawIn) add('in', anchorOf(r.id), home, r.n);
+  for (const r of drawOut) add('out', home, countryAnchor(r.id), r.n);
+  for (const r of drawIn) add('in', countryAnchor(r.id), home, r.n);
   feats.push({ type: 'Feature', properties: { role: 'origin' }, geometry: { type: 'Point', coordinates: home } });
   return feats;
 }
