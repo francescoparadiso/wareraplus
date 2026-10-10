@@ -310,9 +310,10 @@ wareraPlus/
     │   ├── alliances.js, naps.js, sphereOfInfluence.js, blocs.js (dead, vedi sotto)
     │   ├── battleMarkers.js, battleHeatmap.js, battleFront.js, battleFront/
     │   ├── battleFlows.js     ← NUOVO — al clic su una battaglia: frecce dalla
-│   │                        CAPITALE di ogni nazione (sopra l'1% del suo lato,
-│   │                        come la heatmap) alla regione. Spessore ∝ √danno,
-│   │                        numero = quota di lato (lo stesso delle etichette).
+│   │                        CAPITALE delle prime 5 nazioni per lato (sopra il
+│   │                        5% del lato: con tutte le ≥1% era illeggibile) alla
+│   │                        regione. Spessore ∝ √danno, nessun numero (la quota
+│   │                        la scrive già la heatmap sulla nazione).
 │   │                        Animazione: trattini che scorrono (line-dasharray
 │   │                        ciclata) + onde d'impatto sulla regione. Zero fetch,
 │   │                        legge state.battleHeatmapData.

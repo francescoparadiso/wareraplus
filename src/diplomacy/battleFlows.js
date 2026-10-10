@@ -8,24 +8,21 @@
 
    Zero fetch: chi ha combattuto e quanto lo sa già la heatmap della
    battaglia (battleHeatmap.js → state.battleHeatmapData, rinfrescato
-   ogni 10 s con la battaglia aperta). Le frecce partono dalle stesse
-   nazioni che la heatmap colora — `highlightedIds`, almeno l'1% del
-   danno del proprio lato — così mappa, nomi e frecce dicono la stessa
-   cosa. Il punto di partenza è la capitale (flowGeometry.js), quello
-   d'arrivo la `position` della regione (state.regionData).
+   ogni 10 s con la battaglia aperta). Il punto di partenza è la
+   capitale (flowGeometry.js), quello d'arrivo la `position` della
+   regione (state.regionData).
 
-   ── QUALE PERCENTUALE ──────────────────────────────────────────
-   Due misure diverse, ognuna dove serve:
-     · lo SPESSORE segue il danno vero (√ danno / danno del primo), così
-       le frecce dei due lati si confrontano fra loro: sulla quota di
-       lato, l'unico difensore di una battaglia a senso unico farebbe
-       100% e sembrerebbe pesare quanto tutto l'attacco;
-     · il NUMERO è la quota sul proprio lato, lo stesso che le etichette
-       della heatmap scrivono sulla nazione (labels.js) e la legenda
-       («Share = nation damage / side total»). Con la quota sul totale
-       la stessa nazione mostrava due percentuali diverse a un dito di
-       distanza.
-   La legenda dice tutte e due le cose.
+   ── CHI HA UNA FRECCIA (feedback utente: «troppo cluttered») ────
+   La prima versione ne tirava una per ogni nazione colorata dalla
+   heatmap (≥1% del lato): 24 frecce e 24 numeri su una battaglia
+   grande, un groviglio. Ora solo chi pesa davvero: al massimo
+   MAX_PER_SIDE per lato, e solo sopra MIN_SIDE_SHARE del proprio lato.
+   Le altre restano colorate dalla heatmap e nell'elenco "All
+   contributors", senza freccia.
+   Niente numeri sulle frecce: la quota di lato la scrive già la heatmap
+   sull'etichetta della nazione (labels.js), da cui la freccia parte.
+   Lo SPESSORE segue il danno vero (√ danno / danno del primo), non la
+   quota di lato: così le frecce dei due lati si confrontano fra loro.
 
    ── ANIMAZIONE ─────────────────────────────────────────────────
    Niente comete (quelle sono delle migrazioni). Qui il danno SCORRE:
@@ -46,10 +43,10 @@ import { countryAnchor, arc } from './flowGeometry.js';
 // attaccanti blu, difensori rossi.
 export const ATTACKER_COLOR = '#4d8dff';
 export const DEFENDER_COLOR = '#ff4d4d';
-const MAX_ARROWS = 24;
+const MAX_PER_SIDE = 5;
+const MIN_SIDE_SHARE = 0.05;
 // Sotto questa distanza (gradi) la capitale è praticamente sulla regione
-// contesa — la classica nazione che si difende in casa: niente arco, solo
-// il numero sul suo pallino.
+// contesa — la classica nazione che si difende in casa: niente arco.
 const MIN_ARC_DEG = 1.2;
 
 const SRC = 'wp-bflow-src';
@@ -60,19 +57,12 @@ const LYR_DASH = 'wp-bflow-dash';
 const LYR_ORIGIN = 'wp-bflow-origin';
 const LYR_RING = 'wp-bflow-ring';
 const LYR_TARGET = 'wp-bflow-target';
-const LYR_BADGE = 'wp-bflow-badge';
-const LYR_BADGE_TXT = 'wp-bflow-badge-txt';
 
 function regionPosition(d) {
   const id = d?.regionId;
   if (!id) return null;
   const p = state.regionData?.[id]?.position || state.regionCache?.get(id)?.position;
   return Array.isArray(p) ? p : null;
-}
-
-function fmtShare(s) {
-  const pct = s * 100;
-  return pct >= 10 ? `${Math.round(pct)}%` : `${pct.toFixed(1)}%`;
 }
 
 // Chi sta facendo più danno: decide la tinta delle onde d'impatto.
@@ -92,25 +82,24 @@ function overlayFeatures() {
   const sideTotal = { attacker: atk, defender: total - atk };
   _leader = atk >= total - atk ? 'attacker' : 'defender';
 
-  const hi = d.highlightedIds;
   // `nations` arriva già ordinato per danno decrescente (buildNationRanking).
-  const rows = d.nations.filter(n => n.totalDamage > 0 && (!hi || hi.has(n.countryId))).slice(0, MAX_ARROWS);
+  const taken = { attacker: 0, defender: 0 };
+  const rows = d.nations.filter(n => {
+    if (!n.totalDamage || taken[n.side] >= MAX_PER_SIDE) return false;
+    if (n.totalDamage / (sideTotal[n.side] || total) < MIN_SIDE_SHARE) return false;
+    taken[n.side]++;
+    return true;
+  });
   const maxDmg = rows.length ? rows[0].totalDamage : 1;
   const feats = [];
   for (const r of rows) {
     const from = countryAnchor(r.countryId);
-    if (!from) continue;
-    const w = Math.sqrt(r.totalDamage / maxDmg);
-    const props = { side: r.side, w, label: fmtShare(r.totalDamage / (sideTotal[r.side] || total)) };
-    if (Math.hypot(from[0] - target[0], from[1] - target[1]) < MIN_ARC_DEG) {
-      feats.push({ type: 'Feature', properties: { ...props, role: 'badge' }, geometry: { type: 'Point', coordinates: from } });
-      continue;
-    }
-    const { coords, mid } = arc(from, target);
+    if (!from || Math.hypot(from[0] - target[0], from[1] - target[1]) < MIN_ARC_DEG) continue;
+    const props = { side: r.side, w: Math.sqrt(r.totalDamage / maxDmg) };
+    const { coords } = arc(from, target);
     feats.push({ type: 'Feature', properties: { ...props, role: 'ground' }, geometry: { type: 'LineString', coordinates: [from, target] } });
     feats.push({ type: 'Feature', properties: { ...props, role: 'arc' }, geometry: { type: 'LineString', coordinates: coords } });
     feats.push({ type: 'Feature', properties: { ...props, role: 'origin' }, geometry: { type: 'Point', coordinates: from } });
-    feats.push({ type: 'Feature', properties: { ...props, role: 'badge' }, geometry: { type: 'Point', coordinates: mid } });
   }
   if (feats.length) feats.push({ type: 'Feature', properties: { role: 'target' }, geometry: { type: 'Point', coordinates: target } });
   return feats;
@@ -128,23 +117,23 @@ function ensureLayers(map) {
   map.addLayer({
     id: LYR_GROUND, type: 'line', source: SRC, filter: role('ground'),
     layout: { 'line-cap': 'round' },
-    paint: { 'line-color': '#000000', 'line-width': width(1.5, 3), 'line-blur': 2.5, 'line-opacity': 0.3 },
+    paint: { 'line-color': '#000000', 'line-width': width(1, 2.5), 'line-blur': 2.5, 'line-opacity': 0.25 },
   });
   // Sotto, la linea piena e tenue: dice dove va la freccia anche fra un
   // trattino e l'altro. Sopra, i trattini che scorrono.
   map.addLayer({
     id: LYR_BASE, type: 'line', source: SRC, filter: role('arc'),
     layout: { 'line-cap': 'round', 'line-join': 'round' },
-    paint: { 'line-color': sideColor, 'line-width': width(1.5, 6), 'line-opacity': 0.28 },
+    paint: { 'line-color': sideColor, 'line-width': width(1, 4), 'line-opacity': 0.22 },
   });
   map.addLayer({
     id: LYR_DASH, type: 'line', source: SRC, filter: role('arc'),
     layout: { 'line-cap': 'butt', 'line-join': 'round' },
-    paint: { 'line-color': sideColor, 'line-width': width(1.5, 6), 'line-opacity': 0.95, 'line-dasharray': DASH_SEQ[0] },
+    paint: { 'line-color': sideColor, 'line-width': width(1, 4), 'line-opacity': 0.9, 'line-dasharray': DASH_SEQ[0] },
   });
   map.addLayer({
     id: LYR_ORIGIN, type: 'circle', source: SRC, filter: role('origin'),
-    paint: { 'circle-radius': 4, 'circle-color': sideColor, 'circle-stroke-color': '#0b1c33', 'circle-stroke-width': 1.5 },
+    paint: { 'circle-radius': 3, 'circle-color': sideColor, 'circle-stroke-color': '#0b1c33', 'circle-stroke-width': 1 },
   });
   map.addLayer({
     id: LYR_RING, type: 'circle', source: SRC_FX,
@@ -160,24 +149,6 @@ function ensureLayers(map) {
   map.addLayer({
     id: LYR_TARGET, type: 'circle', source: SRC, filter: role('target'),
     paint: { 'circle-radius': 6, 'circle-color': '#ffffff', 'circle-stroke-color': '#0b1c33', 'circle-stroke-width': 2.5 },
-  });
-  map.addLayer({
-    id: LYR_BADGE, type: 'circle', source: SRC, filter: role('badge'),
-    paint: {
-      'circle-radius': ['interpolate', ['linear'], ['get', 'w'], 0, 11, 1, 15],
-      'circle-color': sideColor,
-      'circle-stroke-color': '#0b1c33',
-      'circle-stroke-width': 1.5,
-    },
-  });
-  map.addLayer({
-    id: LYR_BADGE_TXT, type: 'symbol', source: SRC, filter: role('badge'),
-    layout: {
-      // Solo font che fonts.openmaptiles.org ha davvero: vedi migrationFlows.js.
-      'text-field': ['get', 'label'], 'text-size': 10.5, 'text-font': ['Open Sans Bold'],
-      'text-allow-overlap': true, 'text-ignore-placement': true,
-    },
-    paint: { 'text-color': '#ffffff', 'text-halo-color': '#0b1c33', 'text-halo-width': 0.6 },
   });
 }
 
