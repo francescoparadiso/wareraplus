@@ -375,8 +375,10 @@ wareraPlus/
 │   │                          viewOverview.js, testi in migrationI18n.js (9 lingue).
 │   │                          Effetto "volo" 3D finto: ombra a terra sotto l'arco +
 │   │                          comete animate (~30 fps, sorgente propria). Ferme con
-│   │                          scheda nascosta, time machine, overlay (mapIdle.js) e
-│   │                          con "riduci movimento" del sistema.
+│   │                          scheda nascosta, time machine, overlay (mapIdle.js).
+│   │                          ⚠️ NON guarda prefers-reduced-motion: Windows con le
+│   │                          animazioni spente lo dichiara e l'utente non vedeva
+│   │                          nessun movimento.
 │   │                          ⚠️ text-font delle etichette MapLibre: solo font che
 │   │                          fonts.openmaptiles.org ha davvero ('Open Sans Bold').
 │   │                          'Noto Sans Regular' risponde con una pagina HTML e fa

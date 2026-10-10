@@ -463,8 +463,13 @@ function ensureLayers(map) {
    ~30 fotogrammi al secondo e non 60, solo con una nazione a fuoco e in
    questa vista, fermo con la scheda nascosta (requestAnimationFrame lo
    fa da sé), con la time machine aperta e sotto gli overlay a tutto
-   schermo (pauseMigrationFx, chiamata da src/app/mapIdle.js). Con
-   "riduci movimento" del sistema non parte: restano arco, ombra e punte.
+   schermo (pauseMigrationFx, chiamata da src/app/mapIdle.js).
+
+   ⚠️ NON si guarda `prefers-reduced-motion`. C'era, e spegneva tutto
+   sulla macchina dell'utente: Windows con "Effetti di animazione"
+   disattivati lo dichiara a ogni sito, e il risultato era "il 3D c'è,
+   il movimento no". L'animazione qui è il contenuto chiesto, non un
+   ornamento, e parte solo dopo un clic esplicito su una nazione.
    ══════════════════════════════════════════════════════════════ */
 const FX_FRAME_MS = 33;
 const FX_PERIOD_MS = 3200;      // il tempo di un volo, lungo o corto che sia
@@ -473,8 +478,6 @@ let _fxRaf = null;
 let _fxLast = 0;
 let _fxPaused = false;
 let _fxOn = false;               // la sorgente FX ha qualcosa disegnato
-
-const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 function fxFeatures(now) {
   const feats = [];
@@ -526,7 +529,7 @@ function fxTick(now) {
 }
 
 function startFx() {
-  if (_fxRaf || _fxPaused || reduceMotion()) return;
+  if (_fxRaf || _fxPaused) return;
   _fxRaf = requestAnimationFrame(fxTick);
 }
 
