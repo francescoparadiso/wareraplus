@@ -3803,3 +3803,30 @@ body.light-theme .wp-travel-btn { color: #8b5a2b; border-color: rgba(139, 90, 43
 body.light-theme .wp-travel-btn[aria-pressed="true"] { background: #8b5a2b; color: #fff; }
 body.light-theme .wp-travel-leg-home { color: #8b5a2b; }
 body.light-theme .wp-travel-warn { color: #9a6700; }
+
+/* ── WarEra+ vista Migrazioni (src/diplomacy/migrationFlows.js) ──
+   I bottoni sono quelli della vista Distanze (.wp-travel-btn): stesso
+   pannello, stessa famiglia di comandi. Qui solo la loro disposizione e
+   le fasce di testo della vista. */
+.wp-mig-seg {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 8px;
+}
+.wp-mig-seg-label { font-size: 11px; color: #8b949e; min-width: 64px; }
+.wp-mig-hint { font-size: 12px; color: #c9d1d9; margin: 2px 0 8px; }
+.wp-mig-note {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #e3b341;
+  margin: 4px 0 8px;
+}
+.wp-mig-title { display: flex; align-items: center; gap: 6px; margin-top: 14px; }
+.wp-mig-swatch { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.wp-mig-name { display: flex; align-items: center; gap: 8px; }
+.wp-mig-open { display: block; width: 100%; margin: 14px 0 6px; padding: 7px 10px; font-size: 12px; }
+body.light-theme .wp-mig-hint { color: #2b2418; }
+body.light-theme .wp-mig-seg-label { color: #5c5347; }
+body.light-theme .wp-mig-note { color: #9a6700; }

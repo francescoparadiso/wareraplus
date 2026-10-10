@@ -530,6 +530,9 @@ export function initNationTooltip(map) {
     // pannello alleanza si apre da solo come sidebar e direbbe le stesse
     // cose (vedi map.js:_onRegionClick).
     if (state.coloringMode === 'blocs') return;
+    // WarEra+: in vista Migrazioni il click accende le frecce; un tooltip
+    // fissato ci finirebbe sopra (su telefono le coprirebbe quasi tutte).
+    if (state.coloringMode === 'migration') return;
     const nid = _extractId(e);
     if (!nid) return;
 

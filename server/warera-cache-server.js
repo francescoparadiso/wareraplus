@@ -153,7 +153,7 @@ const {
 // e' per forza una differenza fra due fotografie. ⚠️ accumula e non
 // recupera, come i bonifici. Vedi il blocco in testa a server/citizenMoves.js.
 const {
-  initCitizenMoves, recordCensus, readCitizenMoves, statoCitizenMoves,
+  initCitizenMoves, recordCensus, readCitizenMoves, readMigrationFlows, statoCitizenMoves,
 } = require('./citizenMoves');
 // WarEra+ storico politico: elezioni riassunte e presidenti nel tempo
 // (completi dal lancio, sono gia' in `elections-by-country`), piu' tre
@@ -2960,6 +2960,33 @@ app.get('/citizen-moves', async (req, res) => {
   } catch (err) {
     console.error('[citizen-moves] richiesta fallita:', err.message);
     res.status(500).json({ error: 'citizen-moves non disponibile' });
+  }
+});
+
+// WarEra+ flussi migratori di tutto il mondo (vista mappa "Migrazioni",
+// src/diplomacy/migrationFlows.js): lo stesso archivio di /citizen-moves
+// letto per coppie da → a. Zero chiamate a WarEra — livello e nazione di
+// adesso vengono da mu-user-countries, vedi readMigrationFlows. Il
+// risultato cambia solo quando il censimento orario aggiunge righe, quindi
+// si tiene in memoria dieci minuti per finestra: rileggere i diciassettemila
+// utenti a ogni visita sarebbe lavoro buttato.
+const MIGRATION_TTL_MS = 10 * 60 * 1000;
+const _migrationCache = new Map();   // days → { at, body }
+app.get('/migration-flows', (req, res) => {
+  const days = Math.min(30, Math.max(1, Number(req.query.days) || 7));
+  try {
+    const hit = _migrationCache.get(days);
+    if (hit && Date.now() - hit.at < MIGRATION_TTL_MS) return res.json(hit.body);
+    const userInfo = readCache(MU_USER_COUNTRIES_FILE, { data: {} }).data || {};
+    const census = readCache(CITIZENS_FILE, { data: {} }).data || {};
+    const citizens = {};
+    for (const [id, c] of Object.entries(census)) citizens[id] = { n: c.n || 0, n10: c.n10 || 0 };
+    const body = readMigrationFlows(days, { userInfo, citizens });
+    _migrationCache.set(days, { at: Date.now(), body });
+    res.json(body);
+  } catch (err) {
+    console.error('[migration-flows] richiesta fallita:', err.message);
+    res.status(500).json({ error: 'migration-flows non disponibile' });
   }
 });
 

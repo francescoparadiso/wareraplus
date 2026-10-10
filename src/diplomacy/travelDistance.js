@@ -421,7 +421,10 @@ function ensureLayers(map) {
     id: LYR_NUMS, type: 'symbol', source: SRC,
     filter: ['all', ['==', ['geometry-type'], 'Point'], ['!=', ['get', 'label'], '']],
     layout: {
-      'text-field': ['get', 'label'], 'text-size': 11, 'text-font': ['Noto Sans Regular'],
+      // ⚠️ un font che fonts.openmaptiles.org NON ha (era 'Noto Sans Regular':
+      // risponde 200 con una pagina HTML) fa fallire il parse dei glifi e con
+      // lui l'intera sorgente, linee comprese: «Unimplemented type: 4».
+      'text-field': ['get', 'label'], 'text-size': 11, 'text-font': ['Open Sans Bold'],
       'text-allow-overlap': true, 'text-ignore-placement': true,
     },
     paint: { 'text-color': '#0b1c33' },

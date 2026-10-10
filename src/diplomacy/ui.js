@@ -13,6 +13,7 @@ import { activeDeposits, getProductionStats, productionLegendGradient, RESOURCE_
 import { getPoliticsStats, POLITICS_COLORS } from './politicsHeatmap.js';
 import { getTravelStats, travelLegendGradient, regionName, HOPS_PER_BAR, STAMINA_PER_HOP, OIL_PER_EXTRA_HOP } from './travelDistance.js';
 import { getTrendStats, trendLegendGradient } from './playstyleTrendHeatmap.js';
+import { getMigrationStats, migrationLegendGradient, focusFlows, OUT_COLOR, IN_COLOR } from './migrationFlows.js';
 import { mergedSphereGroups } from '../proxy/radar.js';
 import { flagImgHtml } from '../panel/nationFlag.js';
 
@@ -253,6 +254,50 @@ export function updateDynamicLegend() {
       <div class="legend-note">${s
         ? `From ${regionName(state.travel.origin)} · ${s.withinBar} regions within a full stamina bar · farthest ${s.far} · `
         : 'Click a region to start from it · '}${STAMINA_PER_HOP} stamina per region crossed, then ${OIL_PER_EXTRA_HOP} oil barrels each (patch 0.26.1)</div>`;
+    return;
+  }
+
+  // WarEra+ — Migrazioni: la scala del saldo (rosso perde, verde guadagna)
+  // e, con una nazione a fuoco, cosa vogliono dire i due colori delle
+  // frecce. Inglese fisso come le altre legende; il riepilogo tradotto sta
+  // nel pannello.
+  if (state.coloringMode === 'migration') {
+    const sub = THEMES[state.theme].TEXT_SECONDARY;
+    const m = state.migration;
+    const title = '<div class="legend-section-title">Migration</div>';
+    if (!m?.data || m.data.days !== m.days) {
+      const msg = m?.loading || !m?.error ? 'Loading citizenship changes…'
+        : m.error === 'missing' ? 'Migration data not available yet (cache server not updated).'
+          : 'Cache server unreachable right now — reopen this view to retry.';
+      box.innerHTML = `${title}<div class="legend-note">${msg}</div>`;
+      return;
+    }
+    const st = getMigrationStats();
+    const span = m.days === 1 ? 'last 24 hours' : `last ${m.days} days`;
+    let arrows = '';
+    if (m.focus) {
+      const f = focusFlows(m.focus);
+      const name = escapeHtml(state.nationMap.get(m.focus)?.name || '—');
+      arrows = `
+      <div class="legend-item">
+        <div class="legend-bar" style="background:${OUT_COLOR};"></div>
+        <div class="legend-info"><div class="legend-name">Leaving ${name}</div><div class="legend-desc">${f.country?.out || 0} moves to ${f.out.length} nations</div></div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-bar" style="background:${IN_COLOR};"></div>
+        <div class="legend-info"><div class="legend-name">Arriving in ${name}</div><div class="legend-desc">${f.country?.in || 0} moves from ${f.in.length} nations</div></div>
+      </div>`;
+    }
+    box.innerHTML = `${title}
+      <div class="legend-scale" style="margin:4px 0;">
+        <div style="width:100%;height:14px;background:${migrationLegendGradient()};border-radius:3px;"></div>
+      </div>
+      <div class="legend-item" style="justify-content:space-between; padding:0 4px;">
+        <span style="font-size:10px; color:${sub};">losing</span>
+        <span style="font-size:10px; color:${sub};">${m.metric === 'rate' ? 'per 100 citizens' : 'net moves'}</span>
+        <span style="font-size:10px; color:${sub};">gaining</span>
+      </div>${arrows}
+      <div class="legend-note">${st.moves.toLocaleString()} citizenship changes of level ${m.data.minLevel || 10}+ players, ${span} · ${st.gaining} nations gaining, ${st.losing} losing · ${m.focus ? 'click it again or the sea to clear' : 'click a nation for its arrows'}</div>`;
     return;
   }
 

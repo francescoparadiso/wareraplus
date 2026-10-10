@@ -136,6 +136,7 @@ const DICT = {
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Elections",
     mode_travel: "🧭 Travel",
+    mode_migration: "🧳 Migration",
     vo_politics_title: "Elections",
     vo_politics_about: "Where people are voting right now (red) and where candidacies are open (gold). Click a nation to open its political view.",
     vo_stat_voting: "Voting now",
@@ -420,6 +421,7 @@ const DICT = {
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Elezioni",
     mode_travel: "🧭 Distanze",
+    mode_migration: "🧳 Migrazioni",
     vo_politics_title: "Elezioni",
     vo_politics_about: "Dove si vota adesso (rosso) e dove sono aperte le candidature (oro). Clic su una nazione per aprirne la situazione politica.",
     vo_stat_voting: "Voto in corso",
@@ -704,6 +706,7 @@ const DICT = {
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Elecciones",
     mode_travel: "🧭 Distancias",
+    mode_migration: "🧳 Migraciones",
     vo_politics_title: "Elecciones",
     vo_politics_about: "Dónde se vota ahora (rojo) y dónde hay candidaturas abiertas (oro). Clic en una nación para abrir su situación política.",
     vo_stat_voting: "Votación en curso",
@@ -988,6 +991,7 @@ const DICT = {
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Wahlen",
     mode_travel: "🧭 Reisen",
+    mode_migration: "🧳 Migration",
     vo_politics_title: "Wahlen",
     vo_politics_about: "Wo gerade abgestimmt wird (rot) und wo Kandidaturen offen sind (gold). Klick auf eine Nation öffnet ihre politische Lage.",
     vo_stat_voting: "Abstimmung läuft",
@@ -1272,6 +1276,7 @@ const DICT = {
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Élections",
     mode_travel: "🧭 Distances",
+    mode_migration: "🧳 Migrations",
     vo_politics_title: "Élections",
     vo_politics_about: "Où l'on vote en ce moment (rouge) et où les candidatures sont ouvertes (or). Cliquez sur une nation pour ouvrir sa situation politique.",
     vo_stat_voting: "Vote en cours",
@@ -1556,6 +1561,7 @@ const DICT = {
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Verkiezingen",
     mode_travel: "🧭 Afstanden",
+    mode_migration: "🧳 Migratie",
     vo_politics_title: "Verkiezingen",
     vo_politics_about: "Waar nu wordt gestemd (rood) en waar kandidaturen open zijn (goud). Klik op een natie om de politieke situatie te openen.",
     vo_stat_voting: "Stemming bezig",
@@ -1840,6 +1846,7 @@ const DICT = {
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Val",
     mode_travel: "🧭 Avstånd",
+    mode_migration: "🧳 Migration",
     vo_politics_title: "Val",
     vo_politics_about: "Var det röstas just nu (rött) och var kandidaturer är öppna (guld). Klicka på en nation för att öppna dess politiska läge.",
     vo_stat_voting: "Röstning pågår",
@@ -2124,6 +2131,7 @@ const DICT = {
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Eleições",
     mode_travel: "🧭 Distâncias",
+    mode_migration: "🧳 Migrações",
     vo_politics_title: "Eleições",
     vo_politics_about: "Onde se vota agora (vermelho) e onde há candidaturas abertas (dourado). Clique numa nação para abrir a sua situação política.",
     vo_stat_voting: "Votação em curso",
@@ -2408,6 +2416,7 @@ const DICT = {
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ الانتخابات",
     mode_travel: "🧭 المسافات",
+    mode_migration: "🧳 الهجرة",
     vo_politics_title: "الانتخابات",
     vo_politics_about: "أين يجري التصويت الآن (أحمر) وأين الترشيحات مفتوحة (ذهبي). انقر على دولة لفتح وضعها السياسي.",
     vo_stat_voting: "التصويت جارٍ",

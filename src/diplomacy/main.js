@@ -443,6 +443,19 @@ document.getElementById('mode-travel')?.addEventListener('click', async () => {
   setColoringMode('travel');
 });
 
+// WarEra+ vista Migrazioni: una richiesta per tutto il mondo
+// (/migration-flows), rinfrescata ogni 10 minuti a vista accesa — vedi
+// migrationFlows.js, che possiede dato, timer e frecce.
+document.getElementById('mode-migration')?.addEventListener('click', async () => {
+  _dimOtherSliders();
+  const third = document.getElementById('mode-slider-third');
+  if (third) third.style.opacity = '0.3';
+  trackEvent('view-mode-change', { mode: 'migration' });
+  const { enterMigrationView } = await import('./migrationFlows.js');
+  setColoringMode('migration');
+  await enterMigrationView();
+});
+
 document.getElementById('mode-playstyle')?.addEventListener('click', async () => {
   _dimOtherSliders();
   trackEvent('view-mode-change', { mode: 'playstyle' });

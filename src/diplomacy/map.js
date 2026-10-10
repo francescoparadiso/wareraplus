@@ -25,6 +25,8 @@ import { buildPlaystyleTrendColorExpression } from './playstyleTrendHeatmap.js';
 import { buildPoliticsColorExpression } from './politicsHeatmap.js';
 // WarEra+ vista Distanze: quante regioni da A a B (vedi travelDistance.js)
 import { buildTravelColorExpression, syncTravelOverlay, onTravelRegionClick } from './travelDistance.js';
+// WarEra+ vista Migrazioni: saldo per nazione + frecce della nazione cliccata
+import { buildMigrationColorExpression, syncMigrationOverlay, onMigrationCountryClick, clearMigrationFocus } from './migrationFlows.js';
 import { buildWeeklyDamageColorExpression } from './weeklyDamage.js';
 import { buildSphereColorExpression } from './sphereOfInfluence.js';
 import { buildBattleHeatmapColorExpression } from './battleHeatmap.js';
@@ -489,6 +491,11 @@ state.map.on('click', (e) => {
         if (m.getCurrentSphereId()) m.renderSphereOverviewPanel();
       });
     }
+  } else if (state.coloringMode === 'migration') {
+    // WarEra+: click sul mare in vista Migrazioni = via le frecce, il
+    // riepilogo torna al mondo (come il mare in vista Sfera).
+    const features = state.map.queryRenderedFeatures(e.point, { layers: [LYR_FILL] });
+    if (!features.length) clearMigrationFocus();
   } else if (state.coloringMode === 'diplomacy' && state.selectedCountryId) {
     // Stesso principio del ramo blocs sopra, ma per la selezione nazione
     // "normale": _onRegionClick (bound solo a LYR_FILL) toggla la selezione
@@ -646,6 +653,10 @@ export function renderMap() {
     // travelDistance.js. Non dipende da chi possiede cosa: vale identico in
     // vista Attuale e Originale.
     fillExpr = buildTravelColorExpression();
+  } else if (state.coloringMode === 'migration') {
+    // WarEra+: saldo dei trasferimenti di cittadinanza per nazione — vedi
+    // migrationFlows.js. Le frecce le accende syncMigrationOverlay qui sotto.
+    fillExpr = buildMigrationColorExpression(state.mapSource === 'original');
   } else if (state.coloringMode === 'battleHeatmap') {
     fillExpr = buildBattleHeatmapColorExpression(state.mapSource === 'original');
   } else if (state.mapSource === 'actual') {
@@ -672,6 +683,8 @@ export function renderMap() {
   // WarEra+: percorso e barra in basso della vista Distanze — si accendono
   // e si spengono qui, così uscire dalla vista li toglie senza un hook a parte.
   syncTravelOverlay();
+  // WarEra+: stesso patto per le frecce della vista Migrazioni.
+  syncMigrationOverlay();
 
   // WarEra+ perf: qui c'era una ricostruzione di centinaia di Feature
   // (_buildLabelsWithPopulation) ri-pubblicate su SRC_LABELS nelle modalità
@@ -818,6 +831,14 @@ function _onRegionClick(e) {
   const cId = state.mapSource === 'original'
     ? e.features[0].properties.initialCountryId
     : e.features[0].properties.countryId;
+
+  // WarEra+: in vista Migrazioni il click accende le frecce della nazione
+  // (dove vanno i suoi giocatori, da dove arrivano gli altri) e il
+  // riepilogo passa a lei — la selezione diplomatica non c'entra.
+  if (state.coloringMode === 'migration') {
+    onMigrationCountryClick(cId);
+    return;
+  }
 
   // WarEra+: in modalità 'blocs' il click seleziona il BLOCCO (alleanza)
   // a cui appartiene la nazione cliccata, non la singola nazione — la
@@ -1150,6 +1171,7 @@ function _viewDataReady(mode) {
   if (mode === 'warIntensity') return !!(state.warIntensityData || state.warIntensityError);
   if (mode === 'playstyle')    return !!state.nationPlaystyle;
   if (mode === 'politics')     return !!(state.openElections || state.openElectionsError);
+  if (mode === 'migration')    return !!(state.migration?.data || state.migration?.error);
   return true;
 }
 
@@ -1430,6 +1452,7 @@ export function setColoringMode(mode) {
   document.getElementById('mode-playstyle')?.classList.toggle('active', mode === 'playstyle');
   document.getElementById('mode-politics')?.classList.toggle('active', mode === 'politics');
   document.getElementById('mode-travel')?.classList.toggle('active', mode === 'travel');
+  document.getElementById('mode-migration')?.classList.toggle('active', mode === 'migration');
   const isThirdRow = mode === 'contested' || mode === 'warIntensity' || mode === 'playstyle';
   
   // Slider prima riga (3 pulsanti: diplomacy, blocs, sphere)
@@ -1442,7 +1465,7 @@ export function setColoringMode(mode) {
       sphereOfInfluence: isMobile ? 'calc(66.66% + 0.5px)' : 'calc(66.66% + 0.6px)'
     };
     // Per i modi delle altre righe, nascondi lo slider o mettilo in una posizione neutra
-    if (mode === 'weeklyDamage' || mode === 'population' || mode === 'production' || isThirdRow || mode === 'politics' || mode === 'travel') {
+    if (mode === 'weeklyDamage' || mode === 'population' || mode === 'production' || isThirdRow || mode === 'politics' || mode === 'travel' || mode === 'migration') {
       sliderTop.style.opacity = '0.3';
     } else {
       sliderTop.style.opacity = '1';

@@ -205,7 +205,11 @@ wareraPlus/
 │   │                              rilegge dal vivo chi compare (getUserLite, cache 1h):
 │   │                              stessa nazione = inattivo, contato a parte; e mostra
 │   │                              solo livello 10+ (o prestigio).
-│   │                              Endpoint: /citizen-moves.
+│   │                              Endpoint: /citizen-moves, e /migration-flows (lo
+│   │                              stesso archivio per coppie da → a, tutto il mondo:
+│   │                              livello e nazione di adesso da mu-user-countries,
+│   │                              zero chiamate; conta SPOSTAMENTI, non persone, se
+│   │                              no il saldo di chi fa andata e ritorno sbaglia).
 │   ├── priceHistory.js         ← NUOVO — storico dei prezzi: un campione all'ora di
 │   │                              itemTrading.getPrices (PUBBLICA, tutte le risorse
 │   │                              in una richiesta) ridotto a una candela al giorno
@@ -361,7 +365,19 @@ wareraPlus/
     │   │                          ⚠️ i costi (10 stamina a regione, poi 2 barili) NON
     │   │                          sono in gameConfig: sono della patch 0.26.1, costanti
     │   │                          in testa al file. Testi in travelI18n.js (9 lingue).
-    │   ├── politicsHeatmap.js   ← NUOVO — vista mappa "Elezioni": dove si vota (rosso)
+    │   ├── migrationFlows.js    ← NUOVO — vista mappa "Migrazioni": saldo dei cambi di
+│   │                          cittadinanza per nazione (rosso perde, verde guadagna,
+│   │                          assoluto o ogni 100 cittadini 10+) e, cliccando una
+│   │                          nazione, frecce curve verso dove vanno i suoi giocatori
+│   │                          (arancio) e da dove arrivano (azzurro). Una richiesta a
+│   │                          /migration-flows per tutto il mondo, NESSUN ripiego (non
+│   │                          esiste una chiamata WarEra equivalente). Riepilogo in
+│   │                          viewOverview.js, testi in migrationI18n.js (9 lingue).
+│   │                          ⚠️ text-font delle etichette MapLibre: solo font che
+│   │                          fonts.openmaptiles.org ha davvero ('Open Sans Bold').
+│   │                          'Noto Sans Regular' risponde con una pagina HTML e fa
+│   │                          cadere l'INTERA sorgente («Unimplemented type: 4»).
+│   ├── politicsHeatmap.js   ← NUOVO — vista mappa "Elezioni": dove si vota (rosso)
     │   │                          e dove sono aperte le candidature (oro), da
     │   │                          /elections?open=1 (la rotta dei ticker)
     │   ├── antiqueTheme.js      ← NUOVO — estetica "mappa antica", tema chiaro
@@ -813,7 +829,7 @@ Node su VPS esterno (`WARERA_CACHE_BASE`), gestito con pm2. Polla le API
 WarEra una volta per tutti invece di lasciare che lo faccia ogni browser —
 serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`,
 `/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
-`/citizen-moves`, `/battle-timeline`,
+`/citizen-moves`, `/migration-flows`, `/battle-timeline`,
 `/daily-damage`, `/damage-timeline`, `/price-history`, `/day-history`,
 `/alliance-history`,
 `/labour-history`, `/company-census`, `/player-wealth`,
