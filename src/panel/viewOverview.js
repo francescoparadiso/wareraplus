@@ -45,7 +45,7 @@ import { warIntensityRankedList, getWarIntensityStats } from '../diplomacy/warIn
 import { buildPlaystyleScale, getBalanceColor, getPlaystyleStats } from '../diplomacy/playstyleHeatmap.js';
 import { getTrendColor, getTrendStats } from '../diplomacy/playstyleTrendHeatmap.js';
 import { activeDeposits, depositsByCountry, getProductionColor, getProductionStats, productionRankedList, RESOURCE_TYPES } from '../diplomacy/productionHeatmap.js';
-import { openElectionRows, getPoliticsStats, POLITICS_COLORS } from '../diplomacy/politicsHeatmap.js';
+import { openElectionRows, getPoliticsStats, POLITICS_COLORS, turnoutColor } from '../diplomacy/politicsHeatmap.js';
 import { travelOverviewHtml } from '../diplomacy/travelDistance.js';
 import { mig, migrationRanking, getMigrationStats, focusFlows, migrationValue, migrationColor, migrationCanHover,
   MIGRATION_DAYS, MIN_RATE_CITIZENS, OUT_COLOR, IN_COLOR } from '../diplomacy/migrationFlows.js';
@@ -521,21 +521,27 @@ function politicsHtml() {
     + statsHtml([
       { label: t('vo_stat_voting'), value: fmt(s.voting) },
       { label: t('vo_stat_candidacy'), value: fmt(s.candidacy) },
-      { label: t('vo_stat_open_elections'), value: fmt(rows.length) },
+      { label: t('vo_stat_avg_turnout'), value: s.avgTurnout != null ? `${Math.round(s.avgTurnout * 100)}%` : '—' },
       { label: t('vo_stat_votes_cast'), value: fmt(s.votes) },
     ]);
   if (!rows.length) return head + emptyHtml(t('vo_politics_empty'));
-  const maxVotes = Math.max(1, ...rows.map(r => r.votes));
+  // Prima chi vota, dal più partecipato: la barra è l'affluenza (su scala
+  // 0–100%), con la stessa tinta della nazione sulla mappa. Le
+  // candidature restano in fondo, nell'ordine di apertura del voto.
+  rows.sort((a, b) => (a.phase === b.phase ? 0 : a.phase === 'voting' ? -1 : 1)
+    || (a.phase === 'voting' ? (b.turnout ?? -1) - (a.turnout ?? -1) : 0));
   return head + rows.map((r, i) => rowHtml({
     rank: i + 1,
     icon: r.nation ? flagImgHtml(r.countryId, r.nation, 'wp-vo-flag') : '',
     name: r.nation?.name || '—',
-    value: r.phase === 'voting' ? t('vo_votes_n', { n: fmt(r.votes) }) : t('vo_cand_n', { n: fmt(r.candidates) }),
+    value: r.phase === 'voting'
+      ? (r.turnout != null ? `${Math.round(r.turnout * 100)}% · ` : '') + t('vo_votes_n', { n: fmt(r.votes) })
+      : t('vo_cand_n', { n: fmt(r.candidates) }),
     sub: `${r.type === 'president' ? t('vo_pres') : t('vo_cong')} · ${r.phase === 'voting'
       ? t('vo_closes', { t: _politicsLeft((r.end || 0) - now) })
       : t('vo_opens', { t: _politicsLeft((r.start || 0) - now) })}`,
-    share: r.phase === 'voting' ? r.votes / maxVotes : 0.04,
-    color: POLITICS_COLORS[r.phase],
+    share: r.phase === 'voting' ? (r.turnout ?? 0) : 0.04,
+    color: r.phase === 'voting' ? turnoutColor(r.turnout) : POLITICS_COLORS[r.phase],
     dataset: ` data-vo-political="${escapeHtml(r.countryId)}"`,
   })).join('');
 }

@@ -373,11 +373,17 @@ wareraPlus/
 │   │                          /migration-flows per tutto il mondo, NESSUN ripiego (non
 │   │                          esiste una chiamata WarEra equivalente). Riepilogo in
 │   │                          viewOverview.js, testi in migrationI18n.js (9 lingue).
+│   │                          Effetto "volo" 3D finto: ombra a terra sotto l'arco +
+│   │                          comete animate (~30 fps, sorgente propria). Ferme con
+│   │                          scheda nascosta, time machine, overlay (mapIdle.js) e
+│   │                          con "riduci movimento" del sistema.
 │   │                          ⚠️ text-font delle etichette MapLibre: solo font che
 │   │                          fonts.openmaptiles.org ha davvero ('Open Sans Bold').
 │   │                          'Noto Sans Regular' risponde con una pagina HTML e fa
 │   │                          cadere l'INTERA sorgente («Unimplemented type: 4»).
-│   ├── politicsHeatmap.js   ← NUOVO — vista mappa "Elezioni": dove si vota (rosso)
+│   ├── politicsHeatmap.js   ← NUOVO — vista mappa "Elezioni": dove si vota (rosso,
+│   │                          sfumato per AFFLUENZA di adesso = voti / popolazione
+│   │                          attiva, scala fissa 0–100% ponderata a radice)
     │   │                          e dove sono aperte le candidature (oro), da
     │   │                          /elections?open=1 (la rotta dei ticker)
     │   ├── antiqueTheme.js      ← NUOVO — estetica "mappa antica", tema chiaro

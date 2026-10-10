@@ -10,7 +10,7 @@ import { getContestedStats, contestedLegendGradient } from './contestedHeatmap.j
 import { getWarIntensityStats, warIntensityLegendGradient } from './warIntensityHeatmap.js';
 import { getPlaystyleStats, playstyleLegendGradient } from './playstyleHeatmap.js';
 import { activeDeposits, getProductionStats, productionLegendGradient, RESOURCE_TYPES, scaleMax } from './productionHeatmap.js';
-import { getPoliticsStats, POLITICS_COLORS } from './politicsHeatmap.js';
+import { getPoliticsStats, POLITICS_COLORS, TURNOUT_MAX, TURNOUT_MID, turnoutLegendGradient } from './politicsHeatmap.js';
 import { getTravelStats, travelLegendGradient, regionName, HOPS_PER_BAR, STAMINA_PER_HOP, OIL_PER_EXTRA_HOP } from './travelDistance.js';
 import { getTrendStats, trendLegendGradient } from './playstyleTrendHeatmap.js';
 import { getMigrationStats, migrationLegendGradient, focusFlows, OUT_COLOR, IN_COLOR } from './migrationFlows.js';
@@ -309,17 +309,28 @@ export function updateDynamicLegend() {
       return;
     }
     const s = getPoliticsStats();
+    const sub = THEMES[state.theme].TEXT_SECONDARY;
+    // WarEra+: dove si vota la tinta è l'affluenza di adesso (voti /
+    // popolazione attiva), su scala fissa — vedi politicsHeatmap.js.
     box.innerHTML = `
       <div class="legend-section-title">Elections</div>
+      <div class="legend-name" style="margin-top:4px;">Voting now · turnout so far</div>
+      <div class="legend-scale" style="margin:4px 0;">
+        <div style="width:100%;height:14px;background:${turnoutLegendGradient()};border-radius:3px;"></div>
+      </div>
+      <div class="legend-item" style="justify-content:space-between; padding:0 4px;">
+        <span style="font-size:10px; color:${sub};">0%</span>
+        <span style="font-size:10px; color:${sub};">${Math.round(TURNOUT_MID * 100)}%</span>
+        <span style="font-size:10px; color:${sub};">${Math.round(TURNOUT_MAX * 100)}%</span>
+      </div>
       <div class="legend-item">
-        <div class="legend-bar" style="background:${POLITICS_COLORS.voting};"></div>
-        <div class="legend-info"><div class="legend-name">Voting now</div><div class="legend-desc">${s.voting} nations</div></div>
+        <div class="legend-info"><div class="legend-desc">${s.voting} nations voting${s.avgTurnout != null ? ` · average ${Math.round(s.avgTurnout * 100)}%, highest ${Math.round(s.maxTurnout * 100)}%` : ''}</div></div>
       </div>
       <div class="legend-item">
         <div class="legend-bar" style="background:${POLITICS_COLORS.candidacy};"></div>
         <div class="legend-info"><div class="legend-name">Candidacies open</div><div class="legend-desc">${s.candidacy} nations</div></div>
       </div>
-      <div class="legend-note">${s.presidential} presidential, ${s.congress} congress · ${s.votes.toLocaleString()} votes cast so far · refreshed every 3 minutes · click a nation in the panel to open its political view</div>`;
+      <div class="legend-note">${s.presidential} presidential, ${s.congress} congress · ${s.votes.toLocaleString()} votes cast so far · turnout = votes / active population · refreshed every 3 minutes · click a nation in the panel to open its political view</div>`;
     return;
   }
 

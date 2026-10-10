@@ -26,7 +26,8 @@
        buildMigrationColorExpression);
      · frecce della nazione cliccata: archi curvi con le punte lungo la
        linea, spessore ∝ √spostamenti, il numero a metà arco
-       (syncMigrationOverlay, chiamata da renderMap);
+       (syncMigrationOverlay, chiamata da renderMap), più l'effetto
+       "volo" animato (vedi ANIMAZIONE più sotto);
      · comandi del riepilogo nel pannello (wireMigrationOverview); il
        markup sta in viewOverview.js con le altre viste, che ne possiede
        gli attrezzi (righe, celle, intestazione).
@@ -48,6 +49,7 @@ const FETCH_TIMEOUT_MS = 15000;
 const TTL_MS = 10 * 60 * 1000;        // il server ricalcola ogni 10 min, il dato cambia ogni ora
 
 const SRC = 'wp-migration-src';
+const LYR_GROUND = 'wp-migration-ground';
 const LYR_GLOW = 'wp-migration-glow';
 const LYR_LINE = 'wp-migration-line';
 const LYR_HEADS = 'wp-migration-heads';
@@ -56,11 +58,17 @@ const LYR_BADGE = 'wp-migration-badge';
 const LYR_BADGE_TXT = 'wp-migration-badge-txt';
 const LYR_ORIGIN = 'wp-migration-origin';
 const ICON = 'wp-migration-chevron';
+const SRC_FX = 'wp-migration-fx-src';
+const LYR_FX_SHADOW = 'wp-migration-fx-shadow';
+const LYR_FX_GLOW = 'wp-migration-fx-glow';
+const LYR_FX_CORE = 'wp-migration-fx-core';
 
 /** Lo stato della vista, creato al primo uso. */
 export function mig() {
   if (!state.migration) {
-    state.migration = { data: null, error: null, at: 0, days: 7, metric: 'net', focus: null, dir: 'out', loading: false };
+    // `dir` parte da 'both' (richiesta dell'utente): con le sole partenze
+    // le frecce in entrata restavano dietro un bottone e sembravano mancare.
+    state.migration = { data: null, error: null, at: 0, days: 7, metric: 'net', focus: null, dir: 'both', loading: false };
   }
   return state.migration;
 }
@@ -265,8 +273,28 @@ function arc(a, b, steps = 28) {
   return { coords, mid: pt(0.5) };
 }
 
+// Mercatore dritto da a a b, per l'ombra "a terra" di una cometa.
+function groundAt(a, b, t) {
+  const ay = toY(a[1]), by = toY(b[1]);
+  return [a[0] + (b[0] - a[0]) * t, toLat(ay + (by - ay) * t)];
+}
+
+/** Punto a frazione t (0–1) lungo una polilinea a passi uniformi. */
+function alongArc(coords, t) {
+  const f = Math.max(0, Math.min(1, t)) * (coords.length - 1);
+  const i = Math.min(coords.length - 2, Math.floor(f));
+  const k = f - i;
+  const p = coords[i], q = coords[i + 1];
+  return [p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k];
+}
+
+// Gli archi disegnati adesso, per l'animazione: la geometria si calcola
+// una volta sola in overlayFeatures, il giro dei fotogrammi la rilegge.
+let _fxArcs = [];
+
 function overlayFeatures() {
   const s = mig();
+  _fxArcs = [];
   if (!s.focus || !s.data) return [];
   const home = anchorOf(s.focus);
   if (!home) return [];
@@ -279,7 +307,12 @@ function overlayFeatures() {
     if (!from || !to) return;
     const { coords, mid } = arc(from, to);
     const w = Math.sqrt(n / maxN);
+    // L'ombra a terra: la retta fra i due estremi, sotto l'arco. È lei a
+    // far leggere l'arco come una traiettoria SOLLEVATA e non come una
+    // linea storta sulla mappa.
+    feats.push({ type: 'Feature', properties: { kind, n, w, role: 'ground' }, geometry: { type: 'LineString', coordinates: [from, to] } });
     feats.push({ type: 'Feature', properties: { kind, n, w }, geometry: { type: 'LineString', coordinates: coords } });
+    _fxArcs.push({ kind, coords, from, to, w, phase: (_fxArcs.length * 0.618) % 1 });
     feats.push({ type: 'Feature', properties: { kind, n, w, role: 'badge', label: String(n) }, geometry: { type: 'Point', coordinates: mid } });
     // Il pallino all'estremo che non è la nazione cliccata.
     const end = kind === 'out' ? to : from;
@@ -317,11 +350,17 @@ function ensureLayers(map) {
   if (map.getSource(SRC)) return;
   map.addSource(SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   const kindColor = ['match', ['get', 'kind'], 'out', OUT_COLOR, IN_COLOR];
-  const isLine = ['==', ['geometry-type'], 'LineString'];
+  const isLine = ['all', ['==', ['geometry-type'], 'LineString'], ['!=', ['get', 'role'], 'ground']];
   // Spessore: base + √(spostamenti / il più grosso), e cresce col zoom.
   const width = (lo, hi) => ['interpolate', ['linear'], ['zoom'],
     1, ['+', lo, ['*', hi, ['get', 'w']]],
     5, ['+', lo * 1.8, ['*', hi * 1.8, ['get', 'w']]]];
+  map.addLayer({
+    id: LYR_GROUND, type: 'line', source: SRC,
+    filter: ['==', ['get', 'role'], 'ground'],
+    layout: { 'line-cap': 'round' },
+    paint: { 'line-color': '#000000', 'line-width': width(1.5, 3), 'line-blur': 2.5, 'line-opacity': 0.28 },
+  });
   map.addLayer({
     id: LYR_GLOW, type: 'line', source: SRC, filter: isLine,
     layout: { 'line-cap': 'round', 'line-join': 'round' },
@@ -377,6 +416,135 @@ function ensureLayers(map) {
     },
     paint: { 'text-color': '#0b1c33' },
   });
+
+  // L'animazione ha una sorgente sua: riscrivere ogni fotogramma quella
+  // delle frecce rifarebbe anche numeri e punte, che stanno fermi.
+  // Ombre sotto, poi l'alone, poi il nucleo; badge e numeri restano sopra
+  // a tutto perché questi layer si infilano prima di LYR_ENDS.
+  map.addSource(SRC_FX, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addLayer({
+    id: LYR_FX_SHADOW, type: 'circle', source: SRC_FX,
+    filter: ['==', ['get', 'role'], 'shadow'],
+    paint: { 'circle-radius': ['get', 'r'], 'circle-color': '#000000', 'circle-blur': 0.8, 'circle-opacity': ['get', 'o'] },
+  }, LYR_ENDS);
+  map.addLayer({
+    id: LYR_FX_GLOW, type: 'circle', source: SRC_FX,
+    filter: ['==', ['get', 'role'], 'comet'],
+    paint: { 'circle-radius': ['*', ['get', 'r'], 2.4], 'circle-color': kindColor, 'circle-blur': 1, 'circle-opacity': ['*', ['get', 'o'], 0.45] },
+  }, LYR_ENDS);
+  map.addLayer({
+    id: LYR_FX_CORE, type: 'circle', source: SRC_FX,
+    filter: ['==', ['get', 'role'], 'comet'],
+    paint: {
+      'circle-radius': ['get', 'r'],
+      'circle-color': ['match', ['get', 'kind'], 'out', '#ffd9b0', '#d6f3ff'],
+      'circle-stroke-color': kindColor,
+      'circle-stroke-width': ['*', ['get', 'r'], 0.35],
+      'circle-opacity': ['get', 'o'],
+      'circle-stroke-opacity': ['get', 'o'],
+    },
+  }, LYR_ENDS);
+}
+
+/* ══════════════════ ANIMAZIONE ══════════════════
+   Richiesta dell'utente: «un effetto di movimento 3D» sulle frecce.
+   La mappa è piatta (niente pitch, MapLibre non solleva le linee), quindi
+   la profondità si finge con tre segnali che l'occhio legge insieme:
+     · l'arco ha sotto la sua OMBRA dritta a terra (layer statico);
+     · lungo l'arco corrono COMETE con la scia, che si ingrandiscono
+       verso il colmo (sin π·t: "più vicine") e rimpiccioliscono
+       all'arrivo;
+     · ogni cometa ha la sua ombra sulla retta a terra, che fa l'opposto:
+       al colmo è piccola e sbiadita, come un oggetto che si alza.
+   Le comete dicono anche il VERSO senza bisogno di leggere le punte.
+
+   Costo: ogni fotogramma è una setData su qualche centinaio di punti, e
+   ogni setData ridisegna la mappa (e le etichette, labels.js). Quindi:
+   ~30 fotogrammi al secondo e non 60, solo con una nazione a fuoco e in
+   questa vista, fermo con la scheda nascosta (requestAnimationFrame lo
+   fa da sé), con la time machine aperta e sotto gli overlay a tutto
+   schermo (pauseMigrationFx, chiamata da src/app/mapIdle.js). Con
+   "riduci movimento" del sistema non parte: restano arco, ombra e punte.
+   ══════════════════════════════════════════════════════════════ */
+const FX_FRAME_MS = 33;
+const FX_PERIOD_MS = 3200;      // il tempo di un volo, lungo o corto che sia
+const FX_TRAIL = 4;             // punti della scia, cometa compresa
+let _fxRaf = null;
+let _fxLast = 0;
+let _fxPaused = false;
+let _fxOn = false;               // la sorgente FX ha qualcosa disegnato
+
+const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+function fxFeatures(now) {
+  const feats = [];
+  for (const a of _fxArcs) {
+    const comets = 1 + Math.round(a.w * 2);
+    const size = 2.2 + 2.8 * a.w;
+    for (let j = 0; j < comets; j++) {
+      const t0 = (now / FX_PERIOD_MS + a.phase + j / comets) % 1;
+      for (let k = 0; k < FX_TRAIL; k++) {
+        const t = t0 - k * 0.022;
+        if (t <= 0) break;
+        const h = Math.sin(Math.PI * t);                    // "altezza": 0 agli estremi, 1 al colmo
+        const edge = Math.min(1, t * 10, (1 - t) * 10);    // nasce e muore dolce agli estremi
+        feats.push({
+          type: 'Feature',
+          properties: { role: 'comet', kind: a.kind, r: size * (0.65 + 0.85 * h) * (1 - k * 0.2), o: edge * (1 - k * 0.24) },
+          geometry: { type: 'Point', coordinates: alongArc(a.coords, t) },
+        });
+        if (k === 0) {
+          feats.push({
+            type: 'Feature',
+            properties: { role: 'shadow', r: size * (1.1 - 0.5 * h), o: edge * 0.5 * (1 - 0.65 * h) },
+            geometry: { type: 'Point', coordinates: groundAt(a.from, a.to, t) },
+          });
+        }
+      }
+    }
+  }
+  return feats;
+}
+
+function setFx(features) {
+  const src = state.map?.getSource(SRC_FX);
+  if (src) src.setData({ type: 'FeatureCollection', features });
+  _fxOn = features.length > 0;
+}
+
+function fxTick(now) {
+  _fxRaf = null;
+  if (_fxPaused || state.timeMachineActive || state.coloringMode !== 'migration' || !_fxArcs.length) {
+    if (_fxOn) setFx([]);
+    return;
+  }
+  if (now - _fxLast >= FX_FRAME_MS) {
+    _fxLast = now;
+    setFx(fxFeatures(now));
+  }
+  _fxRaf = requestAnimationFrame(fxTick);
+}
+
+function startFx() {
+  if (_fxRaf || _fxPaused || reduceMotion()) return;
+  _fxRaf = requestAnimationFrame(fxTick);
+}
+
+function stopFx() {
+  if (_fxRaf) cancelAnimationFrame(_fxRaf);
+  _fxRaf = null;
+  if (_fxOn) setFx([]);
+}
+
+/** Overlay a tutto schermo aperto sopra la mappa (src/app/mapIdle.js). */
+export function pauseMigrationFx() {
+  _fxPaused = true;
+  stopFx();
+}
+
+export function resumeMigrationFx() {
+  _fxPaused = false;
+  if (state.coloringMode === 'migration' && _fxArcs.length) startFx();
 }
 
 /** Chiamata da renderMap a ogni ridisegno: accende o spegne le frecce a
@@ -389,6 +557,9 @@ export function syncMigrationOverlay() {
   if (on) ensureLayers(map);
   const src = map.getSource(SRC);
   if (src) src.setData({ type: 'FeatureCollection', features: on ? overlayFeatures() : [] });
+  if (!on) _fxArcs = [];
+  if (on && _fxArcs.length) startFx();
+  else stopFx();
 }
 
 // ══════════════════ CLICK E COMANDI ══════════════════
