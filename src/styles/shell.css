@@ -1906,19 +1906,25 @@ body.light-theme .wp-visits-pill {
   box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
 }
 
-/* La pill dello sfondo di Wallpaper Engine (stesso modulo): la sola
-   cliccabile della famiglia, porta alla pagina del Workshop. Quindi
-   puntatore e il sollevamento delle altre pill cliccabili. */
-.wp-wallpaper-pill {
-  cursor: pointer;
+/* Terza parte della pill: gli iscritti su Wallpaper Engine. Stesso filo
+   verticale degli online (è un'altra grandezza ancora), ma è un link alla
+   pagina del Workshop: l'unico pezzo cliccabile della pill, quindi
+   puntatore e colore al passaggio. */
+.wp-visits-wallpaper {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 9px;
+  margin-left: 2px;
+  border-left: 1px solid rgba(255, 255, 255, .16);
+  color: inherit;
   text-decoration: none;
-  transition: transform 0.2s, border-color 0.2s;
+  cursor: pointer;
+  transition: color 0.2s;
 }
-.wp-wallpaper-pill:hover {
-  transform: translateY(-2px);
-  border-color: #58a6ff;
-}
-body.light-theme .wp-wallpaper-pill:hover { border-color: #2f6fb5; }
+.wp-visits-wallpaper:hover { color: #58a6ff; }
+body.light-theme .wp-visits-wallpaper { border-left-color: rgba(0, 0, 0, .14); }
+body.light-theme .wp-visits-wallpaper:hover { color: #2f6fb5; }
 
 /* Stessa regola della pill autore: sulla mappa, su telefono, non c'è
    spazio — riappare dentro il drawer ☰, dove il wrapper viene rilocato. */
