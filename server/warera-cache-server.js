@@ -3264,16 +3264,17 @@ setInterval(() => {
 // identiche ricevono da WarEra la stessa cosa, chiunque le mandi.
 //
 // Due pezzi, e servono tutti e due:
-//   - la cache: 15 s per le sole risposte 200. Un 429 o un 5xx non si
+//   - la cache: 10 s per le sole risposte 200. Un 429 o un 5xx non si
 //     tiene: il client ha il suo backoff e deve vederli freschi;
 //   - l'accorpamento delle richieste IN VOLO: senza, mille client che
 //     chiedono nello stesso secondo mancano tutti la cache (la prima
 //     risposta non e' ancora arrivata) e partono mille chiamate. Cosi' ne
 //     parte una e le altre aspettano quella.
-// 15 s contro il giro di 10 s della heatmap battaglia: al peggio quel giro
-// vede lo stesso numero due volte, e il ranking per nazione cambia comunque
-// solo al tick (~2 min).
-const PROXY_CACHE_TTL_MS = 15 * 1000;
+// 10 s e non di piu' (scelta esplicita): e' il giro della heatmap
+// battaglia, quindi un client che ripassa trova sempre un dato nuovo, e
+// fra tutti i client insieme a WarEra arriva al massimo una chiamata ogni
+// 10 s per richiesta uguale.
+const PROXY_CACHE_TTL_MS = 10 * 1000;
 // Tetti di memoria: il VPS ha meno di un GB e questa e' una comodita', non
 // un archivio. Una risposta piu' grossa di 4 MB si serve e non si tiene.
 const PROXY_CACHE_MAX_BYTES = 64 * 1024 * 1024;
