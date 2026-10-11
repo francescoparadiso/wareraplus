@@ -39,17 +39,17 @@
    pallino non compare e il totale delle visite resta: mezza pill vera e'
    meglio di una pill intera con dentro un numero finto.
    ── LO SFONDO DI WALLPAPER ENGINE ──────────────────────────────────
-   Accanto alle visite, una seconda pill: "N sfondi · ● M accesi". N sono
-   gli iscritti sullo Steam Workshop (li legge il server da Steam una
-   volta all'ora), M gli sfondi accesi adesso. È l'unica pill cliccabile:
-   porta alla pagina del Workshop, da cui ci si iscrive.
+   Accanto alle visite, una seconda pill: "N Wallpaper Engine · ● M". N
+   sono gli iscritti sullo Steam Workshop (li legge il server da Steam una
+   volta all'ora), M gli sfondi accesi adesso, sempre mostrato anche a 0.
+   È l'unica pill cliccabile: porta alla pagina del Workshop.
 
-   E dentro lo sfondo (`wallpaper: true`) le pill si vedono, ma il
-   browser NON conta: nessuna visita, nessun "online". Uno sfondo resta
-   acceso tutto il giorno su ogni desktop e si ricarica a ogni avvio di
-   Windows, quindi in quei due numeri sarebbe rumore. Manda solo il suo
-   battito `source=wallpaper`, che il server tiene a parte (gli "accesi"),
-   e solo sul live: lo sfondo puntato su dev legge e basta.
+   Dentro lo sfondo (`wallpaper: true`) le pill si vedono, ma il browser
+   NON conta visite: si ricarica a ogni avvio di Windows. Manda solo il
+   suo battito `source=wallpaper`, e solo sul live (lo sfondo puntato su
+   dev legge e basta). Il server quel battito lo conta fra gli sfondi
+   accesi E fra gli online del pallino verde delle visite — scelta
+   dell'utente: chi ha lo sfondo acceso sta usando il tool.
    ══════════════════════════════════════════════════════════════ */
 
 import { fetchVisitsViaCache } from '../diplomacy/cacheClient.js';
@@ -101,7 +101,8 @@ function paint(pill, data) {
 function paintWallpaper(host, data) {
   const w = data.wallpaper;
   const hasSubs = Number.isFinite(w?.subscriptions);
-  const hasOnline = Number.isFinite(w?.online) && w.online > 0;
+  // Il dato live si mostra sempre, anche a 0 (richiesta dell'utente).
+  const hasOnline = Number.isFinite(w?.online);
   let pill = document.getElementById('wp-wallpaper-pill');
   if (!w || !w.url || (!hasSubs && !hasOnline)) { pill?.remove(); return; }
   if (!pill) {

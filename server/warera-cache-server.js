@@ -3518,9 +3518,10 @@ function _countOnline() {
      niente chiave). Una lettura all'ora, salvata su disco così un riavvio
      non lascia la pill vuota finché Steam non risponde;
    - ACCESI ADESSO: lo sfondo ripassa ogni minuto con `source=wallpaper`.
-     Va in una mappa sua, non in `_onlineSeen` né nel totale delle visite:
-     uno sfondo resta acceso tutto il giorno, e contato fra gli "online"
-     del sito ne farebbe un numero che non significa più niente. ── */
+     Va in una mappa sua e MAI nel totale delle visite (si ricarica a ogni
+     avvio di Windows). Negli "online" invece sì, per scelta dell'utente:
+     chi ha lo sfondo acceso sta usando il tool. `online` è quindi sito +
+     sfondi, e `wallpaper.online` dice quanti di quelli sono sfondi. ── */
 const WORKSHOP_ID = '3818208882';
 const WORKSHOP_URL = `https://steamcommunity.com/sharedfiles/filedetails/?id=${WORKSHOP_ID}`;
 const WORKSHOP_POLL_MS = 60 * 60 * 1000;
@@ -3599,8 +3600,9 @@ app.get('/visits', (req, res) => {
   res.json({
     total: VISITS_SEED + (store.own || 0),
     today: day.count,
-    // Quante persone stanno usando il tool adesso (finestra di 5 minuti).
-    online: _countOnline(),
+    // Quante persone stanno usando il tool adesso (finestra di 5 minuti):
+    // sito + sfondi di Wallpaper Engine accesi (vedi sopra).
+    online: _countOnline() + _countWallpapers(),
     // Ogni quanto il client dovrebbe ripassare. Sta nella risposta e non
     // in una costante nel client cosi' si puo' cambiare il ritmo con un
     // pm2 restart invece che con un deploy su Vercel.
