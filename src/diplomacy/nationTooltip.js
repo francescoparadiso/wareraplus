@@ -532,7 +532,7 @@ export function initNationTooltip(map) {
     if (state.coloringMode === 'blocs') return;
     // WarEra+: in vista Migrazioni il click accende le frecce; un tooltip
     // fissato ci finirebbe sopra (su telefono le coprirebbe quasi tutte).
-    if (state.coloringMode === 'migration') return;
+    if (state.coloringMode === 'migration' || state.coloringMode === 'funding') return;
     const nid = _extractId(e);
     if (!nid) return;
 

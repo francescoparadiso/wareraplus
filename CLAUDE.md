@@ -412,6 +412,15 @@ wareraPlus/
     │   │                          fonts.openmaptiles.org ha davvero ('Open Sans Bold').
     │   │                          'Noto Sans Regular' risponde con una pagina HTML e fa
     │   │                          cadere l'INTERA sorgente («Unimplemented type: 4»).
+    │   ├── fundingFlows.js      ← NUOVO — vista mappa "Finanziamenti": saldo dei
+    │   │                          bonifici fra tesori (oro riceve, viola dà; 7/30/90 gg
+    │   │                          o tutto l'archivio, dal 25 apr 2026) e, cliccando una
+    │   │                          nazione, archi da chi la finanzia e verso chi finanzia
+    │   │                          lei con MONETE che scorrono nel verso del denaro. Con
+    │   │                          una nazione a fuoco si colorano solo lei e i partner.
+    │   │                          Dati: la stessa fetchMoneyTransfers della scheda
+    │   │                          battaglia (src/battles/moneyTransfers.js), conti in
+    │   │                          memoria. Testi in fundingI18n.js.
     │   ├── politicsHeatmap.js   ← NUOVO — vista mappa "Elezioni": dove si vota (rosso,
     │   │                          sfumato per AFFLUENZA di adesso = voti / popolazione
     │   │                          attiva, scala fissa 0–100% ponderata a radice)

@@ -27,6 +27,8 @@ import { buildPoliticsColorExpression } from './politicsHeatmap.js';
 import { buildTravelColorExpression, syncTravelOverlay, onTravelRegionClick } from './travelDistance.js';
 // WarEra+ vista Migrazioni: saldo per nazione + frecce della nazione cliccata
 import { buildMigrationColorExpression, syncMigrationOverlay, onMigrationCountryClick, clearMigrationFocus } from './migrationFlows.js';
+// WarEra+ vista Finanziamenti: saldo dei bonifici + frecce con le monete
+import { buildFundingColorExpression, syncFundingOverlay, onFundingCountryClick, clearFundingFocus } from './fundingFlows.js';
 // WarEra+ frecce del danno sulla battaglia aperta (heatmap battaglia)
 import { syncBattleFlowOverlay } from './battleFlows.js';
 // WarEra+ replay della battaglia aperta (/battle-timeline)
@@ -502,6 +504,9 @@ state.map.on('click', (e) => {
     // riepilogo torna al mondo (come il mare in vista Sfera).
     const features = state.map.queryRenderedFeatures(e.point, { layers: [LYR_FILL] });
     if (!features.length) clearMigrationFocus();
+  } else if (state.coloringMode === 'funding') {
+    const features = state.map.queryRenderedFeatures(e.point, { layers: [LYR_FILL] });
+    if (!features.length) clearFundingFocus();
   } else if (state.coloringMode === 'diplomacy' && state.selectedCountryId) {
     // Stesso principio del ramo blocs sopra, ma per la selezione nazione
     // "normale": _onRegionClick (bound solo a LYR_FILL) toggla la selezione
@@ -663,6 +668,9 @@ export function renderMap() {
     // WarEra+: saldo dei trasferimenti di cittadinanza per nazione — vedi
     // migrationFlows.js. Le frecce le accende syncMigrationOverlay qui sotto.
     fillExpr = buildMigrationColorExpression(state.mapSource === 'original');
+  } else if (state.coloringMode === 'funding') {
+    // WarEra+: saldo dei bonifici fra tesori — vedi fundingFlows.js.
+    fillExpr = buildFundingColorExpression(state.mapSource === 'original');
   } else if (state.coloringMode === 'battleHeatmap') {
     fillExpr = buildBattleHeatmapColorExpression(state.mapSource === 'original');
   } else if (state.mapSource === 'actual') {
@@ -691,6 +699,7 @@ export function renderMap() {
   syncTravelOverlay();
   // WarEra+: stesso patto per le frecce della vista Migrazioni.
   syncMigrationOverlay();
+  syncFundingOverlay();
   // WarEra+: e per quelle del danno sulla battaglia aperta (battleFlows.js).
   syncBattleFlowOverlay();
   // WarEra+: compare/scompare la barra del replay della battaglia aperta.
@@ -849,6 +858,11 @@ function _onRegionClick(e) {
   // riepilogo passa a lei — la selezione diplomatica non c'entra.
   if (state.coloringMode === 'migration') {
     onMigrationCountryClick(cId);
+    return;
+  }
+  // WarEra+: stesso patto in vista Finanziamenti (fundingFlows.js).
+  if (state.coloringMode === 'funding') {
+    onFundingCountryClick(cId);
     return;
   }
 
@@ -1184,6 +1198,7 @@ function _viewDataReady(mode) {
   if (mode === 'playstyle')    return !!state.nationPlaystyle;
   if (mode === 'politics')     return !!(state.openElections || state.openElectionsError);
   if (mode === 'migration')    return !!(state.migration?.data || state.migration?.error);
+  if (mode === 'funding')      return !!(state.funding?.data || state.funding?.error);
   return true;
 }
 
@@ -1465,6 +1480,7 @@ export function setColoringMode(mode) {
   document.getElementById('mode-politics')?.classList.toggle('active', mode === 'politics');
   document.getElementById('mode-travel')?.classList.toggle('active', mode === 'travel');
   document.getElementById('mode-migration')?.classList.toggle('active', mode === 'migration');
+  document.getElementById('mode-funding')?.classList.toggle('active', mode === 'funding');
   const isThirdRow = mode === 'contested' || mode === 'warIntensity' || mode === 'playstyle';
   
   // Slider prima riga (3 pulsanti: diplomacy, blocs, sphere)
@@ -1477,7 +1493,7 @@ export function setColoringMode(mode) {
       sphereOfInfluence: isMobile ? 'calc(66.66% + 0.5px)' : 'calc(66.66% + 0.6px)'
     };
     // Per i modi delle altre righe, nascondi lo slider o mettilo in una posizione neutra
-    if (mode === 'weeklyDamage' || mode === 'population' || mode === 'production' || isThirdRow || mode === 'politics' || mode === 'travel' || mode === 'migration') {
+    if (mode === 'weeklyDamage' || mode === 'population' || mode === 'production' || isThirdRow || mode === 'politics' || mode === 'travel' || mode === 'migration' || mode === 'funding') {
       sliderTop.style.opacity = '0.3';
     } else {
       sliderTop.style.opacity = '1';

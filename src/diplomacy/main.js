@@ -456,6 +456,18 @@ document.getElementById('mode-migration')?.addEventListener('click', async () =>
   await enterMigrationView();
 });
 
+// WarEra+ vista Finanziamenti: i bonifici fra tesori (stessa lista della
+// scheda battaglia, una per sessione) — vedi fundingFlows.js.
+document.getElementById('mode-funding')?.addEventListener('click', async () => {
+  _dimOtherSliders();
+  const third = document.getElementById('mode-slider-third');
+  if (third) third.style.opacity = '0.3';
+  trackEvent('view-mode-change', { mode: 'funding' });
+  const { enterFundingView } = await import('./fundingFlows.js');
+  setColoringMode('funding');
+  await enterFundingView();
+});
+
 document.getElementById('mode-playstyle')?.addEventListener('click', async () => {
   _dimOtherSliders();
   trackEvent('view-mode-change', { mode: 'playstyle' });

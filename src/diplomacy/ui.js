@@ -14,6 +14,7 @@ import { getPoliticsStats, POLITICS_COLORS, TURNOUT_MAX, TURNOUT_MID, turnoutLeg
 import { getTravelStats, travelLegendGradient, regionName, HOPS_PER_BAR, STAMINA_PER_HOP, OIL_PER_EXTRA_HOP } from './travelDistance.js';
 import { getTrendStats, trendLegendGradient } from './playstyleTrendHeatmap.js';
 import { getMigrationStats, migrationLegendGradient, focusFlows, OUT_COLOR, IN_COLOR } from './migrationFlows.js';
+import { fund, getFundingStats, fundingLegendGradient, fundingFocus, IN_COLOR as FUND_IN, OUT_COLOR as FUND_OUT } from './fundingFlows.js';
 import { mergedSphereGroups } from '../proxy/radar.js';
 import { flagImgHtml } from '../panel/nationFlag.js';
 
@@ -300,6 +301,39 @@ export function updateDynamicLegend() {
         <span style="font-size:10px; color:${sub};">gaining</span>
       </div>${arrows}
       <div class="legend-note">${st.moves.toLocaleString()} citizenship changes of level ${m.data.minLevel || 10}+ players, ${span} · ${st.gaining} nations gaining, ${st.losing} losing · ${m.focus ? 'click it again or the sea to clear' : 'click a nation for its arrows'}</div>`;
+    return;
+  }
+
+  // WarEra+ — Finanziamenti: chi dà (viola) e chi riceve (oro), e con una
+  // nazione a fuoco il significato dei due colori delle frecce.
+  if (state.coloringMode === 'funding') {
+    const sub = THEMES[state.theme].TEXT_SECONDARY;
+    const f = fund();
+    const st = getFundingStats();
+    const title = '<div class="legend-section-title">Funding</div>';
+    if (!st) {
+      box.innerHTML = `${title}<div class="legend-note">${f.loading || !f.error ? 'Loading treasury transfers…' : 'Transfers not available right now — reopen this view to retry.'}</div>`;
+      return;
+    }
+    let arrows = '';
+    if (f.focus) {
+      const ff = fundingFocus(f.focus);
+      const name = escapeHtml(state.nationMap.get(f.focus)?.name || '—');
+      arrows = `
+      <div class="legend-item"><div class="legend-bar" style="background:${FUND_IN};"></div>
+        <div class="legend-info"><div class="legend-name">Funding ${name}</div><div class="legend-desc">${fmtNumber(ff.country?.in || 0)} from ${ff.in.length} nations</div></div></div>
+      <div class="legend-item"><div class="legend-bar" style="background:${FUND_OUT};"></div>
+        <div class="legend-info"><div class="legend-name">Funded by ${name}</div><div class="legend-desc">${fmtNumber(ff.country?.out || 0)} to ${ff.out.length} nations</div></div></div>`;
+    }
+    box.innerHTML = `${title}
+      <div class="legend-scale" style="margin:4px 0;">
+        <div style="width:100%;height:14px;background:${fundingLegendGradient()};border-radius:3px;"></div>
+      </div>
+      <div class="legend-item" style="justify-content:space-between; padding:0 4px;">
+        <span style="font-size:10px; color:${sub};">gives more</span>
+        <span style="font-size:10px; color:${sub};">gets more</span>
+      </div>${arrows}
+      <div class="legend-note">${st.count.toLocaleString()} treasury-to-treasury transfers, ${fmtNumber(st.total)} moved, ${f.days ? `last ${f.days} days` : 'whole archive'} · ${f.focus ? 'coins flow from payer to receiver · click the sea to clear' : 'click a nation for its arrows'}</div>`;
     return;
   }
 

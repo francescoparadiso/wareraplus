@@ -50,11 +50,14 @@ import { travelOverviewHtml } from '../diplomacy/travelDistance.js';
 import { mig, migrationRanking, getMigrationStats, focusFlows, migrationValue, migrationColor, migrationCanHover, migrationDays,
   MIGRATION_DAYS, MIN_RATE_CITIZENS, OUT_COLOR, IN_COLOR } from '../diplomacy/migrationFlows.js';
 import { mT } from '../diplomacy/migrationI18n.js';
+import { fund, fundingAgg, fundingWindowShort, getFundingStats, fundingRanking, fundingFocus, fundingColor, fundingCanHover,
+  FUNDING_DAYS, IN_COLOR as FUND_IN, OUT_COLOR as FUND_OUT } from '../diplomacy/fundingFlows.js';
+import { fT } from '../diplomacy/fundingI18n.js';
 
 /** Le viste che hanno un riepilogo. Chi chiama usa questo elenco per
  *  decidere se aprire il pannello: tenerlo qui evita che countryPanel.js
  *  e map.js abbiano due liste da tenere allineate a mano. */
-export const OVERVIEW_MODES = ['blocs', 'population', 'weeklyDamage', 'production', 'contested', 'warIntensity', 'playstyle', 'politics', 'travel', 'migration'];
+export const OVERVIEW_MODES = ['blocs', 'population', 'weeklyDamage', 'production', 'contested', 'warIntensity', 'playstyle', 'politics', 'travel', 'migration', 'funding'];
 
 export function hasViewOverview(mode) {
   return OVERVIEW_MODES.includes(mode);
@@ -772,6 +775,137 @@ function migrationFocusHtml(s, d, controls) {
     + `<button type="button" class="wp-travel-btn wp-mig-open" data-mig-action="open-nation">${escapeHtml(mT('Players by name in the nation panel'))} ›</button>`;
 }
 
+/* ══════════════════ FINANZIAMENTI ══════════════════
+   Markup della vista Finanziamenti (dati, colori e monete in
+   diplomacy/fundingFlows.js, comandi in wireFundingOverview). Stessa
+   forma delle Migrazioni: il mondo, oppure la nazione cliccata. */
+
+function fundSegHtml(label, attr, options, current) {
+  return migSegHtml(label, attr, options, current);
+}
+
+function fundNotesHtml() {
+  const a = fundingAgg();
+  if (!a) return '';
+  if (!a.fromServer) return `<div class="wp-mig-note">${escapeHtml(fT('Cache server unreachable: only the last few days the game remembers.'))}</div>`;
+  if (fundingWindowShort()) {
+    return `<div class="wp-mig-note">${escapeHtml(fT('The archive starts on {date}: earlier transfers do not show up.', {
+      date: new Date(a.coverageFrom).toLocaleDateString(),
+    }))}</div>`;
+  }
+  return '';
+}
+
+const fundCount = n => (n === 1 ? fT('1 transfer') : fT('{n} transfers', { n: fmt(n) }));
+const fundSigned = v => (v > 0 ? `+${fmt(v)}` : v < 0 ? `−${fmt(-v)}` : '0');
+
+function fundingHtml() {
+  const s = fund();
+  const a = fundingAgg();
+  const controls = fundSegHtml(fT('Window'), 'fund-days',
+    FUNDING_DAYS.map(n => [n, n ? fT('{n} days', { n }) : fT('All')]), s.days);
+  const about = aboutHtml(fT('Money sent from treasury to treasury. Gold: nations receiving more than they send; violet: nations sending more than they receive. Click a nation to see who funds it and whom it funds.'));
+  if (!a) {
+    const msg = s.loading || !s.error ? fT('Loading…') : fT('Transfers are not available right now — reopen this view to retry.');
+    return headerHtml(fT('Funding')) + controls + emptyHtml(msg) + about;
+  }
+  if (s.focus) return fundingFocusHtml(s, controls);
+
+  const st = getFundingStats();
+  const { receivers, givers, flows } = fundingRanking(10);
+  const maxAbs = Math.max(1, ...[...receivers, ...givers].map(r => Math.abs(r.net)));
+  const nationRow = (r, i) => {
+    const nation = state.nationMap.get(r.id);
+    return rowHtml({
+      rank: i + 1,
+      icon: nation ? flagImgHtml(r.id, nation, 'wp-vo-flag') : '',
+      name: nation?.name || '—',
+      value: fundSigned(r.net),
+      sub: fT('received {i} · sent {o}', { i: fmt(r.in), o: fmt(r.out) }),
+      share: Math.abs(r.net) / maxAbs,
+      color: fundingColor(r.net),
+      dataset: ` data-fund-country="${escapeHtml(r.id)}"`,
+    });
+  };
+  const maxFlow = Math.max(1, ...flows.map(f => f.m));
+  const flowRows = flows.map((f, i) => {
+    const x = state.nationMap.get(f.f), y = state.nationMap.get(f.t);
+    return rowHtml({
+      rank: i + 1,
+      icon: x ? flagImgHtml(f.f, x, 'wp-vo-flag') : '',
+      name: `${x?.name || '—'} → ${y?.name || '—'}`,
+      value: fmt(f.m),
+      sub: fundCount(f.n),
+      share: f.m / maxFlow,
+      color: FUND_IN,
+      dataset: ` data-fund-country="${escapeHtml(f.t)}"`,
+    });
+  }).join('');
+  const section = (title, body) => body ? `<div class="wp-panel-section-title wp-mig-title">${escapeHtml(title)}</div>${body}` : '';
+  const hint = `<div class="wp-mig-hint">${escapeHtml(fundingCanHover() ? fT('Click a nation to see who funds it.') : fT('Tap a nation to see who funds it.'))}</div>`;
+
+  return headerHtml(fT('Funding'), s.days ? fT('{n} days', { n: s.days }) : fT('All'))
+    + controls
+    + statsHtml([
+      { label: fT('Money moved'), value: fmt(st.total) },
+      { label: fT('Transfers'), value: fmt(st.count) },
+      { label: fT('Receiving'), value: fmt(st.receivers) },
+      { label: fT('Giving'), value: fmt(st.givers) },
+    ])
+    + hint
+    + fundNotesHtml()
+    + (st.count
+      ? section(fT('Receive the most'), receivers.map(nationRow).join(''))
+        + section(fT('Give the most'), givers.map(nationRow).join(''))
+        + section(fT('Biggest flows'), flowRows)
+      : emptyHtml(fT('No transfers in this window.')))
+    + about;
+}
+
+function fundingFocusHtml(s, controls) {
+  const id = s.focus;
+  const nation = state.nationMap.get(id);
+  const f = fundingFocus(id);
+  const c = f.country || { in: 0, out: 0, net: 0, nIn: 0, nOut: 0 };
+  const dirSeg = fundSegHtml(fT('Arrows'), 'fund-dir',
+    [['in', fT('Incoming')], ['out', fT('Outgoing')], ['both', fT('Both')]], s.dir);
+  const partnerRows = (list, total, color, key) => {
+    const max = Math.max(1, ...list.map(r => r.m));
+    return list.slice(0, TOP_NATIONS).map((r, i) => {
+      const n = state.nationMap.get(r.id);
+      return rowHtml({
+        rank: i + 1,
+        icon: n ? flagImgHtml(r.id, n, 'wp-vo-flag') : '',
+        name: n?.name || '—',
+        value: fmt(r.m),
+        sub: `${fT(key, { p: Math.round(r.m / Math.max(1, total) * 100) })} · ${fundCount(r.n)}`,
+        share: r.m / max,
+        color,
+        dataset: ` data-fund-country="${escapeHtml(r.id)}"`,
+      });
+    }).join('');
+  };
+  const flag = nation ? flagImgHtml(id, nation, 'wp-vo-flag') : '';
+  const body = (f.in.length || f.out.length)
+    ? (f.in.length ? `<div class="wp-panel-section-title wp-mig-title"><span class="wp-mig-swatch" style="background:${FUND_IN}"></span>${escapeHtml(fT('Who funds it'))}</div>`
+        + partnerRows(f.in, c.in, FUND_IN, '{p}% of what it received') : '')
+      + (f.out.length ? `<div class="wp-panel-section-title wp-mig-title"><span class="wp-mig-swatch" style="background:${FUND_OUT}"></span>${escapeHtml(fT('Whom it funds'))}</div>`
+        + partnerRows(f.out, c.out, FUND_OUT, '{p}% of what it sent') : '')
+    : emptyHtml(fT('No transfers to or from this nation in this window.'));
+  return `<button class="wp-sphere-back" type="button" data-fund-action="unfocus">${escapeHtml(fT('← All nations'))}</button>`
+    + `<div class="wp-panel-header"><div><div class="wp-panel-name wp-mig-name">${flag}${escapeHtml(nation?.name || '—')}</div></div></div>`
+    + controls + dirSeg
+    + statsHtml([
+      { label: fT('Received'), value: fmt(c.in) },
+      { label: fT('Sent'), value: fmt(c.out) },
+      { label: fT('Balance'), value: fundSigned(c.net) },
+      { label: fT('Transfers'), value: fmt(c.nIn + c.nOut) },
+    ])
+    + fundNotesHtml()
+    + body
+    + `<button type="button" class="wp-travel-btn wp-mig-open" data-fund-action="open-nation">${escapeHtml(fT('Open the nation panel'))} ›</button>`;
+}
+
 /* I GIACIMENTI: l'altro bonus alla produzione, e l'unico che scade.
    `region.deposit` vale +30% su UN item in UNA regione per pochi giorni
    (vedi productionHeatmap.js), quindi la cosa che conta non è la
@@ -846,6 +980,8 @@ export function buildViewOverviewHtml(mode) {
   if (mode === 'travel') return travelOverviewHtml();
 
   if (mode === 'migration') return migrationHtml();
+
+  if (mode === 'funding') return fundingHtml();
 
   if (mode === 'contested') {
     const counts = state.contestedCounts;

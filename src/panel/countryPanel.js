@@ -1162,6 +1162,7 @@ export function renderViewOverviewPanel(mode) {
   // WarEra+ vista Migrazioni: finestra, metrica, direzione delle frecce e
   // righe che mettono a fuoco una nazione (non aprono il suo pannello).
   if (mode === 'migration') import('../diplomacy/migrationFlows.js').then(m => m.wireMigrationOverview(contentEl));
+  if (mode === 'funding') import('../diplomacy/fundingFlows.js').then(m => m.wireFundingOverview(contentEl));
 
   // WarEra+ vista Elezioni: la riga apre la situazione politica della
   // nazione, non il suo pannello.
@@ -1601,7 +1602,7 @@ export function initCountryPanel() {
     // WarEra+: in vista Migrazioni il click mette a fuoco la nazione nel
     // riepilogo della vista (map.js → migrationFlows.js); aprire qui il
     // pannello nazione lo sostituirebbe, frecce senza spiegazione.
-    if (state.coloringMode === 'migration') return;
+    if (state.coloringMode === 'migration' || state.coloringMode === 'funding') return;
     // WarEra+ (feedback utente): su mobile il pannello a schermo intero non
     // si apre più da solo al click — nasconderebbe mappa/diplomazia sotto
     // finché non lo si chiude. nationTooltip.js mostra un tooltip leggero

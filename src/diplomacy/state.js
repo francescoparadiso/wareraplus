@@ -80,6 +80,8 @@ export const state = {
   // WarEra+ replay della battaglia (battleReplay.js): { active, maxDamage }
   // mentre si riproduce, altrimenti null.
   battleReplay: null,
+  // WarEra+ vista Finanziamenti (fundingFlows.js): { data, days, focus, dir, … }
+  funding: null,
   regionData: null,
   regionCache: new Map(), // regionId → { position: [lng,lat], name: string }
 
