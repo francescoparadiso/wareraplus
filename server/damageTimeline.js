@@ -781,6 +781,64 @@ function readTimeline({ countryId = null, countryIds = null, hours = 48, days = 
   return { ...meta, known: true, series, daily };
 }
 
+/* ── Il battito di tutto il mondo (/damage-pulse) ─────────────────────
+   Richiesta dell'utente: nella vista Danni, ogni nazione che pulsa al
+   ritmo del danno dell'ultima ora, più accesa dove ci sono più pillati.
+   readTimeline sa rispondere per una nazione o un gruppo sommato; qui
+   serve il CONTRARIO, tutte le nazioni separate ma una sola ora. Stessa
+   lettura (epoche, ritardo, "un'ora è misurata solo se lo sono tutti i
+   suoi secchi"), ristretta alle ultime ore per non scorrere l'archivio
+   intero a ogni richiesta.
+   `hour` è l'ora COMPLETA più recente; null se nelle ultime ore non ce
+   n'è nessuna (server appena riavviato): il client allora non pulsa,
+   invece di far battere tutti a zero. */
+const PULSE_LOOKBACK_MS = 4 * HOUR_MS;
+
+function readPulse() {
+  const st = _readState();
+  const now = Date.now();
+  const nowHour = _floor(now, HOUR_MS);
+  const from = nowHour - PULSE_LOOKBACK_MS - 2 * HOUR_MS;   // margine per il ritardo delle epoche vecchie
+  const n = st.ids.length;
+  const ore = new Map();      // ora → { d: [], visti, attesi }
+  const pills = new Map();    // ora → [] massimo dei secchi
+  for (const k of Object.keys(st.hours).map(Number).filter(k => k >= from).sort((a, b) => a - b)) {
+    const b = st.hours[String(k)];
+    const dur = _slotAt(st, k);
+    const origine = _floor(k, HOUR_MS);
+    const t = origine - _lagAt(st, k);
+    let row = ore.get(t);
+    if (!row) { row = { d: new Array(n).fill(0), visti: 0, attesi: Math.max(1, Math.round(HOUR_MS / dur)) }; ore.set(t, row); }
+    if (b.d && b.d.length) {
+      for (let i = 0; i < b.d.length; i++) row.d[i] += b.d[i] || 0;
+      row.visti += 1;
+    }
+    if (b.p && b.p.length) {
+      const arr = pills.get(origine) || new Array(n).fill(0);
+      for (let i = 0; i < b.p.length; i++) arr[i] = Math.max(arr[i], b.p[i] || 0);
+      pills.set(origine, arr);
+    }
+  }
+  let hour = null;
+  for (const [t, row] of ore) {
+    if (t >= nowHour || row.visti < row.attesi) continue;
+    if (hour == null || t > hour) hour = t;
+  }
+  const out = { hour, to: hour != null ? hour + HOUR_MS : null, coverageFrom: st.startedAt || null, ids: [], d: [], p: [] };
+  if (hour == null) return out;
+  const row = ore.get(hour);
+  const pp = pills.get(hour) || [];
+  for (let i = 0; i < n; i++) {
+    const d = row.d[i] || 0;
+    const p = pp[i] || 0;
+    if (!d && !p) continue;
+    out.ids.push(st.ids[i]);
+    out.d.push(Math.round(d));
+    out.p.push(p);
+  }
+  return out;
+}
+
 /** Riga per /health. */
 function timelineStatus() {
   const st = _readState();
@@ -802,6 +860,7 @@ module.exports = {
   refreshPillConfig,
   recordPills,
   readTimeline,
+  readPulse,
   timelineStatus,
   pillTakenAt,      // esportata per i test: è la sola aritmetica non ovvia
 };

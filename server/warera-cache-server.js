@@ -176,7 +176,7 @@ const {
 // blocco in testa a server/damageTimeline.js.
 const {
   initDamageTimeline, sampleDamage, refreshPillConfig, recordPills,
-  readTimeline, timelineStatus,
+  readTimeline, readPulse, timelineStatus,
 } = require('./damageTimeline');
 // WarEra+ storico dei prezzi: un campione all'ora di `itemTrading.getPrices`
 // (pubblica, tutte le risorse in una richiesta) ridotto a una candela al
@@ -3009,6 +3009,16 @@ app.get('/damage-timeline', (req, res) => {
     ? String(req.query.countryIds).split(',').map(x => x.trim()).filter(Boolean).slice(0, 200)
     : null;
   res.json(readTimeline({ countryId: req.query.countryId || null, countryIds, hours, days }));
+});
+
+// WarEra+ il danno dell'ultima ora di TUTTE le nazioni, coi pillati di
+// quell'ora (server/damageTimeline.js: readPulse) — il battito della vista
+// Danni. Tre array paralleli: ids, d, p. Cinque minuti in memoria: l'ora
+// cambia una volta all'ora.
+let _pulseCache = null;
+app.get('/damage-pulse', (req, res) => {
+  if (!_pulseCache || Date.now() - _pulseCache.at > 5 * 60 * 1000) _pulseCache = { at: Date.now(), body: readPulse() };
+  res.json(_pulseCache.body);
 });
 
 // Andamento di UNA battaglia (server/battleTimeline.js). 404 se questo

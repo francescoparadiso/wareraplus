@@ -38,6 +38,7 @@ import { pauseBattleFlowFx, resumeBattleFlowFx } from '../diplomacy/battleFlows.
 import { pauseBattleReplay } from '../diplomacy/battleReplay.js';
 import { pauseSphereLinks, resumeSphereLinks } from '../diplomacy/sphereLinks.js';
 import { pauseFundingFx, resumeFundingFx } from '../diplomacy/fundingFlows.js';
+import { pauseDamagePulse, resumeDamagePulse } from '../diplomacy/damagePulse.js';
 
 let _depth = 0;
 
@@ -54,6 +55,7 @@ export function pauseMapBackgroundWork() {
   pauseBattleReplay();
   pauseSphereLinks();
   pauseFundingFx();
+  pauseDamagePulse();
 }
 
 /** Da chiamare quando l'overlay si chiude e la mappa torna visibile. */
@@ -74,6 +76,7 @@ export function resumeMapBackgroundWork() {
   resumeBattleFlowFx();
   resumeSphereLinks();
   resumeFundingFx();
+  resumeDamagePulse();
 
   // BUG FIX (mobile): stessa causa del ridisegno su 'idle'/'visibilitychange'
   // in labels.js — i nomi di nazioni e alleanze stanno su un canvas 2D a

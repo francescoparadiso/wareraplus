@@ -329,6 +329,11 @@ wareraPlus/
     │   │                        migrazioni, sfere, time machine): punto di aggancio
     │   │                        di una nazione (capitale se sua, se no etichetta),
     │   │                        archi in Mercatore, brightenColor per le linee.
+    │   ├── damagePulse.js     ← NUOVO — in vista Danni: un cuore sulla capitale di
+    │   │                        ogni nazione, grande e veloce quanto il danno
+    │   │                        dell'ULTIMA ORA completa, alone ambra → rosa con la
+    │   │                        quota di attivi pillati. Da /damage-pulse (tutte le
+    │   │                        nazioni, un'ora), nessun ripiego.
     │   ├── sphereLinks.js     ← NUOVO — in vista Sfera: fili potenza → proxy nel
     │   │                        colore della sfera, pieni dal CSV e tratteggiati
     │   │                        dal radar (gli stessi gruppi che tingono la mappa),
@@ -886,7 +891,7 @@ WarEra una volta per tutti invece di lasciare che lo faccia ogni browser —
 serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`,
 `/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
 `/citizen-moves`, `/migration-flows`, `/battle-timeline`,
-`/daily-damage`, `/damage-timeline`, `/price-history`, `/day-history`,
+`/daily-damage`, `/damage-timeline`, `/damage-pulse`, `/price-history`, `/day-history`,
 `/alliance-history`,
 `/labour-history`, `/company-census`, `/player-wealth`,
 `/political-history`, `/political-overview`, `/presidents`,

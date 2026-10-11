@@ -14,6 +14,7 @@ import { getPoliticsStats, POLITICS_COLORS, TURNOUT_MAX, TURNOUT_MID, turnoutLeg
 import { getTravelStats, travelLegendGradient, regionName, HOPS_PER_BAR, STAMINA_PER_HOP, OIL_PER_EXTRA_HOP } from './travelDistance.js';
 import { getTrendStats, trendLegendGradient } from './playstyleTrendHeatmap.js';
 import { getMigrationStats, migrationLegendGradient, focusFlows, OUT_COLOR, IN_COLOR } from './migrationFlows.js';
+import { damagePulseInfo } from './damagePulse.js';
 import { fund, getFundingStats, fundingLegendGradient, fundingFocus, IN_COLOR as FUND_IN, OUT_COLOR as FUND_OUT } from './fundingFlows.js';
 import { mergedSphereGroups } from '../proxy/radar.js';
 import { flagImgHtml } from '../panel/nationFlag.js';
@@ -170,6 +171,16 @@ export function updateDynamicLegend() {
         <span style="font-size:10px; color:${sub};">${fmtNumber(max)}</span>
       </div>
       <div class="legend-note">Low = blue · High = red</div>
+      ${(() => {
+        // WarEra+: il battito sulle capitali (damagePulse.js).
+        const pi = damagePulseInfo();
+        if (pi.data?.hour) {
+          const h = t => new Date(t).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
+          return `<div class="legend-note">Pulse = damage of the last full hour (${h(pi.data.hour)}–${h(pi.data.to)}): bigger and faster = more damage · glow from amber to pink = more players on pills</div>`;
+        }
+        if (pi.error) return '<div class="legend-note">Hourly pulse not available (cache server).</div>';
+        return '';
+      })()}
     `;
     return;
   }

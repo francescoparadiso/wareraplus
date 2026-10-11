@@ -35,6 +35,8 @@ import { syncBattleFlowOverlay } from './battleFlows.js';
 import { syncBattleReplay } from './battleReplay.js';
 // WarEra+ fili potenza → proxy in vista Sfera d'influenza
 import { syncSphereLinks } from './sphereLinks.js';
+// WarEra+ battito del danno dell'ultima ora in vista Danni
+import { syncDamagePulse } from './damagePulse.js';
 import { buildWeeklyDamageColorExpression } from './weeklyDamage.js';
 import { buildSphereColorExpression } from './sphereOfInfluence.js';
 import { buildBattleHeatmapColorExpression } from './battleHeatmap.js';
@@ -706,6 +708,8 @@ export function renderMap() {
   syncBattleReplay();
   // WarEra+: e i fili delle sfere d'influenza (sphereLinks.js).
   syncSphereLinks();
+  // WarEra+: e il battito del danno in vista Danni (damagePulse.js).
+  syncDamagePulse();
 
   // WarEra+ perf: qui c'era una ricostruzione di centinaia di Feature
   // (_buildLabelsWithPopulation) ri-pubblicate su SRC_LABELS nelle modalità
