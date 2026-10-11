@@ -1643,6 +1643,10 @@ export function initCountryPanel() {
     // riepilogo della vista (map.js → migrationFlows.js); aprire qui il
     // pannello nazione lo sostituirebbe, frecce senza spiegazione.
     if (state.coloringMode === 'migration' || state.coloringMode === 'funding') return;
+    // WarEra+ (feedback utente): in vista Distanze il click sceglie
+    // partenza, casa o casse (map.js → travelDistance.js) e il riepilogo
+    // della vista mostra il percorso: il pannello nazione lo copriva.
+    if (state.coloringMode === 'travel') return;
     // WarEra+ (feedback utente): su mobile il pannello a schermo intero non
     // si apre più da solo al click — nasconderebbe mappa/diplomazia sotto
     // finché non lo si chiude. nationTooltip.js mostra un tooltip leggero
