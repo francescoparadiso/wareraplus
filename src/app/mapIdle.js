@@ -35,6 +35,7 @@ import { drawLabels, resizeLabelCanvas } from '../diplomacy/labels.js';
 import { pauseMigrationFx, resumeMigrationFx } from '../diplomacy/migrationFlows.js';
 // WarEra+: onde d'impatto e trattini delle frecce sulla battaglia aperta.
 import { pauseBattleFlowFx, resumeBattleFlowFx } from '../diplomacy/battleFlows.js';
+import { pauseBattleReplay } from '../diplomacy/battleReplay.js';
 
 let _depth = 0;
 
@@ -48,6 +49,7 @@ export function pauseMapBackgroundWork() {
   pauseBattleMarkersPolling();
   pauseMigrationFx();
   pauseBattleFlowFx();
+  pauseBattleReplay();
 }
 
 /** Da chiamare quando l'overlay si chiude e la mappa torna visibile. */

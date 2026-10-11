@@ -3830,3 +3830,70 @@ body.light-theme .wp-travel-warn { color: #9a6700; }
 body.light-theme .wp-mig-hint { color: #2b2418; }
 body.light-theme .wp-mig-seg-label { color: #5c5347; }
 body.light-theme .wp-mig-note { color: #9a6700; }
+
+/* ── WarEra+ replay della battaglia (src/diplomacy/battleReplay.js) ──
+   Sopra la scheda della battaglia chiusa (che sta a bottom: 55px). */
+#wp-replay-hud {
+  position: fixed;
+  left: 50%;
+  bottom: calc(108px + env(safe-area-inset-bottom, 0px));  /* rimisurato da placeHud */
+  transform: translateX(-50%);
+  z-index: 9100;  /* sopra la scheda della battaglia (9000) e il suo "All contributors" */
+  max-width: calc(100vw - 32px);
+  color: #e6edf3;
+  font-size: 12px;
+}
+#wp-replay-hud[hidden] { display: none; }
+.wp-replay-open {
+  font: inherit;
+  font-weight: 700;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 209, 102, .5);
+  background: rgba(13, 17, 23, .92);
+  color: #ffd166;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+}
+.wp-replay-open:hover { background: rgba(40, 32, 12, .95); }
+#wp-replay-hud.active .wp-replay-open { display: none; }
+.wp-replay-bar { display: none; }
+#wp-replay-hud.active .wp-replay-bar {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 420px) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  width: min(560px, calc(100vw - 32px));
+  border-radius: 12px;
+  background: rgba(13, 17, 23, .94);
+  border: 1px solid rgba(255, 209, 102, .35);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .5);
+}
+.wp-replay-btn {
+  font: inherit;
+  min-width: 32px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 209, 102, .35);
+  background: rgba(255, 209, 102, .08);
+  color: #ffd166;
+  cursor: pointer;
+}
+.wp-replay-x { color: #8b949e; border-color: transparent; background: none; }
+.wp-replay-range { width: 100%; accent-color: #ffd166; }
+.wp-replay-info { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.wp-replay-info b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.wp-replay-info span { color: #8b949e; font-variant-numeric: tabular-nums; }
+.wp-replay-note { flex-basis: 100%; font-size: 11px; color: #e3b341; }
+body.light-theme .wp-replay-open,
+body.light-theme #wp-replay-hud.active .wp-replay-bar {
+  background: rgba(250, 244, 230, .96);
+  border-color: rgba(139, 90, 43, .4);
+  color: #8b5a2b;
+}
+body.light-theme #wp-replay-hud { color: #2b2418; }
+body.light-theme .wp-replay-btn { color: #8b5a2b; border-color: rgba(139, 90, 43, .35); background: rgba(139, 90, 43, .06); }
+body.light-theme .wp-replay-info span { color: #5c5347; }
+body.light-theme .wp-replay-note { color: #9a6700; }

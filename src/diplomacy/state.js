@@ -77,6 +77,9 @@ export const state = {
   // WarEra+ vista Migrazioni (migrationFlows.js): { data, error, days, metric,
   // focus, dir }, creato alla prima apertura. `data` è /migration-flows.
   migration: null,
+  // WarEra+ replay della battaglia (battleReplay.js): { active, maxDamage }
+  // mentre si riproduce, altrimenti null.
+  battleReplay: null,
   regionData: null,
   regionCache: new Map(), // regionId → { position: [lng,lat], name: string }
 

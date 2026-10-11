@@ -90,7 +90,10 @@ function overlayFeatures() {
     taken[n.side]++;
     return true;
   });
-  const maxDmg = rows.length ? rows[0].totalDamage : 1;
+  // Durante il replay (battleReplay.js) lo spessore si misura sul danno
+  // FINALE del primo: le frecce crescono col tempo invece di restare
+  // sempre piene rispetto a chi è primo in quel momento.
+  const maxDmg = state.battleReplay?.maxDamage || (rows.length ? rows[0].totalDamage : 1);
   const feats = [];
   for (const r of rows) {
     const from = countryAnchor(r.countryId);

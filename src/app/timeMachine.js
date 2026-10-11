@@ -63,6 +63,8 @@ import { dayKey, fetchDay, cachedDay, fuoriPortata } from './timeMachineDay.js';
 // dal lancio del gioco: a differenza della diplomazia, qui non esiste un
 // "fuori portata". Una richiesta per sessione, nessun ripiego.
 import { fetchPresidents } from '../political/plusApi.js';
+// WarEra+: le conquiste animate durante la riproduzione (freccia + onda).
+import { animateConquests, clearConquests } from './timeMachineConquest.js';
 
 let _presidents;          // undefined = mai chiesto, null = non disponibile
 
@@ -185,6 +187,8 @@ let _speedIdx = 0; // indice in PLAY_SPEEDS
 // degrado grazioso, il resto della time machine funziona comunque.
 let _eventTsSorted = null; // number[] ordinato, per il salto prossimo/precedente
 let _eventsByRegion = null; // Map<regionId, {ts,toCountry}[]> ordinato per ts, per "dal —"
+let _eventsSorted = null; // WarEra+: gli stessi eventi in un elenco solo, per le conquiste animate
+let _lastRenderedTs = null; // istante dell'ultimo fotogramma applicato: le conquiste animate sono quelle in mezzo
 
 export function initTimeMachine() {
   _btn = document.getElementById('wp-time-machine-btn');
@@ -264,6 +268,8 @@ function _deactivate() {
   _active = false;
   state.timeMachineActive = false;
   trackEvent('time-machine-close');
+  clearConquests();
+  _lastRenderedTs = null;
   _stopPlay();
   _btn.classList.remove('wp-time-machine-btn-active');
   if (_panel) _panel.classList.remove('open');
@@ -772,6 +778,7 @@ async function _loadEvents() {
       .slice()
       .sort((a, b) => a.ts - b.ts);
     _eventTsSorted = events.map(e => e.ts);
+    _eventsSorted = events;
     _eventsByRegion = new Map();
     for (const e of events) {
       if (!_eventsByRegion.has(e.regionId)) _eventsByRegion.set(e.regionId, []);
@@ -855,6 +862,11 @@ async function _fetchAndRender(ts) {
     if (token !== _applyToken) return false; // superata da una richiesta più recente, scartata
     _lastRegions = regions;
     renderTimeMachineFrame(regions, _buildLabelEntries(regions));
+    // WarEra+: i passaggi di mano fra il fotogramma di prima e questo, come
+    // lampi dalla capitale del conquistatore (timeMachineConquest.js).
+    // Solo in avanti, e il modulo stesso si limita sui salti lunghi.
+    if (_lastRenderedTs != null && _eventsSorted) animateConquests(_eventsSorted, _lastRenderedTs, ts);
+    _lastRenderedTs = ts;
     _updateStandings(regions);
     _updateFocus(ts);
     return true;

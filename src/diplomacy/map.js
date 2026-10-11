@@ -29,6 +29,8 @@ import { buildTravelColorExpression, syncTravelOverlay, onTravelRegionClick } fr
 import { buildMigrationColorExpression, syncMigrationOverlay, onMigrationCountryClick, clearMigrationFocus } from './migrationFlows.js';
 // WarEra+ frecce del danno sulla battaglia aperta (heatmap battaglia)
 import { syncBattleFlowOverlay } from './battleFlows.js';
+// WarEra+ replay della battaglia aperta (/battle-timeline)
+import { syncBattleReplay } from './battleReplay.js';
 import { buildWeeklyDamageColorExpression } from './weeklyDamage.js';
 import { buildSphereColorExpression } from './sphereOfInfluence.js';
 import { buildBattleHeatmapColorExpression } from './battleHeatmap.js';
@@ -689,6 +691,8 @@ export function renderMap() {
   syncMigrationOverlay();
   // WarEra+: e per quelle del danno sulla battaglia aperta (battleFlows.js).
   syncBattleFlowOverlay();
+  // WarEra+: compare/scompare la barra del replay della battaglia aperta.
+  syncBattleReplay();
 
   // WarEra+ perf: qui c'era una ricostruzione di centinaia di Feature
   // (_buildLabelsWithPopulation) ri-pubblicate su SRC_LABELS nelle modalità

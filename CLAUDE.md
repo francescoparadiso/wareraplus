@@ -310,17 +310,25 @@ wareraPlus/
     │   ├── alliances.js, naps.js, sphereOfInfluence.js, blocs.js (dead, vedi sotto)
     │   ├── battleMarkers.js, battleHeatmap.js, battleFront.js, battleFront/
     │   ├── battleFlows.js     ← NUOVO — al clic su una battaglia: frecce dalla
-│   │                        CAPITALE delle prime 5 nazioni per lato (sopra il
-│   │                        5% del lato: con tutte le ≥1% era illeggibile) alla
-│   │                        regione. Spessore ∝ √danno, nessun numero (la quota
-│   │                        la scrive già la heatmap sulla nazione).
-│   │                        Animazione: trattini che scorrono (line-dasharray
-│   │                        ciclata) + onde d'impatto sulla regione. Zero fetch,
-│   │                        legge state.battleHeatmapData.
-│   ├── flowGeometry.js    ← NUOVO — condivisa da battleFlows e migrationFlows:
-│   │                        punto di aggancio di una nazione (capitale se sua,
-│   │                        se no etichetta) e archi in Mercatore.
-│   ├── battleSpending.js  ← NUOVO — quanto è costata una battaglia: taglie
+    │   │                        CAPITALE delle prime 5 nazioni per lato (sopra il
+    │   │                        5% del lato: con tutte le ≥1% era illeggibile) alla
+    │   │                        regione. Spessore ∝ √danno, nessun numero (la quota
+    │   │                        la scrive già la heatmap sulla nazione).
+    │   │                        Animazione: trattini che scorrono (line-dasharray
+    │   │                        ciclata) + onde d'impatto sulla regione. Zero fetch,
+    │   │                        legge state.battleHeatmapData.
+    │   ├── battleReplay.js    ← NUOVO — replay della battaglia aperta: barra con
+    │   │                        play/pausa/cursore/velocità sopra la scheda della
+    │   │                        battaglia; da /battle-timeline ricostruisce la
+    │   │                        classifica per nazione a ogni tick e la mette AL
+    │   │                        POSTO di state.battleHeatmapData.nations finché
+    │   │                        dura (heatmap, etichette, legenda e frecce la
+    │   │                        seguono da sole). Il giro live dei 10 s si ferma
+    │   │                        intanto. Solo battaglie registrate dal 2026-10-07.
+    │   ├── flowGeometry.js    ← NUOVO — condivisa da battleFlows e migrationFlows:
+    │   │                        punto di aggancio di una nazione (capitale se sua,
+    │   │                        se no etichetta) e archi in Mercatore.
+    │   ├── battleSpending.js  ← NUOVO — quanto è costata una battaglia: taglie
     │   │                        pagate (classifica "money" per nazione) + contratti
     │   │                        mercenari aggiudicati, per schieramento. Tre procedure
     │   │                        PUBBLICHE su api6 (nessun consumo del Worker), un
@@ -377,26 +385,26 @@ wareraPlus/
     │   │                          sono in gameConfig: sono della patch 0.26.1, costanti
     │   │                          in testa al file. Testi in travelI18n.js (9 lingue).
     │   ├── migrationFlows.js    ← NUOVO — vista mappa "Migrazioni": saldo dei cambi di
-│   │                          cittadinanza per nazione (rosso perde, verde guadagna,
-│   │                          assoluto o ogni 100 cittadini 10+) e, cliccando una
-│   │                          nazione, frecce curve DALLA CAPITALE verso dove vanno i suoi giocatori
-│   │                          (arancio) e da dove arrivano (azzurro). Una richiesta a
-│   │                          /migration-flows per tutto il mondo, NESSUN ripiego (non
-│   │                          esiste una chiamata WarEra equivalente). Riepilogo in
-│   │                          viewOverview.js, testi in migrationI18n.js (9 lingue).
-│   │                          Effetto "volo" 3D finto: ombra a terra sotto l'arco +
-│   │                          comete animate (~30 fps, sorgente propria). Ferme con
-│   │                          scheda nascosta, time machine, overlay (mapIdle.js).
-│   │                          ⚠️ NON guarda prefers-reduced-motion: Windows con le
-│   │                          animazioni spente lo dichiara e l'utente non vedeva
-│   │                          nessun movimento.
-│   │                          ⚠️ text-font delle etichette MapLibre: solo font che
-│   │                          fonts.openmaptiles.org ha davvero ('Open Sans Bold').
-│   │                          'Noto Sans Regular' risponde con una pagina HTML e fa
-│   │                          cadere l'INTERA sorgente («Unimplemented type: 4»).
-│   ├── politicsHeatmap.js   ← NUOVO — vista mappa "Elezioni": dove si vota (rosso,
-│   │                          sfumato per AFFLUENZA di adesso = voti / popolazione
-│   │                          attiva, scala fissa 0–100% ponderata a radice)
+    │   │                          cittadinanza per nazione (rosso perde, verde guadagna,
+    │   │                          assoluto o ogni 100 cittadini 10+) e, cliccando una
+    │   │                          nazione, frecce curve DALLA CAPITALE verso dove vanno i suoi giocatori
+    │   │                          (arancio) e da dove arrivano (azzurro). Una richiesta a
+    │   │                          /migration-flows per tutto il mondo, NESSUN ripiego (non
+    │   │                          esiste una chiamata WarEra equivalente). Riepilogo in
+    │   │                          viewOverview.js, testi in migrationI18n.js (9 lingue).
+    │   │                          Effetto "volo" 3D finto: ombra a terra sotto l'arco +
+    │   │                          comete animate (~30 fps, sorgente propria). Ferme con
+    │   │                          scheda nascosta, time machine, overlay (mapIdle.js).
+    │   │                          ⚠️ NON guarda prefers-reduced-motion: Windows con le
+    │   │                          animazioni spente lo dichiara e l'utente non vedeva
+    │   │                          nessun movimento.
+    │   │                          ⚠️ text-font delle etichette MapLibre: solo font che
+    │   │                          fonts.openmaptiles.org ha davvero ('Open Sans Bold').
+    │   │                          'Noto Sans Regular' risponde con una pagina HTML e fa
+    │   │                          cadere l'INTERA sorgente («Unimplemented type: 4»).
+    │   ├── politicsHeatmap.js   ← NUOVO — vista mappa "Elezioni": dove si vota (rosso,
+    │   │                          sfumato per AFFLUENZA di adesso = voti / popolazione
+    │   │                          attiva, scala fissa 0–100% ponderata a radice)
     │   │                          e dove sono aperte le candidature (oro), da
     │   │                          /elections?open=1 (la rotta dei ticker)
     │   ├── antiqueTheme.js      ← NUOVO — estetica "mappa antica", tema chiaro
@@ -727,6 +735,11 @@ wareraPlus/
     │   │                         FERMATO, mai una per fotogramma di playback, e
     │   │                         nessun fallback: se il server non ce l'ha, le
     │   │                         sezioni non compaiono.
+    │   ├── timeMachineConquest.js ← NUOVO — conquiste animate nella riproduzione:
+    │   │                         freccia lampo dalla capitale ORIGINARIA del
+    │   │                         conquistatore + onda sulla regione, per gli eventi
+    │   │                         fra un fotogramma e l'altro. Tetti: niente oltre 4
+    │   │                         giorni di salto, 6 per fotogramma, 14 a schermo.
     │   ├── timeMachineMap.js   ← SECONDA mappa MapLibre dedicata e alleggerita (3 layer)
     │   │                         usata dalla time machine; la principale viene nascosta,
     │   │                         non toccata. timeMachine.js tiene tutta la logica.

@@ -23,7 +23,9 @@ const MIN_SIDE_SHARE = 0.01;
 //     (richiesta dell'utente: nascondere i nomi dei paesi che non hanno
 //     combattuto, sia per togliere rumore sia perché così i nomi di chi
 //     ha combattuto non perdono più le collisioni contro i vicini muti).
-function computeHighlightedIds(nations) {
+// WarEra+: esportata per il replay (battleReplay.js), che ricalcola chi è
+// evidenziato sulla classifica di un istante passato con la STESSA regola.
+export function computeHighlightedIds(nations) {
   let totalAttacker = 0, totalDefender = 0;
   nations.forEach(n => {
     if (n.side === 'attacker') totalAttacker += n.totalDamage;
@@ -501,6 +503,10 @@ function startLiveUpdates(battleId) {
       return;
     }
     if (document.hidden) return; // WarEra+ perf: nessuno sta guardando
+    // WarEra+: col replay attivo la classifica mostrata è quella di un
+    // istante passato (battleReplay.js); riscriverla con quella di adesso
+    // farebbe saltare la mappa avanti a ogni giro.
+    if (state.battleReplay?.active) return;
     try {
       const rankingData = await fetchBattleRanking(battleId);
       if (rankingData && rankingData.length) {
