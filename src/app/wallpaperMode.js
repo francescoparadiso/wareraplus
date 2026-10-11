@@ -400,11 +400,15 @@ function startRotation() {
   clearInterval(_rotateTimer);
   _rotateTimer = null;
   if (!_props.rotate) return;
-  _rotateIndex = Math.max(0, ROTATION.indexOf(_props.view));
+  // Solo le viste che questa versione del sito ha davvero: lo sfondo
+  // pubblicato carica il live, che può avere meno viste di dev.
+  const views = ROTATION.filter(v => document.getElementById(`mode-${v}`));
+  if (!views.length) return;
+  _rotateIndex = Math.max(0, views.indexOf(_props.view));
   _rotateTimer = setInterval(() => {
     if (_paused || document.hidden) return;
-    _rotateIndex = (_rotateIndex + 1) % ROTATION.length;
-    setView(ROTATION[_rotateIndex]);
+    _rotateIndex = (_rotateIndex + 1) % views.length;
+    setView(views[_rotateIndex]);
   }, _props.rotateMinutes * 60 * 1000);
 }
 
