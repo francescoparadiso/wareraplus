@@ -3937,3 +3937,6 @@ body.light-theme .wp-mig-tl-off, body.light-theme .wp-mig-tl-axis { fill: #d8cfc
   100% { opacity: 0; transform: translateY(-6px); }
 }
 body.light-theme .wp-ping-label { background: rgba(250, 244, 230, .95); color: #2b2418; }
+
+/* Comandi dei fili della vista Sfera (diplomacy/sphereLinks.js). */
+.wp-sphere-links-ctl { margin: 6px 0 10px; }

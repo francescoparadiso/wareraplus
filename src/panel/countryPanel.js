@@ -490,7 +490,7 @@ function render(nationId) {
   if (!nation) return;
   currentNationId = nationId;
   currentBlocId = null;
-  currentSphereId = null;
+  _setSphere(null);
   sphereOverviewOpen = false;
   currentOverviewMode = null;
   contentEl.innerHTML = overviewBackHtml() + buildPanelHtml(nation);
@@ -753,6 +753,14 @@ let currentOverviewMode = null;
 // il dettaglio sfera con #wp-sphere-back), non solo nella barra mobile.
 let overviewOrigin = null;
 let currentSphereId = null;
+// WarEra+: la sfera aperta è anche in state.selectedSphereId, perché i fili
+// sulla mappa (diplomacy/sphereLinks.js) disegnano di partenza solo quella.
+function _setSphere(id) {
+  currentSphereId = id;
+  if (state.selectedSphereId === id) return;
+  state.selectedSphereId = id;
+  if (state.coloringMode === 'sphereOfInfluence') import('../diplomacy/sphereLinks.js').then(m => m.syncSphereLinks()).catch(() => {});
+}
 let sphereOverviewOpen = false;   // il riepilogo di TUTTE le sfere è quello aperto
 
 function sphereStats(nation) {
@@ -883,7 +891,7 @@ function buildSpherePanelHtml(primaryId) {
 function renderSpherePanel(primaryId) {
   // WarEra+: vale anche per le potenze che esistono solo grazie al radar.
   if (!mergedSphereGroups().some(g => g.primaryId === primaryId)) return;
-  currentSphereId = primaryId;
+  _setSphere(primaryId);
   currentNationId = null;
   currentBlocId = null;
   sphereOverviewOpen = false;
@@ -898,6 +906,23 @@ function renderSpherePanel(primaryId) {
     openPanelNow();
   }
   wirePinStar();
+
+  // WarEra+: i comandi dei fili sulla mappa, subito sotto l'intestazione.
+  import('../diplomacy/sphereLinks.js').then(m => {
+    if (currentSphereId !== primaryId) return;
+    const head = contentEl.querySelector('.wp-panel-header');
+    if (!head || contentEl.querySelector('.wp-sphere-links-ctl')) return;
+    head.insertAdjacentHTML('afterend', m.sphereLinksControlHtml());
+    // Ridisegna solo il riquadro dei comandi (i bottoni accesi), non la
+    // scheda: si ricollega ogni volta il riquadro nuovo, e basta.
+    const remount = () => {
+      const old = contentEl.querySelector('.wp-sphere-links-ctl');
+      if (!old) return;
+      old.outerHTML = m.sphereLinksControlHtml();
+      m.wireSphereLinkControls(contentEl.querySelector('.wp-sphere-links-ctl'), remount);
+    };
+    m.wireSphereLinkControls(contentEl.querySelector('.wp-sphere-links-ctl'), remount);
+  }).catch(() => {});
 
   // Ogni riga apre il pannello della SINGOLA nazione: è il livello di
   // dettaglio sotto la sfera (parlamento, alleanze, guerre della nazione).
@@ -1042,7 +1067,7 @@ function buildSphereOverviewHtml() {
 
 export function renderSphereOverviewPanel() {
   if (!contentEl) return;
-  currentSphereId = null;
+  _setSphere(null);
   currentNationId = null;
   currentBlocId = null;
   sphereOverviewOpen = true;
@@ -1054,6 +1079,14 @@ export function renderSphereOverviewPanel() {
   } else {
     openPanelNow();
   }
+  // WarEra+: i comandi dei fili sulla mappa (sphereLinks.js), sopra l'elenco.
+  import('../diplomacy/sphereLinks.js').then(m => {
+    if (!sphereOverviewOpen || contentEl.querySelector('.wp-sphere-links-ctl')) return;
+    const anchor = contentEl.querySelector('.wp-sphere-disclaimer');
+    if (!anchor) return;
+    anchor.insertAdjacentHTML('afterend', m.sphereLinksControlHtml({ inOverview: true }));
+    m.wireSphereLinkControls(contentEl.querySelector('.wp-sphere-links-ctl'), () => renderSphereOverviewPanel());
+  }).catch(() => {});
 
   contentEl.querySelectorAll('[data-sphere-open]').forEach(el => {
     el.addEventListener('click', (e) => {
@@ -1139,7 +1172,7 @@ export function renderViewOverviewPanel(mode) {
   overviewOrigin = mode;
   currentNationId = null;
   currentBlocId = null;
-  currentSphereId = null;
+  _setSphere(null);
   sphereOverviewOpen = false;
   contentEl.innerHTML = html;
 
@@ -1462,7 +1495,7 @@ function renderBlocPanel(allianceId) {
   if (!alliance) return;
   currentBlocId = allianceId;
   currentNationId = null;
-  currentSphereId = null;
+  _setSphere(null);
   sphereOverviewOpen = false;
   currentOverviewMode = null;
   contentEl.innerHTML = overviewBackHtml() + buildBlocPanelHtml(allianceId);
@@ -1516,7 +1549,7 @@ export function closePanel() {
   document.body.classList.remove('wp-panel-open');
   currentNationId = null;
   currentBlocId = null;
-  currentSphereId = null;
+  _setSphere(null);
   sphereOverviewOpen = false;
   currentOverviewMode = null;
   overviewOrigin = null;

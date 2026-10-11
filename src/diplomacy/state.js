@@ -82,6 +82,9 @@ export const state = {
   battleReplay: null,
   // WarEra+ vista Finanziamenti (fundingFlows.js): { data, days, focus, dir, … }
   funding: null,
+  // WarEra+ la sfera aperta nel pannello (countryPanel.js), per i fili
+  // della vista Sfera (sphereLinks.js). null = nessuna.
+  selectedSphereId: null,
   regionData: null,
   regionCache: new Map(), // regionId → { position: [lng,lat], name: string }
 

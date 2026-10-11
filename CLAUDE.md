@@ -338,6 +338,10 @@ wareraPlus/
     │   │                        colore della sfera, pieni dal CSV e tratteggiati
     │   │                        dal radar (gli stessi gruppi che tingono la mappa),
     │   │                        con un impulso di luce che corre verso il proxy.
+    │   │                        Di partenza SOLO la sfera aperta nel pannello
+    │   │                        (state.selectedSphereId): tutte insieme erano ~60
+    │   │                        fili. Comandi nel pannello: sfera aperta / tutte /
+    │   │                        nessuno, CSV / radar / entrambe (`we_sphere_links`).
     │   ├── battleSpending.js  ← NUOVO — quanto è costata una battaglia: taglie
     │   │                        pagate (classifica "money" per nazione) + contratti
     │   │                        mercenari aggiudicati, per schieramento. Tre procedure
