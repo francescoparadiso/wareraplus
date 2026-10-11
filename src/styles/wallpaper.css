@@ -24,11 +24,14 @@ body.wp-wallpaper.wp-wp-no-ticker .wp-news-ticker-wrapper { display: none !impor
 /* ── Crediti e contatore: stanno nella fascia "i" ── */
 body.wp-wallpaper #wp-bottom-credits { display: none !important; }
 
-/* ── La "i" in basso a destra ── */
+/* ── La "i" in basso a destra ──
+   Lo sfondo copre TUTTO il monitor, anche la striscia dietro la barra
+   delle applicazioni di Windows (~48px, di più con lo scaling): 16px dal
+   fondo finivano sotto la barra. 72px la lasciano sopra anche a 150%. */
 .wp-wallpaper-info-btn {
   position: fixed;
   right: 16px;
-  bottom: 16px;
+  bottom: 72px;
   z-index: 8000;
   width: 28px;
   height: 28px;
@@ -48,7 +51,7 @@ body.wp-wallpaper #wp-bottom-credits { display: none !important; }
 .wp-wallpaper-info {
   position: fixed;
   right: 16px;
-  bottom: 54px;
+  bottom: 110px;
   z-index: 8000;
   width: min(380px, calc(100vw - 32px));
   padding: 14px 16px;
