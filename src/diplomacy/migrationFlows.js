@@ -37,6 +37,7 @@ import { state } from './state.js';
 import { COLORS, WARERA_CACHE_BASE } from './config.js';
 import { trackEvent } from '../shared/analytics.js';
 import { countryAnchor, arc, groundAt, alongArc } from './flowGeometry.js';
+import { animationsOn } from '../shared/motion.js';
 
 export const MIGRATION_DAYS = [1, 7, 30];
 export const OUT_COLOR = '#ff9f43';   // partenze: arancio, non si confonde col rosso del saldo
@@ -581,7 +582,7 @@ function setFx(features) {
 
 function fxTick(now) {
   _fxRaf = null;
-  if (_fxPaused || state.timeMachineActive || state.coloringMode !== 'migration' || !_fxArcs.length) {
+  if (_fxPaused || !animationsOn() || state.timeMachineActive || state.coloringMode !== 'migration' || !_fxArcs.length) {
     if (_fxOn) setFx([]);
     return;
   }
@@ -593,7 +594,7 @@ function fxTick(now) {
 }
 
 function startFx() {
-  if (_fxRaf || _fxPaused) return;
+  if (_fxRaf || _fxPaused || !animationsOn()) return;
   _fxRaf = requestAnimationFrame(fxTick);
 }
 

@@ -404,6 +404,7 @@ let _openElectionsTimer = null;
 
 async function _loadOpenElections(force = false) {
   if (!force && state.openElections && Date.now() - state.openElectionsAt < OPEN_ELECTIONS_TTL) return;
+  const prev = state.openElections;
   try {
     const { fetchOpenElectionsViaCache } = await import('./cacheClient.js');
     state.openElections = await fetchOpenElectionsViaCache();
@@ -413,7 +414,16 @@ async function _loadOpenElections(force = false) {
     console.warn('[politics] elezioni aperte non disponibili:', err.message);
     if (!state.openElections) state.openElectionsError = 'Open elections are not available right now (cache server unreachable).';
   }
-  if (state.coloringMode === 'politics') { renderMap(); _refreshOverview('politics'); }
+  if (state.coloringMode === 'politics') {
+    // WarEra+ elezioni in diretta (electionsLive.js): se i voti sono saliti
+    // dal giro prima la tinta si scalda in transizione e la capitale batte;
+    // in quel caso il ridisegno lo fa lei alla fine, non qui.
+    const live = prev && prev !== state.openElections
+      ? await import('./electionsLive.js').then(m => m.onElectionsUpdate(prev, state.openElections)).catch(() => false)
+      : false;
+    if (!live) renderMap();
+    _refreshOverview('politics');
+  }
 }
 
 document.getElementById('mode-politics')?.addEventListener('click', async () => {

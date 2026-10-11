@@ -39,6 +39,7 @@ import { state } from './state.js';
 import { computeHighlightedIds } from './battleHeatmap.js';
 import { getLang } from '../shared/i18n.js';
 import { trackEvent } from '../shared/analytics.js';
+import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 
 // Il replay dura sempre lo stesso tempo, qualunque sia la battaglia: una
 // di otto ore e una di quaranta minuti si guardano in mezzo minuto.
@@ -57,6 +58,9 @@ const T = {
   'Speed': ['Velocità', 'Velocidad', 'Tempo', 'Vitesse', 'Snelheid', 'Hastighet', 'Velocidade', 'السرعة'],
   'Close replay': ['Chiudi il replay', 'Cerrar la repetición', 'Wiederholung schließen', 'Fermer le replay', 'Herhaling sluiten', 'Stäng repriset', 'Fechar a repetição', 'إغلاق الإعادة'],
   'Round {n}': ['Round {n}', 'Ronda {n}', 'Runde {n}', 'Manche {n}', 'Ronde {n}', 'Rond {n}', 'Ronda {n}', 'الجولة {n}'],
+  'Attackers take the lead': ['Gli attaccanti passano avanti', 'Los atacantes toman la delantera', 'Die Angreifer gehen in Führung', 'Les attaquants prennent l’avantage', 'De aanvallers nemen de leiding', 'Anfallarna tar ledningen', 'Os atacantes passam à frente', 'المهاجمون يتقدمون'],
+  'Defenders take the lead': ['I difensori passano avanti', 'Los defensores toman la delantera', 'Die Verteidiger gehen in Führung', 'Les défenseurs prennent l’avantage', 'De verdedigers nemen de leiding', 'Försvararna tar ledningen', 'Os defensores passam à frente', 'المدافعون يتقدمون'],
+  '{name} joins': ['Entra {name}', 'Entra {name}', '{name} steigt ein', '{name} entre', '{name} doet mee', '{name} går in', 'Entra {name}', 'تنضم {name}'],
   'Recorded from {time}: damage done before arrives all at once.': [
     'Registrata dalle {time}: il danno fatto prima arriva tutto in un colpo.',
     'Registrada desde las {time}: el daño anterior llega de golpe.',
@@ -130,6 +134,43 @@ let _playing = false;
 let _timer = null;
 let _lastFrameAt = 0;
 let _speed = 1;
+let _marks = [];          // { t, kind: 'flip'|'entry', side, country }
+
+/* ── Segni sul cursore (richiesta dell'utente) ──
+   I SORPASSI (cambio di chi fa più danno nel round) e gli INGRESSI delle
+   nazioni che pesano, come li calcola la scheda battaglia
+   (src/battles/battleTimeline.js: analyzeTimeline). Un clic ci porta il
+   replay. Tetti: 12 sorpassi e 8 ingressi, i più grossi — su una
+   battaglia lunga sarebbero decine di tacche una sopra l'altra. */
+const MAX_FLIPS = 12;
+const MAX_ENTRIES = 8;
+
+function buildMarks(an) {
+  if (!an) return [];
+  const flips = (an.flips || []).slice(0, MAX_FLIPS).map(f => ({ t: f.t, kind: 'flip', side: f.side }));
+  const entries = (an.entries || [])
+    .filter(e => !e.minor)
+    .sort((a, b) => (b.total || 0) - (a.total || 0))
+    .slice(0, MAX_ENTRIES)
+    .map(e => ({ t: e.at, kind: 'entry', side: e.side, country: e.country }));
+  return [...flips, ...entries].sort((a, b) => a.t - b.t);
+}
+
+function marksHtml() {
+  if (!_range || !_marks.length) return '';
+  const span = _range.t1 - _range.t0;
+  return _marks.map((m, i) => {
+    const left = Math.max(0, Math.min(100, (m.t - _range.t0) / span * 100)).toFixed(2);
+    if (m.kind === 'flip') {
+      const title = rT(m.side === 'attacker' ? 'Attackers take the lead' : 'Defenders take the lead');
+      return `<button type="button" class="wp-replay-mark flip ${m.side}" style="left:${left}%" data-replay-mark="${i}" title="${title} · ${fmtClock(m.t)}" aria-label="${title}"></button>`;
+    }
+    const n = state.nationMap.get(m.country);
+    const flag = n ? getFlagUrl(getNationCode(m.country, n)) : null;
+    const title = rT('{name} joins', { name: n?.name || '—' });
+    return `<button type="button" class="wp-replay-mark entry ${m.side}" style="left:${left}%" data-replay-mark="${i}" title="${title} · ${fmtClock(m.t)}" aria-label="${title}">${flag ? `<img src="${flag}" alt="" onerror="this.remove()">` : ''}</button>`;
+  }).join('');
+}
 
 /** Chiamata da renderMap a ogni ridisegno: prepara il replay quando si
  *  apre una battaglia, lo smonta quando la si chiude o si cambia. Non
@@ -145,9 +186,11 @@ export function syncBattleReplay() {
 
 async function prepare(id) {
   let tl = null;
+  let an = null;
   try {
-    const { fetchBattleTimeline } = await import('../battles/battleTimeline.js');
+    const { fetchBattleTimeline, analyzeTimeline } = await import('../battles/battleTimeline.js');
     tl = await fetchBattleTimeline(id, { live: true });
+    if (tl) { try { an = analyzeTimeline(tl); } catch { an = null; } }
   } catch (err) {
     console.warn('WarEra+ replay: andamento non disponibile:', err.message);
   }
@@ -161,6 +204,7 @@ async function prepare(id) {
   const t0 = tl.baseAt ? snaps[0].t : Math.min(created || snaps[0].t, snaps[0].t);
   const t1 = Math.max(snaps[snaps.length - 1].t, _S.length ? _S[_S.length - 1][0] : 0);
   _range = { t0, t1: Math.max(t1, t0 + 60000) };
+  _marks = buildMarks(an);
   showHud();
 }
 
@@ -198,6 +242,7 @@ function teardown({ restore = true } = {}) {
   _orig = null;
   state.battleReplay = null;
   _tl = _snaps = _S = _range = null;
+  _marks = [];
   _T = null;
   _shownIdx = -2;
   if (_hud) _hud.hidden = true;
@@ -286,13 +331,24 @@ function showHud() {
       <button type="button" class="wp-replay-open" data-replay="open"></button>
       <div class="wp-replay-bar">
         <button type="button" class="wp-replay-btn" data-replay="toggle"></button>
-        <input type="range" class="wp-replay-range" min="0" max="1000" step="1" value="0">
+        <div class="wp-replay-track">
+          <div class="wp-replay-marks"></div>
+          <input type="range" class="wp-replay-range" min="0" max="1000" step="1" value="0">
+        </div>
         <button type="button" class="wp-replay-btn wp-replay-speed" data-replay="speed"></button>
         <button type="button" class="wp-replay-btn wp-replay-x" data-replay="close">✕</button>
         <div class="wp-replay-info"></div>
       </div>`;
     document.body.appendChild(_hud);
     _hud.addEventListener('click', (e) => {
+      // Un segno sul cursore: il replay salta lì e si ferma.
+      const mark = e.target.closest('[data-replay-mark]');
+      if (mark) {
+        e.stopPropagation();
+        const m = _marks[Number(mark.dataset.replayMark)];
+        if (m && _range) { stopPlay(); start(); applyAt(m.t, { force: true }); trackEvent('battle-replay-mark', { kind: m.kind }); }
+        return;
+      }
       const a = e.target.closest('[data-replay]')?.dataset.replay;
       if (!a) return;
       e.stopPropagation();
@@ -354,6 +410,11 @@ function renderHud() {
   const x = _hud.querySelector('[data-replay="close"]');
   x.title = x.ariaLabel = rT('Close replay');
   if (!active) return;
+  const marksEl = _hud.querySelector('.wp-replay-marks');
+  if (marksEl && marksEl.dataset.for !== String(_battleId)) {
+    marksEl.innerHTML = marksHtml();
+    marksEl.dataset.for = String(_battleId);
+  }
   const T = _T ?? _range.t0;
   const range = _hud.querySelector('.wp-replay-range');
   if (document.activeElement !== range) range.value = String(Math.round((T - _range.t0) / (_range.t1 - _range.t0) * 1000));

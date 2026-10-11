@@ -40,6 +40,7 @@ import { countryAnchor, arc, alongArc, brightenColor } from '../diplomacy/flowGe
 import { fetchRegionHistoryEventsViaCache } from '../diplomacy/cacheClient.js';
 import { t } from '../shared/i18n.js';
 import { escapeHtml } from '../diplomacy/utils.js';
+import { animationsOn } from '../shared/motion.js';
 
 const SRC = 'wp-ping-src';
 const LYR_RING = 'wp-ping-ring';
@@ -219,8 +220,10 @@ function showLabel(map, at, text, color) {
 function play(ev) {
   const map = state.map;
   ensureLayers(map);
-  _live.push({ ...ev, start: performance.now() });
   showLabel(map, ev.labelAt || ev.pos || ev.coords?.[ev.coords.length - 1], ev.label, ev.color);
+  // Animazioni spente (Impostazioni): resta l'etichetta, ferma; niente onde.
+  if (!animationsOn()) return;
+  _live.push({ ...ev, start: performance.now() });
   if (!_raf) _raf = requestAnimationFrame(tick);
 }
 

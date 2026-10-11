@@ -38,6 +38,7 @@
 
 import { state } from './state.js';
 import { countryAnchor, arc } from './flowGeometry.js';
+import { animationsOn } from '../shared/motion.js';
 
 // Le stesse due famiglie della heatmap e della sua legenda (ui.js):
 // attaccanti blu, difensori rossi.
@@ -185,7 +186,7 @@ function setFx(features) {
 function tick(now) {
   _raf = null;
   const map = state.map;
-  if (_paused || state.timeMachineActive || state.coloringMode !== 'battleHeatmap' || !_target || !map?.getLayer(LYR_DASH)) {
+  if (_paused || !animationsOn() || state.timeMachineActive || state.coloringMode !== 'battleHeatmap' || !_target || !map?.getLayer(LYR_DASH)) {
     if (_fxOn) setFx([]);
     return;
   }
@@ -212,7 +213,7 @@ function tick(now) {
 }
 
 function start() {
-  if (_raf || _paused) return;
+  if (_raf || _paused || !animationsOn()) return;
   _raf = requestAnimationFrame(tick);
 }
 

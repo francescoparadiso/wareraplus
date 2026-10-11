@@ -30,6 +30,8 @@ import { buildRoutesData, makeRunner } from './oceanRoutes.js';
 // Rinominato in import per non confondersi col parametro `state` di
 // applyOceanTheme(state) — stesso schema già usato in antiqueTheme.js.
 import { state as globalState } from './state.js';
+// WarEra+: l'interruttore unico delle animazioni (Impostazioni).
+import { animationsOn } from '../shared/motion.js';
 
 const SRC_PREFIX = 'wp-ocean-';
 
@@ -64,6 +66,7 @@ function startAnimations() {
   // riparte alla chiusura della time machine e ricomincia ad animare
   // layer nascosti.
   if (globalState.theme === 'light') return; // rotte "futuristiche": solo tema scuro
+  if (!animationsOn()) return; // WarEra+: animazioni spente nelle Impostazioni (shared/motion.js)
   if (!_stopShips && _shipsArgs) {
     _stopShips = makeRunner(_shipsArgs.map, _shipsArgs.sourceId, _shipsArgs.sampledPaths, _shipsArgs.opts);
   }

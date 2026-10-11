@@ -50,6 +50,8 @@ import { loadOceanImages, OCEAN_IMAGE_IDS } from './oceanImages.js';
 
 const { SRC_REGIONS } = LAYER_IDS;
 import { buildRoutesData, makeRunner } from './oceanRoutes.js';
+// WarEra+: l'interruttore unico delle animazioni (Impostazioni).
+import { animationsOn } from '../shared/motion.js';
 
 const SRC_PREFIX = 'wp-antique-';
 const SRC_ANTIQUE_MARKERS = 'wp-antique-markers-src';
@@ -152,6 +154,7 @@ function _startAnimations() {
   // (timeMachine.js alla chiusura), che risveglia entrambi i temi senza
   // sapere quale sia attivo.
   if (globalState.theme !== 'light') return; // rotte "seppia": solo tema chiaro
+  if (!animationsOn()) return; // WarEra+: animazioni spente nelle Impostazioni (shared/motion.js)
   if (!_stopShips && _shipsArgs) {
     _stopShips = makeRunner(_shipsArgs.map, _shipsArgs.sourceId, _shipsArgs.sampledPaths, _shipsArgs.opts);
   }

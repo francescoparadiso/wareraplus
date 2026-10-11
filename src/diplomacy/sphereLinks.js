@@ -38,6 +38,7 @@ import { countryAnchor, arc, alongArc, brightenColor } from './flowGeometry.js';
 import { mergedSphereGroups } from '../proxy/radar.js';
 import { getLang } from '../shared/i18n.js';
 import { escapeHtml } from './utils.js';
+import { animationsOn } from '../shared/motion.js';
 
 const SRC = 'wp-sphere-links-src';
 const SRC_FX = 'wp-sphere-links-fx-src';
@@ -188,7 +189,7 @@ function ensureLayers(map) {
 function tick(now) {
   _raf = null;
   const map = state.map;
-  if (_paused || state.timeMachineActive || state.coloringMode !== 'sphereOfInfluence' || !_arcs.length || !map?.getSource(SRC_FX)) {
+  if (_paused || !animationsOn() || state.timeMachineActive || state.coloringMode !== 'sphereOfInfluence' || !_arcs.length || !map?.getSource(SRC_FX)) {
     if (_fxOn) { map?.getSource(SRC_FX)?.setData({ type: 'FeatureCollection', features: [] }); _fxOn = false; }
     return;
   }
@@ -208,7 +209,7 @@ function tick(now) {
 }
 
 function start() {
-  if (_raf || _paused) return;
+  if (_raf || _paused || !animationsOn()) return;
   _raf = requestAnimationFrame(tick);
 }
 

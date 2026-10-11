@@ -205,6 +205,29 @@ function _primoGiorno(store) {
   return primo;
 }
 
+/* WarEra+ (2026-10-11) — la REGIONE di ogni battaglia, per le frecce
+   "dall'attaccante alla regione" della time machine. Le righe non la
+   portano (vedi in testa: l'import non l'aveva, gli scatti nostri non la
+   scrivevano), ma il server la sa per id: l'archivio battaglie concluse
+   (battleArchive.js, campo `r`, 90 giorni) e la cache delle battaglie in
+   corso. Si aggiunge IN LETTURA come tredicesima colonna, così vale anche
+   per i giorni già salvati; un id che non si trova resta null e il client
+   non disegna quella freccia. Indice in memoria, ricostruito ogni 10 min. */
+let _regionIdx = null;
+let _regionIdxAt = 0;
+function _regionOf(battleId) {
+  if (!_regionIdx || Date.now() - _regionIdxAt > 10 * 60 * 1000) {
+    _regionIdx = new Map();
+    for (const b of deps.readCache('battle-archive', { data: [] })?.data || []) if (b?.i && b.r) _regionIdx.set(b.i, b.r);
+    for (const b of deps.readCache('battles', null)?.data || []) {
+      const r = b?.defender?.region || b?.attacker?.region;
+      if (b?._id && r) _regionIdx.set(b._id, r);
+    }
+    _regionIdxAt = Date.now();
+  }
+  return _regionIdx.get(battleId) || null;
+}
+
 /**
  * Quello che va al browser: un giorno solo.
  *
@@ -219,7 +242,7 @@ function readDay(giorno) {
   return {
     day: chiesto,
     diplomacy: storeD.days[chiesto] || null,
-    battles: storeB.days[chiesto] || null,
+    battles: storeB.days[chiesto] ? storeB.days[chiesto].map(r => [...r.slice(0, 12), _regionOf(r[0])]) : null,
     // Da quando in qua c'è qualcosa: prima di questo giorno una risposta
     // vuota significa "non stavo guardando", e il client lo dice invece di
     // mostrare una nazione senza né guerre né patti.

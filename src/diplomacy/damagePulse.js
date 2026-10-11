@@ -27,6 +27,7 @@
 import { state } from './state.js';
 import { WARERA_CACHE_BASE } from './config.js';
 import { countryAnchor } from './flowGeometry.js';
+import { animationsOn } from '../shared/motion.js';
 
 const SRC = 'wp-dmg-pulse-src';
 const LYR_GLOW = 'wp-dmg-pulse-glow';
@@ -124,6 +125,11 @@ function ensureLayers(map) {
 function tick(now) {
   _raf = null;
   const map = state.map;
+  // Animazioni spente (Impostazioni): i cuori restano, fermi.
+  if (!animationsOn() && !_paused && state.coloringMode === 'weeklyDamage' && _beats.length && map?.getSource(SRC)) {
+    paintStill(map);
+    return;
+  }
   if (_paused || state.timeMachineActive || state.coloringMode !== 'weeklyDamage' || !_beats.length || !map?.getSource(SRC)) {
     if (_on) { map?.getSource(SRC)?.setData({ type: 'FeatureCollection', features: [] }); _on = false; }
     return;
@@ -155,7 +161,24 @@ function tick(now) {
 
 function start() {
   if (_raf || _paused) return;
+  if (!animationsOn()) { paintStill(state.map); return; }
   _raf = requestAnimationFrame(tick);
+}
+
+/** Un fotogramma fermo, a battito nullo: la dimensione e l'alone dicono
+ *  ancora danno e pillati, manca solo il movimento. */
+function paintStill(map) {
+  const src = map?.getSource(SRC);
+  if (!src) return;
+  src.setData({ type: 'FeatureCollection', features: _beats.map(b => {
+    const base = 2.5 + 7 * b.w;
+    return {
+      type: 'Feature',
+      properties: { r: base, gr: base * (2 + 1.6 * b.rate), go: (0.25 + 0.45 * b.rate) * 0.7, c: glowColor(b.rate) },
+      geometry: { type: 'Point', coordinates: b.pos },
+    };
+  }) });
+  _on = true;
 }
 
 export function pauseDamagePulse() {

@@ -32,6 +32,7 @@ import { state } from './state.js';
 import { COLORS } from './config.js';
 import { countryAnchor, arc, alongArc } from './flowGeometry.js';
 import { trackEvent } from '../shared/analytics.js';
+import { animationsOn } from '../shared/motion.js';
 
 export const FUNDING_DAYS = [7, 30, 90, 0];   // 0 = tutto l'archivio
 export const IN_COLOR = '#e3b341';            // denaro che arriva alla nazione cliccata
@@ -347,7 +348,7 @@ let _fxOn = false;
 function tick(now) {
   _raf = null;
   const map = state.map;
-  if (_paused || state.timeMachineActive || state.coloringMode !== 'funding' || !_arcs.length || !map?.getSource(SRC_FX)) {
+  if (_paused || !animationsOn() || state.timeMachineActive || state.coloringMode !== 'funding' || !_arcs.length || !map?.getSource(SRC_FX)) {
     if (_fxOn) { map?.getSource(SRC_FX)?.setData({ type: 'FeatureCollection', features: [] }); _fxOn = false; }
     return;
   }
@@ -374,7 +375,7 @@ function tick(now) {
 }
 
 function start() {
-  if (_raf || _paused) return;
+  if (_raf || _paused || !animationsOn()) return;
   _raf = requestAnimationFrame(tick);
 }
 

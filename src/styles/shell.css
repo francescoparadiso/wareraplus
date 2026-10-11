@@ -3940,3 +3940,32 @@ body.light-theme .wp-ping-label { background: rgba(250, 244, 230, .95); color: #
 
 /* Comandi dei fili della vista Sfera (diplomacy/sphereLinks.js). */
 .wp-sphere-links-ctl { margin: 6px 0 10px; }
+
+/* WarEra+ animazioni spente nelle Impostazioni (src/shared/motion.js):
+   ferme anche quelle CSS delle aggiunte WarEra+. */
+body.wp-no-motion .wp-ping-label { animation: none; }
+
+/* Segni sul cursore del replay (battleReplay.js): sorpassi e ingressi. */
+.wp-replay-track { position: relative; padding-top: 16px; }
+.wp-replay-marks { position: absolute; left: 8px; right: 8px; top: 0; height: 16px; }
+.wp-replay-mark {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.wp-replay-mark.flip {
+  width: 0; height: 0; top: 4px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 8px solid #ffd166;
+}
+.wp-replay-mark.flip.attacker { border-top-color: #4d8dff; }
+.wp-replay-mark.flip.defender { border-top-color: #ff4d4d; }
+.wp-replay-mark.entry img { display: block; width: 14px; height: 10px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .5); }
+.wp-replay-mark.entry.attacker img { box-shadow: 0 0 0 1.5px #4d8dff; }
+.wp-replay-mark.entry.defender img { box-shadow: 0 0 0 1.5px #ff4d4d; }
+.wp-replay-mark:hover { filter: brightness(1.3); z-index: 1; }

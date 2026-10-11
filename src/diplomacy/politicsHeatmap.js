@@ -126,9 +126,9 @@ function phaseByCountry(now = Date.now()) {
 
 /** Affluenza di adesso per nazione dove si vota: la più alta fra le sue
  *  elezioni aperte (null se la popolazione non si sa). */
-export function turnoutByCountry(now = Date.now()) {
+export function turnoutByCountry(now = Date.now(), byCountry = state.openElections) {
   const out = new Map();
-  for (const r of openElectionRows(state.openElections, now)) {
+  for (const r of openElectionRows(byCountry, now)) {
     if (r.phase !== 'voting') continue;
     const cur = out.get(r.countryId);
     if (!out.has(r.countryId) || (r.turnout != null && (cur == null || r.turnout > cur))) out.set(r.countryId, r.turnout);
@@ -136,11 +136,13 @@ export function turnoutByCountry(now = Date.now()) {
   return out;
 }
 
-export function buildPoliticsColorExpression(isOriginal = false) {
+// `turnouts` (facoltativa): affluenze da usare al posto di quelle di
+// adesso — la transizione di electionsLive.js ci passa quelle interpolate.
+export function buildPoliticsColorExpression(isOriginal = false, turnouts = null) {
   const prop = isOriginal ? 'initialCountryId' : 'countryId';
   const phases = phaseByCountry();
   if (!phases.size) return COLORS.DEFAULT_LAND;
-  const turnouts = turnoutByCountry();
+  turnouts = turnouts || turnoutByCountry();
   const expr = ['match', ['get', prop]];
   for (const [id, phase] of phases) {
     expr.push(id, phase === 'voting' ? turnoutColor(turnouts.get(id)) : POLITICS_COLORS[phase]);

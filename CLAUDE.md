@@ -317,6 +317,10 @@ wareraPlus/
     │   │                        Animazione: trattini che scorrono (line-dasharray
     │   │                        ciclata) + onde d'impatto sulla regione. Zero fetch,
     │   │                        legge state.battleHeatmapData.
+    │   ├── electionsLive.js   ← NUOVO — vista Elezioni in diretta: a ogni giro (3 min)
+    │   │                        dove i voti sono saliti la tinta dell'affluenza passa
+    │   │                        al colore nuovo in transizione e la capitale batte
+    │   │                        con "+N voti". Il ridisegno finale lo fa lei.
     │   ├── battleReplay.js    ← NUOVO — replay della battaglia aperta: barra con
     │   │                        play/pausa/cursore/velocità sopra la scheda della
     │   │                        battaglia; da /battle-timeline ricostruisce la
@@ -325,6 +329,9 @@ wareraPlus/
     │   │                        dura (heatmap, etichette, legenda e frecce la
     │   │                        seguono da sole). Il giro live dei 10 s si ferma
     │   │                        intanto. Solo battaglie registrate dal 2026-10-07.
+    │   │                        Sul cursore i SEGNI di sorpassi e ingressi delle
+    │   │                        nazioni grosse (analyzeTimeline della scheda), clic =
+    │   │                        salto lì.
     │   ├── flowGeometry.js    ← NUOVO — condivisa da tutte le frecce (battaglie,
     │   │                        migrazioni, sfere, time machine): punto di aggancio
     │   │                        di una nazione (capitale se sua, se no etichetta),
@@ -781,6 +788,11 @@ wareraPlus/
     │   │                         respira) della nazione SELEZIONATA come archi dalla
     │   │                         sua capitale di quel giorno. Solo per la selezione:
     │   │                         il mondo intero sono ~1.200 coppie al giorno.
+    │   ├── timeMachineBattles.js ← NUOVO — le battaglie del giorno come frecce
+    │   │                         dall'attaccante (capitale di quel giorno) alla regione,
+    │   │                         spesse quanto il danno (o la potenza, nei giorni
+    │   │                         importati). La regione la aggiunge /day-history in
+    │   │                         lettura dall'archivio battaglie: c'è da luglio 2026.
     │   ├── timeMachineMap.js   ← SECONDA mappa MapLibre dedicata e alleggerita (3 layer)
     │   │                         usata dalla time machine; la principale viene nascosta,
     │   │                         non toccata. timeMachine.js tiene tutta la logica.
@@ -813,6 +825,11 @@ wareraPlus/
     │   ├── dailyDamage.js      ← "danno di oggi" per nazioni/alleanze/unità, dalla
     │   │                          differenza fra due snapshot del cumulato settimanale
     │   ├── analytics.js        ← wrapper su Umami (trackEvent)
+    │   ├── motion.js           ← NUOVO — interruttore unico "Animazioni" (Impostazioni,
+    │   │                          `we_animations`): ferma comete, trattini, monete,
+    │   │                          impulsi, battiti, ping, navi e particelle; restano
+    │   │                          frecce e colori. Tutti i moduli animati chiedono
+    │   │                          animationsOn(). Il replay battaglia NO (è a mano).
     │   └── trpcClient.js       ← client tRPC unificato: trpcBatchManual (stile Diplomacy)
     │                              + trpcCall (stile Political), cache namespaced
     │                              we_<namespace>_*. src/diplomacy/utils.js:trpcBatch NON

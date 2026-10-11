@@ -35,6 +35,7 @@ import { state } from '../diplomacy/state.js';
 import { COLORS } from '../diplomacy/config.js';
 import { arc } from '../diplomacy/flowGeometry.js';
 import { getTimeMachineMap, TM_LYR_FILL } from './timeMachineMap.js';
+import { animationsOn } from '../shared/motion.js';
 
 const SRC = 'wp-tm-links-src';
 const LYR_SHADOW = 'wp-tm-links-shadow';
@@ -149,7 +150,7 @@ function ensureLayers(map) {
 function tick(now) {
   _raf = null;
   const map = getTimeMachineMap();
-  if (!_has || !state.timeMachineActive || !map?.getLayer(LYR_WAR)) return;
+  if (!_has || !state.timeMachineActive || !map?.getLayer(LYR_WAR) || !animationsOn()) return;
   const step = Math.floor(now / DASH_STEP_MS) % DASH_SEQ.length;
   if (step !== _step) {
     _step = step;
@@ -200,7 +201,7 @@ export function setTimeMachineLinks(focus, regionsMap) {
   }
   map.getSource(SRC).setData({ type: 'FeatureCollection', features: feats });
   _has = feats.length > 0;
-  if (_has && !_raf) _raf = requestAnimationFrame(tick);
+  if (_has && !_raf && animationsOn()) _raf = requestAnimationFrame(tick);
 }
 
 export function clearTimeMachineLinks() {
@@ -209,3 +210,9 @@ export function clearTimeMachineLinks() {
   _has = false;
   getTimeMachineMap()?.getSource(SRC)?.setData({ type: 'FeatureCollection', features: [] });
 }
+
+// Riaccese dalle Impostazioni: la time machine non passa da renderMap,
+// quindi il giro dei trattini riparte da qui.
+window.addEventListener('wareraplus:motionchange', () => {
+  if (animationsOn() && _has && !_raf) _raf = requestAnimationFrame(tick);
+});

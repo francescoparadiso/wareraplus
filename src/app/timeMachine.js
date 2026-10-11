@@ -67,6 +67,8 @@ import { fetchPresidents } from '../political/plusApi.js';
 import { animateConquests, clearConquests } from './timeMachineConquest.js';
 // WarEra+: guerre e patti della nazione selezionata come archi animati.
 import { setTimeMachineLinks, clearTimeMachineLinks } from './timeMachineLinks.js';
+// WarEra+: le battaglie del giorno come frecce dall'attaccante alla regione.
+import { setTimeMachineBattles, clearTimeMachineBattles } from './timeMachineBattles.js';
 
 let _presidents;          // undefined = mai chiesto, null = non disponibile
 
@@ -271,6 +273,7 @@ function _deactivate() {
   state.timeMachineActive = false;
   trackEvent('time-machine-close');
   clearConquests();
+  clearTimeMachineBattles();
   _lastRenderedTs = null;
   _stopPlay();
   _btn.classList.remove('wp-time-machine-btn-active');
@@ -869,6 +872,11 @@ async function _fetchAndRender(ts) {
     // Solo in avanti, e il modulo stesso si limita sui salti lunghi.
     if (_lastRenderedTs != null && _eventsSorted) animateConquests(_eventsSorted, _lastRenderedTs, ts);
     _lastRenderedTs = ts;
+    // WarEra+: le battaglie del giorno, se quel giorno è già in memoria; se
+    // non lo è (durante il playback non si scarica) via le frecce, invece di
+    // lasciare quelle di un altro giorno.
+    const giornoFrame = cachedDay(dayKey(ts));
+    setTimeMachineBattles(giornoFrame?.battles || null, regions);
     _updateStandings(regions);
     _updateFocus(ts);
     return true;
@@ -934,6 +942,8 @@ function _scheduleDay(ts) {
 
 function _renderDay(giorno) {
   _updateDayBattles(giorno);
+  // WarEra+: il giorno è arrivato, le sue battaglie diventano frecce.
+  if (_slider && dayKey(Number(_slider.value)) === giorno) setTimeMachineBattles(cachedDay(giorno)?.battles || null, _lastRegions);
   // Nazione selezionata: si riempie da se' quando i dati arrivano, senza
   // chiedere all'utente di ricliccare.
   if (_focusId && dayKey(Number(_slider.value)) === giorno) _updateFocus(Number(_slider.value));

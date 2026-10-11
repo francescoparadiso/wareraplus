@@ -52,6 +52,8 @@ import { startNewsTicker } from './app/newsTicker.js';
 import { initTimeMachine, openTimeMachineAt } from './app/timeMachine.js';
 import { initAuthorPill } from './app/authorPill.js';
 import { initVisitorCounter } from './app/visitorCounter.js';
+// WarEra+: interruttore unico delle animazioni (Impostazioni)
+import { initMotion } from './shared/motion.js';
 import { applyTranslations, initLangButton } from './shared/i18n.js';
 import { updateDynamicLegend } from './diplomacy/ui.js';
 import { state } from './diplomacy/state.js';
@@ -81,6 +83,7 @@ function handleIncomingDeepLink() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  initMotion();
   initPoliticalOverlay();
   initEconomyOverlay();
   initNewsOverlay();

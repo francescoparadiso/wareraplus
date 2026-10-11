@@ -25,6 +25,8 @@
    finestra.
    ══════════════════════════════════════════════════════════════ */
 
+import { animationsOn } from './motion.js';
+
 const GLOW_SPRITE_SIZE = 64;
 // Ogni sezione ha DUE tinte, non una: ogni nodo nasce con la sua
 // posizione `t` fissa sulla rampa fra le due, e le linee prendono la
@@ -177,7 +179,9 @@ export function startParticles(canvas, opts = {}) {
         ctx.fill();
       });
     }
-    animId = requestAnimationFrame(draw);
+    // WarEra+: con le animazioni spente (Impostazioni) resta il primo
+    // fotogramma, fermo — lo sfondo c'è, non si muove.
+    animId = animationsOn() ? requestAnimationFrame(draw) : null;
   }
 
   const onResize = () => {

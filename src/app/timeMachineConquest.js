@@ -36,6 +36,7 @@
 import { state } from '../diplomacy/state.js';
 import { arc, alongArc, countryAnchor, brightenColor } from '../diplomacy/flowGeometry.js';
 import { getTimeMachineMap, TM_LYR_FILL } from './timeMachineMap.js';
+import { animationsOn } from '../shared/motion.js';
 
 const SRC = 'wp-tm-conq-src';
 const LYR_GLOW = 'wp-tm-conq-glow';
@@ -154,7 +155,8 @@ function tick() {
  */
 export function animateConquests(events, prevTs, ts) {
   const map = getTimeMachineMap();
-  if (!map || !events?.length || !(ts > prevTs)) return;
+  // Animazioni spente: la conquista si vede già dal colore della regione.
+  if (!map || !events?.length || !(ts > prevTs) || !animationsOn()) return;
   if (!ensureLayers(map)) return;
   const from = Math.max(prevTs, ts - MAX_SPAN_MS);
   // Ricerca binaria del primo evento dopo `from`.
