@@ -141,6 +141,7 @@ export function updateDynamicLegend() {
         <span style="font-size:10px; color:${subPop};">${fmtNumber(max)}</span>
       </div>
       <div class="legend-note">Higher = more orange</div>
+      <div class="legend-note">Breathing circles: active players gained (green) or lost (red) in the last 24 h, sized by the change</div>
     `;
     return;
   }
@@ -344,7 +345,7 @@ export function updateDynamicLegend() {
         <span style="font-size:10px; color:${sub};">gives more</span>
         <span style="font-size:10px; color:${sub};">gets more</span>
       </div>${arrows}
-      <div class="legend-note">${st.count.toLocaleString()} treasury-to-treasury transfers, ${fmtNumber(st.total)} moved, ${f.days ? `last ${f.days} days` : 'whole archive'} · ${f.focus ? 'coins flow from payer to receiver · click the sea to clear' : 'click a nation for its arrows'}</div>`;
+      <div class="legend-note">${st.count.toLocaleString()} treasury-to-treasury transfers, ${fmtNumber(st.total)} moved, ${f.days ? `last ${f.days} days` : 'whole archive'} · ${f.focus ? 'coins flow from payer to receiver · click the sea to clear' : 'click a nation for its arrows · coins rising (or falling, red) over a capital = treasury up (or down) 2%+ in the last 24 h'}</div>`;
     return;
   }
 
@@ -398,7 +399,7 @@ export function updateDynamicLegend() {
       </div>
       <div class="legend-note">Total = strategic resources + ruling-party ethics${stats.ethicsLoaded
         ? ` (${stats.withEthic} industrialist nations, +30% each on their specialised item)`
-        : ' — ethics still loading, showing resources only'} · grey = nothing (${stats.without} nations) · best +${stats.best}%, average +${stats.avg.toFixed(1)}% · regions by resource: ${spread} · ⛏ ${activeDeposits().length} temporary deposits (+30% on one item, few days) — listed in the panel</div>
+        : ' — ethics still loading, showing resources only'} · grey = nothing (${stats.without} nations) · best +${stats.best}%, average +${stats.avg.toFixed(1)}% · regions by resource: ${spread} · ⛏ ${activeDeposits().length} temporary deposits (+30% on one item, few days) — listed in the panel, pulsing on the map: faster = closer to expiry</div>
     `;
     return;
   }

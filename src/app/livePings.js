@@ -267,6 +267,45 @@ function tick(now) {
   if (_live.length) _raf = requestAnimationFrame(tick);
 }
 
+/* ── Dal ticker e dalla vista News: vola sul posto e rifà il ping ──
+   Richiesta dell'utente: una notizia cliccata deve "trovarsi" sulla
+   mappa. Il bersaglio lo annota newsTicker.js (newsTargetFor) quando
+   costruisce il testo. Il ping parte quando la camera è arrivata. */
+const TONES = { war: COLORS.war, sworn: COLORS.sworn, peace: COLORS.peace, pact: COLORS.pact, up: '#3fb950', down: '#f85149' };
+
+export function pingNewsTarget(target, label) {
+  const map = state.map;
+  if (!map || !target || state.timeMachineActive) return;
+  let ev = null;
+  if (target.kind === 'battle' || target.kind === 'region') {
+    const pos = regionPos(target.region);
+    if (!pos) return;
+    const color = target.kind === 'battle' ? COLORS.battle
+      : brightenColor(state.nationBaseColorMap?.get(target.country), 0.4, '#ffd166');
+    ev = { kind: 'ring', color, pos, label };
+    map.flyTo({ center: pos, zoom: Math.max(map.getZoom(), 4), speed: 1.4 });
+  } else if (target.kind === 'link') {
+    const from = countryAnchor(target.a), to = countryAnchor(target.b);
+    if (!from || !to) return;
+    const color = TONES[target.tone] || COLORS.war;
+    const coords = Math.hypot(from[0] - to[0], from[1] - to[1]) >= MIN_ARC_DEG ? arc(from, to).coords : null;
+    ev = { kind: 'link', color, coords, pos: coords ? null : to, label, labelAt: to };
+    map.fitBounds([[Math.min(from[0], to[0]), Math.min(from[1], to[1])], [Math.max(from[0], to[0]), Math.max(from[1], to[1])]],
+      { padding: 120, maxZoom: 5, speed: 1.4 });
+  } else if (target.kind === 'country') {
+    const pos = countryAnchor(target.country);
+    if (!pos) return;
+    ev = { kind: 'ring', color: TONES[target.tone] || '#58a6ff', pos, label };
+    map.flyTo({ center: pos, zoom: Math.max(map.getZoom(), 3.5), speed: 1.4 });
+  }
+  if (!ev) return;
+  // Il ping a camera ferma: durante il volo un'onda scivolerebbe via.
+  let done = false;
+  const go = () => { if (done) return; done = true; play(ev); };
+  map.once('moveend', go);
+  setTimeout(go, 2500);
+}
+
 /* ── Pausa (src/app/mapIdle.js) ── */
 
 export function pauseLivePings() {

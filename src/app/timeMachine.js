@@ -64,7 +64,7 @@ import { dayKey, fetchDay, cachedDay, fuoriPortata } from './timeMachineDay.js';
 // "fuori portata". Una richiesta per sessione, nessun ripiego.
 import { fetchPresidents } from '../political/plusApi.js';
 // WarEra+: le conquiste animate durante la riproduzione (freccia + onda).
-import { animateConquests, clearConquests } from './timeMachineConquest.js';
+import { animateConquests, animateAlliances, clearConquests } from './timeMachineConquest.js';
 // WarEra+: guerre e patti della nazione selezionata come archi animati.
 import { setTimeMachineLinks, clearTimeMachineLinks } from './timeMachineLinks.js';
 // WarEra+: le battaglie del giorno come frecce dall'attaccante alla regione.
@@ -871,6 +871,8 @@ async function _fetchAndRender(ts) {
     // lampi dalla capitale del conquistatore (timeMachineConquest.js).
     // Solo in avanti, e il modulo stesso si limita sui salti lunghi.
     if (_lastRenderedTs != null && _eventsSorted) animateConquests(_eventsSorted, _lastRenderedTs, ts);
+    // WarEra+: e ingressi/uscite dai blocchi d'alleanza nello stesso intervallo.
+    if (_lastRenderedTs != null) animateAlliances(_lastRenderedTs, ts);
     _lastRenderedTs = ts;
     // WarEra+: le battaglie del giorno, se quel giorno è già in memoria; se
     // non lo è (durante il playback non si scarica) via le frecce, invece di

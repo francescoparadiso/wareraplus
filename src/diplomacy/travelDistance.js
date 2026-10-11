@@ -464,6 +464,7 @@ function paintOverlay() {
   const map = state.map;
   if (!map?.getLayer('regions-fill')) return;
   const on = state.coloringMode === 'travel';
+  if (!on && _walk) stopWalk({ repaint: false });
   if (on) ensureLayers(map);
   const src = map.getSource(SRC);
   if (src) src.setData({ type: 'FeatureCollection', features: on ? overlayFeatures() : [] });
@@ -500,6 +501,7 @@ function staminaBarHtml(h) {
 
 function renderHud() {
   const tr = t();
+  if (_walk && state.coloringMode === 'travel' && _hud) { renderWalkHud(); return; }
   const show = state.coloringMode === 'travel' && !!tr.origin;
   if (!show) { if (_hud) _hud.hidden = true; return; }
   if (!_hud) {
@@ -525,6 +527,118 @@ function renderHud() {
   }
   _hud.innerHTML = `<div class="wp-travel-hud-title">${from} → ${to} · ${escapeHtml(h === 1 ? tT('1 region away') : tT('{n} regions away', { n: h }))}</div>
     <div class="wp-travel-hud-cost">${staminaBarHtml(h)}</div>`;
+}
+
+// ══════════════════ IL CAMMINO (richiesta dell'utente) ══════════════════
+// Un segnalino che percorre il giro delle casse regione per regione, con la
+// barra della stamina che si svuota a ogni confine (e i barili che salgono
+// dopo), il salto gratis a casa quando il giro lo usa, e il conto delle
+// casse raccolte. Lo stesso percorso disegnato (pathBetween sul grafo dei
+// vicini), solo percorso. Lo avvia un bottone: non è un ornamento, quindi
+// l'interruttore delle animazioni non lo blocca.
+const WALK_HOP_MS = 330;
+const WALK_JUMP_MS = 650;
+const WALK_PAUSE_MS = 450;     // fermata su una cassa
+const SRC_WALK = 'wp-travel-walker-src';
+const LYR_WALK_GLOW = 'wp-travel-walker-glow';
+const LYR_WALK = 'wp-travel-walker';
+let _walk = null;   // { hops, i, t0, walked, cases, totalCases, raf }
+
+function buildWalk(route) {
+  const tr = t();
+  const hops = [];
+  for (const s of route.steps) {
+    if (s.viaHome && tr.home) hops.push({ a: null, b: tr.home, jump: true });
+    const path = pathBetween(s.from, s.caseId);
+    for (let k = 1; k < path.length; k++) hops.push({ a: path[k - 1], b: path[k], jump: false, caseAt: k === path.length - 1 ? s.caseId : null });
+    if (path.length <= 1) hops.push({ a: s.from, b: s.caseId, jump: false, caseAt: s.caseId, still: true });
+  }
+  return hops;
+}
+
+function walkPos(h, k) {
+  const pb = _pos.get(h.b);
+  const pa = h.a ? _pos.get(h.a) : null;
+  if (!pb) return null;
+  if (!pa || h.jump || h.still) return pb;
+  let lng = pb[0];
+  while (lng - pa[0] > 180) lng -= 360;
+  while (lng - pa[0] < -180) lng += 360;
+  return [pa[0] + (lng - pa[0]) * k, pa[1] + (pb[1] - pa[1]) * k];
+}
+
+function ensureWalkLayers(map) {
+  if (map.getSource(SRC_WALK)) return;
+  map.addSource(SRC_WALK, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addLayer({ id: LYR_WALK_GLOW, type: 'circle', source: SRC_WALK, paint: { 'circle-radius': 16, 'circle-color': '#f1c40f', 'circle-blur': 1, 'circle-opacity': ['get', 'o'] } });
+  map.addLayer({ id: LYR_WALK, type: 'circle', source: SRC_WALK, paint: { 'circle-radius': 7, 'circle-color': '#ffffff', 'circle-stroke-color': '#f1c40f', 'circle-stroke-width': 3, 'circle-opacity': ['get', 'o'], 'circle-stroke-opacity': ['get', 'o'] } });
+}
+
+function walkFrame(now) {
+  const w = _walk;
+  if (!w) return;
+  w.raf = null;
+  const map = state.map;
+  if (!map || state.coloringMode !== 'travel') { stopWalk({ repaint: false }); return; }
+  let h = w.hops[w.i];
+  const dur = h.jump ? WALK_JUMP_MS : WALK_HOP_MS;
+  const extra = h.caseAt ? WALK_PAUSE_MS : 0;
+  let k = (now - w.t0) / dur;
+  if (k >= 1 && now - w.t0 >= dur + extra) {
+    // Fine del passo: si paga e si passa al prossimo.
+    if (!h.jump && !h.still) w.walked += 1;
+    if (h.caseAt) w.cases += 1;
+    w.i += 1;
+    w.t0 = now;
+    if (w.i >= w.hops.length) { w.done = true; renderHud(); paintWalker(_pos.get(h.b), 1); return; }
+    h = w.hops[w.i];
+    k = 0;
+    renderHud();
+  }
+  const kk = Math.min(1, k);
+  // Il salto a casa: svanisce e ricompare, non scivola.
+  const o = h.jump ? Math.abs(1 - 2 * kk) : 1;
+  paintWalker(walkPos(h, h.jump ? (kk < 0.5 ? 0 : 1) : kk) || _pos.get(h.b), o);
+  w.raf = requestAnimationFrame(walkFrame);
+}
+
+function paintWalker(pos, o) {
+  const src = state.map?.getSource(SRC_WALK);
+  if (!src) return;
+  src.setData({ type: 'FeatureCollection', features: pos ? [{ type: 'Feature', properties: { o }, geometry: { type: 'Point', coordinates: pos } }] : [] });
+}
+
+function toggleWalk() {
+  if (_walk) { stopWalk(); return; }
+  const route = currentRoute();
+  if (!route?.steps.length || !state.map) return;
+  const hops = buildWalk(route);
+  if (!hops.length) return;
+  ensureWalkLayers(state.map);
+  _walk = { hops, i: 0, t0: performance.now(), walked: 0, cases: 0, totalCases: route.steps.length, raf: null, done: false };
+  trackEvent('travel-walk');
+  paintOverlay();
+  refreshAll({ map: false });
+  // Il primo fotogramma parte dalla posizione di partenza.
+  paintWalker(_pos.get(t().origin), 1);
+  _walk.raf = requestAnimationFrame(walkFrame);
+}
+
+function stopWalk({ repaint = true } = {}) {
+  if (!_walk) return;
+  if (_walk.raf) cancelAnimationFrame(_walk.raf);
+  _walk = null;
+  paintWalker(null, 0);
+  if (repaint) { paintOverlay(); refreshAll({ map: false }); }
+}
+
+function renderWalkHud() {
+  const w = _walk;
+  _hud.hidden = false;
+  const h = w.hops[Math.min(w.i, w.hops.length - 1)];
+  const where = escapeHtml(regionName(w.done ? h.b : (h.jump ? h.b : (h.a || h.b))));
+  _hud.innerHTML = `<div class="wp-travel-hud-title">🚶 ${where} · 📦 ${w.cases}/${w.totalCases}</div>
+    <div class="wp-travel-hud-cost">${staminaBarHtml(w.walked)}</div>`;
 }
 
 // ══════════════════ CLICK SULLA MAPPA ══════════════════
@@ -642,6 +756,7 @@ function plannerHtml() {
       </ol>
       <div class="wp-travel-total">${escapeHtml(tT('Total: {n} regions travelled', { n: route.travels }))}</div>
       <div class="wp-travel-hud-cost">${staminaBarHtml(route.travels)}</div>
+      <button type="button" class="wp-travel-btn wp-travel-walk" data-travel-action="walk" aria-pressed="${Boolean(_walk)}">${_walk ? `⏹ ${escapeHtml(tT('Stop'))}` : `▶ ${escapeHtml(tT('Walk the route'))}`}</button>
       ${over ? `<div class="wp-travel-warn">⚠️ ${escapeHtml(tT('This route outruns a full bar by {n} regions, at {oil} barrels each.', { n: over, oil: OIL_PER_EXTRA_HOP }))}</div>` : ''}
       ${tr.home
         ? `<div class="wp-vo-about">${escapeHtml(tT('Travelling home is free once every {h} hours: the route spends it on the leg where it saves the most, or keeps it.', { h: FREE_HOME_HOURS }))}</div>`
@@ -714,6 +829,7 @@ export function wireTravelOverview(root) {
       else if (a === 'clear-home') { tr.home = null; saveHome(null); }
       else if (a === 'clear-case') { tr.cases = []; if (tr.pick === 'case') tr.pick = null; }
       else if (a === 'drop-case') tr.cases = tr.cases.filter(c => c !== btn.dataset.region);
+      else if (a === 'walk') { toggleWalk(); return; }
       if (a.startsWith('pick-') && tr.pick) trackEvent('travel-pick', { what: tr.pick });
       refreshAll({ map: false });
     });

@@ -126,7 +126,8 @@ function formatBattleMessages(battles, topIds = null, refreshedAt = null) {
     const atk = state.nationMap.get(b.attacker?.country);
     const def = state.nationMap.get(b.defender?.country);
     if (!atk || !def) return;
-    messages.push(_withTime(t('ticker_battle', { a: atk.name, b: def.name }), refreshedAt));
+    messages.push(_tag(_withTime(t('ticker_battle', { a: atk.name, b: def.name }), refreshedAt),
+      { kind: 'battle', region: b.defender?.region || b.attacker?.region || null, a: atk._id, b: def._id }));
   });
   return messages;
 }
@@ -169,9 +170,9 @@ function formatElectionMessages(electionsRaw) {
       if (now >= start && now <= end) {
         // Voto già in corso: l'orario utile è quando CHIUDE, non quando è
         // iniziato (che potrebbe essere giorni fa).
-        messages.push(_withTime(t('ticker_election_live', { nation: nation.name, type }), end));
+        messages.push(_tag(_withTime(t('ticker_election_live', { nation: nation.name, type }), end), { kind: 'country', country: nation._id }));
       } else if (now < start) {
-        messages.push(_withTime(t('ticker_election_candidacy', { nation: nation.name, type }), start));
+        messages.push(_tag(_withTime(t('ticker_election_candidacy', { nation: nation.name, type }), start), { kind: 'country', country: nation._id }));
       }
     });
   });
@@ -280,6 +281,25 @@ function _fmtEventTime(ts) {
 // guerre/sworn restano quelle di prima in tutte e 9 le lingue, e la
 // parentesi è identica ovunque (un orario non ha bisogno di essere
 // tradotto). Meno superficie da tenere in sync.
+/* WarEra+ — DOVE punta ogni notizia (richiesta dell'utente: cliccando una
+   notizia del ticker o della vista News la mappa vola sul posto e rifà il
+   ping, vedi livePings.js: pingNewsTarget). I messaggi restano stringhe —
+   le leggono già due viste — e accanto si annota, per testo, il bersaglio:
+   una regione, una nazione o una coppia di nazioni. Tetto all'elenco: i
+   testi cambiano a ogni giro e a ogni cambio lingua. */
+const _targets = new Map();
+const MAX_TARGETS = 3000;
+function _tag(msg, target) {
+  if (target) {
+    _targets.set(msg, target);
+    if (_targets.size > MAX_TARGETS) _targets.delete(_targets.keys().next().value);
+  }
+  return msg;
+}
+export function newsTargetFor(text) {
+  return _targets.get(String(text || '').trim()) || null;
+}
+
 function _withTime(msg, ts) {
   const time = _fmtEventTime(ts);
   return time ? `${msg} (${time})` : msg;
@@ -294,7 +314,8 @@ function formatWarMessages(events, topIds) {
     .filter(e => e.category === 'war' && (!topIds || topIds.has(e.countryId)))
     .slice() // gli eventi arrivano condivisi: mai ordinare l'array del chiamante in place
     .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-    .map(e => _withTime(t('ticker_new_war', { a: nameOf(e.countryId), b: nameOf(e.enemyId) }), e.timestamp));
+    .map(e => _tag(_withTime(t('ticker_new_war', { a: nameOf(e.countryId), b: nameOf(e.enemyId) }), e.timestamp),
+      { kind: 'link', tone: 'war', a: e.countryId, b: e.enemyId }));
 }
 
 function formatSwornMessages(events, topIds) {
@@ -303,9 +324,10 @@ function formatSwornMessages(events, topIds) {
     .filter(e => (e.category === 'sworn_new' || e.category === 'sworn_removed') && (!topIds || topIds.has(e.countryId)))
     .slice()
     .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-    .map(e => _withTime(e.category === 'sworn_new'
+    .map(e => _tag(_withTime(e.category === 'sworn_new'
       ? t('ticker_sworn_new', { a: nameOf(e.countryId), b: nameOf(e.enemyId) })
-      : t('ticker_sworn_removed', { a: nameOf(e.countryId), b: nameOf(e.enemyId) }), e.timestamp));
+      : t('ticker_sworn_removed', { a: nameOf(e.countryId), b: nameOf(e.enemyId) }), e.timestamp),
+      { kind: 'link', tone: 'sworn', a: e.countryId, b: e.enemyId }));
 }
 
 // ── EVENTI UFFICIALI WarEra (event.getEventsPaginated, via pollGameEvents
@@ -359,21 +381,23 @@ function formatGameEventMessages(events, topIds) {
       const nation = countryId ? state.nationMap.get(countryId) : null;
       if (!nation) return; // campo non riconosciuto o nazione ignota: salta invece di mostrare "undefined"
       if (topIds && !topIds.has(countryId)) return;
-      messages.push(_withTime(t(handler.key, { nation: nation.name }), e.timestamp));
+      messages.push(_tag(_withTime(t(handler.key, { nation: nation.name }), e.timestamp), { kind: 'country', country: countryId }));
     } else if (handler.kind === 'pair') {
       const [aId, bId] = countries;
       if (!aId || !bId || aId === bId) return;
       const a = state.nationMap.get(aId), b = state.nationMap.get(bId);
       if (!a || !b) return;
       if (topIds && !topIds.has(aId) && !topIds.has(bId)) return;
-      messages.push(_withTime(t(handler.key, { a: a.name, b: b.name }), e.timestamp));
+      const tone = /peace/i.test(e.eventType) ? 'peace' : /Pact|alliance/i.test(e.eventType) ? 'pact' : 'war';
+      messages.push(_tag(_withTime(t(handler.key, { a: a.name, b: b.name }), e.timestamp), { kind: 'link', tone, a: aId, b: bId }));
     } else if (handler.kind === 'fromTo') {
       const fromId = data.fromCountry, toId = data.toCountry;
       if (!fromId || !toId) return;
       const a = state.nationMap.get(fromId), b = state.nationMap.get(toId);
       if (!a || !b) return;
       if (topIds && !topIds.has(fromId) && !topIds.has(toId)) return;
-      messages.push(_withTime(t(handler.key, { a: a.name, b: b.name }), e.timestamp));
+      messages.push(_tag(_withTime(t(handler.key, { a: a.name, b: b.name }), e.timestamp),
+        data.region ? { kind: 'region', region: data.region, country: toId } : { kind: 'link', tone: 'war', a: fromId, b: toId }));
     }
   });
   return messages;
@@ -540,22 +564,22 @@ function _emit(agg, topIds, nameOf, popKey, wealthKey) {
     .filter(([countryId, delta]) => delta && (!topIds || topIds.has(countryId)))
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
     .forEach(([countryId, delta]) => {
-      messages.push(t(popKey, {
+      messages.push(_tag(t(popKey, {
         nation: nameOf(countryId),
         sign: delta > 0 ? '+' : '−',
         delta: fmtNumber(Math.abs(Math.round(delta))),
-      }));
+      }), { kind: 'country', country: countryId, tone: delta > 0 ? 'up' : 'down' }));
     });
 
   Object.entries(agg.wealth || {})
     .filter(([countryId, pct]) => Math.abs(pct) >= MIN_TREASURY_PCT && (!topIds || topIds.has(countryId)))
     .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
     .forEach(([countryId, pct]) => {
-      messages.push(t(wealthKey, {
+      messages.push(_tag(t(wealthKey, {
         nation: nameOf(countryId),
         sign: pct > 0 ? '+' : '−',
         pct: Math.abs(pct).toFixed(1),
-      }));
+      }), { kind: 'country', country: countryId, tone: pct > 0 ? 'up' : 'down' }));
     });
 
   return messages;
@@ -619,8 +643,9 @@ function _rebuildTrack() {
   if (!track) return;
   const msgs = _tickerMessages.length ? _tickerMessages : [t('ticker_no_news')];
   // Tripla ripetizione per avere sempre contenuto avanti durante il loop.
+  // WarEra+: l'indice del messaggio sullo span, per il clic → mappa.
   const html = [...msgs, ...msgs, ...msgs]
-    .map(msg => `<span class="wp-ticker-message">🔹 ${msg}</span><span class="wp-ticker-sep">✦</span>`)
+    .map((msg, i) => `<span class="wp-ticker-message${_targets.has(msg) ? ' wp-ticker-link' : ''}" data-i="${i % msgs.length}">🔹 ${msg}</span><span class="wp-ticker-sep">✦</span>`)
     .join('');
   track.innerHTML = html;
   requestAnimationFrame(() => { _tickerUnitWidth = track.scrollWidth / 3; });
@@ -656,6 +681,9 @@ async function refreshNews() {
     // battaglie nuove, guerre, nemici giurati, paci e patti. Nessuna fetch
     // in più; se il modulo manca il ticker è identico.
     import('./livePings.js').then(m => m.feedNews(_lastRawData)).catch(() => {});
+    // WarEra+: gli aggregati a 24 ore (popolazione, tesoro) per le animazioni
+    // delle viste Popolazione e Finanziamenti (diplomacy/mapPulses.js).
+    window.dispatchEvent(new CustomEvent('wareraplus:ticker-data', { detail: { agg24: stats?.agg24 || null } }));
   } catch (err) {
     console.warn('WarEra+ newsTicker: errore aggiornamento', err);
   }
@@ -749,6 +777,14 @@ export async function ensureNewsData({ force = false } = {}) {
 export function startNewsTicker() {
   const track = document.getElementById('wp-news-ticker-track');
   if (!track) return;
+  // WarEra+: clic su una notizia → la mappa vola sul posto e rifà il ping.
+  track.addEventListener('click', (e) => {
+    const span = e.target.closest('.wp-ticker-message');
+    const msg = span ? _tickerMessages[Number(span.dataset.i)] : null;
+    const target = msg ? _targets.get(msg) : null;
+    if (!target) return;
+    import('./livePings.js').then(m => m.pingNewsTarget(target, msg)).catch(() => {});
+  });
   _tickerPos = 0;
   _tickerRunning = true;
   initVisitAnchor(); // PRIMA di refreshNews: decide da quando scaricare gli eventi

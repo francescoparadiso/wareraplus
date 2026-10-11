@@ -37,6 +37,8 @@ import { syncBattleReplay } from './battleReplay.js';
 import { syncSphereLinks } from './sphereLinks.js';
 // WarEra+ battito del danno dell'ultima ora in vista Danni
 import { syncDamagePulse } from './damagePulse.js';
+// WarEra+ giacimenti (Produzione), respiro (Popolazione), monete (Finanziamenti)
+import { syncMapPulses } from './mapPulses.js';
 import { buildWeeklyDamageColorExpression } from './weeklyDamage.js';
 import { buildSphereColorExpression } from './sphereOfInfluence.js';
 import { buildBattleHeatmapColorExpression } from './battleHeatmap.js';
@@ -710,6 +712,7 @@ export function renderMap() {
   syncSphereLinks();
   // WarEra+: e il battito del danno in vista Danni (damagePulse.js).
   syncDamagePulse();
+  syncMapPulses();
 
   // WarEra+ perf: qui c'era una ricostruzione di centinaia di Feature
   // (_buildLabelsWithPopulation) ri-pubblicate su SRC_LABELS nelle modalità

@@ -309,6 +309,9 @@ wareraPlus/
     │   ├── ui.js, diplomacy.js, labels.js, patterns.js
     │   ├── alliances.js, naps.js, sphereOfInfluence.js, blocs.js (dead, vedi sotto)
     │   ├── battleMarkers.js, battleHeatmap.js, battleFront.js, battleFront/
+    │   │                        (battleMarkers: WarEra+ il marcatore LAMPEGGIA nel
+    │   │                        colore del lato che passa avanti nel round in corso —
+    │   │                        stesso round, mai al cambio round; CSS in shell.css)
     │   ├── battleFlows.js     ← NUOVO — al clic su una battaglia: frecce dalla
     │   │                        CAPITALE delle prime 5 nazioni per lato (sopra il
     │   │                        5% del lato: con tutte le ≥1% era illeggibile) alla
@@ -321,6 +324,11 @@ wareraPlus/
     │   │                        dove i voti sono saliti la tinta dell'affluenza passa
     │   │                        al colore nuovo in transizione e la capitale batte
     │   │                        con "+N voti". Il ridisegno finale lo fa lei.
+    │   │                        Quando un'elezione si CHIUDE fra due giri: un'onda
+    │   │                        sulla nazione nel colore del partito vincitore (lo
+    │   │                        stesso stringToColor di Political) col suo nome.
+    │   │                        Nomi da /parties?countryId= (/parties-detail pesa
+    │   │                        1,1 MB). Si vede solo con la vista Elezioni aperta.
     │   ├── battleReplay.js    ← NUOVO — replay della battaglia aperta: barra con
     │   │                        play/pausa/cursore/velocità sopra la scheda della
     │   │                        battaglia; da /battle-timeline ricostruisce la
@@ -341,6 +349,16 @@ wareraPlus/
     │   │                        dell'ULTIMA ORA completa, alone ambra → rosa con la
     │   │                        quota di attivi pillati. Da /damage-pulse (tutte le
     │   │                        nazioni, un'ora), nessun ripiego.
+    │   ├── mapPulses.js       ← NUOVO — tre animazioni di vista, dati GIÀ in pagina:
+    │   │                        Produzione = i giacimenti pulsano più in fretta
+    │   │                        quanto più sono vicini alla scadenza; Popolazione =
+    │   │                        le nazioni respirano in verde/rosso con gli attivi
+    │   │                        guadagnati/persi in 24h; Finanziamenti senza nazione
+    │   │                        a fuoco = monete che salgono/scendono sulle capitali
+    │   │                        col tesoro ±2% in 24h. Popolazione e tesoro sono gli
+    │   │                        aggregati del ticker, annunciati con l'evento
+    │   │                        `wareraplus:ticker-data`: prima del primo giro del
+    │   │                        ticker non c'è niente da disegnare.
     │   ├── sphereLinks.js     ← NUOVO — in vista Sfera: fili potenza → proxy nel
     │   │                        colore della sfera, pieni dal CSV e tratteggiati
     │   │                        dal radar (gli stessi gruppi che tingono la mappa),
@@ -405,6 +423,10 @@ wareraPlus/
     │   │                          ⚠️ i costi (10 stamina a regione, poi 2 barili) NON
     │   │                          sono in gameConfig: sono della patch 0.26.1, costanti
     │   │                          in testa al file. Testi in travelI18n.js (9 lingue).
+    │   │                          "Percorri il giro": un segnalino cammina il percorso
+    │   │                          regione per regione, la barra stamina si svuota e le
+    │   │                          casse si contano. È a comando, quindi l'interruttore
+    │   │                          Animazioni non lo blocca.
     │   ├── migrationFlows.js    ← NUOVO — vista mappa "Migrazioni": saldo dei cambi di
     │   │                          cittadinanza per nazione (rosso perde, verde guadagna,
     │   │                          assoluto o ogni 100 cittadini 10+) e, cliccando una
@@ -764,6 +786,10 @@ wareraPlus/
     │   │                         Le altre fonti le passa il ticker a ogni giro (zero
     │   │                         fetch). Etichetta col testo del ticker. All'apertura
     │   │                         gli ultimi 30 minuti, poi solo il nuovo, uno alla volta.
+    │   │                         Clic su una notizia (ticker o vista News) = la mappa
+    │   │                         vola sul posto e rifà il ping: newsTicker.js tiene
+    │   │                         il bersaglio di ogni messaggio (newsTargetFor) e
+    │   │                         pingNewsTarget lo suona.
     │   ├── newsView.js         ← vista "News": lo STESSO materiale del ticker, completo,
     │   │                         fermo e raggruppato per categoria. Zero fetch nuove —
     │   │                         riusa getNewsGroups() del ticker.
@@ -783,6 +809,13 @@ wareraPlus/
     │   │                         conquistatore + onda sulla regione, per gli eventi
     │   │                         fra un fotogramma e l'altro. Tetti: niente oltre 4
     │   │                         giorni di salto, 6 per fotogramma, 14 a schermo.
+    │   │                         In più il FRONTE (il contorno delle regioni passate
+    │   │                         di mano brilla nel colore del conquistatore, fino a
+    │   │                         40 per fotogramma) e i lampi delle ALLEANZE (entra /
+    │   │                         esce / espulsa, solo blocchi: le bilaterali sono
+    │   │                         ~250 al giorno). ⚠️ filtro "niente" = ['boolean',
+    │   │                         false]: ['==', 1, 0] MapLibre lo legge come filtro
+    │   │                         legacy e SCARTA il layer senza errori.
     │   ├── timeMachineLinks.js ← NUOVO — guerre (rosso, trattini che scorrono),
     │   │                         nemico giurato (più spesso) e patti (viola che
     │   │                         respira) della nazione SELEZIONATA come archi dalla

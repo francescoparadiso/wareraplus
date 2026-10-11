@@ -1574,6 +1574,45 @@ function buildMarkerEl(battle, regionName, liveData, totalAttackerDmg, totalDefe
   return el;
 }
 
+// ==================== WarEra+: il marcatore che reagisce al sorpasso ====
+// Richiesta dell'utente: quando in una battaglia cambia chi fa più danno
+// nel round in corso, il marcatore lampeggia nel colore del lato che è
+// passato avanti (attacco blu, difesa rosso, come la heatmap). Nessun dato
+// nuovo: il danno del round arriva già a ogni giro dei marcatori (live
+// data, o currentRound di getBattles). Si confronta il segno con quello del
+// giro prima, NELLO STESSO round (al cambio round il contatore riparte da
+// zero e il primo vantaggio non è un sorpasso). Animazione CSS, quindi
+// l'interruttore delle Impostazioni la spegne da sé (body.wp-no-motion).
+const _leadState = new Map();   // battleId → { round, sign }
+const _pendingFlash = new Map(); // battleId → 'attacker' | 'defender'
+const FLASH_MS = 2400;
+
+function _trackLead(battle, liveData) {
+  const live = liveData && (liveData.attackerDmg > 0 || liveData.defenderDmg > 0);
+  const atk = live ? liveData.attackerDmg : (battle.currentRound?.attacker?.damages || 0);
+  const def = live ? liveData.defenderDmg : (battle.currentRound?.defender?.damages || 0);
+  const sign = Math.sign(atk - def);
+  const round = battle.roundsHistory?.length ?? null;
+  const prev = _leadState.get(battle._id);
+  if (prev && prev.round === round && prev.sign && sign && sign !== prev.sign) {
+    _pendingFlash.set(battle._id, sign > 0 ? 'attacker' : 'defender');
+  }
+  if (sign || !prev || prev.round !== round) _leadState.set(battle._id, { round, sign });
+}
+
+function _playLeadFlashes() {
+  for (const [battleId, side] of _pendingFlash) {
+    const el = markers.get(battleId)?.marker?.getElement?.();
+    if (!el) continue;
+    const cls = `wp-bm-flash-${side}`;
+    el.classList.remove('wp-bm-flash-attacker', 'wp-bm-flash-defender');
+    void el.offsetWidth;   // riparte l'animazione anche se la classe c'era
+    el.classList.add(cls);
+    setTimeout(() => el.classList.remove(cls), FLASH_MS);
+  }
+  _pendingFlash.clear();
+}
+
 // ==================== UPDATE MARKERS ====================
 export async function updateBattleMarkers() {
   // Se i marker sono disabilitati, esci
@@ -1661,6 +1700,7 @@ export async function updateBattleMarkers() {
         const effDef = (liveData && (liveData.attackerDmg > 0 || liveData.defenderDmg > 0))
           ? liveData.defenderDmg : totalDefenderDmg;
         const trend = computeTrend(battle._id, effAtk, effDef);
+        _trackLead(battle, liveData);   // WarEra+: sorpasso nel round → lampo
 
         seen.add(battle._id);
         battleCache.set(battle._id, { battle, regionName, liveData, totalAttackerDmg, totalDefenderDmg, trend, centroid });
@@ -1681,6 +1721,8 @@ export async function updateBattleMarkers() {
       }
 
       _syncMarkersToViewport();
+      _playLeadFlashes();
+      for (const id of _leadState.keys()) if (!battleCache.has(id)) _leadState.delete(id);
     }
   } catch (err) {
     console.error('Error updating battle markers:', err);

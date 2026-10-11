@@ -31,11 +31,30 @@
      · a schermo al massimo MAX_LIVE, le più vecchie cedono il posto.
    Indietro nel tempo non si anima niente: una conquista vista al
    contrario non è una conquista.
+
+   ── IL FRONTE (richiesta dell'utente) ──────────────────────────
+   Oltre al lampo, il CONTORNO di ogni regione passata di mano brilla per
+   un attimo nel colore del conquistatore: le regioni prese lo stesso
+   giorno, una accanto all'altra, disegnano la linea dove avanza la
+   guerra. Tutte quelle del fotogramma (fino a MAX_FRONT), non solo le sei
+   col lampo: è la forma del fronte che conta. Un solo layer line sulla
+   sorgente delle regioni della time machine, con opacità e colore per
+   regione (match su regionId) ricalcolati a ogni fotogramma.
+
+   ── LE ALLEANZE (richiesta dell'utente) ────────────────────────
+   Un lampo sulla capitale quando una nazione entra in un blocco (blu),
+   ne esce (grigio) o ne viene espulsa (rosso), con l'etichetta. Dal
+   registro eventi (timeMachineAlliances.js), che si carica qui la prima
+   volta che serve — è una richiesta da ~80 KB per sessione.
    ══════════════════════════════════════════════════════════════ */
 
 import { state } from '../diplomacy/state.js';
 import { arc, alongArc, countryAnchor, brightenColor } from '../diplomacy/flowGeometry.js';
 import { getTimeMachineMap, TM_LYR_FILL } from './timeMachineMap.js';
+import maplibregl from 'maplibre-gl';
+import { allianceEventsBetween, allianceHistoryReady, loadAllianceHistory } from './timeMachineAlliances.js';
+import { getLang } from '../shared/i18n.js';
+import { escapeHtml } from '../diplomacy/utils.js';
 import { animationsOn } from '../shared/motion.js';
 
 const SRC = 'wp-tm-conq-src';
@@ -47,6 +66,12 @@ const LYR_TIP = 'wp-tm-conq-tip';
 const MAX_SPAN_MS = 4 * 24 * 60 * 60 * 1000;
 const MAX_PER_FRAME = 6;
 const MAX_LIVE = 14;
+const MAX_FRONT = 40;
+const FRONT_MS = 1700;
+const LYR_FRONT = 'wp-tm-conq-front';
+// Un'espressione vera: ['==', 1, 0] MapLibre lo prende per un filtro legacy
+// (chiave non stringa) e scarta il layer senza dire niente.
+const NO_FRONT = ['boolean', false];
 const STAGGER_MS = 70;      // fra due lampi dello stesso fotogramma
 const DRAW_MS = 450;        // la freccia che si allunga fino alla regione
 const RING_MS = 1300;       // l'onda sulla regione, dopo l'arrivo
@@ -57,6 +82,7 @@ const FALLBACK = '#ffd166';
 let _capitals = null;
 let _capitalsFrom = null;
 let _effects = [];          // { start, coords, to, color }
+const _front = new Map();   // regionId → { start, color }
 let _raf = null;
 let _on = false;
 
@@ -141,11 +167,46 @@ function setData(features) {
   _on = features.length > 0;
 }
 
+/* Il contorno delle regioni appena conquistate: opacità e colore per
+   regione in una sola espressione, ricalcolata a ogni fotogramma. */
+function ensureFront(map) {
+  if (map.getLayer(LYR_FRONT)) return;
+  const fill = map.getLayer(TM_LYR_FILL);
+  if (!fill) return;
+  map.addLayer({
+    id: LYR_FRONT, type: 'line', source: fill.source,
+    filter: NO_FRONT,
+    layout: { 'line-join': 'round' },
+    paint: { 'line-color': '#ffd166', 'line-width': 3.5, 'line-blur': 1.5, 'line-opacity': 0 },
+  });
+}
+
+function paintFront(now) {
+  const map = getTimeMachineMap();
+  if (!map?.getLayer(LYR_FRONT)) return;
+  for (const [id, f] of _front) if (now - f.start > FRONT_MS) _front.delete(id);
+  if (!_front.size) { map.setFilter(LYR_FRONT, NO_FRONT); return; }
+  const ids = [..._front.keys()];
+  const op = ['match', ['get', 'regionId']];
+  const col = ['match', ['get', 'regionId']];
+  for (const [id, f] of _front) {
+    const x = Math.max(0, (now - f.start) / FRONT_MS);
+    op.push(id, Math.sin(Math.PI * Math.min(1, x)) * 0.95);
+    col.push(id, f.color);
+  }
+  op.push(0); col.push('#ffd166');
+  map.setFilter(LYR_FRONT, ['in', ['get', 'regionId'], ['literal', ids]]);
+  map.setPaintProperty(LYR_FRONT, 'line-opacity', op);
+  map.setPaintProperty(LYR_FRONT, 'line-color', col);
+}
+
 function tick() {
   _raf = null;
   if (!state.timeMachineActive) { clearConquests(); return; }
-  setData(frameFeatures(performance.now()));
-  if (_effects.length) _raf = requestAnimationFrame(tick);
+  const now = performance.now();
+  setData(frameFeatures(now));
+  paintFront(now);
+  if (_effects.length || _front.size) _raf = requestAnimationFrame(tick);
   else if (_on) setData([]);
 }
 
@@ -166,6 +227,11 @@ export function animateConquests(events, prevTs, ts) {
   for (let i = lo; i < events.length && events[i].ts <= ts; i++) fresh.push(events[i]);
   if (!fresh.length) return;
   const now = performance.now();
+  ensureFront(map);
+  for (const ev of fresh.slice(-MAX_FRONT)) {
+    const c = brightenColor((ev.toCountry && state.nationBaseColorMap?.get(ev.toCountry)) || FALLBACK, 0.45, FALLBACK);
+    _front.set(ev.regionId, { start: now, color: c });
+  }
   fresh.slice(-MAX_PER_FRAME).forEach((ev, i) => {
     const to = state.regionData?.[ev.regionId]?.position;
     if (!Array.isArray(to)) return;
@@ -178,10 +244,67 @@ export function animateConquests(events, prevTs, ts) {
   if (!_raf) _raf = requestAnimationFrame(tick);
 }
 
+/* ── Lampi delle alleanze ── */
+const ORDINE = ['it', 'es', 'de', 'fr', 'nl', 'sv', 'pt', 'ar'];
+const AT = {
+  '{a} joins {b}': ['{a} entra in {b}', '{a} se une a {b}', '{a} tritt {b} bei', '{a} rejoint {b}', '{a} treedt toe tot {b}', '{a} går med i {b}', '{a} entra em {b}', 'تنضم {a} إلى {b}'],
+  '{a} leaves {b}': ['{a} lascia {b}', '{a} abandona {b}', '{a} verlässt {b}', '{a} quitte {b}', '{a} verlaat {b}', '{a} lämnar {b}', '{a} sai de {b}', 'تغادر {a} {b}'],
+  '{a} is expelled from {b}': ['{a} viene espulsa da {b}', '{a} es expulsada de {b}', '{a} wird aus {b} ausgeschlossen', '{a} est exclue de {b}', '{a} wordt uit {b} gezet', '{a} utesluts ur {b}', '{a} é expulsa de {b}', 'تُطرد {a} من {b}'],
+};
+function aT(k, vars) {
+  const i = ORDINE.indexOf(getLang());
+  let s = (i >= 0 && AT[k]?.[i]) || k;
+  for (const [x, v] of Object.entries(vars)) s = s.split(`{${x}}`).join(String(v));
+  return s;
+}
+const ALLY_COLORS = { join: '#58a6ff', leave: '#8b949e', kick: '#f85149' };
+const MAX_ALLY_PER_FRAME = 4;
+let _askedAlliances = false;
+
+function allyLabel(map, at, text, color) {
+  const el = document.createElement('div');
+  el.style.pointerEvents = 'none';
+  el.style.zIndex = '5';
+  const inner = document.createElement('div');
+  inner.className = 'wp-ping-label';
+  inner.style.setProperty('--ping-c', color);
+  inner.innerHTML = escapeHtml(text);
+  el.appendChild(inner);
+  const marker = new maplibregl.Marker({ element: el, anchor: 'bottom', offset: [0, -14] }).setLngLat(at).addTo(map);
+  setTimeout(() => marker.remove(), 3600);
+}
+
+/** Ingressi e uscite dai blocchi in (prevTs, ts]: anello + etichetta. */
+export function animateAlliances(prevTs, ts) {
+  const map = getTimeMachineMap();
+  if (!map || !(ts > prevTs) || !animationsOn()) return;
+  if (!allianceHistoryReady()) {
+    if (!_askedAlliances) { _askedAlliances = true; loadAllianceHistory(); }
+    return;
+  }
+  if (!ensureLayers(map)) return;
+  const evs = allianceEventsBetween(Math.max(prevTs, ts - MAX_SPAN_MS), ts).slice(-MAX_ALLY_PER_FRAME);
+  if (!evs.length) return;
+  const now = performance.now();
+  evs.forEach((e, i) => {
+    const pos = originalCapital(e.country);
+    if (!pos) return;
+    const color = ALLY_COLORS[e.kind];
+    _effects.push({ start: now + i * STAGGER_MS, coords: null, to: pos, color });
+    const key = e.kind === 'join' ? '{a} joins {b}' : e.kind === 'kick' ? '{a} is expelled from {b}' : '{a} leaves {b}';
+    allyLabel(map, pos, `🤝 ${aT(key, { a: state.nationMap.get(e.country)?.name || '—', b: e.name || '—' })}`, color);
+  });
+  if (_effects.length > MAX_LIVE) _effects = _effects.slice(-MAX_LIVE);
+  if (!_raf) _raf = requestAnimationFrame(tick);
+}
+
 /** Chiusura della time machine (o salto indietro): via tutto. */
 export function clearConquests() {
   if (_raf) cancelAnimationFrame(_raf);
   _raf = null;
   _effects = [];
+  _front.clear();
   if (_on) setData([]);
+  const map = getTimeMachineMap();
+  if (map?.getLayer(LYR_FRONT)) map.setFilter(LYR_FRONT, NO_FRONT);
 }

@@ -3969,3 +3969,29 @@ body.wp-no-motion .wp-ping-label { animation: none; }
 .wp-replay-mark.entry.attacker img { box-shadow: 0 0 0 1.5px #4d8dff; }
 .wp-replay-mark.entry.defender img { box-shadow: 0 0 0 1.5px #ff4d4d; }
 .wp-replay-mark:hover { filter: brightness(1.3); z-index: 1; }
+
+/* Notizie che portano sulla mappa (newsTicker.js / newsView.js → livePings.js). */
+.wp-ticker-message.wp-ticker-link { cursor: pointer; }
+.wp-ticker-message.wp-ticker-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.wp-news-item.wp-news-link, .wp-news-lead-title.wp-news-link { cursor: pointer; }
+.wp-news-item.wp-news-link:hover, .wp-news-lead-title.wp-news-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* WarEra+ marcatore di battaglia al sorpasso nel round (battleMarkers.js). */
+.battle-marker.wp-bm-flash-attacker { animation: wp-bm-flash-atk 2.4s ease-out; }
+.battle-marker.wp-bm-flash-defender { animation: wp-bm-flash-def 2.4s ease-out; }
+@keyframes wp-bm-flash-atk {
+  0% { filter: none; }
+  12% { filter: drop-shadow(0 0 10px #4d8dff) drop-shadow(0 0 4px #4d8dff) brightness(1.35); }
+  35% { filter: none; }
+  50% { filter: drop-shadow(0 0 8px #4d8dff) brightness(1.2); }
+  100% { filter: none; }
+}
+@keyframes wp-bm-flash-def {
+  0% { filter: none; }
+  12% { filter: drop-shadow(0 0 10px #ff4d4d) drop-shadow(0 0 4px #ff4d4d) brightness(1.35); }
+  35% { filter: none; }
+  50% { filter: drop-shadow(0 0 8px #ff4d4d) brightness(1.2); }
+  100% { filter: none; }
+}
+body.wp-no-motion .battle-marker.wp-bm-flash-attacker,
+body.wp-no-motion .battle-marker.wp-bm-flash-defender { animation: none; }

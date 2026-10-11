@@ -45,6 +45,23 @@ export function allianceHistoryReady() {
   return Boolean(_dati);
 }
 
+/** WarEra+ — gli ingressi/uscite dai BLOCCHI caduti in (from, to], per i
+ *  lampi della time machine (timeMachineConquest.js). Solo i blocchi: le
+ *  bilaterali di prima del 10 giugno sono ~250 eventi al giorno, sulla
+ *  mappa sarebbero una pioggia. Nome = quello che l'alleanza portava allora.
+ *  [] se il registro non è (ancora) caricato. */
+export function allianceEventsBetween(from, to) {
+  if (!_dati) return [];
+  const out = [];
+  for (const e of _dati.bloc) {          // dal più recente al più vecchio
+    if (e.t > to) continue;
+    if (e.t <= from) break;
+    const { nome, allora } = _nomiA(e.a, e.t);
+    out.push({ t: e.t, kind: e.k === 'j' ? 'join' : e.k === 'x' ? 'kick' : 'leave', country: e.n, alliance: e.a, name: allora || nome || '' });
+  }
+  return out.reverse();
+}
+
 function _decodifica(raw) {
   const c = raw?.c;
   if (!Array.isArray(c) || !raw.bloc || !raw.pair) return null;
