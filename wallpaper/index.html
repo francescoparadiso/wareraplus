@@ -4,18 +4,25 @@
   WarEra+ — involucro dello sfondo di Wallpaper Engine
   ------------------------------------------------------------------
   Questa cartella è lo sfondo che si pubblica sullo Steam Workshop, e
-  NON contiene il tool: carica il sito in un iframe con ?wallpaper=1.
-  Ogni deploy del sito aggiorna quindi anche lo sfondo senza ripubblicare
-  niente. Cosa fa il sito in modalità sfondo: src/app/wallpaperMode.js.
+  NON contiene il tool: porta la pagina dello sfondo sul sito con
+  ?wallpaper=1. Ogni deploy del sito aggiorna quindi anche lo sfondo
+  senza ripubblicare niente. Cosa fa il sito in modalità sfondo:
+  src/app/wallpaperMode.js.
+
+  ⚠️ Niente iframe: nel browser di Wallpaper Engine (CEF 146, provato il
+  2026-10-12) qualunque iframe di un altro sito va in crash appena arriva
+  la risposta, anche example.com. Per questo si naviga la pagina intera
+  (location.replace) e da lì le proprietà le riceve il sito stesso.
 
   Qui stanno solo tre cose:
-  1. le proprietà di Wallpaper Engine (project.json) → all'avvio come
-     parametri dell'URL, poi via postMessage (la chiave API SOLO così,
-     mai nell'URL, e solo verso l'origin esatto del sito);
-  2. la pausa (setPaused), girata al sito che ferma il lavoro della mappa;
+  1. le proprietà di Wallpaper Engine (project.json) → parametri dell'URL;
+     la chiave API nel FRAMMENTO (#k=…), che non parte mai verso un
+     server e che il sito cancella appena letto;
+  2. l'attesa delle proprietà: Wallpaper Engine le manda tutte appena la
+     pagina è pronta, e si parte con quelle;
   3. l'attesa della rete: Wallpaper Engine parte con Windows, spesso
-     prima che la connessione ci sia. Un iframe caricato in quel momento
-     resterebbe sulla pagina d'errore di Chromium per tutta la sessione,
+     prima che la connessione ci sia. Una navigazione fatta in quel
+     momento resterebbe sulla pagina d'errore per tutta la sessione,
      quindi si prova prima a raggiungere il sito e si ritenta da soli.
   ══════════════════════════════════════════════════════════════
 -->
@@ -27,28 +34,26 @@
   <style>
     :root { --bg: #0d1117; --fg: #c9d1d9; --muted: #8b949e; }
     html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
-    iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: var(--bg); }
     #waiting {
       position: fixed; inset: 0; display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 8px;
       font: 15px/1.4 'Segoe UI', system-ui, sans-serif; color: var(--fg); text-align: center;
     }
-    #waiting[hidden] { display: none; }
     #waiting small { color: var(--muted); }
   </style>
 </head>
 <body>
-  <div id="waiting" hidden>
+  <div id="waiting">
     <div>WarEra+</div>
-    <small id="waiting-text">Waiting for an internet connection…</small>
+    <small id="waiting-text">Loading…</small>
   </div>
-  <iframe id="app" title="WarEra+" hidden></iframe>
 
   <script>
     'use strict';
 
     // Canale: "live" è quello che usano tutti; "dev" serve a provare lo
     // sfondo contro il branch dev prima di portare le modifiche sul live.
+    // Gli stessi indirizzi stanno in src/app/wallpaperMode.js (CHANNELS).
     const CHANNELS = {
       live: 'https://wareraplus.vercel.app',
       dev: 'https://wareraplus-dev.vercel.app',
@@ -79,14 +84,11 @@
       ticker: 'ticker', menubar: 'menubar', apikey: 'apiKey',
     };
 
-    const frame = document.getElementById('app');
-    const waiting = document.getElementById('waiting');
-    let origin = null;       // origin del sito caricato: unico destinatario dei messaggi
+    const waitingText = document.getElementById('waiting-text');
     let started = false;
-    let paused = false;
     let retryTimer = null;
 
-    function siteUrl() {
+    function siteUrl(base) {
       const q = new URLSearchParams({
         wallpaper: '1',
         view: props.view,
@@ -103,72 +105,42 @@
       });
       // `focus` e non `country`: ?country= è il deep-link del sito (vuole un id).
       if (props.country) q.set('focus', props.country);
-      return `${origin}/?${q}`;
+      const key = props.apiKey ? `#k=${encodeURIComponent(props.apiKey)}` : '';
+      return `${base}/?${q}${key}`;
     }
 
-    function send(msg) {
-      if (!origin || !frame.contentWindow) return;
-      frame.contentWindow.postMessage({ source: 'wareraplus-wallpaper', ...msg }, origin);
-    }
-
-    function sendProps() {
-      const { channel, ...rest } = props;
-      send({ type: 'props', props: rest });
-    }
-
-    // Prima di caricare: il sito risponde? `no-cors` basta a sapere se la
+    // Prima di partire: il sito risponde? `no-cors` basta a sapere se la
     // rete c'è (una risposta opaca arriva, un errore di rete no).
-    async function load() {
+    async function go() {
       clearTimeout(retryTimer);
       const base = CHANNELS[props.channel] || CHANNELS.live;
       try {
         await fetch(`${base}/manifest.webmanifest`, { mode: 'no-cors', cache: 'no-store' });
       } catch {
-        waiting.hidden = false;
-        frame.hidden = true;
-        retryTimer = setTimeout(load, RETRY_MS);
+        waitingText.textContent = 'Waiting for an internet connection…';
+        retryTimer = setTimeout(go, RETRY_MS);
         return;
       }
-      origin = base;
-      waiting.hidden = true;
-      frame.hidden = false;
-      frame.src = siteUrl();
+      location.replace(siteUrl(base));
     }
 
     function start() {
       if (started) return;
       started = true;
-      load();
+      go();
     }
 
-    // Il sito saluta quando è pronto (due volte: subito e a mappa pronta).
-    // A ogni saluto riceve le proprietà correnti, chiave compresa.
-    window.addEventListener('message', (e) => {
-      if (e.source !== frame.contentWindow || e.origin !== origin) return;
-      const d = e.data;
-      if (!d || d.source !== 'wareraplus' || d.type !== 'hello') return;
-      sendProps();
-      if (paused) send({ type: 'paused', paused: true });
-    });
-
+    // Da qui in poi le proprietà le riceve il sito (wallpaperMode.js
+    // definisce lo stesso listener). Questo serve solo per la prima
+    // chiamata, che arriva con TUTTE le proprietà, e per quelle che
+    // dovessero arrivare mentre si aspetta la rete.
     window.wallpaperPropertyListener = {
       applyUserProperties(changed) {
-        let channelChanged = false;
         for (const [name, prop] of Object.entries(changed)) {
           const key = KEYMAP[name];
-          if (!key || !prop || !('value' in prop)) continue;
-          if (key === 'channel' && prop.value !== props.channel) channelChanged = true;
-          props[key] = prop.value;
+          if (key && prop && 'value' in prop) props[key] = prop.value;
         }
-        // La prima chiamata arriva subito dopo il caricamento con TUTTE le
-        // proprietà: è quella che fa partire il sito con l'URL giusto.
-        if (!started) { start(); return; }
-        if (channelChanged) load();
-        else sendProps();
-      },
-      setPaused(isPaused) {
-        paused = Boolean(isPaused);
-        send({ type: 'paused', paused });
+        start();
       },
     };
 

@@ -55,11 +55,11 @@ import { startNewsTicker } from './app/newsTicker.js';
 import { initTimeMachine, openTimeMachineAt } from './app/timeMachine.js';
 import { initAuthorPill } from './app/authorPill.js';
 import { initVisitorCounter } from './app/visitorCounter.js';
-// WarEra+ sfondo Wallpaper Engine: il listener dei messaggi parte subito
-// (la chiave API deve arrivare prima delle prime chiamate), il resto a
-// mappa pronta. Vedi src/app/wallpaperMode.js.
-import { listenWallpaperHost, startWallpaperMode } from './app/wallpaperMode.js';
-if (IS_WALLPAPER) listenWallpaperHost();
+// WarEra+ sfondo Wallpaper Engine: chiave API e listener delle proprietà
+// partono subito (la chiave deve arrivare prima delle prime chiamate), il
+// resto a mappa pronta. Vedi src/app/wallpaperMode.js.
+import { initWallpaperEarly, startWallpaperMode } from './app/wallpaperMode.js';
+if (IS_WALLPAPER) initWallpaperEarly();
 // WarEra+: interruttore unico delle animazioni (Impostazioni)
 import { initMotion } from './shared/motion.js';
 import { applyTranslations, initLangButton } from './shared/i18n.js';
