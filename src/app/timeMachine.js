@@ -97,8 +97,16 @@ const STEP_MS = 24 * 60 * 60 * 1000;
 // PLAY_TICK_MS: cadenza NOMINALE del loop di playback, non la velocità
 // (vedi _playLoop — la velocità è calcolata sul tempo reale trascorso, non
 // su questo). 1x/2x/3x = 1/2/3 giorni di gioco al SECONDO reale.
-const PLAY_TICK_MS = 150;
-const PLAY_SPEEDS = [1, 2, 3]; // giorni/secondo — 4x rimosso su richiesta esplicita
+// WarEra+: con la riproduzione locale (vedi _localRegionsAt) un fotogramma
+// costa un millisecondo, quindi la cadenza può salire: 60 ms invece di 150
+// rende lo scorrimento fluido invece che a scatti.
+const PLAY_TICK_MS = 60;
+// giorni/secondo — 4x rimosso su richiesta esplicita; ¼x e ½x aggiunti
+// (richiesta dell'utente: "si muove troppo velocemente ed è caotica"), e ½x
+// è la partenza: a 1x i primi mesi, pieni di conquiste, passavano in un lampo.
+const PLAY_SPEEDS = [0.25, 0.5, 1, 2, 3];
+const DEFAULT_SPEED_IDX = 1;
+const speedLabel = (s) => (s === 0.25 ? '¼x' : s === 0.5 ? '½x' : `${s}x`);
 
 // Il server semina la genesi (keyframe più vecchio) al 1 maggio 2025 — vedi
 // GENESIS_TS in server/warera-cache-server.js. Non serve duplicare la
@@ -182,7 +190,7 @@ let _labelRegionId = null; // Map: indice in state.labelsData -> regionId "sotto
 let _playing = false;
 let _playTimer = null;
 let _playLastTickAt = null; // Date.now() dell'ultimo frame applicato — vedi _playLoop
-let _speedIdx = 0; // indice in PLAY_SPEEDS
+let _speedIdx = DEFAULT_SPEED_IDX; // indice in PLAY_SPEEDS
 
 // Eventi (salto prossimo/precedente + "dal —" nel popup): UNA fetch sola
 // per sessione (l'intero storico), non una per interazione — vedi
@@ -325,7 +333,7 @@ function _buildPanelIfNeeded() {
       <button id="wp-tm-prev-event" data-i18n-title="tm_prev_event" data-i18n-aria="tm_prev_event" title="${t('tm_prev_event')}" aria-label="${t('tm_prev_event')}" disabled>⏮</button>
       <button id="wp-tm-play" data-i18n-title="tm_play" data-i18n-aria="tm_play" title="${t('tm_play')}" aria-label="${t('tm_play')}">▶</button>
       <button id="wp-tm-next-event" data-i18n-title="tm_next_event" data-i18n-aria="tm_next_event" title="${t('tm_next_event')}" aria-label="${t('tm_next_event')}" disabled>⏭</button>
-      <button id="wp-tm-speed" data-i18n-title="tm_speed_title" data-i18n-aria="tm_speed_title" title="${t('tm_speed_title')}" aria-label="${t('tm_speed_title')}">1x</button>
+      <button id="wp-tm-speed" data-i18n-title="tm_speed_title" data-i18n-aria="tm_speed_title" title="${t('tm_speed_title')}" aria-label="${t('tm_speed_title')}">${speedLabel(PLAY_SPEEDS[_speedIdx])}</button>
       <!-- WarEra+ (richiesto): scelta diretta della data. Con ~490 giorni
            di storico su una traccia larga poche centinaia di pixel, lo
            slider non permette di "beccare" un giorno preciso; questo lo
@@ -744,7 +752,7 @@ async function _playLoop() {
 
 function _cycleSpeed() {
   _speedIdx = (_speedIdx + 1) % PLAY_SPEEDS.length;
-  _speedBtn.textContent = `${PLAY_SPEEDS[_speedIdx]}x`;
+  _speedBtn.textContent = speedLabel(PLAY_SPEEDS[_speedIdx]);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -860,10 +868,33 @@ let _applyToken = 0;
 // posizione nell'interfaccia (vedi _applyAt sotto per l'uso interattivo,
 // _playLoop per l'autoplay). Ritorna true se il rendering è stato
 // applicato, false se scartato (superato o fetch fallita).
+/* WarEra+: la riproduzione IN LOCALE. Prima ogni fotogramma del playback
+   (ogni 150 ms) chiedeva /region-history/at al server e aspettava: con una
+   risposta lenta il fotogramma dopo recuperava il tempo perso con un salto
+   lungo, e la mappa andava a strappi, con le conquiste animate di un
+   intervallo che la mappa aveva già superato. Ma gli eventi di passaggio
+   di mano sono già tutti in memoria (_eventsSorted, una fetch per sessione)
+   e il server non fa altro che applicarli alla fotografia di partenza —
+   verificato: fotografia del server + eventi in mezzo = fotografia del
+   server, zero differenze su 726 regioni a 20 e 60 giorni di distanza.
+   Quindi andando AVANTI da un fotogramma già mostrato si applicano gli
+   eventi in (ultimo, ts] e basta: niente rete, niente attese. Indietro, o
+   senza eventi caricati, si chiede al server come prima. */
+function _localRegionsAt(ts) {
+  if (!_lastRegions || !_eventsSorted || _lastRenderedTs == null || ts < _lastRenderedTs) return null;
+  const ev = _eventsSorted;
+  let lo = 0, hi = ev.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (ev[mid].ts <= _lastRenderedTs) lo = mid + 1; else hi = mid; }
+  const out = { ..._lastRegions };
+  for (let i = lo; i < ev.length && ev[i].ts <= ts; i++) out[ev[i].regionId] = ev[i].toCountry;
+  return out;
+}
+
 async function _fetchAndRender(ts) {
   const token = ++_applyToken;
   try {
-    const { regions } = await fetchRegionHistoryAtViaCache(ts);
+    const local = _localRegionsAt(ts);
+    const { regions } = local ? { regions: local } : await fetchRegionHistoryAtViaCache(ts);
     if (token !== _applyToken) return false; // superata da una richiesta più recente, scartata
     _lastRegions = regions;
     renderTimeMachineFrame(regions, _buildLabelEntries(regions));

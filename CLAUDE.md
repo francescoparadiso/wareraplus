@@ -329,6 +329,9 @@ wareraPlus/
     │   │                        stesso stringToColor di Political) col suo nome.
     │   │                        Nomi da /parties?countryId= (/parties-detail pesa
     │   │                        1,1 MB). Si vede solo con la vista Elezioni aperta.
+    │   │                        Per rivederla: il riepilogo elenca le "Appena chiuse"
+    │   │                        (48 ore, /elections?closed=48) e un clic su una riga
+    │   │                        vola sulla nazione e rifà l'onda.
     │   ├── battleReplay.js    ← NUOVO — replay della battaglia aperta: barra con
     │   │                        play/pausa/cursore/velocità sopra la scheda della
     │   │                        battaglia; da /battle-timeline ricostruisce la
@@ -797,6 +800,11 @@ wareraPlus/
     │   │                         (dati dal server: keyframe + replay lato VPS). Scope
     │   │                         volutamente ridotto: solo ownership + nome + bandiera.
     │   │                         Deep-link ?tm=<epoch ms>.
+    │   │                         Il PLAYBACK in avanti si ricostruisce IN LOCALE
+    │   │                         (fotogramma precedente + eventi in mezzo, già in
+    │   │                         memoria): zero richieste, fluido, conquiste in
+    │   │                         sincrono. Verificato identico a /region-history/at.
+    │   │                         Velocità ¼x ½x 1x 2x 3x giorni/secondo, si parte a ½x.
     │   ├── timeMachineDay.js   ← NUOVO — la giornata storica per la time machine
     │   │                         (/day-history): patti, guerre, nemico giurato nel
     │   │                         popup del click e battaglie aperte sotto la

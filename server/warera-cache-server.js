@@ -2544,8 +2544,23 @@ function _electionTs(s) {
 }
 
 app.get('/elections', (req, res) => {
-  const { countryId, countryIds, open } = req.query;
+  const { countryId, countryIds, open, closed } = req.query;
   const cache = readCache('elections-by-country', { fetchedAt: null, data: {} });
+  // WarEra+: `?closed=H` — le elezioni il cui voto si è chiuso nelle ultime
+  // H ore (massimo una settimana), per tutte le nazioni. Le usa il riepilogo
+  // della vista Elezioni ("Appena chiuse"), che a un clic rifà sulla mappa
+  // l'onda del vincitore (src/diplomacy/electionsLive.js). Poche righe.
+  if (closed) {
+    const now = Date.now();
+    const hours = Math.min(168, Math.max(1, Number(closed) || 48));
+    const since = now - hours * 3600e3;
+    const out = {};
+    for (const [id, list] of Object.entries(cache.data || {})) {
+      const chiuse = (list || []).filter(e => { const t = _electionTs(e.votesEndAt); return t >= since && t <= now; });
+      if (chiuse.length) out[id] = chiuse;
+    }
+    return res.json({ fetchedAt: cache.fetchedAt, closed: true, hours, data: out });
+  }
   if (open) {
     const now = Date.now();
     const out = {};

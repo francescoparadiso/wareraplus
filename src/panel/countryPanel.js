@@ -1206,6 +1206,13 @@ export function renderViewOverviewPanel(mode) {
       openPoliticalView(id, state.nationMap.get(id)?.name || '');
     });
   });
+  // WarEra+ "Appena chiuse": la riga rifà sulla mappa l'esito dell'elezione.
+  contentEl.querySelectorAll('.wp-vo-row[data-vo-result]').forEach(el => {
+    el.addEventListener('click', () => {
+      trackEvent('view-overview-click', { mode, target: 'election-result' });
+      import('../diplomacy/electionsLive.js').then(m => m.replayResult(el.dataset.voResult));
+    });
+  });
 
   // WarEra+ — toggle "fotografia / variazione 7 giorni" della vista Guerra
   // vs Eco: cambia insieme la mappa e questo riepilogo, perché sono due

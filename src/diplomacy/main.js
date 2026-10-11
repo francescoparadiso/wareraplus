@@ -423,6 +423,12 @@ async function _loadOpenElections(force = false) {
       : false;
     if (!live) renderMap();
     _refreshOverview('politics');
+    // WarEra+: le elezioni appena chiuse per il riepilogo (clic = rifà
+    // l'onda del vincitore, electionsLive.js). Non blocca niente: arrivano,
+    // e il riepilogo si ridisegna.
+    import('./electionsLive.js').then(m => m.loadRecentResults()).then((rows) => {
+      if (rows?.length && state.coloringMode === 'politics') _refreshOverview('politics');
+    }).catch(() => {});
   }
 }
 

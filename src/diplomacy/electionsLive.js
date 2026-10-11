@@ -150,8 +150,8 @@ const LYR_WAVE_FILL = 'wp-elections-result-fill';
 const LYR_WAVE_RING = 'wp-elections-result-ring';
 const WAVE_MS = 2600;
 
-async function announceResult(e, countryId) {
-  if (_announced.has(e._id)) return;
+async function announceResult(e, countryId, { force = false } = {}) {
+  if (_announced.has(e._id) && !force) return;
   _announced.add(e._id);
   let detail = null;
   try {
@@ -202,6 +202,59 @@ async function announceResult(e, countryId) {
     else { map.setPaintProperty(LYR_WAVE_FILL, 'fill-opacity', 0); map.getSource(SRC_WAVE)?.setData({ type: 'FeatureCollection', features: [] }); }
   };
   requestAnimationFrame(step);
+}
+
+/* ── Appena chiuse (richiesta dell'utente: "esito elezioni, come posso
+   controllare?") ──────────────────────────────────────────────────────
+   L'onda del vincitore parte da sola solo se un'elezione si chiude MENTRE
+   la vista Elezioni è aperta: succede di rado, e chi apre la vista dopo
+   non l'ha vista. Il riepilogo elenca quindi le elezioni chiuse nelle
+   ultime RECENT_HOURS ore (/elections?closed=, una richiesta per tutto il
+   mondo, TTL 10 minuti) e un clic su una riga vola sulla nazione e rifà
+   l'onda. Server vecchio senza il parametro = la sezione non compare. */
+const RECENT_HOURS = 48;
+const RECENT_TTL = 10 * 60 * 1000;
+let _recent = null;
+let _recentAt = 0;
+let _recentP = null;
+
+const endTs = (s) => (s ? Date.parse(/Z$|[+-]\d\d:?\d\d$/.test(s) ? s : `${s}Z`) : NaN);
+
+export function loadRecentResults() {
+  if (_recent && Date.now() - _recentAt < RECENT_TTL) return Promise.resolve(_recent);
+  if (_recentP) return _recentP;
+  _recentP = fetch(`${WARERA_CACHE_BASE}/elections?closed=${RECENT_HOURS}`)
+    .then(r => (r.ok ? r.json() : null))
+    .then(j => {
+      if (!j?.closed || !j.data || Array.isArray(j.data)) return _recent;
+      const rows = [];
+      for (const [countryId, list] of Object.entries(j.data)) {
+        for (const e of list || []) if (e?._id) rows.push({ e, countryId, end: endTs(e.votesEndAt) });
+      }
+      rows.sort((a, b) => b.end - a.end);
+      _recent = rows;
+      _recentAt = Date.now();
+      return _recent;
+    })
+    .catch(() => _recent)
+    .finally(() => { _recentP = null; });
+  return _recentP;
+}
+
+/** [{ e, countryId, end }] dalla più recente; [] finché non è arrivato niente. */
+export const recentResults = () => _recent || [];
+
+/** Clic su una riga "Appena chiuse": vola sulla nazione e rifà l'esito. */
+export function replayResult(electionId) {
+  const row = (_recent || []).find(r => r.e._id === electionId);
+  const map = state.map;
+  const pos = row && countryAnchor(row.countryId);
+  if (!map || !pos) return;
+  let done = false;
+  const go = () => { if (done) return; done = true; announceResult(row.e, row.countryId, { force: true }); };
+  map.flyTo({ center: pos, zoom: Math.max(map.getZoom(), 3.2), duration: 1200, essential: true });
+  map.once('moveend', go);
+  setTimeout(go, 1800);
 }
 
 /** Le elezioni al voto nel giro prima che ora sono chiuse. */

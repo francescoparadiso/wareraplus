@@ -46,6 +46,7 @@ import { buildPlaystyleScale, getBalanceColor, getPlaystyleStats } from '../dipl
 import { getTrendColor, getTrendStats } from '../diplomacy/playstyleTrendHeatmap.js';
 import { activeDeposits, depositsByCountry, getProductionColor, getProductionStats, productionRankedList, RESOURCE_TYPES } from '../diplomacy/productionHeatmap.js';
 import { openElectionRows, getPoliticsStats, POLITICS_COLORS, turnoutColor } from '../diplomacy/politicsHeatmap.js';
+import { recentResults } from '../diplomacy/electionsLive.js';
 import { travelOverviewHtml } from '../diplomacy/travelDistance.js';
 import { mig, migrationRanking, getMigrationStats, focusFlows, migrationValue, migrationColor, migrationCanHover, migrationDays,
   MIGRATION_DAYS, MIN_RATE_CITIZENS, OUT_COLOR, IN_COLOR } from '../diplomacy/migrationFlows.js';
@@ -527,7 +528,7 @@ function politicsHtml() {
       { label: t('vo_stat_avg_turnout'), value: s.avgTurnout != null ? `${Math.round(s.avgTurnout * 100)}%` : '—' },
       { label: t('vo_stat_votes_cast'), value: fmt(s.votes) },
     ]);
-  if (!rows.length) return head + emptyHtml(t('vo_politics_empty'));
+  if (!rows.length) return head + emptyHtml(t('vo_politics_empty')) + recentResultsHtml(now);
   // Prima chi vota, dal più partecipato: la barra è l'affluenza (su scala
   // 0–100%), con la stessa tinta della nazione sulla mappa. Le
   // candidature restano in fondo, nell'ordine di apertura del voto.
@@ -546,7 +547,27 @@ function politicsHtml() {
     share: r.phase === 'voting' ? (r.turnout ?? 0) : 0.04,
     color: r.phase === 'voting' ? turnoutColor(r.turnout) : POLITICS_COLORS[r.phase],
     dataset: ` data-vo-political="${escapeHtml(r.countryId)}"`,
-  })).join('');
+  })).join('') + recentResultsHtml(now);
+}
+
+/* WarEra+ — "Appena chiuse": le elezioni finite nelle ultime 48 ore, dalla
+   più recente. Un clic rifà sulla mappa l'onda del vincitore (che da sola
+   parte solo se l'elezione si chiude a vista aperta). */
+function recentResultsHtml(now) {
+  const rows = recentResults().slice(0, 12);
+  if (!rows.length) return '';
+  return `<div class="wp-panel-section-title">${escapeHtml(t('vo_recent_results'))}</div>`
+    + aboutHtml(t('vo_recent_hint'))
+    + rows.map((r, i) => rowHtml({
+      rank: i + 1,
+      icon: state.nationMap.get(r.countryId) ? flagImgHtml(r.countryId, state.nationMap.get(r.countryId), 'wp-vo-flag') : '',
+      name: state.nationMap.get(r.countryId)?.name || '—',
+      value: r.e.type === 'president' ? t('vo_pres') : t('vo_cong'),
+      sub: t('vo_closed_ago', { t: _politicsLeft(now - (r.end || now)) }),
+      share: 0.04,
+      color: '#e3b341',
+      dataset: ` data-vo-result="${escapeHtml(r.e._id)}"`,
+    })).join('');
 }
 
 /* ══════════════════ MIGRAZIONI ══════════════════

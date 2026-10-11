@@ -64,8 +64,15 @@ const LYR_RING = 'wp-tm-conq-ring';
 const LYR_TIP = 'wp-tm-conq-tip';
 
 const MAX_SPAN_MS = 4 * 24 * 60 * 60 * 1000;
-const MAX_PER_FRAME = 6;
-const MAX_LIVE = 14;
+// WarEra+: tetti ridotti (richiesta dell'utente: "molto caotica"). Con la
+// riproduzione locale i fotogrammi sono più fitti, quindi il tetto che
+// conta è quello al SECONDO: al massimo MAX_PER_SEC frecce nuove e una
+// etichetta d'alleanza ogni ALLY_LABEL_GAP_MS, il resto si salta (il
+// contorno del fronte invece le mostra tutte: è la forma che conta).
+const MAX_PER_FRAME = 3;
+const MAX_LIVE = 8;
+const MAX_PER_SEC = 4;
+const ALLY_LABEL_GAP_MS = 1400;
 const MAX_FRONT = 40;
 const FRONT_MS = 1700;
 const LYR_FRONT = 'wp-tm-conq-front';
@@ -83,6 +90,14 @@ let _capitals = null;
 let _capitalsFrom = null;
 let _effects = [];          // { start, coords, to, color }
 const _front = new Map();   // regionId → { start, color }
+let _spawned = [];          // performance.now() delle ultime frecce, per MAX_PER_SEC
+let _lastAllyLabel = 0;
+
+/** Quante frecce nuove si possono ancora lanciare in questo secondo. */
+function budget(now) {
+  _spawned = _spawned.filter(x => now - x < 1000);
+  return Math.max(0, MAX_PER_SEC - _spawned.length);
+}
 let _raf = null;
 let _on = false;
 
@@ -232,7 +247,9 @@ export function animateConquests(events, prevTs, ts) {
     const c = brightenColor((ev.toCountry && state.nationBaseColorMap?.get(ev.toCountry)) || FALLBACK, 0.45, FALLBACK);
     _front.set(ev.regionId, { start: now, color: c });
   }
-  fresh.slice(-MAX_PER_FRAME).forEach((ev, i) => {
+  const n = Math.min(MAX_PER_FRAME, budget(now));
+  (n ? fresh.slice(-n) : []).forEach((ev, i) => {
+    _spawned.push(now);
     const to = state.regionData?.[ev.regionId]?.position;
     if (!Array.isArray(to)) return;
     const color = brightenColor((ev.toCountry && state.nationBaseColorMap?.get(ev.toCountry)) || FALLBACK, 0.45, FALLBACK);
@@ -291,6 +308,10 @@ export function animateAlliances(prevTs, ts) {
     if (!pos) return;
     const color = ALLY_COLORS[e.kind];
     _effects.push({ start: now + i * STAGGER_MS, coords: null, to: pos, color });
+    // L'anello sempre, l'etichetta solo se la precedente ha avuto il tempo
+    // di farsi leggere: una pioggia di scritte non la legge nessuno.
+    if (now - _lastAllyLabel < ALLY_LABEL_GAP_MS) return;
+    _lastAllyLabel = now;
     const key = e.kind === 'join' ? '{a} joins {b}' : e.kind === 'kick' ? '{a} is expelled from {b}' : '{a} leaves {b}';
     allyLabel(map, pos, `🤝 ${aT(key, { a: state.nationMap.get(e.country)?.name || '—', b: e.name || '—' })}`, color);
   });
