@@ -160,6 +160,10 @@ const T = {
   'New Alliance {n}': ['Nuova alleanza {n}', 'Nueva alianza {n}', 'Neue Allianz {n}', 'Nouvelle alliance {n}', 'Nieuwe alliantie {n}', 'Ny allians {n}', 'Nova aliança {n}', 'تحالف جديد {n}'],
   'Name of the new alliance:': ['Nome della nuova alleanza:', 'Nombre de la nueva alianza:', 'Name der neuen Allianz:', 'Nom de la nouvelle alliance :', 'Naam van de nieuwe alliantie:', 'Namn på den nya alliansen:', 'Nome da nova aliança:', 'اسم التحالف الجديد:'],
   '"{name}" already exists. Pick another name.': ['"{name}" esiste già. Scegli un altro nome.', '"{name}" ya existe. Elige otro nombre.', '"{name}" existiert bereits. Wähle einen anderen Namen.', '« {name} » existe déjà. Choisis un autre nom.', '"{name}" bestaat al. Kies een andere naam.', '"{name}" finns redan. Välj ett annat namn.', '"{name}" já existe. Escolha outro nome.', '"{name}" موجود بالفعل. اختر اسمًا آخر.'],
+  'Pick a name.': ['Scegli un nome.', 'Elige un nombre.', 'Wähle einen Namen.', 'Choisis un nom.', 'Kies een naam.', 'Välj ett namn.', 'Escolha um nome.', 'اختر اسمًا.'],
+  'Create': ['Crea', 'Crear', 'Erstellen', 'Créer', 'Aanmaken', 'Skapa', 'Criar', 'إنشاء'],
+  'Cancel': ['Annulla', 'Cancelar', 'Abbrechen', 'Annuler', 'Annuleren', 'Avbryt', 'Cancelar', 'إلغاء'],
+  'Delete': ['Cancella', 'Eliminar', 'Löschen', 'Supprimer', 'Verwijderen', 'Ta bort', 'Excluir', 'حذف'],
   'deleteConfirm': [
     'Cancellare "{name}" dal costruttore?\n\nLe sue {n} nazioni tornano fra le non allineate. Puoi rimetterla dall’elenco "Cancellate" nella barra.',
     '¿Eliminar "{name}" del constructor?\n\nSus {n} naciones vuelven a no alineadas. Puedes recuperarla desde la lista "Eliminadas" de la barra.',

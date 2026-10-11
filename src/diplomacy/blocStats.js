@@ -587,6 +587,14 @@ function injectStyles() {
     .bs-add-empty{font-size:12px;color:#8b949e;padding:10px 2px}
     .bs-merge-close{position:absolute;top:12px;right:16px;cursor:pointer;color:#8b949e;font-size:20px}
     .bs-merge-close:hover{color:#fff}
+    /* WarEra+ — askInPage(): nome di una nuova alleanza e conferma di cancellazione */
+    .bs-ask h3{padding-right:24px}
+    .bs-ask-msg{margin:0 0 4px;font-size:13px;line-height:1.5;color:#8b949e;white-space:pre-line}
+    .bs-ask-input{margin-bottom:6px}
+    .bs-ask-err{font-size:12px;color:#f85149;margin-bottom:4px}
+    .bs-ask .bs-add-actions{justify-content:flex-end}
+    .bs-newbtn.bs-ask-danger{background:rgba(248,81,73,.15);border-color:rgba(248,81,73,.5);color:#f85149}
+    .bs-newbtn.bs-ask-danger:hover{background:rgba(248,81,73,.25)}
 
     /* Popup */
     .bs-popup-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:9999;backdrop-filter:blur(3px)}
@@ -945,6 +953,10 @@ function injectStyles() {
     body.light-theme .bs-nation-option.selected .bs-nation-box{background:#8b5a2b;border-color:#8b5a2b;color:#fff}
     body.light-theme .bs-add-count,body.light-theme .bs-add-plain{color:#6b5a47}
     body.light-theme .bs-add-plain{border-color:rgba(0,0,0,.15)}
+    body.light-theme .bs-ask-input{background:#fff;border-color:#c4b394;color:#3e2f1c}
+    body.light-theme .bs-ask-input:focus{border-color:#8b5a2b}
+    body.light-theme .bs-ask-msg{color:#6b5a47}
+    body.light-theme .bs-newbtn.bs-ask-danger{background:rgba(207,34,46,.1);border-color:rgba(207,34,46,.45);color:#cf222e}
     body.light-theme .bs-btbl tr.drag-over{background:rgba(139,90,43,.14);outline-color:#8b5a2b}
     body.light-theme .bs-card.pinned{box-shadow:inset 0 0 0 1px rgba(155,115,45,.6)}
     body.light-theme .bs-btbl tr.pinned{background:rgba(155,115,45,.08)}
@@ -1758,11 +1770,80 @@ function ensurePlaystyleData() {
     });
 }
 
-/** Nome libero, chiesto con prompt(): il builder è già una pagina piena di
- *  drag&drop, un form inline in più ruberebbe spazio alle card. Il nome deve
- *  essere unico, altrimenti la nuova alleanza si fonderebbe silenziosamente
- *  con una esistente (blocMembers è indicizzato per nome). */
-function createCustomBloc() {
+/** WarEra+ — finestrella NELLA PAGINA al posto di prompt()/confirm().
+ *  prompt() non esiste in tutti i Chromium: Electron e diverse webview lo
+ *  rifiutano con un'eccezione ("prompt() is and will not be supported") e
+ *  "＋ New alliance" non faceva semplicemente niente (Firefox andava).
+ *  confirm() esce per lo stesso motivo: dove i dialoghi nativi sono soppressi
+ *  risponde false in silenzio, e cancellare un'alleanza diventerebbe
+ *  impossibile senza nemmeno un errore in console.
+ *  Con `value` (anche '') chiede un testo; `validate(testo)` ritorna il
+ *  messaggio d'errore o '' per accettare. Risolve col testo (o true senza
+ *  campo), null se si annulla. Riusa il guscio del menu "aggiungi". */
+function askInPage({ title, message = '', value, okLabel, danger = false, validate }) {
+  return new Promise(resolve => {
+    document.querySelectorAll('.bs-merge-overlay').forEach(el => el.remove());
+    const hasInput = value != null;
+    const overlay = document.createElement('div');
+    overlay.className = 'bs-merge-overlay';
+    const box = document.createElement('form');
+    box.className = 'bs-merge-menu bs-ask';
+    box.noValidate = true;
+    box.innerHTML = `
+      <div class="bs-merge-close">✕</div>
+      <h3>${escapeHtml(title)}</h3>
+      ${message ? `<p class="bs-ask-msg">${escapeHtml(message)}</p>` : ''}
+      ${hasInput ? '<input class="bs-add-search bs-ask-input" type="text" autocomplete="off">' : ''}
+      <div class="bs-ask-err" hidden></div>
+      <div class="bs-add-actions">
+        <button type="button" class="bs-add-plain" data-ask-cancel>${escapeHtml(bT('Cancel'))}</button>
+        <button type="submit" class="bs-newbtn${danger ? ' bs-ask-danger' : ''}">${escapeHtml(okLabel)}</button>
+      </div>`;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    const input = box.querySelector('.bs-ask-input');
+    const err = box.querySelector('.bs-ask-err');
+    const finish = (result) => {
+      document.removeEventListener('keydown', onKey, true);
+      overlay.remove();
+      resolve(result);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); finish(null); } };
+    document.addEventListener('keydown', onKey, true);
+    box.querySelector('.bs-merge-close').onclick = () => finish(null);
+    box.querySelector('[data-ask-cancel]').onclick = () => finish(null);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) finish(null); });
+    input?.addEventListener('input', () => { err.hidden = true; });
+    box.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = hasInput ? input.value.trim() : true;
+      const problem = validate ? validate(text) : '';
+      if (problem) {
+        err.textContent = problem;
+        err.hidden = false;
+        input?.focus();
+        return;
+      }
+      finish(text);
+    });
+
+    if (input) {
+      input.value = value;
+      input.focus();
+      input.select();
+    } else {
+      box.querySelector('[type="submit"]').focus();
+    }
+  });
+}
+
+/** Nome libero, chiesto in una finestrella (askInPage): il builder è già una
+ *  pagina piena di drag&drop, un form inline in più ruberebbe spazio alle
+ *  card. Il nome deve essere unico, altrimenti la nuova alleanza si
+ *  fonderebbe silenziosamente con una esistente (blocMembers è indicizzato
+ *  per nome) — e adesso lo si dice dentro la finestra, senza chiuderla. */
+async function createCustomBloc() {
   const taken = new Set([
     ...state.externalBlocsInfo.map(b => b.name),
     ...customBlocs.keys(),
@@ -1771,12 +1852,15 @@ function createCustomBloc() {
   ]);
   let suggested;
   do { suggested = bT('New Alliance {n}', { n: ++customCounter }); } while (taken.has(suggested));
-  const name = (prompt(bT('Name of the new alliance:'), suggested) || '').trim();
+  const name = await askInPage({
+    title: bT('Name of the new alliance:'),
+    value: suggested,
+    okLabel: bT('Create'),
+    validate: v => !v ? bT('Pick a name.')
+      : taken.has(v) ? bT('"{name}" already exists. Pick another name.', { name: v })
+      : '',
+  });
   if (!name) return;
-  if (taken.has(name)) {
-    alert(bT('"{name}" already exists. Pick another name.', { name }));
-    return;
-  }
   customBlocs.set(name, CUSTOM_COLORS[customBlocs.size % CUSTOM_COLORS.length]);
   allStats = computeBlocStats();
   buildUI();
@@ -1790,10 +1874,14 @@ function createCustomBloc() {
  *  al primo ricalcolo l'alleanza si ricostruirebbe da sola.
  *  Cancellare una fusione cancella le alleanze che la compongono: la fusione
  *  non è un contenitore in più, è quelle alleanze viste insieme. */
-function dissolveBloc(blocId) {
+async function dissolveBloc(blocId) {
   const bloc = allStats.find(b => b.id === blocId);
   if (!bloc || bloc.isUnaligned) return;
-  if (bloc.countryCount && !confirm(bT('deleteConfirm', { name: bloc.name, n: bloc.countryCount }))) return;
+  if (bloc.countryCount) {
+    const [title, ...rest] = bT('deleteConfirm', { name: bloc.name, n: bloc.countryCount }).split('\n\n');
+    const ok = await askInPage({ title, message: rest.join('\n\n'), okLabel: bT('Delete'), danger: true });
+    if (!ok) return;
+  }
   const expand = name => mergedBlocs.has(name) ? mergedBlocs.get(name).originals.flatMap(expand) : [name];
   const names = mergedBlocs.has(blocId) ? expand(blocId) : [bloc.name];
   mergedBlocs.delete(blocId);
