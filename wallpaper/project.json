@@ -1,0 +1,252 @@
+{
+	"contentrating" : "Everyone",
+	"description" : "The WarEra+ live strategic map as your desktop: alliances, wars, live battles, elections, damage, migrations and funding between nations, with the news ticker and live pings on the map. Click nations, battles and news. Needs an internet connection.\n\nTip: add your own WarEra API key in the properties (request one in the game settings) so the data comes straight from WarEra on your key.\n\nFull tool: https://wareraplus.vercel.app/",
+	"file" : "index.html",
+	"general" :
+	{
+		"localization" :
+		{
+			"en-us" :
+			{
+				"ui_wp_channel" : "Version",
+				"ui_wp_channel_live" : "Stable",
+				"ui_wp_channel_dev" : "Preview (dev)",
+				"ui_wp_view" : "Map view",
+				"ui_wp_view_diplomacy" : "Diplomacy",
+				"ui_wp_view_blocs" : "Alliances",
+				"ui_wp_view_sphere" : "Spheres of influence",
+				"ui_wp_view_damage" : "Weekly damage",
+				"ui_wp_view_population" : "Population",
+				"ui_wp_view_production" : "Production",
+				"ui_wp_view_contested" : "Contested regions",
+				"ui_wp_view_warhistory" : "War history",
+				"ui_wp_view_playstyle" : "War vs Eco",
+				"ui_wp_view_politics" : "Elections",
+				"ui_wp_view_travel" : "Travel distances",
+				"ui_wp_view_migration" : "Migrations",
+				"ui_wp_view_funding" : "Funding",
+				"ui_wp_rotate" : "Rotate views",
+				"ui_wp_rotateminutes" : "Minutes per view",
+				"ui_wp_framing" : "Framing",
+				"ui_wp_framing_world" : "World",
+				"ui_wp_framing_europe" : "Europe",
+				"ui_wp_framing_americas" : "Americas",
+				"ui_wp_framing_asia" : "Asia",
+				"ui_wp_framing_africa" : "Africa",
+				"ui_wp_framing_middleeast" : "Middle East",
+				"ui_wp_country" : "My nation (name or code, centers the map)",
+				"ui_wp_theme" : "Theme",
+				"ui_wp_theme_dark" : "Dark",
+				"ui_wp_theme_light" : "Antique map (light)",
+				"ui_wp_language" : "Language",
+				"ui_wp_language_auto" : "Automatic",
+				"ui_wp_animations" : "Animations",
+				"ui_wp_battles" : "Live battles",
+				"ui_wp_alliancelabels" : "Alliance names",
+				"ui_wp_ticker" : "News ticker",
+				"ui_wp_menubar" : "WarEra+ menu bar (mouse only)",
+				"ui_wp_apikey" : "WarEra API key (optional, shown in plain text)"
+			},
+			"it-it" :
+			{
+				"ui_wp_channel" : "Versione",
+				"ui_wp_channel_live" : "Stabile",
+				"ui_wp_channel_dev" : "Anteprima (dev)",
+				"ui_wp_view" : "Vista mappa",
+				"ui_wp_view_diplomacy" : "Diplomazia",
+				"ui_wp_view_blocs" : "Alleanze",
+				"ui_wp_view_sphere" : "Sfere d'influenza",
+				"ui_wp_view_damage" : "Danni settimanali",
+				"ui_wp_view_population" : "Popolazione",
+				"ui_wp_view_production" : "Produzione",
+				"ui_wp_view_contested" : "Regioni contese",
+				"ui_wp_view_warhistory" : "Storico bellico",
+				"ui_wp_view_playstyle" : "Guerra vs Eco",
+				"ui_wp_view_politics" : "Elezioni",
+				"ui_wp_view_travel" : "Distanze",
+				"ui_wp_view_migration" : "Migrazioni",
+				"ui_wp_view_funding" : "Finanziamenti",
+				"ui_wp_rotate" : "Ruota le viste",
+				"ui_wp_rotateminutes" : "Minuti per vista",
+				"ui_wp_framing" : "Inquadratura",
+				"ui_wp_framing_world" : "Mondo",
+				"ui_wp_framing_europe" : "Europa",
+				"ui_wp_framing_americas" : "Americhe",
+				"ui_wp_framing_asia" : "Asia",
+				"ui_wp_framing_africa" : "Africa",
+				"ui_wp_framing_middleeast" : "Medio Oriente",
+				"ui_wp_country" : "La mia nazione (nome o codice, centra la mappa)",
+				"ui_wp_theme" : "Tema",
+				"ui_wp_theme_dark" : "Scuro",
+				"ui_wp_theme_light" : "Mappa antica (chiaro)",
+				"ui_wp_language" : "Lingua",
+				"ui_wp_language_auto" : "Automatica",
+				"ui_wp_animations" : "Animazioni",
+				"ui_wp_battles" : "Battaglie in corso",
+				"ui_wp_alliancelabels" : "Nomi delle alleanze",
+				"ui_wp_ticker" : "Ticker notizie",
+				"ui_wp_menubar" : "Barra menù di WarEra+ (solo mouse)",
+				"ui_wp_apikey" : "Chiave API WarEra (facoltativa, visibile in chiaro)"
+			}
+		},
+		"properties" :
+		{
+			"view" :
+			{
+				"order" : 100,
+				"text" : "ui_wp_view",
+				"type" : "combo",
+				"value" : "diplomacy",
+				"options" :
+				[
+					{ "label" : "ui_wp_view_diplomacy", "value" : "diplomacy" },
+					{ "label" : "ui_wp_view_blocs", "value" : "blocs" },
+					{ "label" : "ui_wp_view_sphere", "value" : "sphereOfInfluence" },
+					{ "label" : "ui_wp_view_damage", "value" : "weeklyDamage" },
+					{ "label" : "ui_wp_view_population", "value" : "population" },
+					{ "label" : "ui_wp_view_production", "value" : "production" },
+					{ "label" : "ui_wp_view_contested", "value" : "contested" },
+					{ "label" : "ui_wp_view_warhistory", "value" : "warIntensity" },
+					{ "label" : "ui_wp_view_playstyle", "value" : "playstyle" },
+					{ "label" : "ui_wp_view_politics", "value" : "politics" },
+					{ "label" : "ui_wp_view_travel", "value" : "travel" },
+					{ "label" : "ui_wp_view_migration", "value" : "migration" },
+					{ "label" : "ui_wp_view_funding", "value" : "funding" }
+				]
+			},
+			"rotate" :
+			{
+				"order" : 101,
+				"text" : "ui_wp_rotate",
+				"type" : "bool",
+				"value" : false
+			},
+			"rotateminutes" :
+			{
+				"order" : 102,
+				"text" : "ui_wp_rotateminutes",
+				"type" : "slider",
+				"condition" : "rotate.value == true",
+				"min" : 1,
+				"max" : 60,
+				"step" : 1,
+				"precision" : 0,
+				"fraction" : false,
+				"editable" : true,
+				"value" : 10
+			},
+			"framing" :
+			{
+				"order" : 103,
+				"text" : "ui_wp_framing",
+				"type" : "combo",
+				"value" : "world",
+				"options" :
+				[
+					{ "label" : "ui_wp_framing_world", "value" : "world" },
+					{ "label" : "ui_wp_framing_europe", "value" : "europe" },
+					{ "label" : "ui_wp_framing_americas", "value" : "americas" },
+					{ "label" : "ui_wp_framing_asia", "value" : "asia" },
+					{ "label" : "ui_wp_framing_africa", "value" : "africa" },
+					{ "label" : "ui_wp_framing_middleeast", "value" : "middleeast" }
+				]
+			},
+			"country" :
+			{
+				"order" : 104,
+				"text" : "ui_wp_country",
+				"type" : "textinput",
+				"value" : ""
+			},
+			"theme" :
+			{
+				"order" : 105,
+				"text" : "ui_wp_theme",
+				"type" : "combo",
+				"value" : "dark",
+				"options" :
+				[
+					{ "label" : "ui_wp_theme_dark", "value" : "dark" },
+					{ "label" : "ui_wp_theme_light", "value" : "light" }
+				]
+			},
+			"language" :
+			{
+				"order" : 106,
+				"text" : "ui_wp_language",
+				"type" : "combo",
+				"value" : "auto",
+				"options" :
+				[
+					{ "label" : "ui_wp_language_auto", "value" : "auto" },
+					{ "label" : "English", "value" : "en" },
+					{ "label" : "Italiano", "value" : "it" },
+					{ "label" : "Español", "value" : "es" },
+					{ "label" : "Deutsch", "value" : "de" },
+					{ "label" : "Français", "value" : "fr" },
+					{ "label" : "Nederlands", "value" : "nl" },
+					{ "label" : "Svenska", "value" : "sv" },
+					{ "label" : "Português", "value" : "pt" },
+					{ "label" : "العربية", "value" : "ar" }
+				]
+			},
+			"animations" :
+			{
+				"order" : 107,
+				"text" : "ui_wp_animations",
+				"type" : "bool",
+				"value" : true
+			},
+			"battles" :
+			{
+				"order" : 108,
+				"text" : "ui_wp_battles",
+				"type" : "bool",
+				"value" : true
+			},
+			"alliancelabels" :
+			{
+				"order" : 109,
+				"text" : "ui_wp_alliancelabels",
+				"type" : "bool",
+				"value" : true
+			},
+			"ticker" :
+			{
+				"order" : 110,
+				"text" : "ui_wp_ticker",
+				"type" : "bool",
+				"value" : true
+			},
+			"menubar" :
+			{
+				"order" : 111,
+				"text" : "ui_wp_menubar",
+				"type" : "bool",
+				"value" : false
+			},
+			"apikey" :
+			{
+				"order" : 112,
+				"text" : "ui_wp_apikey",
+				"type" : "textinput",
+				"value" : ""
+			},
+			"channel" :
+			{
+				"order" : 113,
+				"text" : "ui_wp_channel",
+				"type" : "combo",
+				"value" : "live",
+				"options" :
+				[
+					{ "label" : "ui_wp_channel_live", "value" : "live" },
+					{ "label" : "ui_wp_channel_dev", "value" : "dev" }
+				]
+			}
+		}
+	},
+	"tags" : [ "Game" ],
+	"title" : "WarEra+ live map",
+	"type" : "web"
+}

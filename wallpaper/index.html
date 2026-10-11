@@ -1,0 +1,180 @@
+<!doctype html>
+<!--
+  ══════════════════════════════════════════════════════════════
+  WarEra+ — involucro dello sfondo di Wallpaper Engine
+  ------------------------------------------------------------------
+  Questa cartella è lo sfondo che si pubblica sullo Steam Workshop, e
+  NON contiene il tool: carica il sito in un iframe con ?wallpaper=1.
+  Ogni deploy del sito aggiorna quindi anche lo sfondo senza ripubblicare
+  niente. Cosa fa il sito in modalità sfondo: src/app/wallpaperMode.js.
+
+  Qui stanno solo tre cose:
+  1. le proprietà di Wallpaper Engine (project.json) → all'avvio come
+     parametri dell'URL, poi via postMessage (la chiave API SOLO così,
+     mai nell'URL, e solo verso l'origin esatto del sito);
+  2. la pausa (setPaused), girata al sito che ferma il lavoro della mappa;
+  3. l'attesa della rete: Wallpaper Engine parte con Windows, spesso
+     prima che la connessione ci sia. Un iframe caricato in quel momento
+     resterebbe sulla pagina d'errore di Chromium per tutta la sessione,
+     quindi si prova prima a raggiungere il sito e si ritenta da soli.
+  ══════════════════════════════════════════════════════════════
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WarEra+</title>
+  <style>
+    :root { --bg: #0d1117; --fg: #c9d1d9; --muted: #8b949e; }
+    html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
+    iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: var(--bg); }
+    #waiting {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 8px;
+      font: 15px/1.4 'Segoe UI', system-ui, sans-serif; color: var(--fg); text-align: center;
+    }
+    #waiting[hidden] { display: none; }
+    #waiting small { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div id="waiting" hidden>
+    <div>WarEra+</div>
+    <small id="waiting-text">Waiting for an internet connection…</small>
+  </div>
+  <iframe id="app" title="WarEra+" hidden></iframe>
+
+  <script>
+    'use strict';
+
+    // Canale: "live" è quello che usano tutti; "dev" serve a provare lo
+    // sfondo contro il branch dev prima di portare le modifiche sul live.
+    const CHANNELS = {
+      live: 'https://wareraplus.vercel.app',
+      dev: 'https://wareraplus-dev.vercel.app',
+    };
+    // Prova in locale: index.html?site=http://localhost:5173 punta al server
+    // di sviluppo (Vite serve anche questa cartella). Solo localhost, e solo
+    // da un browser: Wallpaper Engine apre la pagina senza parametri.
+    const LOCAL_SITE = (() => {
+      const s = new URLSearchParams(location.search).get('site') || '';
+      return /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(s) ? s : null;
+    })();
+    if (LOCAL_SITE) CHANNELS.live = CHANNELS.dev = LOCAL_SITE;
+    const RETRY_MS = 15000;
+
+    // Valori di partenza: gli stessi di project.json, servono solo se la
+    // pagina si apre fuori da Wallpaper Engine (prova in un browser).
+    const props = {
+      channel: 'live', view: 'diplomacy', rotate: false, rotateMinutes: 10,
+      framing: 'world', country: '', theme: 'dark', lang: 'auto',
+      animations: true, battles: true, blocLabels: true, ticker: true,
+      menubar: false, apiKey: '',
+    };
+    // Nome della proprietà in project.json → nome che usa il sito.
+    const KEYMAP = {
+      channel: 'channel', view: 'view', rotate: 'rotate', rotateminutes: 'rotateMinutes',
+      framing: 'framing', country: 'country', theme: 'theme', language: 'lang',
+      animations: 'animations', battles: 'battles', alliancelabels: 'blocLabels',
+      ticker: 'ticker', menubar: 'menubar', apikey: 'apiKey',
+    };
+
+    const frame = document.getElementById('app');
+    const waiting = document.getElementById('waiting');
+    let origin = null;       // origin del sito caricato: unico destinatario dei messaggi
+    let started = false;
+    let paused = false;
+    let retryTimer = null;
+
+    function siteUrl() {
+      const q = new URLSearchParams({
+        wallpaper: '1',
+        view: props.view,
+        rotate: props.rotate ? '1' : '0',
+        rotatemin: String(props.rotateMinutes),
+        framing: props.framing,
+        theme: props.theme,
+        lang: props.lang,
+        anim: props.animations ? '1' : '0',
+        battles: props.battles ? '1' : '0',
+        labels: props.blocLabels ? '1' : '0',
+        ticker: props.ticker ? '1' : '0',
+        menubar: props.menubar ? '1' : '0',
+      });
+      // `focus` e non `country`: ?country= è il deep-link del sito (vuole un id).
+      if (props.country) q.set('focus', props.country);
+      return `${origin}/?${q}`;
+    }
+
+    function send(msg) {
+      if (!origin || !frame.contentWindow) return;
+      frame.contentWindow.postMessage({ source: 'wareraplus-wallpaper', ...msg }, origin);
+    }
+
+    function sendProps() {
+      const { channel, ...rest } = props;
+      send({ type: 'props', props: rest });
+    }
+
+    // Prima di caricare: il sito risponde? `no-cors` basta a sapere se la
+    // rete c'è (una risposta opaca arriva, un errore di rete no).
+    async function load() {
+      clearTimeout(retryTimer);
+      const base = CHANNELS[props.channel] || CHANNELS.live;
+      try {
+        await fetch(`${base}/manifest.webmanifest`, { mode: 'no-cors', cache: 'no-store' });
+      } catch {
+        waiting.hidden = false;
+        frame.hidden = true;
+        retryTimer = setTimeout(load, RETRY_MS);
+        return;
+      }
+      origin = base;
+      waiting.hidden = true;
+      frame.hidden = false;
+      frame.src = siteUrl();
+    }
+
+    function start() {
+      if (started) return;
+      started = true;
+      load();
+    }
+
+    // Il sito saluta quando è pronto (due volte: subito e a mappa pronta).
+    // A ogni saluto riceve le proprietà correnti, chiave compresa.
+    window.addEventListener('message', (e) => {
+      if (e.source !== frame.contentWindow || e.origin !== origin) return;
+      const d = e.data;
+      if (!d || d.source !== 'wareraplus' || d.type !== 'hello') return;
+      sendProps();
+      if (paused) send({ type: 'paused', paused: true });
+    });
+
+    window.wallpaperPropertyListener = {
+      applyUserProperties(changed) {
+        let channelChanged = false;
+        for (const [name, prop] of Object.entries(changed)) {
+          const key = KEYMAP[name];
+          if (!key || !prop || !('value' in prop)) continue;
+          if (key === 'channel' && prop.value !== props.channel) channelChanged = true;
+          props[key] = prop.value;
+        }
+        // La prima chiamata arriva subito dopo il caricamento con TUTTE le
+        // proprietà: è quella che fa partire il sito con l'URL giusto.
+        if (!started) { start(); return; }
+        if (channelChanged) load();
+        else sendProps();
+      },
+      setPaused(isPaused) {
+        paused = Boolean(isPaused);
+        send({ type: 'paused', paused });
+      },
+    };
+
+    // Fuori da Wallpaper Engine nessuno chiama applyUserProperties: si
+    // parte coi valori di default dopo un attimo.
+    setTimeout(start, 1000);
+  </script>
+</body>
+</html>
