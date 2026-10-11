@@ -39,10 +39,10 @@
    pallino non compare e il totale delle visite resta: mezza pill vera e'
    meglio di una pill intera con dentro un numero finto.
    ── LO SFONDO DI WALLPAPER ENGINE ──────────────────────────────────
-   Accanto alle visite, una seconda pill: "N Wallpaper Engine · ● M". N
-   sono gli iscritti sullo Steam Workshop (li legge il server da Steam una
-   volta all'ora), M gli sfondi accesi adesso, sempre mostrato anche a 0.
-   È l'unica pill cliccabile: porta alla pagina del Workshop.
+   La pill ha tre parti: "👁 visite | ● online adesso | 🖥 N Wallpaper
+   Engine". Gli online sono sito + sfondi accesi (somma del server), N gli
+   iscritti sullo Steam Workshop (letti da Steam una volta all'ora). La
+   terza parte è l'unica cliccabile: porta alla pagina del Workshop.
 
    Dentro lo sfondo (`wallpaper: true`) le pill si vedono, ma il browser
    NON conta visite: si ricarica a ogni avvio di Windows. Manda solo il
@@ -77,9 +77,11 @@ function visitorId() {
   }
 }
 
-/** Scrive nella pill i due numeri dell'ultima risposta. Il pallino verde
+/** Scrive nella pill i numeri dell'ultima risposta. Il pallino verde
  *  esiste solo se il server sa dire quanti sono online: un server vecchio
- *  non lo manda, e allora la pill mostra le sole visite. */
+ *  non lo manda, e allora la pill mostra le sole visite. `online` è già
+ *  sito + Wallpaper Engine (lo somma il server); quanti di quelli sono
+ *  sfondi lo dice il tooltip. */
 function paint(pill, data) {
   const num = pill.querySelector('.wp-visits-num');
   if (num) num.textContent = data.total.toLocaleString();
@@ -87,44 +89,30 @@ function paint(pill, data) {
   const slot = pill.querySelector('.wp-visits-online-slot');
   if (!slot) return;
   if (!Number.isFinite(data.online)) { slot.innerHTML = ''; return; }
+  const we = data.wallpaper?.online;
+  const title = t('online_hint') + (Number.isFinite(we) ? ` (Wallpaper Engine: ${we})` : '');
   slot.innerHTML = `
-    <span class="wp-visits-online" title="${t('online_hint')}">
+    <span class="wp-visits-online" title="${title}">
       <span class="wp-visits-dot" aria-hidden="true"></span>
       <span class="wp-visits-online-num">${data.online}</span>
     </span>`;
 }
 
-/** La pill dello sfondo: iscritti sul Workshop + sfondi accesi. Si crea
- *  alla prima risposta che porta `wallpaper` (un server vecchio non lo
- *  manda: niente pill) e si aggiorna a ogni battito. Se Steam non ha mai
- *  risposto `subscriptions` è null: resta il solo "accesi", se c'è. */
-function paintWallpaper(host, data) {
+/** Terza parte della pill: gli iscritti su Wallpaper Engine, cliccabile
+ *  verso la pagina del Workshop. Un server vecchio non manda `wallpaper`,
+ *  e finché Steam non ha mai risposto `subscriptions` è null: in tutti e
+ *  due i casi la parte non c'è, mai uno zero inventato. */
+function paintWallpaper(pill, data) {
+  const slot = pill.querySelector('.wp-visits-wallpaper-slot');
+  if (!slot) return;
   const w = data.wallpaper;
-  const hasSubs = Number.isFinite(w?.subscriptions);
-  // Il dato live si mostra sempre, anche a 0 (richiesta dell'utente).
-  const hasOnline = Number.isFinite(w?.online);
-  let pill = document.getElementById('wp-wallpaper-pill');
-  if (!w || !w.url || (!hasSubs && !hasOnline)) { pill?.remove(); return; }
-  if (!pill) {
-    pill = document.createElement('a');
-    pill.id = 'wp-wallpaper-pill';
-    pill.className = 'wp-visits-pill wp-wallpaper-pill';
-    pill.target = '_blank';
-    pill.rel = 'noopener';
-    host.appendChild(pill);
-  }
-  pill.href = w.url;
-  pill.title = t('wallpaper_hint');
-  pill.innerHTML = `
-    <span class="wp-visits-icon" aria-hidden="true">🖥</span>
-    ${hasSubs ? `<span class="wp-visits-text">
-      <span class="wp-visits-num">${w.subscriptions.toLocaleString()}</span>
+  if (!w || !w.url || !Number.isFinite(w.subscriptions)) { slot.innerHTML = ''; return; }
+  slot.innerHTML = `
+    <a class="wp-visits-wallpaper" href="${w.url}" target="_blank" rel="noopener" title="${t('wallpaper_hint')}">
+      <span class="wp-visits-icon" aria-hidden="true">🖥</span>
+      <span class="wp-visits-online-num">${w.subscriptions.toLocaleString()}</span>
       <span class="wp-visits-label">${t('wallpaper_label')}</span>
-    </span>` : ''}
-    ${hasOnline ? `<span class="wp-visits-online" title="${t('wallpaper_online_hint')}">
-      <span class="wp-visits-dot" aria-hidden="true"></span>
-      <span class="wp-visits-online-num">${w.online}</span>
-    </span>` : ''}`;
+    </a>`;
 }
 
 export async function initVisitorCounter({ wallpaper = false } = {}) {
@@ -148,10 +136,11 @@ export async function initVisitorCounter({ wallpaper = false } = {}) {
       <span class="wp-visits-num"></span>
       <span class="wp-visits-label">${t('visits_label')}</span>
     </span>
-    <span class="wp-visits-online-slot"></span>`;
+    <span class="wp-visits-online-slot"></span>
+    <span class="wp-visits-wallpaper-slot"></span>`;
   host.appendChild(pill);
   paint(pill, data);
-  paintWallpaper(host, data);
+  paintWallpaper(pill, data);
 
   // ── Battito: "ci sono ancora", senza toccare il totale ──
   // `count: false` è la differenza fra un heartbeat e una visita nuova.
@@ -166,7 +155,7 @@ export async function initVisitorCounter({ wallpaper = false } = {}) {
     // Una risposta mancata non azzera niente: resta l'ultimo numero buono
     // finché il server non torna. Un "0 online" lampeggiante a ogni
     // singhiozzo di rete sarebbe una bugia, non un aggiornamento.
-    if (fresh) { paint(pill, fresh); paintWallpaper(host, fresh); }
+    if (fresh) { paint(pill, fresh); paintWallpaper(pill, fresh); }
   };
 
   const start = () => { if (!timer) timer = setInterval(beat, every); };
@@ -186,18 +175,16 @@ export async function initVisitorCounter({ wallpaper = false } = {}) {
   // dello shell (evento su window, vedi src/app/langSync.js). I numeri
   // non si ricomprano, si riscrivono solo le parole.
   window.addEventListener('wareraplus:langchange', () => {
-    const label = pill.querySelector('.wp-visits-label');
+    const label = pill.querySelector('.wp-visits-text .wp-visits-label');
     if (label) label.textContent = t('visits_label');
     pill.title = t('visits_hint');
     const online = pill.querySelector('.wp-visits-online');
-    if (online) online.title = t('online_hint');
-    const wp = document.getElementById('wp-wallpaper-pill');
+    if (online) online.title = online.title.replace(/^[^(]*/, t('online_hint') + ' ').replace(/ $/, '');
+    const wp = pill.querySelector('.wp-visits-wallpaper');
     if (wp) {
       wp.title = t('wallpaper_hint');
       const wl = wp.querySelector('.wp-visits-label');
       if (wl) wl.textContent = t('wallpaper_label');
-      const wo = wp.querySelector('.wp-visits-online');
-      if (wo) wo.title = t('wallpaper_online_hint');
     }
   });
 }
