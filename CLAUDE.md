@@ -278,11 +278,15 @@ wareraPlus/
 │   │                               scritto).
 │   └── README.md               ← deploy a mano (scp + pm2 restart), vedi ⚠️ in fondo
 ├── wallpaper/                  ← NUOVO — lo sfondo di Wallpaper Engine (Steam Workshop).
-│                                  NON contiene il tool: index.html carica il sito in un
-│                                  iframe con ?wallpaper=1 (src/app/wallpaperMode.js) e gli
-│                                  passa le proprietà di project.json. Fuori da build e
-│                                  deploy Vercel. Procedura di prova e pubblicazione nel
-│                                  suo README.
+│                                  NON contiene il tool: index.html porta la pagina sul
+│                                  sito con ?wallpaper=1 (src/app/wallpaperMode.js), le
+│                                  proprietà di project.json nell'URL e la chiave nel
+│                                  frammento #k=. ⚠️ Il browser di Wallpaper Engine va in
+│                                  CRASH su qualunque iframe di altro sito e su ogni
+│                                  <select> con antenato fixed/absolute: niente iframe, e
+│                                  con ?wallpaper=1 i <select> sono spenti (in linea in
+│                                  testa a index.html). Fuori da build e deploy Vercel.
+│                                  Prova, debug remoto e pubblicazione nel suo README.
 ├── public/
 │   ├── icons/
 │   └── political/              ← Political View ORIGINALE (script globali), NON PIÙ USATO
@@ -643,10 +647,12 @@ wareraPlus/
     │   │                         shared/wallpaper.js): niente contatori né analytics,
     │   │                         niente barra menù e crediti (wallpaper.css), riepiloghi
     │   │                         delle viste dietro la linguetta anche su desktop, fascia
-    │   │                         "i" (la tastiera non arriva a uno sfondo). Le proprietà
-    │   │                         di Wallpaper Engine arrivano dall'involucro (wallpaper/)
-    │   │                         via URL all'avvio e postMessage dopo; la chiave API
-    │   │                         SOLO via postMessage, in memoria. setPaused → mapIdle.
+    │   │                         "i" (la tastiera non arriva a uno sfondo). Proprietà
+    │   │                         dall'involucro (wallpaper/) via URL all'avvio, poi la
+    │   │                         pagina stessa definisce wallpaperPropertyListener (WE
+    │   │                         la richiama dal vivo, verificato); chiave API dal
+    │   │                         frammento #k=, tolta subito, in memoria.
+    │   │                         setPaused → mapIdle. Niente <select> visibili: crash.
     │   ├── newsOverlay.js      ← apre la vista News
     │   ├── guideOverlay.js     ← apre la Guida "Come si usa"
     │   ├── newsTicker.js       ← ticker in cima alla mappa: battaglie, elezioni, nuove
