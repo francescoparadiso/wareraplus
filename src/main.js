@@ -129,8 +129,11 @@ window.addEventListener('wareraplus:diplomacy-ready', () => {
   // sul server di cache, che non sa da quale deploy arrivi la richiesta).
   // Fuori dal live non si tocca; al suo posto il cartellino DEV.
   // Lo sfondo resta acceso tutto il giorno: il suo battito farebbe di ogni
-  // desktop un "online adesso" perenne. Avrà un contatore suo.
-  if (IS_LIVE && !IS_WALLPAPER) initVisitorCounter();
+  // desktop un "online adesso" perenne. Lì le pill si vedono in sola
+  // lettura e il battito va nel conto a parte degli sfondi accesi (e solo
+  // sul live: vedi la testata di visitorCounter.js).
+  if (IS_WALLPAPER) initVisitorCounter({ wallpaper: true });
+  else if (IS_LIVE) initVisitorCounter();
   initDeployBadge();
   if (IS_WALLPAPER) startWallpaperMode();
   handleIncomingDeepLink();

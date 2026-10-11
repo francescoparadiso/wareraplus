@@ -1906,6 +1906,20 @@ body.light-theme .wp-visits-pill {
   box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
 }
 
+/* La pill dello sfondo di Wallpaper Engine (stesso modulo): la sola
+   cliccabile della famiglia, porta alla pagina del Workshop. Quindi
+   puntatore e il sollevamento delle altre pill cliccabili. */
+.wp-wallpaper-pill {
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.2s, border-color 0.2s;
+}
+.wp-wallpaper-pill:hover {
+  transform: translateY(-2px);
+  border-color: #58a6ff;
+}
+body.light-theme .wp-wallpaper-pill:hover { border-color: #2f6fb5; }
+
 /* Stessa regola della pill autore: sulla mappa, su telefono, non c'è
    spazio — riappare dentro il drawer ☰, dove il wrapper viene rilocato. */
 @media (max-width: 768px) {

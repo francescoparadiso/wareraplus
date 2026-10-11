@@ -38,10 +38,23 @@
    non conosce `online` (versione vecchia, non ancora rideployata), il
    pallino non compare e il totale delle visite resta: mezza pill vera e'
    meglio di una pill intera con dentro un numero finto.
+   ── LO SFONDO DI WALLPAPER ENGINE ──────────────────────────────────
+   Accanto alle visite, una seconda pill: "N sfondi · ● M accesi". N sono
+   gli iscritti sullo Steam Workshop (li legge il server da Steam una
+   volta all'ora), M gli sfondi accesi adesso. È l'unica pill cliccabile:
+   porta alla pagina del Workshop, da cui ci si iscrive.
+
+   E dentro lo sfondo (`wallpaper: true`) le pill si vedono, ma il
+   browser NON conta: nessuna visita, nessun "online". Uno sfondo resta
+   acceso tutto il giorno su ogni desktop e si ricarica a ogni avvio di
+   Windows, quindi in quei due numeri sarebbe rumore. Manda solo il suo
+   battito `source=wallpaper`, che il server tiene a parte (gli "accesi"),
+   e solo sul live: lo sfondo puntato su dev legge e basta.
    ══════════════════════════════════════════════════════════════ */
 
 import { fetchVisitsViaCache } from '../diplomacy/cacheClient.js';
 import { t } from '../shared/i18n.js';
+import { IS_LIVE } from '../shared/deployEnv.js';
 
 const STORAGE_KEY = 'we_visitor_id';
 
@@ -81,12 +94,47 @@ function paint(pill, data) {
     </span>`;
 }
 
-export async function initVisitorCounter() {
+/** La pill dello sfondo: iscritti sul Workshop + sfondi accesi. Si crea
+ *  alla prima risposta che porta `wallpaper` (un server vecchio non lo
+ *  manda: niente pill) e si aggiorna a ogni battito. Se Steam non ha mai
+ *  risposto `subscriptions` è null: resta il solo "accesi", se c'è. */
+function paintWallpaper(host, data) {
+  const w = data.wallpaper;
+  const hasSubs = Number.isFinite(w?.subscriptions);
+  const hasOnline = Number.isFinite(w?.online) && w.online > 0;
+  let pill = document.getElementById('wp-wallpaper-pill');
+  if (!w || !w.url || (!hasSubs && !hasOnline)) { pill?.remove(); return; }
+  if (!pill) {
+    pill = document.createElement('a');
+    pill.id = 'wp-wallpaper-pill';
+    pill.className = 'wp-visits-pill wp-wallpaper-pill';
+    pill.target = '_blank';
+    pill.rel = 'noopener';
+    host.appendChild(pill);
+  }
+  pill.href = w.url;
+  pill.title = t('wallpaper_hint');
+  pill.innerHTML = `
+    <span class="wp-visits-icon" aria-hidden="true">🖥</span>
+    ${hasSubs ? `<span class="wp-visits-text">
+      <span class="wp-visits-num">${w.subscriptions.toLocaleString()}</span>
+      <span class="wp-visits-label">${t('wallpaper_label')}</span>
+    </span>` : ''}
+    ${hasOnline ? `<span class="wp-visits-online" title="${t('wallpaper_online_hint')}">
+      <span class="wp-visits-dot" aria-hidden="true"></span>
+      <span class="wp-visits-online-num">${w.online}</span>
+    </span>` : ''}`;
+}
+
+export async function initVisitorCounter({ wallpaper = false } = {}) {
   const host = document.getElementById('wp-bottom-credits');
   if (!host) return;
 
-  const id = visitorId();
-  const data = await fetchVisitsViaCache(id);
+  // Dentro lo sfondo: id solo sul live (il battito "sfondo acceso"), e
+  // in ogni caso niente visite (count:false) — vedi testata.
+  const id = wallpaper ? (IS_LIVE ? visitorId() : '') : visitorId();
+  const opts = wallpaper ? { count: false, source: 'wallpaper' } : {};
+  const data = await fetchVisitsViaCache(id, opts);
   if (!data) return; // server giù: nessuna pill, vedi testata
 
   const pill = document.createElement('div');
@@ -102,6 +150,7 @@ export async function initVisitorCounter() {
     <span class="wp-visits-online-slot"></span>`;
   host.appendChild(pill);
   paint(pill, data);
+  paintWallpaper(host, data);
 
   // ── Battito: "ci sono ancora", senza toccare il totale ──
   // `count: false` è la differenza fra un heartbeat e una visita nuova.
@@ -112,11 +161,11 @@ export async function initVisitorCounter() {
 
   const beat = async () => {
     if (document.hidden) return;
-    const fresh = await fetchVisitsViaCache(id, { count: false });
+    const fresh = await fetchVisitsViaCache(id, { ...opts, count: false });
     // Una risposta mancata non azzera niente: resta l'ultimo numero buono
     // finché il server non torna. Un "0 online" lampeggiante a ogni
     // singhiozzo di rete sarebbe una bugia, non un aggiornamento.
-    if (fresh) paint(pill, fresh);
+    if (fresh) { paint(pill, fresh); paintWallpaper(host, fresh); }
   };
 
   const start = () => { if (!timer) timer = setInterval(beat, every); };
@@ -141,5 +190,13 @@ export async function initVisitorCounter() {
     pill.title = t('visits_hint');
     const online = pill.querySelector('.wp-visits-online');
     if (online) online.title = t('online_hint');
+    const wp = document.getElementById('wp-wallpaper-pill');
+    if (wp) {
+      wp.title = t('wallpaper_hint');
+      const wl = wp.querySelector('.wp-visits-label');
+      if (wl) wl.textContent = t('wallpaper_label');
+      const wo = wp.querySelector('.wp-visits-online');
+      if (wo) wo.title = t('wallpaper_online_hint');
+    }
   });
 }

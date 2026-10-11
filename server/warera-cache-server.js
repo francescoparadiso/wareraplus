@@ -3510,6 +3510,62 @@ function _countOnline() {
   return n;
 }
 
+/* ── Lo sfondo di Wallpaper Engine (`wallpaper` nella risposta) ──────
+   WarEra+ è anche uno sfondo sullo Steam Workshop (cartella wallpaper/ e
+   src/app/wallpaperMode.js). Due numeri, nessuno dei due mescolato alle
+   visite del sito:
+   - ISCRITTI: li conta Steam, e GetPublishedFileDetails è pubblica (POST,
+     niente chiave). Una lettura all'ora, salvata su disco così un riavvio
+     non lascia la pill vuota finché Steam non risponde;
+   - ACCESI ADESSO: lo sfondo ripassa ogni minuto con `source=wallpaper`.
+     Va in una mappa sua, non in `_onlineSeen` né nel totale delle visite:
+     uno sfondo resta acceso tutto il giorno, e contato fra gli "online"
+     del sito ne farebbe un numero che non significa più niente. ── */
+const WORKSHOP_ID = '3818208882';
+const WORKSHOP_URL = `https://steamcommunity.com/sharedfiles/filedetails/?id=${WORKSHOP_ID}`;
+const WORKSHOP_POLL_MS = 60 * 60 * 1000;
+let _workshopItem = readCache('workshop-item', null); // { subscriptions, lifetime, favorited, at }
+
+async function pollWorkshopItem() {
+  try {
+    const body = new URLSearchParams({ itemcount: '1', 'publishedfileids[0]': WORKSHOP_ID });
+    const r = await fetch('https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/', { method: 'POST', body });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = (await r.json())?.response?.publishedfiledetails?.[0];
+    if (!d || d.result !== 1) throw new Error(`result ${d?.result}`);
+    _workshopItem = {
+      subscriptions: Number(d.subscriptions) || 0,
+      lifetime: Number(d.lifetime_subscriptions) || 0,
+      favorited: Number(d.favorited) || 0,
+      at: Date.now(),
+    };
+    writeCache('workshop-item', _workshopItem, { compact: true });
+  } catch (err) {
+    // Steam giù: resta l'ultima lettura buona, mai uno zero inventato.
+    console.error('[workshop] lettura fallita:', err.message);
+  }
+}
+pollWorkshopItem();
+setInterval(pollWorkshopItem, WORKSHOP_POLL_MS).unref?.();
+
+const _wallpaperSeen = new Map(); // id -> ultimo passaggio (ms), stessa finestra degli online
+
+function _touchWallpaper(id) {
+  if (!id) return;
+  const now = Date.now();
+  _wallpaperSeen.set(id, now);
+  if (_wallpaperSeen.size > 64) {
+    for (const [k, t] of _wallpaperSeen) if (now - t > ONLINE_WINDOW_MS) _wallpaperSeen.delete(k);
+  }
+}
+
+function _countWallpapers() {
+  const cutoff = Date.now() - ONLINE_WINDOW_MS;
+  let n = 0;
+  for (const t of _wallpaperSeen.values()) if (t >= cutoff) n++;
+  return n;
+}
+
 app.get('/visits', (req, res) => {
   const store = readCache('visits', { own: 0, days: {} });
   store.days = store.days || {};
@@ -3517,12 +3573,15 @@ app.get('/visits', (req, res) => {
   const day = store.days[today] = store.days[today] || { count: 0, ids: [] };
 
   const id = String(req.query.id || '').slice(0, 64);
+  // Lo sfondo: solo il suo battito, niente visite né online del sito.
+  const fromWallpaper = req.query.source === 'wallpaper';
+  if (fromWallpaper) _touchWallpaper(id);
   // Presenza: si aggiorna a OGNI passaggio, anche in sola lettura — e'
   // esattamente cosa fa l'heartbeat, che non deve gonfiare il totale.
-  _touchOnline(id);
+  else _touchOnline(id);
   // `count=0` (o id assente) = sola lettura: la vista puo' rinfrescare il
   // numero senza gonfiarlo.
-  if (id && req.query.count !== '0' && !day.ids.includes(id)) {
+  if (!fromWallpaper && id && req.query.count !== '0' && !day.ids.includes(id)) {
     day.count += 1;
     store.own = (store.own || 0) + 1;
     if (day.ids.length < VISITS_MAX_IDS_PER_DAY) day.ids.push(id);
@@ -3550,6 +3609,14 @@ app.get('/visits', (req, res) => {
     // il totale non nasce tutto da qui.
     seed: VISITS_SEED,
     countedHere: store.own || 0,
+    // Lo sfondo di Wallpaper Engine: iscritti da Steam (null finché Steam
+    // non ha mai risposto) e sfondi accesi adesso.
+    wallpaper: {
+      url: WORKSHOP_URL,
+      subscriptions: _workshopItem ? _workshopItem.subscriptions : null,
+      lifetime: _workshopItem ? _workshopItem.lifetime : null,
+      online: _countWallpapers(),
+    },
   });
 });
 
