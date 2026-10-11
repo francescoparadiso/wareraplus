@@ -65,6 +65,8 @@ import { dayKey, fetchDay, cachedDay, fuoriPortata } from './timeMachineDay.js';
 import { fetchPresidents } from '../political/plusApi.js';
 // WarEra+: le conquiste animate durante la riproduzione (freccia + onda).
 import { animateConquests, clearConquests } from './timeMachineConquest.js';
+// WarEra+: guerre e patti della nazione selezionata come archi animati.
+import { setTimeMachineLinks, clearTimeMachineLinks } from './timeMachineLinks.js';
 
 let _presidents;          // undefined = mai chiesto, null = non disponibile
 
@@ -1120,6 +1122,7 @@ function _clearFocus() {
   if (_focusEl) _focusEl.classList.remove('visible');
   document.body.classList.remove('wp-tm-has-focus');
   setTimeMachineFocus(null);
+  clearTimeMachineLinks();
 }
 
 /** Chiamata a ogni fotogramma applicato (_fetchAndRender) e quando arriva
@@ -1148,8 +1151,14 @@ function _updateFocus(ts) {
   const alleati = al?.tipo === 'blocco' ? (al.membri || []) : (al?.alleati || []);
   const coloreAlleati = al?.tipo === 'blocco' ? BORDER_COLORS.ALLIANCE : COLORS.ALLY_DIRECT;
   const base = { self: _focusId, allies: alleati, alliesColor: coloreAlleati };
-  if (d) setTimeMachineFocus({ ...base, wars: d.wars, pacts: d.pacts, sworn: d.sworn });
-  else if (dati !== undefined) setTimeMachineFocus(base);
+  if (d) {
+    setTimeMachineFocus({ ...base, wars: d.wars, pacts: d.pacts, sworn: d.sworn });
+    // WarEra+: gli stessi legami come archi dalla sua capitale di quel giorno.
+    setTimeMachineLinks({ self: _focusId, wars: d.wars, pacts: d.pacts, sworn: d.sworn }, _lastRegions);
+  } else if (dati !== undefined) {
+    setTimeMachineFocus(base);
+    clearTimeMachineLinks();
+  }
   // dati === undefined: si tengono i colori del giorno prima (vedi testa).
 
   _renderFocus(ts, giorno, dati, d, fuori, al);

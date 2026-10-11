@@ -740,6 +740,11 @@ wareraPlus/
     │   │                         conquistatore + onda sulla regione, per gli eventi
     │   │                         fra un fotogramma e l'altro. Tetti: niente oltre 4
     │   │                         giorni di salto, 6 per fotogramma, 14 a schermo.
+    │   ├── timeMachineLinks.js ← NUOVO — guerre (rosso, trattini che scorrono),
+    │   │                         nemico giurato (più spesso) e patti (viola che
+    │   │                         respira) della nazione SELEZIONATA come archi dalla
+    │   │                         sua capitale di quel giorno. Solo per la selezione:
+    │   │                         il mondo intero sono ~1.200 coppie al giorno.
     │   ├── timeMachineMap.js   ← SECONDA mappa MapLibre dedicata e alleggerita (3 layer)
     │   │                         usata dalla time machine; la principale viene nascosta,
     │   │                         non toccata. timeMachine.js tiene tutta la logica.
