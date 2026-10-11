@@ -3912,3 +3912,28 @@ body.light-theme .wp-replay-note { color: #9a6700; }
 .wp-mig-tl-foot b { color: #c9d1d9; font-weight: 600; text-align: center; }
 body.light-theme .wp-mig-tl-foot b { color: #2b2418; }
 body.light-theme .wp-mig-tl-off, body.light-theme .wp-mig-tl-axis { fill: #d8cfc0; stroke: #d8cfc0; }
+
+/* ── WarEra+ etichette dei ping sulla mappa (src/app/livePings.js) ── */
+.wp-ping-label {
+  pointer-events: none;
+  max-width: 240px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: rgba(13, 17, 23, .9);
+  border: 1px solid var(--ping-c, #ffd166);
+  color: #e6edf3;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: normal;
+  text-align: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
+  animation: wp-ping-label 4.5s ease forwards;
+}
+@keyframes wp-ping-label {
+  0% { opacity: 0; transform: translateY(6px); }
+  10% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-6px); }
+}
+body.light-theme .wp-ping-label { background: rgba(250, 244, 230, .95); color: #2b2418; }

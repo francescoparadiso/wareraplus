@@ -745,6 +745,14 @@ wareraPlus/
     │   │                         quattro arrivano già pronte dal server (/ticker), non
     │   │                         più da snapshot in localStorage. Tetto per categoria
     │   │                         (CAT_CAP) così una sola non monopolizza il ticker.
+    │   ├── livePings.js        ← NUOVO — la mappa "viva": un ping per evento.
+    │   │                         Battaglia nuova = onde arancioni sulla regione; cambio
+    │   │                         di proprietario = onde nel colore del nuovo padrone
+    │   │                         (da /region-history/events ogni 3 min); guerra,
+    │   │                         nemico giurato, pace, patto = impulso fra le capitali.
+    │   │                         Le altre fonti le passa il ticker a ogni giro (zero
+    │   │                         fetch). Etichetta col testo del ticker. All'apertura
+    │   │                         gli ultimi 30 minuti, poi solo il nuovo, uno alla volta.
     │   ├── newsView.js         ← vista "News": lo STESSO materiale del ticker, completo,
     │   │                         fermo e raggruppato per categoria. Zero fetch nuove —
     │   │                         riusa getNewsGroups() del ticker.

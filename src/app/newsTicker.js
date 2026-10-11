@@ -652,6 +652,10 @@ async function refreshNews() {
 
     _lastRawData = { topIds, battles, electionsRaw, stats, refreshedAt: Date.now() };
     _rebuildMessages();
+    // WarEra+: gli stessi dati diventano ping sulla mappa (livePings.js):
+    // battaglie nuove, guerre, nemici giurati, paci e patti. Nessuna fetch
+    // in più; se il modulo manca il ticker è identico.
+    import('./livePings.js').then(m => m.feedNews(_lastRawData)).catch(() => {});
   } catch (err) {
     console.warn('WarEra+ newsTicker: errore aggiornamento', err);
   }
