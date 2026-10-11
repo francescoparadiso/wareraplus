@@ -3,6 +3,16 @@
 
 <head>
   <meta charset="UTF-8" />
+  <!-- WarEra+ sfondo (Wallpaper Engine): il browser di Wallpaper Engine va
+       in CRASH su qualunque <select> nativo con un antenato posizionato
+       (fixed/absolute) — misurato il 2026-10-12, basta
+       <div style="position:fixed"><select></select></div>, anche aggiunto
+       dopo da JS; con display:none no. Qui ne abbiamo parecchi (lingua,
+       overlay, filtri), e il primo è nel markup: la regola deve valere
+       PRIMA del primo layout, quindi script classico e stile in linea, non
+       il modulo (che arriva a parsing finito). Vedi src/app/wallpaperMode.js. -->
+  <script>if (/[?&]wallpaper=1(&|$)/.test(location.search)) document.documentElement.classList.add('wp-wallpaper');</script>
+  <style>html.wp-wallpaper select { display: none !important; }</style>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>WarEra+</title>
   <meta name="description" content="WarEra+ — mappa diplomatica e situazione politica di tutte le nazioni, in un'unica esperienza." />

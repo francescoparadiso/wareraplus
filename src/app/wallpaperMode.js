@@ -4,9 +4,20 @@
    PERCHE' ESISTE
    WarEra+ si pubblica anche come sfondo animato di Wallpaper Engine.
    Lo sfondo NON contiene una copia del tool: è un involucro (cartella
-   wallpaper/ in radice) che carica il sito live in un iframe con
-   `?wallpaper=1`. Così ogni deploy aggiorna anche lo sfondo, e il sito
-   gira sul suo origin vero (CORS, cache, service worker come sempre).
+   wallpaper/ in radice) che porta la pagina dello sfondo sul sito live
+   con `?wallpaper=1`. Così ogni deploy aggiorna anche lo sfondo, e il
+   sito gira sul suo origin vero (CORS, cache, service worker come sempre).
+
+   ⚠️ NIENTE IFRAME, e non per scelta: nel browser di Wallpaper Engine
+   (CEF 146, provato il 2026-10-12) QUALUNQUE iframe di un altro sito va
+   in crash appena arriva la risposta — anche example.com. L'involucro
+   quindi naviga la pagina intera verso il sito (location.replace), e da
+   lì è il sito stesso a ricevere le proprietà da Wallpaper Engine.
+
+   ⚠️ E NIENTE <select> VISIBILI: lo stesso browser va in crash su un
+   <select> nativo dentro un antenato posizionato (fixed/absolute). La
+   regola che li spegne sta in linea in testa a index.html, perché deve
+   valere prima del primo layout.
 
    COSA CAMBIA CON ?wallpaper=1
    - via contatori e analytics (main.js, analytics.js): uno sfondo resta
@@ -22,23 +33,16 @@
    - le impostazioni di Wallpaper Engine arrivano qui (sotto).
 
    COME ARRIVANO LE IMPOSTAZIONI
-   L'involucro le riceve da Wallpaper Engine
-   (window.wallpaperPropertyListener) e le passa in due modi:
-   - all'avvio come parametri dell'URL dell'iframe (vista, tema, lingua…),
-     così la prima schermata è già quella giusta;
-   - dopo, con postMessage, così cambiarne una non ricarica la mappa.
-   La CHIAVE API arriva solo con postMessage — mai nell'URL, che finisce
-   in cronologia e nei log — e resta in memoria (shared/trpcProxy.js).
-   Si accettano messaggi solo dalla finestra madre, e solo con il flag
-   acceso: una pagina che incorniciasse il sito senza ?wallpaper=1 non
-   pilota niente.
-
-   Protocollo (oggetti `{ source, type, ... }`):
-     iframe → madre   { source:'wareraplus', type:'hello' }   "sono pronto"
-     madre → iframe   { source:'wareraplus-wallpaper', type:'props', props }
-     madre → iframe   { source:'wareraplus-wallpaper', type:'paused', paused }
-   La madre risponde a ogni 'hello' con le proprietà correnti: l'ordine di
-   caricamento delle due pagine non conta.
+   - all'avvio, dall'involucro, come parametri dell'URL (vista, tema,
+     lingua…), così la prima schermata è già quella giusta;
+   - la CHIAVE API nel FRAMMENTO (`#k=…`): il frammento non parte mai
+     verso un server e non finisce nei log, e qui lo si cancella appena
+     letto (history.replaceState). Poi resta in memoria
+     (shared/trpcProxy.js);
+   - dopo, direttamente da Wallpaper Engine: questa pagina definisce
+     window.wallpaperPropertyListener come farebbe uno sfondo locale.
+     Se Wallpaper Engine richiama la pagina corrente (e non solo quella
+     dell'involucro), cambiare una proprietà non ricarica la mappa.
 
    PAUSA
    Wallpaper Engine mette in pausa lo sfondo quando c'è un'app a schermo
@@ -53,8 +57,22 @@ import { animationsOn, setAnimationsOn } from '../shared/motion.js';
 import { setUserApiKey, userApiKeyStatus } from '../shared/trpcProxy.js';
 import { pauseMapBackgroundWork, resumeMapBackgroundWork } from './mapIdle.js';
 
-const FROM_HOST = 'wareraplus-wallpaper';
 const HINT_KEY = 'we_wallpaper_hint_seen';
+
+// Canali dello sfondo (proprietà "Versione"): stessi indirizzi
+// dell'involucro. Cambiarlo dal pannello porta la pagina sull'altro sito.
+const CHANNELS = {
+  live: 'https://wareraplus.vercel.app',
+  dev: 'https://wareraplus-dev.vercel.app',
+};
+
+// Nome della proprietà in wallpaper/project.json → nome usato qui.
+const WE_KEYMAP = {
+  view: 'view', rotate: 'rotate', rotateminutes: 'rotateMinutes',
+  framing: 'framing', country: 'country', theme: 'theme', language: 'lang',
+  animations: 'animations', battles: 'battles', alliancelabels: 'blocLabels',
+  ticker: 'ticker', menubar: 'menubar', apikey: 'apiKey',
+};
 
 // Le viste sono i bottoni #mode-<id> del markup Diplomacy: cambiare vista
 // è un clic su quel bottone, lo stesso che fa la barra menù.
@@ -258,32 +276,68 @@ function propsFromUrl() {
   return raw;
 }
 
-/* ── Messaggi con la madre (l'involucro) ── */
-function postToHost(msg) {
-  if (window.parent === window) return;
-  try { window.parent.postMessage({ source: 'wareraplus', ...msg }, '*'); } catch { /* niente madre */ }
+/** L'URL di uno stato: lo stesso formato che costruisce l'involucro
+ *  (wallpaper/index.html), chiave esclusa. */
+function queryFor(p) {
+  const q = new URLSearchParams({
+    wallpaper: '1', view: p.view, rotate: p.rotate ? '1' : '0',
+    rotatemin: String(p.rotateMinutes), framing: p.framing, theme: p.theme,
+    lang: p.lang, anim: p.animations ? '1' : '0', battles: p.battles ? '1' : '0',
+    labels: p.blocLabels ? '1' : '0', ticker: p.ticker ? '1' : '0',
+    menubar: p.menubar ? '1' : '0',
+  });
+  if (p.country) q.set('focus', p.country);
+  return q.toString();
+}
+
+/** La chiave dal frammento `#k=…`, poi il frammento sparisce. */
+function takeKeyFromHash() {
+  const m = /[#&]k=([^&]*)/.exec(window.location.hash);
+  if (!m) return '';
+  try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch { /* idem */ }
+  try { return decodeURIComponent(m[1]); } catch { return ''; }
+}
+
+/** Le proprietà come le manda Wallpaper Engine ({ nome: { value } }),
+ *  tradotte nei nomi di qui. Solo quelle cambiate arrivano ogni volta. */
+function fromWallpaperEngine(changed) {
+  const raw = {};
+  for (const [name, prop] of Object.entries(changed || {})) {
+    const key = WE_KEYMAP[name];
+    if (key && prop && 'value' in prop) raw[key] = prop.value;
+  }
+  return raw;
 }
 
 /** Parte appena il modulo è caricato (da main.js), prima della mappa: la
- *  chiave API deve essere impostata prima delle prime chiamate. */
-export function listenWallpaperHost() {
-  _props = normalizeProps(propsFromUrl());
+ *  chiave API deve essere impostata prima delle prime chiamate, e
+ *  Wallpaper Engine può chiamare il listener molto presto. */
+export function initWallpaperEarly() {
+  _props = normalizeProps({ ...propsFromUrl(), apiKey: takeKeyFromHash() });
+  setUserApiKey(_props.apiKey);
   document.body?.classList.add('wp-wallpaper');
 
-  window.addEventListener('message', (e) => {
-    if (window.parent === window || e.source !== window.parent) return;
-    const d = e.data;
-    if (!d || d.source !== FROM_HOST) return;
-    if (d.type === 'props') {
-      _props = normalizeProps(d.props);
+  window.wallpaperPropertyListener = {
+    applyUserProperties(changed) {
+      console.debug('[wallpaper] proprietà da Wallpaper Engine:', Object.keys(changed || {}).join(', '));
+      // "Versione" cambiata: si va sull'altro sito, con le stesse
+      // proprietà nell'URL (la chiave di nuovo nel frammento).
+      const ch = changed?.channel?.value;
+      if (ch && CHANNELS[ch] && CHANNELS[ch] !== window.location.origin
+          && /^https:/.test(window.location.origin)) {
+        _props = normalizeProps(fromWallpaperEngine(changed));
+        const k = _props.apiKey ? `#k=${encodeURIComponent(_props.apiKey)}` : '';
+        window.location.replace(`${CHANNELS[ch]}/?${queryFor(_props)}${k}`);
+        return;
+      }
+      _props = normalizeProps(fromWallpaperEngine(changed));
       setUserApiKey(_props.apiKey);
       if (_ready) applyProps();
-    } else if (d.type === 'paused') {
-      setPaused(Boolean(d.paused));
-    }
-  });
-
-  postToHost({ type: 'hello' });
+    },
+    setPaused(isPaused) {
+      setPaused(Boolean(isPaused));
+    },
+  };
 }
 
 /** A mappa pronta (wareraplus:diplomacy-ready, da main.js). */
@@ -294,9 +348,6 @@ export function startWallpaperMode() {
   applyProps();
   window.addEventListener('wareraplus:apikey-status', paintKeyStatus);
   window.addEventListener('wareraplus:langchange', () => { if (_infoEl) renderInfo(); });
-  // Un secondo saluto: se la madre ha risposto al primo prima che la mappa
-  // esistesse, le proprietà sono già qui; se no arrivano adesso.
-  postToHost({ type: 'hello' });
 }
 
 /* ── Applicazione ── */
