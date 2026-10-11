@@ -86,3 +86,22 @@ export function alongArc(coords, t) {
   const p = coords[i], q = coords[i + 1];
   return [p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k];
 }
+
+/** Una tinta schiarita verso il bianco. I colori delle nazioni sono pensati
+ *  come campiture: una linea o un'onda di quel colore pieno, su fondo
+ *  scuro, non si vedeva (nata per le conquiste della time machine).
+ *  Accetta #rgb, #rrggbb e rgb(); altrimenti `fallback`. */
+export function brightenColor(color, k = 0.45, fallback = '#ffd166') {
+  let r, g, b;
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color || '');
+  if (hex) {
+    const h = hex[1].length === 3 ? hex[1].replace(/./g, ch => ch + ch) : hex[1];
+    [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+  } else {
+    const m = /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i.exec(color || '');
+    if (!m) return fallback;
+    [r, g, b] = [m[1], m[2], m[3]].map(Number);
+  }
+  const mix = v => Math.round(v + (255 - v) * k);
+  return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
+}

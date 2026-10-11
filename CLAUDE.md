@@ -325,9 +325,14 @@ wareraPlus/
     │   │                        dura (heatmap, etichette, legenda e frecce la
     │   │                        seguono da sole). Il giro live dei 10 s si ferma
     │   │                        intanto. Solo battaglie registrate dal 2026-10-07.
-    │   ├── flowGeometry.js    ← NUOVO — condivisa da battleFlows e migrationFlows:
-    │   │                        punto di aggancio di una nazione (capitale se sua,
-    │   │                        se no etichetta) e archi in Mercatore.
+    │   ├── flowGeometry.js    ← NUOVO — condivisa da tutte le frecce (battaglie,
+    │   │                        migrazioni, sfere, time machine): punto di aggancio
+    │   │                        di una nazione (capitale se sua, se no etichetta),
+    │   │                        archi in Mercatore, brightenColor per le linee.
+    │   ├── sphereLinks.js     ← NUOVO — in vista Sfera: fili potenza → proxy nel
+    │   │                        colore della sfera, pieni dal CSV e tratteggiati
+    │   │                        dal radar (gli stessi gruppi che tingono la mappa),
+    │   │                        con un impulso di luce che corre verso il proxy.
     │   ├── battleSpending.js  ← NUOVO — quanto è costata una battaglia: taglie
     │   │                        pagate (classifica "money" per nazione) + contratti
     │   │                        mercenari aggiudicati, per schieramento. Tre procedure

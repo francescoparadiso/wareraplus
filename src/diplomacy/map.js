@@ -31,6 +31,8 @@ import { buildMigrationColorExpression, syncMigrationOverlay, onMigrationCountry
 import { syncBattleFlowOverlay } from './battleFlows.js';
 // WarEra+ replay della battaglia aperta (/battle-timeline)
 import { syncBattleReplay } from './battleReplay.js';
+// WarEra+ fili potenza → proxy in vista Sfera d'influenza
+import { syncSphereLinks } from './sphereLinks.js';
 import { buildWeeklyDamageColorExpression } from './weeklyDamage.js';
 import { buildSphereColorExpression } from './sphereOfInfluence.js';
 import { buildBattleHeatmapColorExpression } from './battleHeatmap.js';
@@ -693,6 +695,8 @@ export function renderMap() {
   syncBattleFlowOverlay();
   // WarEra+: compare/scompare la barra del replay della battaglia aperta.
   syncBattleReplay();
+  // WarEra+: e i fili delle sfere d'influenza (sphereLinks.js).
+  syncSphereLinks();
 
   // WarEra+ perf: qui c'era una ricostruzione di centinaia di Feature
   // (_buildLabelsWithPopulation) ri-pubblicate su SRC_LABELS nelle modalità

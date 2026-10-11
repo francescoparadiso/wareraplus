@@ -34,7 +34,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { state } from '../diplomacy/state.js';
-import { arc, alongArc, countryAnchor } from '../diplomacy/flowGeometry.js';
+import { arc, alongArc, countryAnchor, brightenColor } from '../diplomacy/flowGeometry.js';
 import { getTimeMachineMap, TM_LYR_FILL } from './timeMachineMap.js';
 
 const SRC = 'wp-tm-conq-src';
@@ -52,24 +52,6 @@ const RING_MS = 1300;       // l'onda sulla regione, dopo l'arrivo
 const FADE_MS = 800;        // la freccia che svanisce, dopo l'arrivo
 const MIN_ARC_DEG = 1.2;    // capitale quasi sulla regione: solo l'onda
 const FALLBACK = '#ffd166';
-
-/** La tinta del conquistatore schiarita verso il bianco: i colori delle
- *  nazioni sono pensati come campiture e su fondo scuro, un'onda di
- *  quel colore pieno non si vedeva. Accetta #rgb, #rrggbb e rgb(). */
-function brighten(color, k = 0.45) {
-  let r, g, b;
-  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color || '');
-  if (hex) {
-    const h = hex[1].length === 3 ? hex[1].replace(/./g, ch => ch + ch) : hex[1];
-    [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
-  } else {
-    const m = /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i.exec(color || '');
-    if (!m) return FALLBACK;
-    [r, g, b] = [m[1], m[2], m[3]].map(Number);
-  }
-  const mix = v => Math.round(v + (255 - v) * k);
-  return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
-}
 
 let _capitals = null;
 let _capitalsFrom = null;
@@ -185,7 +167,7 @@ export function animateConquests(events, prevTs, ts) {
   fresh.slice(-MAX_PER_FRAME).forEach((ev, i) => {
     const to = state.regionData?.[ev.regionId]?.position;
     if (!Array.isArray(to)) return;
-    const color = brighten((ev.toCountry && state.nationBaseColorMap?.get(ev.toCountry)) || FALLBACK);
+    const color = brightenColor((ev.toCountry && state.nationBaseColorMap?.get(ev.toCountry)) || FALLBACK, 0.45, FALLBACK);
     const cap = ev.toCountry ? originalCapital(ev.toCountry) : null;
     const coords = cap && Math.hypot(cap[0] - to[0], cap[1] - to[1]) >= MIN_ARC_DEG ? arc(cap, to).coords : null;
     _effects.push({ start: now + i * STAGGER_MS, coords, to, color });
