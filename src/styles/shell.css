@@ -3897,3 +3897,18 @@ body.light-theme #wp-replay-hud { color: #2b2418; }
 body.light-theme .wp-replay-btn { color: #8b5a2b; border-color: rgba(139, 90, 43, .35); background: rgba(139, 90, 43, .06); }
 body.light-theme .wp-replay-info span { color: #5c5347; }
 body.light-theme .wp-replay-note { color: #9a6700; }
+
+/* Cursore giorno per giorno della vista Migrazioni (viewOverview.js). */
+.wp-mig-tl { margin: 4px 0 12px; }
+.wp-mig-tl-empty { font-size: 11.5px; color: #8b949e; }
+.wp-mig-tl-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.wp-mig-tl-svg { display: block; width: 100%; height: 64px; }
+.wp-mig-tl-day { cursor: pointer; }
+.wp-mig-tl-day:hover rect + rect { opacity: .75; }
+.wp-mig-tl-sel rect + rect { fill: #ffd166; }
+.wp-mig-tl-off { fill: #30363d; }
+.wp-mig-tl-axis { stroke: #30363d; stroke-width: 1; }
+.wp-mig-tl-foot { display: flex; justify-content: space-between; gap: 8px; font-size: 10.5px; color: #8b949e; margin-top: 2px; }
+.wp-mig-tl-foot b { color: #c9d1d9; font-weight: 600; text-align: center; }
+body.light-theme .wp-mig-tl-foot b { color: #2b2418; }
+body.light-theme .wp-mig-tl-off, body.light-theme .wp-mig-tl-axis { fill: #d8cfc0; stroke: #d8cfc0; }

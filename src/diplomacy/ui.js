@@ -273,7 +273,9 @@ export function updateDynamicLegend() {
       return;
     }
     const st = getMigrationStats();
-    const span = m.days === 1 ? 'last 24 hours' : `last ${m.days} days`;
+    const span = m.day
+      ? `on ${new Date(`${m.day}T12:00:00`).toLocaleDateString('en', { day: 'numeric', month: 'short' })}`
+      : m.days === 1 ? 'last 24 hours' : `last ${m.days} days`;
     let arrows = '';
     if (m.focus) {
       const f = focusFlows(m.focus);

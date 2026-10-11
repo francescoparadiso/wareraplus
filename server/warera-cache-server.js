@@ -2974,15 +2974,19 @@ const MIGRATION_TTL_MS = 10 * 60 * 1000;
 const _migrationCache = new Map();   // days → { at, body }
 app.get('/migration-flows', (req, res) => {
   const days = Math.min(30, Math.max(1, Number(req.query.days) || 7));
+  // `daily=1`: anche la divisione giorno per giorno (cursore nel tempo
+  // della vista Migrazioni). Chiave di cache separata: pesa di più.
+  const daily = req.query.daily === '1';
+  const ckey = `${days}${daily ? 'd' : ''}`;
   try {
-    const hit = _migrationCache.get(days);
+    const hit = _migrationCache.get(ckey);
     if (hit && Date.now() - hit.at < MIGRATION_TTL_MS) return res.json(hit.body);
     const userInfo = readCache(MU_USER_COUNTRIES_FILE, { data: {} }).data || {};
     const census = readCache(CITIZENS_FILE, { data: {} }).data || {};
     const citizens = {};
     for (const [id, c] of Object.entries(census)) citizens[id] = { n: c.n || 0, n10: c.n10 || 0 };
-    const body = readMigrationFlows(days, { userInfo, citizens });
-    _migrationCache.set(days, { at: Date.now(), body });
+    const body = readMigrationFlows(days, { userInfo, citizens, daily });
+    _migrationCache.set(ckey, { at: Date.now(), body });
     res.json(body);
   } catch (err) {
     console.error('[migration-flows] richiesta fallita:', err.message);

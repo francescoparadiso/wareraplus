@@ -47,7 +47,7 @@ import { getTrendColor, getTrendStats } from '../diplomacy/playstyleTrendHeatmap
 import { activeDeposits, depositsByCountry, getProductionColor, getProductionStats, productionRankedList, RESOURCE_TYPES } from '../diplomacy/productionHeatmap.js';
 import { openElectionRows, getPoliticsStats, POLITICS_COLORS, turnoutColor } from '../diplomacy/politicsHeatmap.js';
 import { travelOverviewHtml } from '../diplomacy/travelDistance.js';
-import { mig, migrationRanking, getMigrationStats, focusFlows, migrationValue, migrationColor, migrationCanHover,
+import { mig, migrationRanking, getMigrationStats, focusFlows, migrationValue, migrationColor, migrationCanHover, migrationDays,
   MIGRATION_DAYS, MIN_RATE_CITIZENS, OUT_COLOR, IN_COLOR } from '../diplomacy/migrationFlows.js';
 import { mT } from '../diplomacy/migrationI18n.js';
 
@@ -590,11 +590,66 @@ function migNotesHtml(d) {
   return html;
 }
 
+/* Il cursore giorno per giorno (migrationFlows.js: IL TEMPO). Trenta
+   barre, una per giorno: senza nazione a fuoco gli spostamenti del mondo,
+   con una nazione il SUO saldo (verde sopra, rosso sotto) — è così che
+   si vede il giorno in cui parte un esodo. Una barra cliccata è quel
+   giorno sulla mappa; ▶ li scorre uno al secondo. Prima che l'archivio
+   guardasse: niente barra, un trattino in basso. */
+function migDayLabel(day) {
+  return new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+function migTimelineHtml(s) {
+  if (s.dailyError && !s.daily) return '';
+  const days = migrationDays();
+  if (!days.length) return `<div class="wp-mig-tl wp-mig-tl-empty">${escapeHtml(mT('Loading…'))}</div>`;
+  const focus = s.focus;
+  const val = d => {
+    if (!d.entry) return 0;
+    if (!focus) return d.entry.moves;
+    return d.entry.countries?.[focus]?.net || 0;
+  };
+  const W = 300, H = 64, gap = 2;
+  const bw = (W - gap * (days.length - 1)) / days.length;
+  const max = Math.max(1, ...days.map(d => Math.abs(val(d))));
+  const base = focus ? H / 2 : H - 1;
+  const half = focus ? H / 2 - 2 : H - 3;
+  const bars = days.map((d, i) => {
+    const x = (i * (bw + gap)).toFixed(1);
+    if (!d.watched) return `<rect x="${x}" y="${H - 2}" width="${bw.toFixed(1)}" height="1" class="wp-mig-tl-off"/>`;
+    const v = val(d);
+    const h = Math.max(1, Math.abs(v) / max * half);
+    const y = focus ? (v >= 0 ? base - h : base) : base - h;
+    const color = focus ? (v > 0 ? '#3fb950' : v < 0 ? '#f85149' : '#6e7681') : '#8b949e';
+    const sel = s.day === d.day ? ' wp-mig-tl-sel' : '';
+    const title = `${migDayLabel(d.day)} · ${focus ? migSigned(v, 'net') : fmt(v)}`;
+    // Una colonna trasparente alta tutto il grafico: il dito prende il
+    // giorno anche dove la barra è bassa.
+    return `<g class="wp-mig-tl-day${sel}" data-mig-day="${d.day}"><title>${escapeHtml(title)}</title>
+      <rect x="${x}" y="0" width="${bw.toFixed(1)}" height="${H}" fill="transparent"/>
+      <rect x="${x}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1" fill="${color}"/></g>`;
+  }).join('');
+  const axis = focus ? `<line x1="0" y1="${base}" x2="${W}" y2="${base}" class="wp-mig-tl-axis"/>` : '';
+  const selLabel = s.day ? migDayLabel(s.day) : mT('Click a day to see only its moves.');
+  return `
+    <div class="wp-mig-tl">
+      <div class="wp-mig-tl-head">
+        <span class="wp-mig-seg-label">${escapeHtml(focus ? mT('Balance day by day') : mT('Day by day'))}</span>
+        <button type="button" class="wp-travel-btn" data-mig-action="day-play" aria-pressed="${s.dayPlaying}">${s.dayPlaying ? '⏸' : '▶'}</button>
+        ${s.day ? `<button type="button" class="wp-travel-btn" data-mig-action="day-clear">✕ ${escapeHtml(mT('Whole window'))}</button>` : ''}
+      </div>
+      <svg class="wp-mig-tl-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(mT('Day by day'))}">${axis}${bars}</svg>
+      <div class="wp-mig-tl-foot"><span>${escapeHtml(migDayLabel(days[0].day))}</span><b>${escapeHtml(selLabel)}</b><span>${escapeHtml(migDayLabel(days[days.length - 1].day))}</span></div>
+    </div>`;
+}
+
 function migrationHtml() {
   const s = mig();
   const d = s.data;
   const controls = migSegHtml(mT('Window'), 'mig-days',
-    MIGRATION_DAYS.map(n => [n, n === 1 ? mT('24 hours') : mT('{n} days', { n })]), s.days);
+    // Con un giorno scelto nessuna finestra è "accesa": valgono le barre.
+    MIGRATION_DAYS.map(n => [n, n === 1 ? mT('24 hours') : mT('{n} days', { n })]), s.day ? null : s.days);
   const about = aboutHtml(mT('Who changed citizenship. The game does not publish it: it is worked out by comparing every nation\'s citizen list hour by hour. Only players of level {lv}+ (or with prestige) count, and a player who simply went inactive is not a departure.', { lv: d?.minLevel || 10 }));
 
   if (!d || d.days !== s.days) {
@@ -647,21 +702,23 @@ function migrationHtml() {
   const section = (title, body) => body
     ? `<div class="wp-panel-section-title wp-mig-title">${escapeHtml(title)}</div>${body}` : '';
 
-  return headerHtml(mT('Migration'), s.days === 1 ? mT('24 hours') : mT('{n} days', { n: s.days }))
+  const badge = s.day ? migDayLabel(s.day) : (s.days === 1 ? mT('24 hours') : mT('{n} days', { n: s.days }));
+  return headerHtml(mT('Migration'), badge)
     + controls + metricSeg
+    + migTimelineHtml(s)
     + statsHtml([
       { label: mT('Moves'), value: fmt(st.moves) },
-      { label: mT('Players'), value: fmt(st.people) },
+      { label: mT('Players'), value: st.people == null ? '—' : fmt(st.people) },
       { label: mT('Nations gaining'), value: fmt(st.gaining) },
       { label: mT('Nations losing'), value: fmt(st.losing) },
     ])
     + hint
-    + migNotesHtml(d)
+    + (s.day ? '' : migNotesHtml(d))
     + (st.moves
       ? section(mT('Gaining players'), gaining.map(nationRow).join(''))
         + section(mT('Losing players'), losing.map(nationRow).join(''))
         + section(mT('Biggest flows'), flowRows)
-      : emptyHtml(mT('No moves recorded in this window.')))
+      : emptyHtml(mT(s.day ? 'No moves recorded on this day.' : 'No moves recorded in this window.')))
     + about;
 }
 
@@ -697,18 +754,20 @@ function migrationFocusHtml(s, d, controls) {
         + partnerRows(out, c.out, OUT_COLOR, '{p}% of departures') : '')
       + (inn.length ? `<div class="wp-panel-section-title wp-mig-title"><span class="wp-mig-swatch" style="background:${IN_COLOR}"></span>${escapeHtml(mT('Where they come from'))}</div>`
         + partnerRows(inn, c.in, IN_COLOR, '{p}% of arrivals') : '')
-    : emptyHtml(mT('Nobody left or arrived in this window.'));
+    : emptyHtml(mT(s.day ? 'Nobody left or arrived on this day.' : 'Nobody left or arrived in this window.'));
 
+  const dayBadge = s.day ? `<span class="wp-panel-bloc" style="background:#58a6ff22;color:#58a6ff">${escapeHtml(migDayLabel(s.day))}</span>` : '';
   return `<button class="wp-sphere-back" type="button" data-mig-action="unfocus">${escapeHtml(mT('← All nations'))}</button>`
-    + `<div class="wp-panel-header"><div><div class="wp-panel-name wp-mig-name">${flag}${escapeHtml(nation?.name || '—')}</div></div></div>`
+    + `<div class="wp-panel-header"><div><div class="wp-panel-name wp-mig-name">${flag}${escapeHtml(nation?.name || '—')}</div>${dayBadge}</div></div>`
     + controls + dirSeg
+    + migTimelineHtml(s)
     + statsHtml([
       { label: mT('Arrived'), value: fmt(c.in) },
       { label: mT('Left'), value: fmt(c.out) },
       { label: mT('Balance'), value: migSigned(c.net, 'net') },
       { label: mT('Per 100 citizens'), value: c.citizens >= MIN_RATE_CITIZENS ? migSigned(rate, 'rate') : '—' },
     ])
-    + migNotesHtml(d)
+    + (s.day ? '' : migNotesHtml(d))
     + body
     + `<button type="button" class="wp-travel-btn wp-mig-open" data-mig-action="open-nation">${escapeHtml(mT('Players by name in the nation panel'))} ›</button>`;
 }

@@ -397,6 +397,11 @@ wareraPlus/
     │   │                          /migration-flows per tutto il mondo, NESSUN ripiego (non
     │   │                          esiste una chiamata WarEra equivalente). Riepilogo in
     │   │                          viewOverview.js, testi in migrationI18n.js (9 lingue).
+    │   │                          Cursore GIORNO PER GIORNO (30 gg, /migration-flows?
+    │   │                          daily=1): un giorno scelto sostituisce la finestra
+    │   │                          per mappa, classifiche e frecce; con una nazione a
+    │   │                          fuoco le barre sono il SUO saldo (quando parte un
+    │   │                          esodo). Giorni prima di coverageFrom = buco.
     │   │                          Effetto "volo" 3D finto: ombra a terra sotto l'arco +
     │   │                          comete animate (~30 fps, sorgente propria). Ferme con
     │   │                          scheda nascosta, time machine, overlay (mapIdle.js).

@@ -69,7 +69,9 @@ export function mig() {
   if (!state.migration) {
     // `dir` parte da 'both' (richiesta dell'utente): con le sole partenze
     // le frecce in entrata restavano dietro un bottone e sembravano mancare.
-    state.migration = { data: null, error: null, at: 0, days: 7, metric: 'net', focus: null, dir: 'both', loading: false };
+    // `day`/`daily`: il cursore giorno per giorno (vedi IL TEMPO più sotto).
+    state.migration = { data: null, error: null, at: 0, days: 7, metric: 'net', focus: null, dir: 'both', loading: false,
+      day: null, daily: null, dailyError: null, dailyLoading: false, dayPlaying: false };
   }
   return state.migration;
 }
@@ -119,10 +121,126 @@ export async function loadMigrationFlows({ force = false } = {}) {
 export function enterMigrationView() {
   clearInterval(_timer);
   _timer = setInterval(() => {
-    if (state.coloringMode !== 'migration') { clearInterval(_timer); _timer = null; return; }
-    if (!document.hidden) loadMigrationFlows({ force: true });
+    if (state.coloringMode !== 'migration') { clearInterval(_timer); _timer = null; stopDayPlay(); return; }
+    if (!document.hidden) { loadMigrationFlows({ force: true }); loadMigrationDaily({ force: true }); }
   }, TTL_MS);
+  loadMigrationDaily();
   return loadMigrationFlows();
+}
+
+/* ══════════════════ IL TEMPO ══════════════════
+   Richiesta dell'utente: «un cursore sui 30 giorni per vedere quando è
+   partito un esodo». /migration-flows?daily=1 divide gli stessi
+   spostamenti per giorno italiano (server/citizenMoves.js): scegliendo un
+   giorno, mappa, classifiche e frecce leggono QUEL giorno invece della
+   finestra (migrationView). Si scarica una volta ogni 10 minuti, a parte
+   dal dato della finestra: chi non tocca il cursore non lo aspetta.
+
+   Un giorno senza riga dopo coverageFrom è zero; prima non si stava
+   guardando, e il cursore lo disegna come buco, non come calma. */
+const DAILY_DAYS = 30;
+const DAY_PLAY_MS = 1100;
+let _dayTimer = null;
+
+export async function loadMigrationDaily({ force = false } = {}) {
+  const s = mig();
+  if (s.dailyLoading || (!force && s.daily && Date.now() - s.daily.at < TTL_MS)) return;
+  s.dailyLoading = true;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${WARERA_CACHE_BASE}/migration-flows?days=${DAILY_DAYS}&daily=1`, { signal: controller.signal });
+    if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+    const body = await res.json();
+    // Un server che non conosce `daily` risponde lo stesso, senza il campo.
+    if (!Array.isArray(body?.daily)) throw Object.assign(new Error('risposta senza daily'), { status: 404 });
+    const citizens = {};
+    for (const [id, c] of Object.entries(body.countries || {})) citizens[id] = c.citizens || 0;
+    s.daily = {
+      at: Date.now(),
+      fetchedAt: body.fetchedAt,
+      coverageFrom: body.coverageFrom,
+      list: body.daily,
+      byDay: new Map(body.daily.map(d => [d.day, d])),
+      citizens,
+    };
+    s.dailyError = null;
+  } catch (err) {
+    console.warn('[migration] giorno per giorno non disponibile:', err.message);
+    s.dailyError = err.status === 404 ? 'missing' : 'unreachable';
+  } finally {
+    clearTimeout(timer);
+    s.dailyLoading = false;
+  }
+  if (state.coloringMode === 'migration') refreshAll({ map: Boolean(s.day) });
+}
+
+const _dayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' });
+/** I giorni del cursore, dal più vecchio a oggi, con quello che c'è per
+ *  ognuno: `entry` (null = nessuno spostamento) e `watched` (false = prima
+ *  che l'archivio cominciasse a guardare). */
+export function migrationDays() {
+  const s = mig();
+  if (!s.daily) return [];
+  const out = [];
+  const now = Date.now();
+  const cov = s.daily.coverageFrom ? _dayFmt.format(new Date(s.daily.coverageFrom)) : null;
+  for (let i = DAILY_DAYS - 1; i >= 0; i--) {
+    const day = _dayFmt.format(new Date(now - i * 86400000));
+    if (out.length && out[out.length - 1].day === day) continue;   // cambio d'ora
+    out.push({ day, entry: s.daily.byDay.get(day) || null, watched: !cov || day >= cov });
+  }
+  return out;
+}
+
+/** Quello che la mappa sta mostrando: un giorno scelto, o la finestra. */
+export function migrationView() {
+  const s = mig();
+  if (s.day && s.daily) {
+    const e = s.daily.byDay.get(s.day) || { moves: 0, countries: {}, flows: [] };
+    const countries = {};
+    for (const [id, c] of Object.entries(e.countries)) countries[id] = { ...c, citizens: s.daily.citizens[id] || 0 };
+    return { day: s.day, countries, flows: e.flows, totals: { moves: e.moves } };
+  }
+  return s.data;
+}
+
+export function selectMigrationDay(day) {
+  const s = mig();
+  s.day = day && s.day !== day ? day : null;
+  if (!s.day) stopDayPlay();
+  refreshAll();
+}
+
+function stepDay() {
+  _dayTimer = null;
+  const s = mig();
+  if (!s.dayPlaying || state.coloringMode !== 'migration') { s.dayPlaying = false; return; }
+  const days = migrationDays().filter(d => d.watched);
+  const i = days.findIndex(d => d.day === s.day);
+  if (i < 0 || i >= days.length - 1) { s.dayPlaying = false; refreshAll({ map: false }); return; }
+  s.day = days[i + 1].day;
+  refreshAll();
+  _dayTimer = setTimeout(stepDay, DAY_PLAY_MS);
+}
+
+export function toggleMigrationDayPlay() {
+  const s = mig();
+  if (s.dayPlaying) { stopDayPlay(); refreshAll({ map: false }); return; }
+  const days = migrationDays().filter(d => d.watched);
+  if (!days.length) return;
+  // Dall'inizio, o da dove si è fermi se non si è già in fondo.
+  if (!s.day || s.day === days[days.length - 1].day) s.day = days[0].day;
+  s.dayPlaying = true;
+  trackEvent('migration-day-play');
+  refreshAll();
+  _dayTimer = setTimeout(stepDay, DAY_PLAY_MS);
+}
+
+function stopDayPlay() {
+  mig().dayPlaying = false;
+  clearTimeout(_dayTimer);
+  _dayTimer = null;
 }
 
 // ══════════════════ NUMERI ══════════════════
@@ -140,7 +258,7 @@ export function migrationValue(c, metric = mig().metric) {
 /** Fondo scala: il 90° percentile dei valori, non il massimo — una
  *  nazione che si svuota in un giorno non deve spegnere tutte le altre. */
 function scaleMax(metric = mig().metric) {
-  const vals = Object.values(mig().data?.countries || {})
+  const vals = Object.values(migrationView()?.countries || {})
     .map(c => Math.abs(migrationValue(c, metric) ?? 0))
     .filter(v => v > 0)
     .sort((a, b) => a - b);
@@ -168,7 +286,7 @@ export function migrationLegendGradient() {
 
 export function buildMigrationColorExpression(isOriginal = false) {
   const prop = isOriginal ? 'initialCountryId' : 'countryId';
-  const countries = mig().data?.countries;
+  const countries = migrationView()?.countries;
   if (!countries) return COLORS.DEFAULT_LAND;
   const max = scaleMax();
   const byColor = new Map();
@@ -186,7 +304,7 @@ export function buildMigrationColorExpression(isOriginal = false) {
 }
 
 export function getMigrationStats() {
-  const d = mig().data;
+  const d = migrationView();
   if (!d) return null;
   let gaining = 0, losing = 0;
   for (const c of Object.values(d.countries)) {
@@ -195,7 +313,9 @@ export function getMigrationStats() {
   }
   return {
     moves: d.totals?.moves || 0,
-    people: d.totals?.people || 0,
+    // null per un giorno solo: il server conta le persone distinte solo
+    // sulla finestra intera, e "0 giocatori" con 144 spostamenti è falso.
+    people: d.totals?.people ?? null,
     gaining, losing,
     inactive: d.totals?.inactive || 0,
     lowLevel: d.totals?.lowLevel || 0,
@@ -204,7 +324,7 @@ export function getMigrationStats() {
 
 /** Le classifiche del riepilogo: chi guadagna, chi perde, le coppie più grosse. */
 export function migrationRanking(limit = 10) {
-  const d = mig().data;
+  const d = migrationView();
   if (!d) return { gaining: [], losing: [], flows: [] };
   const metric = mig().metric;
   const rows = Object.entries(d.countries)
@@ -219,14 +339,15 @@ export function migrationRanking(limit = 10) {
 
 /** I partner di una nazione: dove vanno i suoi e da dove arrivano gli altri. */
 export function focusFlows(id = mig().focus) {
-  const flows = mig().data?.flows || [];
+  const view = migrationView();
+  const flows = view?.flows || [];
   const out = [], inn = [];
   for (const f of flows) {
     if (f.f === id) out.push({ id: f.t, n: f.n });
     else if (f.t === id) inn.push({ id: f.f, n: f.n });
   }
   // `flows` arriva già ordinato per n decrescente dal server.
-  return { out, in: inn, country: mig().data?.countries?.[id] || null };
+  return { out, in: inn, country: view?.countries?.[id] || null };
 }
 
 // ══════════════════ FRECCE ══════════════════
@@ -537,11 +658,20 @@ function refreshAll({ map = true } = {}) {
 
 /** Collega i comandi del riepilogo (countryPanel.js, dopo innerHTML). */
 export function wireMigrationOverview(root) {
+  // Una barra del cursore: quel giorno (ricliccata = di nuovo la finestra).
+  root.querySelectorAll('[data-mig-day]').forEach(el => {
+    el.addEventListener('click', () => {
+      stopDayPlay();
+      selectMigrationDay(el.dataset.migDay);
+    });
+  });
   root.querySelectorAll('[data-mig-days]').forEach(btn => {
     btn.addEventListener('click', () => {
       const days = Number(btn.dataset.migDays);
       const s = mig();
-      if (!days || days === s.days) return;
+      // Scegliere una finestra vuol dire "non più un giorno solo".
+      if (s.day) { s.day = null; stopDayPlay(); }
+      if (!days || days === s.days) { refreshAll(); return; }
       s.days = days;
       trackEvent('migration-days', { days });
       refreshAll({ map: false });
@@ -575,7 +705,11 @@ export function wireMigrationOverview(root) {
   root.querySelectorAll('[data-mig-action]').forEach(btn => {
     btn.addEventListener('click', () => {
       const s = mig();
-      if (btn.dataset.migAction === 'unfocus') {
+      if (btn.dataset.migAction === 'day-play') {
+        toggleMigrationDayPlay();
+      } else if (btn.dataset.migAction === 'day-clear') {
+        selectMigrationDay(null);
+      } else if (btn.dataset.migAction === 'unfocus') {
         s.focus = null;
         refreshAll({ map: false });
       } else if (btn.dataset.migAction === 'open-nation' && s.focus) {

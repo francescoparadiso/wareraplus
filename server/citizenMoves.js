@@ -273,11 +273,21 @@ function readCitizenMoves(countryId, days) {
    ═══════════════════════════════════════════════════════════════════════ */
 const FLOW_MIN_LEVEL = 10;
 
+// Il giorno di uno spostamento: giorno ITALIANO, la stessa griglia degli
+// altri archivi del server (dayHistory, priceHistory) e del client.
+const _dayFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
 /**
  * @param {number} days
  * @param {{ userInfo?: Object<string, Array>, citizens?: Object<string, {n:number,n10?:number}> }} ctx
  */
-function readMigrationFlows(days, { userInfo = {}, citizens = {} } = {}) {
+/* `daily` (richiesta dell'utente, 2026-10-11: «vedere quando è partito un
+   esodo»): gli stessi spostamenti divisi per giorno, ognuno con i suoi
+   saldi e le sue coppie. Stessa risoluzione delle uscite e stesso filtro
+   di livello della somma: la somma dei giorni È il totale. */
+function readMigrationFlows(days, { userInfo = {}, citizens = {}, daily = false } = {}) {
   const store = _readMoves();
   const now = Date.now();
   const since = now - (days || 7) * 24 * 60 * 60 * 1000;
@@ -292,6 +302,7 @@ function readMigrationFlows(days, { userInfo = {}, citizens = {} } = {}) {
   }
 
   const pairs = new Map();   // "f>t" → spostamenti
+  const byDay = new Map();   // "YYYY-MM-DD" → Map("f>t" → spostamenti)
   const people = new Set();
   const inactive = new Set();
   const lowLevel = new Set();
@@ -310,6 +321,12 @@ function readMigrationFlows(days, { userInfo = {}, citizens = {} } = {}) {
       const key = `${r.f}>${to}`;
       pairs.set(key, (pairs.get(key) || 0) + 1);
       people.add(userId);
+      if (daily) {
+        const day = _dayFmt.format(new Date(r.a));
+        if (!byDay.has(day)) byDay.set(day, new Map());
+        const m = byDay.get(day);
+        m.set(key, (m.get(key) || 0) + 1);
+      }
     }
   }
 
@@ -333,7 +350,7 @@ function readMigrationFlows(days, { userInfo = {}, citizens = {} } = {}) {
     movers += c.in;
   }
 
-  return {
+  const out = {
     fetchedAt: store.fetchedAt,
     coverageFrom: store.startedAt,
     retentionDays: RETENTION_DAYS,
@@ -343,6 +360,27 @@ function readMigrationFlows(days, { userInfo = {}, citizens = {} } = {}) {
     countries,
     flows,
   };
+  if (daily) {
+    // Un giorno = { day, moves, countries: {id: {in, out, net}}, flows }.
+    // Solo i giorni con almeno uno spostamento: un giorno assente è "zero"
+    // se è dopo coverageFrom, "non si guardava" se è prima (lo dice il client).
+    out.daily = [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([day, m]) => {
+      const cs = {};
+      const fl = [];
+      let moves = 0;
+      for (const [key, n] of m) {
+        const [f, t] = key.split('>');
+        fl.push({ f, t, n });
+        (cs[f] || (cs[f] = { in: 0, out: 0, net: 0 })).out += n;
+        (cs[t] || (cs[t] = { in: 0, out: 0, net: 0 })).in += n;
+        moves += n;
+      }
+      for (const c of Object.values(cs)) c.net = c.in - c.out;
+      fl.sort((a, b) => b.n - a.n);
+      return { day, moves, countries: cs, flows: fl };
+    });
+  }
+  return out;
 }
 
 function statoCitizenMoves() {
