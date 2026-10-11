@@ -3250,6 +3250,105 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000).unref?.();
 
+// ── Micro-cache del proxy ──────────────────────────────────────────────
+// Il passthrough qui sopra mandava a WarEra OGNI richiesta di OGNI utente,
+// e tutte con la stessa key: il tetto di 500/min e' uno solo per l'intero
+// tool. Ma i client chiedono quasi sempre la stessa cosa nello stesso
+// momento — i marker battaglia, per dirne una, ripassano ogni 30 s con lo
+// stesso batch di getLiveBattleData su ogni mappa aperta — quindi la
+// stessa risposta si puo' dare a tutti per qualche secondo.
+//
+// E' sicuro perche' la risposta dipende SOLO da metodo + URL + body: questa
+// route non inoltra header del client (niente cookie, niente Authorization
+// dell'utente), solo la NOSTRA key, uguale per tutti. Due richieste
+// identiche ricevono da WarEra la stessa cosa, chiunque le mandi.
+//
+// Due pezzi, e servono tutti e due:
+//   - la cache: 15 s per le sole risposte 200. Un 429 o un 5xx non si
+//     tiene: il client ha il suo backoff e deve vederli freschi;
+//   - l'accorpamento delle richieste IN VOLO: senza, mille client che
+//     chiedono nello stesso secondo mancano tutti la cache (la prima
+//     risposta non e' ancora arrivata) e partono mille chiamate. Cosi' ne
+//     parte una e le altre aspettano quella.
+// 15 s contro il giro di 10 s della heatmap battaglia: al peggio quel giro
+// vede lo stesso numero due volte, e il ranking per nazione cambia comunque
+// solo al tick (~2 min).
+const PROXY_CACHE_TTL_MS = 15 * 1000;
+// Tetti di memoria: il VPS ha meno di un GB e questa e' una comodita', non
+// un archivio. Una risposta piu' grossa di 4 MB si serve e non si tiene.
+const PROXY_CACHE_MAX_BYTES = 64 * 1024 * 1024;
+const PROXY_CACHE_MAX_ENTRY = 4 * 1024 * 1024;
+
+const _proxyCache = new Map();    // chiave -> { at, status, contentType, buf }
+const _proxyInflight = new Map(); // chiave -> Promise<risposta upstream>
+let _proxyCacheBytes = 0;
+const _proxyCacheStats = { hits: 0, shared: 0, misses: 0 };
+
+function _proxyCacheGet(key) {
+  const hit = _proxyCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > PROXY_CACHE_TTL_MS) {
+    _proxyCache.delete(key);
+    _proxyCacheBytes -= hit.buf.length;
+    return null;
+  }
+  return hit;
+}
+
+function _proxyCachePut(key, entry) {
+  if (entry.status !== 200 || entry.buf.length > PROXY_CACHE_MAX_ENTRY) return;
+  const old = _proxyCache.get(key);
+  if (old) { _proxyCache.delete(key); _proxyCacheBytes -= old.buf.length; }
+  _proxyCache.set(key, entry);
+  _proxyCacheBytes += entry.buf.length;
+  // La Map tiene l'ordine d'inserimento: i primi sono i piu' vecchi.
+  for (const [k, v] of _proxyCache) {
+    if (_proxyCacheBytes <= PROXY_CACHE_MAX_BYTES) break;
+    _proxyCache.delete(k);
+    _proxyCacheBytes -= v.buf.length;
+  }
+}
+
+// Le voci scadute che nessuno richiede piu' non si ripulirebbero da sole.
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of _proxyCache) {
+    if (now - v.at > PROXY_CACHE_TTL_MS) { _proxyCache.delete(k); _proxyCacheBytes -= v.buf.length; }
+  }
+}, 60 * 1000).unref?.();
+
+/** La chiamata vera a WarEra, ridotta a quello che serve per rispondere:
+ *  e' la stessa per tutti quelli che la stanno aspettando. */
+async function _proxyUpstream(target, method, contentType, body) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
+  try {
+    const headers = {
+      // `identity`: stesso accorgimento del Worker — con la compressione
+      // attiva i body di errore di WarEra tornavano corrotti.
+      'Accept-Encoding': 'identity',
+    };
+    if (WARERA_API_TOKEN) headers['X-API-Key'] = WARERA_API_TOKEN;
+
+    const init = { method, headers, signal: controller.signal };
+    if (method === 'POST') {
+      headers['Content-Type'] = contentType || 'application/json';
+      init.body = body;
+    }
+
+    const upstream = await fetch(target, init);
+    return {
+      at: Date.now(),
+      status: upstream.status,
+      contentType: upstream.headers.get('content-type') || 'application/json',
+      retryAfter: upstream.headers.get('retry-after'),
+      buf: Buffer.from(await upstream.arrayBuffer()),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function _trpcProxy(req, res) {
   const ip = req.headers['x-real-ip'] || req.ip || 'sconosciuto';
   if (_proxyRateExceeded(ip)) {
@@ -3263,33 +3362,43 @@ async function _trpcProxy(req, res) {
   const search = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
   const target = TRPC_UPSTREAM + suffix + search;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
   try {
-    const headers = {
-      // `identity`: stesso accorgimento del Worker — con la compressione
-      // attiva i body di errore di WarEra tornavano corrotti.
-      'Accept-Encoding': 'identity',
-    };
-    if (WARERA_API_TOKEN) headers['X-API-Key'] = WARERA_API_TOKEN;
+    const body = req.method === 'POST' ? await _readRawBody(req) : null;
+    // Il body fa parte della chiave: i batch POST di Political portano le
+    // procedure nell'URL ma gli input nel body.
+    const key = `${req.method} ${suffix}${search}${body ? '\n' + body.toString('utf8') : ''}`;
 
-    const init = { method: req.method, headers, signal: controller.signal };
-    if (req.method === 'POST') {
-      headers['Content-Type'] = req.headers['content-type'] || 'application/json';
-      init.body = await _readRawBody(req);
+    let out = _proxyCacheGet(key);
+    let how = 'HIT';
+    if (out) {
+      _proxyCacheStats.hits++;
+    } else if (_proxyInflight.has(key)) {
+      out = await _proxyInflight.get(key);
+      how = 'SHARED';
+      _proxyCacheStats.shared++;
+    } else {
+      const p = _proxyUpstream(target, req.method, req.headers['content-type'], body);
+      _proxyInflight.set(key, p);
+      try {
+        out = await p;
+      } finally {
+        _proxyInflight.delete(key);
+      }
+      _proxyCachePut(key, out);
+      how = 'MISS';
+      _proxyCacheStats.misses++;
     }
 
-    const upstream = await fetch(target, init);
-    const buf = Buffer.from(await upstream.arrayBuffer());
-    res.status(upstream.status);
-    res.set('Content-Type', upstream.headers.get('content-type') || 'application/json');
+    res.status(out.status);
+    res.set('Content-Type', out.contentType);
+    res.set('X-Proxy-Cache', how);
     // Il 429 di WarEra deve arrivare al client COME 429, con il suo
     // Retry-After: e' su quello che trpcBatch calcola il backoff.
-    const retryAfter = upstream.headers.get('retry-after');
-    if (retryAfter) res.set('Retry-After', retryAfter);
+    if (out.retryAfter) res.set('Retry-After', out.retryAfter);
 
     // Stesso criterio del middleware gzip in testa al file (che intercetta
     // solo res.json, non res.send: qui il body e' gia' un Buffer grezzo).
+    const buf = out.buf;
     const wantsGzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
     if (!wantsGzip || buf.length < GZIP_MIN_BYTES) return res.send(buf);
     zlib.gzip(buf, (err, gz) => {
@@ -3303,8 +3412,6 @@ async function _trpcProxy(req, res) {
     // (-> ricadi sul Worker) da un errore applicativo.
     console.error('[proxy] fallito:', req.path.slice(0, 120), '-', err.message);
     if (!res.headersSent) res.status(502).send('Proxy error: ' + err.message);
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -3450,7 +3557,13 @@ app.get('/health', (req, res) => res.json({
   now: Date.now(),
   // Solo se c'e', mai il valore: serve a verificare dopo un deploy che
   // pm2 abbia davvero l'env var, senza doverla stampare.
-  trpcProxy: { ready: true, apiKey: WARERA_API_TOKEN ? 'caricata' : 'MANCANTE' },
+  // `cache`: quante richieste la micro-cache ha risparmiato a WarEra
+  // (hits + shared) contro quante ne sono partite davvero (misses).
+  trpcProxy: {
+    ready: true,
+    apiKey: WARERA_API_TOKEN ? 'caricata' : 'MANCANTE',
+    cache: { ..._proxyCacheStats, entries: _proxyCache.size, bytes: _proxyCacheBytes },
+  },
   // Quanto e' avanti l'archivio battaglie: dopo un deploy dice a colpo
   // d'occhio se il bootstrap notturno ha gia' girato o se le due viste
   // stanno ancora lavorando in modalita' ridotta.
