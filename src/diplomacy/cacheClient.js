@@ -548,9 +548,11 @@ export async function fetchMoneyTransfersViaCache() {
  *  si legge il numero senza incrementarlo.
  *  Ritorna null se il server non risponde: il contatore semplicemente non
  *  compare, come ogni altra cosa che dipende dal VPS. */
-export async function fetchVisitsViaCache(visitorId, { count = true } = {}) {
+export async function fetchVisitsViaCache(visitorId, { count = true, source = '' } = {}) {
   try {
-    const q = `?id=${encodeURIComponent(visitorId || '')}${count ? '' : '&count=0'}`;
+    // `source=wallpaper`: lo sfondo di Wallpaper Engine, che il server
+    // conta a parte (sfondi accesi) e mai fra visite e online del sito.
+    const q = `?id=${encodeURIComponent(visitorId || '')}${count ? '' : '&count=0'}${source ? `&source=${source}` : ''}`;
     const json = await _fetchCacheJsonRaw(`/visits${q}`);
     if (!json || !Number.isFinite(json.total)) return null;
     return json;

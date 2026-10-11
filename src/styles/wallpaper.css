@@ -21,8 +21,11 @@ body.wp-wallpaper.wp-wp-no-ticker .wp-news-ticker-wrapper { display: none !impor
   body.wp-wallpaper.wp-wp-no-ticker #legend-container { top: var(--wp-bar-h); }
 }
 
-/* ── Crediti e contatore: stanno nella fascia "i" ── */
-body.wp-wallpaper #wp-bottom-credits { display: none !important; }
+/* ── Crediti e contatori: visibili, sopra la barra delle applicazioni ──
+   Lo sfondo copre anche la striscia dietro la barra di Windows: ai 16px
+   del sito finirebbero sotto. Le pill sono in sola lettura qui (vedi
+   visitorCounter.js), "Creato da" e Ko-fi restano link normali. */
+body.wp-wallpaper #wp-bottom-credits { bottom: 64px; }
 
 /* ── La "i" in basso a destra ──
    Lo sfondo copre TUTTO il monitor, anche la striscia dietro la barra
