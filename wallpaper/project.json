@@ -246,6 +246,7 @@
 			}
 		}
 	},
+	"preview" : "preview.jpg",
 	"tags" : [ "Game" ],
 	"title" : "WarEra+ live map",
 	"type" : "web"
