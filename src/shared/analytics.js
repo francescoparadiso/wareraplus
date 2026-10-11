@@ -21,6 +21,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { IS_LIVE } from './deployEnv.js';
+import { IS_WALLPAPER } from './wallpaper.js';
 
 /* ══════════════════════════════════════════════════════════════
    Caricamento dello script Umami
@@ -35,7 +36,10 @@ const UMAMI_SRC = 'https://cloud.umami.is/script.js';
 const UMAMI_WEBSITE_ID = 'dc8b6461-36c0-4765-b340-cce22c231910';
 
 export function initAnalytics() {
-  if (!IS_LIVE) return;
+  // WarEra+ sfondo: uno sfondo resta acceso tutto il giorno su ogni
+  // desktop e si ricarica a ogni avvio di Windows — contarlo come visita
+  // gonfierebbe i numeri delle persone vere. Vedi src/shared/wallpaper.js.
+  if (!IS_LIVE || IS_WALLPAPER) return;
   try {
     const s = document.createElement('script');
     s.defer = true;

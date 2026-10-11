@@ -103,6 +103,92 @@ export function isProxyInCooldown() {
   return Date.now() < _proxyDownUntil;
 }
 
+/* ── La chiave dell'UTENTE (sfondo Wallpaper Engine) ──────────────────
+   Proxy e Worker mettono la NOSTRA key, una sola per tutto il tool, con un
+   tetto di 500 richieste al minuto. Quasi tutti i giocatori ne hanno una
+   loro (la chiedono dalle impostazioni del gioco e la incollano già negli
+   altri tool), e WarEra la accetta anche da una pagina web: il preflight
+   CORS di api2 risponde `allow-headers: x-api-key` con origin `*`
+   (verificato il 2026-10-11). Con quella chiave le chiamate "da Worker"
+   vanno DRITTE ad api2 e consumano il budget di chi guarda, non quello
+   condiviso.
+
+   Oggi la imposta solo lo sfondo (src/app/wallpaperMode.js, dalle
+   proprietà di Wallpaper Engine via postMessage). Sta in MEMORIA e basta:
+   mai localStorage, mai un URL.
+
+   Proxy e Worker restano dietro come rete, nello stesso ordine di sempre:
+   - 401/403 = chiave rifiutata → la si accantona per la sessione e lo si
+     annuncia (`wareraplus:apikey-status`), lo sfondo lo dice all'utente;
+   - rete giù / timeout / 502-504 → pausa di PROXY_COOLDOWN_MS, come il VPS;
+   - 429 → si restituisce com'è: è il limite della SUA chiave, e il
+     backoff del chiamante è la risposta giusta, non spostare il carico
+     sulla chiave di tutti. */
+const USER_KEY_BASE = 'https://api2.warera.io';
+let _userApiKey = '';
+let _userKeyRejected = false;
+let _userKeyConfirmed = false;
+let _userKeyDownUntil = 0;
+
+function _announceKey(status) {
+  window.dispatchEvent(new CustomEvent('wareraplus:apikey-status', { detail: { status } }));
+}
+
+/** Imposta (o toglie, con '') la chiave dell'utente. */
+export function setUserApiKey(key) {
+  const k = String(key || '').trim();
+  if (k === _userApiKey) return;
+  _userApiKey = k;
+  _userKeyRejected = false;
+  _userKeyConfirmed = false;
+  _userKeyDownUntil = 0;
+  _announceKey(k ? 'pending' : 'none');
+  if (k) _probeUserKey(k, 1);
+}
+
+/* Una chiave SBAGLIATA non la rifiuta nessuno: sulle procedure pubbliche
+   WarEra la ignora e risponde 200 come a una richiesta anonima (misurato
+   il 2026-10-12 con una chiave inventata). Il 200 di una chiamata normale
+   quindi non dice niente, e "chiave attiva" sarebbe una bugia. La prova
+   vera è una procedura PROTETTA: `transaction.getPaginatedTransactions`
+   risponde 401 "API token required" senza una chiave valida. Una
+   richiesta sola, con limit 1, a ogni chiave nuova.
+   Finché la prova non ha risposto la chiave si usa lo stesso: se è
+   sbagliata quelle chiamate valgono come anonime, sul limite dell'IP di
+   chi guarda e non su quello condiviso. */
+const PROBE_INPUT = encodeURIComponent(JSON.stringify({ transactionType: 'countryMoneyTransfer', limit: 1 }));
+
+async function _probeUserKey(key, attempt) {
+  try {
+    const res = await fetch(`${USER_KEY_BASE}/trpc/transaction.getPaginatedTransactions?input=${PROBE_INPUT}`, {
+      headers: { 'X-API-Key': key },
+    });
+    if (key !== _userApiKey) return; // cambiata nel frattempo
+    if (res.ok) { _userKeyConfirmed = true; _announceKey('ok'); return; }
+    if (res.status === 401 || res.status === 403) {
+      _userKeyRejected = true;
+      _announceKey('rejected');
+      return;
+    }
+    throw new Error(`HTTP ${res.status}`);
+  } catch (err) {
+    // Rete giù o WarEra di traverso: non è un verdetto sulla chiave.
+    if (key !== _userApiKey || attempt >= 3) return;
+    setTimeout(() => _probeUserKey(key, attempt + 1), 60 * 1000);
+  }
+}
+
+/** 'none' | 'pending' | 'ok' | 'rejected' */
+export function userApiKeyStatus() {
+  if (!_userApiKey) return 'none';
+  if (_userKeyRejected) return 'rejected';
+  return _userKeyConfirmed ? 'ok' : 'pending';
+}
+
+function _userKeyUsable() {
+  return Boolean(_userApiKey) && !_userKeyRejected && Date.now() >= _userKeyDownUntil;
+}
+
 /**
  * Basi da provare, in ordine, per una chiamata destinata a `resolvedBase`.
  * Se non e' il Worker (es. una base custom, o api6 diretta) non c'e' niente
@@ -110,8 +196,18 @@ export function isProxyInCooldown() {
  */
 export function chainFor(resolvedBase) {
   if (resolvedBase !== WORKER_API_BASE) return [resolvedBase];
-  if (_proxyDisabled()) return [WORKER_API_BASE];
-  return [TRPC_PROXY_BASE, WORKER_API_BASE];
+  const bases = [];
+  if (_userKeyUsable()) bases.push(USER_KEY_BASE);
+  if (!_proxyDisabled()) bases.push(TRPC_PROXY_BASE);
+  bases.push(WORKER_API_BASE);
+  return bases;
+}
+
+/** Una base che non ha risposto si mette in pausa: la chiave dell'utente
+ *  per conto suo, il VPS col suo interruttore di sempre. */
+function _markDown(base) {
+  if (base === USER_KEY_BASE) _userKeyDownUntil = Date.now() + PROXY_COOLDOWN_MS;
+  else _markProxyDown();
 }
 
 /**
@@ -119,13 +215,16 @@ export function chainFor(resolvedBase) {
  *
  * @param {string} resolvedBase  la base che il chiamante avrebbe usato prima
  * @param {(base: string) => string} buildUrl  compone l'URL da una base
- * @param {(url: string) => Promise<Response>} doFetch  la fetch vera del
- *        chiamante (con i suoi timeout/opzioni/metodo: questo modulo non
- *        impone la sua, cosi' GET di Diplomacy e POST di Political
- *        mantengono ognuno il proprio comportamento). Sui tentativi che
- *        NON sono l'ultimo vale in piu' PROXY_ATTEMPT_TIMEOUT_MS: e' il
- *        tempo oltre il quale il VPS si considera perso, indipendentemente
- *        da quanto sia paziente il chiamante.
+ * @param {(url: string, extraHeaders?: object) => Promise<Response>} doFetch
+ *        la fetch vera del chiamante (con i suoi timeout/opzioni/metodo:
+ *        questo modulo non impone la sua, cosi' GET di Diplomacy e POST di
+ *        Political mantengono ognuno il proprio comportamento). Il secondo
+ *        argomento c'e' solo sulla base con la chiave dell'utente
+ *        (`X-API-Key`) e il chiamante lo fonde nei suoi header. Sui
+ *        tentativi che NON sono l'ultimo vale in piu'
+ *        PROXY_ATTEMPT_TIMEOUT_MS: e' il tempo oltre il quale una base si
+ *        considera persa, indipendentemente da quanto sia paziente il
+ *        chiamante.
  */
 export async function fetchWithProxyChain(resolvedBase, buildUrl, doFetch) {
   const bases = chainFor(resolvedBase);
@@ -134,30 +233,38 @@ export async function fetchWithProxyChain(resolvedBase, buildUrl, doFetch) {
   for (let i = 0; i < bases.length; i++) {
     const isLast = i === bases.length - 1;
     const base = bases[i];
+    const isUserKey = base === USER_KEY_BASE;
     try {
+      const attempt = isUserKey
+        ? doFetch(buildUrl(base), { 'X-API-Key': _userApiKey })
+        : doFetch(buildUrl(base));
       // Il cronometro vale solo per i tentativi che hanno una rete sotto:
       // sull'ultima base (il Worker) non c'e' piu' dove ricadere, e vale il
       // timeout del chiamante — che e' quello giusto, perche' li' la risposta
       // lenta e' di WarEra, non di un proxy che non sta rispondendo.
-      const res = isLast
-        ? await doFetch(buildUrl(base))
-        : await _withDeadline(doFetch(buildUrl(base)), PROXY_ATTEMPT_TIMEOUT_MS);
+      const res = isLast ? await attempt : await _withDeadline(attempt, PROXY_ATTEMPT_TIMEOUT_MS);
       if (res === _TIMED_OUT) {
-        console.warn(`[trpcProxy] ${base} non ha risposto entro ${PROXY_ATTEMPT_TIMEOUT_MS}ms, passo al Worker`);
-        _markProxyDown();
+        console.warn(`[trpcProxy] ${base} non ha risposto entro ${PROXY_ATTEMPT_TIMEOUT_MS}ms, passo alla base successiva`);
+        _markDown(base);
+        continue;
+      }
+      if (isUserKey && (res.status === 401 || res.status === 403)) {
+        console.warn(`[trpcProxy] chiave API dell'utente rifiutata (${res.status}), uso il server condiviso`);
+        _userKeyRejected = true;
+        _announceKey('rejected');
         continue;
       }
       if (!isLast && PROXY_DOWN_STATUS.has(res.status)) {
-        console.warn(`[trpcProxy] ${base} ha risposto ${res.status}, passo al Worker`);
-        _markProxyDown();
+        console.warn(`[trpcProxy] ${base} ha risposto ${res.status}, passo alla base successiva`);
+        _markDown(base);
         continue;
       }
       return res;
     } catch (err) {
       lastErr = err;
       if (isLast) break;
-      console.warn(`[trpcProxy] ${base} non raggiungibile (${err.message}), passo al Worker`);
-      _markProxyDown();
+      console.warn(`[trpcProxy] ${base} non raggiungibile (${err.message}), passo alla base successiva`);
+      _markDown(base);
     }
   }
 
@@ -173,5 +280,6 @@ export async function fetchWithProxyChain(resolvedBase, buildUrl, doFetch) {
  * @param {string} pathAndQuery  es. `/trpc/battle.getById?input=...`
  */
 export function workerGet(pathAndQuery) {
-  return fetchWithProxyChain(WORKER_API_BASE, base => `${base}${pathAndQuery}`, url => fetch(url));
+  return fetchWithProxyChain(WORKER_API_BASE, base => `${base}${pathAndQuery}`,
+    (url, extra) => fetch(url, extra ? { headers: extra } : undefined));
 }

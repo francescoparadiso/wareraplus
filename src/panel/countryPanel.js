@@ -38,6 +38,7 @@ import { buildViewOverviewHtml, hasViewOverview, trendDaysLabel } from './viewOv
 import { nationWatchHtml, paintNationWatch, wireNationWatch, refreshSphereWatch } from './nationWatch.js';
 // WarEra+ radar dei proxy: le sfere mostrate non sono più solo quelle del CSV.
 import { mergedSphereGroups, proxiesOfPrimary, patronOf, runRadar, isRadarReady, MAP_THRESHOLD } from '../proxy/radar.js';
+import { IS_WALLPAPER } from '../shared/wallpaper.js';
 
 // Stella di pin per l'intestazione del pannello (nazione o alleanza).
 function pinStarHtml(type, id) {
@@ -82,6 +83,16 @@ let currentBlocId = null;
    (stessa correzione già fatta in diplomacy/ui.js per la legenda). */
 function isMobileView() {
   return window.innerWidth <= 768;
+}
+
+/* WarEra+ sfondo: entrando in una vista il riepilogo resta dietro la
+   linguetta anche su desktop. Lo sfondo cambia vista da solo (rotazione)
+   e un pannello che si riapre ogni dieci minuti coprirebbe la mappa, che
+   è il motivo per cui uno se la mette come sfondo. Vale solo per le
+   aperture AUTOMATICHE: un clic su una nazione o una sfera apre come
+   sempre. */
+function keepOverviewClosed() {
+  return isMobileView() || IS_WALLPAPER;
 }
 
 let peekEl = null;
@@ -1074,7 +1085,7 @@ export function renderSphereOverviewPanel() {
   currentOverviewMode = null;
   overviewOrigin = null;
   contentEl.innerHTML = buildSphereOverviewHtml();
-  if (isMobileView() && !panelEl.classList.contains('open')) {
+  if (keepOverviewClosed() && !panelEl.classList.contains('open')) {
     showPanelPeek(t('sphere_all_label'));
   } else {
     openPanelNow();
@@ -1176,7 +1187,7 @@ export function renderViewOverviewPanel(mode) {
   sphereOverviewOpen = false;
   contentEl.innerHTML = html;
 
-  if (isMobileView() && !panelEl.classList.contains('open')) {
+  if (keepOverviewClosed() && !panelEl.classList.contains('open')) {
     showPanelPeek(contentEl.querySelector('.wp-panel-name')?.textContent || '');
   } else {
     openPanelNow();

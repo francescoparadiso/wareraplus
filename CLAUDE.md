@@ -90,6 +90,11 @@ Le ultime due sono nate col dev pubblico: un URL raggiungibile da Google
 prima o poi porta un giocatore a segnalare un bug già corretto in live, e
 l'area riservata scrive su un database che non deve essere quello vero.
 
+Le stesse tre cose sono spente anche con **`?wallpaper=1`** (lo sfondo di
+Wallpaper Engine, `src/shared/wallpaper.js: IS_WALLPAPER`), pure sul live:
+uno sfondo resta acceso tutto il giorno su ogni desktop e si ricarica a
+ogni avvio di Windows.
+
 Le prime tre sono **contatori pubblici condivisi**: il server di cache non sa
 da quale deploy arrivi una richiesta, quindi senza questo gate ogni ricarica
 in dev alzerebbe il totale visite mostrato ai veri utenti. Regola generale:
@@ -145,6 +150,17 @@ npm run preview   # testa la build in locale
   2026-08-24, e il tetto sale col numero di utenti. Il Worker resta
   deployato come rete di sicurezza — non rimuoverlo. Per tornare indietro
   basta mettere `TRPC_PROXY_BASE` a stringa vuota.
+- **Chiave API dell'utente** (oggi solo nello sfondo Wallpaper Engine):
+  `setUserApiKey()` in `trpcProxy.js` mette DAVANTI a VPS e Worker una
+  base diretta su `api2.warera.io` con la chiave di chi guarda (CORS di
+  WarEra accetta `X-API-Key` da qualunque origin). ⚠️ Una chiave sbagliata
+  NON viene rifiutata sulle procedure pubbliche (200 come un anonimo):
+  la verifica vera è una chiamata a una procedura protetta
+  (`transaction.getPaginatedTransactions`, limit 1). I `doFetch` dei
+  chiamanti ricevono un secondo argomento con gli header in più.
+- Il proxy `/trpc` del VPS ha una **micro-cache di 10 s** sulle risposte
+  200 e accorpa le richieste identiche in volo: la key condivisa ha un
+  tetto solo (500/min) per tutto il tool. `/health` → `trpcProxy.cache`.
 
 ## Struttura del progetto
 
@@ -291,6 +307,12 @@ wareraPlus/
 │   │                               manutenzione pota quello che l'import ha appena
 │   │                               scritto).
 │   └── README.md               ← deploy a mano (scp + pm2 restart), vedi ⚠️ in fondo
+├── wallpaper/                  ← NUOVO — lo sfondo di Wallpaper Engine (Steam Workshop).
+│                                  NON contiene il tool: index.html carica il sito in un
+│                                  iframe con ?wallpaper=1 (src/app/wallpaperMode.js) e gli
+│                                  passa le proprietà di project.json. Fuori da build e
+│                                  deploy Vercel. Procedura di prova e pubblicazione nel
+│                                  suo README.
 ├── public/
 │   ├── icons/
 │   └── political/              ← Political View ORIGINALE (script globali), NON PIÙ USATO
@@ -774,6 +796,14 @@ wareraPlus/
     │   │                         due volte nello stesso giorno. Server giù = niente
     │   │                         pill; server vecchio che non manda `online` = pill con
     │   │                         le sole visite. Mai un numero inventato.
+    │   ├── wallpaperMode.js    ← NUOVO — modalità sfondo (?wallpaper=1, flag in
+    │   │                         shared/wallpaper.js): niente contatori né analytics,
+    │   │                         niente barra menù e crediti (wallpaper.css), riepiloghi
+    │   │                         delle viste dietro la linguetta anche su desktop, fascia
+    │   │                         "i" (la tastiera non arriva a uno sfondo). Le proprietà
+    │   │                         di Wallpaper Engine arrivano dall'involucro (wallpaper/)
+    │   │                         via URL all'avvio e postMessage dopo; la chiave API
+    │   │                         SOLO via postMessage, in memoria. setPaused → mapIdle.
     │   ├── newsOverlay.js      ← apre la vista News
     │   ├── guideOverlay.js     ← apre la Guida "Come si usa"
     │   ├── newsTicker.js       ← ticker in cima alla mappa: battaglie, elezioni, nuove
@@ -871,6 +901,8 @@ wareraPlus/
     │   │                          impulsi, battiti, ping, navi e particelle; restano
     │   │                          frecce e colori. Tutti i moduli animati chiedono
     │   │                          animationsOn(). Il replay battaglia NO (è a mano).
+    │   ├── wallpaper.js        ← NUOVO — solo il flag IS_WALLPAPER (?wallpaper=1),
+    │   │                          letto da main.js, analytics.js, countryPanel.js
     │   └── trpcClient.js       ← client tRPC unificato: trpcBatchManual (stile Diplomacy)
     │                              + trpcCall (stile Political), cache namespaced
     │                              we_<namespace>_*. src/diplomacy/utils.js:trpcBatch NON

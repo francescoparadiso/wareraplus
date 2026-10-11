@@ -25,7 +25,10 @@ import './diplomacy/main.js';
 // src/shared/deployEnv.js.
 import { IS_LIVE, initDeployBadge } from './shared/deployEnv.js';
 import { inject } from '@vercel/analytics';
-if (IS_LIVE) inject();
+// WarEra+ sfondo: neanche dentro lo sfondo di Wallpaper Engine, che si
+// ricarica a ogni avvio del PC (vedi src/shared/wallpaper.js).
+import { IS_WALLPAPER } from './shared/wallpaper.js';
+if (IS_LIVE && !IS_WALLPAPER) inject();
 
 // Umami: era un tag statico in index.html, ora si carica da qui (e solo
 // in live) per lo stesso motivo.
@@ -52,6 +55,11 @@ import { startNewsTicker } from './app/newsTicker.js';
 import { initTimeMachine, openTimeMachineAt } from './app/timeMachine.js';
 import { initAuthorPill } from './app/authorPill.js';
 import { initVisitorCounter } from './app/visitorCounter.js';
+// WarEra+ sfondo Wallpaper Engine: il listener dei messaggi parte subito
+// (la chiave API deve arrivare prima delle prime chiamate), il resto a
+// mappa pronta. Vedi src/app/wallpaperMode.js.
+import { listenWallpaperHost, startWallpaperMode } from './app/wallpaperMode.js';
+if (IS_WALLPAPER) listenWallpaperHost();
 // WarEra+: interruttore unico delle animazioni (Impostazioni)
 import { initMotion } from './shared/motion.js';
 import { applyTranslations, initLangButton } from './shared/i18n.js';
@@ -120,8 +128,11 @@ window.addEventListener('wareraplus:diplomacy-ready', () => {
   // WarEra+ dev: la pill visite scrive su un contatore PUBBLICO (/visits
   // sul server di cache, che non sa da quale deploy arrivi la richiesta).
   // Fuori dal live non si tocca; al suo posto il cartellino DEV.
-  if (IS_LIVE) initVisitorCounter();
+  // Lo sfondo resta acceso tutto il giorno: il suo battito farebbe di ogni
+  // desktop un "online adesso" perenne. Avrà un contatore suo.
+  if (IS_LIVE && !IS_WALLPAPER) initVisitorCounter();
   initDeployBadge();
+  if (IS_WALLPAPER) startWallpaperMode();
   handleIncomingDeepLink();
   restoreAfterChunkReload();
 }, { once: true });

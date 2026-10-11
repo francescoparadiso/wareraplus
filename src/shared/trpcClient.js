@@ -137,7 +137,7 @@ export async function trpcBatchManual(calls, { useWorker = false, baseUrl, worke
     // _fetchWithTimeout e non `fetch` nuda: questa modalita' era rimasta
     // indietro rispetto alle altre due di questo stesso file, che il tetto
     // d'attesa ce l'hanno gia' — vedi il commento sopra _fetchWithTimeout.
-    const res = await fetchWithProxyChain(base, b => `${b}${suffix}`, u => _fetchWithTimeout(u));
+    const res = await fetchWithProxyChain(base, b => `${b}${suffix}`, (u, extra) => _fetchWithTimeout(u, extra ? { headers: extra } : {}));
 
     if (res.status === 429) {
       if (_attempt <= MANUAL_MAX_RETRY_ATTEMPTS) {
@@ -219,9 +219,9 @@ async function _sendAutoBatch(chunk, q, attempt = 1) {
     // WarEra+ (vedi shared/trpcProxy.js): VPS prima, Worker come rete. Il
     // body e' una stringa gia' pronta, quindi rispedirlo sulla seconda base
     // non costa una ri-serializzazione.
-    res = await fetchWithProxyChain(base, b => `${b}${suffix}`, u => _fetchWithTimeout(u, {
+    res = await fetchWithProxyChain(base, b => `${b}${suffix}`, (u, extra) => _fetchWithTimeout(u, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...extra },
       body: payload,
     }));
   } catch (networkErr) {
@@ -294,7 +294,7 @@ async function _sendSingle(base, proc, params) {
   // WarEra+ (vedi shared/trpcProxy.js): anche il fallback a chiamate singole
   // passa dalla catena. Se il proxy e' gia' in cooldown, chainFor ritorna
   // solo il Worker e questo e' un normale fetch, come prima.
-  const res = await fetchWithProxyChain(base, b => `${b}${suffix}`, u => _fetchWithTimeout(u));
+  const res = await fetchWithProxyChain(base, b => `${b}${suffix}`, (u, extra) => _fetchWithTimeout(u, extra ? { headers: extra } : {}));
   if (!res.ok) throw new Error(`HTTP ${res.status} → ${proc}`);
   const json = await res.json();
   if (json && json.result) return json.result.data;
