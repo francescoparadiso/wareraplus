@@ -800,6 +800,11 @@ wareraPlus/
     │   │                         due volte nello stesso giorno. Server giù = niente
     │   │                         pill; server vecchio che non manda `online` = pill con
     │   │                         le sole visite. Mai un numero inventato.
+    │   │                         Più una pill "N sfondi · ● M accesi" (cliccabile →
+    │   │                         Steam Workshop): iscritti letti dal server da Steam
+    │   │                         ogni ora, accesi da un battito `source=wallpaper` in
+    │   │                         un conto A PARTE. Dentro lo sfondo le pill si vedono
+    │   │                         ma in sola lettura (niente visite né online).
     │   ├── wallpaperMode.js    ← NUOVO — modalità sfondo (?wallpaper=1, flag in
     │   │                         shared/wallpaper.js): niente contatori né analytics,
     │   │                         niente barra menù e crediti (wallpaper.css), riepiloghi
