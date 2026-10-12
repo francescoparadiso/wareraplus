@@ -66,6 +66,8 @@ import { initWallpaperEarly, startWallpaperMode } from './app/wallpaperMode.js';
 if (IS_WALLPAPER) initWallpaperEarly();
 // WarEra+: interruttore unico delle animazioni (Impostazioni)
 import { initMotion } from './shared/motion.js';
+// WarEra+: numeri che contano e grafici che si disegnano (un osservatore solo)
+import { initReveal } from './shared/reveal.js';
 import { applyTranslations, initLangButton } from './shared/i18n.js';
 import { updateDynamicLegend } from './diplomacy/ui.js';
 import { state } from './diplomacy/state.js';
@@ -208,6 +210,7 @@ async function handleIncomingDeepLink() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initMotion();
+  initReveal();
   initPoliticalOverlay();
   initEconomyOverlay();
   initNewsOverlay();

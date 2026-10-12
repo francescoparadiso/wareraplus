@@ -4015,3 +4015,41 @@ body.wp-no-motion .wp-ping-label { animation: none; }
 }
 body.wp-no-motion .battle-marker.wp-bm-flash-attacker,
 body.wp-no-motion .battle-marker.wp-bm-flash-defender { animation: none; }
+
+
+/* ── WarEra+: numeri che contano e grafici che si disegnano ──────────
+   src/shared/reveal.js. Il sipario è un clip-path sull'<svg> intero (vale
+   per linee, barre, aree e candele allo stesso modo, senza sapere cosa c'è
+   dentro); le ciambelle ruotano entrando. Il badge del cambiamento sta
+   sopra la scheda (assoluto): non deve spostare niente mentre compare. */
+.wp-draw-in { animation: wp-draw-wipe 750ms cubic-bezier(.2, .7, .2, 1) both; }
+@keyframes wp-draw-wipe {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+.wp-draw-spin { animation: wp-draw-spin 650ms cubic-bezier(.2, .7, .2, 1) both; transform-origin: 50% 50%; }
+@keyframes wp-draw-spin {
+  from { opacity: 0; transform: rotate(-120deg) scale(.82); }
+  to   { opacity: 1; transform: none; }
+}
+.wp-num-counting { font-variant-numeric: tabular-nums; }
+.wp-num-delta {
+  position: absolute; top: 2px; right: 4px;
+  font-size: 10.5px; font-weight: 700; line-height: 1;
+  padding: 2px 5px; border-radius: 6px; pointer-events: none;
+  font-variant-numeric: tabular-nums;
+  animation: wp-num-delta 4.2s ease forwards;
+}
+.wp-num-delta.up   { color: #3fb950; background: rgba(63, 185, 80, .14); }
+.wp-num-delta.down { color: #f85149; background: rgba(248, 81, 73, .14); }
+@keyframes wp-num-delta {
+  0%   { opacity: 0; transform: translateY(4px); }
+  10%  { opacity: 1; transform: none; }
+  75%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-4px); }
+}
+body.wp-no-motion .wp-draw-in,
+body.wp-no-motion .wp-draw-spin { animation: none; }
+/* Senza animazioni il badge resta (è un'informazione), solo senza moto:
+   compare e se ne va col suo timer in reveal.js. */
+body.wp-no-motion .wp-num-delta { animation: none; }

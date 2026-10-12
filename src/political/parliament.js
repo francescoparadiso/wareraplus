@@ -25,6 +25,12 @@ import { localFetch } from './api.js';
 import { fillPlayerCardPlus } from './links.js';
 // WarEra+: il tasto Indietro chiude la finestra invece di uscire dal tool.
 import { pushBack, dropBack } from '../app/backNav.js';
+import { animationsOn } from '../shared/motion.js';
+
+// WarEra+ — dove stava ogni seggio all'ultimo disegno, per contenitore: il
+// seggio i-esimo (in ordine d'angolo) dell'elezione nuova parte da lì e
+// scivola al suo posto, cambiando colore, invece di sparire e ricomparire.
+const _prevSeats = new WeakMap();
 
 let _lastRenderData = null;   // salva { parties, container, legendContainer, tooltip }
 
@@ -216,6 +222,11 @@ if (!W || W < (isMobile ? 260 : 340)) {
   const viewBoxW = maxX - minX + 2 * padding;
   const viewBoxH = maxY - minY + 2 * padding;
 
+  const motion = animationsOn();
+  const prevSeats = _prevSeats.get(container);
+  const n = colored.length;
+  const seatXY = d => [cx + d.radius * Math.cos(d.angle), cy + d.radius * Math.sin(d.angle)];
+
   const svg = d3.select(container)
     .append('svg')
     .attr('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxW} ${viewBoxH}`)
@@ -273,14 +284,6 @@ if (!W || W < (isMobile ? 260 : 340)) {
     .append('g')
     .attr('class', 'seat-group')
     .attr('transform', d => `translate(${cx + d.radius * Math.cos(d.angle)}, ${cy + d.radius * Math.sin(d.angle)})`)
-    .style('opacity', 0)
-    .each(function (d, i) {
-      d3.select(this)
-        .transition()
-        .delay(i * (500 / colored.length))
-        .duration(180)
-        .style('opacity', 1);
-    })
     .each(function (d) {
       const inner = d3.select(this).append('g').attr('class', 'seat-inner');
       inner.append('circle')
@@ -304,6 +307,35 @@ if (!W || W < (isMobile ? 260 : 340)) {
           .attr('preserveAspectRatio', 'xMidYMid slice')
           .attr('href', d.avatarUrl)
           .attr('clip-path', `url(#${clipId})`);
+      }
+    })
+    // WarEra+ — il parlamento che si riempie e che si trasforma. Con un
+    // disegno precedente nello stesso contenitore (altra elezione, altra
+    // nazione, ridimensionamento) il seggio i-esimo parte da dov'era, col
+    // suo colore di prima, e scivola al posto nuovo; i seggi in più salgono
+    // dal centro dell'emiciclo, da sinistra a destra. Ridisegnare la stessa
+    // elezione non muove niente: partenza e arrivo coincidono.
+    .each(function (d, i) {
+      if (!motion) return;
+      const g = d3.select(this);
+      const [x, y] = seatXY(d);
+      const old = prevSeats?.[i];
+      if (old) {
+        if (old.x === x && old.y === y && old.color === d.color) return;
+        const delay = i * (250 / n);
+        g.attr('transform', `translate(${old.x}, ${old.y})`)
+          .transition().delay(delay).duration(700).ease(d3.easeCubicInOut)
+          .attr('transform', `translate(${x}, ${y})`);
+        if (old.color !== d.color) {
+          g.select('circle').attr('fill', old.color).attr('stroke', old.color)
+            .transition().delay(delay).duration(700)
+            .attr('fill', d.color).attr('stroke', d.color);
+        }
+      } else {
+        g.style('opacity', 0).attr('transform', `translate(${cx}, ${cy}) scale(0.2)`)
+          .transition().delay(i * (700 / n)).duration(450).ease(d3.easeBackOut.overshoot(1.3))
+          .style('opacity', 1)
+          .attr('transform', `translate(${x}, ${y}) scale(1)`);
       }
     })
     .on('mouseover', function (event, d) {
@@ -389,6 +421,10 @@ if (!W || W < (isMobile ? 260 : 340)) {
     legendContainer.appendChild(el);
   });
 
+  _prevSeats.set(container, colored.map(d => {
+    const [x, y] = seatXY(d);
+    return { x, y, color: d.color };
+  }));
   _lastRenderData = { parties, container, legendContainer, tooltip };
 }
 

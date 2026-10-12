@@ -941,6 +941,21 @@ wareraPlus/
     │   ├── dailyDamage.js      ← "danno di oggi" per nazioni/alleanze/unità, dalla
     │   │                          differenza fra due snapshot del cumulato settimanale
     │   ├── analytics.js        ← wrapper su Umami (trackEvent)
+    │   ├── reveal.js           ← NUOVO — numeri che contano e grafici che si disegnano,
+    │   │                          con UN MutationObserver su <body>: nessuna vista è
+    │   │                          toccata, si riconoscono dai selettori (NUM_SELECTOR,
+    │   │                          CHART_SELECTOR in testa al file: per aggiungerne altri
+    │   │                          si tocca solo lì). Numeri: chiave = vista + titolo di
+    │   │                          ciò che si guarda + etichetta; mai visto → sale da 0,
+    │   │                          uguale → fermo, diverso → dal vecchio + badge "+12K".
+    │   │                          Riscrive col formato della vista (separatori, decimali,
+    │   │                          K/M/%); un testo con più numeri, date o "#12" no.
+    │   │                          Grafici: sipario da sinistra (clip-path), ciambelle che
+    │   │                          ruotano; NIENTE sipario se nello stesso giro sparisce un
+    │   │                          grafico della stessa classe già a schermo (refresh sul
+    │   │                          posto). Il parlamento di Political si anima da sé
+    │   │                          (parliament.js: _prevSeats, i seggi scivolano fra due
+    │   │                          elezioni). Tutto sotto motion.js.
     │   ├── motion.js           ← NUOVO — interruttore unico "Animazioni" (Impostazioni,
     │   │                          `we_animations`): ferma comete, trattini, monete,
     │   │                          impulsi, battiti, ping, navi e particelle; restano
