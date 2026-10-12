@@ -44,8 +44,8 @@ const SENTINEL = 'wpBack';
 
 /** Le chiavi dell'URL che appartengono ai livelli: le altre non si toccano.
  *  ⚠️ `view` NO: è dello sfondo di Wallpaper Engine (?wallpaper=1&view=). */
-export const URL_KEYS = ['map', 'country', 'alliance', 'sphere', 'battle',
-  'section', 'tab', 'item', 'mu', 'nation', 'senate'];
+export const URL_KEYS = ['map', 'focus', 'days', 'region', 'country', 'alliance',
+  'sphere', 'battle', 'section', 'tab', 'item', 'mu', 'nation', 'senate'];
 
 /** @type {{ id: string, onBack: () => void, isOpen?: () => boolean, params?: object }[]} */
 const stack = [];
@@ -145,6 +145,11 @@ export function pushBack(id, onBack, isOpen, params) {
   }
   arm();
   syncUrl();
+}
+
+/** C'è un livello con questo id? */
+export function hasBack(id) {
+  return stack.some(l => l.id === id);
 }
 
 /** Cambia i parametri di un livello già aperto (scheda di Economia, nazione

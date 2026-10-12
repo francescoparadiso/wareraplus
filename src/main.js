@@ -47,7 +47,7 @@ import { initPrivateOverlay, openPrivateView } from './app/privateOverlay.js';
 import { takeReloadIntent } from './shared/lazyModule.js';
 // WarEra+: il tasto Indietro chiude la cosa aperta invece di uscire dal
 // tool. Il listener va messo subito, prima di qualunque deep-link.
-import { initBackNav, startUrlSync } from './app/backNav.js';
+import { initBackNav, startUrlSync, updateBackParams } from './app/backNav.js';
 initBackNav({ enabled: !IS_WALLPAPER });
 import { initThemeSync } from './app/themeSync.js';
 import { initLangSync } from './app/langSync.js';
@@ -90,7 +90,11 @@ const nextTick = () => new Promise(r => setTimeout(r, 0));
 async function switchMapView(mode) {
   document.getElementById(`mode-${mode}`)?.click();
   const hasOverview = mode === 'sphereOfInfluence' || hasViewOverviewMode(mode);
-  for (let i = 0; i < 40 && hasOverview && !isViewOverviewOpen() && !isSphereOverviewOpen(); i++) {
+  // Limite in tempo VERO, non in giri: in una scheda aperta in background
+  // (Ctrl+clic da Discord) il browser stira ogni setTimeout fino a 1 s o
+  // più, e 40 giri da 25 ms diventerebbero minuti.
+  const deadline = Date.now() + 1000;
+  while (hasOverview && !isViewOverviewOpen() && !isSphereOverviewOpen() && Date.now() < deadline) {
     await new Promise(r => setTimeout(r, 25));
   }
   await nextTick();
@@ -107,7 +111,32 @@ async function handleIncomingDeepLink() {
   //    tutto: cambiare vista riapre/richiude il pannello di riepilogo, in
   //    modo asincrono — da qui il nextTick prima di toccare il pannello.
   const map = full ? params.get('map') : null;
+  // Le viste che mettono a fuoco una nazione DENTRO la vista invece di
+  // aprirne il pannello (Migrazioni, Finanziamenti) e Distanze: finestra e
+  // partenza si impostano PRIMA di entrare (il primo caricamento le usa
+  // già), il fuoco DOPO, con lo stesso clic che farebbe l'utente.
+  const focus = full ? params.get('focus') : null;
+  const days = full && params.has('days') ? Number(params.get('days')) : null;
+  let focusView = null;
+  let travelView = null;
+  if (map === 'migration') {
+    focusView = await import('./diplomacy/migrationFlows.js');
+    if (focusView.MIGRATION_DAYS.includes(days)) focusView.mig().days = days;
+  } else if (map === 'funding') {
+    focusView = await import('./diplomacy/fundingFlows.js');
+    if (focusView.FUNDING_DAYS.includes(days)) focusView.fund().days = days;
+  } else if (map === 'travel' && params.get('region')) {
+    travelView = await import('./diplomacy/travelDistance.js');
+    travelView.setTravelOrigin(params.get('region'));
+  }
   if (map && map !== 'diplomacy') await switchMapView(map);
+  // La partenza EFFETTIVA (se quella del link non esiste, la vista ripiega
+  // su casa o capitale): la vista la scrive da sé solo dopo un clic.
+  if (travelView) updateBackParams('mapview', { region: travelView.getTravelOrigin() || undefined });
+  if (focus && state.nationMap?.has(focus)) {
+    if (map === 'migration') focusView.onMigrationCountryClick(focus);
+    else if (map === 'funding') focusView.onFundingCountryClick(focus);
+  }
 
   // 2) Selezione del pannello. Con ?section=political la nazione è quella
   //    di Political, che copre tutto: il pannello sotto non si apre.

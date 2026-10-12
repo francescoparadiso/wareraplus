@@ -46,7 +46,7 @@ import { initNationTooltip } from './nationTooltip.js';
 import { initShipTooltip } from './shipTooltip.js';
 import { hide as hideTooltip } from './nationTooltip.js';
 // WarEra+: tasto Indietro (vedi src/app/backNav.js)
-import { pushBack, dropBack } from '../app/backNav.js';
+import { pushBack, dropBack, hasBack, updateBackParams } from '../app/backNav.js';
 import { initOceanBackground, applyOceanTheme } from './oceanBackground.js';
 import { initAntiqueTheme, applyAntiqueTheme } from './antiqueTheme.js';
 import { initDarkFleetTheme, applyDarkFleetTheme } from './darkFleetTheme.js';
@@ -1430,14 +1430,23 @@ export function setColoringMode(mode) {
   if (mode !== 'playstyle') state.playstyleTrendMode = false;
   _fadePendingMode = null;
   clearTimeout(_fadePendingTimer);
+  const prevMode = state.coloringMode; // WarEra+: per il link (vedi sotto)
   state.coloringMode = mode;
   // WarEra+ — una vista diversa da Diplomazia è un livello del tasto
   // Indietro: si torna a Diplomazia dallo stesso bottone che userebbe
   // l'utente (tracciamento e cursori compresi). Cambiare fra due viste
   // non aggiunge livelli: Indietro esce dalla vista, non le ripercorre.
+  // Nel link: ?map=, più i parametri che la vista aggiunge da sé (?days=,
+  // ?region=, e il fuoco ?focus= come livello figlio 'mapview/focus'):
+  // ripetere la STESSA vista (lo fanno i riepiloghi del pannello) li tiene,
+  // cambiare vista li azzera.
   if (mode === 'diplomacy') dropBack('mapview');
-  else pushBack('mapview', () => document.getElementById('mode-diplomacy')?.click(),
-    () => state.coloringMode !== 'diplomacy', { map: mode });
+  else if (mode === prevMode && hasBack('mapview')) updateBackParams('mapview', { map: mode });
+  else {
+    dropBack('mapview/focus');
+    pushBack('mapview', () => document.getElementById('mode-diplomacy')?.click(),
+      () => state.coloringMode !== 'diplomacy', { map: mode });
+  }
   // WarEra+: il focus su un blocco ha senso solo restando in modalità
   // 'blocs' — se si cambia modalità (anche rientrando dopo), si riparte
   // dalla vista blocs "flat" invece di lasciare un focus obsoleto.

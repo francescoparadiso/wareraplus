@@ -37,6 +37,7 @@ import { COLORS } from './config.js';
 import { escapeHtml } from './utils.js';
 import { tT } from './travelI18n.js';
 import { trackEvent } from '../shared/analytics.js';
+import { updateBackParams } from '../app/backNav.js';
 
 export const STAMINA_PER_HOP = 10;
 export const STAMINA_MAX = 100;
@@ -163,6 +164,19 @@ function saveHome(id) {
 }
 
 const canHover = () => window.matchMedia('(hover: hover)').matches;
+
+/** WarEra+ — partenza da un link condivisibile (?map=travel&region=), da
+ *  impostare PRIMA di entrare nella vista: enterTravelView la tiene. */
+export function getTravelOrigin() {
+  return t().origin;
+}
+
+export function setTravelOrigin(regionId) {
+  if (!regionId) return;
+  const tr = t();
+  tr.origin = regionId;
+  tr.target = null;
+}
 
 /** Entrando nella vista: se non c'è ancora una partenza si parte da casa
  *  (se l'utente l'ha impostata) o dalla capitale della nazione selezionata. */
@@ -672,6 +686,9 @@ export function onTravelRegionClick(regionId) {
 }
 
 function refreshAll({ map = true, panel = true } = {}) {
+  // WarEra+: la partenza scelta va nel link della vista (?region=). Non è un
+  // livello del tasto Indietro: una partenza c'è sempre (casa o capitale).
+  if (state.coloringMode === 'travel') updateBackParams('mapview', { region: t().origin || undefined });
   if (map) import('./map.js').then(m => m.renderMap());
   else paintOverlay();
   if (panel) import('../panel/countryPanel.js').then(m => m.refreshViewOverviewPanel('travel'));

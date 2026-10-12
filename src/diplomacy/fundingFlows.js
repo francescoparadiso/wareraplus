@@ -33,6 +33,7 @@ import { COLORS } from './config.js';
 import { countryAnchor, arc, alongArc } from './flowGeometry.js';
 import { trackEvent } from '../shared/analytics.js';
 import { animationsOn } from '../shared/motion.js';
+import { syncBack, updateBackParams } from '../app/backNav.js';
 
 export const FUNDING_DAYS = [7, 30, 90, 0];   // 0 = tutto l'archivio
 export const IN_COLOR = '#e3b341';            // denaro che arriva alla nazione cliccata
@@ -422,10 +423,23 @@ export function clearFundingFocus() {
 }
 
 function refreshAll({ map = true } = {}) {
+  syncLink();
   if (map) import('./map.js').then(m => m.renderMap());
   else syncFundingOverlay();
   if (!map) import('./ui.js').then(m => m.updateDynamicLegend());
   import('../panel/countryPanel.js').then(m => m.refreshViewOverviewPanel('funding'));
+}
+
+/** WarEra+ — link condivisibile e tasto Indietro (src/app/backNav.js), come
+ *  in Migrazioni: ?days= nel link della vista (0 = tutto l'archivio; la
+ *  finestra di partenza, 30, non si scrive), ?focus= come livello sopra la
+ *  vista. Il fuoco qui ricolora anche la mappa, da cui `map: true`. */
+function syncLink() {
+  if (state.coloringMode !== 'funding') return;
+  const s = fund();
+  updateBackParams('mapview', { days: s.days !== 30 ? s.days : undefined });
+  syncBack('mapview/focus', !!s.focus, () => { s.focus = null; refreshAll(); },
+    () => state.coloringMode === 'funding' && !!fund().focus, { focus: s.focus });
 }
 
 export function wireFundingOverview(root) {

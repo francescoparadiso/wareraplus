@@ -38,6 +38,7 @@ import { COLORS, WARERA_CACHE_BASE } from './config.js';
 import { trackEvent } from '../shared/analytics.js';
 import { countryAnchor, arc, groundAt, alongArc } from './flowGeometry.js';
 import { animationsOn } from '../shared/motion.js';
+import { syncBack, updateBackParams } from '../app/backNav.js';
 
 export const MIGRATION_DAYS = [1, 7, 30];
 export const OUT_COLOR = '#ff9f43';   // partenze: arancio, non si confonde col rosso del saldo
@@ -651,10 +652,23 @@ export function clearMigrationFocus() {
 }
 
 function refreshAll({ map = true } = {}) {
+  syncLink();
   if (map) import('./map.js').then(m => m.renderMap());
   else syncMigrationOverlay();
   if (!map) import('./ui.js').then(m => m.updateDynamicLegend());
   import('../panel/countryPanel.js').then(m => m.refreshViewOverviewPanel('migration'));
+}
+
+/** WarEra+ — link condivisibile e tasto Indietro (src/app/backNav.js): la
+ *  finestra va nel link della vista (?days=, solo se non è quella di
+ *  partenza), la nazione a fuoco è un livello sopra la vista (?focus=):
+ *  Indietro prima torna al mondo, poi esce dalla vista. */
+function syncLink() {
+  if (state.coloringMode !== 'migration') return;
+  const s = mig();
+  updateBackParams('mapview', { days: s.days !== 7 ? s.days : undefined });
+  syncBack('mapview/focus', !!s.focus, () => { s.focus = null; refreshAll({ map: false }); },
+    () => state.coloringMode === 'migration' && !!mig().focus, { focus: s.focus });
 }
 
 /** Collega i comandi del riepilogo (countryPanel.js, dopo innerHTML). */

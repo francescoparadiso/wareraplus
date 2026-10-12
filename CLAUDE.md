@@ -902,7 +902,10 @@ wareraPlus/
     │   │                         azzererebbe il marchio della sentinella.
     │   │                         LINK CONDIVISIBILI: ogni livello porta i suoi parametri
     │   │                         (4° argomento di pushBack, o updateBackParams) e l'URL
-    │   │                         si riscrive da sé: ?map= ?country= ?alliance= ?sphere=
+    │   │                         si riscrive da sé: ?map= (con ?days= e ?focus= in
+    │   │                         Migrazioni/Finanziamenti — il fuoco è il livello figlio
+    │   │                         'mapview/focus' — e ?region= in Distanze) ?country=
+    │   │                         ?alliance= ?sphere=
     │   │                         ?battle= ?section= (political, economy, news, mu,
     │   │                         nations, battles, guide, private, alliances) ?tab=
     │   │                         ?item= ?mu= ?nation= ?senate=. Si toccano SOLO le
