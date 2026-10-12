@@ -39,6 +39,7 @@ import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
 import { withModuleLoading } from '../shared/loadingScreen.js';
 import { pauseMapBackgroundWork, resumeMapBackgroundWork } from './mapIdle.js';
+import { pushBack, dropBack } from './backNav.js';
 
 let overlayEl, backBtn, titleEl;
 
@@ -77,6 +78,8 @@ export async function openPoliticalView(countryId, countryName = '', options = {
   // è già aperto non deve contare due volte la pausa (mapIdle.js tiene un
   // contatore: due pause e una sola resume lascerebbero la mappa ferma).
   if (!wasOpen) pauseMapBackgroundWork();
+  // Indietro del browser/telefono = closePoliticalView (vedi backNav.js).
+  pushBack('political', closePoliticalView, isPoliticalViewOpen);
 
   // Import dinamico: scarica il chunk Political solo qui, alla prima
   // apertura reale (poi resta in cache del browser/module graph per le
@@ -108,6 +111,7 @@ export function closePoliticalView() {
   const wasOpen = isPoliticalViewOpen();
   overlayEl.classList.remove('open');
   overlayEl.setAttribute('aria-hidden', 'true');
+  dropBack('political');
   // Guardia su wasOpen: closePoliticalView si può chiamare (Escape,
   // backBtn) anche quando l'overlay è già chiuso — non è una vera
   // "chiusura" da parte dell'utente, non ha senso contarla.

@@ -45,6 +45,8 @@ import { buildBattleHeatmapColorExpression } from './battleHeatmap.js';
 import { initNationTooltip } from './nationTooltip.js';
 import { initShipTooltip } from './shipTooltip.js';
 import { hide as hideTooltip } from './nationTooltip.js';
+// WarEra+: tasto Indietro (vedi src/app/backNav.js)
+import { pushBack, dropBack } from '../app/backNav.js';
 import { initOceanBackground, applyOceanTheme } from './oceanBackground.js';
 import { initAntiqueTheme, applyAntiqueTheme } from './antiqueTheme.js';
 import { initDarkFleetTheme, applyDarkFleetTheme } from './darkFleetTheme.js';
@@ -1429,6 +1431,13 @@ export function setColoringMode(mode) {
   _fadePendingMode = null;
   clearTimeout(_fadePendingTimer);
   state.coloringMode = mode;
+  // WarEra+ — una vista diversa da Diplomazia è un livello del tasto
+  // Indietro: si torna a Diplomazia dallo stesso bottone che userebbe
+  // l'utente (tracciamento e cursori compresi). Cambiare fra due viste
+  // non aggiunge livelli: Indietro esce dalla vista, non le ripercorre.
+  if (mode === 'diplomacy') dropBack('mapview');
+  else pushBack('mapview', () => document.getElementById('mode-diplomacy')?.click(),
+    () => state.coloringMode !== 'diplomacy');
   // WarEra+: il focus su un blocco ha senso solo restando in modalità
   // 'blocs' — se si cambia modalità (anche rientrando dopo), si riparte
   // dalla vista blocs "flat" invece di lasciare un focus obsoleto.

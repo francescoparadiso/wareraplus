@@ -6,6 +6,8 @@ import { renderMap, captureHeatmapFadeFrom, startHeatmapFadeIn, clearHeatmapFade
 import { updateDynamicLegend } from './ui.js';
 import { fetchActiveBattlesViaCache } from './cacheClient.js';
 import { trackEvent } from '../shared/analytics.js';
+// WarEra+: tasto Indietro (vedi src/app/backNav.js)
+import { pushBack, dropBack } from '../app/backNav.js';
 
 const BATTLE_NEUTRAL = '#2a2d33';
 
@@ -437,6 +439,10 @@ export async function setBattleHeatmap(battleId) {
 
     state.coloringMode = 'battleHeatmap';
     currentBattleId = battleId;
+    // WarEra+: Indietro lascia la battaglia come Esc — hideBattleTooltip
+    // chiude il tooltip ed esce dalla heatmap (vedi diplomacy/main.js).
+    pushBack('battle', () => import('./battleMarkers.js').then(m => m.hideBattleTooltip()),
+      () => state.coloringMode === 'battleHeatmap');
 
     // Ferma il vecchio live update e avvia quello nuovo
     stopLiveUpdates();
@@ -458,6 +464,7 @@ export function exitBattleHeatmap() {
   
   if (state.coloringMode === 'battleHeatmap') {
     const previousMode = savedColoringMode || 'diplomacy';
+    dropBack('battle'); // WarEra+
     console.log('Returning to mode:', previousMode);
     trackEvent('battle-heatmap-exit');
 

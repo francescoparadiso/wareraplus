@@ -14,6 +14,7 @@ import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
 import { withModuleLoading } from '../shared/loadingScreen.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
+import { pushBack, dropBack } from './backNav.js';
 
 let overlayEl, backBtn, rootEl;
 
@@ -41,6 +42,8 @@ export async function openMuView(muId) {
   // di sfondo della mappa, che resta montata sotto l'overlay.
   // Dopo .open: a overlay nascosto il canvas misurerebbe 0x0.
   enterOverlay(overlayEl, 'mu');
+  // Indietro del browser/telefono = closeMuView (vedi backNav.js).
+  pushBack('mu', closeMuView, isMuViewOpen);
 
   // Schermata di attesa su chunk + directory (shared/loadingScreen.js):
   // la prima apertura scarica ~550 KB di elenco unità, non è istantanea.
@@ -58,6 +61,7 @@ export function closeMuView() {
   overlayEl.classList.remove('open');
   overlayEl.setAttribute('aria-hidden', 'true');
   leaveOverlay(overlayEl);
+  dropBack('mu');
 }
 
 export function isMuViewOpen() {

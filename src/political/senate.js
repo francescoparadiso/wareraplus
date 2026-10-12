@@ -59,6 +59,8 @@ import { localFetch } from './api.js';
 import { getAllCountries } from '../shared/countries.js';
 import { trackEvent } from '../shared/analytics.js';
 import { openPlayerCard } from './parliament.js';
+// WarEra+: il tasto Indietro chiude la finestra invece di uscire dal tool.
+import { pushBack, dropBack } from '../app/backNav.js';
 
 // ── state ──
 let _parties = [];
@@ -1413,6 +1415,7 @@ export function open() {
   if (!overlay) return;
   overlay.classList.add('active');
   document.body.style.overflow = 'hidden';
+  pushBack('political/senate', close, () => overlay.classList.contains('active'));
   trackEvent('senate-view-open', { countryId: currentCountryId });
   if (!_resizeListenerBound) {
     _resizeListenerBound = true;
@@ -1434,6 +1437,7 @@ export function close() {
   if (!overlay) return;
   overlay.classList.remove('active');
   document.body.style.overflow = '';
+  dropBack('political/senate');
   trackEvent('senate-view-close');
 }
 

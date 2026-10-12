@@ -26,6 +26,8 @@ import { t } from './i18n.js';
 // WarEra+: le viste nuove (Storia, Mondo) si nascondono quando torna una
 // vista originale — unica riga aggiunta in showView/showPartyView.
 import { hideWpPlusViews } from './plusViews.js';
+// WarEra+: il tasto Indietro chiude la finestra invece di uscire dal tool.
+import { pushBack, dropBack } from '../app/backNav.js';
 
 /* ── VIEW HELPERS ── */
 export function showView(which) {
@@ -221,12 +223,14 @@ export function openParliamentFullscreen() {
   dest.appendChild(svg);
   overlay.classList.add('active');
   document.body.style.overflow = 'hidden';
+  pushBack('political/fullscreen', closeParliamentFullscreen, () => overlay.classList.contains('active'));
 }
 export function closeParliamentFullscreen() {
   const overlay = document.getElementById('parliamentOverlay');
   if (!overlay) return;
   overlay.classList.remove('active');
   document.body.style.overflow = '';
+  dropBack('political/fullscreen');
   if (overlay._svg && overlay._originalParent) {
     overlay._svg.style.width  = '';
     overlay._svg.style.height = '';

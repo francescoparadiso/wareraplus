@@ -33,6 +33,7 @@ import { renderBattleList, wireBattleList } from './battleList.js';
 import { renderBattleDetail, wireBattleDetail, loadBattleDetail, resetBattleDetail } from './battleDetail.js';
 import { renderWarExpenses, wireWarExpenses } from './warExpenses.js';
 import { trackEvent } from '../shared/analytics.js';
+import { syncBack } from '../app/backNav.js';
 
 let _container = null;
 let _tab = 'archive';       // 'archive' | 'expenses'
@@ -75,6 +76,12 @@ function shellHtml() {
 function paintBody() {
   const body = document.getElementById('wp-btl-body');
   if (!body) return;
+
+  // WarEra+: con la scheda di una battaglia aperta, Indietro torna
+  // all'archivio invece di chiudere la sezione (vedi app/backNav.js).
+  syncBack('battles/detail', _tab === 'archive' && !!_openBattle,
+    () => { _openBattle = null; resetBattleDetail(); paintBody(); },
+    () => _tab === 'archive' && !!_openBattle);
 
   if (_tab === 'archive') {
     if (!_archive) { body.innerHTML = `<div class="wp-btl-loading">${btlT('loading')}</div>`; return; }

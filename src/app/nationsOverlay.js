@@ -12,6 +12,7 @@ import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
 import { withModuleLoading } from '../shared/loadingScreen.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
+import { pushBack, dropBack } from './backNav.js';
 
 let overlayEl, backBtn, rootEl;
 
@@ -37,6 +38,8 @@ export async function openNationsView(countryId) {
   // Sfondo a particelle nella tinta della sezione + pausa del lavoro di
   // sfondo della mappa, che resta montata sotto l'overlay.
   enterOverlay(overlayEl, 'nations');
+  // Indietro del browser/telefono = closeNationsView (vedi backNav.js).
+  pushBack('nations', closeNationsView, isNationsViewOpen);
 
   await withModuleLoading('nations', async () => {
     const mod = await loadModule(() => import('../nations/main.js'), 'nations');
@@ -52,6 +55,7 @@ export function closeNationsView() {
   overlayEl.classList.remove('open');
   overlayEl.setAttribute('aria-hidden', 'true');
   leaveOverlay(overlayEl);
+  dropBack('nations');
 }
 
 export function isNationsViewOpen() {

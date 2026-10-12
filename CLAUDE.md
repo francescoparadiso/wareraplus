@@ -883,6 +883,23 @@ wareraPlus/
     │   │                         Impostazioni, ricerca ⌘K, Preferiti)
     │   ├── mobileMenuBar.js    ← equivalente mobile (drawer)
     │   ├── pins.js             ← store dei Preferiti (nazioni/alleanze/unità), localStorage
+    │   ├── backNav.js          ← NUOVO — tasto Indietro (browser, gesto Android, PWA):
+    │   │                         chiude la cosa aperta invece di USCIRE dal tool.
+    │   │                         Chi apre chiama pushBack(id, onBack, isOpen), chi chiude
+    │   │                         dropBack(id); id gerarchici ('mu/detail' figlio di 'mu',
+    │   │                         che si registra solo col genitore aperto). In cronologia
+    │   │                         c'è AL MASSIMO una voce in più (la sentinella), qualunque
+    │   │                         sia la profondità; nessun cambio di URL. Collegati:
+    │   │                         overlay, schede di dettaglio (unità, nazioni, battaglie,
+    │   │                         prezzi, bilancio), finestre di Political, Statistiche
+    │   │                         alleanze e popup, pannello nazione (SOLO con una
+    │   │                         selezione: il riepilogo di una vista appartiene alla
+    │   │                         vista), viste mappa ≠ Diplomazia, battaglia selezionata,
+    │   │                         time machine, drawer e ricerca mobile. Spento con
+    │   │                         ?wallpaper=1. ⚠️ Una cosa nuova che "si apre" va
+    │   │                         registrata qui, o Indietro torna a far uscire.
+    │   │                         ⚠️ replaceState: passare history.state, MAI null —
+    │   │                         azzererebbe il marchio della sentinella.
     │   ├── overlayChrome.js    ← chrome condiviso degli overlay: sfondo a particelle nella
     │   │                         tinta della sezione + pausa mappa
     │   ├── mapIdle.js          ← pausa/riprende il lavoro di sfondo della mappa (pallini

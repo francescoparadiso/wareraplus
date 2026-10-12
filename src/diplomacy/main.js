@@ -14,6 +14,8 @@ import { loadRegions } from './regions.js';
 import { fetchCountriesViaCache, fetchMapDataViaCache, fetchAlliancesViaCache, fetchDiplomacyViaCache } from './cacheClient.js';
 import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
+// WarEra+: tasto Indietro (vedi src/app/backNav.js)
+import { pushBack, dropBack } from '../app/backNav.js';
 let battleMarkersTimer = null;
 
 // ── WarEra+ perf: pausa del polling marker battaglia ─────────────────
@@ -534,6 +536,10 @@ document.getElementById('mode-playstyle')?.addEventListener('click', async () =>
     document.getElementById('map').style.display = 'none';
     document.getElementById('bloc-stats-page').style.display = 'block';
     trackEvent('bloc-stats-open');
+    // WarEra+ (additivo): Indietro chiude la pagina come la sua ✕.
+    pushBack('blocstats',
+      () => document.getElementById('bloc-stats-close')?.click(),
+      () => document.getElementById('bloc-stats-page')?.style.display === 'block');
     // ── WarEra+ (additivo): sfondo a particelle viola della sezione e
     // pausa del lavoro di sfondo della mappa, come per gli altri overlay
     // di "Approfondimenti". Import dinamico + catch: se il modulo manca,
@@ -582,6 +588,7 @@ document.getElementById('mode-playstyle')?.addEventListener('click', async () =>
     document.getElementById('bloc-stats-page').style.display = 'none';
     document.getElementById('map').style.display = 'block';
     trackEvent('bloc-stats-close');
+    dropBack('blocstats'); // WarEra+
     // Simmetrica all'apertura: ferma le particelle e fa ripartire la mappa.
     import('../app/overlayChrome.js')
       .then(m => m.leaveOverlay(document.getElementById('bloc-stats-page')))

@@ -45,6 +45,10 @@ import { initBattlesOverlay, openBattlesView } from './app/battlesOverlay.js';
 import { initGuideOverlay, openGuideView } from './app/guideOverlay.js';
 import { initPrivateOverlay, openPrivateView } from './app/privateOverlay.js';
 import { takeReloadIntent } from './shared/lazyModule.js';
+// WarEra+: il tasto Indietro chiude la cosa aperta invece di uscire dal
+// tool. Il listener va messo subito, prima di qualunque deep-link.
+import { initBackNav } from './app/backNav.js';
+initBackNav({ enabled: !IS_WALLPAPER });
 import { initThemeSync } from './app/themeSync.js';
 import { initLangSync } from './app/langSync.js';
 import { initBattleToggle } from './app/battleToggle.js';

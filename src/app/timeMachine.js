@@ -69,6 +69,7 @@ import { animateConquests, animateAlliances, clearConquests } from './timeMachin
 import { setTimeMachineLinks, clearTimeMachineLinks } from './timeMachineLinks.js';
 // WarEra+: le battaglie del giorno come frecce dall'attaccante alla regione.
 import { setTimeMachineBattles, clearTimeMachineBattles } from './timeMachineBattles.js';
+import { pushBack, dropBack } from './backNav.js';
 
 let _presidents;          // undefined = mai chiesto, null = non disponibile
 
@@ -235,6 +236,8 @@ async function _activate(initialTs) {
 
   _active = true;
   state.timeMachineActive = true;
+  // Indietro del browser/telefono chiude la time machine (vedi backNav.js).
+  pushBack('tm', _deactivate, () => _active);
   _btn.classList.add('wp-time-machine-btn-active');
   // PERF: il pallino nave è puramente decorativo (schema seedato sempre
   // uguale, non dipende da nessun dato) — pausarlo (resta visibile, solo
@@ -279,6 +282,7 @@ async function _activate(initialTs) {
 function _deactivate() {
   _active = false;
   state.timeMachineActive = false;
+  dropBack('tm');
   trackEvent('time-machine-close');
   clearConquests();
   clearTimeMachineBattles();
@@ -847,14 +851,16 @@ function _ownedSince(regionId, ts) {
 function _syncUrl(ts) {
   const url = new URL(window.location.href);
   url.searchParams.set('tm', String(Math.round(ts)));
-  history.replaceState(null, '', url);
+  // history.state e non null: la voce può essere la sentinella del tasto
+  // Indietro (backNav.js), e azzerarne lo stato la renderebbe anonima.
+  history.replaceState(history.state, '', url);
 }
 
 function _clearUrl() {
   const url = new URL(window.location.href);
   if (!url.searchParams.has('tm')) return;
   url.searchParams.delete('tm');
-  history.replaceState(null, '', url);
+  history.replaceState(history.state, '', url);
 }
 
 // _applyToken: ogni chiamata a _fetchAndRender si prende un numero
@@ -1153,6 +1159,8 @@ function _setFocus(countryId, regionId = null) {
   _focusId = countryId;
   _focusRegion = regionId;
   trackEvent('time-machine-focus');
+  // Come Esc: Indietro toglie prima la nazione evidenziata, poi chiude.
+  pushBack('tm/focus', _clearFocus, () => !!_focusId);
   _updateFocus(Number(_slider.value));
   // Le alleanze arrivano con una fetch per sessione (vedi
   // timeMachineAlliances.js): alla prima selezione, e poi si ridisegna.
@@ -1162,6 +1170,7 @@ function _setFocus(countryId, regionId = null) {
 function _clearFocus() {
   _focusId = null;
   _focusRegion = null;
+  dropBack('tm/focus');
   if (_focusEl) _focusEl.classList.remove('visible');
   document.body.classList.remove('wp-tm-has-focus');
   setTimeMachineFocus(null);

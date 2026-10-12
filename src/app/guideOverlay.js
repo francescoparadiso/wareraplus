@@ -12,6 +12,7 @@ import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
 import { withModuleLoading } from '../shared/loadingScreen.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
+import { pushBack, dropBack } from './backNav.js';
 
 let overlayEl, backBtn, rootEl;
 
@@ -34,6 +35,8 @@ export async function openGuideView() {
   rootEl.style.display = 'block';
 
   enterOverlay(overlayEl, 'guide');
+  // Indietro del browser/telefono = closeGuideView (vedi backNav.js).
+  pushBack('guide', closeGuideView, isGuideViewOpen);
 
   await withModuleLoading('guide', async () => {
     const mod = await loadModule(() => import('../guide/main.js'), 'guide');
@@ -48,6 +51,7 @@ export function closeGuideView() {
   overlayEl.classList.remove('open');
   overlayEl.setAttribute('aria-hidden', 'true');
   leaveOverlay(overlayEl);
+  dropBack('guide');
 }
 
 export function isGuideViewOpen() {

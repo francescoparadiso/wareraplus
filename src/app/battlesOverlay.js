@@ -17,6 +17,7 @@ import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
 import { withModuleLoading } from '../shared/loadingScreen.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
+import { pushBack, dropBack } from './backNav.js';
 
 let overlayEl, backBtn, rootEl;
 // Modulo della vista, tenuto da parte alla prima apertura: serve alla
@@ -44,6 +45,8 @@ export async function openBattlesView() {
 
   // Dopo .open: a overlay nascosto il canvas misurerebbe 0x0.
   enterOverlay(overlayEl, 'battles');
+  // Indietro del browser/telefono = closeBattlesView (vedi backNav.js).
+  pushBack('battles', closeBattlesView, isBattlesViewOpen);
 
   await withModuleLoading('battles', async () => {
     viewMod = await loadModule(() => import('../battles/main.js'), 'battles');
@@ -57,6 +60,7 @@ export function closeBattlesView() {
   overlayEl.classList.remove('open');
   overlayEl.setAttribute('aria-hidden', 'true');
   leaveOverlay(overlayEl);
+  dropBack('battles');
   viewMod?.stopBattlesAutoRefresh?.();
 }
 

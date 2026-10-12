@@ -39,6 +39,7 @@ import { nationWatchHtml, paintNationWatch, wireNationWatch, refreshSphereWatch 
 // WarEra+ radar dei proxy: le sfere mostrate non sono più solo quelle del CSV.
 import { mergedSphereGroups, proxiesOfPrimary, patronOf, runRadar, isRadarReady, MAP_THRESHOLD } from '../proxy/radar.js';
 import { IS_WALLPAPER } from '../shared/wallpaper.js';
+import { syncBack, dropBack } from '../app/backNav.js';
 
 // Stella di pin per l'intestazione del pannello (nazione o alleanza).
 function pinStarHtml(type, id) {
@@ -116,6 +117,7 @@ function showPanelPeek(title) {
   el.innerHTML = `<span class="wp-panel-peek-title">${escapeHtml(title)}</span>
                   <span class="wp-panel-peek-cta">${t('see_details')} ›</span>`;
   el.hidden = false;
+  syncPanelBack();
 }
 
 function hidePanelPeek() {
@@ -127,6 +129,46 @@ function openPanelNow() {
   panelEl.setAttribute('aria-hidden', 'false');
   document.body.classList.add('wp-panel-open');
   updateBackBar();
+  syncPanelBack();
+}
+
+/* ── Tasto Indietro del browser/telefono (WarEra+, vedi app/backNav.js) ──
+   Il pannello è un livello solo quando mostra una SELEZIONE (nazione,
+   alleanza, sfera). Il riepilogo che si apre da solo entrando in una vista
+   mappa appartiene alla vista: lì Indietro esce dalla vista in un colpo,
+   e il riepilogo si chiude con lei — non servono due pressioni.
+   Indietro fa la stessa risalita della barra "Indietro" mobile. */
+function panelHasSelection() {
+  return !!(currentNationId || currentBlocId || currentSphereId);
+}
+function panelShown() {
+  return !!panelEl?.classList.contains('open') || (!!peekEl && !peekEl.hidden);
+}
+function syncPanelBack() {
+  syncBack('panel', panelHasSelection(), onPanelBack, () => panelShown() && panelHasSelection());
+}
+function onPanelBack() {
+  if (panelEl.classList.contains('open')) panelGoBack('browser-back');
+  else closePanel(); // solo la linguetta "Vedi dettagli" (mobile)
+  // Risalendo al riepilogo la selezione non c'è più e il livello cade;
+  // dalla sfera al riepilogo delle sfere idem.
+  if (panelShown()) syncPanelBack();
+}
+
+/** Un livello su: dal dettaglio di una sfera al riepilogo delle sfere, dal
+ *  dettaglio di una nazione/alleanza al riepilogo della vista da cui si
+ *  era arrivati; altrimenti si chiude il pannello. */
+function panelGoBack(via) {
+  if (currentSphereId) { renderSphereOverviewPanel(); return; }
+  // Stessa risalita di un livello per le altre viste: dal dettaglio di
+  // una nazione/alleanza si torna al riepilogo della vista che si stava
+  // guardando, non alla mappa nuda.
+  if (overviewOrigin && (currentNationId || currentBlocId)) {
+    renderViewOverviewPanel(overviewOrigin);
+    return;
+  }
+  trackEvent('nation-panel-close', { via });
+  closePanel();
 }
 
 /* ── Barra "Indietro" in cima al pannello (WarEra+, solo mobile) ──
@@ -154,18 +196,7 @@ function ensureBackBar() {
   backLabelEl = document.createElement('button');
   backLabelEl.type = 'button';
   backLabelEl.className = 'wp-panel-back-btn';
-  backLabelEl.addEventListener('click', () => {
-    if (currentSphereId) { renderSphereOverviewPanel(); return; }
-    // Stessa risalita di un livello per le altre viste: dal dettaglio di
-    // una nazione/alleanza si torna al riepilogo della vista che si stava
-    // guardando, non alla mappa nuda.
-    if (overviewOrigin && (currentNationId || currentBlocId)) {
-      renderViewOverviewPanel(overviewOrigin);
-      return;
-    }
-    trackEvent('nation-panel-close', { via: 'mobile-back' });
-    closePanel();
-  });
+  backLabelEl.addEventListener('click', () => panelGoBack('mobile-back'));
 
   const closeInBar = document.createElement('button');
   closeInBar.type = 'button';
@@ -1572,6 +1603,7 @@ export function closePanel() {
   currentOverviewMode = null;
   overviewOrigin = null;
   _blocQueueToken++; // interrompe qualunque coda di caricamento parlamenti in corso
+  dropBack('panel');
 }
 
 export function getCurrentNationId() {

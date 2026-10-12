@@ -22,6 +22,7 @@ import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
 import { withModuleLoading } from '../shared/loadingScreen.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
+import { pushBack, dropBack } from './backNav.js';
 
 let overlayEl, backBtn, rootEl;
 let stopAll = null;
@@ -51,6 +52,8 @@ export async function openEconomyView({ tab } = {}) {
 
   // Dopo .open: a overlay nascosto il canvas misurerebbe 0x0.
   enterOverlay(overlayEl, 'eco');
+  // Indietro del browser/telefono = closeEconomyView (vedi backNav.js).
+  pushBack('economy', closeEconomyView, isEconomyViewOpen);
 
   await withModuleLoading('eco', async () => {
     const mod = await loadModule(() => import('../economy/main.js'), 'economy');
@@ -68,6 +71,7 @@ export function closeEconomyView() {
   overlayEl.classList.remove('open');
   overlayEl.setAttribute('aria-hidden', 'true');
   leaveOverlay(overlayEl);
+  dropBack('economy');
 }
 
 export function isEconomyViewOpen() {

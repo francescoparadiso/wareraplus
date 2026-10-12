@@ -31,6 +31,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { escapeHtml } from '../mu/ui.js';
+import { syncBack } from '../app/backNav.js';
 import { ecoT } from './i18n.js';
 import { candleChartSvg, attachCandleExplorer } from './candleChart.js';
 import { variazione, priceChartSvg } from '../market/priceChart.js';
@@ -259,6 +260,11 @@ function dettaglioHtml(code) {
 // ── Lo scheletro della scheda ───────────────────────────────────────
 function paint() {
   if (!_container) return;
+  // WarEra+: con la scheda di una risorsa aperta, Indietro torna all'elenco
+  // invece di chiudere Economia (vedi app/backNav.js). Cambiando scheda il
+  // contenitore si NASCONDE, non si smonta: da qui il controllo sui rect.
+  syncBack('economy/prices', !!_aperta, () => { _aperta = null; paint(); },
+    () => !!_aperta && _container.getClientRects().length > 0);
   const copertura = priceHistoryCoverage();
 
   _container.innerHTML = `

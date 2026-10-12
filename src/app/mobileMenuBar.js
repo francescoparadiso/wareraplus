@@ -49,6 +49,8 @@
 
 import { state } from '../diplomacy/state.js';
 import { renderMap, setColoringMode } from '../diplomacy/map.js';
+// Tasto Indietro del telefono: chiude drawer e ricerca (vedi backNav.js).
+import { pushBack, dropBack } from './backNav.js';
 import { openPoliticalView, closePoliticalView } from './politicalOverlay.js';
 import { openEconomyView, closeEconomyView, isEconomyViewOpen } from './economyOverlay.js';
 import { openBattlesView, closeBattlesView, isBattlesViewOpen } from './battlesOverlay.js';
@@ -334,12 +336,14 @@ function openDrawer() {
   drawer.classList.add('open');
   drawerScrim.classList.add('open');
   document.body.classList.add('wp-mmb-drawer-open');
+  pushBack('drawer', closeDrawer, () => drawerOpen);
 }
 function closeDrawer() {
   drawerOpen = false;
   drawer.classList.remove('open');
   drawerScrim.classList.remove('open');
   document.body.classList.remove('wp-mmb-drawer-open');
+  dropBack('drawer');
 }
 
 // Accordion generico
@@ -713,12 +717,14 @@ function openSearchOverlay() {
   closeDrawer();
   searchOverlay.classList.add('open');
   document.body.classList.add('wp-mmb-search-open');
+  pushBack('msearch', closeSearchOverlay, () => searchOverlay.classList.contains('open'));
   renderResults(searchInput.value);
   setTimeout(() => searchInput.focus(), 50);
 }
 function closeSearchOverlay() {
   searchOverlay.classList.remove('open');
   document.body.classList.remove('wp-mmb-search-open');
+  dropBack('msearch');
   searchInput.blur();
 }
 function renderResults(query) {

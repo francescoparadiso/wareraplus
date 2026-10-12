@@ -25,6 +25,7 @@ import { METRICS, metricValue } from './metrics.js';
 import { donutHtml, barsHtml } from './charts.js';
 import { escapeHtml, flagImg, fmtCompact } from '../mu/ui.js';
 import { trackEvent } from '../shared/analytics.js';
+import { syncBack } from '../app/backNav.js';
 
 let rootEl = null;
 let tab = 'overview';                 // 'overview' | 'compare' | 'charts'
@@ -77,10 +78,13 @@ function render() {
       renderNationDetail(rootEl.querySelector('#wp-nat-body'), nation, {
         onBack: () => { openCountryId = null; render(); },
       });
+      // WarEra+: Indietro torna all'elenco, non chiude la sezione (app/backNav.js).
+      syncBack('nations/detail', true, () => { openCountryId = null; render(); }, () => !!openCountryId);
       return;
     }
     openCountryId = null;
   }
+  syncBack('nations/detail', false);
 
   rootEl.innerHTML = `
     <div class="wp-nat-page">

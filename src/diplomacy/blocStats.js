@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { worldCoreDevelopment, bonusFromShare, formatBonus, isPenalty, curveTooltip } from '../shared/allianceBonus.js';
 import { trackEvent } from '../shared/analytics.js';
+import { pushBack } from '../app/backNav.js';
 // withAlpha: i colori delle alleanze sono stringhe hsl(...), la vecchia
 // trasparenza "colore + due cifre esa" su quelle non e' un colore valido.
 import { withAlpha } from './utils.js';
@@ -8,6 +9,24 @@ import { withAlpha } from './utils.js';
 // dizionario locale, con il testo inglese come chiave (vedi blocStatsI18n.js).
 import { bT } from './blocStatsI18n.js';
 import { ensureDailyDamage, sumCountryDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
+
+// WarEra+ — tasto Indietro: chiude il popup in cima (prima il menu/dialogo
+// del builder, poi la scheda nazione/alleanza) invece di uscire dal tool.
+// Nessun dropBack nelle chiusure esistenti: `popupAperto` basta a far
+// scartare il livello quando il popup sparisce per altre vie.
+function popupAperto() { return !!document.querySelector('.bs-merge-overlay, .bs-popup'); }
+function registraPopup() {
+  pushBack('blocstats/popup', () => {
+    const merge = document.querySelector('.bs-merge-overlay');
+    if (merge) {
+      const x = merge.querySelector('.bs-merge-close');
+      if (x) x.click(); else merge.remove();
+    } else {
+      document.querySelectorAll('.bs-popup-overlay, .bs-popup').forEach(el => el.remove());
+    }
+    if (popupAperto()) registraPopup();
+  }, popupAperto);
+}
 
 /* ── Helpers ── */
 function fmt(n, d = 1, full = false) {
@@ -1030,6 +1049,7 @@ function showPopup(nationId) {
   popup.querySelector('.bs-popup-close').onclick = () => { overlay.remove(); popup.remove(); };
   document.body.appendChild(overlay);
   document.body.appendChild(popup);
+  registraPopup(); // WarEra+: Indietro lo chiude (app/backNav.js)
 }
 
 /* ── Popup Blocco (ordinamento decrescente corretto) ── */
@@ -1134,6 +1154,7 @@ function showBlocPopup(blocId) {
   popup.querySelector('.bs-popup-close').onclick = () => { overlay.remove(); popup.remove(); };
   document.body.appendChild(overlay);
   document.body.appendChild(popup);
+  registraPopup(); // WarEra+: Indietro lo chiude (app/backNav.js)
 
   // WarEra+ — danno ora per ora e pillati dell'alleanza, sommati sulle sue
   // nazioni (src/diplomacy/blocDamageCurves.js). Modulo a parte, caricato
@@ -1801,6 +1822,7 @@ function askInPage({ title, message = '', value, okLabel, danger = false, valida
       </div>`;
     overlay.appendChild(box);
     document.body.appendChild(overlay);
+    registraPopup(); // WarEra+: Indietro lo chiude (app/backNav.js)
 
     const input = box.querySelector('.bs-ask-input');
     const err = box.querySelector('.bs-ask-err');
@@ -2353,6 +2375,7 @@ function showAddMenu(srcBlocId, srcBlocName) {
   `;
   overlay.appendChild(menu);
   document.body.appendChild(overlay);
+  registraPopup(); // WarEra+: Indietro lo chiude (app/backNav.js)
 
   const closeMenu = () => overlay.remove();
   menu.querySelector('.bs-merge-close').onclick = closeMenu;

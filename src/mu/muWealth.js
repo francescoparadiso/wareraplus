@@ -45,6 +45,7 @@ import { fetchBilancio, fetchPanoramica, WealthError } from './wealthApi.js';
 import { muT } from './i18n.js';
 import { avatarImg, escapeHtml, fmtCompact, fmtFull } from './ui.js';
 import { trackEvent } from '../shared/analytics.js';
+import { syncBack } from '../app/backNav.js';
 
 // Sotto questa soglia, in valore assoluto, un'unità si dichiara "in pari":
 // una manciata di monete su un patrimonio non è una tendenza, e chiamarla
@@ -370,6 +371,7 @@ function tabellaElenco(righe) {
 
 function disegnaElenco() {
   if (!hostEl) return;
+  syncBack('mu/wealth', false);
 
   const bottoni = `<button type="button" class="wp-mu-more" id="wp-mw-refresh">${escapeHtml(muT('wRefresh'))}</button>`;
   let corpo;
@@ -601,6 +603,10 @@ function tabellaMembri(r) {
 
 function disegnaScheda() {
   if (!hostEl) return;
+  // WarEra+: con più unità, Indietro risale all'elenco come "← Unità"
+  // (vedi app/backNav.js). Con una sola non c'è un elenco a cui tornare.
+  syncBack('mu/wealth', unitaDisponibili.length > 1, tornaAllElenco,
+    () => !!muScelta && !!hostEl?.isConnected);
 
   const meta = unitaDisponibili.find((u) => u.id === muScelta) || {};
   const nome = dati?.unita?.nome || meta.nome || muScelta;

@@ -23,6 +23,8 @@ import { escapeHtml, APP_BASE } from './config.js';
 // scheda, da getUserLite (quasi sempre già in cache di Political).
 import { localFetch } from './api.js';
 import { fillPlayerCardPlus } from './links.js';
+// WarEra+: il tasto Indietro chiude la finestra invece di uscire dal tool.
+import { pushBack, dropBack } from '../app/backNav.js';
 
 let _lastRenderData = null;   // salva { parties, container, legendContainer, tooltip }
 
@@ -467,6 +469,7 @@ export function openPlayerCard(d) {
   overlay.querySelector('.pc-modal-close').addEventListener('click', close);
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   document.addEventListener('keydown', _pcEscHandler);
+  pushBack('political/card', closePlayerCard, () => !!document.querySelector('.pc-modal-overlay'));
 }
 
 function _animateCount(el, from, to, duration) {
@@ -484,6 +487,7 @@ export function closePlayerCard() {
   document.querySelectorAll('.pc-modal-overlay').forEach(el => el.remove());
   document.body.style.overflow = '';
   document.removeEventListener('keydown', _pcEscHandler);
+  dropBack('political/card');
 }
 
 function _pcEscHandler(e) {
