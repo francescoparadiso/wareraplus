@@ -1962,9 +1962,75 @@ function snapshotDailyDamage() {
       if (typeof v === 'number') byMu[m._id] = v;
     }
 
-    writeCache(DAILY_DAMAGE_FILE, { takenAt: Date.now(), tz: DAILY_DAMAGE_TZ, byCountry, byMu }, { compact: true });
+    const takenAt = Date.now();
+    writeCache(DAILY_DAMAGE_FILE, { takenAt, tz: DAILY_DAMAGE_TZ, byCountry, byMu }, { compact: true });
     console.log(`[daily-damage] scatto salvato: ${Object.keys(byCountry).length} nazioni, ${Object.keys(byMu).length} unità`);
+    archiveDailyDamage(countries, mus, takenAt);
   } catch (err) { console.error('[daily-damage] scatto fallito:', err.message); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// STORICO DANNI — lo scatto delle 02:00, conservato giorno per giorno
+// -----------------------------------------------------------------------
+// daily-damage-baseline si riscrive ogni notte: serve al "danno di oggi" e
+// basta. Ma il danno di una MU in un giorno passato non esiste da nessuna
+// parte nel gioco (solo il settimanale corrente e il totale di sempre), e
+// fino a qui l'unico storico erano i backup settimanali, che ruotano dopo
+// quattro copie. Quindi lo stesso scatto si accoda anche qui, una riga per
+// giorno di gioco, e non si pota.
+//
+// Si salva anche il TOTALE di sempre (muDamages / countryDamages), non solo
+// il settimanale: il totale non si azzera al reset della settimana, quindi
+// danno fra due giorni qualsiasi = totale(dopo) − totale(prima), senza
+// dover sapere quando è caduto il reset.
+//
+// Forma: { v, tz, days: { 'YYYY-MM-DD': { t, src, mu: { id: [settimanale,
+// totale, membri] }, country: { id: [settimanale, totale] } } } }
+// `src` è 'daily' per lo scatto delle 02:00, 'backup' per i giorni
+// ricostruiti a posteriori dai backup (stessi campi, ora diversa: `t` dice
+// quale). Il primo scatto di un giorno vince: un riavvio non lo riscrive.
+// Peso: ~40 KB al giorno, ~15 MB l'anno.
+// ═══════════════════════════════════════════════════════════════════════
+const DAMAGE_HISTORY_FILE = 'damage-history';
+const _romeDay = new Intl.DateTimeFormat('sv-SE', { timeZone: DAILY_DAMAGE_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+
+function archiveDailyDamage(countries, mus, takenAt) {
+  try {
+    const day = _romeDay.format(new Date(takenAt));
+    const hist = readCache(DAMAGE_HISTORY_FILE, null) || { v: 1, tz: DAILY_DAMAGE_TZ, days: {} };
+    if (hist.days[day]) return;
+    const num = (x) => (typeof x === 'number' ? x : null);
+    const mu = {};
+    for (const m of mus) {
+      const w = num(m?.rankings?.muWeeklyDamages?.value), tot = num(m?.rankings?.muDamages?.value);
+      if (w == null && tot == null) continue;
+      mu[m._id] = [w, tot, num(m?.memberCount)];
+    }
+    const country = {};
+    for (const n of countries) {
+      const w = num(n?.rankings?.weeklyCountryDamages?.value), tot = num(n?.rankings?.countryDamages?.value);
+      if (w == null && tot == null) continue;
+      country[n._id] = [w, tot];
+    }
+    hist.days[day] = { t: takenAt, src: 'daily', mu, country };
+    writeCache(DAMAGE_HISTORY_FILE, hist, { compact: true });
+    console.log(`[damage-history] ${day} archiviato: ${Object.keys(mu).length} unità, ${Object.keys(country).length} nazioni (${Object.keys(hist.days).length} giorni in archivio)`);
+  } catch (err) { console.error('[damage-history] archiviazione fallita:', err.message); }
+}
+
+/** Serie di UNA unità o nazione dallo storico: [{ day, t, src, weekly, total, members? }]. */
+function readDamageHistory({ mu, country }) {
+  const hist = readCache(DAMAGE_HISTORY_FILE, { days: {} });
+  const out = [];
+  for (const day of Object.keys(hist.days).sort()) {
+    const d = hist.days[day];
+    const row = mu ? d.mu?.[mu] : d.country?.[country];
+    if (!row) continue;
+    out.push(mu
+      ? { day, t: d.t, src: d.src, weekly: row[0], total: row[1], members: row[2] }
+      : { day, t: d.t, src: d.src, weekly: row[0], total: row[1] });
+  }
+  return out;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2689,6 +2755,15 @@ app.get('/mu-playstyle-by-country', (req, res) => sendCacheFile(req, res, 'mu-pl
 // Scatto del danno settimanale al cambio giorno di gioco — vedi
 // snapshotDailyDamage. { takenAt, tz, byCountry: {countryId: danno} }
 app.get('/daily-damage', (req, res) => res.json(readCache(DAILY_DAMAGE_FILE, { takenAt: null, tz: DAILY_DAMAGE_TZ, byCountry: {}, byMu: {} })));
+// Storico giornaliero del danno di UNA unità (?mu=id) o nazione (?country=id)
+// — vedi archiveDailyDamage. Una serie per richiesta: il file intero cresce
+// di ~40 KB al giorno e non va mandato al browser.
+app.get('/damage-history', (req, res) => {
+  const mu = typeof req.query.mu === 'string' ? req.query.mu : null;
+  const country = typeof req.query.country === 'string' ? req.query.country : null;
+  if (!mu === !country) return res.status(400).json({ error: 'serve ?mu=<id> oppure ?country=<id>' });
+  res.json({ tz: DAILY_DAMAGE_TZ, id: mu || country, kind: mu ? 'mu' : 'country', days: readDamageHistory({ mu, country }) });
+});
 
 // Storico di UNA nazione: [[ts, war, eco, mixed, undecided, known], ...].
 // Una nazione per richiesta e non tutto insieme: il file intero è di qualche

@@ -257,6 +257,33 @@ Al primissimo avvio, se il file non esiste, se ne fa uno subito: vale meno
 (parte dall'avvio, non dal cambio giorno) e infatti il client scrive
 "Since HH:MM" invece di "Today" finché non passano le 02:00.
 
+### Storico danni (`/damage-history`)
+
+`daily-damage-baseline.json` si riscrive ogni notte: serve al "danno di oggi"
+e basta. Lo stesso scatto delle 02:01 si **accoda** anche in
+`cache/damage-history.json`, una riga per giorno di gioco, mai potata
+(`archiveDailyDamage`): per ogni unità militare `[settimanale, totale,
+membri]`, per ogni nazione `[settimanale, totale]`. Il gioco non dice quanto
+ha fatto una MU in un giorno passato, e fino al 2026-10-12 l'unico storico
+erano i backup settimanali, che ruotano dopo quattro copie.
+
+Si salva anche il **totale di sempre** (`muDamages` / `countryDamages`)
+perché non si azzera al reset della settimana: danno fra due giorni qualsiasi
+= totale(dopo) − totale(prima), senza sapere quando è caduto il reset. Il
+primo scatto di un giorno vince (un riavvio non lo riscrive). ~40 KB al
+giorno, ~15 MB l'anno; il file sta in `cache/`, quindi `backup.sh` lo prende
+già.
+
+`src` dice da dove viene il giorno: `daily` (lo scatto delle 02:01),
+`backup` (ricostruito a posteriori dai backup settimanali: 20 e 27 set, 4 e
+11 ott 2026, MU e nazioni) o `dump` (dal dump PostgreSQL di terzi: solo
+nazioni, solo totale, giornaliero dal 19 giu al 17 set 2026, `t` messo a
+mezzogiorno UTC). Ora diversa da giorno a giorno: chi fa differenze usa `t`.
+
+`/damage-history?mu=<id>` o `?country=<id>` → `{ tz, id, kind, days: [{ day,
+t, src, weekly, total, members? }] }`. Una serie per richiesta: il file
+intero non va mandato al browser.
+
 ### Danno ora per ora e giocatori pillati (`/damage-timeline`)
 
 `server/damageTimeline.js`. Due serie sulla stessa griglia oraria, perché la

@@ -286,7 +286,7 @@ originale: **affianca** gli endpoint diretti invece di sostituirli tutti —
 il server è un'ottimizzazione e mai un nuovo punto di fallimento.
 
 Endpoint principali: `/mu-directory`, `/mu-playstyle-by-country`,
-`/mu-playstyle-history`, `/country-citizens`, `/daily-damage`, `/ticker`,
+`/mu-playstyle-history`, `/country-citizens`, `/daily-damage`, `/damage-history`, `/ticker`,
 `/region-history/{at,range,events,contested,war-intensity}`, `/alliances`,
 `/battles`, `/elections`, `/parties`, `/users-lite`, `/credit-profiles`,
 `/health`.
