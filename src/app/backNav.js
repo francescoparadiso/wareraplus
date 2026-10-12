@@ -45,7 +45,7 @@ const SENTINEL = 'wpBack';
 /** Le chiavi dell'URL che appartengono ai livelli: le altre non si toccano.
  *  ⚠️ `view` NO: è dello sfondo di Wallpaper Engine (?wallpaper=1&view=). */
 export const URL_KEYS = ['map', 'focus', 'days', 'region', 'country', 'alliance',
-  'sphere', 'battle', 'section', 'tab', 'item', 'mu', 'nation', 'senate'];
+  'sphere', 'battle', 'section', 'tab', 'item', 'mu', 'mua', 'mub', 'nation', 'senate'];
 
 /** @type {{ id: string, onBack: () => void, isOpen?: () => boolean, params?: object }[]} */
 const stack = [];

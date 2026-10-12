@@ -17,6 +17,8 @@ import { getLang } from '../shared/i18n.js';
 const MU_DICT = {
   en: {
     title: 'Military Units', subtitle: 'units', tabList: 'Directory', tabRanking: 'Leaderboards',
+    // WarEra+: confronto 1 vs 1 (muCompare.js)
+    tabCompare: "1 vs 1", cmpUnitA: "Unit A", cmpUnitB: "Unit B", cmpPick: "Pick two units, one per side.", cmpSearch: "Search a unit…", cmpEmpty: "No unit chosen", cmpAhead: "ahead in {n} of {t}", cmpEven: "even", cmpNote: "The winner of each row is in bold, with its lead. {t} measures counted; shares are shown but not counted.", cmpDmgPerMember: "Weekly damage per member", cmpWealthPerMember: "Wealth per member", cmpBuilds: "How the members play", cmpWarPct: "War players %", cmpEcoPct: "Economy players %", cmpWarN: "War players", cmpEcoN: "Economy players", cmpHybN: "Hybrid players", cmpSwap: "Swap", cmpClear: "Remove", cmpCompare: "Compare", cmpOpen: "Open the unit card",
     searchPh: 'Search a unit by name…', allCountries: 'All countries', sortBy: 'Sort by',
     loading: 'Loading units…', error: 'Could not load the unit directory', retry: 'Retry',
     noResults: 'No unit matches', loadMore: 'Load more', showing: 'showing', of: 'of',
@@ -53,6 +55,8 @@ const MU_DICT = {
   },
   it: {
     title: 'Unità Militari', subtitle: 'unità', tabList: 'Elenco', tabRanking: 'Classifiche',
+    // WarEra+: confronto 1 vs 1 (muCompare.js)
+    tabCompare: "1 vs 1", cmpUnitA: "Unità A", cmpUnitB: "Unità B", cmpPick: "Scegli due unità, una per lato.", cmpSearch: "Cerca un'unità…", cmpEmpty: "Nessuna unità scelta", cmpAhead: "avanti in {n} su {t}", cmpEven: "pari", cmpNote: "In grassetto chi vince la riga, col suo vantaggio. Contate {t} misure; le quote si vedono ma non si contano.", cmpDmgPerMember: "Danni sett. per membro", cmpWealthPerMember: "Ricchezza per membro", cmpBuilds: "Come giocano i membri", cmpWarPct: "Giocatori da guerra %", cmpEcoPct: "Giocatori da economia %", cmpWarN: "Giocatori da guerra", cmpEcoN: "Giocatori da economia", cmpHybN: "Giocatori ibridi", cmpSwap: "Scambia", cmpClear: "Togli", cmpCompare: "Confronta", cmpOpen: "Apri la scheda dell'unità",
     searchPh: "Cerca un'unità per nome…", allCountries: 'Tutte le nazioni', sortBy: 'Ordina per',
     loading: 'Caricamento unità…', error: "Impossibile caricare l'elenco delle unità", retry: 'Riprova',
     noResults: 'Nessuna unità corrisponde', loadMore: 'Carica altre', showing: 'mostrate', of: 'di',
@@ -89,6 +93,8 @@ const MU_DICT = {
   },
   es: {
     title: 'Unidades Militares', subtitle: 'unidades', tabList: 'Listado', tabRanking: 'Clasificaciones',
+    // WarEra+: confronto 1 vs 1 (muCompare.js)
+    tabCompare: "1 vs 1", cmpUnitA: "Unidad A", cmpUnitB: "Unidad B", cmpPick: "Elige dos unidades, una por lado.", cmpSearch: "Buscar una unidad…", cmpEmpty: "Ninguna unidad elegida", cmpAhead: "por delante en {n} de {t}", cmpEven: "empate", cmpNote: "En negrita quien gana la fila, con su ventaja. Se cuentan {t} medidas; las cuotas se muestran pero no se cuentan.", cmpDmgPerMember: "Daño sem. por miembro", cmpWealthPerMember: "Riqueza por miembro", cmpBuilds: "Cómo juegan los miembros", cmpWarPct: "Jugadores de guerra %", cmpEcoPct: "Jugadores de economía %", cmpWarN: "Jugadores de guerra", cmpEcoN: "Jugadores de economía", cmpHybN: "Jugadores híbridos", cmpSwap: "Intercambiar", cmpClear: "Quitar", cmpCompare: "Comparar", cmpOpen: "Abrir la ficha de la unidad",
     searchPh: 'Busca una unidad por nombre…', allCountries: 'Todas las naciones', sortBy: 'Ordenar por',
     loading: 'Cargando unidades…', error: 'No se pudo cargar el listado de unidades', retry: 'Reintentar',
     noResults: 'Ninguna unidad coincide', loadMore: 'Cargar más', showing: 'mostradas', of: 'de',
@@ -125,6 +131,8 @@ const MU_DICT = {
   },
   de: {
     title: 'Militäreinheiten', subtitle: 'Einheiten', tabList: 'Verzeichnis', tabRanking: 'Ranglisten',
+    // WarEra+: confronto 1 vs 1 (muCompare.js)
+    tabCompare: "1 vs 1", cmpUnitA: "Einheit A", cmpUnitB: "Einheit B", cmpPick: "Wähle zwei Einheiten, eine pro Seite.", cmpSearch: "Einheit suchen…", cmpEmpty: "Keine Einheit gewählt", cmpAhead: "vorne in {n} von {t}", cmpEven: "gleich", cmpNote: "Fett: wer die Zeile gewinnt, mit Vorsprung. {t} Kennzahlen gezählt; Anteile werden gezeigt, aber nicht gezählt.", cmpDmgPerMember: "Wöch. Schaden pro Mitglied", cmpWealthPerMember: "Vermögen pro Mitglied", cmpBuilds: "Wie die Mitglieder spielen", cmpWarPct: "Kriegsspieler %", cmpEcoPct: "Wirtschaftsspieler %", cmpWarN: "Kriegsspieler", cmpEcoN: "Wirtschaftsspieler", cmpHybN: "Hybridspieler", cmpSwap: "Tauschen", cmpClear: "Entfernen", cmpCompare: "Vergleichen", cmpOpen: "Einheitenkarte öffnen",
     searchPh: 'Einheit nach Namen suchen…', allCountries: 'Alle Nationen', sortBy: 'Sortieren nach',
     loading: 'Einheiten werden geladen…', error: 'Verzeichnis konnte nicht geladen werden', retry: 'Erneut versuchen',
     noResults: 'Keine Einheit passt', loadMore: 'Mehr laden', showing: 'angezeigt', of: 'von',
@@ -161,6 +169,8 @@ const MU_DICT = {
   },
   fr: {
     title: 'Unités Militaires', subtitle: 'unités', tabList: 'Annuaire', tabRanking: 'Classements',
+    // WarEra+: confronto 1 vs 1 (muCompare.js)
+    tabCompare: "1 vs 1", cmpUnitA: "Unité A", cmpUnitB: "Unité B", cmpPick: "Choisis deux unités, une par côté.", cmpSearch: "Rechercher une unité…", cmpEmpty: "Aucune unité choisie", cmpAhead: "devant sur {n} de {t}", cmpEven: "égalité", cmpNote: "En gras, qui gagne la ligne, avec son avance. {t} mesures comptées ; les parts sont affichées mais pas comptées.", cmpDmgPerMember: "Dégâts hebdo. par membre", cmpWealthPerMember: "Richesse par membre", cmpBuilds: "Comment jouent les membres", cmpWarPct: "Joueurs guerre %", cmpEcoPct: "Joueurs économie %", cmpWarN: "Joueurs guerre", cmpEcoN: "Joueurs économie", cmpHybN: "Joueurs hybrides", cmpSwap: "Échanger", cmpClear: "Retirer", cmpCompare: "Comparer", cmpOpen: "Ouvrir la fiche de l'unité",
     searchPh: 'Rechercher une unité par nom…', allCountries: 'Toutes les nations', sortBy: 'Trier par',
     loading: 'Chargement des unités…', error: "Impossible de charger l'annuaire des unités", retry: 'Réessayer',
     noResults: 'Aucune unité ne correspond', loadMore: 'Charger plus', showing: 'affichées', of: 'sur',
@@ -197,6 +207,8 @@ const MU_DICT = {
   },
   nl: {
     title: 'Militaire Eenheden', subtitle: 'eenheden', tabList: 'Overzicht', tabRanking: 'Ranglijsten',
+    // WarEra+: confronto 1 vs 1 (muCompare.js)
+    tabCompare: "1 vs 1", cmpUnitA: "Eenheid A", cmpUnitB: "Eenheid B", cmpPick: "Kies twee eenheden, één per kant.", cmpSearch: "Zoek een eenheid…", cmpEmpty: "Geen eenheid gekozen", cmpAhead: "voor in {n} van {t}", cmpEven: "gelijk", cmpNote: "Vet: wie de rij wint, met de voorsprong. {t} maatstaven geteld; aandelen worden getoond maar niet geteld.", cmpDmgPerMember: "Wekel. schade per lid", cmpWealthPerMember: "Vermogen per lid", cmpBuilds: "Hoe de leden spelen", cmpWarPct: "Oorlogsspelers %", cmpEcoPct: "Economiespelers %", cmpWarN: "Oorlogsspelers", cmpEcoN: "Economiespelers", cmpHybN: "Hybride spelers", cmpSwap: "Wisselen", cmpClear: "Verwijderen", cmpCompare: "Vergelijken", cmpOpen: "Open de eenheidskaart",
     searchPh: 'Zoek een eenheid op naam…', allCountries: 'Alle naties', sortBy: 'Sorteren op',
     loading: 'Eenheden laden…', error: 'Kon het eenhedenoverzicht niet laden', retry: 'Opnieuw',
     noResults: 'Geen eenheid komt overeen', loadMore: 'Meer laden', showing: 'getoond', of: 'van',
@@ -233,6 +245,8 @@ const MU_DICT = {
   },
   sv: {
     title: 'Militära Enheter', subtitle: 'enheter', tabList: 'Katalog', tabRanking: 'Topplistor',
+    // WarEra+: confronto 1 vs 1 (muCompare.js)
+    tabCompare: "1 mot 1", cmpUnitA: "Enhet A", cmpUnitB: "Enhet B", cmpPick: "Välj två enheter, en per sida.", cmpSearch: "Sök en enhet…", cmpEmpty: "Ingen enhet vald", cmpAhead: "före i {n} av {t}", cmpEven: "lika", cmpNote: "Fetstil: vem som vinner raden, med försprånget. {t} mått räknade; andelar visas men räknas inte.", cmpDmgPerMember: "Veckoskada per medlem", cmpWealthPerMember: "Förmögenhet per medlem", cmpBuilds: "Hur medlemmarna spelar", cmpWarPct: "Krigsspelare %", cmpEcoPct: "Ekonomispelare %", cmpWarN: "Krigsspelare", cmpEcoN: "Ekonomispelare", cmpHybN: "Hybridspelare", cmpSwap: "Byt", cmpClear: "Ta bort", cmpCompare: "Jämför", cmpOpen: "Öppna enhetskortet",
     searchPh: 'Sök en enhet efter namn…', allCountries: 'Alla nationer', sortBy: 'Sortera efter',
     loading: 'Laddar enheter…', error: 'Kunde inte ladda enhetskatalogen', retry: 'Försök igen',
     noResults: 'Ingen enhet matchar', loadMore: 'Ladda fler', showing: 'visas', of: 'av',
@@ -269,6 +283,8 @@ const MU_DICT = {
   },
   pt: {
     title: 'Unidades Militares', subtitle: 'unidades', tabList: 'Diretório', tabRanking: 'Classificações',
+    // WarEra+: confronto 1 vs 1 (muCompare.js)
+    tabCompare: "1 vs 1", cmpUnitA: "Unidade A", cmpUnitB: "Unidade B", cmpPick: "Escolhe duas unidades, uma de cada lado.", cmpSearch: "Procurar uma unidade…", cmpEmpty: "Nenhuma unidade escolhida", cmpAhead: "à frente em {n} de {t}", cmpEven: "empate", cmpNote: "A negrito quem vence a linha, com a vantagem. {t} medidas contadas; as quotas mostram-se mas não contam.", cmpDmgPerMember: "Dano sem. por membro", cmpWealthPerMember: "Riqueza por membro", cmpBuilds: "Como jogam os membros", cmpWarPct: "Jogadores de guerra %", cmpEcoPct: "Jogadores de economia %", cmpWarN: "Jogadores de guerra", cmpEcoN: "Jogadores de economia", cmpHybN: "Jogadores híbridos", cmpSwap: "Trocar", cmpClear: "Remover", cmpCompare: "Comparar", cmpOpen: "Abrir a ficha da unidade",
     searchPh: 'Procurar uma unidade pelo nome…', allCountries: 'Todas as nações', sortBy: 'Ordenar por',
     loading: 'A carregar unidades…', error: 'Não foi possível carregar o diretório de unidades', retry: 'Tentar de novo',
     noResults: 'Nenhuma unidade corresponde', loadMore: 'Carregar mais', showing: 'mostradas', of: 'de',
@@ -305,6 +321,8 @@ const MU_DICT = {
   },
   ar: {
     title: 'الوحدات العسكرية', subtitle: 'وحدات', tabList: 'الدليل', tabRanking: 'التصنيفات',
+    // WarEra+: confronto 1 vs 1 (muCompare.js)
+    tabCompare: "1 ضد 1", cmpUnitA: "الوحدة أ", cmpUnitB: "الوحدة ب", cmpPick: "اختر وحدتين، واحدة لكل جانب.", cmpSearch: "ابحث عن وحدة…", cmpEmpty: "لم يتم اختيار وحدة", cmpAhead: "متقدم في {n} من {t}", cmpEven: "تعادل", cmpNote: "بالخط العريض من يفوز بالسطر مع تقدمه. تم احتساب {t} مقاييس؛ النسب تُعرض ولا تُحتسب.", cmpDmgPerMember: "الضرر الأسبوعي لكل عضو", cmpWealthPerMember: "الثروة لكل عضو", cmpBuilds: "كيف يلعب الأعضاء", cmpWarPct: "لاعبو الحرب %", cmpEcoPct: "لاعبو الاقتصاد %", cmpWarN: "لاعبو الحرب", cmpEcoN: "لاعبو الاقتصاد", cmpHybN: "لاعبون هجينون", cmpSwap: "تبديل", cmpClear: "إزالة", cmpCompare: "قارن", cmpOpen: "افتح بطاقة الوحدة",
     searchPh: '…ابحث عن وحدة بالاسم', allCountries: 'كل الدول', sortBy: 'ترتيب حسب',
     loading: '…جارٍ تحميل الوحدات', error: 'تعذّر تحميل دليل الوحدات', retry: 'إعادة المحاولة',
     noResults: 'لا توجد وحدة مطابقة', loadMore: 'تحميل المزيد', showing: 'معروضة', of: 'من',

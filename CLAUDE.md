@@ -533,6 +533,13 @@ wareraPlus/
     │   ├── muDetail.js          ← scheda unità: sei classifiche + composizione per
     │   │                          nazionalità (calcolata dal vivo sui membri) + membri
     │   ├── ranking.js           ← classifiche, ordinate dalla directory (zero fetch)
+    │   ├── muCompare.js         ← NUOVO — linguetta "⚔ 1 vs 1": un'unità contro un'altra,
+    │   │                          stessa grafica e regole del 1 vs 2 nazioni (versusBarHtml
+    │   │                          e classi wp-nat-* di nations.css, importato dal modulo):
+    │   │                          sei classifiche, membri, danni e ricchezza per membro, e
+    │   │                          come giocano i membri (se il server di cache c'è). Zero
+    │   │                          fetch. Bottone "Confronta" nella scheda di un'unità.
+    │   │                          Link: ?section=mu&tab=compare&mua=&mub=.
     │   ├── muWealth.js          ← NUOVO — linguetta "Bilancio", l'unica parte CHIUSA
     │   │                          della vista. DUE schermate: ELENCO delle unità con i
     │   │                          loro numeri (zero fetch a WarEra: il server lo calcola

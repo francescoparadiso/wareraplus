@@ -31,8 +31,10 @@ export function initMuOverlay() {
 }
 
 /** Apre la vista. Con `muId` salta direttamente alla scheda di
- *  quell'unità (preferiti, ricerca globale della barra menù). */
-export async function openMuView(muId) {
+ *  quell'unità (preferiti, ricerca globale della barra menù). `preset`:
+ *  linguetta e lati del confronto 1 vs 1 da un link condivisibile
+ *  ({ tab, a, b }, vedi mu/main.js:presetMuView). */
+export async function openMuView(muId, preset) {
   if (!overlayEl) return;
   overlayEl.classList.add('open');
   overlayEl.setAttribute('aria-hidden', 'false');
@@ -49,6 +51,7 @@ export async function openMuView(muId) {
   // la prima apertura scarica ~550 KB di elenco unità, non è istantanea.
   await withModuleLoading('mu', async () => {
     const mod = await loadModule(() => import('../mu/main.js'), 'mu');
+    if (preset) mod.presetMuView(preset);
     if (muId) mod.openMuDetail(muId);
     await mod.initMuView(rootEl);
   });

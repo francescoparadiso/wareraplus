@@ -187,7 +187,8 @@ async function handleIncomingDeepLink() {
       return openEconomyView({ tab: item ? 'prices' : (params.get('tab') || undefined) });
     },
     news: () => openNewsView(),
-    mu: () => openMuView(params.get('mu') || undefined),
+    mu: () => openMuView(params.get('mu') || undefined,
+      { tab: params.get('tab'), a: params.get('mua'), b: params.get('mub') }),
     nations: () => openNationsView(params.get('nation') || undefined),
     battles: () => openBattlesView(params.get('battle') || undefined),
     guide: () => openGuideView(),
