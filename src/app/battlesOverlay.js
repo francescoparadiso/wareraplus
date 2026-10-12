@@ -38,7 +38,9 @@ export function initBattlesOverlay() {
   });
 }
 
-export async function openBattlesView() {
+/** Con `battleId` apre direttamente la scheda di quella battaglia
+ *  dell'archivio (link condivisibile ?section=battles&battle=). */
+export async function openBattlesView(battleId) {
   overlayEl.classList.add('open');
   overlayEl.setAttribute('aria-hidden', 'false');
   rootEl.style.display = 'block';
@@ -46,10 +48,11 @@ export async function openBattlesView() {
   // Dopo .open: a overlay nascosto il canvas misurerebbe 0x0.
   enterOverlay(overlayEl, 'battles');
   // Indietro del browser/telefono = closeBattlesView (vedi backNav.js).
-  pushBack('battles', closeBattlesView, isBattlesViewOpen);
+  pushBack('battles', closeBattlesView, isBattlesViewOpen, { section: 'battles' });
 
   await withModuleLoading('battles', async () => {
     viewMod = await loadModule(() => import('../battles/main.js'), 'battles');
+    if (battleId) viewMod.openBattleDetail(battleId);
     await viewMod.initBattlesView(rootEl);
   });
 

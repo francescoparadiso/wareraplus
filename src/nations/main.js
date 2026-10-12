@@ -79,7 +79,8 @@ function render() {
         onBack: () => { openCountryId = null; render(); },
       });
       // WarEra+: Indietro torna all'elenco, non chiude la sezione (app/backNav.js).
-      syncBack('nations/detail', true, () => { openCountryId = null; render(); }, () => !!openCountryId);
+      syncBack('nations/detail', true, () => { openCountryId = null; render(); }, () => !!openCountryId,
+        { nation: openCountryId });
       return;
     }
     openCountryId = null;

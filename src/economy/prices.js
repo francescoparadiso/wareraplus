@@ -264,7 +264,7 @@ function paint() {
   // invece di chiudere Economia (vedi app/backNav.js). Cambiando scheda il
   // contenitore si NASCONDE, non si smonta: da qui il controllo sui rect.
   syncBack('economy/prices', !!_aperta, () => { _aperta = null; paint(); },
-    () => !!_aperta && _container.getClientRects().length > 0);
+    () => !!_aperta && _container.getClientRects().length > 0, { item: _aperta });
   const copertura = priceHistoryCoverage();
 
   _container.innerHTML = `
@@ -420,6 +420,13 @@ export async function initPricesTab(container) {
   _history = await loadPriceHistory(_giorni);
   await aggiorna();
   avviaTimer();
+}
+
+/** WarEra+ — apre la scheda di una risorsa (link ?section=economy&tab=prices
+ *  &item=). Prima di initPricesTab basta impostarla: il primo paint la vede. */
+export function openPriceItem(code) {
+  _aperta = code || null;
+  if (_container) paint();
 }
 
 /** Ridisegna con la lingua nuova, a sezione già aperta. */

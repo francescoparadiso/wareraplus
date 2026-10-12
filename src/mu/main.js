@@ -141,7 +141,8 @@ function render() {
   const view = rootEl.querySelector('#wp-mu-view');
   // WarEra+: con la scheda di un'unità aperta, Indietro torna all'elenco
   // invece di chiudere la sezione (vedi app/backNav.js).
-  syncBack('mu/detail', !!pendingMuId, () => { pendingMuId = null; render(); }, () => !!pendingMuId);
+  syncBack('mu/detail', !!pendingMuId, () => { pendingMuId = null; render(); }, () => !!pendingMuId,
+    { mu: pendingMuId });
   if (pendingMuId) renderMuDetail(view, pendingMuId, ctx());
   else if (tab === 'wealth' && bilancio) mostraBilancio(view);
   else if (tab === 'ranking') renderMuRankings(view, ctx());

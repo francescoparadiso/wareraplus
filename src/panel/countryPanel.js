@@ -145,7 +145,11 @@ function panelShown() {
   return !!panelEl?.classList.contains('open') || (!!peekEl && !peekEl.hidden);
 }
 function syncPanelBack() {
-  syncBack('panel', panelHasSelection(), onPanelBack, () => panelShown() && panelHasSelection());
+  // Nel link: la selezione del pannello (?country= / ?alliance= / ?sphere=).
+  const params = currentSphereId ? { sphere: currentSphereId }
+    : currentBlocId ? { alliance: currentBlocId }
+    : { country: currentNationId };
+  syncBack('panel', panelHasSelection(), onPanelBack, () => panelShown() && panelHasSelection(), params);
 }
 function onPanelBack() {
   if (panelEl.classList.contains('open')) panelGoBack('browser-back');

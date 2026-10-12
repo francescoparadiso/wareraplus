@@ -53,7 +53,7 @@ export async function openEconomyView({ tab } = {}) {
   // Dopo .open: a overlay nascosto il canvas misurerebbe 0x0.
   enterOverlay(overlayEl, 'eco');
   // Indietro del browser/telefono = closeEconomyView (vedi backNav.js).
-  pushBack('economy', closeEconomyView, isEconomyViewOpen);
+  pushBack('economy', closeEconomyView, isEconomyViewOpen, { section: 'economy', tab: tab || undefined });
 
   await withModuleLoading('eco', async () => {
     const mod = await loadModule(() => import('../economy/main.js'), 'economy');

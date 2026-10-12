@@ -1437,7 +1437,7 @@ export function setColoringMode(mode) {
   // non aggiunge livelli: Indietro esce dalla vista, non le ripercorre.
   if (mode === 'diplomacy') dropBack('mapview');
   else pushBack('mapview', () => document.getElementById('mode-diplomacy')?.click(),
-    () => state.coloringMode !== 'diplomacy');
+    () => state.coloringMode !== 'diplomacy', { map: mode });
   // WarEra+: il focus su un blocco ha senso solo restando in modalità
   // 'blocs' — se si cambia modalità (anche rientrando dopo), si riparte
   // dalla vista blocs "flat" invece di lasciare un focus obsoleto.

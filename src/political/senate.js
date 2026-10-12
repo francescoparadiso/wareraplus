@@ -1415,7 +1415,7 @@ export function open() {
   if (!overlay) return;
   overlay.classList.add('active');
   document.body.style.overflow = 'hidden';
-  pushBack('political/senate', close, () => overlay.classList.contains('active'));
+  pushBack('political/senate', close, () => overlay.classList.contains('active'), { senate: 1 });
   trackEvent('senate-view-open', { countryId: currentCountryId });
   if (!_resizeListenerBound) {
     _resizeListenerBound = true;

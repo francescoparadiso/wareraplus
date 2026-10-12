@@ -40,7 +40,7 @@ export async function openNewsView() {
   // Dopo .open: a overlay nascosto il canvas misurerebbe 0x0.
   enterOverlay(overlayEl, 'news');
   // Indietro del browser/telefono = closeNewsView (vedi backNav.js).
-  pushBack('news', closeNewsView, isNewsViewOpen);
+  pushBack('news', closeNewsView, isNewsViewOpen, { section: 'news' });
 
   await withModuleLoading('news', async () => {
     const { initNewsView } = await loadModule(() => import('./newsView.js'), 'news');

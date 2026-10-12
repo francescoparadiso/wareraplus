@@ -1765,6 +1765,25 @@ export function clearMarkers() {
   battleCache.clear();
 }
 
+// WarEra+ — link condivisibile ?battle=<id> (vedi src/app/backNav.js):
+// apre la battaglia come un clic sul suo marker. I marker esistono solo per
+// le battaglie nel viewport, quindi prima si porta lì la mappa. Aspetta
+// (fino a ~15 s) il primo giro dei marker; false se la battaglia non è fra
+// quelle in corso (chiusa, o marker spenti dalle impostazioni).
+export async function openBattleById(battleId) {
+  for (let i = 0; i < 30 && !battleCache.has(battleId); i++) {
+    await new Promise(r => setTimeout(r, 500));
+  }
+  const d = battleCache.get(battleId);
+  if (!d || !state.map) return false;
+  state.map.jumpTo({ center: d.centroid, zoom: Math.max(state.map.getZoom(), 4) });
+  _syncMarkersToViewport();
+  const entry = markers.get(battleId);
+  if (!entry) return false;
+  entry.el.click();
+  return true;
+}
+
 // ==================== FORCE UPDATE ====================
 export function forceUpdateBattleMarkers() {
   lastSuccessfulBattles = [];

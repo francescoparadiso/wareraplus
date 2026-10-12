@@ -39,7 +39,7 @@ export async function openNationsView(countryId) {
   // sfondo della mappa, che resta montata sotto l'overlay.
   enterOverlay(overlayEl, 'nations');
   // Indietro del browser/telefono = closeNationsView (vedi backNav.js).
-  pushBack('nations', closeNationsView, isNationsViewOpen);
+  pushBack('nations', closeNationsView, isNationsViewOpen, { section: 'nations' });
 
   await withModuleLoading('nations', async () => {
     const mod = await loadModule(() => import('../nations/main.js'), 'nations');

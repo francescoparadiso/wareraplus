@@ -889,7 +889,7 @@ wareraPlus/
     │   │                         dropBack(id); id gerarchici ('mu/detail' figlio di 'mu',
     │   │                         che si registra solo col genitore aperto). In cronologia
     │   │                         c'è AL MASSIMO una voce in più (la sentinella), qualunque
-    │   │                         sia la profondità; nessun cambio di URL. Collegati:
+    │   │                         sia la profondità. Collegati:
     │   │                         overlay, schede di dettaglio (unità, nazioni, battaglie,
     │   │                         prezzi, bilancio), finestre di Political, Statistiche
     │   │                         alleanze e popup, pannello nazione (SOLO con una
@@ -900,6 +900,19 @@ wareraPlus/
     │   │                         registrata qui, o Indietro torna a far uscire.
     │   │                         ⚠️ replaceState: passare history.state, MAI null —
     │   │                         azzererebbe il marchio della sentinella.
+    │   │                         LINK CONDIVISIBILI: ogni livello porta i suoi parametri
+    │   │                         (4° argomento di pushBack, o updateBackParams) e l'URL
+    │   │                         si riscrive da sé: ?map= ?country= ?alliance= ?sphere=
+    │   │                         ?battle= ?section= (political, economy, news, mu,
+    │   │                         nations, battles, guide, private, alliances) ?tab=
+    │   │                         ?item= ?mu= ?nation= ?senate=. Si toccano SOLO le
+    │   │                         chiavi di URL_KEYS (?tm= resta della time machine).
+    │   │                         ⚠️ `view` NO: è dello sfondo (?wallpaper=1&view=).
+    │   │                         In ingresso li rilegge main.js:handleIncomingDeepLink,
+    │   │                         che gira PRIMA di startUrlSync(): fino ad allora l'URL
+    │   │                         non si scrive (la closePanel() del boot cancellerebbe
+    │   │                         ?country= prima che venga letto). Dentro lo sfondo
+    │   │                         valgono solo ?country= e ?tm=, come prima.
     │   ├── overlayChrome.js    ← chrome condiviso degli overlay: sfondo a particelle nella
     │   │                         tinta della sezione + pausa mappa
     │   ├── mapIdle.js          ← pausa/riprende il lavoro di sfondo della mappa (pallini

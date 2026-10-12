@@ -539,7 +539,8 @@ document.getElementById('mode-playstyle')?.addEventListener('click', async () =>
     // WarEra+ (additivo): Indietro chiude la pagina come la sua ✕.
     pushBack('blocstats',
       () => document.getElementById('bloc-stats-close')?.click(),
-      () => document.getElementById('bloc-stats-page')?.style.display === 'block');
+      () => document.getElementById('bloc-stats-page')?.style.display === 'block',
+      { section: 'alliances' });
     // ── WarEra+ (additivo): sfondo a particelle viola della sezione e
     // pausa del lavoro di sfondo della mappa, come per gli altri overlay
     // di "Approfondimenti". Import dinamico + catch: se il modulo manca,

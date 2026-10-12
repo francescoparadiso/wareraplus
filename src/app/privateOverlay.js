@@ -150,7 +150,7 @@ export async function openPrivateView() {
 
   enterOverlay(overlayEl, 'private');
   // Indietro del browser/telefono = closePrivateView (vedi backNav.js).
-  pushBack('private', closePrivateView, isPrivateViewOpen);
+  pushBack('private', closePrivateView, isPrivateViewOpen, { section: 'private' });
 
   await withModuleLoading('private', async () => {
     const mod = await loadModule(() => import('../private/main.js'), 'private');

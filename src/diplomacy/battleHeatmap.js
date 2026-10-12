@@ -442,7 +442,7 @@ export async function setBattleHeatmap(battleId) {
     // WarEra+: Indietro lascia la battaglia come Esc — hideBattleTooltip
     // chiude il tooltip ed esce dalla heatmap (vedi diplomacy/main.js).
     pushBack('battle', () => import('./battleMarkers.js').then(m => m.hideBattleTooltip()),
-      () => state.coloringMode === 'battleHeatmap');
+      () => state.coloringMode === 'battleHeatmap', { battle: battleId });
 
     // Ferma il vecchio live update e avvia quello nuovo
     stopLiveUpdates();

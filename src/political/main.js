@@ -94,6 +94,16 @@ let _listenersWired = false;
 let _stopBackgroundCanvas = null;
 
 /* ── LOAD ELECTION (entry point, dispatcher congress/presidential) ── */
+// WarEra+ fix: chi aspettava la chiamata precedente di loadElection. Una
+// seconda chiamata entro i 300 ms di debounce cancella il timer della prima
+// (vedi sotto), e la promessa della prima restava APPESA PER SEMPRE: chi la
+// aspettava non ripartiva più. Succedeva all'apertura di Political subito
+// dopo il caricamento (link condivisibile ?section=political): il cambio di
+// lingua interno (listener 'langchange' qui sotto) rilancia loadElection
+// mentre _bootData sta ancora aspettando la prima, e la vista restava su
+// "Caricamento elezione..." senza mai aprire il senato.
+let _resolvePreviousLoad = null;
+
 export async function loadElection(id) {
   // Se non viene passato un id, usa quello selezionato nel dropdown
   let electionId = id;
@@ -107,6 +117,8 @@ export async function loadElection(id) {
     clearTimeout(pendingRequest.timeout);
     if (pendingRequest.controller) pendingRequest.controller.abort();
   }
+  // WarEra+ fix: la chiamata sostituita si considera conclusa (vedi sopra).
+  if (_resolvePreviousLoad) { _resolvePreviousLoad(); _resolvePreviousLoad = null; }
 
   const selectEl = document.getElementById('electionSelect');
   const btnEl = document.getElementById('loadBtn');
@@ -118,6 +130,7 @@ export async function loadElection(id) {
   // (es. SenateView) ottiene davvero i dati aggiornati, invece di risolversi
   // subito e leggere lastElectedParties ancora vecchio.
   return new Promise(resolveOuter => {
+    _resolvePreviousLoad = resolveOuter;
     setPendingRequest({});
     const timeout = setTimeout(async () => {
       setPendingRequest(null);
@@ -164,6 +177,7 @@ export async function loadElection(id) {
         }
       } finally {
         selectEl.disabled = false; btnEl.disabled = false;
+        if (_resolvePreviousLoad === resolveOuter) _resolvePreviousLoad = null;
         resolveOuter();
       }
     }, 300);

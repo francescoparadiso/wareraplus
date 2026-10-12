@@ -38,6 +38,7 @@
 
 import Chart from 'chart.js/auto';
 import { WORKER_API_BASE } from '../diplomacy/config.js';
+import { updateBackParams } from '../app/backNav.js';
 
 export const API_BASE = WORKER_API_BASE; // senza /trpc finale, vedi nota sopra
 export const APP_BASE = 'https://app.warera.io';
@@ -98,7 +99,12 @@ const _urlCountryId = _urlParams.get('country');
 if (_urlCountryId) { try { localStorage.setItem('preferredCountryId', _urlCountryId); } catch (_) {} }
 
 export let currentCountryId = _urlCountryId || localStorage.getItem('preferredCountryId') || '6813b6d446e731854c7ac7a2';
-export function setCurrentCountryId(v) { currentCountryId = v; }
+export function setCurrentCountryId(v) {
+  currentCountryId = v;
+  // WarEra+: la nazione scelta dentro Political va nel link condivisibile
+  // (vedi app/backNav.js). Prima che l'overlay si registri non fa nulla.
+  updateBackParams('political', { country: v });
+}
 
 export let currentCountryData = null;
 export function setCurrentCountryData(v) { currentCountryData = v; }

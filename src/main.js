@@ -35,7 +35,7 @@ if (IS_LIVE && !IS_WALLPAPER) inject();
 import { initAnalytics } from './shared/analytics.js';
 initAnalytics();
 
-import { initCountryPanel, selectNationInPanel } from './panel/countryPanel.js';
+import { initCountryPanel, selectNationInPanel, selectBlocInPanel, selectSphereInPanel, hasViewOverviewMode, isViewOverviewOpen, isSphereOverviewOpen } from './panel/countryPanel.js';
 import { initPoliticalOverlay, openPoliticalView } from './app/politicalOverlay.js';
 import { initEconomyOverlay, openEconomyView } from './app/economyOverlay.js';
 import { initNewsOverlay, openNewsView } from './app/newsOverlay.js';
@@ -47,7 +47,7 @@ import { initPrivateOverlay, openPrivateView } from './app/privateOverlay.js';
 import { takeReloadIntent } from './shared/lazyModule.js';
 // WarEra+: il tasto Indietro chiude la cosa aperta invece di uscire dal
 // tool. Il listener va messo subito, prima di qualunque deep-link.
-import { initBackNav } from './app/backNav.js';
+import { initBackNav, startUrlSync } from './app/backNav.js';
 initBackNav({ enabled: !IS_WALLPAPER });
 import { initThemeSync } from './app/themeSync.js';
 import { initLangSync } from './app/langSync.js';
@@ -70,10 +70,61 @@ import { applyTranslations, initLangButton } from './shared/i18n.js';
 import { updateDynamicLegend } from './diplomacy/ui.js';
 import { state } from './diplomacy/state.js';
 
-function handleIncomingDeepLink() {
+/* ══════════════════════════════════════════════════════════════
+   Link condivisibili in ingresso
+   ------------------------------------------------------------------
+   Rilegge l'indirizzo che src/app/backNav.js scrive mentre si naviga e
+   riapre le stesse cose, nello stesso ordine della pila: vista mappa →
+   selezione del pannello (nazione / alleanza / sfera) → battaglia →
+   sezione con la sua scheda. ?country= e ?tm= sono i due link storici e
+   restano identici (girano negli articoli).
+   ⚠️ Dentro lo sfondo di Wallpaper Engine valgono SOLO quei due: lo sfondo
+   usa l'URL per le sue proprietà (`view`, `focus`…, wallpaperMode.js).
+   Alla fine startUrlSync(): da lì in poi l'URL segue la navigazione.
+   ══════════════════════════════════════════════════════════════ */
+const nextTick = () => new Promise(r => setTimeout(r, 0));
+
+/** Cambiare vista apre il suo riepilogo nel pannello con un import()
+ *  asincrono (map.js:setColoringMode): una selezione fatta prima ci
+ *  finirebbe sotto. Si aspetta che il riepilogo ci sia (max ~1 s). */
+async function switchMapView(mode) {
+  document.getElementById(`mode-${mode}`)?.click();
+  const hasOverview = mode === 'sphereOfInfluence' || hasViewOverviewMode(mode);
+  for (let i = 0; i < 40 && hasOverview && !isViewOverviewOpen() && !isSphereOverviewOpen(); i++) {
+    await new Promise(r => setTimeout(r, 25));
+  }
+  await nextTick();
+}
+
+async function handleIncomingDeepLink() {
   const params = new URLSearchParams(window.location.search);
+  const full = !IS_WALLPAPER;
+  const section = full ? params.get('section') : null;
   const countryId = params.get('country');
-  if (countryId) {
+
+  // 1) Vista mappa: dallo stesso bottone che userebbe l'utente (entra
+  //    nelle viste che hanno un enter*, aggiorna cursori e menù). Prima di
+  //    tutto: cambiare vista riapre/richiude il pannello di riepilogo, in
+  //    modo asincrono — da qui il nextTick prima di toccare il pannello.
+  const map = full ? params.get('map') : null;
+  if (map && map !== 'diplomacy') await switchMapView(map);
+
+  // 2) Selezione del pannello. Con ?section=political la nazione è quella
+  //    di Political, che copre tutto: il pannello sotto non si apre.
+  const allianceId = full ? params.get('alliance') : null;
+  const sphereId = full ? params.get('sphere') : null;
+  if (allianceId) {
+    if (state.coloringMode !== 'blocs') await switchMapView('blocs');
+    state.selectedBlocId = allianceId;
+    const { renderMap } = await import('./diplomacy/map.js');
+    renderMap();
+    const bloc = state.externalBlocsInfo?.find(b => b.id === allianceId);
+    if (bloc && bloc.labelLng != null && state.map) state.map.flyTo({ center: [bloc.labelLng, bloc.labelLat], zoom: Math.max(state.map.getZoom(), 3) });
+    selectBlocInPanel(allianceId);
+  } else if (sphereId) {
+    if (state.coloringMode !== 'sphereOfInfluence') await switchMapView('sphereOfInfluence');
+    selectSphereInPanel(sphereId);
+  } else if (countryId && section !== 'political') {
     selectNationInPanel(countryId);
 
     // Centra la mappa sulla nazione, riusando gli stessi dati (label
@@ -83,6 +134,38 @@ function handleIncomingDeepLink() {
     if (label && state.map) {
       state.map.flyTo({ center: label.coordinates, zoom: Math.max(state.map.getZoom(), 3) });
     }
+  }
+
+  // 3) Battaglia in corso sulla mappa (senza sezione: con ?section=battles
+  //    lo stesso id è la scheda dell'archivio). Non si aspetta: i marker
+  //    arrivano col loro giro, e quando la battaglia si apre l'URL la
+  //    riprende da sé.
+  const battleId = full ? params.get('battle') : null;
+  if (battleId && section !== 'battles') {
+    import('./diplomacy/battleMarkers.js').then(m => m.openBattleById(battleId)).catch(() => {});
+  }
+
+  // 4) Sezione, con la sua scheda.
+  const open = {
+    political: () => openPoliticalView(countryId || undefined,
+      (countryId && state.nationMap?.get(countryId)?.name) || '',
+      { openSenate: params.get('senate') === '1' }),
+    economy: async () => {
+      const item = params.get('item');
+      if (item) (await import('./economy/prices.js')).openPriceItem(item);
+      return openEconomyView({ tab: item ? 'prices' : (params.get('tab') || undefined) });
+    },
+    news: () => openNewsView(),
+    mu: () => openMuView(params.get('mu') || undefined),
+    nations: () => openNationsView(params.get('nation') || undefined),
+    battles: () => openBattlesView(params.get('battle') || undefined),
+    guide: () => openGuideView(),
+    private: () => openPrivateView(),
+    alliances: () => document.getElementById('bloc-stats-btn')?.click(),
+  }[section];
+  if (open) {
+    try { await Promise.race([open(), nextTick()]); }
+    catch (err) { console.warn('[deep-link] sezione non aperta:', section, err); }
   }
 
   // ?tm=<epoch ms> — deep-link condivisibile della time machine (vedi
@@ -140,7 +223,11 @@ window.addEventListener('wareraplus:diplomacy-ready', () => {
   else if (IS_LIVE) initVisitorCounter();
   initDeployBadge();
   if (IS_WALLPAPER) startWallpaperMode();
-  handleIncomingDeepLink();
+  // Prima si legge il link, POI l'URL comincia a seguire la navigazione
+  // (vedi la testata di app/backNav.js).
+  handleIncomingDeepLink()
+    .catch(err => console.warn('[deep-link]', err))
+    .finally(startUrlSync);
   restoreAfterChunkReload();
 }, { once: true });
 

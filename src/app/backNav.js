@@ -26,15 +26,28 @@
      passano da dropBack (DOM rimosso altrove, cambio lingua…): un
      livello che non è più aperto viene scartato invece di "mangiarsi"
      una pressione di Indietro senza effetti visibili.
-   - Nessun cambio di URL: i deep-link (?country=, ?tm=) restano quelli
-     di prima. Se un livello ritocca l'URL mentre la sentinella è in cima
-     (la time machine con ?tm=), l'URL viene riportato sulla voce di
-     sotto quando la sentinella si toglie.
+   - Link condivisibili: ogni livello può portare i suoi parametri
+     (`{ section: 'mu' }`, `{ mu: id }`, `{ map: 'weeklyDamage' }`…) e la
+     barra degli indirizzi si riscrive da sola a ogni apertura/chiusura,
+     sempre con replaceState sulla voce corrente. Si toccano SOLO le chiavi
+     di URL_KEYS: ?tm= (la time machine se lo gestisce da sé), ?wallpaper=
+     e il resto restano dove sono. Chi apre il link lo rilegge da
+     main.js:handleIncomingDeepLink, che deve girare PRIMA di
+     startUrlSync(): fino ad allora l'URL non si scrive, altrimenti la
+     closePanel() del boot cancellerebbe ?country= prima che venga letto.
+   - Se un livello ritocca l'URL mentre la sentinella è in cima (la time
+     machine con ?tm=), l'URL viene riportato sulla voce di sotto quando
+     la sentinella si toglie.
    ══════════════════════════════════════════════════════════════ */
 
 const SENTINEL = 'wpBack';
 
-/** @type {{ id: string, onBack: () => void, isOpen?: () => boolean }[]} */
+/** Le chiavi dell'URL che appartengono ai livelli: le altre non si toccano.
+ *  ⚠️ `view` NO: è dello sfondo di Wallpaper Engine (?wallpaper=1&view=). */
+export const URL_KEYS = ['map', 'country', 'alliance', 'sphere', 'battle',
+  'section', 'tab', 'item', 'mu', 'nation', 'senate'];
+
+/** @type {{ id: string, onBack: () => void, isOpen?: () => boolean, params?: object }[]} */
 const stack = [];
 let armed = false;          // la voce in cima alla cronologia è la nostra sentinella?
 let ignoreNextPop = false;  // il prossimo popstate è il nostro history.back()
@@ -42,6 +55,32 @@ let carryUrl = null;        // URL della sentinella da riportare sulla voce di s
 let backTimer = null;
 let handling = false;       // dentro il popstate: la cronologia è già a posto
 let enabled = false;        // spento finché initBackNav non lo accende
+let urlReady = false;       // l'URL si scrive solo dopo aver letto il deep-link
+
+/** L'indirizzo che descrive la pila: chiavi nostre nell'ordine dei livelli
+ *  (prima la vista mappa, poi la nazione, poi la sezione…), il resto intatto. */
+function syncUrl() {
+  if (!urlReady) return;
+  const url = new URL(location.href);
+  URL_KEYS.forEach(k => url.searchParams.delete(k));
+  for (const layer of stack) {
+    // Un livello che non si vede più (scheda nascosta, popup rimosso
+    // altrove) non deve restare nel link anche se non è ancora stato potato.
+    if (!stillOpen(layer)) continue;
+    for (const [k, v] of Object.entries(layer.params || {})) {
+      if (v != null && v !== '' && v !== false) url.searchParams.set(k, String(v));
+    }
+  }
+  if (url.href !== location.href) history.replaceState(history.state, '', url);
+}
+
+/** Da chiamare una volta, dopo handleIncomingDeepLink (vedi testata). */
+export function startUrlSync() {
+  if (!enabled) return;
+  urlReady = true;
+  prune();
+  syncUrl();
+}
 
 function stillOpen(layer) {
   if (!layer.isOpen) return true;
@@ -82,8 +121,9 @@ function scheduleDisarm() {
  * @param {string} id
  * @param {() => void} onBack  cosa fare quando l'utente preme Indietro
  * @param {() => boolean} [isOpen]
+ * @param {object} [params]  i suoi parametri nell'URL (chiavi di URL_KEYS)
  */
-export function pushBack(id, onBack, isOpen) {
+export function pushBack(id, onBack, isOpen, params) {
   if (!enabled) return;
   // Un figlio ('mu/detail') vale solo dentro il suo genitore aperto: una
   // vista che si ridisegna a overlay chiuso (giro automatico, cambio
@@ -99,10 +139,21 @@ export function pushBack(id, onBack, isOpen) {
   if (existing) {
     existing.onBack = onBack;
     existing.isOpen = isOpen;
+    existing.params = params;
   } else {
-    stack.push({ id, onBack, isOpen });
+    stack.push({ id, onBack, isOpen, params });
   }
   arm();
+  syncUrl();
+}
+
+/** Cambia i parametri di un livello già aperto (scheda di Economia, nazione
+ *  scelta dentro Political) senza toccare la cronologia. */
+export function updateBackParams(id, params) {
+  const layer = stack.find(l => l.id === id);
+  if (!layer) return;
+  layer.params = { ...layer.params, ...params };
+  syncUrl();
 }
 
 /** Il livello `id` (e i suoi figli `id/...`) è stato chiuso. */
@@ -112,15 +163,16 @@ export function dropBack(id) {
     const lid = stack[i].id;
     if (lid === id || lid.startsWith(id + '/')) stack.splice(i, 1);
   }
-  if (handling) return;
+  if (handling) { syncUrl(); return; }
   prune();
+  syncUrl();
   if (!stack.length && armed) scheduleDisarm();
 }
 
 /** Comodità per le viste che si ridisegnano da sole: allinea il livello
  *  `id` a uno stato booleano ("la scheda di dettaglio è aperta?"). */
-export function syncBack(id, active, onBack, isOpen) {
-  if (active) pushBack(id, onBack, isOpen);
+export function syncBack(id, active, onBack, isOpen, params) {
+  if (active) pushBack(id, onBack, isOpen, params);
   else if (stack.some(l => l.id === id)) dropBack(id);
 }
 
@@ -132,6 +184,7 @@ function onPopState() {
     }
     carryUrl = null;
     prune();
+    syncUrl();
     if (stack.length) arm();
     return;
   }
@@ -151,6 +204,9 @@ function onPopState() {
     finally { handling = false; }
   }
   prune();
+  // Siamo sulla voce di sotto: il suo URL deve dire cosa è aperto ADESSO
+  // (la sentinella rimessa da arm() lo copia).
+  syncUrl();
   if (stack.length) arm();
 }
 

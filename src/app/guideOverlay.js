@@ -36,7 +36,7 @@ export async function openGuideView() {
 
   enterOverlay(overlayEl, 'guide');
   // Indietro del browser/telefono = closeGuideView (vedi backNav.js).
-  pushBack('guide', closeGuideView, isGuideViewOpen);
+  pushBack('guide', closeGuideView, isGuideViewOpen, { section: 'guide' });
 
   await withModuleLoading('guide', async () => {
     const mod = await loadModule(() => import('../guide/main.js'), 'guide');

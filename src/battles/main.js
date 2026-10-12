@@ -46,6 +46,7 @@ let _pendingCountryFilter = null;
 let _langHandler = null;
 // Battaglia aperta nel dettaglio (scomposizione per nazione). Null = elenco.
 let _openBattle = null;
+let _pendingBattleId = null; // WarEra+: da aprire appena c'è l'archivio (link ?battle=)
 
 const TABS = [
   { id: 'archive', key: 'tabArchive' },
@@ -77,11 +78,21 @@ function paintBody() {
   const body = document.getElementById('wp-btl-body');
   if (!body) return;
 
+  // WarEra+: battaglia chiesta da un link (?section=battles&battle=), aperta
+  // appena l'archivio è in memoria. Se non c'è (più vecchia di 90 giorni)
+  // resta l'elenco.
+  if (_tab === 'archive' && _pendingBattleId && _archive) {
+    const id = _pendingBattleId;
+    _pendingBattleId = null;
+    const found = (_archive.live || []).find(x => x.id === id) || _archive.battles.find(x => x.id === id);
+    if (found) { _openBattle = found; loadBattleDetail(found, () => paintBody()); }
+  }
+
   // WarEra+: con la scheda di una battaglia aperta, Indietro torna
   // all'archivio invece di chiudere la sezione (vedi app/backNav.js).
   syncBack('battles/detail', _tab === 'archive' && !!_openBattle,
     () => { _openBattle = null; resetBattleDetail(); paintBody(); },
-    () => _tab === 'archive' && !!_openBattle);
+    () => _tab === 'archive' && !!_openBattle, { battle: _openBattle?.id });
 
   if (_tab === 'archive') {
     if (!_archive) { body.innerHTML = `<div class="wp-btl-loading">${btlT('loading')}</div>`; return; }
@@ -199,6 +210,14 @@ function startLiveRefresh() {
 
 /** Ferma il giro. Esportata perché la chiami la chiusura dell'overlay:
  *  la vista non sa da sola quando smette di essere guardata. */
+/** WarEra+ — apre la scheda di una battaglia dell'archivio (link
+ *  condivisibile). Va chiamata PRIMA di initBattlesView. */
+export function openBattleDetail(battleId) {
+  _pendingBattleId = battleId;
+  _openBattle = null;
+  _tab = 'archive';
+}
+
 export function stopBattlesAutoRefresh() {
   if (_liveTimer) { clearInterval(_liveTimer); _liveTimer = null; }
 }
