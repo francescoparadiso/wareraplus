@@ -54,6 +54,7 @@ const GAP_MS = 900;
 const MAX_QUEUE = 12;
 const LIFE_MS = 3200;          // un ping, dall'inizio alla scomparsa
 const LABEL_MS = 4500;
+const LABEL_MARGIN = 8;        // px di aria fra due etichette
 const REGION_POLL_MS = 3 * 60 * 1000;
 const MIN_ARC_DEG = 1.2;
 
@@ -71,6 +72,7 @@ let _queue = [];
 let _live = [];                // { start, kind, color, pos?, coords? }
 let _raf = null;
 let _gapTimer = null;
+let _labels = [];              // etichette a schermo: { inner, until }
 let _paused = false;
 let _regionTimer = null;
 let _regionSince = null;
@@ -167,9 +169,44 @@ function startRegionPoll() {
 function pump() {
   if (_gapTimer || !_queue.length) return;
   if (_paused || state.timeMachineActive || document.hidden || !state.map?.getLayer('regions-fill')) return;
-  const ev = _queue.shift();
-  play(ev);
+  const ev = _queue[0];
+  // Segnalato dall'utente: con un ping ogni GAP_MS e etichette che durano
+  // LABEL_MS, due eventi vicini sulla mappa mettevano le etichette una
+  // sopra l'altra. Si posa l'etichetta, si guarda se tocca una di quelle
+  // ancora a schermo e, se sì, la si toglie e l'evento ASPETTA che l'altra
+  // se ne vada: gli eventi lontani continuano al solito ritmo, quelli
+  // vicini escono sfalsati. In ordine: chi aspetta ferma la coda dietro.
+  const label = placeLabel(state.map, labelAnchor(ev), ev.label, ev.color);
+  if (label) {
+    const wait = overlapWait(label.inner);
+    if (wait > 0) {
+      label.marker.remove();
+      _gapTimer = setTimeout(() => { _gapTimer = null; pump(); }, wait + 150);
+      return;
+    }
+  }
+  _queue.shift();
+  play(ev, label);
   _gapTimer = setTimeout(() => { _gapTimer = null; pump(); }, GAP_MS);
+}
+
+const labelAnchor = ev => ev.labelAt || ev.pos || ev.coords?.[ev.coords.length - 1];
+
+/** Quanto manca perché sparisca l'ultima etichetta che `inner` toccherebbe
+ *  (0 = posto libero). Fuori schermo non tocca niente di visibile. */
+function overlapWait(inner) {
+  const now = performance.now();
+  _labels = _labels.filter(l => l.until > now && l.inner.isConnected);
+  const r = inner.getBoundingClientRect();
+  let wait = 0;
+  for (const l of _labels) {
+    if (l.inner === inner) continue;
+    const o = l.inner.getBoundingClientRect();
+    const hit = r.left < o.right + LABEL_MARGIN && r.right > o.left - LABEL_MARGIN
+      && r.top < o.bottom + LABEL_MARGIN && r.bottom > o.top - LABEL_MARGIN;
+    if (hit) wait = Math.max(wait, l.until - now);
+  }
+  return wait;
 }
 
 function ensureLayers(map) {
@@ -197,8 +234,8 @@ function ensureLayers(map) {
   });
 }
 
-function showLabel(map, at, text, color) {
-  if (!at || !text) return;
+function placeLabel(map, at, text, color) {
+  if (!at || !text) return null;
   // Due elementi: MapLibre posiziona il marcatore con `transform` sul
   // contenitore, e l'animazione (che usa anch'essa transform) lo
   // sovrascriverebbe: si anima solo quello interno.
@@ -214,13 +251,19 @@ function showLabel(map, at, text, color) {
   // marcatori delle battaglie (z-index 2000-2100, battleMarkers.js): senza,
   // il nome della nazione le passava sopra a metà.
   el.style.zIndex = '2300';
-  setTimeout(() => marker.remove(), LABEL_MS);
+  return { marker, inner };
 }
 
-function play(ev) {
+/** `label` già posata da pump (che ha controllato le sovrapposizioni);
+ *  senza, la si posa qui (ping di una notizia cliccata: va mostrato
+ *  subito, ma da lì in poi la coda ne tiene conto). */
+function play(ev, label = placeLabel(state.map, labelAnchor(ev), ev.label, ev.color)) {
   const map = state.map;
   ensureLayers(map);
-  showLabel(map, ev.labelAt || ev.pos || ev.coords?.[ev.coords.length - 1], ev.label, ev.color);
+  if (label) {
+    _labels.push({ inner: label.inner, until: performance.now() + LABEL_MS });
+    setTimeout(() => label.marker.remove(), LABEL_MS);
+  }
   // Animazioni spente (Impostazioni): resta l'etichetta, ferma; niente onde.
   if (!animationsOn()) return;
   _live.push({ ...ev, start: performance.now() });
