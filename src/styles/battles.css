@@ -825,3 +825,51 @@ body.light-theme .wp-btl-tl-tip { background: var(--wp-ov-bg-light, #f4f6fa); }
 .wp-btl-tl-side { font-size: 11.5px; font-weight: 600; }
 .wp-btl-tl-side.wp-btl-tl-attacker { color: var(--wp-btl-atk); }
 .wp-btl-tl-side.wp-btl-tl-defender { color: var(--wp-btl-def); }
+
+/* ══════════════════════════════════════════════════════════════
+   Scomposizione per alleanza (alliancesHtml in battleDetail.js)
+   ------------------------------------------------------------------
+   Nome con il pallino nel colore dell'alleanza sulla mappa, e sotto le
+   bandiere delle nazioni che lo compongono in QUESTA battaglia, in ordine
+   di danno: senza, "Alleanza X 40%" non dice chi ha fatto quel 40%.
+   La cella va a capo (nome lungo + riga di bandiere): niente inline-flex
+   sulla td, stesso problema già visto con le unità militari.
+   ══════════════════════════════════════════════════════════════ */
+.wp-btl-ally-table td.wp-btl-ally { white-space: normal; }
+.wp-btl-ally-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 7px;
+  font-weight: 600;
+}
+.wp-btl-ally-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.wp-btl-ally-dot-none { border: 1px dashed var(--wp-ov-text-dim, #8b949e); }
+.wp-btl-ally-then {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--wp-ov-text-dim, #8b949e);
+}
+.wp-btl-ally-both {
+  font-style: normal;
+  font-weight: 600;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--wp-btl-atk, #f85149);
+  border: 1px solid currentColor;
+}
+.wp-btl-ally-flags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  margin: 4px 0 0 17px;
+}
+.wp-btl-ally-flags .wp-btl-flag { height: 11px; }
+.wp-btl-ally-more { font-size: 10.5px; color: var(--wp-ov-text-dim, #8b949e); }

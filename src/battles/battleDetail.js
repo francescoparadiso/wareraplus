@@ -5,11 +5,12 @@
    l'elenco non può rispondere: dietro a "57M di danno e 4.019 di costo",
    CHI c'era e chi ha preso cosa.
 
-   Quattro blocchi:
+   Cinque blocchi:
    1. riepilogo (regione, esito, danno, costo);
    2. NAZIONI per schieramento — danno, quota del lato, taglia incassata;
-   3. unità militari, stesse colonne, a richiesta (2 chiamate in più);
-   4. contratti mercenari: chi paga, quale unità, quanto.
+   3. le stesse nazioni sommate per ALLEANZA (di quando è iniziata);
+   4. unità militari, stesse colonne, a richiesta (2 chiamate in più);
+   5. contratti mercenari: chi paga, quale unità, quanto.
    Più, sotto ai finanziatori, l'ANDAMENTO minuto per minuto (quando è
    entrata ogni nazione, dove si è girata) — solo per le battaglie che il
    server ha registrato, vedi battleTimeline.js.
@@ -58,6 +59,12 @@ let _spend = null;   // taglia stimata + contratti (src/diplomacy/battleSpending
 // Andamento minuto per minuto (battleTimeline.js). null = il server non
 // l'ha registrata, e la sezione semplicemente non compare.
 let _tl = null;
+// Registro delle alleanze (src/app/timeMachineAlliances.js, ~80 KB gzip,
+// una volta per sessione). `_allyHist` = il modulo, se il registro è
+// arrivato; `_allyTried` dice che il tentativo è finito, riuscito o no.
+// Sopravvivono fra una battaglia e l'altra: il registro è lo stesso.
+let _allyHist = null;
+let _allyTried = false;
 
 function fmtNum(n) {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -127,6 +134,16 @@ function typeLabel(t) {
   return btlT('typeWar');
 }
 
+function sideHeadHtml(battle, sideKey, label, color, countryId) {
+  return `
+      <div class="wp-btl-side-head" style="--side:${color}">
+        ${countryId ? flagHtml(countryId) : ''}
+        <span class="wp-btl-side-name">${escapeHtml(nationName(countryId) || typeLabel(battle.type))}</span>
+        <span class="wp-btl-side-role">${label}</span>
+        ${battle.wonBy === sideKey ? `<span class="wp-btl-winner">🏆</span>` : ''}
+      </div>`;
+}
+
 /* ── Una colonna: un lato della battaglia ──
    La percentuale è sul danno del LATO, non della battaglia intera: la
    domanda è "quanto ha pesato questa nazione fra i suoi", e con due lati
@@ -149,12 +166,7 @@ function sideTable(rows, sideKey, battle, opts) {
 
   return `
     <div class="wp-btl-side-col wp-btl-side-${sideKey}">
-      <div class="wp-btl-side-head" style="--side:${color}">
-        ${countryId ? flagHtml(countryId) : ''}
-        <span class="wp-btl-side-name">${escapeHtml(nationName(countryId) || typeLabel(battle.type))}</span>
-        <span class="wp-btl-side-role">${label}</span>
-        ${battle.wonBy === sideKey ? `<span class="wp-btl-winner">🏆</span>` : ''}
-      </div>
+      ${sideHeadHtml(battle, sideKey, label, color, countryId)}
       <table class="wp-btl-table wp-btl-side-table${pay ? ' wp-btl-has-pay' : ''}">
         <thead><tr>
           <th>${entityHeader}</th>
@@ -331,6 +343,132 @@ function muSectionHtml(battle) {
     ${muNamesMissing(_mu) ? `<p class="wp-btl-foot">${btlT('muNamesMissing')}</p>` : ''}`;
 }
 
+/* ══ PER ALLEANZA ══════════════════════════════════════════
+   Le stesse righe per nazione, sommate per alleanza: la domanda "quanto
+   ha messo il blocco X in questa battaglia" prima si faceva a mano,
+   riconoscendo le bandiere una per una. Zero fetch sulle classifiche: è
+   _detail.sides raggruppato.
+
+   ⚠️ L'alleanza è quella di QUANDO È INIZIATA la battaglia, dal registro
+   eventi (la stessa fonte della time machine), non quella di oggi: un
+   archivio di novanta giorni ha nazioni che nel frattempo hanno cambiato
+   blocco, e con l'appartenenza di oggi il loro danno finirebbe
+   all'alleanza sbagliata senza che niente lo faccia notare. Se il
+   registro non arriva si usa quella di oggi (state.nationAlliancesMap),
+   e la nota sotto lo dichiara.
+   ─────────────────────────────────────────────────────────── */
+function allianceOf(countryId, ts) {
+  if (_allyHist && ts) {
+    const a = _allyHist.alliancesAt(countryId, ts);
+    if (a?.tipo === 'blocco') {
+      return { id: a.id, name: a.nome || state.allianceMap?.get(a.id)?.name || null, then: a.allora, today: false };
+    }
+  }
+  const ids = state.nationAlliancesMap?.get(countryId);
+  const id = ids?.size ? [...ids][0] : null;
+  return { id, name: id ? state.allianceMap?.get(id)?.name || null : null, then: null, today: true };
+}
+
+function allianceRows(sideKey, ts) {
+  const by = new Map();
+  let today = false;
+  for (const r of _detail?.sides?.[sideKey] || []) {
+    const a = allianceOf(r.id, ts);
+    if (a.today) today = true;
+    const key = a.id || '';
+    const cur = by.get(key) || { id: a.id, name: a.name, then: a.then, damage: 0, money: 0, nations: [] };
+    cur.damage += r.damage;
+    cur.money += r.money;
+    cur.nations.push(r.id);     // già in ordine di danno, come le righe
+    by.set(key, cur);
+  }
+  // Per danno, ma "senza alleanza" sempre in fondo: non è un blocco, e in
+  // cima sembrerebbe il più grosso di tutti.
+  const rows = [...by.values()].sort((a, b) => (!a.id - !b.id) || (b.damage - a.damage));
+  return { rows, today };
+}
+
+const ALLY_FLAGS = 8;
+
+function allianceCellHtml(a, both) {
+  const color = a.id ? (state.allianceColorMap?.get(a.id) || '#888888') : null;
+  const name = a.id ? escapeHtml(a.name || '—') : btlT('noAlliance');
+  const flags = a.nations.slice(0, ALLY_FLAGS)
+    .map(id => `<span title="${escapeHtml(nationName(id) || '')}">${flagHtml(id)}</span>`).join('');
+  const more = a.nations.length > ALLY_FLAGS ? `<span class="wp-btl-ally-more">+${a.nations.length - ALLY_FLAGS}</span>` : '';
+  return `
+    <span class="wp-btl-ally-name">
+      <i class="wp-btl-ally-dot${color ? '' : ' wp-btl-ally-dot-none'}"${color ? ` style="background:${color}"` : ''}></i>
+      <span>${name}${a.then ? ` <em class="wp-btl-ally-then">${btlT('allyThen', { name: escapeHtml(a.then) })}</em>` : ''}</span>
+      ${both ? `<em class="wp-btl-ally-both">${btlT('allyBoth')}</em>` : ''}
+    </span>
+    <span class="wp-btl-ally-flags">${flags}${more}</span>`;
+}
+
+function allianceTable(rows, sideKey, battle, opts) {
+  const { label, color, countryId, both } = opts;
+  const totDmg = rows.reduce((s, r) => s + r.damage, 0);
+  const totMoney = rows.reduce((s, r) => s + r.money, 0);
+  return `
+    <div class="wp-btl-side-col wp-btl-side-${sideKey}">
+      ${sideHeadHtml(battle, sideKey, label, color, countryId)}
+      <table class="wp-btl-table wp-btl-side-table wp-btl-ally-table">
+        <thead><tr>
+          <th>${btlT('colAlliance')}</th>
+          <th class="wp-btl-num">${btlT('colDamage')}</th>
+          <th class="wp-btl-num wp-btl-pct">%</th>
+          <th class="wp-btl-num" title="${btlT('earnedHint')}">${btlT('colEarned')}</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td class="wp-btl-ally">${allianceCellHtml(r, r.id && both.has(r.id))}</td>
+              <td class="wp-btl-num">${fmtNum(r.damage)}</td>
+              <td class="wp-btl-num wp-btl-pct">${totDmg ? (r.damage / totDmg * 100).toFixed(1) : '0.0'}%</td>
+              <td class="wp-btl-num wp-btl-bounty">${r.money ? fmtMoney(r.money) : '—'}</td>
+            </tr>`).join('')}
+        </tbody>
+        <tfoot><tr>
+          <td>${btlT('colTotalRow', { n: rows.length })}</td>
+          <td class="wp-btl-num">${fmtNum(totDmg)}</td>
+          <td class="wp-btl-num wp-btl-pct">100%</td>
+          <td class="wp-btl-num wp-btl-bounty">${fmtMoney(totMoney)}</td>
+        </tr></tfoot>
+      </table>
+    </div>`;
+}
+
+function alliancesHtml(battle) {
+  // Finché il registro non ha risposto non si disegna niente: mostrare
+  // prima l'appartenenza di oggi e poi spostare le righe sarebbe peggio.
+  if (!_allyTried || !_detail) return '';
+  const ts = _detail.startedAt || battle.endedAt || Date.now();
+  const def = allianceRows('defender', ts);
+  const atk = allianceRows('attacker', ts);
+  if (!def.rows.length && !atk.rows.length) return '';
+  // La stessa alleanza su tutti e due i lati: membri che si combattono,
+  // ed è proprio la cosa che una tabella per alleanza deve far vedere.
+  // Almeno l'1% del danno di OGNI lato: senza soglia il cartellino
+  // finiva su quasi tutte le righe (sulla Francia–Italia del 13 ottobre
+  // 12 alleanze su 12), perché basta un cittadino che colpisce dall'altra
+  // parte per qualche migliaio di danno.
+  const ids = (rows) => {
+    const tot = rows.reduce((s, r) => s + r.damage, 0);
+    return new Set(rows.filter(r => r.id && tot && r.damage / tot >= 0.01).map(r => r.id));
+  };
+  const atkIds = ids(atk.rows);
+  const both = new Set([...ids(def.rows)].filter(id => atkIds.has(id)));
+  return `
+    <h3 class="wp-btl-h3">${btlT('byAlliance')}</h3>
+    <div class="wp-btl-sides">
+      ${allianceTable(def.rows, 'defender', battle, { label: btlT('defender'), color: 'var(--wp-btl-def)',
+        countryId: battle.defender.countryId, both })}
+      ${allianceTable(atk.rows, 'attacker', battle, { label: btlT('attacker'), color: 'var(--wp-btl-atk)',
+        countryId: battle.attacker.countryId, both })}
+    </div>
+    <p class="wp-btl-foot wp-btl-foot-tight">${def.today || atk.today ? btlT('allyNoteToday') : btlT('allyNoteThen')}</p>`;
+}
+
 /* ══ I FINANZIATORI ════════════════════════════════════════
    Due tabelle sopra la scomposizione per nazione, una per schieramento:
    chi ha versato soldi nel tesoro di quel belligerante MENTRE la
@@ -487,6 +625,8 @@ export function renderBattleDetail(battle) {
       <p class="wp-btl-foot wp-btl-foot-tight">${btlT('paidPerKNote')}${anyCtr ? ' ' + btlT('paidPerKCtrNote') : ''}${
         anyCtr && battle.live ? ' ' + btlT('paidPerKLiveNote') : ''}</p>
 
+      ${alliancesHtml(battle)}
+
       <h3 class="wp-btl-h3">${btlT('byMu')}</h3>
       ${muSectionHtml(battle)}
 
@@ -519,8 +659,20 @@ export async function loadBattleDetail(battle, repaint) {
     import('../diplomacy/battleSpending.js').then(m => m.fetchBattleSpending(battle.id))
       .then(d => { _spend = d; }).catch(() => {}),
     fetchBattleTimeline(battle.id, { live: Boolean(battle.live) }).then(d => { _tl = d; }),
+    loadAllianceRegistry(),
   ]);
   repaint();
+}
+
+/** Il registro delle alleanze, una volta per sessione. Senza server la
+ *  tabella per alleanza c'è lo stesso, con l'appartenenza di oggi. */
+async function loadAllianceRegistry() {
+  if (_allyTried) return;
+  try {
+    const m = await import('../app/timeMachineAlliances.js');
+    if (await m.loadAllianceHistory()) _allyHist = m;
+  } catch (_) { /* resta l'appartenenza di oggi */ }
+  _allyTried = true;
 }
 
 /** Risolve nome e logo di POCHE unità (una richiesta sola, vedi
