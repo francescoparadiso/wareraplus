@@ -13,6 +13,10 @@
         regola: due disegni degli stessi dati, nessuna richiesta in più
         per passare dall'una all'altra.
 
+   Le metriche stanno sempre in cima; grafici, danno nel tempo, lavoro e
+   tasse ed elenco cittadini sono SCHEDE, una visibile alla volta (vedi
+   NAT_TABS).
+
    L'elenco cittadini è l'unico pezzo che dipende dal server di cache
    (/country-citizens): senza, si ricade su una risoluzione diretta
    limitata e lo si dichiara in chiaro invece di fingere una lista
@@ -62,6 +66,26 @@ const CITIZEN_SORTS = [
 
 const VIEW_KEY = 'we_nat_citizen_view';
 
+/* Le schede della pagina nazione. Prima le sezioni stavano una sotto
+   l'altra e la pagina dell'Italia era alta ~14.500px, di cui 12.000
+   l'elenco dei 340 cittadini: per arrivare a "Lavoro e tasse" si
+   scorrevano grafici che non si cercavano. Le metriche in cima restano
+   sempre visibili; sotto, una scheda alla volta. La scelta resta passando
+   da una nazione all'altra (chi confronta i cittadini di tre nazioni li
+   vuole vedere tutte e tre le volte). */
+const NAT_TABS = [
+  { id: 'style',    label: 'playstyle' },
+  { id: 'damage',   label: 'tabDamage' },
+  { id: 'labour',   label: 'tabLabour' },
+  { id: 'citizens', label: 'citizenList' },
+];
+let _ntab = 'style';
+let _painted = new Set();   // schede già disegnate per la nazione aperta
+// Cittadini mostrati prima del "mostra tutti": l'Italia ne ha 340, e da
+// soli facevano 12.000px di tabella anche dentro la loro scheda.
+const CIT_TOP = 50;
+let _citAll = false;
+
 let _host = null;
 let _nation = null;
 let _citizens = null;      // { rows, total, known, partial }
@@ -74,7 +98,7 @@ let _view = (() => {
 
 export function renderNationDetail(host, nation, ctx) {
   _host = host;
-  if (_nation?._id !== nation._id) _citizens = null;
+  if (_nation?._id !== nation._id) { _citizens = null; _citAll = false; }
   _nation = nation;
 
   host.innerHTML = `
@@ -95,15 +119,22 @@ export function renderNationDetail(host, nation, ctx) {
       ${METRICS.map(m => statCard(nation, m)).join('')}
     </section>
 
-    <section class="wp-nat-charts" id="wp-nat-charts"></section>
+    <nav class="wp-nat-dtabs" id="wp-nat-dtabs" role="tablist">
+      ${NAT_TABS.map(t => `<button type="button" role="tab" class="wp-nat-dtab${_ntab === t.id ? ' active' : ''}"
+        aria-selected="${_ntab === t.id}" data-ntab="${t.id}">${escapeHtml(natT(t.label))}${
+        t.id === 'citizens' ? '<span class="wp-nat-dtab-n" id="wp-nat-dtab-cit"></span>' : ''}</button>`).join('')}
+    </nav>
 
-    <section class="wp-nat-lv" id="wp-nat-levels"></section>
+    <div data-npanel="style"${_ntab === 'style' ? '' : ' hidden'}>
+      <section class="wp-nat-charts" id="wp-nat-charts"></section>
+      <section class="wp-nat-lv" id="wp-nat-levels"></section>
+    </div>
 
-    <section class="wp-nat-curves" id="wp-nat-curves"></section>
+    <section class="wp-nat-curves" id="wp-nat-curves" data-npanel="damage"${_ntab === 'damage' ? '' : ' hidden'}></section>
 
-    <section class="wp-nat-labour" id="wp-nat-labour"></section>
+    <section class="wp-nat-labour" id="wp-nat-labour" data-npanel="labour"${_ntab === 'labour' ? '' : ' hidden'}></section>
 
-    <section class="wp-nat-citizens">
+    <section class="wp-nat-citizens" data-npanel="citizens"${_ntab === 'citizens' ? '' : ' hidden'}>
       <h3 class="wp-nat-section-title">
         ${escapeHtml(natT('citizenList'))}
         <span class="wp-nat-count" id="wp-nat-citizen-count"></span>
@@ -124,6 +155,10 @@ export function renderNationDetail(host, nation, ctx) {
     </section>`;
 
   host.querySelector('#wp-nat-back').addEventListener('click', () => ctx.onBack());
+  host.querySelector('#wp-nat-dtabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-ntab]');
+    if (btn) showTab(btn.dataset.ntab);
+  });
   // Political è il PRIMO overlay nel DOM: aprirlo con Statistiche nazioni
   // ancora aperta lo lascerebbe sotto, invisibile. Si chiude questa prima.
   host.querySelector('#wp-nat-political').addEventListener('click', async () => {
@@ -146,9 +181,42 @@ export function renderNationDetail(host, nation, ctx) {
   });
 
   paintToday(nation);
-  paintCurves(nation);
-  paintLabour(nation);
+  _painted = new Set();
+  paintTab(_ntab);
   loadCitizens(nation);
+}
+
+function showTab(id) {
+  if (!_host || !NAT_TABS.some(t => t.id === id)) return;
+  _ntab = id;
+  _host.querySelectorAll('[data-ntab]').forEach(b => {
+    const on = b.dataset.ntab === id;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', String(on));
+  });
+  _host.querySelectorAll('[data-npanel]').forEach(p => { p.hidden = p.dataset.npanel !== id; });
+  paintTab(id);
+}
+
+/* Danno e Lavoro si disegnano alla PRIMA apertura della loro scheda, non
+   prima: le curve misurano la larghezza del contenitore al momento del
+   disegno (damageCurves.js), e dentro una scheda nascosta varrebbe zero —
+   uscirebbero al minimo di 320px. In più chi non le apre non scarica
+   /damage-timeline e /labour-history. Stile di gioco e Cittadini dipendono
+   dall'elenco cittadini e si disegnano quando arriva (loadCitizens). */
+function paintTab(id) {
+  if (!_nation || _painted.has(id)) return;
+  if (id === 'damage') { _painted.add(id); paintCurves(_nation); }
+  else if (id === 'labour') { _painted.add(id); paintLabour(_nation); }
+}
+
+/* Se il server non ha quella sezione il modulo la lascia vuota (degrado
+   voluto, vedi i due moduli): in una scheda a sé una pagina bianca
+   sembrerebbe un guasto, quindi lo si dice. */
+function markIfEmpty(el) {
+  if (el && !el.innerHTML.trim()) {
+    el.innerHTML = `<div class="wp-nat-empty">${escapeHtml(natT('tabUnavailable'))}</div>`;
+  }
 }
 
 function statCard(nation, m) {
@@ -193,7 +261,7 @@ function paintCurves(nation) {
   renderDamageCurves(el, nation).catch(err => {
     console.warn('WarEra+ nations: curve del danno non disegnate:', err.message);
     el.innerHTML = '';
-  });
+  }).then(() => markIfEmpty(el));
 }
 
 /* Lavoro e tasse: archivio CHIUSO (29 lug - 17 set 2026), nessun poll che
@@ -206,7 +274,7 @@ function paintLabour(nation) {
   renderLabour(el, nation).catch(err => {
     console.warn('WarEra+ nations: sezione lavoro non disegnata:', err.message);
     el.innerHTML = '';
-  });
+  }).then(() => markIfEmpty(el));
 }
 
 async function loadCitizens(nation) {
@@ -283,6 +351,8 @@ function renderCitizens() {
   if (!listEl || !_citizens) return;
 
   const { rows, total, known, partial } = _citizens;
+  const tabN = _host?.querySelector('#wp-nat-dtab-cit');
+  if (tabN) tabN.textContent = rows.length ? String(rows.length) : '';
   if (countEl) {
     const base = total
       ? `${known} ${natT('citizensKnown')} ${natT('of')} ${total}`
@@ -296,14 +366,26 @@ function renderCitizens() {
   }
 
   const sorted = sortCitizens(rows);
+  // Primi CIT_TOP secondo l'ordinamento scelto: si ordina l'elenco INTERO
+  // e poi si taglia, quindi "i 50 più ricchi" sono davvero quelli.
+  const shown = _citAll ? sorted : sorted.slice(0, CIT_TOP);
+  const more = sorted.length > CIT_TOP
+    ? `<button type="button" class="wp-nat-more" id="wp-nat-cit-more">${escapeHtml(
+        (_citAll ? natT('showTopCitizens') : natT('showAllCitizens'))
+          .replace('{n}', String(_citAll ? CIT_TOP : sorted.length)))}</button>`
+    : '';
 
   const notice = partial ? `<p class="wp-nat-notice">${escapeHtml(natT('citizensPartial'))}</p>` : '';
   listEl.innerHTML = notice + (_view === 'cards'
-    ? `<div class="wp-nat-citizen-grid">${sorted.map(citizenCard).join('')}</div>`
-    : citizenTable(sorted));
+    ? `<div class="wp-nat-citizen-grid">${shown.map(citizenCard).join('')}</div>`
+    : citizenTable(shown)) + more;
 
   listEl.querySelectorAll('.wp-nat-cth-btn[data-sort]').forEach(btn => {
     btn.addEventListener('click', () => sortByHeader(btn.dataset.sort));
+  });
+  listEl.querySelector('#wp-nat-cit-more')?.addEventListener('click', () => {
+    _citAll = !_citAll;
+    renderCitizens();
   });
 }
 
