@@ -252,19 +252,46 @@ export async function getBattleBounty(battleId, { live = false } = {}) {
   }
 }
 
+/* ── Tutte le aste aggiudicate di una battaglia ──
+   `limit` non passa 50, e una battaglia grossa ne ha molte di più: la
+   Francia–Italia del 13 ottobre 2026 ne aveva 169, e leggendo la sola
+   prima pagina la colonna "di cui contratti" mostrava 5.162 sul lato
+   francese contro 30.232 veri. Si insegue il cursore, una richiesta per
+   pagina, fino a MAX_AUCTION_PAGES; oltre si dichiara il troncamento.
+   `firstPage` permette di riusare la pagina già arrivata in un batch. */
+const MAX_AUCTION_PAGES = 12;
+async function _allWonAuctions(battleId, firstPage) {
+  let page = firstPage;
+  if (page === undefined) {
+    [page] = await trpcBatch([
+      ['mercenaryContractAuction.getPaginatedAuctions', { battleId, status: 'won', limit: 50 }],
+    ]);
+  }
+  if (!page) return null;
+  const items = [...(page.items || [])];
+  let cursor = page.nextCursor;
+  for (let p = 1; cursor && p < MAX_AUCTION_PAGES; p++) {
+    const [next] = await trpcBatch([
+      ['mercenaryContractAuction.getPaginatedAuctions', { battleId, status: 'won', limit: 50, cursor }],
+    ]);
+    if (!next?.items?.length) break;
+    items.push(...next.items);
+    cursor = next.nextCursor;
+  }
+  return { items, truncated: Boolean(cursor) };
+}
+
 /** Contratti mercenari aggiudicati di UNA battaglia, on-demand (fallback). */
 export async function getBattleContracts(battleId) {
   try {
-    const [res] = await trpcBatch([
-      ['mercenaryContractAuction.getPaginatedAuctions', { battleId, status: 'won', limit: 50 }],
-    ]);
+    const res = await _allWonAuctions(battleId);
     const items = res?.items || [];
     return {
       total: items.reduce((s, a) => s + (Number(a.currentPayout) || 0), 0),
       count: items.length,
-      // Oltre 50 contratti in una sola battaglia servirebbe il cursore: qui
-      // si dichiara il troncamento invece di mostrare un numero basso.
-      truncated: Boolean(res?.nextCursor),
+      // Oltre il tetto di pagine si dichiara il troncamento invece di
+      // mostrare un numero basso.
+      truncated: Boolean(res?.truncated),
     };
   } catch (err) {
     console.warn('WarEra+ battaglie: contratti non disponibili', err);
@@ -350,7 +377,7 @@ export async function getBattleDetail(battleId, { live = false } = {}) {
     // "durante" la battaglia. È pubblica come le altre quattro: nessun
     // consumo del proxy, e una procedura in più in un batch che c'era già
     // non è una richiesta in più.
-    const [dAtk, dDef, mAtk, mDef, auctions, raw] = await trpcBatch([
+    const [dAtk, dDef, mAtk, mDef, firstAuctions, raw] = await trpcBatch([
       rank('damage', 'country', 'attacker'),
       rank('damage', 'country', 'defender'),
       rank('money', 'country', 'attacker'),
@@ -358,6 +385,8 @@ export async function getBattleDetail(battleId, { live = false } = {}) {
       ['mercenaryContractAuction.getPaginatedAuctions', { battleId, status: 'won', limit: 50 }],
       ['battle.getById', { battleId }],
     ]);
+    // La prima pagina arriva nel batch; le altre solo se ci sono.
+    const auctions = await _allWonAuctions(battleId, firstAuctions);
 
     const detail = {
       startedAt: _ts(raw?.createdAt),
@@ -381,7 +410,7 @@ export async function getBattleDetail(battleId, { live = false } = {}) {
         minDamage: Number(a.minimumDamage) || 0,
         createdAt: _ts(a.createdAt),
       })).sort((a, b) => b.payout - a.payout),
-      contractsTruncated: Boolean(auctions?.nextCursor),
+      contractsTruncated: Boolean(auctions?.truncated),
     };
 
     // Nessuna delle due classifiche ha risposto: è un errore di rete, non
