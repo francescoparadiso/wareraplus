@@ -5,15 +5,17 @@
    l'elenco non può rispondere: dietro a "57M di danno e 4.019 di costo",
    CHI c'era e chi ha preso cosa.
 
-   Cinque blocchi:
-   1. riepilogo (regione, esito, danno, costo);
-   2. NAZIONI per schieramento — danno, quota del lato, taglia incassata;
-   3. le stesse nazioni sommate per ALLEANZA (di quando è iniziata);
-   4. unità militari, stesse colonne, a richiesta (2 chiamate in più);
-   5. contratti mercenari: chi paga, quale unità, quanto.
-   Più, sotto ai finanziatori, l'ANDAMENTO minuto per minuto (quando è
-   entrata ogni nazione, dove si è girata) — solo per le battaglie che il
-   server ha registrato, vedi battleTimeline.js.
+   In cima il riepilogo (regione, esito, danno, costo), sempre visibile.
+   Sotto, una SCHEDA alla volta (_dtab):
+   - NAZIONI per schieramento — danno, quota del lato, taglia incassata;
+   - le stesse nazioni sommate per ALLEANZA (di quando è iniziata);
+   - unità militari, stesse colonne, caricate all'apertura della scheda;
+   - ANDAMENTO minuto per minuto (quando è entrata ogni nazione, dove si
+     è girata) — solo per le battaglie che il server ha registrato, vedi
+     battleTimeline.js;
+   - finanziatori dei due belligeranti;
+   - contratti mercenari: chi paga, quale unità, quanto.
+   Prima stavano tutte una sotto l'altra, e la pagina era un muro.
 
    ── ⚠️ LA PAROLA "TAGLIA" QUI VUOL DIRE UN'ALTRA COSA ──────────────
    Nell'elenco e nelle spese di guerra la taglia è quanto uno
@@ -65,6 +67,17 @@ let _tl = null;
 // Sopravvivono fra una battaglia e l'altra: il registro è lo stesso.
 let _allyHist = null;
 let _allyTried = false;
+// Scheda del dettaglio in vista. Prima tutte le sezioni stavano una sotto
+// l'altra (finanziatori, andamento, sorpassi, ingressi, nazioni, alleanze,
+// unità, contratti) e la pagina era un muro: ora se ne vede una alla
+// volta. NON si azzera cambiando battaglia: chi sta confrontando le
+// alleanze di tre battaglie le vuole vedere tutte e tre lì.
+let _dtab = 'nations';
+let _ctrAll = false;   // contratti: tutti o solo i primi CTR_TOP
+// Ultimo repaint/battaglia passati a wireBattleDetail: il listener
+// delegato si aggancia UNA volta sola al contenitore (che sopravvive ai
+// repaint) e legge questi, non quelli del primo giro.
+let _wired = { battle: null, repaint: null };
 
 function fmtNum(n) {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -282,9 +295,15 @@ function sentTotals(countryId, fromMs, toMs) {
   return out;
 }
 
+// Contratti mostrati prima del "mostra tutti": una battaglia grossa ne ha
+// centinaia (169 sulla Francia–Italia del 13 ottobre, ~7.000 px di
+// tabella), e sono in ordine di compenso — i primi sono quelli che contano.
+const CTR_TOP = 20;
+
 function contractsHtml(contracts, truncated) {
   if (!contracts.length) return `<p class="wp-btl-foot">${btlT('noContracts')}</p>`;
   const total = contracts.reduce((s, c) => s + c.payout, 0);
+  const shown = _ctrAll ? contracts : contracts.slice(0, CTR_TOP);
   return `
     <h3 class="wp-btl-h3">${btlT('contractsLabel')} <span class="wp-btl-sub">${btlT('contractsCount', { n: contracts.length })} · ${fmtMoney(total)}</span></h3>
     <div class="wp-btl-tablewrap">
@@ -298,7 +317,7 @@ function contractsHtml(contracts, truncated) {
           <th class="wp-btl-num">${btlT('colPayout')}</th>
         </tr></thead>
         <tbody>
-          ${contracts.map(c => `
+          ${shown.map(c => `
             <tr>
               <td class="wp-btl-nation">${flagHtml(c.payer)}${escapeHtml(nationName(c.payer) || '—')}</td>
               <td><span class="wp-btl-type">${c.side === 'defender' ? btlT('defender') : btlT('attacker')}</span></td>
@@ -310,6 +329,10 @@ function contractsHtml(contracts, truncated) {
         </tbody>
       </table>
     </div>
+    ${contracts.length > CTR_TOP
+      ? `<button type="button" class="wp-btl-more" id="wp-btl-ctr-more">${
+          _ctrAll ? btlT('showTopCtr', { n: CTR_TOP }) : btlT('showAllCtr', { n: contracts.length })}</button>`
+      : ''}
     ${truncated ? `<p class="wp-btl-foot">⚠️ ${btlT('contractsTruncated')}</p>` : ''}`;
 }
 
@@ -459,7 +482,6 @@ function alliancesHtml(battle) {
   const atkIds = ids(atk.rows);
   const both = new Set([...ids(def.rows)].filter(id => atkIds.has(id)));
   return `
-    <h3 class="wp-btl-h3">${btlT('byAlliance')}</h3>
     <div class="wp-btl-sides">
       ${allianceTable(def.rows, 'defender', battle, { label: btlT('defender'), color: 'var(--wp-btl-def)',
         countryId: battle.defender.countryId, both })}
@@ -603,13 +625,35 @@ export function renderBattleDetail(battle) {
   const payDef = payPerK('defender');
   const payAtk = payPerK('attacker');
   const anyCtr = payDef.totContracts > 0 || payAtk.totContracts > 0;
-  return `
-    <div class="wp-btl-detail">
-      ${head}
-      ${fundersHtml(battle)}
-      ${timelineSectionHtml(_tl, { nationName: nm, flagHtml })}
 
-      <h3 class="wp-btl-h3">${btlT('byNation')}</h3>
+  const timeline = timelineSectionHtml(_tl, { nationName: nm, flagHtml });
+  // La scheda Andamento esiste solo se il server ha registrato la
+  // battaglia: chi la teneva aperta e passa a una che non ce l'ha torna
+  // alle nazioni invece di guardare una scheda vuota.
+  if (_dtab === 'timeline' && !timeline) _dtab = 'nations';
+  const nFunders = _money && wFrom
+    ? transfersFor(_money, battle.defender.countryId, wFrom, wTo).length
+      + transfersFor(_money, battle.attacker.countryId, wFrom, wTo).length
+    : null;
+  const tabs = [
+    // Niente numero sulle nazioni: sommare i due lati conta due volte chi
+    // ha combattuto da tutte e due le parti, e il numero vero è già in
+    // fondo a ciascuna tabella.
+    { id: 'nations', label: btlT('tabNations') },
+    { id: 'alliances', label: btlT('tabAlliances') },
+    { id: 'mu', label: btlT('tabMu') },
+    timeline && { id: 'timeline', label: btlT('tabTimeline') },
+    { id: 'funders', label: btlT('tabFunders'), n: nFunders },
+    { id: 'contracts', label: btlT('tabContracts'), n: _detail.contracts.length },
+  ].filter(Boolean);
+
+  let body;
+  if (_dtab === 'alliances') body = alliancesHtml(battle) || `<div class="wp-btl-loading">${btlT('loading')}</div>`;
+  else if (_dtab === 'mu') body = muSectionHtml(battle);
+  else if (_dtab === 'timeline') body = timeline;
+  else if (_dtab === 'funders') body = fundersHtml(battle);
+  else if (_dtab === 'contracts') body = contractsHtml(_detail.contracts, _detail.contractsTruncated);
+  else body = `
       <p class="wp-btl-foot wp-btl-foot-tight">${btlT('earnedNote')}</p>
       <div class="wp-btl-sides">
         ${sideTable(_detail.sides.defender, 'defender', battle, {
@@ -623,14 +667,18 @@ export function renderBattleDetail(battle) {
       </div>
       ${anySent ? `<p class="wp-btl-foot wp-btl-foot-tight">${btlT('sentNote')}</p>` : ''}
       <p class="wp-btl-foot wp-btl-foot-tight">${btlT('paidPerKNote')}${anyCtr ? ' ' + btlT('paidPerKCtrNote') : ''}${
-        anyCtr && battle.live ? ' ' + btlT('paidPerKLiveNote') : ''}</p>
+        anyCtr && battle.live ? ' ' + btlT('paidPerKLiveNote') : ''}</p>`;
 
-      ${alliancesHtml(battle)}
-
-      <h3 class="wp-btl-h3">${btlT('byMu')}</h3>
-      ${muSectionHtml(battle)}
-
-      ${contractsHtml(_detail.contracts, _detail.contractsTruncated)}
+  return `
+    <div class="wp-btl-detail">
+      ${head}
+      <nav class="wp-btl-dtabs" role="tablist">
+        ${tabs.map(t => `
+          <button type="button" role="tab" class="wp-btl-dtab${_dtab === t.id ? ' active' : ''}"
+            aria-selected="${_dtab === t.id}" data-dtab="${t.id}">${t.label}${
+            t.n != null ? `<span class="wp-btl-dtab-n">${t.n}</span>` : ''}</button>`).join('')}
+      </nav>
+      ${body}
     </div>`;
 }
 
@@ -645,6 +693,7 @@ export async function loadBattleDetail(battle, repaint) {
   _tl = null;
   _muState = 'closed';
   _expanded = { attacker: false, defender: false };
+  _ctrAll = false;
   repaint();
   // `live`: su una battaglia in corso le classifiche cambiano ad ogni tick,
   // quindi api.js non le memorizza — riaprirla ridà i numeri aggiornati.
@@ -704,41 +753,67 @@ export function wireBattleDetail(root, battle, { onBack, repaint }) {
     });
   });
 
+  _wired = { battle, repaint };
   // Un solo listener delegato: le righe si ridisegnano ad ogni repaint,
   // e riagganciare un handler per bottone ad ogni giro è il modo classico
-  // di ritrovarsi con listener duplicati.
-  root.addEventListener('click', (e) => {
-    const link = e.target.closest?.('.wp-btl-mu-link');
-    if (!link) return;
-    const muId = link.dataset.muId;
-    if (!muId) return;
-    import('../app/muOverlay.js')
-      .then(m => m.openMuView(muId))
-      .catch(() => {});
-  });
+  // di ritrovarsi con listener duplicati. ⚠️ `root` è il corpo della
+  // sezione e SOPRAVVIVE ai repaint (cambia solo l'innerHTML): prima il
+  // listener si riagganciava a ogni giro, e un clic su un'unità apriva la
+  // sua scheda tante volte quanti repaint c'erano stati. Da qui il flag.
+  if (!root.dataset.btlDetailWired) {
+    root.dataset.btlDetailWired = '1';
+    root.addEventListener('click', (e) => {
+      const tab = e.target.closest?.('.wp-btl-dtab');
+      if (tab) {
+        _dtab = tab.dataset.dtab;
+        _wired.repaint?.();
+        return;
+      }
+      if (e.target.closest?.('#wp-btl-ctr-more')) {
+        _ctrAll = !_ctrAll;
+        _wired.repaint?.();
+        return;
+      }
+      const link = e.target.closest?.('.wp-btl-mu-link');
+      if (!link) return;
+      const muId = link.dataset.muId;
+      if (!muId) return;
+      import('../app/muOverlay.js')
+        .then(m => m.openMuView(muId))
+        .catch(() => {});
+    });
+  }
 
-  root.querySelector('#wp-btl-mu-open')?.addEventListener('click', async () => {
-    _muState = 'loading';
+  // Scheda Unità militari: la si carica quando la si apre (2 chiamate in
+  // più + la directory), non prima — è la scheda che si guarda di meno.
+  if (_dtab === 'mu' && _muState === 'closed') loadMuSection(battle, repaint);
+  root.querySelector('#wp-btl-mu-open')?.addEventListener('click', () => loadMuSection(battle, repaint));
+}
+
+async function loadMuSection(battle, repaint) {
+  _muState = 'loading';
+  repaint();
+  // La directory MU (~550 KB) si scarica SOLO qui, e una volta per
+  // sessione: è condivisa con la vista Unità Militari, quindi spesso è
+  // già calda. Se non arriva, le classifiche si mostrano comunque, con
+  // gli identificativi al posto dei nomi.
+  const [mu, dir] = await Promise.all([
+    getBattleMuBreakdown(battle.id, { live: Boolean(battle.live) }),
+    import('../mu/api.js').then(m => m.fetchMuDirectory()).catch(() => null),
+  ]);
+  if (dir) _dir = dir;
+  // Nel frattempo si è passati a un'altra battaglia: queste classifiche
+  // non sono le sue.
+  if (_wired.battle?.id !== battle.id) return;
+  _mu = mu;
+  _muState = mu ? 'open' : 'error';
+  repaint();
+  // La directory copre già quasi tutto; questo raccoglie le briciole
+  // (unità nate dopo l'ultimo giro del server, o directory non arrivata).
+  if (mu) {
+    await resolveMuBriefs([...(mu.defender || []), ...(mu.attacker || [])].map(r => r.id));
     repaint();
-    // La directory MU (~550 KB) si scarica SOLO qui, e una volta per
-    // sessione: è condivisa con la vista Unità Militari, quindi spesso è
-    // già calda. Se non arriva, le classifiche si mostrano comunque, con
-    // gli identificativi al posto dei nomi.
-    const [mu, dir] = await Promise.all([
-      getBattleMuBreakdown(battle.id, { live: Boolean(battle.live) }),
-      import('../mu/api.js').then(m => m.fetchMuDirectory()).catch(() => null),
-    ]);
-    _mu = mu;
-    if (dir) _dir = dir;
-    _muState = mu ? 'open' : 'error';
-    repaint();
-    // La directory copre già quasi tutto; questo raccoglie le briciole
-    // (unità nate dopo l'ultimo giro del server, o directory non arrivata).
-    if (mu) {
-      await resolveMuBriefs([...(mu.defender || []), ...(mu.attacker || [])].map(r => r.id));
-      repaint();
-    }
-  });
+  }
 }
 
 /** Azzera lo stato quando si esce dal dettaglio, così riaprendo un'altra

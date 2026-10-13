@@ -873,3 +873,52 @@ body.light-theme .wp-btl-tl-tip { background: var(--wp-ov-bg-light, #f4f6fa); }
 }
 .wp-btl-ally-flags .wp-btl-flag { height: 11px; }
 .wp-btl-ally-more { font-size: 10.5px; color: var(--wp-ov-text-dim, #8b949e); }
+
+/* ══════════════════════════════════════════════════════════════
+   Schede del dettaglio battaglia (_dtab in battleDetail.js)
+   ------------------------------------------------------------------
+   Pillole e non linguette: le linguette (.wp-btl-tab) sono già quelle di
+   Archivio / Spese di guerra due righe più su, e due file di linguette
+   uguali una sopra l'altra non dicono quale comanda cosa. Classe diversa
+   anche per un motivo pratico: main.js aggancia .wp-btl-tab.
+   Vanno a capo su telefono invece di scorrere: sei pulsanti, tutti
+   visibili, è il punto di averli.
+   ══════════════════════════════════════════════════════════════ */
+.wp-btl-dtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 18px 0 14px;
+}
+.wp-btl-dtab {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--wp-ov-text-dim, #8b949e);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.wp-btl-dtab:hover { color: var(--wp-ov-text, #e6edf3); border-color: var(--wp-ov-text-dim, #8b949e); }
+.wp-btl-dtab.active {
+  color: var(--wp-ov-accent, #e5484d);
+  border-color: var(--wp-ov-accent, #e5484d);
+  background: color-mix(in srgb, var(--wp-ov-accent, #e5484d) 12%, transparent);
+}
+.wp-btl-dtab:focus-visible { outline: 2px solid var(--wp-ov-accent, #e5484d); outline-offset: 2px; }
+.wp-btl-dtab-n {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  font-variant-numeric: tabular-nums;
+}
+body.light-theme .wp-btl-dtab-n { background: rgba(0, 0, 0, .07); }
