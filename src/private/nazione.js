@@ -69,6 +69,9 @@ const compatto = (n) => (n == null ? '—'
 const ora = (ms) => (ms ? new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '—');
 const quando = (ms) => (ms ? new Date(ms).toLocaleString(undefined,
   { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—');
+/** L'ora di una lettura, col giorno se non è di stamattina: "letti alle
+ *  02:30" di una lettura di ieri sembrava di poco fa. */
+const oraLettura = (ms) => (ms && Date.now() - ms > 12 * 3600_000 ? quando(ms) : ora(ms));
 const giornoBreve = (iso) => (iso ? new Date(`${iso}T12:00:00Z`).toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' }) : '—');
 
 /** "fra 3 ore" / "20 min fa", nella lingua scelta: RelativeTimeFormat sa
@@ -392,6 +395,9 @@ function bloccoPillole(n) {
   return frag;
 }
 
+// Oltre questa età quello che si vede va riletto (vedi caricaNemici).
+const VECCHIO_MS = 10 * 60_000;
+
 const TIER_ORDINE = ['diamond', 'platinum', 'gold', 'silver', 'bronze'];
 
 // ── Allarmi già visti (per nazione, in questo browser) ─────────────
@@ -434,6 +440,12 @@ export function creaQuadroNazione(ctx) {
   // La ricerca è un nodo che sopravvive ai ridisegni: ricrearla ad ogni
   // render le toglierebbe il fuoco a metà parola.
   let cercaWidget = null;
+  // Quando è arrivato il quadro, e la sua prima scheda: serve a sapere se
+  // la vista è ancora a schermo prima di rileggerla da sola.
+  let lettoIl = 0;
+  let radice = null;
+  let riprovaNemici = null;
+  let tentativiNemici = 0;
 
   async function carica() {
     caricamento = true; errore = null;
@@ -443,6 +455,7 @@ export function creaQuadroNazione(ctx) {
     ctx.ridisegna();
     try {
       dati = await leggiNazione({ asAccount: ctx.lente(), paese: paeseScelto });
+      lettoIl = Date.now();
       negato = null;
     } catch (err) {
       if (err instanceof ApiError && err.codice === 'accesso_nazione_negato') {
@@ -493,12 +506,43 @@ export function creaQuadroNazione(ctx) {
     return t !== k ? t : pvErr(err.codice);
   }
 
-  async function caricaNemici() {
+  async function caricaNemici({ ripresa = false } = {}) {
+    clearTimeout(riprovaNemici);
+    if (!ripresa) tentativiNemici = 0;
     caricamentoNemici = true; erroreNemici = null; ctx.ridisegna();
-    try { nemici = await leggiNemici({ asAccount: ctx.lente(), paese: paeseScelto }); }
-    catch { erroreNemici = nzT('enemiesError'); nemici = null; }
-    finally { caricamentoNemici = false; ctx.ridisegna(); }
+    try {
+      nemici = await leggiNemici({ asAccount: ctx.lente(), paese: paeseScelto });
+      // Il server risponde SUBITO con l'ultima lettura che ha — anche di un
+      // giorno e mezzo fa, se nel frattempo nessuno guardava — e intanto
+      // rilegge in sottofondo. Prima la si mostrava e basta: la nuova non
+      // arrivava mai (segnalato il 2026-10-13: "4 sotto pillola, la prima
+      // scade alle 02:50, 34 ore fa"). Si ripassa a prenderla.
+      const letture = [nemici?.noi, ...(nemici?.nemici || [])].map((n) => n?.letto).filter(Boolean);
+      if (letture.length && Date.now() - Math.min(...letture) > VECCHIO_MS && tentativiNemici < 6) {
+        tentativiNemici++;
+        riprovaNemici = setTimeout(() => { if (aSchermo()) caricaNemici({ ripresa: true }); }, 20_000);
+      }
+    } catch {
+      // Un nuovo tentativo fallito non cancella la lettura che c'è.
+      if (!ripresa) { erroreNemici = nzT('enemiesError'); nemici = null; }
+    } finally { caricamentoNemici = false; ctx.ridisegna(); }
   }
+
+  /** La vista è davvero davanti a qualcuno: area aperta, su questa pagina,
+   *  scheda del browser in primo piano. */
+  function aSchermo() {
+    return !document.hidden && Boolean(radice?.isConnected && radice.getClientRects().length);
+  }
+
+  // Una vista lasciata aperta — l'app sul telefono che si riprende dopo
+  // una notte — mostrava il quadro di quando era stata aperta. Si rilegge
+  // da sola quando torna in primo piano e, finché resta a schermo, ogni
+  // dieci minuti: la stessa cadenza con cui il server rilegge i giocatori.
+  const seVecchio = () => {
+    if (dati && !caricamento && aSchermo() && Date.now() - lettoIl > VECCHIO_MS) carica();
+  };
+  document.addEventListener('visibilitychange', seVecchio);
+  setInterval(seVecchio, 60_000);
 
   /** Quanti allarmi di accensione non ancora visti: main.js lo mostra
    *  anche a quadro chiuso. */
@@ -705,6 +749,7 @@ export function creaQuadroNazione(ctx) {
   function cardNazione() {
     const p = dati.paese;
     const card = el('div', 'wp-pv-card wp-pv-nz-card');
+    radice = card;
 
     const testa = el('div', 'wp-pv-nz-testa');
     const f = bandiera(p.id, 'wp-pv-nz-flag-grande'); if (f) testa.appendChild(f);
@@ -718,7 +763,7 @@ export function creaQuadroNazione(ctx) {
     // non sono la stessa promessa, e un tesoro di dieci minuti fa è già
     // un'altra cifra.
     meta.appendChild(el('span', 'wp-pv-note',
-      `${nzT('natAsOf')} ${ora(p.letto || dati.generatoIl)} · ${p.fonte === 'live' ? nzT('natLive') : nzT('natCache')}`));
+      `${nzT('natAsOf')} ${oraLettura(p.letto || dati.generatoIl)} · ${p.fonte === 'live' ? nzT('natLive') : nzT('natCache')}`));
     if (dati.amministra && dati.ammesse?.length) meta.appendChild(sceltaPaese());
     const agg = bottone('wp-pv-btn-quiet wp-pv-btn-small', nzT('natRefresh'), () => carica());
     agg.disabled = caricamento;
@@ -1060,7 +1105,7 @@ export function creaQuadroNazione(ctx) {
 
     const piede = el('div', 'wp-pv-nz-nemico-piede');
     piede.appendChild(el('span', 'wp-pv-note', nzT('sourceNote')
-      .replace('{n}', num(n.live)).replace('{ora}', ora(n.letto))));
+      .replace('{n}', num(n.live)).replace('{ora}', oraLettura(n.letto))));
     const aperto = tabelleAperte.has(n.id);
     piede.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small',
       aperto ? nzT('hidePlayers') : `${nzT('allPlayers')} (${num(n.censiti)})`, () => {
@@ -1580,7 +1625,7 @@ export function creaQuadroNazione(ctx) {
     if (noi.potenziale !== undefined) card.appendChild(bloccoPotenziale(noi));
 
     const piede = el('div', 'wp-pv-nz-nemico-piede');
-    piede.appendChild(el('span', 'wp-pv-note', nzT('sourceNote').replace('{n}', num(noi.live)).replace('{ora}', ora(noi.letto))));
+    piede.appendChild(el('span', 'wp-pv-note', nzT('sourceNote').replace('{n}', num(noi.live)).replace('{ora}', oraLettura(noi.letto))));
     const aperto = tabelleAperte.has(noi.id);
     piede.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small',
       aperto ? nzT('hidePlayers') : `${nzT('ourPlayers')} (${num(noi.censiti)})`, () => {
