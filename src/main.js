@@ -191,7 +191,7 @@ async function handleIncomingDeepLink() {
     mu: () => openMuView(params.get('mu') || undefined,
       { tab: params.get('tab'), a: params.get('mua'), b: params.get('mub') }),
     nations: () => openNationsView(params.get('nation') || undefined),
-    players: () => openPlayersView(params.get('player') || undefined),
+    players: () => openPlayersView(params.get('player') || undefined, params.get('vs') || undefined),
     battles: () => openBattlesView(params.get('battle') || undefined),
     guide: () => openGuideView(),
     private: () => openPrivateView(),

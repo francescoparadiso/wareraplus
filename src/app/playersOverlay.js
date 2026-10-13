@@ -29,8 +29,9 @@ export function initPlayersOverlay() {
   });
 }
 
-/** Con `userId` apre direttamente la scheda di quel giocatore. */
-export async function openPlayersView(userId) {
+/** Con `userId` apre direttamente la scheda di quel giocatore, e con
+ *  `vsId` il confronto fra i due (link ?player=A&vs=B). */
+export async function openPlayersView(userId, vsId) {
   if (!overlayEl) return;
   overlayEl.classList.add('open');
   overlayEl.setAttribute('aria-hidden', 'false');
@@ -43,6 +44,7 @@ export async function openPlayersView(userId) {
     _mod = await loadModule(() => import('../players/main.js'), 'players');
     if (userId) _mod.openPlayer(userId);
     await _mod.initPlayersView(rootEl);
+    if (userId && vsId) _mod.openCompare(vsId);
   });
 
   trackEvent('players-view-open', { deepLink: !!userId });

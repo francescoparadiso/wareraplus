@@ -12,9 +12,12 @@
       classifiche mondiali dei giocatori (danni settimanali, totali,
       ricchezza, taglia) filtrabili per nazione.
    2. SCHEDA DI UN GIOCATORE — in cima chi è (nazione, unità, livello,
-      build, pillola) e i numeri con la posizione mondiale; sotto tre
-      schede: Battaglie (default), Ricchezza nel tempo, Abilità ed
+      build, pillola) e i numeri con la posizione mondiale E nella sua
+      nazione; sotto cinque schede: Battaglie (col bottino di ognuna),
+      Ricchezza nel tempo, Aziende e lavoro, Politica, Abilità ed
       equipaggiamento.
+   3. CONFRONTO 1 VS 1 — dalla scheda, "Confronta con…": due giocatori
+      affiancati, riga per riga, col migliore dei due evidenziato.
 
    "Sono io" è la STESSA chiave della scheda Ricchezza di Economia
    (`we_my_player`): dirlo in un posto vale anche nell'altro. I visti di
@@ -37,7 +40,8 @@ import { syncBack } from '../app/backNav.js';
 import { plyT } from './i18n.js';
 import {
   LEADERBOARDS, fetchPlayer, searchPlayers, fetchEquipment, fetchWealthHistory,
-  fetchLeaderboard, fetchNames, fetchPlayerBattles,
+  fetchLeaderboard, fetchNames, fetchPlayerBattles, fetchCompanies, fetchWorkStats,
+  fetchPolitics, fetchNationRanks,
 } from './api.js';
 
 const APP_BASE = 'https://app.warera.io';
@@ -76,6 +80,20 @@ let _wealth;                 // undefined = non chiesta, null = non disponibile
 let _equip;                  // idem
 let _muName = null;
 let _wealthObs = null;
+let _natRanks = null;        // posizione nella sua nazione (fetchNationRanks)
+let _companies;              // undefined = non chiesta, 'loading', null, []
+let _work;                   // idem, statistiche di lavoro a 31 giorni
+let _politics;               // idem
+let _lootOpen = new Set();   // battaglie con la riga del bottino aperta
+
+// Confronto
+let _picking = false;        // "Confronta con…" aperto sulla scheda
+let _pickQ = '';
+let _pickCands = null;
+let _pickSearching = false;
+let _cmpId = null;
+let _cmp = null;             // { lite, natRanks, equip } del secondo giocatore
+let _cmpEquipA;              // equipaggiamento del primo, per il confronto
 
 /* ── Piccoli aiuti ─────────────────────────────────────────────── */
 
@@ -175,6 +193,16 @@ export async function openPlayer(id) {
   _wealth = undefined;
   _equip = undefined;
   _muName = null;
+  _natRanks = null;
+  _companies = undefined;
+  _work = undefined;
+  _politics = undefined;
+  _lootOpen = new Set();
+  _picking = false;
+  _pickCands = null;
+  _cmpId = null;
+  _cmp = null;
+  _cmpEquipA = undefined;
   if (!_root) return;          // la vista non è ancora montata: ci pensa initPlayersView
   render();
   _root.scrollTop = 0;
@@ -186,6 +214,7 @@ export async function openPlayer(id) {
   rememberRecent(id, lite);
   render();
   if (lite?.mu) resolveMuName(lite.mu, id);
+  if (lite) fetchNationRanks(lite).then(r => { if (_pid === id) { _natRanks = r; render(); } }).catch(() => {});
   loadTab(_ptab);
 }
 
@@ -213,6 +242,18 @@ function loadTab(tab) {
     const pid = _pid;
     _equip = 'loading';
     fetchEquipment(pid).then(e => { if (_pid === pid) { _equip = e; render(); } });
+  }
+  if (tab === 'work' && _companies === undefined) {
+    const pid = _pid;
+    _companies = 'loading';
+    _work = 'loading';
+    fetchCompanies(pid).catch(() => null).then(c => { if (_pid === pid) { _companies = c; render(); } });
+    fetchWorkStats(pid).then(w => { if (_pid === pid) { _work = w; render(); } });
+  }
+  if (tab === 'politics' && _politics === undefined) {
+    const pid = _pid;
+    _politics = 'loading';
+    fetchPolitics(pid, _lite.country).catch(() => null).then(p => { if (_pid === pid) { _politics = p; render(); } });
   }
 }
 
@@ -305,12 +346,14 @@ function homeHtml() {
 
 /* ── Scheda di un giocatore ───────────────────────────────────── */
 
-function statCard(label, rk, fmt = fmtCompact) {
+function statCard(label, rk, fmt = fmtCompact, type = null) {
+  const nat = type && _natRanks?.ranks?.[type];
   return `
     <div class="wp-ply-stat">
       <span>${escapeHtml(label)}</span>
       <strong>${rk?.value != null ? escapeHtml(fmt(rk.value)) : '—'}</strong>
       ${rk?.rank ? `<em class="wp-ply-tier-${escapeHtml(rk.tier || '')}">${escapeHtml(plyT('worldRank', { n: fmtFull(rk.rank) }))}</em>` : ''}
+      ${nat ? `<em class="wp-ply-natrank" title="${escapeHtml(plyT(_natRanks.partial ? 'natRankPartial' : 'natRankNote', { n: fmtFull(_natRanks.n) }))}">${escapeHtml(plyT('natRank', { n: fmtFull(nat), c: countryName(_lite?.country) }))}</em>` : ''}
     </div>`;
 }
 
@@ -341,11 +384,15 @@ function playerHtml() {
   const tabs = [
     { id: 'battles', label: plyT('tabBattles') },
     { id: 'wealth', label: plyT('tabWealth') },
+    { id: 'work', label: plyT('tabWork') },
+    { id: 'politics', label: plyT('tabPolitics') },
     { id: 'skills', label: plyT('tabSkills') },
   ];
   let body = '';
   if (_ptab === 'wealth') body = wealthHtml();
   else if (_ptab === 'skills') body = skillsHtml(p, ps);
+  else if (_ptab === 'work') body = workHtml();
+  else if (_ptab === 'politics') body = politicsHtml();
   else body = battlesHtml();
 
   return `
@@ -373,15 +420,17 @@ function playerHtml() {
         ${mine
           ? `<span class="wp-ply-dim">${escapeHtml(plyT('isMine'))}</span> <button type="button" class="wp-ply-chip" data-forget="1">${escapeHtml(plyT('forget'))}</button>`
           : `<button type="button" class="wp-ply-chip" data-mine="1">${escapeHtml(plyT('mine'))}</button>`}
+        <button type="button" class="wp-ply-chip wp-ply-chip-me" data-compare="1">⚖ ${escapeHtml(plyT('cmpWith'))}</button>
         <a class="wp-ply-chip" href="${APP_BASE}/user/${encodeURIComponent(_pid)}" target="_blank" rel="noopener noreferrer">${escapeHtml(plyT('openInGame'))} ↗</a>
       </div>
     </header>
+    ${_picking ? pickerHtml() : ''}
 
     <div class="wp-ply-stats">
-      ${statCard(plyT('stWeekly'), rk.weeklyUserDamages)}
-      ${statCard(plyT('stTotal'), rk.userDamages)}
-      ${statCard(plyT('stWealth'), rk.userWealth, fmtMoney)}
-      ${statCard(plyT('stBounty'), rk.userBounty, fmtMoney)}
+      ${statCard(plyT('stWeekly'), rk.weeklyUserDamages, fmtCompact, 'weeklyUserDamages')}
+      ${statCard(plyT('stTotal'), rk.userDamages, fmtCompact, 'userDamages')}
+      ${statCard(plyT('stWealth'), rk.userWealth, fmtMoney, 'userWealth')}
+      ${statCard(plyT('stBounty'), rk.userBounty, fmtMoney, 'userBounty')}
       ${statCard(plyT('stXp'), rk.userLevel)}
     </div>
     <div class="wp-ply-minor">
@@ -403,8 +452,8 @@ function battlesHtml() {
   const rows = b.rows;
   const tot = rows.reduce((t, r) => ({
     hits: t.hits + r.s.hits, dmg: t.dmg + r.s.dmg, bounty: t.bounty + r.s.bounty,
-    contract: t.contract + r.s.contract, cases: t.cases + r.s.cases,
-  }), { hits: 0, dmg: 0, bounty: 0, contract: 0, cases: 0 });
+    contract: t.contract + r.s.contract, cases: t.cases + r.s.cases, loot: t.loot + (r.s.loot?.length || 0),
+  }), { hits: 0, dmg: 0, bounty: 0, contract: 0, cases: 0, loot: 0 });
   const nation = (id) => `<span class="wp-ply-who">${flagImg(id, 'wp-ply-flag')}<span>${escapeHtml(countryName(id))}</span></span>`;
   const region = (id) => state.regionData?.[id]?.name || '';
 
@@ -420,6 +469,7 @@ function battlesHtml() {
         <th class="wp-ply-num">${escapeHtml(plyT('colHits'))}</th><th class="wp-ply-num">${escapeHtml(plyT('colDamage'))}</th>
         <th class="wp-ply-num">${escapeHtml(plyT('colBountyShort'))}</th><th class="wp-ply-num">${escapeHtml(plyT('colContract'))}</th>
         <th class="wp-ply-num">${escapeHtml(plyT('colCases'))}</th>
+        <th class="wp-ply-num">${escapeHtml(plyT('colLoot'))}</th>
       </tr></thead>
       <tbody>${rows.map(({ battle: bt, s }) => `
         <tr class="wp-ply-rowlink" data-battle="${escapeHtml(bt.id)}" tabindex="0">
@@ -431,7 +481,15 @@ function battlesHtml() {
           <td class="wp-ply-num wp-ply-gold">${s.bounty ? escapeHtml(fmtMoney(s.bounty)) : '—'}</td>
           <td class="wp-ply-num wp-ply-violet">${s.contract ? escapeHtml(fmtMoney(s.contract)) : '—'}</td>
           <td class="wp-ply-num">${s.cases || '—'}</td>
-        </tr>`).join('')}</tbody>
+          <td class="wp-ply-num">${s.loot?.length
+            ? `<button type="button" class="wp-ply-lootbtn${_lootOpen.has(bt.id) ? ' active' : ''}" data-loot="${escapeHtml(bt.id)}" aria-expanded="${_lootOpen.has(bt.id)}">🎁 ${s.loot.length}</button>`
+            : '—'}</td>
+        </tr>${_lootOpen.has(bt.id) && s.loot?.length ? `
+        <tr class="wp-ply-lootrow"><td colspan="8"><div class="wp-ply-loot">${s.loot.map(l => `
+          <span class="wp-ply-lootitem"><b>${escapeHtml(l.code)}</b>${l.skills
+            ? `<small>${escapeHtml(Object.entries(l.skills).map(([k, v]) => `${plyT(`sk_${k}`)} ${v}`).join(' · '))}</small>` : ''}${l.rank
+            ? `<small class="wp-ply-dim">${escapeHtml(plyT('lootRank', { n: l.rank }))}${l.pool === 'round' || l.pool === 'battle' ? ' · ' + escapeHtml(plyT(`lootPool_${l.pool}`)) : ''}</small>` : ''}</span>`).join('')}
+        </div></td></tr>` : ''}`).join('')}</tbody>
       <tfoot><tr>
         <td colspan="2">${escapeHtml(plyT('total', { n: rows.length }))}</td>
         <td class="wp-ply-num">${escapeHtml(fmtFull(tot.hits))}</td>
@@ -439,6 +497,7 @@ function battlesHtml() {
         <td class="wp-ply-num wp-ply-gold">${escapeHtml(fmtMoney(tot.bounty))}</td>
         <td class="wp-ply-num wp-ply-violet">${escapeHtml(fmtMoney(tot.contract))}</td>
         <td class="wp-ply-num">${tot.cases}</td>
+        <td class="wp-ply-num">${tot.loot || '—'}</td>
       </tr></tfoot>
     </table></div>` : '';
 
@@ -565,10 +624,11 @@ function skillsHtml(p, ps) {
 
 function render() {
   if (!_root) return;
-  _root.innerHTML = `<div class="wp-ply">${_pid ? playerHtml() : homeHtml()}</div>`;
-  // Indietro del telefono/browser: dalla scheda torna alla partenza, e
-  // l'URL porta ?player= finché la scheda è aperta (link condivisibile).
-  syncBack('players/detail', !!_pid, () => { _pid = null; render(); }, () => !!_pid, { player: _pid || undefined });
+  _root.innerHTML = `<div class="wp-ply">${_pid && _cmpId ? compareHtml() : _pid ? playerHtml() : homeHtml()}</div>`;
+  // Indietro del telefono/browser: dal confronto torna alla scheda, dalla
+  // scheda alla partenza; l'URL porta ?player= (e ?vs=) finché sono aperti.
+  syncBack('players/detail', !!_pid, () => { _pid = null; _cmpId = null; render(); }, () => !!_pid, { player: _pid || undefined });
+  syncBack('players/detail/compare', !!(_pid && _cmpId), () => { _cmpId = null; render(); }, () => !!(_pid && _cmpId), { vs: _cmpId || undefined });
   if (_pid && _ptab === 'wealth') drawWealthChart();
   // La classifica parte la prima volta che si vede la partenza — anche
   // tornandoci da una scheda aperta con un link diretto.
@@ -577,6 +637,12 @@ function render() {
 
 function wire() {
   _root.addEventListener('submit', (e) => {
+    if (e.target.id === 'wp-ply-pick') {
+      e.preventDefault();
+      _pickQ = e.target.querySelector('input')?.value || '';
+      doPickSearch();
+      return;
+    }
     if (e.target.id !== 'wp-ply-search') return;
     e.preventDefault();
     _q = e.target.querySelector('input')?.value || '';
@@ -593,8 +659,20 @@ function wire() {
   });
   _root.addEventListener('click', (e) => {
     const t = e.target;
+    const vs = t.closest('[data-vs]');
+    if (vs) { openCompare(vs.dataset.vs); return; }
     const open = t.closest('[data-open]');
     if (open) { openPlayer(open.dataset.open); return; }
+    if (t.closest('[data-compare]')) { _picking = !_picking; render(); return; }
+    if (t.closest('#wp-ply-cmp-back')) { _cmpId = null; render(); return; }
+    if (t.closest('#wp-ply-cmp-swap')) { const a = _pid, b = _cmpId; openPlayer(b).then(() => openCompare(a)); return; }
+    const loot = t.closest('[data-loot]');
+    if (loot) {
+      const id = loot.dataset.loot;
+      if (_lootOpen.has(id)) _lootOpen.delete(id); else _lootOpen.add(id);
+      render();
+      return;
+    }
     const board = t.closest('[data-board]');
     if (board) { if (_board !== board.dataset.board) { _board = board.dataset.board; loadBoard(); } return; }
     if (t.closest('#wp-ply-back')) { _pid = null; render(); return; }
@@ -642,6 +720,291 @@ export async function initPlayersView(container) {
     return;
   }
   render();
+}
+
+/* ── Confronto ─────────────────────────────────────────────────── */
+
+async function doPickSearch() {
+  if (_pickQ.trim().length < 2) return;
+  _pickSearching = true;
+  _pickCands = null;
+  render();
+  try { _pickCands = (await searchPlayers(_pickQ)).filter(c => c.id !== _pid); }
+  catch (_) { _pickCands = []; }
+  _pickSearching = false;
+  if (_pickCands.length === 1) { openCompare(_pickCands[0].id); return; }
+  render();
+}
+
+function pickerHtml() {
+  const rec = recents().filter(r => r.id !== _pid);
+  const mine = safeGet(MINE_KEY);
+  let cands = '';
+  if (_pickSearching) cands = `<div class="wp-ply-loading">${escapeHtml(plyT('searching'))}</div>`;
+  else if (_pickCands && !_pickCands.length) cands = `<p class="wp-ply-note">${escapeHtml(plyT('noResults'))}</p>`;
+  else if (_pickCands) {
+    cands = `<div class="wp-ply-cands">${_pickCands.map(({ id, lite }) => `
+      <button type="button" class="wp-ply-cand" data-vs="${escapeHtml(id)}">
+        ${avatarImg(lite.avatarUrl, lite.username, 'wp-ply-av')}
+        <span class="wp-ply-cand-name">${escapeHtml(lite.username)}
+          <small>${flagImg(lite.country, 'wp-ply-flag')} ${escapeHtml(countryName(lite.country))} · lv ${escapeHtml(lite.leveling?.level ?? '—')}</small></span>
+      </button>`).join('')}</div>`;
+  }
+  const chips = [
+    mine && ID_RE.test(mine) && mine !== _pid ? `<button type="button" class="wp-ply-chip wp-ply-chip-me" data-vs="${escapeHtml(mine)}">★ ${escapeHtml(plyT('me'))}</button>` : '',
+    ...rec.filter(r => r.id !== mine).map(r => `<button type="button" class="wp-ply-chip" data-vs="${escapeHtml(r.id)}">${avatarImg(r.a, r.u, 'wp-ply-av wp-ply-av-xs')}<span>${escapeHtml(r.u || r.id)}</span></button>`),
+  ].filter(Boolean);
+  return `
+    <div class="wp-ply-picker">
+      <form class="wp-ply-search" id="wp-ply-pick">
+        <input type="search" placeholder="${escapeHtml(plyT('cmpSearchPh'))}" value="${escapeHtml(_pickQ)}" autocomplete="off">
+        <button type="submit"${_pickSearching ? ' disabled' : ''}>${escapeHtml(plyT('go'))}</button>
+      </form>
+      ${cands}
+      ${chips.length ? `<div class="wp-ply-recent">${chips.join('')}</div>` : ''}
+    </div>`;
+}
+
+/** Apre il confronto fra il giocatore della scheda e `id`. Esportata:
+ *  la usa l'overlay per i link ?player=A&vs=B. */
+export async function openCompare(id) {
+  if (!ID_RE.test(String(id || '')) || !_pid || id === _pid) return;
+  _picking = false;
+  _cmpId = id;
+  _cmp = null;
+  if (!_root) return;
+  render();
+  _root.scrollTop = 0;
+  const pid = _pid;
+  const lite = await fetchPlayer(id).catch(() => null);
+  if (_cmpId !== id || _pid !== pid) return;
+  _cmp = { lite, natRanks: null, equip: undefined };
+  if (lite) rememberRecent(id, lite);
+  render();
+  // Posizioni nella nazione ed equipaggiamento dei due, in parallelo:
+  // per il primo la posizione c'è già (se la sua scheda l'aveva chiesta).
+  const [nr, eqB, eqA] = await Promise.all([
+    lite ? fetchNationRanks(lite).catch(() => null) : null,
+    fetchEquipment(id),
+    _equip && _equip !== 'loading' ? _equip : fetchEquipment(pid),
+  ]);
+  if (_cmpId !== id || _pid !== pid) return;
+  _cmp = { lite, natRanks: nr, equip: eqB };
+  _cmpEquipA = eqA;
+  render();
+}
+
+function compareHtml() {
+  const a = _lite;
+  const b = _cmp?.lite;
+  const back = `<button type="button" class="wp-ply-back" id="wp-ply-cmp-back">← ${escapeHtml(plyT('cmpBack', { a: a?.username || '' }))}</button>`;
+  if (!a) return back;
+  if (!_cmp) return `${back}<div class="wp-ply-loading">${escapeHtml(plyT('loading'))}</div>`;
+  if (!b) return `${back}<p class="wp-ply-note">${escapeHtml(plyT('notFound'))}</p>`;
+
+  const psA = classifyPlaystyle(a), psB = classifyPlaystyle(b);
+  const ra = a.rankings || {}, rb = b.rankings || {};
+  // Una riga: etichetta, due valori, e chi "vince" (più alto è meglio,
+  // salvo `lower`). Le righe senza un confronto sensato (nazione, build)
+  // non evidenziano nessuno.
+  const row = (label, va, vb, { fmt = (v) => fmtFull(v), sub = null, lower = false, compare = true } = {}) => {
+    const na = Number(va), nb = Number(vb);
+    let win = 0;
+    if (compare && Number.isFinite(na) && Number.isFinite(nb) && na !== nb) win = (na > nb) !== lower ? 1 : 2;
+    const cell = (v, n, i) => `<td class="wp-ply-num${win === i ? ' wp-ply-win' : ''}">${v == null || v === '' ? '—' : escapeHtml(fmt(v))}${
+      sub ? `<small>${escapeHtml(sub(i) || '')}</small>` : ''}</td>`;
+    return `<tr><th scope="row">${escapeHtml(label)}</th>${cell(va, na, 1)}${cell(vb, nb, 2)}</tr>`;
+  };
+  const rankSub = (type) => (i) => {
+    const r = (i === 1 ? ra : rb)[type];
+    const nat = (i === 1 ? _natRanks : _cmp.natRanks)?.ranks?.[type];
+    return [r?.rank ? plyT('worldRank', { n: fmtFull(r.rank) }) : '', nat ? plyT('natRank', { n: fmtFull(nat), c: countryName((i === 1 ? a : b).country) }) : '']
+      .filter(Boolean).join(' · ');
+  };
+  const head = (p, ps) => `
+    <th class="wp-ply-cmp-who">
+      ${avatarImg(p.avatarUrl, p.username, 'wp-ply-av wp-ply-av-md')}
+      <button type="button" class="wp-ply-link" data-open="${escapeHtml(p._id)}">${escapeHtml(p.username)}</button>
+      <span class="wp-ply-who">${flagImg(p.country, 'wp-ply-flag')}<span>${escapeHtml(countryName(p.country))}</span></span>
+      <span class="wp-ply-ps wp-ply-ps-${ps.mode}">${escapeHtml(plyT(`style_${ps.mode}`))}</span>
+    </th>`;
+
+  const skillRows = [...WAR_SKILLS, ...ECO_SKILLS].map(k =>
+    row(plyT(`sk_${k}`), a.skills?.[k]?.level ?? 0, b.skills?.[k]?.level ?? 0)).join('');
+
+  const gearCell = (eq, slot) => {
+    if (eq === undefined || eq === 'loading') return '…';
+    const it = eq?.[slot];
+    return it?.code ? `${it.code}${it.skills ? ' · ' + Object.values(it.skills).join('/') : ''}` : '—';
+  };
+  const gearRows = (_cmp.equip === undefined)
+    ? `<tr><td colspan="3" class="wp-ply-dim">${escapeHtml(plyT('loading'))}</td></tr>`
+    : GEAR_SLOTS.map(slot => `<tr><th scope="row">${escapeHtml(plyT(`slot_${slot}`))}</th>
+        <td class="wp-ply-num">${escapeHtml(gearCell(_cmpEquipA, slot))}</td>
+        <td class="wp-ply-num">${escapeHtml(gearCell(_cmp.equip, slot))}</td></tr>`).join('');
+
+  return `
+    ${back}
+    <header class="wp-ply-head">
+      <h2>${escapeHtml(plyT('cmpTitle', { a: a.username, b: b.username }))}</h2>
+      <p class="wp-ply-sub">${escapeHtml(plyT('cmpSub'))}</p>
+    </header>
+    <div class="wp-ply-pactions"><button type="button" class="wp-ply-chip" id="wp-ply-cmp-swap">⇄ ${escapeHtml(plyT('cmpSwap'))}</button></div>
+    <div class="wp-ply-tablewrap wp-ply-cmpwrap"><table class="wp-ply-table wp-ply-cmp">
+      <thead><tr><th></th>${head(a, psA)}${head(b, psB)}</tr></thead>
+      <tbody>
+        ${row(plyT('stWeekly'), ra.weeklyUserDamages?.value, rb.weeklyUserDamages?.value, { fmt: fmtCompact, sub: rankSub('weeklyUserDamages') })}
+        ${row(plyT('stTotal'), ra.userDamages?.value, rb.userDamages?.value, { fmt: fmtCompact, sub: rankSub('userDamages') })}
+        ${row(plyT('stWealth'), ra.userWealth?.value, rb.userWealth?.value, { fmt: fmtMoney, sub: rankSub('userWealth') })}
+        ${row(plyT('stBounty'), ra.userBounty?.value, rb.userBounty?.value, { fmt: fmtMoney, sub: rankSub('userBounty') })}
+        ${row(plyT('stXp'), ra.userLevel?.value, rb.userLevel?.value, { fmt: fmtCompact })}
+        ${row(plyT('level'), a.leveling?.level, b.leveling?.level)}
+        ${row(plyT('mrank'), a.militaryRank, b.militaryRank)}
+        ${row(plyT('skWar'), psA.war, psB.war, { fmt: (v) => `${v} ${plyT('points')}` })}
+        ${row(plyT('skEco'), psA.eco, psB.eco, { fmt: (v) => `${v} ${plyT('points')}` })}
+        ${row(plyT('stCases'), ra.userCasesOpened?.value, rb.userCasesOpened?.value)}
+        ${row(plyT('stMissions'), ra.userMissionsClaimed?.value, rb.userMissionsClaimed?.value)}
+        ${row(plyT('joined'), a.createdAt ? Date.parse(a.createdAt) : null, b.createdAt ? Date.parse(b.createdAt) : null,
+          { fmt: (v) => fmtDate(new Date(v).toISOString()), compare: false })}
+        <tr class="wp-ply-cmpsep"><th colspan="3">${escapeHtml(plyT('cmpSkills'))}</th></tr>
+        ${skillRows}
+        <tr class="wp-ply-cmpsep"><th colspan="3">${escapeHtml(plyT('gear'))}</th></tr>
+        ${gearRows}
+      </tbody>
+    </table></div>
+    <p class="wp-ply-note">${escapeHtml(plyT('cmpNote'))}</p>`;
+}
+
+/* ── Aziende e lavoro ─────────────────────────────────────────── */
+
+const UPGRADES = ['automatedEngine', 'storage', 'breakRoom', 'headquarters', 'dormitories'];
+
+/* Le ultime 31 giornate come barre impilate (dipendenti / lui / motore),
+   in SVG scritto a mano come i grafici di nations/charts.js. Un giorno
+   senza riga è un BUCO, non uno zero. */
+function workChartSvg(rows) {
+  const W = 760, H = 170, PL = 6, PR = 6, PT = 10, PB = 22;
+  const days = rows.slice(-31);
+  const max = Math.max(1, ...days.map(r => r.total || 0));
+  const bw = (W - PL - PR) / days.length;
+  const y = (v) => PT + (H - PT - PB) * (1 - v / max);
+  const parts = [['employeeProd', 'wp-ply-w-emp'], ['selfWork', 'wp-ply-w-self'], ['automatedEngine', 'wp-ply-w-auto']];
+  const bars = days.map((r, i) => {
+    let acc = 0;
+    const x = PL + i * bw + 1;
+    const rects = parts.map(([k, cls]) => {
+      const v = r[k] || 0;
+      const y1 = y(acc + v), y0 = y(acc);
+      acc += v;
+      return v > 0 ? `<rect class="${cls}" x="${x.toFixed(1)}" y="${y1.toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${Math.max(0.5, y0 - y1).toFixed(1)}"/>` : '';
+    }).join('');
+    const tip = `${r.dailyDate} · ${fmtFull(Math.round(r.total || 0))} ${plyT('wkPts')} · ${plyT('wkWages')} ${fmtMoney(r.wage || 0)}`;
+    return `<g><title>${escapeHtml(tip)}</title>${rects}</g>`;
+  }).join('');
+  const lbl = (i) => days[i] ? `<text x="${(PL + i * bw + bw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle">${escapeHtml(days[i].dailyDate.slice(5))}</text>` : '';
+  return `<svg class="wp-ply-wchart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img">${bars}<g class="wp-ply-axis">${lbl(0)}${lbl(Math.floor(days.length / 2))}${lbl(days.length - 1)}</g></svg>`;
+}
+
+function workHtml() {
+  const loading = `<div class="wp-ply-loading">${escapeHtml(plyT('loading'))}</div>`;
+  let comp;
+  if (_companies === undefined || _companies === 'loading') comp = loading;
+  else if (!_companies) comp = `<p class="wp-ply-note">${escapeHtml(plyT('wkError'))}</p>`;
+  else if (!_companies.length) comp = `<p class="wp-ply-note">${escapeHtml(plyT('wkNone'))}</p>`;
+  else {
+    const totV = _companies.reduce((t, c) => t + c.value, 0);
+    const totW = _companies.reduce((t, c) => t + c.workers, 0);
+    const region = (id) => state.regionData?.[id];
+    comp = `
+      <p class="wp-ply-summary">${escapeHtml(plyT('wkCompanies', { n: _companies.length }))}
+        <span class="wp-ply-dim">· ${escapeHtml(plyT('wkValue'))} ${escapeHtml(fmtMoney(totV))} · ${escapeHtml(plyT('wkWorkers'))} ${totW}</span></p>
+      <div class="wp-ply-tablewrap"><table class="wp-ply-table">
+        <thead><tr><th>${escapeHtml(plyT('wkProduct'))}</th><th>${escapeHtml(plyT('wkRegion'))}</th>
+          <th class="wp-ply-num">${escapeHtml(plyT('wkWorkers'))}</th><th class="wp-ply-num">${escapeHtml(plyT('wkStock'))}</th>
+          <th class="wp-ply-num">${escapeHtml(plyT('wkValue'))}</th><th>${escapeHtml(plyT('wkUpgrades'))}</th></tr></thead>
+        <tbody>${_companies.map(c => {
+          const r = region(c.region);
+          const ups = UPGRADES.filter(k => c.upgrades[k]).map(k => `${plyT(`up_${k}`)} ${c.upgrades[k]}`).join(' · ');
+          return `<tr${c.disabled ? ' class="wp-ply-off"' : ''}>
+            <td><b>${escapeHtml(c.itemCode || '—')}</b>${c.disabled ? ` <small class="wp-ply-dim">(${escapeHtml(plyT('wkDisabled'))})</small>` : ''}</td>
+            <td><span class="wp-ply-who">${r?.country ? flagImg(r.country, 'wp-ply-flag') : ''}<span>${escapeHtml(r?.name || '—')}</span></span></td>
+            <td class="wp-ply-num">${c.workers || '—'}</td>
+            <td class="wp-ply-num">${escapeHtml(fmtMoney(c.stock))}</td>
+            <td class="wp-ply-num">${escapeHtml(fmtMoney(c.value))}</td>
+            <td><small class="wp-ply-dim">${escapeHtml(ups || '—')}</small></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>`;
+  }
+
+  let work;
+  if (_work === undefined || _work === 'loading') work = loading;
+  else if (!_work || !_work.length) work = `<p class="wp-ply-note">${escapeHtml(plyT('wkNoStats'))}</p>`;
+  else {
+    const sum = (k) => _work.reduce((t, r) => t + (r[k] || 0), 0);
+    work = `
+      <div class="wp-ply-minor wp-ply-minor-big">
+        <span>${escapeHtml(plyT('wkTotal31'))} <b>${escapeHtml(fmtFull(Math.round(sum('total'))))}</b> ${escapeHtml(plyT('wkPts'))}</span>
+        <span><i class="wp-ply-key wp-ply-w-emp"></i>${escapeHtml(plyT('wkEmp'))} <b>${escapeHtml(fmtCompact(Math.round(sum('employeeProd'))))}</b></span>
+        <span><i class="wp-ply-key wp-ply-w-self"></i>${escapeHtml(plyT('wkSelf'))} <b>${escapeHtml(fmtCompact(Math.round(sum('selfWork'))))}</b></span>
+        <span><i class="wp-ply-key wp-ply-w-auto"></i>${escapeHtml(plyT('wkAuto'))} <b>${escapeHtml(fmtCompact(Math.round(sum('automatedEngine'))))}</b></span>
+        <span>${escapeHtml(plyT('wkWages'))} <b class="wp-ply-gold">${escapeHtml(fmtMoney(sum('wage')))}</b></span>
+      </div>
+      <div class="wp-ply-wchartwrap">${workChartSvg(_work)}</div>`;
+  }
+
+  return `
+    ${comp}
+    <h3 class="wp-ply-h3">${escapeHtml(plyT('wkChart'))}</h3>
+    ${work}
+    <p class="wp-ply-note">${escapeHtml(plyT('wkNote'))}</p>`;
+}
+
+/* ── Politica ─────────────────────────────────────────────────── */
+
+function politicsHtml() {
+  if (_politics === undefined || _politics === 'loading') return `<div class="wp-ply-loading">${escapeHtml(plyT('loading'))}</div>`;
+  if (!_politics) return `<p class="wp-ply-note">${escapeHtml(plyT('polError'))}</p>`;
+  const { party, roles, presidentOf, history } = _politics;
+  const fmtD = (ms) => ms ? fmtDate(new Date(ms).toISOString()) : plyT('polToday');
+  const span = (from, to) => `${fmtD(from)} → ${to ? fmtD(to) : plyT('polToday')}`;
+  const allRoles = [...roles];
+  if (presidentOf && !allRoles.includes('president')) allRoles.unshift('president');
+
+  const partyCard = party ? `
+    <div class="wp-ply-polcard">
+      ${avatarImg(party.avatarUrl, party.name, 'wp-ply-av wp-ply-av-md')}
+      <div><b>${escapeHtml(party.name)}</b>
+        <small class="wp-ply-dim">${escapeHtml(plyT(`polRole_${party.role}`))}${party.members != null ? ' · ' + escapeHtml(plyT('polMembers', { n: party.members })) : ''}</small></div>
+    </div>` : `<p class="wp-ply-note">${escapeHtml(plyT('polNoParty'))}</p>`;
+
+  const list = (rows, fn) => rows.length
+    ? `<ul class="wp-ply-pollist">${rows.map(fn).join('')}</ul>`
+    : `<p class="wp-ply-note">${escapeHtml(plyT('polEmpty'))}</p>`;
+
+  let hist;
+  if (!history) hist = `<p class="wp-ply-note">${escapeHtml(plyT('polNoHistory'))}</p>`;
+  else {
+    hist = `
+      <h3 class="wp-ply-h3">${escapeHtml(plyT('polPresidencies'))}</h3>
+      ${list(history.presidencies, p => `<li><span>${escapeHtml(span(p.from, p.to))}</span>
+        <small class="wp-ply-dim">${p.share != null ? escapeHtml(plyT('polVotes', { p: Math.round(p.share * 100) })) : ''}${p.party ? ' · ' + escapeHtml(p.party) : ''}</small></li>`)}
+      <h3 class="wp-ply-h3">${escapeHtml(plyT('polTerms'))} ${history.govFrom ? `<small class="wp-ply-dim">${escapeHtml(plyT('polSince', { d: fmtD(history.govFrom) }))}</small>` : ''}</h3>
+      ${list(history.terms, t => `<li><span>${escapeHtml(plyT(`role_${t.role}`))}</span><small class="wp-ply-dim">${escapeHtml(span(t.from, t.to))}</small></li>`)}
+      <h3 class="wp-ply-h3">${escapeHtml(plyT('polSwitches'))} ${history.switchFrom ? `<small class="wp-ply-dim">${escapeHtml(plyT('polSince', { d: fmtD(history.switchFrom) }))}</small>` : ''}</h3>
+      ${list(history.switches, w => `<li><span>${escapeHtml(fmtD(w.at))}</span>
+        <small>${escapeHtml(w.from || plyT('polNoPartyShort'))} → ${escapeHtml(w.to || plyT('polNoPartyShort'))}</small></li>`)}
+      <p class="wp-ply-note">${escapeHtml(plyT('polNatNote', { c: countryName(_lite?.country) }))}</p>`;
+  }
+
+  return `
+    <h3 class="wp-ply-h3 wp-ply-h3-first">${escapeHtml(plyT('polParty'))}</h3>
+    ${partyCard}
+    <h3 class="wp-ply-h3">${escapeHtml(plyT('polNow'))}</h3>
+    ${allRoles.length
+      ? `<div class="wp-ply-recent">${allRoles.map(r => `<span class="wp-ply-badge wp-ply-badge-role">${escapeHtml(plyT(`role_${r}`))}</span>`).join('')}</div>`
+      : `<p class="wp-ply-note">${escapeHtml(plyT('polNone'))}</p>`}
+    ${hist}`;
 }
 
 export function stopPlayersView() {

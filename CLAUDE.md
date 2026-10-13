@@ -589,9 +589,19 @@ wareraPlus/
     │   │                            chiave `we_my_player` della scheda Ricchezza), visti di
     │   │                            recente, classifiche mondiali (ranking.getRanking, la
     │   │                            ladder intera ~470 KB gz, solo all'apertura, in memoria).
-    │   │                            Scheda: numeri con posizione mondiale da getUserLite, e
-    │   │                            tre schede — Battaglie, Ricchezza (/player-wealth),
-    │   │                            Abilità ed equipaggiamento. ?section=players&player=ID.
+    │   │                            Scheda: numeri con posizione mondiale (getUserLite) e
+    │   │                            NELLA SUA NAZIONE (/country-citizens), e cinque schede —
+    │   │                            Battaglie (col bottino, poolLoot), Ricchezza
+    │   │                            (/player-wealth), Aziende e lavoro, Politica, Abilità ed
+    │   │                            equipaggiamento. Confronto 1 vs 1 dalla scheda.
+    │   │                            ?section=players&player=ID(&vs=ID).
+    │   │                            ⚠️ work.getStatsByUserId (con chiave, via proxy) è la
+    │   │                            somma ESATTA di getStatsByCompany sulle SUE aziende:
+    │   │                            `wage` = salari che PAGA, non quello che incassa
+    │   │                            lavorando per altri (verificato 2026-10-14).
+    │   │                            ⚠️ La politica legge /political-history della nazione
+    │   │                            di OGGI: la carriera prima di un cambio di cittadinanza
+    │   │                            non c'è, e la vista lo scrive.
     │   ├── api.js               ← ⚠️ "le battaglie di un giocatore" NON esistono come
     │   │                          procedura e nessuna transazione porta l'id della
     │   │                          battaglia: si chiede battleLootSummary.getByBattleAndUser

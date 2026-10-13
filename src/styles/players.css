@@ -207,3 +207,66 @@ body.light-theme .wp-ply-skbar { background: rgba(0, 0, 0, .08); }
   .wp-ply-skill small { display: none; }
   .wp-ply-stat strong { font-size: 18px; }
 }
+
+/* ══ Aggiunte: posizione in nazione, bottino, confronto, lavoro, politica ══ */
+.wp-ply-av-md { width: 44px; height: 44px; font-size: 17px; }
+.wp-ply-stat em.wp-ply-natrank { color: var(--wp-ov-accent, #ec4899); cursor: help; }
+
+/* Bottino: il bottone sta nella riga della battaglia (che è cliccabile per
+   aprirla), quindi è un bottone vero e il clic non arriva alla riga. */
+.wp-ply-lootbtn {
+  padding: 2px 8px; border-radius: 999px; border: 1px solid var(--wp-ov-border, #30363d);
+  background: transparent; color: inherit; font: inherit; font-size: 11.5px; cursor: pointer; white-space: nowrap;
+}
+.wp-ply-lootbtn:hover, .wp-ply-lootbtn.active { border-color: var(--wp-ov-accent, #ec4899); color: var(--wp-ov-accent, #ec4899); }
+.wp-ply-lootrow td { background: color-mix(in srgb, var(--wp-ov-accent, #ec4899) 5%, transparent); }
+.wp-ply-loot { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-ply-lootitem {
+  display: flex; flex-direction: column; gap: 1px; padding: 6px 10px; border-radius: 8px;
+  border: 1px solid var(--wp-ov-border, #30363d); background: var(--wp-ov-surface, #161b22); font-size: 12px;
+}
+.wp-ply-lootitem small { font-size: 10.5px; }
+
+/* Confronto */
+.wp-ply-picker {
+  margin-top: 14px; padding: 12px; border-radius: 10px;
+  border: 1px dashed var(--wp-ov-accent, #ec4899); background: color-mix(in srgb, var(--wp-ov-accent, #ec4899) 4%, transparent);
+}
+.wp-ply-picker .wp-ply-recent { margin-top: 10px; }
+.wp-ply-cmpwrap { margin-top: 12px; }
+.wp-ply-cmp { table-layout: fixed; }
+.wp-ply-cmp th[scope="row"] { width: 34%; text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 600; color: var(--wp-ov-text-dim, #8b949e); background: transparent; border-bottom: 1px solid color-mix(in srgb, var(--wp-ov-border, #30363d) 60%, transparent); }
+.wp-ply-cmp td small { display: block; font-size: 10.5px; font-weight: 500; color: var(--wp-ov-text-dim, #8b949e); white-space: normal; }
+.wp-ply-cmp-who { text-transform: none !important; letter-spacing: 0 !important; text-align: right !important; vertical-align: top; }
+.wp-ply-cmp-who > * { display: flex; justify-content: flex-end; margin-left: auto; margin-bottom: 4px; }
+.wp-ply-cmp-who .wp-ply-link { font-size: 14px; color: var(--wp-ov-text, #e6edf3); }
+.wp-ply-cmp-who .wp-ply-ps { display: inline-flex; width: fit-content; }
+.wp-ply-win { color: var(--wp-ov-accent, #ec4899); font-weight: 800; background: color-mix(in srgb, var(--wp-ov-accent, #ec4899) 8%, transparent); }
+.wp-ply-cmpsep th { padding-top: 16px !important; background: transparent !important; color: var(--wp-ov-text, #e6edf3) !important; }
+
+/* Aziende e lavoro */
+.wp-ply-off td { opacity: .55; }
+.wp-ply-wchartwrap { border: 1px solid var(--wp-ov-border, #30363d); border-radius: 10px; padding: 8px; background: var(--wp-ov-surface, #161b22); }
+.wp-ply-wchart { display: block; width: 100%; height: 190px; }
+.wp-ply-w-emp { fill: #a371f7; }
+.wp-ply-w-self { fill: var(--wp-ov-accent, #ec4899); }
+.wp-ply-w-auto { fill: #39d0d8; }
+.wp-ply-axis text { font-size: 10px; fill: var(--wp-ov-text-dim, #8b949e); }
+.wp-ply-key { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
+.wp-ply-key.wp-ply-w-emp { background: #a371f7; }
+.wp-ply-key.wp-ply-w-self { background: var(--wp-ov-accent, #ec4899); }
+.wp-ply-key.wp-ply-w-auto { background: #39d0d8; }
+
+/* Politica */
+.wp-ply-h3-first { margin-top: 4px; }
+.wp-ply-polcard {
+  display: inline-flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 10px;
+  border: 1px solid var(--wp-ov-border, #30363d); background: var(--wp-ov-surface, #161b22);
+}
+.wp-ply-polcard div { display: flex; flex-direction: column; gap: 2px; }
+.wp-ply-badge-role { border: 1px solid var(--wp-ov-accent, #ec4899); color: var(--wp-ov-accent, #ec4899); }
+.wp-ply-pollist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.wp-ply-pollist li {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding: 7px 12px; border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--wp-ov-border, #30363d) 70%, transparent);
+}

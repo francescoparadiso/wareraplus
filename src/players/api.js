@@ -35,10 +35,11 @@
    mostra le due nazioni della battaglia e non indovina.
    ══════════════════════════════════════════════════════════════ */
 
-import { API_BASE_URL } from '../diplomacy/config.js';
-import { trpcBatchManual } from '../shared/trpcClient.js';
+import { API_BASE_URL, WARERA_CACHE_BASE } from '../diplomacy/config.js';
+import { trpcBatchManual, trpcCall } from '../shared/trpcClient.js';
 import { fetchPlayerWealthViaCache, fetchUsersLiteViaCache } from '../diplomacy/cacheClient.js';
 import { getBattleArchive, getLiveBattles } from '../battles/api.js';
+import { fetchCountryCitizens } from '../nations/api.js';
 
 export const LEADERBOARDS = ['weeklyUserDamages', 'userDamages', 'userWealth', 'userBounty'];
 
@@ -154,6 +155,14 @@ async function _summaryBatch(userId, battleIds, attempt = 0) {
       bounty: d.totalMoneyFromBounty || 0,
       contract: d.totalMoneyFromContract || 0,
       cases: (d.case1Count || 0) + (d.case2Count || 0),
+      // Gli oggetti caduti, con la posizione in classifica che li ha fatti
+      // cadere. Arrivano già in questa risposta: tenerli non costa niente.
+      loot: (Array.isArray(d.poolLoot) ? d.poolLoot : []).map(l => ({
+        code: l.item?.code || null,
+        skills: l.item?.skills || null,
+        rank: l.rank ?? null,
+        pool: l.pool || null,
+      })).filter(l => l.code),
     };
   });
 }
@@ -210,4 +219,145 @@ export async function fetchPlayerBattles(userId, { days = 3 } = {}) {
   // e l'ordinamento salta), poi le concluse dalla più recente.
   rows.sort((a, b) => (!!b.battle.live - !!a.battle.live) || ((b.battle.endedAt || 0) - (a.battle.endedAt || 0)));
   return { rows, checked: list.length, failed, days, archiveDegraded: !!archive?.degraded };
+}
+
+/* ── Aziende e lavoro ─────────────────────────────────────────── */
+
+/** Le aziende del giocatore: `company.getCompanies {userId}` dà solo gli
+ *  id, `company.getById` il resto (prodotto, regione, dipendenti,
+ *  magazzino, valore stimato, potenziamenti). Pubbliche, due giri. */
+export async function fetchCompanies(userId) {
+  const [list] = await trpcBatchManual([['company.getCompanies', { userId, perPage: 50 }]]);
+  const ids = (list?.items || []).map(x => (typeof x === 'string' ? x : x?._id)).filter(Boolean);
+  const out = [];
+  for (let i = 0; i < ids.length; i += 25) {
+    const chunk = ids.slice(i, i + 25);
+    const res = await trpcBatchManual(chunk.map(id => ['company.getById', { companyId: id }]));
+    res.forEach((c, k) => {
+      if (!c) return;
+      out.push({
+        id: chunk[k], name: c.name || '', itemCode: c.itemCode, region: c.region,
+        workers: c.workerCount || 0, stock: c.production || 0, value: c.estimatedValue || 0,
+        upgrades: c.activeUpgradeLevels || {}, disabled: !!c.disabledAt,
+      });
+    });
+  }
+  return out.sort((a, b) => b.value - a.value);
+}
+
+/** 31 giorni di lavoro DELLE SUE AZIENDE, giorno per giorno:
+ *  `employeeProd` (prodotto dai dipendenti), `selfWork` (da lui),
+ *  `automatedEngine` (dal motore), `total` la somma — in punti
+ *  produzione — e `wage`, i salari che le sue aziende hanno PAGATO.
+ *  ⚠️ Verificato il 2026-10-14: è la somma esatta di work.getStatsByCompany
+ *  sulle sue aziende, quindi lo stipendio che incassa lavorando per altri
+ *  qui NON c'è. Procedura con chiave: passa dal proxy (useWorker). */
+export async function fetchWorkStats(userId) {
+  try {
+    const rows = await trpcCall('work.getStatsByUserId', { userId }, { useWorker: true });
+    return Array.isArray(rows) ? rows : null;
+  } catch (err) {
+    console.warn('WarEra+ giocatori: statistiche di lavoro non disponibili:', err.message);
+    return null;
+  }
+}
+
+/* ── Politica ─────────────────────────────────────────────────── */
+
+const GOV_ROLES = ['president', 'vicePresident', 'minOfDefense', 'minOfForeignAffairs', 'minOfEconomy'];
+
+/**
+ * Partito, cariche di adesso e storia politica di un giocatore.
+ * · partito: getUserById (getUserLite non lo porta) + party.getById;
+ * · cariche: government.getByCountryId della SUA nazione;
+ * · storia: /political-history del cache-server per la sua nazione —
+ *   presidenze (complete dal lancio), governi e cambi di partito (che
+ *   ACCUMULANO dal deploy: `coverageFrom` dice da quando). Senza server
+ *   la storia manca e lo si dice; partito e cariche ci sono lo stesso.
+ *   ⚠️ È la storia della nazione di ADESSO: chi ha cambiato cittadinanza
+ *   ha avuto la sua carriera di prima altrove, e qui non compare.
+ */
+export async function fetchPolitics(userId, countryId) {
+  const [full, gov] = await trpcBatchManual([
+    ['user.getUserById', { userId }],
+    ['government.getByCountryId', { countryId }],
+  ]);
+  const partyId = full?.party || null;
+  let party = null;
+  if (partyId) {
+    const [p] = await trpcBatchManual([['party.getById', { partyId }]]);
+    if (p) {
+      party = {
+        id: partyId, name: p.name || '', avatarUrl: p.avatarUrl || null,
+        members: Array.isArray(p.members) ? p.members.length : null,
+        role: p.leader === userId ? 'leader' : (p.councilMembers || []).includes(userId) ? 'council' : 'member',
+      };
+    }
+  }
+  const roles = [];
+  if (gov) {
+    for (const r of GOV_ROLES) if (gov[r] === userId) roles.push(r);
+    if ((gov.congressMembers || []).includes(userId)) roles.push('congress');
+  }
+
+  let history = null;
+  try {
+    const res = await fetch(`${WARERA_CACHE_BASE}/political-history?countryId=${encodeURIComponent(countryId)}&days=180`,
+      { signal: AbortSignal.timeout(8000) });
+    if (res.ok) {
+      const h = await res.json();
+      // Governi: una riga quando qualcosa cambia, quindi una carica dura
+      // dalla riga in cui compare fino alla prima in cui non c'è più.
+      const govRows = h.governments?.rows || [];
+      const terms = [];
+      for (let ri = 0; ri < GOV_ROLES.length; ri++) {
+        let open = null;
+        govRows.forEach((g, i) => {
+          const holds = g.r?.[ri] === userId;
+          if (holds && !open) open = { role: GOV_ROLES[ri], from: g.a, to: null };
+          if (!holds && open) { open.to = g.a; terms.push(open); open = null; }
+          if (holds && i === govRows.length - 1) terms.push(open);
+        });
+      }
+      history = {
+        presidencies: (h.presidents || []).filter(p => p.u === userId)
+          .map(p => ({ from: p.from, to: p.to, share: p.share, party: h.partyNames?.[p.p] || null }))
+          .sort((a, b) => b.from - a.from),
+        terms: terms.sort((a, b) => b.from - a.from),
+        govFrom: h.governments?.coverageFrom || null,
+        switches: (h.switches?.rows || []).filter(r => r.u === userId)
+          .map(r => ({ at: r.a, from: h.partyNames?.[r.f] || null, to: h.partyNames?.[r.t] || null, fromId: r.f, toId: r.t }))
+          .sort((a, b) => b.at - a.at),
+        switchFrom: h.switches?.coverageFrom || null,
+      };
+    }
+  } catch (_) { /* resta null: la vista dice che lo storico non c'è */ }
+
+  return { party, roles, presidentOf: full?.infos?.presidentOf || null, history };
+}
+
+/* ── Posizione nella sua nazione ──────────────────────────────── */
+
+const NAT_KEYS = { weeklyUserDamages: 'wk', userDamages: 'dmg', userWealth: 'w', userBounty: 'b' };
+
+/**
+ * Posizione del giocatore fra i cittadini della sua nazione, per le stesse
+ * quattro misure delle classifiche mondiali. L'elenco viene da
+ * /country-citizens (lo stesso di Statistiche nazioni, stessa cache di
+ * sessione): il valore del giocatore è quello DI ADESSO (getUserLite),
+ * quelli degli altri sono dell'ultimo giro del server, qualche ora fa al
+ * massimo. Ritorna { n, partial, ranks: { rankingType: posizione } }.
+ */
+export async function fetchNationRanks(lite) {
+  if (!lite?.country) return null;
+  const data = await fetchCountryCitizens(lite.country).catch(() => null);
+  const rows = (data?.rows || []).filter(r => r.id !== lite._id);
+  if (!rows.length) return null;
+  const ranks = {};
+  for (const [type, key] of Object.entries(NAT_KEYS)) {
+    const mine = Number(lite.rankings?.[type]?.value);
+    if (!Number.isFinite(mine)) continue;
+    ranks[type] = 1 + rows.filter(r => (Number(r[key]) || 0) > mine).length;
+  }
+  return { n: rows.length + 1, partial: !!data.partial, ranks };
 }
