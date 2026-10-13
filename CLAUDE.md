@@ -582,6 +582,25 @@ wareraPlus/
     │   │                          ⚠️ un'ora senza misura è `d: null` e si disegna come
     │   │                          BUCO (barra assente, linea spezzata), mai come zero.
     │   ├── nationList.js, nationCompare.js, nationDetail.js, i18n.js (9 lingue)
+    ├── players/                  ← NUOVO (2026-10-14) — Giocatori: voce di Approfondimenti
+    │   │                            e destinazione del clic su un cittadino (Statistiche
+    │   │                            nazioni → Cittadini; Ctrl/clic centrale aprono ancora il
+    │   │                            profilo sul gioco). Partenza: ricerca, "Sono io" (stessa
+    │   │                            chiave `we_my_player` della scheda Ricchezza), visti di
+    │   │                            recente, classifiche mondiali (ranking.getRanking, la
+    │   │                            ladder intera ~470 KB gz, solo all'apertura, in memoria).
+    │   │                            Scheda: numeri con posizione mondiale da getUserLite, e
+    │   │                            tre schede — Battaglie, Ricchezza (/player-wealth),
+    │   │                            Abilità ed equipaggiamento. ?section=players&player=ID.
+    │   ├── api.js               ← ⚠️ "le battaglie di un giocatore" NON esistono come
+    │   │                          procedura e nessuna transazione porta l'id della
+    │   │                          battaglia: si chiede battleLootSummary.getByBattleAndUser
+    │   │                          (pubblica, 404 = non c'era) per le in corso + le concluse
+    │   │                          degli ultimi N giorni dall'archivio, 25 per batch. 3 giorni
+    │   │                          ≈ 7 richieste, "cerca più indietro" fino a 31. Il
+    │   │                          riepilogo NON dice lo schieramento: la vista non indovina.
+    │   │                          I 404 in console sono i batch dove non ha combattuto.
+    │   └── main.js, i18n.js (9 lingue); stile in styles/players.css (wp-ply-*)
     ├── economy/                  ← NUOVO — Economia: UNA voce di Approfondimenti,
     │   │                            TRE schede. Prima erano due voci separate
     │   │                            ("Ottimizzatore industriale" e "Rendite di

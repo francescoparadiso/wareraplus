@@ -57,6 +57,9 @@ export const OVERLAY_TINTS = {
   // vicina ma distinta dal rosso pieno delle Unità Militari)
   battles:  { rgbDark: '219,109,40',  rgbDark2: '229,72,77',
               rgbLight: '154,72,17',  rgbLight2: '176,32,38' },
+  // rosa → viola (Giocatori: le persone, tinta che nessun'altra sezione usa)
+  players:  { rgbDark: '236,72,153',  rgbDark2: '168,85,247',
+              rgbLight: '190,24,93',  rgbLight2: '126,34,206' },
 };
 
 const _stoppers = new WeakMap();

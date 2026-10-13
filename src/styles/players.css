@@ -1,0 +1,209 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Giocatori (src/players/*) — stile
+   ------------------------------------------------------------------
+   Namespace `wp-ply-*`. Superfici e bordi dai token --wp-ov-* di
+   shell.css, accento della sezione (rosa) da --wp-ov-accent: qui solo
+   ciò che è di questa vista. Caricato via import() da
+   src/players/main.js, non pesa sul boot.
+   ══════════════════════════════════════════════════════════════ */
+
+#wp-players-root {
+  flex: 1;
+  width: 100%;
+  overflow-y: auto;
+  background: transparent;
+  color: var(--wp-ov-text, #e6edf3);
+}
+
+.wp-ply {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 22px 18px 90px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.wp-ply-head h2 { margin: 0; font-size: clamp(22px, 3.4vw, 30px); font-weight: 800; }
+.wp-ply-sub { margin: 4px 0 16px; font-size: 12.5px; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-ply-h3 { margin: 26px 0 10px; font-size: 15px; font-weight: 700; }
+.wp-ply-dim { color: var(--wp-ov-text-dim, #8b949e); }
+.wp-ply-note { margin: 8px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-ply-loading { padding: 22px 0; font-size: 13px; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-ply-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: 13px; font-weight: 600; }
+
+/* ── Ricerca e scorciatoie ── */
+.wp-ply-search { display: flex; gap: 8px; max-width: 560px; }
+.wp-ply-search input {
+  flex: 1; min-width: 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--wp-ov-border, #30363d);
+  background: var(--wp-ov-surface, #161b22);
+  color: inherit; font: inherit; font-size: 13.5px;
+}
+.wp-ply-search input:focus { outline: none; border-color: var(--wp-ov-accent, #ec4899); }
+.wp-ply-search button {
+  padding: 9px 16px; border-radius: 8px; border: 1px solid var(--wp-ov-accent, #ec4899);
+  background: color-mix(in srgb, var(--wp-ov-accent, #ec4899) 16%, transparent);
+  color: inherit; font: inherit; font-weight: 600; cursor: pointer;
+}
+.wp-ply-search button:disabled { opacity: .5; cursor: default; }
+
+.wp-ply-cands { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; margin-top: 8px; }
+.wp-ply-cand {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border-radius: 10px; border: 1px solid var(--wp-ov-border, #30363d);
+  background: var(--wp-ov-surface, #161b22); color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.wp-ply-cand:hover { border-color: var(--wp-ov-accent, #ec4899); }
+.wp-ply-cand-name { display: flex; flex-direction: column; font-weight: 600; min-width: 0; }
+.wp-ply-cand-name small { font-weight: 400; font-size: 11px; color: var(--wp-ov-text-dim, #8b949e); display: inline-flex; align-items: center; gap: 4px; }
+
+.wp-ply-recent { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 14px; font-size: 12px; }
+.wp-ply-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 11px; border-radius: 999px;
+  border: 1px solid var(--wp-ov-border, #30363d); background: transparent;
+  color: inherit; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none;
+}
+.wp-ply-chip:hover { border-color: var(--wp-ov-accent, #ec4899); }
+.wp-ply-chip-me { border-color: var(--wp-ov-accent, #ec4899); color: var(--wp-ov-accent, #ec4899); }
+
+/* Avatar: stesso markup di mu/ui.js (iniziale sotto, immagine sopra). */
+.wp-ply-av {
+  position: relative; flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%;
+  overflow: hidden; display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, .07); font-weight: 700; font-size: 13px;
+}
+.wp-ply-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.wp-ply-av-xs { width: 20px; height: 20px; font-size: 10px; }
+.wp-ply-av-lg { width: 72px; height: 72px; font-size: 26px; }
+.wp-ply-flag { height: 12px; width: auto; border-radius: 2px; flex-shrink: 0; }
+.wp-ply-who { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+
+/* ── Pillole (classifiche e schede del giocatore) ── */
+.wp-ply-boardbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.wp-ply-pills, .wp-ply-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-ply-tabs { margin: 20px 0 14px; }
+.wp-ply-pill {
+  padding: 6px 13px; border-radius: 999px;
+  border: 1px solid var(--wp-ov-border, #30363d); background: transparent;
+  color: var(--wp-ov-text-dim, #8b949e); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.wp-ply-pill:hover { color: var(--wp-ov-text, #e6edf3); border-color: var(--wp-ov-text-dim, #8b949e); }
+.wp-ply-pill.active {
+  color: var(--wp-ov-accent, #ec4899); border-color: var(--wp-ov-accent, #ec4899);
+  background: color-mix(in srgb, var(--wp-ov-accent, #ec4899) 12%, transparent);
+}
+.wp-ply-pill:focus-visible, .wp-ply-rowlink:focus-visible { outline: 2px solid var(--wp-ov-accent, #ec4899); outline-offset: 2px; }
+.wp-ply-select {
+  padding: 6px 10px; border-radius: 8px; border: 1px solid var(--wp-ov-border, #30363d);
+  background: var(--wp-ov-surface, #161b22); color: inherit; font: inherit; font-size: 12.5px; max-width: 100%;
+}
+
+/* ── Tabelle ── */
+.wp-ply-tablewrap { overflow-x: auto; border: 1px solid var(--wp-ov-border, #30363d); border-radius: 10px; }
+.wp-ply-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.wp-ply-table th {
+  text-align: left; padding: 8px 10px; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--wp-ov-text-dim, #8b949e); background: var(--wp-ov-surface, #161b22);
+  border-bottom: 1px solid var(--wp-ov-border, #30363d); white-space: nowrap;
+}
+.wp-ply-table td { padding: 7px 10px; border-bottom: 1px solid color-mix(in srgb, var(--wp-ov-border, #30363d) 60%, transparent); vertical-align: middle; }
+.wp-ply-table tbody tr:last-child td { border-bottom: none; }
+.wp-ply-table tfoot td { border-top: 1px solid var(--wp-ov-border, #30363d); border-bottom: none; font-weight: 700; }
+.wp-ply-num { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wp-ply-rowlink { cursor: pointer; }
+.wp-ply-rowlink:hover td { background: color-mix(in srgb, var(--wp-ov-accent, #ec4899) 8%, transparent); }
+.wp-ply-gold { color: #e3b341; }
+.wp-ply-violet { color: #a371f7; }
+body.light-theme .wp-ply-gold { color: #8a6410; }
+body.light-theme .wp-ply-violet { color: #6e42c1; }
+.wp-ply-vs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-weight: 600; }
+.wp-ply-when { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wp-ply-livedot {
+  display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%;
+  background: #e5484d; box-shadow: 0 0 0 0 rgba(229, 72, 77, .6); animation: wp-ply-pulse 1.6s infinite;
+}
+@keyframes wp-ply-pulse { 70% { box-shadow: 0 0 0 6px rgba(229, 72, 77, 0); } 100% { box-shadow: 0 0 0 0 rgba(229, 72, 77, 0); } }
+body.wp-no-motion .wp-ply-livedot { animation: none; }
+
+.wp-ply-more {
+  display: block; width: 100%; margin-top: 10px; padding: 9px; border-radius: 8px;
+  border: 1px solid var(--wp-ov-border, #30363d); background: transparent;
+  color: var(--wp-ov-text-dim, #8b949e); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.wp-ply-more:hover:not(:disabled) { color: var(--wp-ov-text, #e6edf3); border-color: var(--wp-ov-accent, #ec4899); }
+.wp-ply-more:disabled { opacity: .6; cursor: default; }
+
+/* ── Scheda di un giocatore ── */
+.wp-ply-back {
+  margin-bottom: 14px; padding: 6px 12px; border-radius: 8px;
+  border: 1px solid var(--wp-ov-border, #30363d); background: transparent;
+  color: var(--wp-ov-text-dim, #8b949e); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.wp-ply-back:hover { color: var(--wp-ov-text, #e6edf3); }
+.wp-ply-phead { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; }
+.wp-ply-pwho { flex: 1 1 280px; min-width: 0; }
+.wp-ply-pwho h2 { margin: 0 0 6px; font-size: clamp(22px, 3.2vw, 28px); font-weight: 800; overflow-wrap: anywhere; }
+.wp-ply-pmeta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 12.5px; margin-top: 4px; }
+.wp-ply-pactions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
+.wp-ply-prestige { color: #e3b341; }
+.wp-ply-link {
+  padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 600; cursor: pointer;
+  text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 3px;
+}
+.wp-ply-link:hover { color: var(--wp-ov-accent, #ec4899); }
+.wp-ply-badge { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.wp-ply-badge-pill { background: rgba(63, 185, 80, .15); color: #3fb950; }
+.wp-ply-badge-down { background: rgba(229, 72, 77, .14); color: #e5484d; }
+.wp-ply-ps { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; border: 1px solid currentColor; }
+.wp-ply-ps-war { color: #e5484d; }
+.wp-ply-ps-eco { color: #3fb950; }
+.wp-ply-ps-mixed { color: #e3b341; }
+.wp-ply-ps-undecided { color: var(--wp-ov-text-dim, #8b949e); }
+
+.wp-ply-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-top: 18px; }
+.wp-ply-stat {
+  display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--wp-ov-border, #30363d); background: var(--wp-ov-surface, #161b22);
+}
+.wp-ply-stat span { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-ply-stat strong { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.wp-ply-stat em { font-style: normal; font-size: 11px; font-weight: 600; color: var(--wp-ov-text-dim, #8b949e); }
+/* Il colore del tier del gioco sulla posizione, come nelle classifiche MU. */
+.wp-ply-stat em.wp-ply-tier-master { color: #e5484d; }
+.wp-ply-stat em.wp-ply-tier-diamond { color: #58a6ff; }
+.wp-ply-stat em.wp-ply-tier-platinum { color: #39d0d8; }
+.wp-ply-stat em.wp-ply-tier-gold { color: #e3b341; }
+.wp-ply-minor { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 12px; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-ply-minor b { color: var(--wp-ov-text, #e6edf3); font-variant-numeric: tabular-nums; }
+.wp-ply-minor em { font-style: normal; font-size: 11px; }
+.wp-ply-minor-big { font-size: 13.5px; margin: 0 0 12px; }
+.wp-ply-up { color: #3fb950; font-weight: 600; }
+.wp-ply-down { color: #e5484d; font-weight: 600; }
+.wp-ply-chart { margin-top: 4px; min-height: 280px; }
+
+.wp-ply-skills { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.wp-ply-skgroup { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--wp-ov-border, #30363d); background: var(--wp-ov-surface, #161b22); }
+.wp-ply-skgroup h4 { margin: 0 0 8px; font-size: 12px; font-weight: 700; }
+.wp-ply-skill { display: grid; grid-template-columns: minmax(110px, 1fr) 1.2fr 24px 54px; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; }
+.wp-ply-skill b { text-align: right; font-variant-numeric: tabular-nums; }
+.wp-ply-skill small { text-align: right; font-variant-numeric: tabular-nums; }
+.wp-ply-skbar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .07); overflow: hidden; }
+.wp-ply-skbar i { display: block; height: 100%; border-radius: 3px; background: var(--wp-ov-accent, #ec4899); }
+body.light-theme .wp-ply-skbar { background: rgba(0, 0, 0, .08); }
+
+.wp-ply-gear { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.wp-ply-gearslot {
+  display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--wp-ov-border, #30363d); background: var(--wp-ov-surface, #161b22); font-size: 12px;
+}
+.wp-ply-gearslot b { font-size: 13px; }
+
+@media (max-width: 640px) {
+  .wp-ply { padding: 16px 16px 90px; }
+  .wp-ply-skill { grid-template-columns: minmax(90px, 1fr) 1fr 22px; }
+  .wp-ply-skill small { display: none; }
+  .wp-ply-stat strong { font-size: 18px; }
+}

@@ -728,6 +728,8 @@ body.light-theme .wp-panel-name {
 .wp-guide-overlay { --wp-ov-accent: #d29922; }   /* Guida: ambra */
 .wp-market-overlay { --wp-ov-accent: #e3b341; }  /* Rendite di produzione: oro */
 .wp-battles-overlay { --wp-ov-accent: #db6d28; } /* Battaglie: arancio bruciato */
+.wp-players-overlay { --wp-ov-accent: #ec4899; } /* Giocatori: rosa */
+body.light-theme .wp-players-overlay { --wp-ov-accent: #be185d; }
 /* L'oro chiaro sparisce sul fondo chiaro: sul tema chiaro l'accento della
    sezione diventa la sua versione scura (la stessa dichiarata come
    rgbLight in OVERLAY_TINTS, src/app/overlayChrome.js). */

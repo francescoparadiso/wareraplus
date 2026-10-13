@@ -442,6 +442,23 @@
     <div id="wp-nations-root" style="display:none;"></div>
   </div>
 
+  <!-- ════════════════════════════════════════════════════════════
+       NUOVO — Overlay Giocatori (src/players/*)
+       Ricerca, classifiche mondiali e scheda di un giocatore (danni,
+       ricchezza, battaglie, abilità). Montata IN-PAGE dentro
+       #wp-players-root da src/players/main.js, aperta da
+       src/app/playersOverlay.js — anche cliccando un cittadino in
+       Statistiche nazioni. Stesso pattern degli altri overlay.
+       ════════════════════════════════════════════════════════════ -->
+  <div id="wp-players-overlay" class="wp-political-overlay wp-players-overlay" aria-hidden="true">
+    <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
+    <div class="wp-political-topbar">
+      <button id="wp-players-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
+      <span class="wp-political-title">Players</span>
+    </div>
+    <div id="wp-players-root" style="display:none;"></div>
+  </div>
+
 
   <!-- Battaglie (src/battles/*): archivio delle battaglie concluse coi
        loro costi + spese di guerra giornaliere per nazione. Stessa

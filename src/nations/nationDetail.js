@@ -383,6 +383,17 @@ function renderCitizens() {
   listEl.querySelectorAll('.wp-nat-cth-btn[data-sort]').forEach(btn => {
     btn.addEventListener('click', () => sortByHeader(btn.dataset.sort));
   });
+  // WarEra+: un clic su un cittadino apre il suo RIEPILOGO (sezione
+  // Giocatori) invece del profilo sul sito del gioco, che resta il link
+  // vero della riga: Ctrl/Cmd/clic centrale lo aprono ancora in una scheda
+  // nuova. onclick e non addEventListener: listEl sopravvive ai ridisegni
+  // e un listener per giro si moltiplicherebbe.
+  listEl.onclick = (e) => {
+    const a = e.target.closest('a[data-player]');
+    if (!a || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    import('../app/playersOverlay.js').then(m => m.openPlayersView(a.dataset.player)).catch(() => window.open(a.href, '_blank', 'noopener'));
+  };
   listEl.querySelector('#wp-nat-cit-more')?.addEventListener('click', () => {
     _citAll = !_citAll;
     renderCitizens();
@@ -471,7 +482,7 @@ function citizenTable(rows) {
   }).join('');
 
   const body = rows.map(c => `
-    <a class="wp-nat-crow" href="${APP_BASE}/user/${encodeURIComponent(c.id)}" target="_blank" rel="noopener noreferrer"
+    <a class="wp-nat-crow" data-player="${escapeHtml(c.id)}" href="${APP_BASE}/user/${encodeURIComponent(c.id)}" target="_blank" rel="noopener noreferrer"
        ${c.ts ? `title="${escapeHtml(`${natT('updated')} ${fmtRelative(new Date(c.ts).toISOString())}`)}"` : ''}>
       <span class="wp-nat-cname">
         ${avatarImg(c.a, c.u || '', 'wp-mu-avatar wp-mu-avatar-xs')}
@@ -494,7 +505,7 @@ function citizenCard(c) {
     </div>`;
 
   return `
-    <a class="wp-nat-ccard" href="${APP_BASE}/user/${encodeURIComponent(c.id)}" target="_blank" rel="noopener noreferrer">
+    <a class="wp-nat-ccard" data-player="${escapeHtml(c.id)}" href="${APP_BASE}/user/${encodeURIComponent(c.id)}" target="_blank" rel="noopener noreferrer">
       <div class="wp-nat-ccard-top">
         ${avatarImg(c.a, c.u || '', 'wp-mu-avatar wp-mu-avatar-sm')}
         <div class="wp-nat-ccard-main">

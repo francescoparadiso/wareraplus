@@ -41,6 +41,7 @@ import { initEconomyOverlay, openEconomyView } from './app/economyOverlay.js';
 import { initNewsOverlay, openNewsView } from './app/newsOverlay.js';
 import { initMuOverlay, openMuView } from './app/muOverlay.js';
 import { initNationsOverlay, openNationsView } from './app/nationsOverlay.js';
+import { initPlayersOverlay, openPlayersView } from './app/playersOverlay.js';
 import { initBattlesOverlay, openBattlesView } from './app/battlesOverlay.js';
 import { initGuideOverlay, openGuideView } from './app/guideOverlay.js';
 import { initPrivateOverlay, openPrivateView } from './app/privateOverlay.js';
@@ -190,6 +191,7 @@ async function handleIncomingDeepLink() {
     mu: () => openMuView(params.get('mu') || undefined,
       { tab: params.get('tab'), a: params.get('mua'), b: params.get('mub') }),
     nations: () => openNationsView(params.get('nation') || undefined),
+    players: () => openPlayersView(params.get('player') || undefined),
     battles: () => openBattlesView(params.get('battle') || undefined),
     guide: () => openGuideView(),
     private: () => openPrivateView(),
@@ -217,6 +219,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initNewsOverlay();
   initMuOverlay();
   initNationsOverlay();
+  initPlayersOverlay();
   initBattlesOverlay();
   initGuideOverlay();
   initPrivateOverlay();
@@ -287,6 +290,7 @@ function restoreAfterChunkReload() {
     news: () => openNewsView(),
     mu: () => openMuView(),
     nations: () => openNationsView(),
+    players: () => openPlayersView(),
     // Mancavano: chi apriva Battaglie, Guida o Area riservata subito dopo
     // un deploy si ritrovava sulla mappa, come se il tool fosse ripartito
     // da zero. 'mu-wealth' riapre la vista unita', che e' dove sta.
