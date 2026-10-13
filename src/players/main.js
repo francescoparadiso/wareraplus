@@ -794,6 +794,77 @@ export async function openCompare(id) {
   render();
 }
 
+/* Il confronto come un "versus" da gioco di combattimento. Richiesta
+   dell'utente: la prima versione era una tabella, giusta ma piatta.
+   - in cima i due giocatori uno di fronte all'altro, ognuno col SUO
+     colore (A rosa = l'accento della sezione, B azzurro) e il punteggio
+     delle voci vinte al centro;
+   - ogni voce è un tiro alla fune: i due valori ai lati e in mezzo una
+     barra divisa in proporzione, che si legge senza leggere i numeri;
+   - le abilità come radar, i due profili sovrapposti: la forma della
+     build si vede prima dei livelli;
+   - l'equipaggiamento slot per slot, vince il pezzo con più statistiche.
+   I colori A/B sono gli stessi ovunque nella schermata. */
+
+const CMP_GEAR_SUM = (it) => it?.skills ? Object.values(it.skills).reduce((t, v) => t + (Number(v) || 0), 0) : 0;
+
+/** Una voce del duello. `win` = 1 (A), 2 (B), 0 (pari o non confrontabile). */
+function duelRow(label, va, vb, { fmt = (v) => fmtFull(v), subA = '', subB = '', lower = false } = {}) {
+  const na = Number(va), nb = Number(vb);
+  const ok = Number.isFinite(na) && Number.isFinite(nb);
+  let win = 0;
+  if (ok && na !== nb) win = (na > nb) !== lower ? 1 : 2;
+  // La barra: quota di A sul totale. Con valori negativi o tutti a zero
+  // (succede: punti eco a 0 per entrambi) metà e metà.
+  const tot = ok && na >= 0 && nb >= 0 ? na + nb : 0;
+  const pa = tot > 0 ? Math.max(4, Math.min(96, (na / tot) * 100)) : 50;
+  const val = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? '—' : escapeHtml(fmt(v)));
+  return {
+    win,
+    html: `
+    <div class="wp-vs-row${win === 1 ? ' wp-vs-wa' : win === 2 ? ' wp-vs-wb' : ''}">
+      <div class="wp-vs-val wp-vs-val-a"><b>${val(va)}</b>${subA ? `<small>${escapeHtml(subA)}</small>` : ''}</div>
+      <div class="wp-vs-mid">
+        <span class="wp-vs-label">${escapeHtml(label)}</span>
+        <div class="wp-vs-bar"><i class="wp-vs-bar-a" style="width:${pa.toFixed(1)}%"></i><i class="wp-vs-bar-b" style="width:${(100 - pa).toFixed(1)}%"></i></div>
+      </div>
+      <div class="wp-vs-val wp-vs-val-b"><b>${val(vb)}</b>${subB ? `<small>${escapeHtml(subB)}</small>` : ''}</div>
+    </div>`,
+  };
+}
+
+/* Radar delle undici abilità (guerra in alto, economia in basso), SVG a
+   mano. Scala sul livello massimo dei due (almeno 10): un giocatore
+   piccolo contro uno piccolo resta leggibile. */
+function radarSvg(a, b) {
+  const keys = [...WAR_SKILLS, ...ECO_SKILLS];
+  const lv = (p, k) => Number(p.skills?.[k]?.level) || 0;
+  const max = Math.max(10, ...keys.map(k => Math.max(lv(a, k), lv(b, k))));
+  const S = 340, C = S / 2, R = 118;
+  const pt = (i, v) => {
+    const ang = -Math.PI / 2 + (i / keys.length) * Math.PI * 2;
+    return [C + Math.cos(ang) * R * v, C + Math.sin(ang) * R * v];
+  };
+  const ring = (f) => keys.map((_, i) => pt(i, f).map(n => n.toFixed(1)).join(',')).join(' ');
+  const poly = (p) => keys.map((k, i) => pt(i, lv(p, k) / max).map(n => n.toFixed(1)).join(',')).join(' ');
+  const grid = [0.25, 0.5, 0.75, 1].map(f => `<polygon class="wp-vs-rgrid" points="${ring(f)}"/>`).join('');
+  const spokes = keys.map((_, i) => { const [x, y] = pt(i, 1); return `<line class="wp-vs-rgrid" x1="${C}" y1="${C}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}"/>`; }).join('');
+  const labels = keys.map((k, i) => {
+    const [x, y] = pt(i, 1.17);
+    const anchor = Math.abs(x - C) < 8 ? 'middle' : x > C ? 'start' : 'end';
+    const war = WAR_SKILLS.includes(k);
+    return `<text class="wp-vs-rlabel${war ? '' : ' wp-vs-rlabel-eco'}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="middle">${escapeHtml(plyT(`sk_${k}`))}<title>${escapeHtml(`${plyT(`sk_${k}`)}: ${lv(a, k)} – ${lv(b, k)}`)}</title></text>`;
+  }).join('');
+  const dots = (p, cls) => keys.map((k, i) => { const [x, y] = pt(i, lv(p, k) / max); return `<circle class="${cls}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3"/>`; }).join('');
+  return `<svg class="wp-vs-radar" viewBox="-70 -24 ${S + 140} ${S + 48}" role="img" aria-label="${escapeHtml(plyT('cmpSkills'))}">
+    ${grid}${spokes}
+    <polygon class="wp-vs-rpoly-b" points="${poly(b)}"/>
+    <polygon class="wp-vs-rpoly-a" points="${poly(a)}"/>
+    ${dots(b, 'wp-vs-rdot-b')}${dots(a, 'wp-vs-rdot-a')}
+    ${labels}
+  </svg>`;
+}
+
 function compareHtml() {
   const a = _lite;
   const b = _cmp?.lite;
@@ -804,74 +875,111 @@ function compareHtml() {
 
   const psA = classifyPlaystyle(a), psB = classifyPlaystyle(b);
   const ra = a.rankings || {}, rb = b.rankings || {};
-  // Una riga: etichetta, due valori, e chi "vince" (più alto è meglio,
-  // salvo `lower`). Le righe senza un confronto sensato (nazione, build)
-  // non evidenziano nessuno.
-  const row = (label, va, vb, { fmt = (v) => fmtFull(v), sub = null, lower = false, compare = true } = {}) => {
-    const na = Number(va), nb = Number(vb);
-    let win = 0;
-    if (compare && Number.isFinite(na) && Number.isFinite(nb) && na !== nb) win = (na > nb) !== lower ? 1 : 2;
-    const cell = (v, n, i) => `<td class="wp-ply-num${win === i ? ' wp-ply-win' : ''}">${v == null || v === '' ? '—' : escapeHtml(fmt(v))}${
-      sub ? `<small>${escapeHtml(sub(i) || '')}</small>` : ''}</td>`;
-    return `<tr><th scope="row">${escapeHtml(label)}</th>${cell(va, na, 1)}${cell(vb, nb, 2)}</tr>`;
-  };
-  const rankSub = (type) => (i) => {
-    const r = (i === 1 ? ra : rb)[type];
-    const nat = (i === 1 ? _natRanks : _cmp.natRanks)?.ranks?.[type];
-    return [r?.rank ? plyT('worldRank', { n: fmtFull(r.rank) }) : '', nat ? plyT('natRank', { n: fmtFull(nat), c: countryName((i === 1 ? a : b).country) }) : '']
-      .filter(Boolean).join(' · ');
-  };
-  const head = (p, ps) => `
-    <th class="wp-ply-cmp-who">
-      ${avatarImg(p.avatarUrl, p.username, 'wp-ply-av wp-ply-av-md')}
-      <button type="button" class="wp-ply-link" data-open="${escapeHtml(p._id)}">${escapeHtml(p.username)}</button>
+  const rankSub = (p, rk, nr, type) => [
+    rk?.[type]?.rank ? plyT('worldRank', { n: fmtFull(rk[type].rank) }) : '',
+    nr?.ranks?.[type] ? plyT('natRank', { n: fmtFull(nr.ranks[type]), c: countryName(p.country) }) : '',
+  ].filter(Boolean).join(' · ');
+  const ranked = (label, type, fmt) => duelRow(label, ra[type]?.value, rb[type]?.value, {
+    fmt, subA: rankSub(a, ra, _natRanks, type), subB: rankSub(b, rb, _cmp.natRanks, type),
+  });
+  const pts = (v) => `${v} ${plyT('points')}`;
+
+  const groups = [
+    { title: plyT('cmpGroupWar'), icon: '⚔', rows: [
+      ranked(plyT('stWeekly'), 'weeklyUserDamages', fmtCompact),
+      ranked(plyT('stTotal'), 'userDamages', fmtCompact),
+      ranked(plyT('stBounty'), 'userBounty', fmtMoney),
+      duelRow(plyT('mrank'), a.militaryRank, b.militaryRank),
+      duelRow(plyT('skWar'), psA.war, psB.war, { fmt: pts }),
+    ] },
+    { title: plyT('cmpGroupEco'), icon: '💰', rows: [
+      ranked(plyT('stWealth'), 'userWealth', fmtMoney),
+      duelRow(plyT('skEco'), psA.eco, psB.eco, { fmt: pts }),
+      duelRow(plyT('stCases'), ra.userCasesOpened?.value, rb.userCasesOpened?.value),
+    ] },
+    { title: plyT('cmpGroupProg'), icon: '★', rows: [
+      duelRow(plyT('stXp'), ra.userLevel?.value, rb.userLevel?.value, { fmt: fmtCompact }),
+      duelRow(plyT('level'), a.leveling?.level, b.leveling?.level),
+      duelRow(plyT('stMissions'), ra.userMissionsClaimed?.value, rb.userMissionsClaimed?.value),
+    ] },
+  ];
+  const all = groups.flatMap(g => g.rows);
+  const winsA = all.filter(r => r.win === 1).length;
+  const winsB = all.filter(r => r.win === 2).length;
+  const verdict = winsA === winsB
+    ? plyT('cmpTie', { n: winsA })
+    : plyT('cmpLead', { name: (winsA > winsB ? a : b).username, n: Math.max(winsA, winsB), t: all.length });
+
+  const fighter = (p, ps, side) => `
+    <div class="wp-vs-fighter wp-vs-fighter-${side}${(side === 'a' ? winsA > winsB : winsB > winsA) ? ' wp-vs-leader' : ''}">
+      ${avatarImg(p.avatarUrl, p.username, 'wp-ply-av wp-vs-av')}
+      <button type="button" class="wp-vs-name" data-open="${escapeHtml(p._id)}">${escapeHtml(p.username)}</button>
       <span class="wp-ply-who">${flagImg(p.country, 'wp-ply-flag')}<span>${escapeHtml(countryName(p.country))}</span></span>
-      <span class="wp-ply-ps wp-ply-ps-${ps.mode}">${escapeHtml(plyT(`style_${ps.mode}`))}</span>
-    </th>`;
+      <div class="wp-vs-tags">
+        <span class="wp-vs-lv">${escapeHtml(plyT('level'))} ${escapeHtml(p.leveling?.level ?? '—')}</span>
+        <span class="wp-ply-ps wp-ply-ps-${ps.mode}">${escapeHtml(plyT(`style_${ps.mode}`))}</span>
+      </div>
+      ${p.createdAt ? `<small class="wp-ply-dim">${escapeHtml(plyT('cmpSince', { d: fmtDate(p.createdAt) }))}</small>` : ''}
+    </div>`;
 
-  const skillRows = [...WAR_SKILLS, ...ECO_SKILLS].map(k =>
-    row(plyT(`sk_${k}`), a.skills?.[k]?.level ?? 0, b.skills?.[k]?.level ?? 0)).join('');
-
-  const gearCell = (eq, slot) => {
-    if (eq === undefined || eq === 'loading') return '…';
-    const it = eq?.[slot];
-    return it?.code ? `${it.code}${it.skills ? ' · ' + Object.values(it.skills).join('/') : ''}` : '—';
+  const gearLoading = _cmp.equip === undefined || _cmpEquipA === undefined;
+  const gearSide = (it, side, win) => {
+    const skills = it?.skills ? Object.entries(it.skills).map(([k, v]) => `${plyT(`sk_${k}`)} ${v}`).join(' · ') : '';
+    return `<div class="wp-vs-gear wp-vs-gear-${side}${win ? ' wp-vs-gear-win' : ''}">
+      <b>${it?.code ? escapeHtml(it.code) : '—'}</b>${skills ? `<small>${escapeHtml(skills)}</small>` : ''}</div>`;
   };
-  const gearRows = (_cmp.equip === undefined)
-    ? `<tr><td colspan="3" class="wp-ply-dim">${escapeHtml(plyT('loading'))}</td></tr>`
-    : GEAR_SLOTS.map(slot => `<tr><th scope="row">${escapeHtml(plyT(`slot_${slot}`))}</th>
-        <td class="wp-ply-num">${escapeHtml(gearCell(_cmpEquipA, slot))}</td>
-        <td class="wp-ply-num">${escapeHtml(gearCell(_cmp.equip, slot))}</td></tr>`).join('');
+  const gear = gearLoading
+    ? `<div class="wp-ply-loading">${escapeHtml(plyT('loading'))}</div>`
+    : GEAR_SLOTS.map(slot => {
+      const ia = _cmpEquipA?.[slot], ib = _cmp.equip?.[slot];
+      const sa = CMP_GEAR_SUM(ia), sb = CMP_GEAR_SUM(ib);
+      return `<div class="wp-vs-gearrow">
+        ${gearSide(ia, 'a', sa > sb)}
+        <span class="wp-vs-slot">${escapeHtml(plyT(`slot_${slot}`))}</span>
+        ${gearSide(ib, 'b', sb > sa)}
+      </div>`;
+    }).join('');
+
+  const skillDuels = [...WAR_SKILLS, ...ECO_SKILLS]
+    .map(k => duelRow(plyT(`sk_${k}`), a.skills?.[k]?.level ?? 0, b.skills?.[k]?.level ?? 0).html).join('');
 
   return `
     ${back}
-    <header class="wp-ply-head">
-      <h2>${escapeHtml(plyT('cmpTitle', { a: a.username, b: b.username }))}</h2>
-      <p class="wp-ply-sub">${escapeHtml(plyT('cmpSub'))}</p>
-    </header>
-    <div class="wp-ply-pactions"><button type="button" class="wp-ply-chip" id="wp-ply-cmp-swap">⇄ ${escapeHtml(plyT('cmpSwap'))}</button></div>
-    <div class="wp-ply-tablewrap wp-ply-cmpwrap"><table class="wp-ply-table wp-ply-cmp">
-      <thead><tr><th></th>${head(a, psA)}${head(b, psB)}</tr></thead>
-      <tbody>
-        ${row(plyT('stWeekly'), ra.weeklyUserDamages?.value, rb.weeklyUserDamages?.value, { fmt: fmtCompact, sub: rankSub('weeklyUserDamages') })}
-        ${row(plyT('stTotal'), ra.userDamages?.value, rb.userDamages?.value, { fmt: fmtCompact, sub: rankSub('userDamages') })}
-        ${row(plyT('stWealth'), ra.userWealth?.value, rb.userWealth?.value, { fmt: fmtMoney, sub: rankSub('userWealth') })}
-        ${row(plyT('stBounty'), ra.userBounty?.value, rb.userBounty?.value, { fmt: fmtMoney, sub: rankSub('userBounty') })}
-        ${row(plyT('stXp'), ra.userLevel?.value, rb.userLevel?.value, { fmt: fmtCompact })}
-        ${row(plyT('level'), a.leveling?.level, b.leveling?.level)}
-        ${row(plyT('mrank'), a.militaryRank, b.militaryRank)}
-        ${row(plyT('skWar'), psA.war, psB.war, { fmt: (v) => `${v} ${plyT('points')}` })}
-        ${row(plyT('skEco'), psA.eco, psB.eco, { fmt: (v) => `${v} ${plyT('points')}` })}
-        ${row(plyT('stCases'), ra.userCasesOpened?.value, rb.userCasesOpened?.value)}
-        ${row(plyT('stMissions'), ra.userMissionsClaimed?.value, rb.userMissionsClaimed?.value)}
-        ${row(plyT('joined'), a.createdAt ? Date.parse(a.createdAt) : null, b.createdAt ? Date.parse(b.createdAt) : null,
-          { fmt: (v) => fmtDate(new Date(v).toISOString()), compare: false })}
-        <tr class="wp-ply-cmpsep"><th colspan="3">${escapeHtml(plyT('cmpSkills'))}</th></tr>
-        ${skillRows}
-        <tr class="wp-ply-cmpsep"><th colspan="3">${escapeHtml(plyT('gear'))}</th></tr>
-        ${gearRows}
-      </tbody>
-    </table></div>
+    <section class="wp-vs">
+      <div class="wp-vs-hero">
+        ${fighter(a, psA, 'a')}
+        <div class="wp-vs-center">
+          <span class="wp-vs-badge">VS</span>
+          <div class="wp-vs-score"><b class="wp-vs-sa">${winsA}</b><span>–</span><b class="wp-vs-sb">${winsB}</b></div>
+          <p class="wp-vs-verdict">${escapeHtml(verdict)}</p>
+          <button type="button" class="wp-ply-chip" id="wp-ply-cmp-swap">⇄ ${escapeHtml(plyT('cmpSwap'))}</button>
+        </div>
+        ${fighter(b, psB, 'b')}
+      </div>
+
+      ${groups.map(g => `
+        <div class="wp-vs-group">
+          <h3 class="wp-vs-gtitle"><span>${g.icon}</span>${escapeHtml(g.title)}
+            <em><b class="wp-vs-sa">${g.rows.filter(r => r.win === 1).length}</b> – <b class="wp-vs-sb">${g.rows.filter(r => r.win === 2).length}</b></em></h3>
+          ${g.rows.map(r => r.html).join('')}
+        </div>`).join('')}
+
+      <div class="wp-vs-group">
+        <h3 class="wp-vs-gtitle"><span>◆</span>${escapeHtml(plyT('cmpSkills'))}</h3>
+        <div class="wp-vs-skills">
+          <div class="wp-vs-radarwrap">
+            ${radarSvg(a, b)}
+            <div class="wp-vs-legend"><span><i class="wp-vs-key-a"></i>${escapeHtml(a.username)}</span><span><i class="wp-vs-key-b"></i>${escapeHtml(b.username)}</span></div>
+          </div>
+          <div class="wp-vs-skilllist">${skillDuels}</div>
+        </div>
+      </div>
+
+      <div class="wp-vs-group">
+        <h3 class="wp-vs-gtitle"><span>🛡</span>${escapeHtml(plyT('gear'))}</h3>
+        ${gear}
+      </div>
+    </section>
     <p class="wp-ply-note">${escapeHtml(plyT('cmpNote'))}</p>`;
 }
 
