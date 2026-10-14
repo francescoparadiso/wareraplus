@@ -399,9 +399,12 @@ function placeHud() {
   }
   const h = _hud.offsetHeight || 36;
   const w = _hud.offsetWidth || 160;
-  const GAP = 10, MARGIN = 8;
+  // TOP_BAR: barra menù + ticker, la stessa riserva della card
+  // (battleMarkers.js, max-height): sopra la card solo se c'è posto SOTTO
+  // la barra, se no il bottone finiva sopra il menù.
+  const GAP = 10, MARGIN = 8, TOP_BAR = 64;
   let top;
-  if (r.top - GAP - h >= MARGIN) {
+  if (r.top - GAP - h >= TOP_BAR) {
     top = r.top - GAP - h;
   } else {
     // Sotto la riga coi nomi dei lati (primo figlio del corpo), o sotto
@@ -409,7 +412,9 @@ function placeHud() {
     const body = card.querySelector('#battle-tooltip-body');
     const anchor = (body && body.style.display !== 'none' && body.firstElementChild) || card.firstElementChild;
     const a = anchor ? anchor.getBoundingClientRect() : r;
-    top = Math.min(Math.max(a.bottom + 6, MARGIN), vh - h - MARGIN);
+    // Con la card che scorre dentro, la riga dei nomi può essere salita
+    // fuori vista: la barra resta comunque dentro il bordo della card.
+    top = Math.min(Math.max(a.bottom + 6, r.top + 6, MARGIN), vh - h - MARGIN);
   }
   const left = Math.min(Math.max(r.left + r.width / 2 - w / 2, MARGIN), vw - w - MARGIN);
   s.bottom = 'auto';

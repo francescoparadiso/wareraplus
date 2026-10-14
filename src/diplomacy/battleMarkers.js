@@ -611,6 +611,21 @@ function injectContribStyles() {
     @media (max-width: 520px) {
       .bfm-spend-c-wrap { grid-template-columns: 1fr; }
     }
+    /* WarEra+ — la card non esce mai dallo schermo. È ancorata in basso
+       e cresce verso l'alto: con "Battle spending" aperto, in una finestra
+       bassa, superava l'altezza disponibile e l'intestazione (nome della
+       battaglia, ripiega, chiudi) finiva sotto la barra in alto, fuori
+       portata. Ora sopra lascia lo spazio della barra e il resto scorre
+       dentro la card. 55px = il suo bottom, 64px = barra menù + ticker. */
+    #battle-tooltip-main {
+      max-height: calc(100vh - 55px - 64px - env(safe-area-inset-bottom, 0px));
+      max-height: calc(100dvh - 55px - 64px - env(safe-area-inset-bottom, 0px));
+      overflow-y: auto; overscroll-behavior: contain;
+      scrollbar-width: thin; scrollbar-color: rgba(128,128,128,.55) transparent;
+    }
+    #battle-tooltip-main::-webkit-scrollbar { width: 6px; }
+    #battle-tooltip-main::-webkit-scrollbar-track { background: transparent; }
+    #battle-tooltip-main::-webkit-scrollbar-thumb { background: rgba(128,128,128,.55); border-radius: 3px; }
     .bfm-contrib-mobile-section { display: none; overflow: hidden; }
     @media (max-width: 768px) {
       #battle-tooltip.bfm-contrib-mobile-open .bfm-contrib-mobile-section.bfm-contrib-has-data { display: block; }
