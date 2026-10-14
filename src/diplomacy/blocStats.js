@@ -688,7 +688,10 @@ function injectStyles() {
     .bs-sec .bs-cv-title{display:none}
     .bs-popup-ps-sub{font-size:11px;color:#8b949e;margin-bottom:6px}
     .bs-popup.bloc-popup .bs-breakdown-body{flex:none;min-height:0;max-height:none;overflow:visible}
-    .bs-popup.bloc-popup .bs-breakdown-header{position:sticky;top:0;z-index:2;background:#1b2028}
+    /* top negativo = il padding del popup: lo sticky si ferma al bordo
+       interno del padding, e sopra resterebbe una striscia di righe. */
+    .bs-popup.bloc-popup .bs-breakdown-header{position:sticky;top:-24px;z-index:2;background:#1b2028}
+    @media(max-height:820px){.bs-popup.bloc-popup .bs-breakdown-header{top:-16px}}
 
     /* WarEra+ — schermi bassi (il caso 1366×768 segnalato): stessi
        contenuti, riquadri e righe più compatti, così la tabella nazioni
