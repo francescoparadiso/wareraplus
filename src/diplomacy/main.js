@@ -62,30 +62,110 @@ export function resumeBattleMarkersPolling() {
 // il server non risponde o i dati sono troppo vecchi — MAI un punto di
 // fallimento unico, l'app deve continuare a funzionare come prima di
 // questo modulo anche a VPS spento.
-async function _fetchCountriesAndMap() {
+// WarEra+ perf (2026-10-14): nazioni e mappa hanno ciascuna il suo
+// ripiego, invece di uno solo per la coppia. Serve a non legare le
+// alleanze e la diplomazia ad /map (3 MB, la più lenta delle due): quelle
+// hanno bisogno solo dell'elenco nazioni e partono appena c'è.
+async function _fetchCountries() {
   try {
-    const [nazioni, mapDataGlobal] = await Promise.all([fetchCountriesViaCache(), fetchMapDataViaCache()]);
-    return { nazioni, mapDataGlobal };
+    return await fetchCountriesViaCache();
   } catch (err) {
-    console.warn('[cache] countries/map non disponibili, fallback diretto:', err.message);
-    const [resN, resM] = await Promise.all([
-      fetch(`${API_BASE_URL}/trpc/country.getAllCountries`),
-      fetch(`${API_BASE_URL}/trpc/map.getMapData`),
-    ]);
-    if (!resN.ok || !resM.ok) throw new Error('Failed to fetch data');
-    const nationsData = await resN.json();
-    const mapData = await resM.json();
-    return { nazioni: nationsData.result.data, mapDataGlobal: mapData.result.data };
+    console.warn('[cache] countries non disponibili, fallback diretto:', err.message);
+    const res = await fetch(`${API_BASE_URL}/trpc/country.getAllCountries`);
+    if (!res.ok) throw new Error('Failed to fetch data');
+    return (await res.json()).result.data;
   }
 }
 
-async function refreshData() {
+async function _fetchMapData() {
+  try {
+    return await fetchMapDataViaCache();
+  } catch (err) {
+    console.warn('[cache] map non disponibile, fallback diretto:', err.message);
+    const res = await fetch(`${API_BASE_URL}/trpc/map.getMapData`);
+    if (!res.ok) throw new Error('Failed to fetch data');
+    return (await res.json()).result.data;
+  }
+}
+
+// ----- ALLEANZE CON GET BATCH -----
+async function _loadAlliances(nazioni) {
+  const uniqueAllianceIds = [...new Set(
+    nazioni
+      .map(nation => nation.allianceId)
+      .filter(id => id != null)
+  )];
+  if (!uniqueAllianceIds.length) return [];
+  try {
+    return await fetchAlliancesViaCache(uniqueAllianceIds);
+  } catch (err) {
+    console.warn('[cache] alleanze non disponibili, fallback diretto:', err.message);
+    // trpcBatch chunka automaticamente oltre MAX_BATCH (50) e gestisce 429/errori
+    const calls = uniqueAllianceIds.map(id => ['alliance.getById', { allianceId: id }]);
+    const results = await trpcBatch(calls);
+    return results.filter(Boolean);
+  }
+}
+
+// ----- DIPLOMAZIA (sworn enemy + defensive pacts) -----
+// Non lancia mai: un errore a metà del ripiego tiene quello che è arrivato.
+async function _loadDiplomacy(countryIds) {
+  try {
+    return await fetchDiplomacyViaCache(countryIds);
+  } catch (err) {
+    console.warn('[cache] diplomazia non disponibile, fallback diretto:', err.message);
+  }
+  const out = new Map();
+  try {
+    // trpcBatch chunka automaticamente a MAX_BATCH (50) elementi per POST
+    // e gestisce 429/errori per singolo item senza abortire l'intero giro.
+    for (let i = 0; i < countryIds.length; i += MAX_BATCH) {
+      const chunk = countryIds.slice(i, i + MAX_BATCH);
+      const calls = chunk.map(id => ['countryDiplomacy.getByCountry', { countryId: id }]);
+      const diplomacyResults = await trpcBatch(calls);
+      diplomacyResults.forEach((data, idx) => {
+        const nationId = chunk[idx];
+        if (!data) return;
+        out.set(nationId, {
+          swornEnemy: data.swornEnemy?.enemy || null,
+          defensivePacts: (data.defensivePacts || []).map(p => p.partner),
+        });
+      });
+    }
+  } catch (diplErr) {
+    console.error('Errore caricamento diplomazia:', diplErr);
+  }
+  return out;
+}
+
+// WarEra+ perf (2026-10-14): i download dell'avvio partono SUBITO, in
+// init(), e non più al 'load' della mappa — e tutti insieme invece che
+// uno dopo l'altro. Prima la catena era: load della mappa → nazioni+mappa
+// → alleanze → diplomazia → layer → regioni. In una scheda aperta in
+// background (Ctrl+clic da Discord) il 'load' di MapLibre aspetta che la
+// scheda diventi visibile, quindi non si scaricava NIENTE finché non la
+// guardavi (misurato: prima richiesta a 15,9 s). Ora nazioni, mappa e
+// regioni partono insieme; alleanze e diplomazia appena ci sono le
+// nazioni, in parallelo fra loro. refreshData() li aspetta dove servono.
+function _startBootFetches() {
+  const countries = _fetchCountries();
+  const mapData = _fetchMapData();
+  const regions = loadRegions();             // scrive state.regionData, non lancia
+  const related = countries.then(nazioni => Promise.all([
+    _loadAlliances(nazioni),
+    _loadDiplomacy(nazioni.map(n => n._id)),
+  ]));
+  // Se una fallisce prima che refreshData() arrivi ad aspettarla, niente
+  // "Uncaught (in promise)": l'errore vero lo raccoglie l'await più sotto.
+  for (const p of [countries, mapData, related]) p.catch(() => {});
+  return { countries, mapData, regions, related };
+}
+
+async function refreshData(boot = _startBootFetches()) {
   try {
     showLoading();
-    const { nazioni, mapDataGlobal } = await _fetchCountriesAndMap();
-
+    const nazioni = await boot.countries;
     state.nazioniGlobal = nazioni;
-    state.mapDataGlobal = mapDataGlobal;
 
     state.nationMap.clear();
     state.nationByCode.clear();
@@ -94,25 +174,7 @@ async function refreshData() {
       if (n.code) state.nationByCode.set(n.code.toUpperCase(), n);
     });
 
-    // ----- CARICAMENTO ALLEANZE CON GET BATCH -----
-    const uniqueAllianceIds = [...new Set(
-      state.nazioniGlobal
-        .map(nation => nation.allianceId)
-        .filter(id => id != null)
-    )];
-
-    let alliances = [];
-    if (uniqueAllianceIds.length > 0) {
-      try {
-        alliances = await fetchAlliancesViaCache(uniqueAllianceIds);
-      } catch (err) {
-        console.warn('[cache] alleanze non disponibili, fallback diretto:', err.message);
-        // trpcBatch chunka automaticamente oltre MAX_BATCH (50) e gestisce 429/errori
-        const calls = uniqueAllianceIds.map(id => ['alliance.getById', { allianceId: id }]);
-        const results = await trpcBatch(calls);
-        alliances = results.filter(Boolean);
-      }
-    }
+    const [alliances, diplomacyData] = await boot.related;
 
     state.alliancesList = alliances;
     state.allianceColorMap.clear();
@@ -121,36 +183,8 @@ async function refreshData() {
     // perché ha bisogno di state.labelsData già popolato per calcolare le
     // coordinate delle label dei blocchi (altrimenti i nomi dei blocchi non
     // vengono disegnati in modalità "blocs").
-    // ----- FINE CARICAMENTO ALLEANZE -----
 
-    // ----- CARICAMENTO DIPLOMAZIA (sworn enemy + defensive pacts) -----
-    const countryIds = state.nazioniGlobal.map(n => n._id);
-    state.diplomacyData.clear();
-    try {
-      try {
-        state.diplomacyData = await fetchDiplomacyViaCache(countryIds);
-      } catch (err) {
-        console.warn('[cache] diplomazia non disponibile, fallback diretto:', err.message);
-        // trpcBatch chunka automaticamente a MAX_BATCH (50) elementi per POST
-        // e gestisce 429/errori per singolo item senza abortire l'intero giro.
-        for (let i = 0; i < countryIds.length; i += MAX_BATCH) {
-          const chunk = countryIds.slice(i, i + MAX_BATCH);
-          const calls = chunk.map(id => ['countryDiplomacy.getByCountry', { countryId: id }]);
-          const diplomacyResults = await trpcBatch(calls);
-          diplomacyResults.forEach((data, idx) => {
-            const nationId = chunk[idx];
-            if (!data) return;
-            state.diplomacyData.set(nationId, {
-              swornEnemy: data.swornEnemy?.enemy || null,
-              defensivePacts: (data.defensivePacts || []).map(p => p.partner),
-            });
-          });
-        }
-      }
-    } catch (diplErr) {
-      console.error('Errore caricamento diplomazia:', diplErr);
-    }
-    // ----- FINE CARICAMENTO DIPLOMAZIA -----
+    state.diplomacyData = diplomacyData;
 
     // Datalist autocomplete
     const datalist = document.getElementById('nazioniList');
@@ -159,8 +193,9 @@ async function refreshData() {
       .sort((a, b) => a.name.localeCompare(b.name))
       .forEach(n => datalist.appendChild(new Option(n.name)));
 
+    state.mapDataGlobal = await boot.mapData;
     await setupMapLayers();
-    await loadRegions();
+    await boot.regions;
 
     // Color map base
     state.nationBaseColorMap.clear();
@@ -614,6 +649,8 @@ document.getElementById('checkActiveBattles').addEventListener('change', functio
 
 // ==================== INIT ====================
 async function init() {
+  // WarEra+ perf: i dati partono prima della mappa, vedi _startBootFetches.
+  const boot = _startBootFetches();
   initMap();
 // main.js - dopo initMap(), aggiungi:
 
@@ -632,7 +669,7 @@ if (sliderBottom) {
   state._lastBottomMode = 'weeklyDamage'; // Default
 }
   setupEventListeners();
-  state.map.on('load', refreshData);
+  state.map.on('load', () => refreshData(boot));
 }
 
 init();

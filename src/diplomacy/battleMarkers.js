@@ -1269,6 +1269,19 @@ async function fetchRegionData(regionId) {
 // Batcha in un solo POST tutte le regioni non ancora in cache (era una
 // fetch sequenziale per battaglia). Vedi warera-api-batching.md.
 async function fetchRegionDataBatch(regionIds) {
+  // WarEra+ perf: posizione e nome di TUTTE le regioni sono già in
+  // state.regionData (region.getRegionsObject, caricata al boot prima del
+  // primo giro dei marker): region.getById resta solo per un id che lì
+  // manca (regione nuova fra due poll del server di cache).
+  for (const id of new Set(regionIds)) {
+    if (!id || state.regionCache.has(id)) continue;
+    const region = state.regionData?.[id];
+    if (!region?.position) continue;
+    state.regionCache.set(id, {
+      position: region.position,
+      name: region.name || region.mainCity || '',
+    });
+  }
   const toFetch = [...new Set(regionIds)].filter(id => id && !state.regionCache.has(id));
   if (!toFetch.length) return;
   const calls = toFetch.map(id => ['region.getById', { regionId: id }]);

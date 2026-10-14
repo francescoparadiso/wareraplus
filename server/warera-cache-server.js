@@ -305,7 +305,8 @@ function readCache(name, fallback) {
   catch (err) { console.error(`Errore leggendo cache ${name}:`, err.message); return fallback; }
 }
 
-// `compact: true` scrive senza indentazione. Serve per i file che crescono
+// `compact: true` (oggi il default, vedi writeCache) scrive senza
+// indentazione. Era nato per i file che crescono
 // molto (ticker-history: con la ritenzione a 14 giorni sono decine di
 // migliaia di eventi, riletti e riscritti ad ogni poll) — l'indentazione lì
 // è il ~35% del file, cioè lettura, parse e scrittura più lenti ad ogni giro
@@ -343,7 +344,13 @@ function sendCacheFile(req, res, name, fallback) {
   return res.send(memo.raw);
 }
 
-function writeCache(name, data, { compact = false } = {}) {
+// WarEra+ perf (2026-10-14): compatto è diventato il DEFAULT. I file serviti
+// tali e quali da sendCacheFile uscivano indentati, e /map pesava 16,4 MB
+// invece di 3,2 (906 KB gzip invece di 667): ogni utente li scaricava,
+// decomprimeva e analizzava al boot. Sui cinque endpoint dell'avvio
+// (map, countries, regions, battles, diplomacy) -22% di gzip. Chi vuole
+// rileggere un file a occhio passi `compact: false`.
+function writeCache(name, data, { compact = true } = {}) {
   const json = compact ? JSON.stringify(data) : JSON.stringify(data, null, 2);
   fs.writeFileSync(path.join(CACHE_DIR, `${name}.json`), json);
 }

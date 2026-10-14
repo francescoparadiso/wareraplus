@@ -60,7 +60,12 @@ function _tripCircuit() {
   _circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_MS;
 }
 
-async function _fetchCacheJson(path) {
+// WarEra+: la soglia vale per i poll da 3-15 minuti. Gli endpoint che il
+// server aggiorna più di rado la passano più larga (`maxStalenessMs`),
+// altrimenti il dato buono viene scartato per gran parte del suo ciclo:
+// /regions (poll orario) andava sulla chiamata diretta a WarEra dal
+// minuto 35 al 15 dell'ora dopo, /credit-profiles (ogni 6 ore) quasi sempre.
+async function _fetchCacheJson(path, maxStalenessMs = MAX_STALENESS_MS) {
   if (_circuitOpen()) throw new Error('cache: circuit breaker aperto (server irraggiungibile di recente)');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -68,7 +73,7 @@ async function _fetchCacheJson(path) {
     const res = await fetch(`${WARERA_CACHE_BASE}${path}`, { signal: controller.signal });
     if (!res.ok) throw new Error(`cache HTTP ${res.status}`);
     const json = await res.json();
-    if (typeof json.fetchedAt === 'number' && (Date.now() - json.fetchedAt) > MAX_STALENESS_MS) {
+    if (typeof json.fetchedAt === 'number' && (Date.now() - json.fetchedAt) > maxStalenessMs) {
       throw new Error(`cache dato scaduto (${Math.round((Date.now() - json.fetchedAt) / 1000)}s)`);
     }
     return json;
@@ -124,7 +129,8 @@ export async function fetchMapDataViaCache() {
 /** region.getRegionsObject — ritorna l'oggetto {regionId: region}, stessa
  *  forma di quanto ritorna la fetch diretta in regions.js. */
 export async function fetchRegionsViaCache() {
-  const json = await _fetchCacheJson('/regions');
+  // Poll orario (:15) sul server: un'ora + margine per un giro saltato.
+  const json = await _fetchCacheJson('/regions', 75 * 60 * 1000);
   const data = json.data?.result?.data ?? json.data;
   if (!data || typeof data !== 'object') throw new Error('cache /regions: forma inattesa');
   return data;
@@ -815,7 +821,8 @@ export async function fetchCreditProfileViaCache(key) {
   const userId = CREDIT_PROFILE_USER_IDS[key];
   if (!userId) throw new Error(`credit profile sconosciuto: '${key}'`);
   try {
-    const json = await _fetchCacheJson('/credit-profiles');
+    // Poll ogni 6 ore sul server (avatar e nomi dei crediti: cambiano di rado).
+    const json = await _fetchCacheJson('/credit-profiles', 6.5 * 60 * 60 * 1000);
     const data = json.data?.[key];
     if (!data) throw new Error(`cache /credit-profiles: '${key}' assente`);
     return data;
