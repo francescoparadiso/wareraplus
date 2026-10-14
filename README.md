@@ -90,7 +90,7 @@ futuro vuoi riattivare quella funzionalità, va prima sistemato `config.js`.
 
 ## 📁 Struttura del progetto
 
-L'albero commentato file per file sta in **`CLAUDE.md`** — qui solo la mappa
+L'albero commentato file per file sta in **`STRUTTURA.md`** — qui solo la mappa
 a colpo d'occhio.
 
 ```
@@ -295,7 +295,7 @@ Endpoint principali: `/mu-directory`, `/mu-playstyle-by-country`,
 
 ## ✨ Cosa c'è oltre ai tool di partenza
 
-Tutto quanto segue è nuovo di WarEra+ (dettagli e file in `CLAUDE.md`):
+Tutto quanto segue è nuovo di WarEra+ (dettagli in `CLAUDE.md`, file per file in `STRUTTURA.md`):
 
 - **Pannello nazione** con riepilogo per ogni vista mappa, ridimensionabile,
   grafico emiciclo nativo, linguetta "Vedi dettagli" su mobile.
