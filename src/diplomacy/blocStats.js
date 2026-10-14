@@ -633,14 +633,22 @@ function injectStyles() {
     .bs-popup::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:3px}
     .bs-popup::-webkit-scrollbar-track{background:transparent}
     .bs-popup-header,.bs-popup-grid,.bs-breakdown-header{flex:0 0 auto}
-    .bs-popup.nation-popup{width:560px}
-    .bs-popup.bloc-popup{width:780px}
+    /* WarEra+ (2026-10-14): su desktop i popup usano lo schermo — erano
+       560/780px fissi anche su un monitor da 1920. Più larghi, i riquadri
+       stanno su una o due righe invece di cinque. Sotto i 1024px resta il
+       95vw del blocco @media più in basso. */
+    .bs-popup.nation-popup{width:min(860px,94vw)}
+    .bs-popup.bloc-popup{width:min(1240px,94vw)}
+    @media(min-width:1100px){
+      .bs-popup.bloc-popup .bs-popup-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
+      .bs-popup.nation-popup .bs-popup-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+    }
     .bs-popup-header{display:flex;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px solid #30363d;margin-bottom:16px}
     .bs-popup-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;font-size:14px}
     .bs-popup-grid.bs-popup-grid-spaced{margin-bottom:18px}
     .bs-popup-item{display:flex;flex-direction:column;color:#8b949e;padding:10px 12px;background:rgba(255,255,255,.03);border-radius:8px}
     .bs-popup-item span{color:#e6edf3;font-weight:600;font-size:17px;margin-top:2px}
-    .bs-popup-percent{grid-column:span 2;background:linear-gradient(90deg,rgba(88,166,255,.18),rgba(88,166,255,.08));padding:14px;border-radius:8px;text-align:center;font-weight:700;color:#58a6ff;font-size:16px;margin-top:6px;border:1px solid rgba(88,166,255,.3)}
+    .bs-popup-percent{grid-column:1/-1;background:linear-gradient(90deg,rgba(88,166,255,.18),rgba(88,166,255,.08));padding:14px;border-radius:8px;text-align:center;font-weight:700;color:#58a6ff;font-size:16px;margin-top:6px;border:1px solid rgba(88,166,255,.3)}
     .bs-popup-close{position:absolute;top:12px;right:14px;cursor:pointer;color:#8b949e;font-size:22px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:6px;transition:all .15s}
     .bs-popup-close:hover{color:#fff;background:rgba(255,255,255,.1)}
 
@@ -660,6 +668,27 @@ function injectStyles() {
     .bs-breakdown-body{flex:1 1 auto;min-height:110px;max-height:340px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent}
     .bs-breakdown-body::-webkit-scrollbar{width:6px}
     .bs-breakdown-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:3px}
+
+    /* WarEra+ — sezioni chiudibili del popup alleanza (vedi secHtml in
+       questo file). Il popup scorre TUTTO: nessun blocco si stringe
+       (flex-shrink 0) e la tabella nazioni non ha più uno scroll suo, così
+       non resta alta tre righe sotto i grafici. Le intestazioni delle
+       colonne restano attaccate in cima mentre scorri. */
+    .bs-popup > *{flex-shrink:0}
+    .bs-sec{margin-bottom:14px}
+    .bs-sec.bs-sec-closed{margin-bottom:6px}
+    .bs-sec:has(> .bs-sec-body:empty){display:none}
+    .bs-sec-head{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;width:100%;cursor:pointer;padding:7px 4px;border-bottom:1px solid rgba(255,255,255,.06);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#c9d1d9}
+    .bs-sec-head:hover{color:#fff}
+    .bs-sec-head:focus-visible{outline:2px solid #58a6ff;outline-offset:2px;border-radius:4px}
+    .bs-sec-chev{margin-left:auto;font-size:13px;color:#8b949e;transition:transform .15s}
+    .bs-sec-closed .bs-sec-chev{transform:rotate(-90deg)}
+    .bs-sec-body{padding-top:10px}
+    .bs-sec-closed .bs-sec-body{display:none}
+    .bs-sec .bs-cv-title{display:none}
+    .bs-popup-ps-sub{font-size:11px;color:#8b949e;margin-bottom:6px}
+    .bs-popup.bloc-popup .bs-breakdown-body{flex:none;min-height:0;max-height:none;overflow:visible}
+    .bs-popup.bloc-popup .bs-breakdown-header{position:sticky;top:0;z-index:2;background:#1b2028}
 
     /* WarEra+ — schermi bassi (il caso 1366×768 segnalato): stessi
        contenuti, riquadri e righe più compatti, così la tabella nazioni
@@ -880,6 +909,10 @@ function injectStyles() {
     body.light-theme .bs-popup-close{color:#6b5a47}
     body.light-theme .bs-popup-close:hover{color:#2e1f0c;background:rgba(0,0,0,.05)}
     body.light-theme .bs-breakdown-header{background:rgba(0,0,0,.03);color:#6b5a47;border-bottom-color:rgba(0,0,0,.08)}
+    body.light-theme .bs-popup.bloc-popup .bs-breakdown-header{background:#f1ebe0}
+    body.light-theme .bs-sec-head{color:#3e2f1c;border-bottom-color:rgba(0,0,0,.08)}
+    body.light-theme .bs-sec-head:hover{color:#2e1f0c}
+    body.light-theme .bs-sec-chev,body.light-theme .bs-popup-ps-sub{color:#6b5a47}
     body.light-theme .bs-breakdown-header .col:hover{color:#8b5a2b}
     body.light-theme .bs-breakdown-header .col.active{color:#8b5a2b}
     body.light-theme .bs-breakdown-row{border-bottom-color:rgba(0,0,0,.04)}
@@ -1052,6 +1085,50 @@ function showPopup(nationId) {
   registraPopup(); // WarEra+: Indietro lo chiude (app/backNav.js)
 }
 
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — sezioni chiudibili del popup alleanza
+   ------------------------------------------------------------------
+   Segnalato (2026-10-14): con riquadri, mobilitazione e i due grafici del
+   danno, la tabella delle nazioni in fondo restava alta pochi pixel e
+   scorreva dentro di sé. Ora ogni blocco ha un'intestazione che lo chiude,
+   la tabella non ha più uno scroll suo (scorre tutto il popup, con le
+   intestazioni delle colonne attaccate in cima) e quello che chiudi resta
+   chiuso anche per le prossime alleanze (localStorage, solo comodità: se
+   lo storage manca si riparte tutto aperto). Una sezione senza contenuto
+   (mobilitazione non ancora arrivata, grafici riservati ai governi) non
+   compare affatto: vedi `.bs-sec:has(...)` nello stile.
+   ══════════════════════════════════════════════════════════════ */
+const SEC_KEY = 'we_bs_popup_closed';
+
+function closedSections() {
+  try { return new Set(JSON.parse(localStorage.getItem(SEC_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+
+function secHtml(id, title, body, closed, bodyId = '') {
+  const isClosed = closed.has(id);
+  return `<section class="bs-sec${isClosed ? ' bs-sec-closed' : ''}" data-sec="${id}">
+    <button type="button" class="bs-sec-head" aria-expanded="${!isClosed}">
+      <span class="bs-sec-title">${title}</span><span class="bs-sec-chev" aria-hidden="true">▾</span>
+    </button>
+    <div class="bs-sec-body"${bodyId ? ` id="${bodyId}"` : ''}>${body}</div>
+  </section>`;
+}
+
+/** `onOpen`: { idSezione: funzione } chiamata quando quella sezione si riapre. */
+function wireSections(root, onOpen = {}) {
+  root.querySelectorAll('.bs-sec-head').forEach(btn => btn.addEventListener('click', () => {
+    const sec = btn.closest('.bs-sec');
+    const id = sec.dataset.sec;
+    const nowClosed = sec.classList.toggle('bs-sec-closed');
+    btn.setAttribute('aria-expanded', String(!nowClosed));
+    const set = closedSections();
+    if (nowClosed) set.add(id); else set.delete(id);
+    try { localStorage.setItem(SEC_KEY, JSON.stringify([...set])); } catch { /* storage negato */ }
+    if (!nowClosed) onOpen[id]?.();
+  }));
+}
+
 /* ── Popup Blocco (ordinamento decrescente corretto) ── */
 function showBlocPopup(blocId) {
   const bloc = allStats.find(b => b.name === blocId || b.id === blocId);
@@ -1101,6 +1178,7 @@ function showBlocPopup(blocId) {
 
   const popup = document.createElement('div');
   popup.className = 'bs-popup bloc-popup';
+  const closed = closedSections();
   popup.innerHTML = `
     <div class="bs-popup-close">✕</div>
     <div class="bs-popup-header">
@@ -1110,7 +1188,7 @@ function showBlocPopup(blocId) {
         <div style="font-size:12px;color:#8b949e">${bT('{n} nations', { n: bloc.countryCount })}${bloc.isMerged ? ' · ' + bT('MERGED') : ''}</div>
       </div>
     </div>
-    <div class="bs-popup-grid bs-popup-grid-spaced">
+    ${secHtml('summary', bT('Summary'), `<div class="bs-popup-grid">
       <div class="bs-popup-item">${bT('Weekly Damage')} <span style="color:#58a6ff">${fmt(bloc.totalDmg)}</span></div>
       <div class="bs-popup-item">${bT('Total Damage')} <span style="color:#f0ad4e">${fmt(bloc.totalAbsoluteDmg)}</span></div>
       <div class="bs-popup-item">${bT('Population')} <span>${fmt(bloc.totalPop)}</span></div>
@@ -1121,10 +1199,10 @@ function showBlocPopup(blocId) {
       <div class="bs-popup-item">${bT('Avg Pop/Nation')} <span>${fmt(bloc.countryCount ? bloc.totalPop / bloc.countryCount : 0)}</span></div>
       <div class="bs-popup-item" title="${bloc.isUnaligned || !bloc.bonus ? '' : curveTooltip()}">${bT('Damage Bonus')} <span style="color:${isPenalty(bloc.bonus?.bonus) ? '#f85149' : '#3fb950'}">${bloc.isUnaligned || !bloc.bonus ? '—' : formatBonus(bloc.bonus.bonus)}</span></div>
       <div class="bs-popup-item">${bT('Core Dev Share')} <span>${bloc.isUnaligned || !bloc.bonus ? '—' : bloc.bonus.share.toFixed(2) + '%'}</span></div>
-    </div>
-    <div class="bs-popup-ps" id="bloc-popup-ps"></div>
-    <div id="bloc-popup-curves"></div>
-    <div class="bs-breakdown-header">
+    </div>`, closed)}
+    ${secHtml('mobilization', bT('Mobilization'), '', closed, 'bloc-popup-ps')}
+    ${secHtml('curves', bT('Hourly damage & pilled players'), '', closed, 'bloc-popup-curves')}
+    ${secHtml('nations', bT('Nations'), `<div class="bs-breakdown-header">
       <span style="flex:1">${bT('Nation')}</span>
       <span class="col ${sortKey === 'dmg' ? 'active' : ''}" data-key="dmg" style="flex:1">${bT('Wk Dmg')}</span>
       <span class="col ${sortKey === 'totalDmg' ? 'active' : ''}" data-key="totalDmg" style="flex:1">${bT('Total Dmg')}</span>
@@ -1133,7 +1211,7 @@ function showBlocPopup(blocId) {
       <span class="col ${sortKey === 'wars' ? 'active' : ''}" data-key="wars" style="min-width:40px">${bT('Wars')}</span>
       <span class="col ${sortKey === 'warPct' ? 'active' : ''}" data-key="warPct" style="min-width:48px" title="${bT('Share of players with a war build')}">${bT('War %')}</span>
     </div>
-    <div class="bs-breakdown-body" id="bloc-popup-rows">${renderRows(sortKey, sortDir)}</div>
+    <div class="bs-breakdown-body" id="bloc-popup-rows">${renderRows(sortKey, sortDir)}</div>`, closed)}
   `;
 
   popup.querySelectorAll('.col').forEach(hdr => {
@@ -1159,12 +1237,18 @@ function showBlocPopup(blocId) {
   // WarEra+ — danno ora per ora e pillati dell'alleanza, sommati sulle sue
   // nazioni (src/diplomacy/blocDamageCurves.js). Modulo a parte, caricato
   // alla prima scheda aperta; senza server la sezione non compare.
+  // I grafici prendono la larghezza dal contenitore al momento del disegno:
+  // disegnati a sezione chiusa (larghezza 0) uscirebbero a 300px, quindi
+  // all'apertura si ridisegnano (i dati sono già in cache nel modulo).
   const curvesHost = popup.querySelector('#bloc-popup-curves');
-  if (curvesHost && bloc.members.length) {
+  const drawCurves = () => {
+    if (!curvesHost || !bloc.members.length) return;
     import('./blocDamageCurves.js')
       .then(m => m.renderGroupCurves(curvesHost, [{ label: bloc.name, color: bloc.color, ids: bloc.members.map(x => x.id) }]))
       .catch(() => { curvesHost.innerHTML = ''; });
-  }
+  };
+  drawCurves();
+  wireSections(popup, { curves: drawCurves });
 
   // La barra della mobilitazione: subito se i dati ci sono, altrimenti
   // quando arrivano (e allora anche la colonna War % si riempie).
@@ -1176,7 +1260,8 @@ function showBlocPopup(blocId) {
     if (host && ps) {
       const { playstyleBarHtml } = await import('../mu/playstyle.js');
       const labels = { war: bT('war'), eco: bT('economy'), mixed: bT('hybrid'), undecided: bT('no points spent') };
-      host.innerHTML = '<div class="bs-popup-ps-title">' + bT('Mobilization') + ' <span>· ' + bT('builds of {n} players', { n: fmt(ps.known, 0, true) }) + '</span></div>'
+      // Il titolo "Mobilitazione" è l'intestazione della sezione: qui solo il campione.
+      host.innerHTML = '<div class="bs-popup-ps-sub">' + bT('builds of {n} players', { n: fmt(ps.known, 0, true) }) + '</div>'
         + playstyleBarHtml(ps, labels);
     }
     const rows = popup.querySelector('#bloc-popup-rows');

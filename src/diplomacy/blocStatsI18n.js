@@ -91,6 +91,7 @@ const T = {
   // ── Mobilitazione
   'War %': ['% guerra', '% guerra', '% Krieg', '% guerre', '% oorlog', '% krig', '% guerra', '% حرب'],
   'Share of players with a war build': ['Quota di giocatori con build da guerra', 'Porcentaje de jugadores con build de guerra', 'Anteil der Spieler mit Kriegs-Build', 'Part des joueurs avec un build de guerre', 'Aandeel spelers met een oorlogsbuild', 'Andel spelare med krigsbuild', 'Parcela de jogadores com build de guerra', 'نسبة اللاعبين ذوي بناء حربي'],
+  'Summary': ['Riepilogo', 'Resumen', 'Übersicht', 'Résumé', 'Overzicht', 'Översikt', 'Resumo', 'الملخص'],
   'Mobilization': ['Mobilitazione', 'Movilización', 'Mobilisierung', 'Mobilisation', 'Mobilisatie', 'Mobilisering', 'Mobilização', 'التعبئة'],
   'builds of {n} players': ['build di {n} giocatori', 'builds de {n} jugadores', 'Builds von {n} Spielern', 'builds de {n} joueurs', 'builds van {n} spelers', 'builds för {n} spelare', 'builds de {n} jogadores', 'بناءات {n} لاعب'],
   'war': ['guerra', 'guerra', 'Krieg', 'guerre', 'oorlog', 'krig', 'guerra', 'حرب'],
