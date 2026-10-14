@@ -32,15 +32,13 @@ import { getBattleArchive, getWarExpenses, getLiveBattles } from './api.js';
 import { renderBattleList, wireBattleList } from './battleList.js';
 import { renderBattleDetail, wireBattleDetail, loadBattleDetail, resetBattleDetail } from './battleDetail.js';
 import { renderWarExpenses, wireWarExpenses } from './warExpenses.js';
-import { loadWhere, renderWhere, wireWhere } from './whereToFight.js';
 import { trackEvent } from '../shared/analytics.js';
 import { syncBack } from '../app/backNav.js';
 
 let _container = null;
-let _tab = 'archive';       // 'archive' | 'expenses' | 'where'
+let _tab = 'archive';       // 'archive' | 'expenses'
 let _archive = null;
 let _expenses = null;
-let _where = null;          // WarEra+: scheda "Dove combattere" (whereToFight.js)
 // Nazione scelta nella scheda spese: la si passa all'archivio quando si
 // salta da una scheda all'altra, così il "vedi le sue battaglie" arriva
 // con il filtro già impostato.
@@ -53,7 +51,6 @@ let _pendingBattleId = null; // WarEra+: da aprire appena c'è l'archivio (link 
 const TABS = [
   { id: 'archive', key: 'tabArchive' },
   { id: 'expenses', key: 'tabExpenses' },
-  { id: 'where', key: 'tabWhere' },
 ];
 
 function shellHtml() {
@@ -120,26 +117,6 @@ function paintBody() {
       trackEvent('battles-open-detail');
     });
     _pendingCountryFilter = null; // consumato: non deve riapplicarsi da solo
-  } else if (_tab === 'where') {
-    body.innerHTML = renderWhere(_where);
-    if (!_where) return;
-    wireWhere(body, {
-      // Una battaglia della lista si apre nell'archivio, dove c'è la sua
-      // scheda: stesso percorso dei link ?battle= (vedi _pendingBattleId).
-      onOpenBattle: (battleId) => {
-        _pendingBattleId = battleId;
-        _openBattle = null;
-        resetBattleDetail();
-        switchTab('archive');
-        trackEvent('battles-where-open');
-      },
-      onRefresh: async () => {
-        _where = null;
-        paintBody();
-        _where = await loadWhere();
-        if (_tab === 'where') paintBody();
-      },
-    });
   } else {
     if (!_expenses) { body.innerHTML = `<div class="wp-btl-loading">${btlT('loading')}</div>`; return; }
     body.innerHTML = renderWarExpenses(_expenses);
@@ -194,11 +171,6 @@ async function ensureData() {
   } else if (_tab === 'expenses' && !_expenses) {
     _expenses = await getWarExpenses();
     if (_tab === 'expenses') paintBody();
-  } else if (_tab === 'where' && (!_where || !_where.at || Date.now() - _where.at > WHERE_TTL_MS)) {
-    // Si rifà anche se è vecchia o se mancava "Sono io": nel frattempo
-    // l'utente può averlo impostato in Giocatori.
-    _where = await loadWhere();
-    if (_tab === 'where') paintBody();
   }
 }
 
@@ -218,7 +190,6 @@ async function ensureData() {
    nessuno la sta leggendo.
    ══════════════════════════════════════════════════════════════ */
 const LIVE_REFRESH_MS = 4 * 60 * 1000;
-const WHERE_TTL_MS = 2 * 60 * 1000;
 let _liveTimer = null;
 
 async function refreshLive({ force = false } = {}) {

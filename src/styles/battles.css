@@ -923,26 +923,35 @@ body.light-theme .wp-btl-tl-tip { background: var(--wp-ov-bg-light, #f4f6fa); }
 }
 body.light-theme .wp-btl-dtab-n { background: rgba(0, 0, 0, .07); }
 
-/* ── Scheda "Dove combattere" (whereToFight.js) ─────────────────
-   Il tuo bonus per ogni battaglia in corso, difesa | attacco. Il lato
-   migliore ha il bordo verde; le pillole sono le voci che lo compongono,
-   con gli ordini nei colori del gioco (rosso alta, giallo media, verde
-   bassa priorità). ── */
-.wp-btl-where-intro { margin: 0 0 12px; }
-.wp-btl-where-me { font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.wp-btl-where td { vertical-align: top; }
-.wp-btl-where .wp-btl-match { flex-wrap: wrap; }
-.wp-btl-tag {
-  font-size: 10px; border-radius: 4px; padding: 1px 6px;
-  background: rgba(128,128,128,.14);
-  color: var(--wp-ov-text-dim, #8b949e);
+/* ── Scheda "Bonus" del dettaglio battaglia (battleDetail.js) ─────
+   Le due parti affiancate, difesa | attacco, ogni nazione con la sua
+   barra e le voci che compongono il bonus (gli ordini nei colori del
+   gioco: rosso alta, giallo media, verde bassa priorità). In cima il tuo
+   bonus, col lato migliore bordato di verde. ── */
+.wp-btl-bonus-you {
+  border: 1px solid var(--wp-ov-border, #30363d); border-radius: 10px;
+  padding: 10px 12px; margin: 6px 0 14px;
 }
-.wp-btl-tag-mine { color: #3fb950; background: rgba(63,185,80,.12); }
-.wp-btl-bside { min-width: 170px; border-left: 2px solid transparent; }
-.wp-btl-bside.best { border-left-color: #3fb950; background: rgba(63,185,80,.06); }
-.wp-btl-btot { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.wp-btl-bside.best .wp-btl-btot { color: #3fb950; }
-.wp-btl-bchips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+.wp-btl-bonus-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+.wp-btl-bonus-cells { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.wp-btl-bonus-cell { border-radius: 8px; padding: 8px 10px; border: 1px solid rgba(128,128,128,.25); }
+.wp-btl-bonus-cell.best { border-color: #3fb950; background: rgba(63,185,80,.07); }
+.wp-btl-bonus-cell strong { display: block; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.wp-btl-bonus-cell.best strong { color: #3fb950; }
+.wp-btl-bonus-lab { font-size: 11px; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-btl-bonus-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+.wp-btl-bcol-h { display: flex; align-items: center; gap: 7px; margin: 0 0 2px; font-size: 14px; }
+.wp-btl-bcol-defender .wp-btl-bcol-h { color: var(--wp-btl-def); }
+.wp-btl-bcol-attacker .wp-btl-bcol-h { color: var(--wp-btl-atk); }
+.wp-btl-brow { padding: 7px 0; border-bottom: 1px solid var(--wp-ov-border, #30363d); }
+.wp-btl-brow-top { display: flex; align-items: center; gap: 7px; font-size: 13px; }
+.wp-btl-brow-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-btl-brow-top strong { font-variant-numeric: tabular-nums; }
+.wp-btl-brow-bar { height: 3px; border-radius: 2px; background: rgba(128,128,128,.15); margin: 5px 0 4px; }
+.wp-btl-brow-bar i { display: block; height: 100%; border-radius: 2px; }
+.wp-btl-bcol-defender .wp-btl-brow-bar i { background: var(--wp-btl-def); }
+.wp-btl-bcol-attacker .wp-btl-brow-bar i { background: var(--wp-btl-atk); }
+.wp-btl-bchips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
 .wp-btl-bchip {
   font-size: 10px; line-height: 16px; border-radius: 4px; padding: 0 6px; white-space: nowrap;
   background: rgba(128,128,128,.14);
@@ -951,9 +960,7 @@ body.light-theme .wp-btl-dtab-n { background: rgba(0, 0, 0, .07); }
 .wp-btl-bchip.o-high { background: rgba(248,81,73,.18); }
 .wp-btl-bchip.o-medium { background: rgba(227,179,65,.2); }
 .wp-btl-bchip.o-low { background: rgba(63,185,80,.18); }
-body.light-theme .wp-btl-bside.best .wp-btl-btot,
-body.light-theme .wp-btl-tag-mine { color: #1a7f37; }
-@media (max-width: 640px) {
-  .wp-btl-bside { min-width: 140px; }
-  .wp-btl-btot { font-size: 14px; }
+body.light-theme .wp-btl-bonus-cell.best strong { color: #1a7f37; }
+@media (max-width: 760px) {
+  .wp-btl-bonus-sides, .wp-btl-bonus-cells { grid-template-columns: 1fr; }
 }

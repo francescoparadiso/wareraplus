@@ -577,7 +577,10 @@ wareraPlus/
     │   │                          ~2 della mappa. Su una battaglia viva le cache per
     │   │                          battaglia si saltano ({live:true}): taglia,
     │   │                          classifiche e dettaglio crescono ancora.
-    │   ├── battleDetail.js       ← scheda di UNA battaglia: scomposizione per
+    │   ├── battleDetail.js       ← scheda di UNA battaglia (a linguette; per le
+    │   │                          battaglie in corso anche "Bonus": le nazioni con
+    │   │                          un bonus loro, difesa | attacco, più il tuo — da
+    │   │                          shared/battleBonus.js): scomposizione per
     │   │                          nazione e per unità militare (danno, quota del
     │   │                          lato, taglia INCASSATA) + elenco dei contratti
     │   │                          mercenari, e in CIMA i FINANZIATORI: le nazioni che
@@ -608,10 +611,6 @@ wareraPlus/
     │   │                  ⚠️ una battaglia già aperta al primo sguardo ha la prima
     │   │                  lettura come FONDO (`baseAt`): chi c'era non è un
     │   │                  ingresso. Testi in timelineI18n.js (9 lingue).
-    │   ├── whereToFight.js   ← NUOVO — scheda "Dove combattere": le battaglie in
-    │   │                        corso ordinate per il TUO bonus (shared/battleBonus.js),
-    │   │                        il lato migliore acceso. Senza "Sono io" spiega
-    │   │                        come impostarlo. Clic = scheda nell'archivio.
     │   ├── main.js, battleList.js, warExpenses.js, i18n.js (9 lingue)
     ├── guide/                    ← NUOVO — Guida "Come si usa": SOLO testo statico
     │   ├── main.js                  (zero fetch, zero stato) + i18n.js a 9 lingue.

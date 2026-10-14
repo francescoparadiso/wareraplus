@@ -385,3 +385,32 @@ export function personalBonus(battle, rules, orders, me) {
   out.best = out.attacker.total > out.defender.total ? 'attacker' : 'defender';
   return out;
 }
+
+/* ── Bonus di una NAZIONE (vista mappa e scheda Bonus della battaglia) ──
+   Le voci che valgono per tutti i cittadini di una nazione. Ordine e
+   quartier generale dell'unità no: dipendono dal singolo giocatore, e
+   sommati a tutti farebbero partire il mondo intero dal 35%. */
+export const NATION_KEYS = ['home', 'enemy', 'pact', 'ally', 'order', 'building', 'revolt', 'malus'];
+
+export function nationTotal(parts) {
+  let t = 0;
+  for (const k of NATION_KEYS) t += Number(parts[k]) || 0;
+  return Math.round(t * 10) / 10;
+}
+
+export function nationParts(parts) {
+  const out = {};
+  for (const k of NATION_KEYS) if (parts[k]) out[k] = parts[k];
+  return out;
+}
+
+/** Le nazioni con un bonus loro (> 0) su un lato, dalla più alta. */
+export function sideNationRows(ctx) {
+  const rows = [];
+  for (const n of state.nazioniGlobal || []) {
+    const { parts } = bonusFor(n._id, ctx);
+    const v = nationTotal(parts);
+    if (v > 0) rows.push({ id: n._id, v, parts: nationParts(parts) });
+  }
+  return rows.sort((a, b) => b.v - a.v);
+}

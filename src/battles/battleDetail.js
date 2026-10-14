@@ -14,7 +14,10 @@
      è girata) — solo per le battaglie che il server ha registrato, vedi
      battleTimeline.js;
    - finanziatori dei due belligeranti;
-   - contratti mercenari: chi paga, quale unità, quanto.
+   - contratti mercenari: chi paga, quale unità, quanto;
+   - BONUS (solo battaglie in corso): per ogni lato le nazioni con un
+     bonus danno loro e le voci che lo compongono, più il tuo se in
+     Giocatori hai detto "Sono io". Calcolo in src/shared/battleBonus.js.
    Prima stavano tutte una sotto l'altra, e la pagina era un muro.
 
    ── ⚠️ LA PAROLA "TAGLIA" QUI VUOL DIRE UN'ALTRA COSA ──────────────
@@ -35,6 +38,11 @@ import { btlT } from './i18n.js';
 import { getBattleDetail, getBattleMuBreakdown } from './api.js';
 import { fetchMoneyTransfers, transfersFor, windowIsShort } from './moneyTransfers.js';
 import { fetchBattleTimeline, timelineSectionHtml, wireTimeline, resetTimeline } from './battleTimeline.js';
+import {
+  loadBonusRules, fetchBattleOrders, loadMe, myPlayerId, sideContext, sideNationRows, personalBonus,
+} from '../shared/battleBonus.js';
+import { fetchActiveBattles } from '../diplomacy/battleHeatmap.js';
+import { bvT } from '../diplomacy/bonusView.js';
 
 // Righe mostrate prima del "mostra tutte": una battaglia grossa ha ~77
 // nazioni per lato, e le prime dieci fanno quasi tutto il danno.
@@ -73,6 +81,8 @@ let _allyTried = false;
 // volta. NON si azzera cambiando battaglia: chi sta confrontando le
 // alleanze di tre battaglie le vuole vedere tutte e tre lì.
 let _dtab = 'nations';
+// Scheda Bonus: null (non caricata) | 'loading' | 'error' | { ... }.
+let _bonus = null;
 let _ctrAll = false;   // contratti: tutti o solo i primi CTR_TOP
 // Ultimo repaint/battaglia passati a wireBattleDetail: il listener
 // delegato si aggancia UNA volta sola al contenitore (che sopravvive ai
@@ -631,6 +641,7 @@ export function renderBattleDetail(battle) {
   // battaglia: chi la teneva aperta e passa a una che non ce l'ha torna
   // alle nazioni invece di guardare una scheda vuota.
   if (_dtab === 'timeline' && !timeline) _dtab = 'nations';
+  if (_dtab === 'bonus' && !battle.live) _dtab = 'nations';
   const nFunders = _money && wFrom
     ? transfersFor(_money, battle.defender.countryId, wFrom, wTo).length
       + transfersFor(_money, battle.attacker.countryId, wFrom, wTo).length
@@ -640,6 +651,9 @@ export function renderBattleDetail(battle) {
     // ha combattuto da tutte e due le parti, e il numero vero è già in
     // fondo a ciascuna tabella.
     { id: 'nations', label: btlT('tabNations') },
+    // I bonus dipendono da ordini e costruzioni ATTIVI: di una battaglia
+    // finita non si sanno più, quindi la scheda c'è solo per quelle in corso.
+    battle.live && { id: 'bonus', label: btlT('tabBonus') },
     { id: 'alliances', label: btlT('tabAlliances') },
     { id: 'mu', label: btlT('tabMu') },
     timeline && { id: 'timeline', label: btlT('tabTimeline') },
@@ -649,6 +663,7 @@ export function renderBattleDetail(battle) {
 
   let body;
   if (_dtab === 'alliances') body = alliancesHtml(battle) || `<div class="wp-btl-loading">${btlT('loading')}</div>`;
+  else if (_dtab === 'bonus') body = bonusHtml(battle);
   else if (_dtab === 'mu') body = muSectionHtml(battle);
   else if (_dtab === 'timeline') body = timeline;
   else if (_dtab === 'funders') body = fundersHtml(battle);
@@ -694,6 +709,7 @@ export async function loadBattleDetail(battle, repaint) {
   _muState = 'closed';
   _expanded = { attacker: false, defender: false };
   _ctrAll = false;
+  _bonus = null;
   repaint();
   // `live`: su una battaglia in corso le classifiche cambiano ad ogni tick,
   // quindi api.js non le memorizza — riaprirla ridà i numeri aggiornati.
@@ -769,6 +785,10 @@ export function wireBattleDetail(root, battle, { onBack, repaint }) {
         _wired.repaint?.();
         return;
       }
+      if (e.target.closest?.('[data-btl-players]')) {
+        import('../app/playersOverlay.js').then(m => m.openPlayersView()).catch(() => {});
+        return;
+      }
       if (e.target.closest?.('#wp-btl-ctr-more')) {
         _ctrAll = !_ctrAll;
         _wired.repaint?.();
@@ -787,6 +807,7 @@ export function wireBattleDetail(root, battle, { onBack, repaint }) {
   // Scheda Unità militari: la si carica quando la si apre (2 chiamate in
   // più + la directory), non prima — è la scheda che si guarda di meno.
   if (_dtab === 'mu' && _muState === 'closed') loadMuSection(battle, repaint);
+  if (_dtab === 'bonus' && _bonus == null) loadBonus(battle, repaint);
   root.querySelector('#wp-btl-mu-open')?.addEventListener('click', () => loadMuSection(battle, repaint));
 }
 
@@ -816,6 +837,117 @@ async function loadMuSection(battle, repaint) {
   }
 }
 
+/* ── Scheda Bonus ─────────────────────────────────────────────────
+   Si calcola all'apertura della scheda: la battaglia grezza (quella dei
+   marcatori della mappa, già in cache: serve la regione d'attacco e il
+   tipo), gli ordini (due chiamate pubbliche, cache 60 s) e, se c'è "Sono
+   io", il tuo profilo. */
+async function loadBonus(battle, repaint) {
+  _bonus = 'loading';
+  repaint();
+  let out = 'error';
+  try {
+    const [rules, raw, me] = await Promise.all([
+      loadBonusRules(),
+      fetchActiveBattles(),
+      myPlayerId() ? loadMe() : Promise.resolve(null),
+    ]);
+    const b = (Array.isArray(raw) ? raw : []).find(x => x?._id === battle.id);
+    if (b) {
+      const orders = (await fetchBattleOrders([b._id])).get(b._id) ?? null;
+      const ctxs = {
+        defender: sideContext(b, 'defender', rules, orders),
+        attacker: sideContext(b, 'attacker', rules, orders),
+      };
+      out = {
+        ctxs,
+        rows: { defender: sideNationRows(ctxs.defender), attacker: sideNationRows(ctxs.attacker) },
+        mine: me ? personalBonus(b, rules, orders, me) : null,
+        hasMe: !!myPlayerId(),
+        ordersKnown: !!orders,
+      };
+    }
+  } catch (err) {
+    console.warn('WarEra+ battaglie: bonus non calcolati', err);
+  }
+  if (_wired.battle?.id !== battle.id) return; // passati a un'altra battaglia
+  _bonus = out;
+  repaint();
+}
+
+const fmtPct = (v) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 10) / 10));
+
+function bonusChips(parts, side) {
+  const KEYS = { home: 'partHome', enemy: 'partEnemy', pact: 'partPact', ally: 'partAlly', order: 'partOrder',
+    muOrder: 'partMuOrder', muHq: 'partMuHq', revolt: 'partRevolt', malus: 'partMalus' };
+  const out = [];
+  for (const [k, v] of Object.entries(parts)) {
+    if (!v || Array.isArray(v)) continue;
+    const label = k === 'building' ? btlT(side === 'defender' ? 'partBunker' : 'partBase') : btlT(KEYS[k]);
+    const neg = v < 0;
+    const ord = (k === 'order' || k === 'muOrder') ? (v >= 15 ? ' o-high' : v >= 10 ? ' o-medium' : ' o-low') : '';
+    out.push(`<span class="wp-btl-bchip${neg ? ' neg' : ord}">${escapeHtml(label)} ${neg ? '' : '+'}${fmtPct(v)}%</span>`);
+  }
+  return out.join('');
+}
+
+function bonusHtml(battle) {
+  if (_bonus == null || _bonus === 'loading') return `<div class="wp-btl-loading">${btlT('loading')}</div>`;
+  if (_bonus === 'error') return `<div class="wp-btl-notice warn">${btlT('bonusError')}</div>`;
+  const b = _bonus;
+  const signed = (v) => `≈${v > 0 ? '+' : ''}${fmtPct(v)}%`;
+
+  let you = '';
+  if (b.mine) {
+    const cell = (side) => `
+      <div class="wp-btl-bonus-cell${b.mine.best === side ? ' best' : ''}">
+        <span class="wp-btl-bonus-lab">${side === 'defender' ? '🛡️ ' + btlT('colDefending') : '⚔️ ' + btlT('colAttacking')}</span>
+        <strong>${signed(b.mine[side].total)}</strong>
+        <div class="wp-btl-bchips">${bonusChips(b.mine[side].parts, side)}</div>
+      </div>`;
+    you = `<div class="wp-btl-bonus-you"><div class="wp-btl-bonus-title">★ ${escapeHtml(bvT('you'))}</div>
+      <div class="wp-btl-bonus-cells">${cell('defender')}${cell('attacker')}</div></div>`;
+  } else if (!b.hasMe) {
+    you = `<div class="wp-btl-notice">${escapeHtml(bvT('setMe'))}
+      <button type="button" class="wp-btl-chip" data-btl-players>${escapeHtml(bvT('openPlayers'))}</button></div>`;
+  }
+
+  const col = (side) => {
+    const ctx = b.ctxs[side];
+    const facts = [];
+    if (side === 'defender') {
+      facts.push(ctx.building ? bvT('bunker', { n: ctx.buildingLevel, p: ctx.building }) : bvT('bunkerOff'));
+      if (ctx.notLinked) facts.push(bvT('notLinked', { p: ctx.notLinked }));
+    } else {
+      facts.push(!ctx.buildingKnown ? bvT('baseUnknown') : ctx.building ? bvT('base', { n: ctx.buildingLevel, p: ctx.building }) : bvT('baseOff'));
+      if (ctx.revoltBar) facts.push(bvT('revolt', { p: fmtPct(Math.round(ctx.revoltBar * 1000) / 10) }));
+    }
+    const rows = b.rows[side];
+    const max = Math.max(1, rows[0]?.v || 1);
+    const list = rows.length ? rows.map(r => `
+      <div class="wp-btl-brow">
+        <div class="wp-btl-brow-top">
+          ${flagHtml(r.id)}<span class="wp-btl-brow-name">${escapeHtml(nationName(r.id) || '—')}</span>
+          <strong>${signed(r.v)}</strong>
+        </div>
+        <div class="wp-btl-brow-bar"><i style="width:${Math.max(3, Math.round(r.v / max * 100))}%"></i></div>
+        <div class="wp-btl-bchips">${bonusChips(r.parts, side)}</div>
+      </div>`).join('') : `<div class="wp-btl-empty">${btlT('bonusNone')}</div>`;
+    return `<section class="wp-btl-bcol wp-btl-bcol-${side}">
+      <h3 class="wp-btl-bcol-h">${flagHtml(ctx.countryId)}${escapeHtml(btlT(side))} · ${escapeHtml(nationName(ctx.countryId) || '—')}</h3>
+      <p class="wp-btl-foot wp-btl-foot-tight">${facts.map(escapeHtml).join(' · ')}</p>
+      ${list}
+    </section>`;
+  };
+
+  return `
+    <p class="wp-btl-foot wp-btl-foot-tight">${btlT('bonusIntro')}</p>
+    ${b.ordersKnown ? '' : `<div class="wp-btl-notice warn">${escapeHtml(bvT('ordersUnknown'))}</div>`}
+    ${you}
+    <div class="wp-btl-bonus-sides">${col('defender')}${col('attacker')}</div>
+    <p class="wp-btl-foot">${escapeHtml(bvT('note'))}</p>`;
+}
+
 /** Azzera lo stato quando si esce dal dettaglio, così riaprendo un'altra
  *  battaglia non si eredita la sezione MU aperta di quella precedente. */
 export function resetBattleDetail() {
@@ -824,6 +956,7 @@ export function resetBattleDetail() {
   _money = null;
   _tl = null;
   resetTimeline();
+  _bonus = null;
   _muState = 'closed';
   _expanded = { attacker: false, defender: false };
   // _dir NON si azzera: è la cache dei nomi, buona per tutta la sessione.

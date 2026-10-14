@@ -29,8 +29,10 @@ import { state } from './state.js';
 import { getLang } from '../shared/i18n.js';
 import {
   loadBonusRules, fetchBattleOrders, loadMe, myPlayerId,
-  sideContext, bonusFor, personalBonus,
+  sideContext, bonusFor, personalBonus, nationTotal, nationParts,
 } from '../shared/battleBonus.js';
+
+export { nationParts };
 
 /* ── Stato ─────────────────────────────────────────────────────── */
 
@@ -46,14 +48,6 @@ const _s = {
   token: 0,
 };
 export const bonusState = () => _s;
-
-/** Le voci che valgono per una nazione intera (vedi testata). */
-const NATION_KEYS = ['home', 'enemy', 'pact', 'ally', 'order', 'building', 'revolt', 'malus'];
-function nationTotal(parts) {
-  let t = 0;
-  for (const k of NATION_KEYS) t += Number(parts[k]) || 0;
-  return Math.round(t * 10) / 10;
-}
 
 /* ── Ingresso / uscita ─────────────────────────────────────────── */
 
@@ -141,11 +135,6 @@ export function bonusRanking(side, limit = 15) {
   return (_s.rows || []).filter(r => r.side === side).slice(0, limit);
 }
 
-export function nationParts(parts) {
-  const out = {};
-  for (const k of NATION_KEYS) if (parts[k]) out[k] = parts[k];
-  return out;
-}
 
 /* ── Testi (9 lingue) ──────────────────────────────────────────── */
 
