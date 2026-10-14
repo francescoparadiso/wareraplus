@@ -614,6 +614,49 @@ export function updateDynamicLegend() {
   // ==================== BATTLE HEATMAP ====================
 // ui.js - sostituisci la sezione battleHeatmap nella funzione updateDynamicLegend
 
+  // ==================== WarEra+ BONUS BATTAGLIA ====================
+  // Vista Bonus battaglia (bonusView.js): prima della scelta una riga di
+  // istruzioni, poi la scala blu (difendere) / rosso (attaccare) fino al
+  // bonus massimo della battaglia, con lo stesso bottone d'uscita.
+  if (state.coloringMode === 'battleBonus') {
+    box.innerHTML = `
+      <div class="legend-section-title">🎖️ Battle bonus</div>
+      <div class="legend-note">Click a battle on the map: nations take the colour of the highest damage bonus their citizens would get there.</div>`;
+    return;
+  }
+  if (state.coloringMode === 'battleHeatmap' && state.battleHeatmapData && (state.battleBonusMap || state.bonusViewLoading)) {
+    const sub = THEMES[state.theme].TEXT_SECONDARY;
+    const bm = state.battleBonusMap;
+    const max = bm ? Math.round(bm.max * 10) / 10 : null;
+    box.innerHTML = `
+      <div class="legend-section-title">🎖️ Battle bonus</div>
+      <div class="legend-item"><span style="font-weight:bold;">${escapeHtml(state.battleHeatmapData.battleName)}</span></div>
+      ${bm ? `
+      <div class="legend-scale" style="margin: 4px 0;">
+        <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+          <span style="font-size:10px; color:#58a6ff; min-width:52px;">Defend</span>
+          <div style="flex:1; height:12px; background:linear-gradient(to right, rgb(150,190,255), rgb(0,68,255)); border-radius:3px;"></div>
+          <span style="font-size:10px; color:${sub};">up to +${max}%</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-size:10px; color:#ff6b6b; min-width:52px;">Attack</span>
+          <div style="flex:1; height:12px; background:linear-gradient(to right, rgb(255,150,150), rgb(255,0,0)); border-radius:3px;"></div>
+          <span style="font-size:10px; color:${sub};">up to +${max}%</span>
+        </div>
+        <div style="font-size:10px; color:${sub}; opacity:.8; margin-top:4px;">Each nation shows only its best side · grey = no specific bonus · details in the side panel</div>
+      </div>` : `<div class="legend-note">Calculating bonuses…</div>`}
+      <button id="exit-heatmap-btn" style="margin-top:8px; background:#ff4444; border:none; color:#fff; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:600; width:100%;">✕ Back to battle choice</button>
+    `;
+    setTimeout(() => {
+      const exitBtn = document.getElementById('exit-heatmap-btn');
+      if (exitBtn) exitBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        import('./battleMarkers.js').then(m => m.hideBattleTooltip());
+      });
+    }, 50);
+    return;
+  }
+
   // ==================== BATTLE HEATMAP ====================
   if (state.coloringMode === 'battleHeatmap' && state.battleHeatmapData) {
     const data = state.battleHeatmapData;

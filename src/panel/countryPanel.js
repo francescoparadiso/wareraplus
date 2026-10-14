@@ -1242,6 +1242,10 @@ export function renderViewOverviewPanel(mode) {
   // righe che mettono a fuoco una nazione (non aprono il suo pannello).
   if (mode === 'migration') import('../diplomacy/migrationFlows.js').then(m => m.wireMigrationOverview(contentEl));
   if (mode === 'funding') import('../diplomacy/fundingFlows.js').then(m => m.wireFundingOverview(contentEl));
+  // WarEra+ vista Bonus battaglia: il bottone per impostare "Sono io".
+  contentEl.querySelector('[data-bv-players]')?.addEventListener('click', () => {
+    import('../app/playersOverlay.js').then(m => m.openPlayersView());
+  });
 
   // WarEra+ vista Elezioni: la riga apre la situazione politica della
   // nazione, non il suo pannello.

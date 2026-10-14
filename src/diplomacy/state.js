@@ -57,6 +57,7 @@ export const state = {
   battleHeatmapData: null,
   // WarEra+: mappa colorata per bonus di battaglia (battleHeatmap.js: setBattleBonusMap)
   battleBonusMap: null,
+  bonusViewLoading: false,  // WarEra+: vista Bonus battaglia, calcolo in corso
   // WarEra+ heatmap storiche: caricate su richiesta alla prima attivazione
   // della relativa vista, poi tenute qui per la sessione (dati che cambiano
   // lentamente, non vale un refetch ad ogni cambio di modalità).

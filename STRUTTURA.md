@@ -240,12 +240,17 @@ wareraPlus/
     │   │                        (state.selectedSphereId): tutte insieme erano ~60
     │   │                        fili. Comandi nel pannello: sfera aperta / tutte /
     │   │                        nessuno, CSV / radar / entrambe (`we_sphere_links`).
-    │   ├── battleBonusPanel.js ← NUOVO — sezione "Damage bonuses" della scheda
-    │   │                        battaglia: il TUO bonus (da "Sono io") in difesa e
-    │   │                        in attacco, poi per lato chi prende quanto, e i
-    │   │                        bottoni per colorare la mappa per bonus invece che
-    │   │                        per danno (battleHeatmap.js: setBattleBonusMap).
-    │   │                        Il calcolo è in shared/battleBonus.js.
+    │   ├── bonusView.js       ← NUOVO — vista mappa "Bonus battaglia": si clicca
+    │   │                        una battaglia e ogni nazione prende il colore del
+    │   │                        bonus PIÙ ALTO dei suoi cittadini lì — blu se le
+    │   │                        conviene difendere, rosso attaccare, più pieno
+    │   │                        fino al massimo. Passa per la heatmap di sempre
+    │   │                        (setBattleHeatmap → onBattleSelected, colori in
+    │   │                        battleHeatmap.js: state.battleBonusMap); dettagli
+    │   │                        e "il tuo bonus" nel riepilogo del pannello
+    │   │                        (viewOverview.js: battleBonusHtml). Sulla mappa
+    │   │                        solo le voci della NAZIONE: ordine e QG dell'unità
+    │   │                        sono del singolo giocatore. Testi in 9 lingue qui.
     │   ├── battleSpending.js  ← NUOVO — quanto è costata una battaglia: taglie
     │   │                        pagate (classifica "money" per nazione) + contratti
     │   │                        mercenari aggiudicati, per schieramento. Tre procedure

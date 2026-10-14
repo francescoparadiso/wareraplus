@@ -54,11 +54,14 @@ import { mT } from '../diplomacy/migrationI18n.js';
 import { fund, fundingAgg, fundingWindowShort, getFundingStats, fundingRanking, fundingFocus, fundingColor, fundingCanHover,
   FUNDING_DAYS, IN_COLOR as FUND_IN, OUT_COLOR as FUND_OUT } from '../diplomacy/fundingFlows.js';
 import { fT } from '../diplomacy/fundingI18n.js';
+import { bonusState, bonusRanking, bvT, partsText, nationParts } from '../diplomacy/bonusView.js';
+import { bonusColor } from '../diplomacy/battleHeatmap.js';
+import { myPlayerId } from '../shared/battleBonus.js';
 
 /** Le viste che hanno un riepilogo. Chi chiama usa questo elenco per
  *  decidere se aprire il pannello: tenerlo qui evita che countryPanel.js
  *  e map.js abbiano due liste da tenere allineate a mano. */
-export const OVERVIEW_MODES = ['blocs', 'population', 'weeklyDamage', 'production', 'contested', 'warIntensity', 'playstyle', 'politics', 'travel', 'migration', 'funding'];
+export const OVERVIEW_MODES = ['blocs', 'population', 'weeklyDamage', 'production', 'contested', 'warIntensity', 'playstyle', 'politics', 'travel', 'migration', 'funding', 'battleBonus'];
 
 export function hasViewOverview(mode) {
   return OVERVIEW_MODES.includes(mode);
@@ -883,6 +886,72 @@ function fundingHtml() {
     + about;
 }
 
+/* ── WarEra+ vista Bonus battaglia (src/diplomacy/bonusView.js) ──────
+   Prima della scelta: istruzioni. Con una battaglia: i fatti della
+   battaglia (bunker, base, regione isolata, rivolta), il TUO bonus se
+   "Sono io" è impostato, e le nazioni a cui conviene difendere (blu) e
+   attaccare (rosso), ognuna col dettaglio delle sue voci. */
+function battleBonusHtml() {
+  const s = bonusState();
+  const about = aboutHtml(bvT('about'));
+  const fmtP = (v) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 10) / 10));
+  const signed = (v) => `≈${v > 0 ? '+' : ''}${fmtP(v)}%`;
+  const setMe = myPlayerId() ? '' : `<div class="wp-mig-note">${escapeHtml(bvT('setMe'))}
+      <button type="button" class="wp-bv-players" data-bv-players>${escapeHtml(bvT('openPlayers'))}</button></div>`;
+  if (!s.battle) return headerHtml(bvT('title')) + emptyHtml(bvT('pick')) + setMe + about;
+
+  const def = state.nationMap.get(s.battle.defender?.country);
+  const atk = state.nationMap.get(s.battle.attacker?.country);
+  const badge = `${def?.name || '—'} vs ${atk?.name || '—'}`;
+  if (s.loading || !s.rows) return headerHtml(bvT('title'), badge) + emptyHtml(bvT('loading')) + about;
+
+  const facts = [];
+  const dc = s.ctxs.defender, ac = s.ctxs.attacker;
+  facts.push(dc.building ? bvT('bunker', { n: dc.buildingLevel, p: dc.building }) : bvT('bunkerOff'));
+  facts.push(!ac.buildingKnown ? bvT('baseUnknown') : ac.building ? bvT('base', { n: ac.buildingLevel, p: ac.building }) : bvT('baseOff'));
+  if (dc.notLinked) facts.push(bvT('notLinked', { p: dc.notLinked }));
+  if (ac.revoltBar) facts.push(bvT('revolt', { p: fmtP(ac.revoltBar * 100) }));
+  const factsHtml = `<div class="wp-mig-hint">${facts.map(escapeHtml).join(' · ')}</div>`
+    + (s.ordersKnown ? '' : `<div class="wp-mig-note">${escapeHtml(bvT('ordersUnknown'))}</div>`);
+
+  let mineHtml = setMe;
+  if (s.mine) {
+    const best = s.mine.best;
+    mineHtml = `<div class="wp-panel-section-title wp-mig-title">${escapeHtml(bvT('you'))}</div>`
+      + statsHtml([
+        { label: `🛡️ ${bvT('defending')}`, value: signed(s.mine.defender.total) },
+        { label: `⚔️ ${bvT('attacking')}`, value: signed(s.mine.attacker.total) },
+      ])
+      + `<div class="wp-mig-hint">${escapeHtml(`${best === 'attacker' ? '⚔️' : '🛡️'} ${partsText(s.mine[best].parts, best)}`)}</div>`;
+  }
+
+  const max = Math.max(1, s.max);
+  const list = (side) => bonusRanking(side, 15).map((r, i) => {
+    const nation = state.nationMap.get(r.id);
+    return rowHtml({
+      rank: i + 1,
+      icon: nation ? flagImgHtml(r.id, nation, 'wp-vo-flag') : '',
+      name: nation?.name || '—',
+      value: signed(r.v),
+      sub: partsText(nationParts(r.parts), side),
+      share: r.v / max,
+      color: bonusColor(side, r.v / max),
+    });
+  }).join('');
+  const section = (title, body) => body ? `<div class="wp-panel-section-title wp-mig-title">${escapeHtml(title)}</div><div class="wp-bv-list">${body}</div>` : '';
+  const defList = list('defender');
+  const atkList = list('attacker');
+
+  return headerHtml(bvT('title'), badge)
+    + factsHtml
+    + mineHtml
+    + (defList || atkList
+      ? section(`🛡️ ${bvT('bestDefend')} · ${def?.name || ''}`, defList) + section(`⚔️ ${bvT('bestAttack')} · ${atk?.name || ''}`, atkList)
+      : emptyHtml(bvT('none')))
+    + `<div class="wp-mig-note">${escapeHtml(bvT('note'))}</div>`
+    + about;
+}
+
 function fundingFocusHtml(s, controls) {
   const id = s.focus;
   const nation = state.nationMap.get(id);
@@ -1003,6 +1072,8 @@ export function buildViewOverviewHtml(mode) {
   if (mode === 'migration') return migrationHtml();
 
   if (mode === 'funding') return fundingHtml();
+
+  if (mode === 'battleBonus') return battleBonusHtml();
 
   if (mode === 'contested') {
     const counts = state.contestedCounts;

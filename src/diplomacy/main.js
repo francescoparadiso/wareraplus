@@ -518,6 +518,21 @@ document.getElementById('mode-funding')?.addEventListener('click', async () => {
   await enterFundingView();
 });
 
+// WarEra+ vista Bonus battaglia: si sceglie una battaglia sulla mappa e le
+// nazioni si colorano per il bonus danno che avrebbero lì — vedi bonusView.js.
+document.getElementById('mode-battleBonus')?.addEventListener('click', async () => {
+  _dimOtherSliders();
+  const third = document.getElementById('mode-slider-third');
+  if (third) third.style.opacity = '0.3';
+  trackEvent('view-mode-change', { mode: 'battleBonus' });
+  const { enterBonusView } = await import('./bonusView.js');
+  enterBonusView();
+  setColoringMode('battleBonus');
+  // Le battaglie si scelgono dai loro marcatori: se erano spenti, si accendono.
+  const toggle = document.getElementById('checkActiveBattles');
+  if (toggle && !toggle.checked) toggle.click();
+});
+
 document.getElementById('mode-playstyle')?.addEventListener('click', async () => {
   _dimOtherSliders();
   trackEvent('view-mode-change', { mode: 'playstyle' });

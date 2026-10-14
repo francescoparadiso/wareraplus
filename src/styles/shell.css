@@ -3852,6 +3852,15 @@ body.light-theme .wp-travel-warn { color: #9a6700; }
 body.light-theme .wp-mig-hint { color: #2b2418; }
 body.light-theme .wp-mig-seg-label { color: #5c5347; }
 body.light-theme .wp-mig-note { color: #9a6700; }
+/* WarEra+ vista Bonus battaglia (viewOverview.js: battleBonusHtml). Il
+   dettaglio delle voci sotto ogni nazione va a capo invece di troncarsi:
+   è la risposta a "perché proprio lei", non un'etichetta. */
+.wp-bv-list .wp-vo-sub { white-space: normal; line-height: 1.35; }
+.wp-bv-players {
+  margin-left: 6px; font: inherit; font-size: 11px; cursor: pointer;
+  border-radius: 6px; padding: 2px 8px; background: transparent; color: inherit;
+  border: 1px solid currentColor;
+}
 
 /* ── WarEra+ replay della battaglia (src/diplomacy/battleReplay.js) ──
    Sopra la scheda della battaglia chiusa (che sta a bottom: 55px). */

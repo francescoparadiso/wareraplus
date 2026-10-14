@@ -679,6 +679,10 @@ export function renderMap() {
     fillExpr = buildFundingColorExpression(state.mapSource === 'original');
   } else if (state.coloringMode === 'battleHeatmap') {
     fillExpr = buildBattleHeatmapColorExpression(state.mapSource === 'original');
+  } else if (state.coloringMode === 'battleBonus') {
+    // WarEra+: vista Bonus battaglia prima di scegliere una battaglia —
+    // mondo spento, così risaltano i marcatori (bonusView.js).
+    fillExpr = '#2a2d33';
   } else if (state.mapSource === 'actual') {
     const styleMap = {};
     state.labelsData.forEach(l => { if (l.properties?.countryId) styleMap[l.properties.countryId] = l.properties.strokeColor; });
@@ -1506,6 +1510,7 @@ export function setColoringMode(mode) {
   document.getElementById('mode-travel')?.classList.toggle('active', mode === 'travel');
   document.getElementById('mode-migration')?.classList.toggle('active', mode === 'migration');
   document.getElementById('mode-funding')?.classList.toggle('active', mode === 'funding');
+  document.getElementById('mode-battleBonus')?.classList.toggle('active', mode === 'battleBonus');
   const isThirdRow = mode === 'contested' || mode === 'warIntensity' || mode === 'playstyle';
   
   // Slider prima riga (3 pulsanti: diplomacy, blocs, sphere)
@@ -1518,7 +1523,7 @@ export function setColoringMode(mode) {
       sphereOfInfluence: isMobile ? 'calc(66.66% + 0.5px)' : 'calc(66.66% + 0.6px)'
     };
     // Per i modi delle altre righe, nascondi lo slider o mettilo in una posizione neutra
-    if (mode === 'weeklyDamage' || mode === 'population' || mode === 'production' || isThirdRow || mode === 'politics' || mode === 'travel' || mode === 'migration' || mode === 'funding') {
+    if (mode === 'weeklyDamage' || mode === 'population' || mode === 'production' || isThirdRow || mode === 'politics' || mode === 'travel' || mode === 'migration' || mode === 'funding' || mode === 'battleBonus') {
       sliderTop.style.opacity = '0.3';
     } else {
       sliderTop.style.opacity = '1';
