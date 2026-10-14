@@ -296,6 +296,9 @@ let contribOpenMobile = false;
 // chiamate, fatte solo alla prima apertura. Come le due flag qui sopra,
 // resettata in hideBattleTooltip.
 let spendOpen = false;
+// WarEra+ — sezione "Damage bonuses" (battleBonusPanel.js): stessa regola
+// di spendOpen, chiusa di default e resettata alla chiusura del tooltip.
+let bonusOpen = false;
 // Simbolo del caret coerente col verso in cui il pannello si apre davvero:
 // su desktop e' una colonna a DESTRA (◀/▶), su mobile una sezione che si
 // apre SOTTO (▲/▼) — segnalato dall'utente: la freccia era sempre ▲/▼ anche
@@ -788,6 +791,14 @@ function buildBattleTooltipContent(battle, regionName, liveData, totalAttackerDm
         </div>
         <div id="battle-spend-panel" class="bfm-spend-panel" style="border-top:1px solid ${border};"></div>
 
+        <!-- WarEra+: bonus danno per lato (bunker/base, patti, alleanza,
+             nemico giurato, ordini) e il TUO, se hai detto "Sono io" in
+             Giocatori. Caricato alla prima apertura: battleBonusPanel.js. -->
+        <div id="battle-bonus-toggle" class="bfm-spend-toggle" style="margin-top:8px; gap:5px; font-size:10px; color:${subColor}; border:1px solid ${border};">
+          🎖️ Damage bonuses <span id="battle-bonus-caret">▾</span>
+        </div>
+        <div id="battle-bonus-panel" class="bfm-bonus-panel" style="border-top:1px solid ${border};"></div>
+
         <!-- WarEra+: bottone unico "Other contributors" — su desktop apre/
              chiude la colonna a lato (fuori da questa card, vedi sotto), su
              mobile la sezione qui dentro. Compare solo se ci sono davvero
@@ -1138,6 +1149,28 @@ function showBattleTooltip(battle, regionName, liveData, totalAttackerDmg, total
       applySpend();
       if (spendOpen) loadSpendingSection(battle, subColor, textColor);
     });
+
+    // WarEra+ — "Damage bonuses": stesso schema. Ridisegnata a ogni
+    // rebuild del tooltip (~30 s) se aperta: gli ordini hanno una cache di
+    // 60 s in battleBonus.js, quindi il giro costa al più due chiamate.
+    const bonusCaret = el.querySelector('#battle-bonus-caret');
+    const bonusHost = el.querySelector('#battle-bonus-panel');
+    const applyBonus = () => {
+      el.classList.toggle('bfm-bonus-open', bonusOpen);
+      if (bonusCaret) bonusCaret.textContent = bonusOpen ? '▲' : '▼';
+      if (bonusHost) bonusHost.style.display = bonusOpen ? 'block' : 'none';
+    };
+    const loadBonus = () => import('./battleBonusPanel.js')
+      .then(m => m.renderBonusPanel(bonusHost, battle, { subColor, isCurrent: () => pinnedBattleId === battle._id }))
+      .catch(err => console.warn('battle bonus: modulo non disponibile', err));
+    applyBonus();
+    if (bonusOpen) loadBonus();
+    el.querySelector('#battle-bonus-toggle')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      bonusOpen = !bonusOpen;
+      applyBonus();
+      if (bonusOpen) loadBonus();
+    });
   }
 
   // Bottone "espandi" — presente sia sopra la colonna desktop sia sopra la
@@ -1184,6 +1217,7 @@ export function hideBattleTooltip() {
   contribOpenMobile = false;
   contribExpanded = false;
   spendOpen = false;
+  bonusOpen = false;
 
   // Ferma il poll live del widget battleFront montato nel tooltip — senza
   // questo continuerebbe a interrogare l'API anche a tooltip chiuso.

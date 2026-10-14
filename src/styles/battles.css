@@ -922,3 +922,38 @@ body.light-theme .wp-btl-tl-tip { background: var(--wp-ov-bg-light, #f4f6fa); }
   font-variant-numeric: tabular-nums;
 }
 body.light-theme .wp-btl-dtab-n { background: rgba(0, 0, 0, .07); }
+
+/* ── Scheda "Dove combattere" (whereToFight.js) ─────────────────
+   Il tuo bonus per ogni battaglia in corso, difesa | attacco. Il lato
+   migliore ha il bordo verde; le pillole sono le voci che lo compongono,
+   con gli ordini nei colori del gioco (rosso alta, giallo media, verde
+   bassa priorità). ── */
+.wp-btl-where-intro { margin: 0 0 12px; }
+.wp-btl-where-me { font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.wp-btl-where td { vertical-align: top; }
+.wp-btl-where .wp-btl-match { flex-wrap: wrap; }
+.wp-btl-tag {
+  font-size: 10px; border-radius: 4px; padding: 1px 6px;
+  background: rgba(128,128,128,.14);
+  color: var(--wp-ov-text-dim, #8b949e);
+}
+.wp-btl-tag-mine { color: #3fb950; background: rgba(63,185,80,.12); }
+.wp-btl-bside { min-width: 170px; border-left: 2px solid transparent; }
+.wp-btl-bside.best { border-left-color: #3fb950; background: rgba(63,185,80,.06); }
+.wp-btl-btot { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.wp-btl-bside.best .wp-btl-btot { color: #3fb950; }
+.wp-btl-bchips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+.wp-btl-bchip {
+  font-size: 10px; line-height: 16px; border-radius: 4px; padding: 0 6px; white-space: nowrap;
+  background: rgba(128,128,128,.14);
+}
+.wp-btl-bchip.neg { background: rgba(248,81,73,.15); color: #f85149; }
+.wp-btl-bchip.o-high { background: rgba(248,81,73,.18); }
+.wp-btl-bchip.o-medium { background: rgba(227,179,65,.2); }
+.wp-btl-bchip.o-low { background: rgba(63,185,80,.18); }
+body.light-theme .wp-btl-bside.best .wp-btl-btot,
+body.light-theme .wp-btl-tag-mine { color: #1a7f37; }
+@media (max-width: 640px) {
+  .wp-btl-bside { min-width: 140px; }
+  .wp-btl-btot { font-size: 14px; }
+}

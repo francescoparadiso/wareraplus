@@ -11,7 +11,7 @@ import { buildOriginalLabels, loadFlagImage } from './labels.js';
 import { API_BASE_URL } from './config.js';
 import { updateBattleMarkers } from './battleMarkers.js';
 import { loadRegions } from './regions.js';
-import { fetchCountriesViaCache, fetchMapDataViaCache, fetchAlliancesViaCache, fetchDiplomacyViaCache } from './cacheClient.js';
+import { fetchCountriesViaCache, fetchMapDataViaCache, fetchAlliancesViaCache, fetchDiplomacyViaCache, diplomacyEntry } from './cacheClient.js';
 import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
 // WarEra+: tasto Indietro (vedi src/app/backNav.js)
@@ -126,10 +126,7 @@ async function _loadDiplomacy(countryIds) {
       diplomacyResults.forEach((data, idx) => {
         const nationId = chunk[idx];
         if (!data) return;
-        out.set(nationId, {
-          swornEnemy: data.swornEnemy?.enemy || null,
-          defensivePacts: (data.defensivePacts || []).map(p => p.partner),
-        });
+        out.set(nationId, diplomacyEntry(data));
       });
     }
   } catch (diplErr) {

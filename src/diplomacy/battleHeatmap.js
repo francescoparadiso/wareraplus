@@ -417,6 +417,7 @@ export async function setBattleHeatmap(battleId) {
     const regionName = (regionId && state.regionCache?.get(regionId)?.name) || 'Unknown';
 
     // AGGIORNA I DATI
+    state.battleBonusMap = null; // WarEra+: la mappa dei bonus è della battaglia di prima
     state.battleHeatmapData = {
       battleId,
       battleName,
@@ -470,6 +471,7 @@ export function exitBattleHeatmap() {
 
     state.coloringMode = previousMode;
     state.battleHeatmapData = null;
+    state.battleBonusMap = null;
     currentBattleId = null;
 
     stopLiveUpdates();
@@ -496,6 +498,7 @@ export function exitBattleHeatmap() {
     updateDynamicLegend();
   } else {
     state.battleHeatmapData = null;
+    state.battleBonusMap = null;
     currentBattleId = null;
     renderMap();
     updateDynamicLegend();
@@ -542,11 +545,50 @@ function stopLiveUpdates() {
   }
 }
 
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — la mappa colorata per BONUS invece che per danno
+   ------------------------------------------------------------------
+   Dalla sezione "Damage bonuses" della scheda battaglia
+   (battleBonusPanel.js): con una battaglia selezionata le nazioni si
+   tingono per il bonus che avrebbero combattendo da un lato, così si
+   vede a colpo d'occhio chi conviene chiamare. Stessa tavolozza della
+   heatmap del danno (rosso difesa, blu attacco); grigio neutro chi non
+   ha niente oltre al bonus di base di chiunque. Vive dentro la heatmap:
+   uscirne, o passare a un'altra battaglia, la spegne.
+   `data`: { battleId, side, values: Map(countryId -> %), baseline } | null
+   ══════════════════════════════════════════════════════════════ */
+export function setBattleBonusMap(data) {
+  state.battleBonusMap = data || null;
+  renderMap();
+}
+
+function buildBonusColorExpression(bm, prop, isOriginal) {
+  let max = bm.baseline;
+  for (const v of bm.values.values()) if (v > max) max = v;
+  const span = Math.max(1, max - bm.baseline);
+  const expr = isOriginal ? ['match', ['to-string', ['get', prop]]] : ['match', ['get', prop]];
+  let n = 0;
+  for (const [id, v] of bm.values) {
+    if (!(v > bm.baseline)) continue;
+    const pct = Math.min(1, Math.max(0.12, (v - bm.baseline) / span));
+    const color = bm.side === 'attacker'
+      ? `rgb(${Math.round(214 - 214 * pct)},${Math.round(232 - 197 * pct)},255)`
+      : `rgb(255,${Math.round(217 - 217 * pct)},${Math.round(217 - 217 * pct)})`;
+    expr.push(isOriginal ? id.toString() : id, color);
+    n++;
+  }
+  if (!n) return BATTLE_NEUTRAL;
+  expr.push(BATTLE_NEUTRAL);
+  return expr;
+}
+
 // ============ ESPRESSIONE COLORE ============
 
 export function buildBattleHeatmapColorExpression(isOriginal = false) {
   const prop = isOriginal ? 'initialCountryId' : 'countryId';
   if (!state.battleHeatmapData) return BATTLE_NEUTRAL;
+  const bm = state.battleBonusMap;
+  if (bm && bm.battleId === state.battleHeatmapData.battleId) return buildBonusColorExpression(bm, prop, isOriginal);
   const { nations } = state.battleHeatmapData;
   const colorMap = new Map();
 

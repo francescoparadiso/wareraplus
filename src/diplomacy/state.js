@@ -55,6 +55,8 @@ export const state = {
   borderPairs: [], // [{ key: 'idA|idB', a, b }] — vista ATTUALE
   borderPairsOriginal: [], // le stesse coppie sui confini di inizio partita (vista ORIGINALE)
   battleHeatmapData: null,
+  // WarEra+: mappa colorata per bonus di battaglia (battleHeatmap.js: setBattleBonusMap)
+  battleBonusMap: null,
   // WarEra+ heatmap storiche: caricate su richiesta alla prima attivazione
   // della relativa vista, poi tenute qui per la sessione (dati che cambiano
   // lentamente, non vale un refetch ad ogni cambio di modalità).

@@ -171,6 +171,22 @@ export async function fetchAlliancesViaCache(allianceIds) {
   return allianceIds.map(id => byId.get(id)).filter(Boolean);
 }
 
+/** Una voce di state.diplomacyData dalla risposta grezza di
+ *  countryDiplomacy.getByCountry. `swornEnemy` e `defensivePacts` (solo
+ *  id) sono la forma storica che il resto del codice legge; `swornBonus`
+ *  e `pactBonus` (partner -> %) sono WarEra+ (2026-10-14) per i bonus di
+ *  battaglia (src/shared/battleBonus.js): il gioco li espone per coppia,
+ *  e prima venivano buttati. Usata anche dal ripiego diretto in main.js. */
+export function diplomacyEntry(data) {
+  const pacts = data?.defensivePacts || [];
+  return {
+    swornEnemy: data?.swornEnemy?.enemy || null,
+    defensivePacts: pacts.map(p => p.partner),
+    swornBonus: Number(data?.swornEnemy?.bonusPercent) || 0,
+    pactBonus: Object.fromEntries(pacts.map(p => [p.partner, Number(p.bonusPercent) || 0])),
+  };
+}
+
 /** countryDiplomacy.getByCountry in batch — stesso principio di
  *  fetchAlliancesViaCache: filtra sul sottoinsieme richiesto, fallisce (e
  *  fa ricadere il chiamante sulla via diretta) se manca qualcosa. Ritorna
@@ -187,10 +203,7 @@ export async function fetchDiplomacyViaCache(countryIds) {
   for (const id of countryIds) {
     const data = byId.get(id);
     if (!data) continue;
-    result.set(id, {
-      swornEnemy: data.swornEnemy?.enemy || null,
-      defensivePacts: (data.defensivePacts || []).map(p => p.partner),
-    });
+    result.set(id, diplomacyEntry(data));
   }
   return result;
 }
