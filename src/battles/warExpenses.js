@@ -35,6 +35,7 @@ import { state } from '../diplomacy/state.js';
 import { escapeHtml } from '../diplomacy/utils.js';
 import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 import { btlT } from './i18n.js';
+import { scrollHintHtml } from '../shared/scrollHint.js';
 import { aggregateExpenses, countrySeries, coveredDays, effectiveDays } from './api.js';
 
 const WINDOWS = [
@@ -202,7 +203,7 @@ export function renderWarExpenses(data) {
   const sortable = (key, label) =>
     `<th class="wp-btl-num wp-btl-tight wp-btl-sortable${_sort === key ? ' active' : ''}" data-sort="${key}">${label}${_sort === key ? '<span class="wp-btl-caret">▾</span>' : ''}</th>`;
 
-  return head + `
+  return head + `${scrollHintHtml(560)}
     <div class="wp-btl-tablewrap">
       <table class="wp-btl-table wp-btl-xp">
         <thead><tr>

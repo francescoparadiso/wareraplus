@@ -521,18 +521,30 @@ body.light-theme .wp-btl-row:hover { background: rgba(0, 0, 0, .035); }
      122px e la tabella usciva di 15px. Le intestazioni vanno a capo. */
   .wp-btl-xp th,
   .wp-btl-side-table th { white-space: normal; line-height: 1.2; vertical-align: bottom; }
-  /* Spese di guerra: la colonna per cui la classifica è ordinata, la spesa
-     TOTALE, era tagliata a destra dietro taglia e contratti. Su telefono
-     restano posizione, nazione, totale e al giorno; la scomposizione è a
-     un tocco, aprendo la nazione. */
-  .wp-btl-xp th[data-sort="bounty"],
-  .wp-btl-xp th[data-sort="contracts"],
-  .wp-btl-xp td.wp-btl-bounty,
-  .wp-btl-xp td.wp-btl-contracts { display: none; }
-  /* Dettaglio per nazione: i contratti incassati sono gia' dentro al
-     "pagato per 1k", e con sei colonne la tabella usciva dallo schermo. */
-  .wp-btl-side-table .wp-btl-col-ctr,
-  .wp-btl-side-table.wp-btl-has-pay .wp-btl-pct { display: none; }
+  /* Spese di guerra e tabelle per nazione del dettaglio: prima su
+     telefono cadevano taglia e contratti (spese) e contratti incassati e
+     % (dettaglio). Segnalazione dei giocatori 2026-10-15, la stessa delle
+     Rendite: da telefono quelle colonne non c'erano più. Adesso restano
+     tutte e la tabella scorre di lato, con la NAZIONE ferma a sinistra
+     (fondo pieno, se no i numeri le passano sotto e si leggono insieme).
+     Le spese hanno già il loro .wp-btl-tablewrap che scorre; nel dettaglio
+     scorre la colonna dello schieramento, che prima aveva overflow:hidden
+     (per gli angoli tondi) e quindi TAGLIAVA quello che non ci stava.
+     Selettore a due classi: la regola di base sta più avanti nel file. */
+  .wp-btl-sides .wp-btl-side-col { overflow-x: auto; }
+  .wp-btl-xp .wp-btl-xp-name,
+  .wp-btl-side-table th:first-child,
+  .wp-btl-side-table td:first-child {
+    position: sticky; left: 0; z-index: 1;
+    background: var(--wp-ov-bg, #0d1117);
+    box-shadow: 6px 0 8px -6px rgba(0, 0, 0, .7);
+  }
+  body.light-theme .wp-btl-xp .wp-btl-xp-name,
+  body.light-theme .wp-btl-side-table th:first-child,
+  body.light-theme .wp-btl-side-table td:first-child {
+    background: var(--wp-ov-bg-light, #f4f6fa);
+    box-shadow: 6px 0 8px -6px rgba(0, 0, 0, .18);
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════

@@ -863,6 +863,12 @@ wareraPlus/
     │   │                          impulsi, battiti, ping, navi e particelle; restano
     │   │                          frecce e colori. Tutti i moduli animati chiedono
     │   │                          animationsOn(). Il replay battaglia NO (è a mano).
+    │   ├── scrollHint.js       ← NUOVO — "Scorri di lato per tutte le colonne": l'avviso
+    │   │                          sopra le tabelle dati che su telefono SCORRONO invece
+    │   │                          di nascondere colonne (Rendite, Prezzi, Produzione,
+    │   │                          Unità, Spese di guerra, Statistiche nazioni). Prima
+    │   │                          colonna ferma, il resto scorre (2026-10-15: da
+    │   │                          telefono non si vedeva più "Rendita/pp base").
     │   ├── wallpaper.js        ← NUOVO — solo il flag IS_WALLPAPER (?wallpaper=1),
     │   │                          letto da main.js, analytics.js, countryPanel.js
     │   └── trpcClient.js       ← client tRPC unificato: trpcBatchManual (stile Diplomacy)

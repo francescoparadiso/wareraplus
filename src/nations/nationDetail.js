@@ -24,6 +24,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { natT } from './i18n.js';
+import { scrollHintHtml } from '../shared/scrollHint.js';
 import { METRICS } from './metrics.js';
 import { fetchCountryCitizens } from './api.js';
 import { barsHtml, donutHtml } from './charts.js';
@@ -491,7 +492,7 @@ function citizenTable(rows) {
       ${CITIZEN_COLS.slice(1).map(col => `<span class="${col.num ? 'wp-nat-num ' : ''}${col.cls || ''}">${col.get(c)}</span>`).join('')}
     </a>`).join('');
 
-  return `<div class="wp-nat-ctable-wrap"><div class="wp-nat-ctable">
+  return `${scrollHintHtml(900)}<div class="wp-nat-ctable-wrap"><div class="wp-nat-ctable">
     <div class="wp-nat-cthead">${head}</div>
     ${body}
   </div></div>`;

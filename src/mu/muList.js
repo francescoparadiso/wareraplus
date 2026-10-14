@@ -35,6 +35,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { muT } from './i18n.js';
+import { scrollHintHtml } from '../shared/scrollHint.js';
 import { PLAYSTYLE_GROUPS } from './playstyle.js';
 import { avatarImg, countryName, dominantCountry, escapeHtml, flagImg, fmtCompact, tierOf } from './ui.js';
 import { ensureDailyDamage, muDamageToday } from '../shared/dailyDamage.js';
@@ -184,6 +185,7 @@ export function renderMuList(host, context) {
       </label>
       <span class="wp-mu-count" id="wp-mu-count"></span>
     </div>
+    ${scrollHintHtml(768)}
     <div class="wp-mu-table" id="wp-mu-table"></div>
     <div class="wp-mu-more-wrap"><button type="button" class="wp-mu-more" id="wp-mu-more" hidden></button></div>`;
 

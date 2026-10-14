@@ -33,6 +33,7 @@
 import { escapeHtml } from '../mu/ui.js';
 import { syncBack } from '../app/backNav.js';
 import { ecoT } from './i18n.js';
+import { scrollHintHtml } from '../shared/scrollHint.js';
 import { candleChartSvg, attachCandleExplorer } from './candleChart.js';
 import { variazione, priceChartSvg } from '../market/priceChart.js';
 import {
@@ -190,7 +191,7 @@ function elencoHtml() {
       <span class="wp-ecn-spark">${r.serie.length > 1 ? priceChartSvg(r.serie.slice(-30), { fmt: gold }) : ''}</span>
     </div>`).join('');
 
-  return `<div class="wp-ecn-table">${head}${body}</div>`;
+  return `${scrollHintHtml(900)}<div class="wp-ecn-table">${head}${body}</div>`;
 }
 
 // ── Disegno: la risorsa aperta ──────────────────────────────────────

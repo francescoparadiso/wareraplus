@@ -4064,3 +4064,18 @@ body.wp-no-motion .wp-draw-spin { animation: none; }
 /* Senza animazioni il badge resta (è un'informazione), solo senza moto:
    compare e se ne va col suo timer in reveal.js. */
 body.wp-no-motion .wp-num-delta { animation: none; }
+
+
+/* ── "Scorri di lato per tutte le colonne" (src/shared/scrollHint.js) ──
+   Sopra le tabelle dati che su telefono scorrono invece di perdere
+   colonne. Compare solo sotto la soglia in cui la tabella scorre. */
+.wp-scrollhint {
+  display: none;
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  color: var(--wp-ov-text-dim, #8b949e);
+  text-align: right;
+}
+@media (max-width: 900px) { .wp-scrollhint-900 { display: block; } }
+@media (max-width: 768px) { .wp-scrollhint-768 { display: block; } }
+@media (max-width: 560px) { .wp-scrollhint-560 { display: block; } }

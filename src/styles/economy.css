@@ -363,40 +363,40 @@ body.light-theme .wp-ecn-type-product { background: rgba(9, 105, 218, .12); colo
 .wp-ecn-tip-n { margin-top: 4px; font-size: 11px; color: var(--wp-ov-text-dim, #8b949e); }
 
 /* ── Telefono ────────────────────────────────────────────────── */
-/* Sotto i 900px le tre colonne di variazione e la sparkline sparirebbero
-   in una riga illeggibile: si tolgono 7g/30g e il grafichino, e restano
-   prezzo, denaro e lettera del mercato. L'andamento completo è a un tocco
-   di distanza, nella scheda della risorsa. */
+/* Prima (audit mobile 2026-09-24) sotto i 900px cadevano 7g, 30g e il
+   grafichino, e sotto i 560 anche denaro e lettera: restavano risorsa,
+   prezzo e 24h. Segnalazione dei giocatori 2026-10-15: così da telefono
+   mezza tabella non esisteva. Adesso le colonne ci sono TUTTE, la risorsa
+   resta ferma a sinistra e il resto scorre di lato, con l'avviso sopra
+   (src/shared/scrollHint.js). Stessa ricetta di Rendite e Produzione. */
 @media (max-width: 900px) {
+  .wp-ecn-table { overflow-x: auto; }
   .wp-ecn-thead,
   .wp-ecn-row {
-    grid-template-columns: minmax(110px, 1.5fr) repeat(3, minmax(58px, 1fr)) minmax(52px, .8fr);
+    grid-template-columns: 112px 74px 74px 74px 60px 60px 60px 96px;
+    gap: 6px;
+    width: max-content;
+    min-width: 100%;
+    box-sizing: border-box;
   }
-  .wp-ecn-th:nth-child(6),
-  .wp-ecn-th:nth-child(7),
-  .wp-ecn-th:nth-child(8),
-  .wp-ecn-row > *:nth-child(6),
-  .wp-ecn-row > *:nth-child(7),
-  .wp-ecn-row > *:nth-child(8) { display: none; }
+  .wp-ecn-thead > :first-child,
+  .wp-ecn-row > :first-child {
+    position: sticky; left: 0; z-index: 1;
+    margin-left: -10px; padding-left: 10px; align-self: stretch;
+    display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+    background: var(--wp-ov-bg, #0d1117);
+    box-shadow: 6px 0 8px -6px rgba(0, 0, 0, .7);
+  }
+  body.light-theme .wp-ecn-thead > :first-child,
+  body.light-theme .wp-ecn-row > :first-child {
+    background: var(--wp-ov-bg-light, #f4f6fa);
+    box-shadow: 6px 0 8px -6px rgba(0, 0, 0, .18);
+  }
   .wp-ecn-tools { width: 100%; }
   .wp-ecn-search { flex: 1; min-width: 0; }
 }
 
-/* WarEra+ — telefono vero (audit mobile 2026-09-24). A 375px anche le
-   cinque colonne di sopra non ci stavano: i soli minimi facevano 336px più
-   spazi e margini, e la colonna 24h usciva a destra dentro uno scorrimento
-   orizzontale che niente annunciava. Qui restano risorsa, prezzo e 24h:
-   denaro e lettera sono a un tocco, nella scheda della risorsa. */
 @media (max-width: 560px) {
-  .wp-ecn-thead,
-  .wp-ecn-row {
-    grid-template-columns: minmax(0, 1.6fr) minmax(64px, 1fr) minmax(56px, .8fr);
-    gap: 6px;
-  }
-  .wp-ecn-th:nth-child(3),
-  .wp-ecn-th:nth-child(4),
-  .wp-ecn-row > *:nth-child(3),
-  .wp-ecn-row > *:nth-child(4) { display: none; }
   /* L'etichetta "prodotto / materia prima" sotto il nome invece che
      accanto: accanto si mangiava metà della colonna. */
   .wp-ecn-item { flex-direction: column; align-items: flex-start; gap: 2px; }
@@ -557,28 +557,32 @@ button.wp-ecn-pth:hover { color: var(--wp-ov-text, #e6edf3); }
   font-size: 12.5px;
 }
 
-@media (max-width: 900px) {
-  .wp-ecn-pthead,
-  .wp-ecn-prow { grid-template-columns: minmax(110px, 1.4fr) repeat(4, minmax(58px, 1fr)); }
-  /* Via "con dipendenti": resta nel dettaglio della risorsa. */
-  .wp-ecn-pthead > *:nth-child(3),
-  .wp-ecn-prow > *:nth-child(3) { display: none; }
-  .wp-ecn-pcountries .wp-ecn-pthead > *:nth-child(3),
-  .wp-ecn-pcountries .wp-ecn-prow > *:nth-child(3) { display: block; }
-  .wp-ecn-pcountries .wp-ecn-pthead > *:nth-child(6),
-  .wp-ecn-pcountries .wp-ecn-prow > *:nth-child(6) { display: none; }
-}
+/* Produzione: fino a 560px le sei colonne ci stanno (minimi ~400px). Sotto
+   prima ne restavano tre; adesso ci sono tutte e la tabella scorre, con la
+   prima colonna ferma (vedi la tabella Prezzi qui sopra, stessa ricetta). */
 @media (max-width: 560px) {
-  /* Telefono: risorsa, dipendenti, tasse. Il resto è a un tocco, nella
-     scheda della risorsa. */
+  .wp-ecn-ptable { overflow-x: auto; }
   .wp-ecn-pthead,
-  .wp-ecn-prow { grid-template-columns: minmax(0, 1.5fr) minmax(58px, 1fr) minmax(64px, 1fr); gap: 6px; }
-  .wp-ecn-pthead > *:nth-child(2), .wp-ecn-prow > *:nth-child(2),
-  .wp-ecn-pthead > *:nth-child(5), .wp-ecn-prow > *:nth-child(5) { display: none; }
-  /* Nazioni della risorsa: nazione, dipendenti, tasse. */
-  .wp-ecn-pcountries .wp-ecn-pthead > *:nth-child(2), .wp-ecn-pcountries .wp-ecn-prow > *:nth-child(2),
-  .wp-ecn-pcountries .wp-ecn-pthead > *:nth-child(4), .wp-ecn-pcountries .wp-ecn-prow > *:nth-child(4) { display: none; }
-  .wp-ecn-pcountries .wp-ecn-pthead > *:nth-child(5), .wp-ecn-pcountries .wp-ecn-prow > *:nth-child(5) { display: block; }
+  .wp-ecn-prow {
+    grid-template-columns: 104px 70px 76px 76px 84px 84px;
+    gap: 6px;
+    width: max-content;
+    min-width: 100%;
+    box-sizing: border-box;
+  }
+  .wp-ecn-pthead > :first-child,
+  .wp-ecn-prow > :first-child {
+    position: sticky; left: 0; z-index: 1;
+    margin-left: -10px; padding-left: 10px; align-self: stretch;
+    display: flex; align-items: center;
+    background: var(--wp-ov-bg, #0d1117);
+    box-shadow: 6px 0 8px -6px rgba(0, 0, 0, .7);
+  }
+  body.light-theme .wp-ecn-pthead > :first-child,
+  body.light-theme .wp-ecn-prow > :first-child {
+    background: var(--wp-ov-bg-light, #f4f6fa);
+    box-shadow: 6px 0 8px -6px rgba(0, 0, 0, .18);
+  }
   .wp-ecn-select { max-width: none; flex: 1; min-width: 0; }
   .wp-ecn-tools { flex-wrap: wrap; }
   .wp-ecn-wdays { grid-template-columns: 1fr; }

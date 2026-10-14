@@ -35,6 +35,8 @@ export const LANGS = {
 const DICT = {
   en: {
     app_subtitle: 'Strategic Map & Political Data',
+    // Avviso sopra le tabelle che su telefono scorrono di lato (wp-scrollhint).
+    table_scroll_hint: 'Swipe sideways for every column →',
     author_credit_label: 'Created by',
     visits_label: 'visits',
     online_hint: 'People using WarEra+ right now, on the site and on Wallpaper Engine.',
@@ -329,6 +331,8 @@ const DICT = {
   },
   it: {
     app_subtitle: 'Mappa Strategica e Dati Politici',
+    // Avviso sopra le tabelle che su telefono scorrono di lato (wp-scrollhint).
+    table_scroll_hint: 'Scorri di lato per tutte le colonne →',
     author_credit_label: 'Creato da',
     visits_label: 'visite',
     online_hint: 'Persone che stanno usando WarEra+ in questo momento, sul sito e su Wallpaper Engine.',
@@ -623,6 +627,8 @@ const DICT = {
   },
   es: {
     app_subtitle: 'Mapa Estratégico y Datos Políticos',
+    // Avviso sopra le tabelle che su telefono scorrono di lato (wp-scrollhint).
+    table_scroll_hint: 'Desliza de lado para ver todas las columnas →',
     author_credit_label: 'Creado por',
     visits_label: 'visitas',
     visits_hint: 'Visitas diarias únicas a WarEra+, contadas desde su lanzamiento.',
@@ -917,6 +923,8 @@ const DICT = {
   },
   de: {
     app_subtitle: 'Strategische Karte & Politische Daten',
+    // Avviso sopra le tabelle che su telefono scorrono di lato (wp-scrollhint).
+    table_scroll_hint: 'Seitlich wischen für alle Spalten →',
     author_credit_label: 'Erstellt von',
     visits_label: 'Besuche',
     online_hint: 'Personen, die WarEra+ gerade nutzen, auf der Website und in Wallpaper Engine.',
@@ -1211,6 +1219,8 @@ const DICT = {
   },
   fr: {
     app_subtitle: 'Carte Stratégique et Données Politiques',
+    // Avviso sopra le tabelle che su telefono scorrono di lato (wp-scrollhint).
+    table_scroll_hint: 'Faites glisser pour voir toutes les colonnes →',
     author_credit_label: 'Créé par',
     visits_label: 'visites',
     online_hint: 'Personnes qui utilisent WarEra+ en ce moment, sur le site et sur Wallpaper Engine.',
@@ -1505,6 +1515,8 @@ const DICT = {
   },
   nl: {
     app_subtitle: 'Strategische Kaart & Politieke Gegevens',
+    // Avviso sopra le tabelle che su telefono scorrono di lato (wp-scrollhint).
+    table_scroll_hint: 'Veeg opzij voor alle kolommen →',
     author_credit_label: 'Gemaakt door',
     visits_label: 'bezoeken',
     online_hint: 'Mensen die WarEra+ nu gebruiken, op de site en in Wallpaper Engine.',
@@ -1799,6 +1811,8 @@ const DICT = {
   },
   sv: {
     app_subtitle: 'Strategisk Karta & Politisk Data',
+    // Avviso sopra le tabelle che su telefono scorrono di lato (wp-scrollhint).
+    table_scroll_hint: 'Svep åt sidan för alla kolumner →',
     author_credit_label: 'Skapad av',
     visits_label: 'besök',
     online_hint: 'Personer som använder WarEra+ just nu, på sajten och i Wallpaper Engine.',
@@ -2093,6 +2107,8 @@ const DICT = {
   },
   pt: {
     app_subtitle: 'Mapa Estratégico e Dados Políticos',
+    // Avviso sopra le tabelle che su telefono scorrono di lato (wp-scrollhint).
+    table_scroll_hint: 'Deslize para o lado para ver todas as colunas →',
     author_credit_label: 'Criado por',
     visits_label: 'visitas',
     visits_hint: 'Visitas diárias únicas ao WarEra+, contadas desde o lançamento.',
@@ -2396,6 +2412,8 @@ const DICT = {
   },
   ar: {
     app_subtitle: 'الخريطة الاستراتيجية والبيانات السياسية',
+    // Avviso sopra le tabelle che su telefono scorrono di lato (wp-scrollhint).
+    table_scroll_hint: 'اسحب جانبيًا لرؤية كل الأعمدة ←',
     author_credit_label: 'بواسطة',
     visits_label: 'زيارة',
     online_hint: 'أشخاص يستخدمون WarEra+ الآن، على الموقع وعلى Wallpaper Engine.',

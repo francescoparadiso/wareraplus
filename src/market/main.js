@@ -29,6 +29,7 @@
 
 import '../styles/market.css';
 import { mktT } from './i18n.js';
+import { scrollHintHtml } from '../shared/scrollHint.js';
 import { loadMarketData, PRICE_TTL_MS, loadPriceHistory, priceSeries, priceHistoryCoverage } from './api.js';
 import { priceChartSvg, variazione } from './priceChart.js';
 import {
@@ -375,7 +376,10 @@ function tableHtml(list) {
 
   const body = list.map(r => rowHtml(r)).join('');
 
-  return `<div class="wp-mkt-table-wrap"><div class="wp-mkt-table">
+  // L'avviso esiste solo su telefono (market.css): lì la tabella scorre
+  // di lato, e uno scorrimento che niente annuncia non lo trova nessuno.
+  return `${scrollHintHtml(560)}
+  <div class="wp-mkt-table-wrap"><div class="wp-mkt-table">
     <div class="wp-mkt-thead">${head}</div>
     ${body}
   </div></div>`;

@@ -29,6 +29,7 @@ import { fetchCompanyCensusViaCache } from '../diplomacy/cacheClient.js';
 import { candleChartSvg, attachCandleExplorer } from './candleChart.js';
 import { plusT } from './i18nPlus.js';
 import { ecoT } from './i18n.js';
+import { scrollHintHtml } from '../shared/scrollHint.js';
 
 let _container = null;
 let _census = null;        // risposta per il mondo (o per la nazione filtrata)
@@ -99,7 +100,7 @@ function elencoHtml() {
       <span class="wp-ecn-num">${escapeHtml(oro(r.wages))}</span>
       <span class="wp-ecn-num wp-ecn-price">${escapeHtml(oro(r.tax))}</span>
     </div>`;
-  return `
+  return `${scrollHintHtml(560)}
     <div class="wp-ecn-ptable">
       ${testataHtml()}
       ${list.map(riga).join('')}
