@@ -28,6 +28,15 @@
 
    Animazione: trattini che scorrono verso la regione (come nelle
    battaglie della mappa principale) e un anello fermo sulla regione.
+
+   ── Quante (2026-10-15, "troppo cluttered") ────────────────────
+   Un giorno ha trenta, quaranta battaglie: tutte insieme erano frecce
+   arancioni da un capo all'altro del mondo, sopra gli archi della
+   nazione selezionata. Adesso:
+     · nessuna nazione selezionata → solo le TOP_N più pesanti, le
+       stesse che l'elenco sotto la classifica mostra per prime;
+     · una nazione selezionata → solo le battaglie dove è attaccante o
+       difensore: la domanda, a quel punto, è la sua.
    ══════════════════════════════════════════════════════════════ */
 
 import { state } from '../diplomacy/state.js';
@@ -41,6 +50,7 @@ const LYR_DASH = 'wp-tm-battles-dash';
 const LYR_TARGET = 'wp-tm-battles-target';
 const COLOR = '#ff7b39';
 const MIN_ARC_DEG = 0.8;
+const TOP_N = 8;           // = DAY_BATTLES_TOP in timeMachine.js
 
 const DASH_SEQ = [
   [0, 4, 3], [0.5, 4, 2.5], [1, 4, 2], [1.5, 4, 1.5], [2, 4, 1], [2.5, 4, 0.5], [3, 4, 0],
@@ -127,9 +137,10 @@ function tick(now) {
 /**
  * `battles`: le righe del giorno (timeMachineDay.js, con `regionId`);
  * null = nessun dato per quel giorno → via le frecce. `regionsMap`: chi
- * possiede cosa nel fotogramma corrente.
+ * possiede cosa nel fotogramma corrente. `focusId`: la nazione
+ * selezionata, o null.
  */
-export function setTimeMachineBattles(battles, regionsMap) {
+export function setTimeMachineBattles(battles, regionsMap, focusId = null) {
   const map = getTimeMachineMap();
   if (!map) return;
   if (!battles?.length || !regionsMap) { clearTimeMachineBattles(); return; }
@@ -145,10 +156,19 @@ export function setTimeMachineBattles(battles, regionsMap) {
     const pow = (b.attackerPower || 0) + (b.defenderPower || 0);
     return pow > 0 ? pow : 1;
   };
-  const rows = battles
+  const focusCode = focusId ? String(state.nationMap?.get(focusId)?.code || '').toUpperCase() : '';
+  const tutte = battles
     .filter(b => b.regionId && b.attackerCode)
-    .map(b => ({ b, v: weightOf(b) }));
-  const maxV = Math.max(1, ...rows.map(r => r.v));
+    .map(b => ({ b, v: weightOf(b) }))
+    .sort((x, y) => y.v - x.v);
+  // Lo spessore resta relativo a TUTTE le battaglie del giorno: filtrare
+  // non deve far sembrare enorme una battaglia piccola.
+  const maxV = Math.max(1, ...tutte.map(r => r.v));
+  const rows = focusId
+    ? tutte.filter(({ b }) => focusCode && (String(b.attackerCode).toUpperCase() === focusCode
+        || String(b.defenderCode || '').toUpperCase() === focusCode))
+    : tutte.slice(0, TOP_N);
+  if (!rows.length) { clearTimeMachineBattles(); return; }
   const feats = [];
   for (const { b, v } of rows) {
     const to = posOf(b.regionId);

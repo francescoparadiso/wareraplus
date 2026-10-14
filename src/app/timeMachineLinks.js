@@ -29,6 +29,13 @@
    nemico. Il nemico giurato ha la linea più spessa. I patti sono
    linee piene che respirano piano (opacità). Si ferma con la time
    machine chiusa o senza selezione.
+
+   ── Un arco per legame (2026-10-15) ────────────────────────────
+   C'era anche una linea DRITTA a terra sotto ogni arco, pensata come
+   ombra. Ma i livelli di guerre e patti filtravano solo per `kind`, che
+   l'ombra aveva uguale: veniva disegnata a colori pieni, e ogni legame
+   usciva due volte, una dritta e una curva (segnalato). Ombra tolta, e
+   patti e pallini più sottili: con trenta legami era una matassa.
    ══════════════════════════════════════════════════════════════ */
 
 import { state } from '../diplomacy/state.js';
@@ -38,7 +45,6 @@ import { getTimeMachineMap, TM_LYR_FILL } from './timeMachineMap.js';
 import { animationsOn } from '../shared/motion.js';
 
 const SRC = 'wp-tm-links-src';
-const LYR_SHADOW = 'wp-tm-links-shadow';
 const LYR_PACT = 'wp-tm-links-pact';
 const LYR_WAR_BASE = 'wp-tm-links-war-base';
 const LYR_WAR = 'wp-tm-links-war';
@@ -103,20 +109,16 @@ function ensureLayers(map) {
   const kind = k => ['==', ['get', 'kind'], k];
   const isLine = ['==', ['geometry-type'], 'LineString'];
   map.addLayer({
-    id: LYR_SHADOW, type: 'line', source: SRC, filter: ['all', isLine, ['==', ['get', 'role'], 'ground']],
-    paint: { 'line-color': '#000000', 'line-width': 2.5, 'line-blur': 2.5, 'line-opacity': 0.3 },
-  });
-  map.addLayer({
     id: LYR_PACT, type: 'line', source: SRC, filter: ['all', isLine, kind('pact')],
     layout: { 'line-cap': 'round', 'line-join': 'round' },
-    paint: { 'line-color': COLORS.DEFENSIVE_PACT, 'line-width': 2.5, 'line-opacity': 0.85 },
+    paint: { 'line-color': COLORS.DEFENSIVE_PACT, 'line-width': 1.6, 'line-opacity': 0.7 },
   });
   map.addLayer({
     id: LYR_WAR_BASE, type: 'line', source: SRC, filter: ['all', isLine, ['in', ['get', 'kind'], ['literal', ['war', 'sworn']]]],
     layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: {
       'line-color': ['match', ['get', 'kind'], 'sworn', COLORS.SWORN_ENEMY, COLORS.WAR_DIRECT],
-      'line-width': ['match', ['get', 'kind'], 'sworn', 4.5, 2.5],
+      'line-width': ['match', ['get', 'kind'], 'sworn', 4, 2],
       'line-opacity': 0.25,
     },
   });
@@ -125,7 +127,7 @@ function ensureLayers(map) {
     layout: { 'line-cap': 'butt', 'line-join': 'round' },
     paint: {
       'line-color': ['match', ['get', 'kind'], 'sworn', COLORS.SWORN_ENEMY, COLORS.WAR_DIRECT],
-      'line-width': ['match', ['get', 'kind'], 'sworn', 4.5, 2.5],
+      'line-width': ['match', ['get', 'kind'], 'sworn', 4, 2],
       'line-opacity': 0.95,
       'line-dasharray': DASH_SEQ[0],
     },
@@ -133,7 +135,7 @@ function ensureLayers(map) {
   map.addLayer({
     id: LYR_ENDS, type: 'circle', source: SRC, filter: ['==', ['get', 'role'], 'end'],
     paint: {
-      'circle-radius': 3.5,
+      'circle-radius': 2.5,
       'circle-color': ['match', ['get', 'kind'], 'sworn', COLORS.SWORN_ENEMY, 'pact', COLORS.DEFENSIVE_PACT, COLORS.WAR_DIRECT],
       'circle-stroke-color': '#0b1c33', 'circle-stroke-width': 1,
     },
@@ -156,7 +158,7 @@ function tick(now) {
     _step = step;
     map.setPaintProperty(LYR_WAR, 'line-dasharray', DASH_SEQ[step]);
     const k = 0.5 + 0.5 * Math.sin(now / BREATH_MS * 2 * Math.PI);
-    map.setPaintProperty(LYR_PACT, 'line-opacity', 0.55 + 0.4 * k);
+    map.setPaintProperty(LYR_PACT, 'line-opacity', 0.45 + 0.35 * k);
   }
   _raf = requestAnimationFrame(tick);
 }
@@ -188,7 +190,6 @@ export function setTimeMachineLinks(focus, regionsMap) {
       seen.add(id);
       const to = anchorAt(id, regionsMap, owned);
       if (!to || Math.hypot(to[0] - home[0], to[1] - home[1]) < MIN_ARC_DEG) return;
-      feats.push({ type: 'Feature', properties: { kind, role: 'ground' }, geometry: { type: 'LineString', coordinates: [home, to] } });
       feats.push({ type: 'Feature', properties: { kind }, geometry: { type: 'LineString', coordinates: arc(home, to).coords } });
       feats.push({ type: 'Feature', properties: { kind, role: 'end' }, geometry: { type: 'Point', coordinates: to } });
     };

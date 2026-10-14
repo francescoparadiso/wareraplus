@@ -940,7 +940,7 @@ async function _fetchAndRender(ts) {
       // non lo è (durante il playback non si scarica) via le frecce, invece di
       // lasciare quelle di un altro giorno.
       const giornoFrame = cachedDay(giorno);
-      setTimeMachineBattles(giornoFrame?.battles || null, regions);
+      setTimeMachineBattles(giornoFrame?.battles || null, regions, _focusId);
       _updateStandings(regions);
       _updateFocus(ts);
     }
@@ -1008,7 +1008,7 @@ function _scheduleDay(ts) {
 function _renderDay(giorno) {
   _updateDayBattles(giorno);
   // WarEra+: il giorno è arrivato, le sue battaglie diventano frecce.
-  if (_slider && dayKey(Number(_slider.value)) === giorno) setTimeMachineBattles(cachedDay(giorno)?.battles || null, _lastRegions);
+  if (_slider && dayKey(Number(_slider.value)) === giorno) setTimeMachineBattles(cachedDay(giorno)?.battles || null, _lastRegions, _focusId);
   // Nazione selezionata: si riempie da se' quando i dati arrivano, senza
   // chiedere all'utente di ricliccare.
   if (_focusId && dayKey(Number(_slider.value)) === giorno) _updateFocus(Number(_slider.value));
@@ -1188,6 +1188,7 @@ function _setFocus(countryId, regionId = null) {
   // Come Esc: Indietro toglie prima la nazione evidenziata, poi chiude.
   pushBack('tm/focus', _clearFocus, () => !!_focusId);
   _updateFocus(Number(_slider.value));
+  _redrawDayBattles();
   // Le alleanze arrivano con una fetch per sessione (vedi
   // timeMachineAlliances.js): alla prima selezione, e poi si ridisegna.
   loadAllianceHistory().then(ok => { if (ok && _focusId) _updateFocus(Number(_slider.value)); });
@@ -1201,6 +1202,16 @@ function _clearFocus() {
   document.body.classList.remove('wp-tm-has-focus');
   setTimeMachineFocus(null);
   clearTimeMachineLinks();
+  _redrawDayBattles();
+}
+
+/* Le frecce delle battaglie dipendono anche dalla selezione (con una
+   nazione a fuoco solo le sue, senza le più pesanti del giorno): si
+   rifanno quando la selezione cambia. Mai a time machine chiusa — la
+   chiusura passa da _clearFocus dopo aver già spento le frecce. */
+function _redrawDayBattles() {
+  if (!_active || !_slider || !_lastRegions) return;
+  setTimeMachineBattles(cachedDay(dayKey(Number(_slider.value)))?.battles || null, _lastRegions, _focusId);
 }
 
 /** Chiamata a ogni fotogramma applicato (_fetchAndRender) e quando arriva
