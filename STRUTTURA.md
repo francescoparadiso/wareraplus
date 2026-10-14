@@ -240,6 +240,12 @@ wareraPlus/
     │   │                        (state.selectedSphereId): tutte insieme erano ~60
     │   │                        fili. Comandi nel pannello: sfera aperta / tutte /
     │   │                        nessuno, CSV / radar / entrambe (`we_sphere_links`).
+    │   ├── battleBonusPanel.js ← NUOVO — sezione "Damage bonuses" della scheda
+    │   │                        battaglia: il TUO bonus (da "Sono io") in difesa e
+    │   │                        in attacco, poi per lato chi prende quanto, e i
+    │   │                        bottoni per colorare la mappa per bonus invece che
+    │   │                        per danno (battleHeatmap.js: setBattleBonusMap).
+    │   │                        Il calcolo è in shared/battleBonus.js.
     │   ├── battleSpending.js  ← NUOVO — quanto è costata una battaglia: taglie
     │   │                        pagate (classifica "money" per nazione) + contratti
     │   │                        mercenari aggiudicati, per schieramento. Tre procedure
@@ -597,6 +603,10 @@ wareraPlus/
     │   │                  ⚠️ una battaglia già aperta al primo sguardo ha la prima
     │   │                  lettura come FONDO (`baseAt`): chi c'era non è un
     │   │                  ingresso. Testi in timelineI18n.js (9 lingue).
+    │   ├── whereToFight.js   ← NUOVO — scheda "Dove combattere": le battaglie in
+    │   │                        corso ordinate per il TUO bonus (shared/battleBonus.js),
+    │   │                        il lato migliore acceso. Senza "Sono io" spiega
+    │   │                        come impostarlo. Clic = scheda nell'archivio.
     │   ├── main.js, battleList.js, warExpenses.js, i18n.js (9 lingue)
     ├── guide/                    ← NUOVO — Guida "Come si usa": SOLO testo statico
     │   ├── main.js                  (zero fetch, zero stato) + i18n.js a 9 lingue.
@@ -817,6 +827,14 @@ wareraPlus/
     │   ├── i18n.js             ← traduzioni condivise dello shell, 9 lingue
     │   │                          (namespace diverso da src/political/i18n.js)
     │   ├── countries.js        ← getAllCountries() legge state.nazioniGlobal (sola lettura)
+    │   ├── battleBonus.js      ← NUOVO — bonus danno di battaglia per chi combatte:
+    │   │                          patriottico, alleanza, patto, nemico giurato,
+    │   │                          ordini (rosso 15 / giallo 10 / verde 5, da
+    │   │                          battleOrder.getByBattle `priority`), QG
+    │   │                          dell'unità, bunker/base, rivolta, malus regione
+    │   │                          isolata. Percentuali da gameConfig. ⚠️ stimati:
+    │   │                          chi riceve metà di bunker/base (qui alleanza o
+    │   │                          patto) e il totale come somma.
     │   ├── allianceBonus.js    ← ricalcola il bonus danno d'alleanza (l'API non lo espone)
     │   ├── dailyDamage.js      ← "danno di oggi" per nazioni/alleanze/unità, dalla
     │   │                          differenza fra due snapshot del cumulato settimanale
