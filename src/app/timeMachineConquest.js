@@ -38,8 +38,8 @@
    giorno, una accanto all'altra, disegnano la linea dove avanza la
    guerra. Tutte quelle del fotogramma (fino a MAX_FRONT), non solo le sei
    col lampo: è la forma del fronte che conta. Un solo layer line sulla
-   sorgente delle regioni della time machine, con opacità e colore per
-   regione (match su regionId) ricalcolati a ogni fotogramma.
+   sorgente delle regioni della time machine, con opacità e colore come
+   stato per regione (vedi paintFront: mai filtri o 'match' per frame).
 
    ── LE ALLEANZE (richiesta dell'utente) ────────────────────────
    Un lampo sulla capitale quando una nazione entra in un blocco (blu),
@@ -76,9 +76,6 @@ const ALLY_LABEL_GAP_MS = 1400;
 const MAX_FRONT = 40;
 const FRONT_MS = 1700;
 const LYR_FRONT = 'wp-tm-conq-front';
-// Un'espressione vera: ['==', 1, 0] MapLibre lo prende per un filtro legacy
-// (chiave non stringa) e scarta il layer senza dire niente.
-const NO_FRONT = ['boolean', false];
 const STAGGER_MS = 70;      // fra due lampi dello stesso fotogramma
 const DRAW_MS = 450;        // la freccia che si allunga fino alla regione
 const RING_MS = 1300;       // l'onda sulla regione, dopo l'arrivo
@@ -182,37 +179,43 @@ function setData(features) {
   _on = features.length > 0;
 }
 
-/* Il contorno delle regioni appena conquistate: opacità e colore per
-   regione in una sola espressione, ricalcolata a ogni fotogramma. */
+/* Il contorno delle regioni appena conquistate: opacità e colore sono
+   uno STATO per regione (setFeatureState sulla sorgente delle regioni,
+   chiave regionId — timeMachineMap.js la crea con promoteId).
+   Prima erano filtro + due espressioni 'match' riscritti a ogni frame
+   dello schermo: per MapLibre un filtro o una proprietà per-feature
+   cambiati vogliono dire ricaricare la sorgente, cioè ritassellare le 726
+   regioni (~40 ms misurati) fino a sessanta volte al secondo, ed era il
+   grosso del lag della riproduzione. Lo stato invece ridipinge e basta. */
+let _frontSrc = null;
 function ensureFront(map) {
   if (map.getLayer(LYR_FRONT)) return;
   const fill = map.getLayer(TM_LYR_FILL);
   if (!fill) return;
+  _frontSrc = fill.source;
   map.addLayer({
     id: LYR_FRONT, type: 'line', source: fill.source,
-    filter: NO_FRONT,
     layout: { 'line-join': 'round' },
-    paint: { 'line-color': '#ffd166', 'line-width': 3.5, 'line-blur': 1.5, 'line-opacity': 0 },
+    paint: {
+      'line-color': ['coalesce', ['feature-state', 'frontColor'], FALLBACK],
+      'line-width': 3.5, 'line-blur': 1.5,
+      'line-opacity': ['coalesce', ['feature-state', 'front'], 0],
+    },
   });
+}
+
+function frontState(map, id, st) {
+  if (_frontSrc) map.setFeatureState({ source: _frontSrc, id }, st);
 }
 
 function paintFront(now) {
   const map = getTimeMachineMap();
   if (!map?.getLayer(LYR_FRONT)) return;
-  for (const [id, f] of _front) if (now - f.start > FRONT_MS) _front.delete(id);
-  if (!_front.size) { map.setFilter(LYR_FRONT, NO_FRONT); return; }
-  const ids = [..._front.keys()];
-  const op = ['match', ['get', 'regionId']];
-  const col = ['match', ['get', 'regionId']];
   for (const [id, f] of _front) {
     const x = Math.max(0, (now - f.start) / FRONT_MS);
-    op.push(id, Math.sin(Math.PI * Math.min(1, x)) * 0.95);
-    col.push(id, f.color);
+    if (x > 1) { _front.delete(id); frontState(map, id, { front: 0 }); continue; }
+    frontState(map, id, { front: Math.sin(Math.PI * x) * 0.95, frontColor: f.color });
   }
-  op.push(0); col.push('#ffd166');
-  map.setFilter(LYR_FRONT, ['in', ['get', 'regionId'], ['literal', ids]]);
-  map.setPaintProperty(LYR_FRONT, 'line-opacity', op);
-  map.setPaintProperty(LYR_FRONT, 'line-color', col);
 }
 
 function tick() {
@@ -324,8 +327,8 @@ export function clearConquests() {
   if (_raf) cancelAnimationFrame(_raf);
   _raf = null;
   _effects = [];
+  const map = getTimeMachineMap();
+  if (map?.getLayer(LYR_FRONT)) for (const id of _front.keys()) frontState(map, id, { front: 0 });
   _front.clear();
   if (_on) setData([]);
-  const map = getTimeMachineMap();
-  if (map?.getLayer(LYR_FRONT)) map.setFilter(LYR_FRONT, NO_FRONT);
 }

@@ -105,7 +105,12 @@ const PLAY_TICK_MS = 60;
 // giorni/secondo — 4x rimosso su richiesta esplicita; ¼x e ½x aggiunti
 // (richiesta dell'utente: "si muove troppo velocemente ed è caotica"), e ½x
 // è la partenza: a 1x i primi mesi, pieni di conquiste, passavano in un lampo.
-const PLAY_SPEEDS = [0.25, 0.5, 1, 2, 3];
+// WarEra+ (2026-10-15, di nuovo richiesta dell'utente: "va rallentata di
+// molto", le animazioni non tenevano il passo): via il 3x, aggiunto 0,1x,
+// e la partenza scende a ¼x — un giorno di gioco ogni quattro secondi, il
+// tempo perché il lampo di una conquista (~1,7 s) finisca prima della
+// successiva.
+const PLAY_SPEEDS = [0.1, 0.25, 0.5, 1, 2];
 const DEFAULT_SPEED_IDX = 1;
 const speedLabel = (s) => (s === 0.25 ? '¼x' : s === 0.5 ? '½x' : `${s}x`);
 
@@ -715,6 +720,9 @@ function _stopPlay() {
   _playTimer = null;
   if (!_playing) return;
   _playing = false;
+  // L'URL in riproduzione si aggiorna una volta al secondo (_syncUrl):
+  // alla pausa si porta sul punto vero.
+  if (_slider && _active) _syncUrl(Number(_slider.value));
   if (_playBtn) {
     _playBtn.textContent = '▶';
     _playBtn.title = t('tm_play');
@@ -848,7 +856,14 @@ function _ownedSince(regionId, ts) {
 // (non pushState): muovere lo slider non deve riempire la cronologia del
 // browser di una entry per pixel trascinato.
 // ─────────────────────────────────────────────────────────────────────────
+// In riproduzione al massimo una volta al secondo: un replaceState ogni 60
+// ms supera il tetto dei browser (Safari lancia un errore dopo 100 in 30
+// secondi, e l'errore fermerebbe il ciclo di riproduzione).
+let _urlSyncedAt = 0;
 function _syncUrl(ts) {
+  const now = Date.now();
+  if (_playing && now - _urlSyncedAt < 1000) return;
+  _urlSyncedAt = now;
   const url = new URL(window.location.href);
   url.searchParams.set('tm', String(Math.round(ts)));
   // history.state e non null: la voce può essere la sentinella del tasto
@@ -896,6 +911,13 @@ function _localRegionsAt(ts) {
   return out;
 }
 
+/* WarEra+ in riproduzione la gran parte dei fotogrammi (uno ogni 60 ms)
+   non cambia nessun proprietario: classifica (un innerHTML con cento
+   bandiere), frecce delle battaglie e legami della nazione selezionata si
+   rifanno solo quando qualcosa è passato di mano o è cambiato il giorno.
+   Fermi, o trascinando, si rifà tutto come prima. */
+let _sideDay = null;
+
 async function _fetchAndRender(ts) {
   const token = ++_applyToken;
   try {
@@ -903,7 +925,7 @@ async function _fetchAndRender(ts) {
     const { regions } = local ? { regions: local } : await fetchRegionHistoryAtViaCache(ts);
     if (token !== _applyToken) return false; // superata da una richiesta più recente, scartata
     _lastRegions = regions;
-    renderTimeMachineFrame(regions, _buildLabelEntries(regions));
+    const changed = renderTimeMachineFrame(regions, _buildLabelEntries(regions));
     // WarEra+: i passaggi di mano fra il fotogramma di prima e questo, come
     // lampi dalla capitale del conquistatore (timeMachineConquest.js).
     // Solo in avanti, e il modulo stesso si limita sui salti lunghi.
@@ -911,13 +933,17 @@ async function _fetchAndRender(ts) {
     // WarEra+: e ingressi/uscite dai blocchi d'alleanza nello stesso intervallo.
     if (_lastRenderedTs != null) animateAlliances(_lastRenderedTs, ts);
     _lastRenderedTs = ts;
-    // WarEra+: le battaglie del giorno, se quel giorno è già in memoria; se
-    // non lo è (durante il playback non si scarica) via le frecce, invece di
-    // lasciare quelle di un altro giorno.
-    const giornoFrame = cachedDay(dayKey(ts));
-    setTimeMachineBattles(giornoFrame?.battles || null, regions);
-    _updateStandings(regions);
-    _updateFocus(ts);
+    const giorno = dayKey(ts);
+    if (!_playing || changed || giorno !== _sideDay) {
+      _sideDay = giorno;
+      // WarEra+: le battaglie del giorno, se quel giorno è già in memoria; se
+      // non lo è (durante il playback non si scarica) via le frecce, invece di
+      // lasciare quelle di un altro giorno.
+      const giornoFrame = cachedDay(giorno);
+      setTimeMachineBattles(giornoFrame?.battles || null, regions);
+      _updateStandings(regions);
+      _updateFocus(ts);
+    }
     return true;
   } catch (err) {
     console.warn('WarEra+ time machine: ricostruzione fallita:', err.message);
