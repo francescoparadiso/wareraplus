@@ -270,6 +270,14 @@ risponde 401 sui tre endpoint token-gated dell'Ottimizzatore — quindi dopo
 un redeploy che perde l'env var il sintomo è "Ottimizzatore in stato setup".
 Lato client ci arriva `src/shared/trpcProxy.js` (vedi sopra).
 
+Nelle **rotte** i file di cache non si rileggono a ogni richiesta: un file
+servito com'è passa da `sendCacheFile` (letto e compresso una volta per
+versione), uno da filtrare da `readCacheShared` (parsato una volta per
+versione, oggetto CONDIVISO: mai modificarlo). `readCache` resta per i poll
+e per chi scrive (`/visits`). Mai `readCacheShared` su file enormi letti di
+rado (`bootstrap-raw-battles`, 255 MB): resterebbero in RAM, e il VPS ne ha
+954 MB in tutto.
+
 Regola di progetto in `src/diplomacy/cacheClient.js`: **ogni** funzione ha un
 fallback se il VPS non risponde — il server è un'ottimizzazione, mai un nuovo
 punto di fallimento. Vedi il ⚠️ in fondo per cosa degrada e come.

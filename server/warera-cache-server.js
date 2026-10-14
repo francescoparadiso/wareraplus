@@ -305,6 +305,33 @@ function readCache(name, fallback) {
   catch (err) { console.error(`Errore leggendo cache ${name}:`, err.message); return fallback; }
 }
 
+// WarEra+ perf (2026-10-14): le ROTTE che leggono un file di cache lo
+// rileggevano e riparsavano da zero a ogni richiesta, sul processo unico
+// che serve tutti. Misurato sul VPS: ticker-history (13 MB) 434 ms di
+// parse — e /ticker/summary lo chiede ogni browser ogni 5 minuti —,
+// elections-by-country (6 MB) 219 ms, mu-user-countries (5 MB) 183 ms.
+// In quei momenti anche /map di chi apre il tool aspettava in coda.
+// Qui il file si parsa UNA volta per versione (mtime+size, come
+// sendCacheFile) e l'oggetto si riusa: ~75 MB di heap fissi in tutto,
+// contro picchi della stessa misura a ogni richiesta.
+// ⚠️ L'oggetto restituito è CONDIVISO fra le richieste: solo per chi lo
+// legge e basta. Chi lo modifica (i poll, /visits) usa readCache.
+// ⚠️ Mai per file enormi letti di rado (bootstrap-raw-battles, 255 MB):
+// resterebbero in memoria per sempre.
+const _readMemo = new Map(); // name -> { key, data }
+
+function readCacheShared(name, fallback) {
+  let st;
+  try { st = fs.statSync(path.join(CACHE_DIR, `${name}.json`)); } catch { return fallback; }
+  const key = `${st.mtimeMs}:${st.size}`;
+  const hit = _readMemo.get(name);
+  if (hit && hit.key === key) return hit.data;
+  const data = readCache(name, undefined);   // file a metà scrittura: niente memo, si riprova
+  if (data === undefined) return fallback;
+  _readMemo.set(name, { key, data });
+  return data;
+}
+
 // `compact: true` (oggi il default, vedi writeCache) scrive senza
 // indentazione. Era nato per i file che crescono
 // molto (ticker-history: con la ritenzione a 14 giorni sono decine di
@@ -2588,12 +2615,12 @@ app.get('/alliances', (req, res) => sendCacheFile(req, res, 'alliances', { fetch
 
 app.get('/parties', (req, res) => {
   const { countryId } = req.query;
-  const cache = readCache('parties-by-country', { fetchedAt: null, data: {} });
+  const cache = readCacheShared('parties-by-country', { fetchedAt: null, data: {} });
   const list = countryId ? (cache.data[countryId] || []) : [];
   res.json({ fetchedAt: cache.fetchedAt, data: list });
 });
 
-app.get('/parties-detail', (req, res) => res.json(readCache('parties-detail', { fetchedAt: null, data: [] })));
+app.get('/parties-detail', (req, res) => sendCacheFile(req, res, 'parties-detail', { fetchedAt: null, data: [] }));
 
 // `countryId` = una nazione (risposta: array, forma storica).
 // `countryIds` = più nazioni in UNA richiesta (risposta: {countryId: array}).
@@ -2618,7 +2645,7 @@ function _electionTs(s) {
 
 app.get('/elections', (req, res) => {
   const { countryId, countryIds, open, closed } = req.query;
-  const cache = readCache('elections-by-country', { fetchedAt: null, data: {} });
+  const cache = readCacheShared('elections-by-country', { fetchedAt: null, data: {} });
   // WarEra+: `?closed=H` — le elezioni il cui voto si è chiuso nelle ultime
   // H ore (massimo una settimana), per tutte le nazioni. Le usa il riepilogo
   // della vista Elezioni ("Appena chiuse"), che a un clic rifà sulla mappa
@@ -2689,7 +2716,7 @@ app.get('/users-lite', async (req, res) => {
 // piu' quanti si sono registrati nelle ultime 24 ore e negli ultimi 7 giorni.
 // Gli elenchi di userId restano sul server: al client servono i conteggi.
 app.get('/citizens', (req, res) => {
-  const cache = readCache(CITIZENS_FILE, { fetchedAt: null, data: {} });
+  const cache = readCacheShared(CITIZENS_FILE, { fetchedAt: null, data: {} });
   const out = {};
   for (const [countryId, row] of Object.entries(cache.data || {})) {
     if (req.query.countryId && req.query.countryId !== countryId) continue;
@@ -2713,11 +2740,11 @@ app.get('/country-citizens', (req, res) => {
   // in più su elenchi che arrivano a 3.500 righe.
   const combat = req.query.fields === 'combat';
 
-  const census = readCache(CITIZENS_FILE, { fetchedAt: null, data: {} });
+  const census = readCacheShared(CITIZENS_FILE, { fetchedAt: null, data: {} });
   const row = census.data?.[countryId];
   if (!row) return res.json({ fetchedAt: census.fetchedAt, total: 0, known: 0, data: [] });
 
-  const userCountries = readCache(MU_USER_COUNTRIES_FILE, { data: {} }).data || {};
+  const userCountries = readCacheShared(MU_USER_COUNTRIES_FILE, { data: {} }).data || {};
   const out = [];
   for (const id of row.ids || []) {
     const entry = userCountries[id];
@@ -2761,7 +2788,7 @@ app.get('/mu-directory', (req, res) => sendCacheFile(req, res, 'mu-directory', {
 app.get('/mu-playstyle-by-country', (req, res) => sendCacheFile(req, res, 'mu-playstyle-by-country', { fetchedAt: null, data: {} }));
 // Scatto del danno settimanale al cambio giorno di gioco — vedi
 // snapshotDailyDamage. { takenAt, tz, byCountry: {countryId: danno} }
-app.get('/daily-damage', (req, res) => res.json(readCache(DAILY_DAMAGE_FILE, { takenAt: null, tz: DAILY_DAMAGE_TZ, byCountry: {}, byMu: {} })));
+app.get('/daily-damage', (req, res) => sendCacheFile(req, res, DAILY_DAMAGE_FILE, { takenAt: null, tz: DAILY_DAMAGE_TZ, byCountry: {}, byMu: {} }));
 // Storico giornaliero del danno di UNA unità (?mu=id) o nazione (?country=id)
 // — vedi archiveDailyDamage. Una serie per richiesta: il file intero cresce
 // di ~40 KB al giorno e non va mandato al browser.
@@ -2787,7 +2814,7 @@ app.get('/damage-history', (req, res) => {
 // che chiede `countryId` (singolo) non riceve mai qualcosa di inatteso.
 app.get('/mu-playstyle-history', (req, res) => {
   const { countryId, countryIds } = req.query;
-  const cache = readCache(MU_PLAYSTYLE_HISTORY_FILE, { fetchedAt: null, data: {} });
+  const cache = readCacheShared(MU_PLAYSTYLE_HISTORY_FILE, { fetchedAt: null, data: {} });
   const since = req.query.since ? Number(req.query.since) : 0;
   const seriesOf = id => (cache.data[id] || []).filter(row => row[0] >= since);
 
@@ -2803,7 +2830,7 @@ app.get('/mu-playstyle-history', (req, res) => {
 });
 
 app.get('/ticker', (req, res) => {
-  const storico = readCache('ticker-history', []);
+  const storico = readCacheShared('ticker-history', []);
   const since = req.query.since ? Number(req.query.since) : 0;
   res.json(storico.filter(e => e.timestamp >= since));
 });
@@ -2871,7 +2898,7 @@ function _aggregateTickerWindow(events, sinceTs) {
 }
 
 app.get('/ticker/summary', (req, res) => {
-  const storico = readCache('ticker-history', []);
+  const storico = readCacheShared('ticker-history', []);
   const windows = String(req.query.windows || '')
     .split(',')
     .map(w => Number(w))
@@ -2897,8 +2924,8 @@ app.get('/ticker/summary', (req, res) => {
 
 // WarEra+ nuovi — time machine
 app.get('/region-history/range', (req, res) => {
-  const keyframes = readCache(REGION_KEYFRAMES_FILE, []);
-  const events = readCache(REGION_EVENTS_FILE, []);
+  const keyframes = readCacheShared(REGION_KEYFRAMES_FILE, []);
+  const events = readCacheShared(REGION_EVENTS_FILE, []);
   if (!keyframes.length) return res.json({ min: null, max: null });
   const allTs = [...keyframes.map(k => k.ts), ...events.map(e => e.ts), Date.now()];
   res.json({ min: Math.min(...allTs), max: Math.max(...allTs) });
@@ -2906,20 +2933,20 @@ app.get('/region-history/range', (req, res) => {
 
 app.get('/region-history/at', (req, res) => {
   const ts = req.query.ts ? Number(req.query.ts) : Date.now();
-  const keyframes = readCache(REGION_KEYFRAMES_FILE, []);
-  const events = readCache(REGION_EVENTS_FILE, []);
+  const keyframes = readCacheShared(REGION_KEYFRAMES_FILE, []);
+  const events = readCacheShared(REGION_EVENTS_FILE, []);
   const result = _reconstructRegionsAt(keyframes, events, ts);
   res.json({ requestedTs: ts, baseTs: result.ts, regions: result.regions });
 });
 
-app.get('/region-history/contested', (req, res) => res.json(readCache('region-contest-counts', { fetchedAt: null, data: {} })));
+app.get('/region-history/contested', (req, res) => sendCacheFile(req, res, 'region-contest-counts', { fetchedAt: null, data: {} }));
 
-app.get('/region-history/war-intensity', (req, res) => res.json(readCache('region-war-intensity', { fetchedAt: null, data: {} })));
+app.get('/region-history/war-intensity', (req, res) => sendCacheFile(req, res, 'region-war-intensity', { fetchedAt: null, data: {} }));
 
 app.get('/region-history/events', (req, res) => {
   const since = req.query.since ? Number(req.query.since) : 0;
   const until = req.query.until ? Number(req.query.until) : Date.now();
-  const events = readCache(REGION_EVENTS_FILE, []);
+  const events = readCacheShared(REGION_EVENTS_FILE, []);
   res.json(events.filter(e => e.ts >= since && e.ts <= until));
 });
 
@@ -2935,7 +2962,7 @@ app.get('/region-history/external-status', (req, res) => {
   }));
 });
 
-app.get('/credit-profiles', (req, res) => res.json(readCache('credit-profiles', { fetchedAt: null, data: {} })));
+app.get('/credit-profiles', (req, res) => sendCacheFile(req, res, 'credit-profiles', { fetchedAt: null, data: {} }));
 
 // ── Archivio battaglie e spese di guerra (server/battleArchive.js) ──
 // /battle-archive porta le righe compatte (chiavi corte: il file viaggia
@@ -3078,8 +3105,8 @@ app.get('/migration-flows', (req, res) => {
   try {
     const hit = _migrationCache.get(ckey);
     if (hit && Date.now() - hit.at < MIGRATION_TTL_MS) return res.json(hit.body);
-    const userInfo = readCache(MU_USER_COUNTRIES_FILE, { data: {} }).data || {};
-    const census = readCache(CITIZENS_FILE, { data: {} }).data || {};
+    const userInfo = readCacheShared(MU_USER_COUNTRIES_FILE, { data: {} }).data || {};
+    const census = readCacheShared(CITIZENS_FILE, { data: {} }).data || {};
     const citizens = {};
     for (const [id, c] of Object.entries(census)) citizens[id] = { n: c.n || 0, n10: c.n10 || 0 };
     const body = readMigrationFlows(days, { userInfo, citizens, daily });
