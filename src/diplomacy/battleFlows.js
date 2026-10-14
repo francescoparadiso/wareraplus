@@ -239,7 +239,8 @@ export function resumeBattleFlowFx() {
 export function syncBattleFlowOverlay() {
   const map = state.map;
   if (!map?.getLayer('regions-fill')) return;
-  const on = state.coloringMode === 'battleHeatmap' && !!state.battleHeatmapData;
+  // WarEra+: nella vista Bonus battaglia le frecce del DANNO non c'entrano.
+  const on = state.coloringMode === 'battleHeatmap' && !!state.battleHeatmapData && !state.bonusHeatmap;
   if (!on && !map.getSource(SRC)) return;
   if (on) ensureLayers(map);
   const feats = on ? overlayFeatures() : [];

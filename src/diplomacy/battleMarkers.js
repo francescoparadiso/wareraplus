@@ -1560,9 +1560,13 @@ function buildMarkerEl(battle, regionName, liveData, totalAttackerDmg, totalDefe
       return;
     }
 
-    showBattleTooltip(d.battle, d.regionName, d.liveData, d.totalAttackerDmg, d.totalDefenderDmg, d.trend);
+    // WarEra+ vista Bonus battaglia: niente riquadro grande (si sovrapponeva
+    // al pannello, che è dove stanno i bonus) e gli altri marcatori restano
+    // visibili, così si passa da una battaglia all'altra con un clic.
+    const bonusView = state.coloringMode === 'battleBonus' || (state.coloringMode === 'battleHeatmap' && state.bonusHeatmap);
+    if (!bonusView) showBattleTooltip(d.battle, d.regionName, d.liveData, d.totalAttackerDmg, d.totalDefenderDmg, d.trend);
     setBattleHeatmap(battleId);
-    hideAllMarkers();
+    if (!bonusView) hideAllMarkers();
     trackEvent('battle-marker-click', { region: d.regionName });
 
     const regionId = d.battle.regionId || d.battle.defender?.region || d.battle.attacker?.region;

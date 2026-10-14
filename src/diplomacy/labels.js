@@ -282,8 +282,13 @@ export function drawLabels() {
   // per giunta rubavano lo spazio della collision-avoidance ai nomi che
   // contano davvero, che sparivano. Se l'insieme non c'è (dati non ancora
   // pronti) si mostrano tutti, come prima.
+  const bonusVals = state.bonusHeatmap ? state.battleBonusMap?.values : null;
   const heatmapIds = state.coloringMode === 'battleHeatmap'
-    ? state.battleHeatmapData?.highlightedIds
+    ? (state.bonusHeatmap
+      // WarEra+ vista Bonus battaglia: le nazioni che hanno un bonus loro
+      // (insieme vuoto finché il calcolo non arriva: niente nomi a caso).
+      ? new Set(bonusVals ? [...bonusVals].filter(([, x]) => x.v > 0).map(([id]) => id) : [])
+      : state.battleHeatmapData?.highlightedIds)
     : null;
 
   sorted.forEach(label => {
@@ -396,7 +401,22 @@ export function drawLabels() {
       ctx.fillText(metric.text, pt.x, numY);
     }
     // ==================== BATTLE HEATMAP PERCENTUALE (sopra il nome) ====================
-    if (state.coloringMode === 'battleHeatmap' && state.battleHeatmapData) {
+    if (state.coloringMode === 'battleHeatmap' && state.bonusHeatmap) {
+      // WarEra+ vista Bonus battaglia: il bonus della nazione al posto
+      // della sua quota di danno.
+      const b = state.battleBonusMap?.values?.get(cId);
+      if (b && b.v > 0) {
+        const txt = `+${Math.round(b.v)}%`;
+        ctx.font = 'bold 11px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.strokeText(txt, pt.x, textY - 4);
+        ctx.fillStyle = b.side === 'attacker' ? '#ff9b9b' : '#9cc4ff';
+        ctx.fillText(txt, pt.x, textY - 4);
+      }
+    } else if (state.coloringMode === 'battleHeatmap' && state.battleHeatmapData) {
       const data = state.battleHeatmapData;
       const nationData = data.nations.find(n => n.countryId === cId);
       if (nationData) {

@@ -436,7 +436,11 @@ export async function setBattleHeatmap(battleId) {
     // sfuma in sopra (vedi map.js, blocco "Dissolvenza in ingresso della
     // heatmap battaglia" — spiega anche perché fill-color-transition di
     // MapLibre qui non funziona e perché la dissolvenza è invertita).
-    const fading = captureHeatmapFadeFrom();
+    // WarEra+: arrivati dalla vista Bonus battaglia la mappa la dipingono i
+    // bonus (bonusView.js). Niente dissolvenza: a fine corsa rimetterebbe il
+    // grigio di partenza SOPRA i colori dei bonus arrivati nel frattempo.
+    state.bonusHeatmap = savedColoringMode === 'battleBonus';
+    const fading = !state.bonusHeatmap && captureHeatmapFadeFrom();
 
     state.coloringMode = 'battleHeatmap';
     currentBattleId = battleId;
@@ -477,6 +481,7 @@ export function exitBattleHeatmap() {
     state.coloringMode = previousMode;
     state.battleHeatmapData = null;
     state.battleBonusMap = null;
+    state.bonusHeatmap = false;
     if (previousMode === 'battleBonus') import('./bonusView.js').then(m => m.onBattleCleared());
     currentBattleId = null;
 
@@ -505,6 +510,7 @@ export function exitBattleHeatmap() {
   } else {
     state.battleHeatmapData = null;
     state.battleBonusMap = null;
+    state.bonusHeatmap = false;
     currentBattleId = null;
     renderMap();
     updateDynamicLegend();
@@ -564,6 +570,7 @@ function stopLiveUpdates() {
    ══════════════════════════════════════════════════════════════ */
 export function setBattleBonusMap(data) {
   state.battleBonusMap = data || null;
+  clearHeatmapFade();
   renderMap();
 }
 

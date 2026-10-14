@@ -176,7 +176,8 @@ function marksHtml() {
  *  apre una battaglia, lo smonta quando la si chiude o si cambia. Non
  *  ridisegna mai la mappa da qui (siamo DENTRO renderMap). */
 export function syncBattleReplay() {
-  const on = state.coloringMode === 'battleHeatmap' && !!state.battleHeatmapData;
+  // WarEra+: il replay è del danno, non serve nella vista Bonus battaglia.
+  const on = state.coloringMode === 'battleHeatmap' && !!state.battleHeatmapData && !state.bonusHeatmap;
   const id = on ? state.battleHeatmapData.battleId : null;
   if (id === _battleId) return;
   teardown({ restore: false });
