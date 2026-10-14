@@ -372,32 +372,60 @@ function showHud() {
 }
 
 /* La barra sta APPENA SOPRA la scheda della battaglia (battleMarkers.js,
-   fissa in basso): chiusa è una striscia, aperta è alta mezzo schermo.
-   Si rimisura a ogni ridisegno della barra e quando la scheda cambia
-   (MutationObserver sul suo stile). Se sopra la scheda aperta non c'è
-   spazio — telefono — la barra le resta sopra in sovrimpressione. */
+   fissa in basso), centrata sulla scheda e non sullo schermo: chiusa è
+   una striscia, aperta è alta mezzo schermo. Si rimisura a ogni
+   ridisegno della barra e quando la scheda cambia (MutationObserver sul
+   suo stile, più lo scroll interno).
+   Se sopra la scheda non c'è posto — "Battle spending" aperto, finestra
+   bassa, telefono — la barra entra NELLA scheda, sul disegno della
+   battaglia sotto i nomi dei due lati: è l'unico punto che copre una
+   decorazione e non dei numeri. Prima restava a 108px dal fondo, cioè
+   in mezzo alla tabella per nazione. */
 let _tipObserver = null;
 function placeHud() {
   if (!_hud) return;
   const tip = document.getElementById('battle-tooltip');
+  const card = document.getElementById('battle-tooltip-main') || tip;
   // (offsetParent qui non serve: la scheda è position:fixed, e per un
   // elemento fisso è SEMPRE null, visibile o no.)
-  const r = tip ? tip.getBoundingClientRect() : null;
-  let bottom = 108;
-  if (r && r.height) {
-    const above = window.innerHeight - r.top + 10;
-    if (above + 90 < window.innerHeight) bottom = Math.max(bottom, above);
+  const r = card ? card.getBoundingClientRect() : null;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const s = _hud.style;
+  if (!r || !r.height) {
+    s.top = ''; s.left = ''; s.transform = '';
+    s.bottom = '';
+    return;
   }
-  _hud.style.bottom = `${Math.round(bottom)}px`;
+  const h = _hud.offsetHeight || 36;
+  const w = _hud.offsetWidth || 160;
+  const GAP = 10, MARGIN = 8;
+  let top;
+  if (r.top - GAP - h >= MARGIN) {
+    top = r.top - GAP - h;
+  } else {
+    // Sotto la riga coi nomi dei lati (primo figlio del corpo), o sotto
+    // l'intestazione se la scheda è ripiegata.
+    const body = card.querySelector('#battle-tooltip-body');
+    const anchor = (body && body.style.display !== 'none' && body.firstElementChild) || card.firstElementChild;
+    const a = anchor ? anchor.getBoundingClientRect() : r;
+    top = Math.min(Math.max(a.bottom + 6, MARGIN), vh - h - MARGIN);
+  }
+  const left = Math.min(Math.max(r.left + r.width / 2 - w / 2, MARGIN), vw - w - MARGIN);
+  s.bottom = 'auto';
+  s.transform = 'none';
+  s.top = `${Math.round(top)}px`;
+  s.left = `${Math.round(left)}px`;
   if (tip && !_tipObserver) {
     _tipObserver = new MutationObserver(() => requestAnimationFrame(placeHud));
     _tipObserver.observe(tip, { attributes: true, subtree: true, attributeFilter: ['style', 'class'] });
+    tip.addEventListener('scroll', () => requestAnimationFrame(placeHud), { capture: true, passive: true });
+    window.addEventListener('resize', () => { if (_hud && !_hud.hidden) placeHud(); });
   }
 }
 
 function renderHud() {
   if (!_hud || !_range) return;
-  placeHud();
   const active = Boolean(_orig);
   _hud.classList.toggle('active', active);
   const open = _hud.querySelector('.wp-replay-open');
@@ -410,7 +438,9 @@ function renderHud() {
   speed.title = rT('Speed');
   const x = _hud.querySelector('[data-replay="close"]');
   x.title = x.ariaLabel = rT('Close replay');
-  if (!active) return;
+  // Si misura DOPO aver scritto i testi: la posizione dipende da quanto
+  // è larga e alta la barra in quel momento.
+  if (!active) { placeHud(); return; }
   const marksEl = _hud.querySelector('.wp-replay-marks');
   if (marksEl && marksEl.dataset.for !== String(_battleId)) {
     marksEl.innerHTML = marksHtml();
@@ -428,4 +458,5 @@ function renderHud() {
     : '';
   _hud.querySelector('.wp-replay-info').innerHTML =
     `<b>${fmtClock(T)}</b> <span>${fmtElapsed(T - _range.t0)}${round}</span>${base}`;
+  placeHud();
 }
