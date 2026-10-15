@@ -60,7 +60,12 @@ const DMG_COLOR = '#e5484d';      // stessa tinta della "guerra" nella ciambella
 const PILL_COLOR = '#a371f7';
 const HOUR_MS = 3600 * 1000;
 
-const RANGES = [24, 48, 72];
+// 7 e 14 giorni dal 2026-10-15, quando il server ha cominciato a tenere
+// l'ora di ogni pillola per due settimane (TAKES_KEEP_MS in
+// server/damageTimeline.js). Il danno orario c'era già per 16 giorni.
+const RANGES = [24, 48, 72, 7 * 24, 14 * 24];
+/** "24h", "7g": l'etichetta di una finestra, nei bottoni e in "{h} fa". */
+const rangeLabel = (h) => (h % 24 === 0 && h > 72 ? `${h / 24}${natT('curveDayShort')}` : `${h}${natT('curveHourShort')}`);
 const RANGE_KEY = 'we_nat_curve_hours';
 
 let _host = null;
@@ -90,7 +95,7 @@ export async function renderDamageCurves(host, nation) {
     // pillati (pillStatsHtml) prende l'ultima ora chiusa e la stessa ora
     // 72 ore prima, che con 72 ore esatte resterebbe fuori di una.
     fetchDamageTimeline(nation._id, { hours: Math.max(...RANGES) + 1 }),
-    fetchDamageTimeline(null, { hours: Math.max(...RANGES) }),
+    fetchDamageTimeline(null, { hours: Math.max(...RANGES) + 1 }),
   ]);
   if (_nation?._id !== nation._id) return;      // nazione cambiata nel frattempo
 
@@ -107,11 +112,11 @@ function paint(own, world) {
       <div class="wp-nat-curve-head">
         <h4 class="wp-nat-chart-title">${escapeHtml(natT('curveHourly'))}</h4>
         <div class="wp-nat-curve-range" id="wp-nat-curve-range" role="group">
-          ${RANGES.map(h => `<button type="button" data-h="${h}" class="${h === _hours ? 'active' : ''}">${h}${escapeHtml(natT('curveHourShort'))}</button>`).join('')}
+          ${RANGES.map(h => `<button type="button" data-h="${h}" class="${h === _hours ? 'active' : ''}">${escapeHtml(rangeLabel(h))}</button>`).join('')}
         </div>
       </div>
       ${pillStatsHtml(own)}
-      ${legendHtml()}
+      ${legendHtml(!!own.pill?.fine)}
       <div class="wp-nat-curve-slot" id="wp-nat-curve-hourly"></div>
       <div class="wp-nat-lv-tip" hidden></div>
       ${peakHtml(own, world)}
@@ -201,18 +206,18 @@ function pillStatsHtml(tl) {
   return `
     <div class="wp-nat-pill-stats">
       ${tile(natT('pillNow'), now.n, now.sub)}
-      ${tile(natT('pillAgo').replace('{h}', _hours), then.n, then.sub)}
+      ${tile(natT('pillAgo').replace('{h}', rangeLabel(_hours)), then.n, then.sub)}
       ${tile(natT('pillDiff'), `${sign(diff)}${Math.abs(diff)}`,
         pct == null ? '—' : `${sign(pct)}${Math.abs(pct)}%`, ` wp-nat-pill-diff${cls}`)}
     </div>
-    <p class="wp-nat-curve-note wp-nat-pill-note">${escapeHtml(exact ? natT('pillExactNote') : natT('pillHourNote').replace('{h}', _hours))}</p>`;
+    <p class="wp-nat-curve-note wp-nat-pill-note">${escapeHtml(exact ? natT('pillExactNote') : natT('pillHourNote').replace('{h}', rangeLabel(_hours)))}</p>`;
 }
 
-function legendHtml() {
+function legendHtml(fine) {
   return `
     <ul class="wp-nat-curve-legend">
       <li><span class="wp-nat-dot" style="background:${DMG_COLOR}"></span>${escapeHtml(natT('curveDamage'))}</li>
-      <li><span class="wp-nat-dot wp-nat-dot-line" style="background:${PILL_COLOR}"></span>${escapeHtml(natT('curvePilled'))}</li>
+      <li><span class="wp-nat-dot wp-nat-dot-line" style="background:${PILL_COLOR}"></span>${escapeHtml(natT(fine ? 'curvePilled15' : 'curvePilled'))}</li>
     </ul>`;
 }
 
@@ -220,7 +225,10 @@ function legendHtml() {
  *  mondo. Serve a non far scambiare "la mia nazione picchia alle 21" per
  *  una sua caratteristica quando alle 21 picchiano tutti. */
 function peakHtml(own, world) {
-  const rows = own.series.filter(s => s.d != null);
+  // Sulla finestra scelta, come il grafico sopra: da quando la serie arriva
+  // a 14 giorni, il picco "di sempre" non sarebbe più quello che si vede.
+  const t0 = Date.now() - _hours * HOUR_MS;
+  const rows = own.series.filter(s => s.d != null && s.t >= t0);
   if (rows.length < 3) return '';
   // Il confronto e' sul RITMO, non sul totale del secchio: fra un punto da
   // un'ora e uno da mezza vincerebbe sempre il primo per il solo fatto di
@@ -239,7 +247,7 @@ function peakHtml(own, world) {
   // sullo stesso grafico.
   if (peak.p != null) out += ` ${escapeHtml(natT('curvePeakPilled').replace('{n}', String(peak.p)))}`;
 
-  const wRows = (world?.series || []).filter(s => s.d != null);
+  const wRows = (world?.series || []).filter(s => s.d != null && s.t >= t0);
   if (wRows.length >= 3) {
     const wPeak = wRows.reduce((a, b) => (b.d > a.d ? b : a));
     const same = new Date(wPeak.t).getUTCHours() === new Date(peak.t).getUTCHours();
@@ -282,13 +290,30 @@ function drawHourly(tl) {
   // ANCHE il totale della finestra, che e' il numero che si va a cercare.
   const rate = (r) => (r.d == null ? null : r.d / ((r.min || 60) / 60));
 
+  // ── Pillati ogni 15 minuti (2026-10-15) ──
+  // Il danno resta orario: è la risoluzione a cui il gioco lo aggiorna. I
+  // pillati no: il server li conta a un ISTANTE ogni 15 minuti dall'ora
+  // vera di ogni presa (`pill.fine`, vedi TAKES_KEEP_MS nel server), fino
+  // ad ADESSO — l'ora in corso compresa, perché per le pillole non c'è
+  // niente da aspettare. Prima che il registro del server arrivi così
+  // indietro i punti sono null, e lì resta la curva oraria di prima (il
+  // massimo dell'ora), più tenue: è un'altra misura e non la si fa passare
+  // per la stessa.
+  const fine = finePoints(tl, t0);
+  const fineStart = fine.find(p => p.v != null)?.t ?? Infinity;
+  const hourlyPill = (r) => (r.t + HOUR_MS / 2 < fineStart ? r.p : null);
+
   const maxD = Math.max(...rows.map(r => rate(r) || 0), 1);
-  const maxP = Math.max(...rows.map(r => r.p || 0), 1);
+  const maxP = Math.max(...rows.map(r => hourlyPill(r) || 0), ...fine.map(p => p.v || 0), 1);
 
   // Asse x sul TEMPO, non sull'indice: con punti di durata diversa una
   // spaziatura uniforme li mostrerebbe tutti larghi uguale, e un buco di
   // tre ore sarebbe indistinguibile da uno di trenta minuti.
-  const tEnd = rows[rows.length - 1].to || (rows[rows.length - 1].t + HOUR_MS);
+  const lastTo = rows[rows.length - 1].to || (rows[rows.length - 1].t + HOUR_MS);
+  const tEnd = Math.max(lastTo, fine.length ? fine[fine.length - 1].t : 0);
+  // L'ora in corso: nella serie del danno non c'è (si chiude a fine ora),
+  // ma i pillati sì. Una riga finta, solo per tooltip ed etichette.
+  const allRows = tEnd > lastTo ? [...rows, { t: lastTo, to: lastTo + HOUR_MS, d: null, p: null, open: true }] : rows;
   const tStart = rows[0].t;
   const span = Math.max(1, tEnd - tStart);
   const x = (t) => PAD.left + ((t - tStart) / span) * plotW;
@@ -338,36 +363,50 @@ function drawHourly(tl) {
   // tratteggiata. Tratteggiare tutta la linea perché finisce nella zona
   // provvisoria direbbe che l'intera curva è incerta, che è il contrario
   // di quello che c'è da comunicare.
-  const settled = tl.pill?.settledUntil ?? Infinity;
-  const path = (pts, dashed) => {
-    if (pts.length < 2) return '';
-    const d = pts.map(({ i, v }, k) => `${k ? 'L' : 'M'}${xMid(rows[i]).toFixed(1)},${yP(v).toFixed(1)}`).join(' ');
-    return `<path d="${d}" fill="none" stroke="${PILL_COLOR}" stroke-width="2"
-      stroke-linejoin="round" stroke-linecap="round"${dashed ? ' stroke-dasharray="4 3"' : ''}/>`;
-  };
-  const line = segments(rows, r => r.p).map(seg => {
-    const cutAt = seg.findIndex(({ i }) => rows[i].t > settled);
-    if (cutAt === -1) return path(seg, false);
+  // Un tratto di punti {t, x, v}: pieno fino a `settled`, tratteggiato dopo.
+  const pillPath = (pts, settled, faint) => {
+    const draw = (part, dashed) => (part.length < 2 ? '' : `<path d="${part.map((p, k) => `${k ? 'L' : 'M'}${p.x.toFixed(1)},${yP(p.v).toFixed(1)}`).join(' ')}"
+      fill="none" stroke="${PILL_COLOR}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"${
+      dashed ? ' stroke-dasharray="4 3"' : ''}${faint ? ' stroke-opacity=".55"' : ''}/>`);
+    const cutAt = pts.findIndex(p => p.t > settled);
+    if (cutAt === -1) return draw(pts, false);
     // Il punto di confine sta in ENTRAMBI i tratti, altrimenti fra il
-    // pieno e il tratteggiato resta un buco largo uno slot.
-    return path(seg.slice(0, cutAt + 1), false) + path(seg.slice(Math.max(0, cutAt - 1)), true);
-  }).join('');
+    // pieno e il tratteggiato resta un buco largo un punto.
+    return draw(pts.slice(0, cutAt + 1), false) + draw(pts.slice(Math.max(0, cutAt - 1)), true);
+  };
+  const hourlySegs = segments(rows, hourlyPill)
+    .map(seg => seg.map(({ i, v }) => ({ t: rows[i].t, x: xMid(rows[i]), v })));
+  const fineSegs = [];
+  let cur = [];
+  for (const p of fine) {
+    if (p.v == null) { if (cur.length) fineSegs.push(cur); cur = []; continue; }
+    cur.push({ t: p.t, x: x(p.t), v: p.v });
+  }
+  if (cur.length) fineSegs.push(cur);
+  const line = hourlySegs.map(seg => pillPath(seg, tl.pill?.settledUntil ?? Infinity, fineSegs.length > 0)).join('')
+    + fineSegs.map(seg => pillPath(seg, tl.pill?.instant?.fresh ?? Infinity, false)).join('');
 
   // Etichette dell'ora: ogni 6 ore, nel fuso di chi guarda. Gli slot sono
   // istanti assoluti, quindi la conversione è esatta — ed è l'ora locale
   // quella che serve per decidere quando collegarsi. Si etichetta sull'ORA
   // piena, mai su una mezza, altrimenti a passo di 30 minuti l'asse
   // stamperebbe due volte lo stesso numero.
-  const labels = rows.map(r => {
+  // Oltre le 72 ore un'etichetta ogni 6 ore sarebbero 56 numeri: si passa
+  // alla mezzanotte di ogni giorno, col giorno del mese.
+  const long = _hours > 72;
+  const labels = allRows.map(r => {
     const dt = new Date(r.t);
-    if (dt.getMinutes() !== 0 || dt.getHours() % 6 !== 0) return '';
-    return `<text class="wp-nat-curve-axis" x="${x(r.t).toFixed(1)}" y="${H - 6}" text-anchor="middle">${dt.getHours()}</text>`;
+    if (dt.getMinutes() !== 0 || dt.getHours() % (long ? 24 : 6) !== 0) return '';
+    const txt = long
+      ? dt.toLocaleDateString(document.documentElement.lang || undefined, { day: 'numeric', month: 'numeric' })
+      : String(dt.getHours());
+    return `<text class="wp-nat-curve-axis" x="${x(r.t).toFixed(1)}" y="${H - 6}" text-anchor="middle">${escapeHtml(txt)}</text>`;
   }).join('');
 
   // Zone di cattura per il tooltip: una per punto, larga quanto la sua
   // finestra vera — puntare una linea spessa 2px sarebbe impossibile.
-  const hits = rows.map((r, i) => {
-    const x0 = x(r.t), x1 = x(r.to || r.t + HOUR_MS);
+  const hits = allRows.map((r, i) => {
+    const x0 = x(r.t), x1 = x(Math.min(r.to || r.t + HOUR_MS, tEnd));
     return `<rect class="wp-nat-lv-hit" x="${x0.toFixed(1)}" y="${PAD.top}"
       width="${Math.max(1, x1 - x0).toFixed(1)}" height="${plotH}" data-i="${i}" fill="transparent"/>`;
   }).join('');
@@ -376,7 +415,16 @@ function drawHourly(tl) {
       aria-label="${escapeHtml(natT('curveHourly'))}">${grid}${area}${dLine}${resetDots}${line}${labels}${hits}</svg>`
     + (hasDamage ? '' : `<p class="wp-nat-curve-pending">${escapeHtml(natT('curveDamagePending'))}</p>`);
 
-  bindTip(slot, rows, hourlyTip);
+  bindTip(slot, allRows, (r) => hourlyTip(r, fine.filter(p => p.v != null && p.t >= r.t && p.t < (r.to || r.t + HOUR_MS))));
+}
+
+/** I punti della curva fine dei pillati dentro la finestra: [{ t, v }],
+ *  v null dove il registro del server non arriva. [] con un server che
+ *  non la manda. */
+function finePoints(tl, t0) {
+  const f = tl.pill?.fine;
+  if (!f || !Array.isArray(f.n) || !f.step) return [];
+  return f.n.map((v, k) => ({ t: f.from + k * f.step, v })).filter(p => p.t >= t0);
 }
 
 /** Spezza la serie in tratti continui, saltando i valori nulli: una linea
@@ -393,7 +441,7 @@ function segments(rows, get) {
   return out;
 }
 
-function hourlyTip(r) {
+function hourlyTip(r, fine = []) {
   // La testata del tooltip e' la FINESTRA, non un istante: questo punto
   // conta il danno fatto fra due orari, e senza dirli si legge come una
   // misura presa alle 14:00 in punto.
@@ -403,13 +451,21 @@ function hourlyTip(r) {
   const day = from.toLocaleDateString(document.documentElement.lang || undefined, { weekday: 'short' });
   const head = `${day} ${hm(from)}\u2013${hm(to)}`;
 
-  const dmg = r.d == null
+  const dmg = r.open
+    ? `<li class="wp-nat-curve-tip-open">${escapeHtml(natT('curveHourOpen'))}</li>`
+    : r.d == null
     ? `<li><span class="wp-nat-lv-tip-name">${escapeHtml(natT('curveNoData'))}</span></li>`
     : `<li><span class="wp-nat-dot" style="background:${DMG_COLOR}"></span>
        <span class="wp-nat-lv-tip-name">${escapeHtml(natT('curveDamage'))}</span><strong>${escapeHtml(fmtCompact(r.d))}</strong></li>
        <li><span class="wp-nat-dot" style="visibility:hidden"></span>
        <span class="wp-nat-lv-tip-name">${escapeHtml(natT('curveRate'))}</span><strong>${escapeHtml(fmtCompact(r.d / ((r.min || 60) / 60)))}</strong></li>`;
-  const pill = r.p == null ? '' : `<li><span class="wp-nat-dot" style="background:${PILL_COLOR}"></span>
+  // Con la curva fine: gli istanti dell'ora, ciascuno col suo orario (è il
+  // dato che la linea disegna). Senza: il massimo dell'ora, come prima.
+  const pill = fine.length
+    ? `<li><span class="wp-nat-dot" style="background:${PILL_COLOR}"></span>
+       <span class="wp-nat-lv-tip-name">${escapeHtml(natT('curvePilledFine'))}</span></li>
+       ${fine.map(p => `<li class="wp-nat-curve-tip-fine"><span class="wp-nat-lv-tip-name">${escapeHtml(hm(new Date(p.t)))}</span><strong>${p.v}</strong></li>`).join('')}`
+    : r.p == null ? '' : `<li><span class="wp-nat-dot" style="background:${PILL_COLOR}"></span>
        <span class="wp-nat-lv-tip-name">${escapeHtml(natT('curvePilled'))}</span><strong>${r.p}</strong></li>`;
   const reset = r.r ? `<li class="wp-nat-curve-tip-warn">${escapeHtml(natT('curveReset'))}</li>` : '';
   return `<div class="wp-nat-lv-tip-head">${escapeHtml(head)}</div>

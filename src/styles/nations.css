@@ -706,6 +706,9 @@ body.light-theme .wp-nat-pill-diff strong { color: #24292f; }
 }
 .wp-nat-curve-loading { padding: 10px 0; font-size: 12.5px; color: var(--wp-ov-text-dim, #8b949e); }
 .wp-nat-curve-tip-warn { color: #e3b341; font-size: 11px; }
+/* Tooltip orario: i pillati ai quattro quarti d'ora, rientrati sotto la loro voce. */
+.wp-nat-curve-tip-fine { padding-left: 16px; font-size: 11.5px; }
+.wp-nat-curve-tip-open { color: var(--wp-ov-text-dim, #8b949e); font-size: 11px; max-width: 220px; }
 
 /* Tema chiaro. `--wp-ov-bg` resta scuro in ENTRAMBI i temi (è il fondo
    dell'overlay, non della carta): le superfici incassate sul chiaro vanno

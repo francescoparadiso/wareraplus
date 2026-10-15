@@ -501,12 +501,14 @@ a velocità molto diverse, e vale la pena saperlo prima di crederlo rotto:
   qua, la vista lo dichiara in una fascia, e la curva a 14 giorni è piena
   dopo 14 giorni.
 
-- i **pillati a un istante** (adesso / 24-48-72 ore fa, in cima al grafico
-  orario) vengono da `pill.instant`, contato sull'ora vera di ogni presa
-  (`st.takes`, 84 ore): "adesso" è esatto subito dopo il deploy, "72 ore
-  fa" dopo ~2 giorni e mezzo. Finché il server non risponde il client
-  confronta due ORE (l'ultima chiusa e la stessa ora prima) e lo dichiara:
-  mai un istante esatto contro un massimo orario.
+- i **pillati a un istante** (adesso / 24h-14g fa, in cima al grafico
+  orario) e la **linea dei pillati ogni 15 minuti** vengono da
+  `pill.instant` e `pill.fine`, contati sull'ora vera di ogni presa (file
+  `pill-takes`, 14 giorni + 12 ore, in memoria): "adesso" è esatto subito
+  dopo il deploy, la curva fine si allunga di un giorno al giorno fino a
+  due settimane. Dove il registro non arriva il client usa la curva
+  oraria (più tenue) e confronta due ORE, dichiarandolo: mai un istante
+  esatto contro un massimo orario. Il danno resta orario.
 
 ⚠️ Non provare a riempire il danno orario dall'archivio battaglie: `ad`/`dd`
 di `battleArchive.js` sono il totale di uno schieramento a battaglia

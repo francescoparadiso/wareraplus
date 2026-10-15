@@ -95,16 +95,39 @@ const DEDUP_MS = 26 * HOUR_MS;        // oltre, di una pillola non arriva più n
 // qualsiasi di quell'ora), quindi conta anche chi ha finito alle 14:05 e
 // chi ha cominciato alle 14:55. Per un istante serve l'ora vera di ogni
 // presa, che `seen` ha ma solo per 26 ore e con l'id utente (che qui non
-// serve). `st.takes` è la stessa informazione ridotta all'osso,
-// [secondi della presa, indice nazione], tenuta per TAKES_KEEP_MS: 72 ore
-// di finestra più le 8 del buff, più margine. ~3.100 prese al giorno nel
-// mondo = ~11.000 coppie, un centinaio di KB nel file di stato.
-// `st.takesFrom`: da quando il registro è completo. Al primo avvio lo si
-// semina da `seen` (le prese delle ultime 26 ore), quindi "adesso" è
-// esatto da subito, "24 ore fa" dopo ~6 ore, "72 ore fa" dopo ~2 giorni e
-// mezzo. Prima di allora readTimeline risponde null e il client ricade
-// sul punto orario, dichiarandolo.
-const TAKES_KEEP_MS = 84 * HOUR_MS;
+// serve). Il REGISTRO DELLE PRESE è la stessa informazione ridotta
+// all'osso, [secondi della presa, indice nazione in st.ids] — gli indici
+// si aggiungono e non si tolgono mai, quindi restano validi.
+// Poi, lo stesso giorno: «allunga il tempo in cui teniamo conto delle
+// pillole, almeno a 2 settimane, e una curva più precisa, ogni 15 minuti;
+// il danno resta ogni ora». Da qui:
+//   · TAKES_KEEP_MS = 14 giorni di finestra + le 8 ore del buff + margine;
+//   · ~3.100 prese al giorno nel mondo → ~45.000 coppie, ~800 KB: troppo
+//     per il file di stato, che readTimeline rilegge da disco a OGNI
+//     richiesta. Sta in un file suo (TAKES_FILE), caricato UNA volta e
+//     tenuto in memoria (`_takes`): lo scrive solo recordPills, nello
+//     stesso processo che lo legge, quindi la copia in memoria è sempre
+//     quella vera;
+//   · `from`: da quando il registro è completo. Al primo avvio lo si
+//     semina da `seen` (le prese delle ultime 26 ore): "adesso" è esatto
+//     subito, un istante X lo è quando X − 8h ≥ from, cioè 2 settimane
+//     dopo il deploy per tutta la finestra. Prima readTimeline risponde
+//     null per quegli istanti e il client usa la curva oraria, dicendolo.
+//     Il passato non si recupera: di una pillola finita da più di 23,5 ore
+//     il gioco non dice più niente.
+const TAKES_FILE = 'pill-takes';
+const TAKES_KEEP_MS = (14 * 24 + 12) * HOUR_MS;
+const PILL_STEP_MS = 15 * 60 * 1000;   // passo della curva fine dei pillati
+let _takes = null;                      // { from, list: [[sec, idx]] }
+
+/** Il registro delle prese dal disco, una volta per processo. null se
+ *  non esiste ancora (lo crea il primo recordPills). */
+function _takesLoaded() {
+  if (_takes) return _takes;
+  const f = readCache(TAKES_FILE, null);
+  if (f && Array.isArray(f.list) && f.from) _takes = f;
+  return _takes;
+}
 
 // ── RISOLUZIONE: mezz'ora, ma l'archivio ricorda quella di prima ──
 //
@@ -592,12 +615,17 @@ function recordPills(users) {
     // sta già lì con un altro significato.
     const i = _idx(st, u.country);
     for (const h of _pillSlots(st, taken, spanMs)) _bump(_bucket(st, h).p, i, 1);
-    if (Array.isArray(st.takes)) st.takes.push([Math.round(taken / 1000), i]);
+    _takes.list.push([Math.round(taken / 1000), i]);
   }
 
   // `first` anche senza pillole nuove: la data di prima osservazione è
   // essa stessa un dato (è quella che distingue "zero pillole" da "non
   // stavo ancora guardando"), e va persistita comunque.
+  if (added || seeded) {
+    const keepFrom = (now - TAKES_KEEP_MS) / 1000;
+    _takes.list = _takes.list.filter(([t]) => t >= keepFrom);
+    writeCache(TAKES_FILE, _takes, { compact: true });
+  }
   if (!added && !first && !fixing && !seeded) return;
   _prune(st, now);
   _writeState(st);
@@ -609,25 +637,24 @@ function recordPills(users) {
 // ---------------------------------------------------------------------------
 
 /** Il registro delle prese (vedi TAKES_KEEP_MS), seminato una volta sola
- *  da `seen`. true se l'ha appena creato (va scritto). */
+ *  da `seen`. Solo da recordPills: il seme può aggiungere nazioni a
+ *  st.ids, e lì lo stato viene poi scritto. true se l'ha appena creato. */
 function _ensureTakes(st, now) {
-  if (Array.isArray(st.takes)) return false;
+  if (_takesLoaded()) return false;
   const country = _countryLookup();
-  st.takes = [];
+  const list = [];
   for (const [k, taken] of Object.entries(st.seen || {})) {
     const c = country.get(k.split('|')[0]);
-    if (c) st.takes.push([Math.round(taken / 1000), _idx(st, c)]);
+    if (c) list.push([Math.round(taken / 1000), _idx(st, c)]);
   }
-  st.takesFrom = now - DEDUP_MS;
-  console.log(`[damage-timeline] registro delle prese seminato: ${st.takes.length} pillole dalle ultime ${DEDUP_MS / HOUR_MS} ore`);
+  _takes = { from: now - DEDUP_MS, list };
+  console.log(`[damage-timeline] registro delle prese seminato: ${list.length} pillole dalle ultime ${DEDUP_MS / HOUR_MS} ore`);
   return true;
 }
 
+const nowHour0 = (now) => _floor(now, HOUR_MS);
+
 function _prune(st, now) {
-  if (Array.isArray(st.takes)) {
-    const keepFrom = (now - TAKES_KEEP_MS) / 1000;
-    st.takes = st.takes.filter(([t]) => t >= keepFrom);
-  }
   const cutoff = _floor(now, HOUR_MS) - RETENTION_MS;
   for (const k of Object.keys(st.hours)) {
     if (Number(k) < cutoff) delete st.hours[k];
@@ -706,20 +733,36 @@ function readTimeline({ countryId = null, countryIds = null, hours = 48, days = 
   // ultimi ~90 minuti non ancora viste dal giro dei cittadini (`fresh`): il
   // client lo dice, come per la coda della curva.
   const spanMs = cfg.buffH * HOUR_MS;
-  const takesFrom = Array.isArray(st.takes) && st.takesFrom ? Math.max(st.takesFrom, now - TAKES_KEEP_MS) : null;
+  const tk = _takesLoaded();
+  const takesFrom = tk ? Math.max(tk.from, now - TAKES_KEEP_MS) : null;
   const sel = idx ? new Set(idx) : null;
+  // Le prese della selezione, in ms e in ordine: una passata sola per
+  // tutti gli istanti chiesti (curva fine + adesso + finestre).
+  const times = tk ? tk.list.filter(([, i]) => !sel || sel.has(i)).map(([t]) => t * 1000).sort((a, b) => a - b) : [];
+  const upTo = (X) => {               // quante prese con t ≤ X (ricerca binaria)
+    let lo = 0, hi = times.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (times[m] <= X) lo = m + 1; else hi = m; }
+    return lo;
+  };
   const pilledAt = (X) => {
     if (takesFrom == null || X - spanMs < takesFrom) return null;
-    const hi = X / 1000, lo = (X - spanMs) / 1000;
-    let n = 0;
-    for (const [t, i] of st.takes) if (t <= hi && t > lo && (!sel || sel.has(i))) n++;
-    return n;
+    return upTo(X) - upTo(X - spanMs);
   };
   meta.pill.instant = {
     now: { at: now, n: pilledAt(now) },
-    ago: [24, 48, 72].map(h => ({ h, at: now - h * HOUR_MS, n: pilledAt(now - h * HOUR_MS) })),
+    ago: [24, 48, 72, 7 * 24, 14 * 24].map(h => ({ h, at: now - h * HOUR_MS, n: pilledAt(now - h * HOUR_MS) })),
     fresh: now - PILL_SWEEP_MS,
   };
+  // La curva FINE dei pillati: un istante ogni PILL_STEP_MS sulla stessa
+  // finestra della serie oraria, fino ad ADESSO (l'ora in corso compresa:
+  // per le pillole non c'è niente da aspettare, al contrario del danno).
+  // `n` parallelo ai tempi, null dove il registro non arriva.
+  if (tk) {
+    const t0 = _floor(nowHour0(now) - Math.max(1, hours) * HOUR_MS, PILL_STEP_MS);
+    const n = [];
+    for (let t = t0; t <= now; t += PILL_STEP_MS) n.push(pilledAt(t));
+    meta.pill.fine = { from: t0, step: PILL_STEP_MS, n };
+  }
 
   const keys = Object.keys(st.hours).map(Number).sort((a, b) => a - b);
 
