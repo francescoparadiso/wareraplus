@@ -683,6 +683,27 @@ body.light-theme .wp-nat-curve-svg .wp-nat-lv-hit:hover { fill: rgba(0, 0, 0, .0
 }
 .wp-nat-curve-peak { margin-top: 8px; }
 .wp-nat-curve-peak strong { color: var(--wp-ov-text, #e6edf3); }
+/* Pillati adesso / {h} ore fa / differenza (damageCurves.js: pillStatsHtml).
+   La differenza non e' "buona" o "cattiva": piu' pillati e' la tinta delle
+   pillole, meno pillati resta neutro. */
+.wp-nat-pill-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0 6px; }
+.wp-nat-pill-tile {
+  display: flex; flex-direction: column; gap: 1px; min-width: 0;
+  padding: 7px 10px; border-radius: 9px; border: 1px solid var(--wp-ov-border, #30363d);
+}
+.wp-nat-pill-lab { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-nat-pill-tile strong { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; color: #a371f7; }
+.wp-nat-pill-sub { font-size: 11px; color: var(--wp-ov-text-dim, #8b949e); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-nat-pill-diff strong { color: var(--wp-ov-text, #e6edf3); }
+.wp-nat-pill-diff.up strong { color: #a371f7; }
+.wp-nat-pill-diff.up { background: rgba(163, 113, 247, .08); border-color: rgba(163, 113, 247, .45); }
+.wp-nat-pill-note { margin-bottom: 4px; padding: 5px 9px; font-size: 11px; }
+body.light-theme .wp-nat-pill-tile strong, body.light-theme .wp-nat-pill-diff.up strong { color: #8250df; }
+body.light-theme .wp-nat-pill-diff strong { color: #24292f; }
+@media (max-width: 480px) {
+  .wp-nat-pill-tile strong { font-size: 17px; }
+  .wp-nat-pill-tile { padding: 6px 8px; }
+}
 .wp-nat-curve-loading { padding: 10px 0; font-size: 12.5px; color: var(--wp-ov-text-dim, #8b949e); }
 .wp-nat-curve-tip-warn { color: #e3b341; font-size: 11px; }
 

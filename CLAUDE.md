@@ -501,6 +501,13 @@ a velocità molto diverse, e vale la pena saperlo prima di crederlo rotto:
   qua, la vista lo dichiara in una fascia, e la curva a 14 giorni è piena
   dopo 14 giorni.
 
+- i **pillati a un istante** (adesso / 24-48-72 ore fa, in cima al grafico
+  orario) vengono da `pill.instant`, contato sull'ora vera di ogni presa
+  (`st.takes`, 84 ore): "adesso" è esatto subito dopo il deploy, "72 ore
+  fa" dopo ~2 giorni e mezzo. Finché il server non risponde il client
+  confronta due ORE (l'ultima chiusa e la stessa ora prima) e lo dichiara:
+  mai un istante esatto contro un massimo orario.
+
 ⚠️ Non provare a riempire il danno orario dall'archivio battaglie: `ad`/`dd`
 di `battleArchive.js` sono il totale di uno schieramento a battaglia
 CONCLUSA, e spalmarli sulle ore produrrebbe una curva credibile e inventata

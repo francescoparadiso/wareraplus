@@ -86,7 +86,10 @@ export async function renderDamageCurves(host, nation) {
   host.innerHTML = `<div class="wp-nat-curve-loading">${escapeHtml(natT('curveLoading'))}</div>`;
 
   const [own, world] = await Promise.all([
-    fetchDamageTimeline(nation._id, { hours: Math.max(...RANGES) }),
+    // Un'ora in più della finestra più larga: il confronto orario dei
+    // pillati (pillStatsHtml) prende l'ultima ora chiusa e la stessa ora
+    // 72 ore prima, che con 72 ore esatte resterebbe fuori di una.
+    fetchDamageTimeline(nation._id, { hours: Math.max(...RANGES) + 1 }),
     fetchDamageTimeline(null, { hours: Math.max(...RANGES) }),
   ]);
   if (_nation?._id !== nation._id) return;      // nazione cambiata nel frattempo
@@ -107,6 +110,7 @@ function paint(own, world) {
           ${RANGES.map(h => `<button type="button" data-h="${h}" class="${h === _hours ? 'active' : ''}">${h}${escapeHtml(natT('curveHourShort'))}</button>`).join('')}
         </div>
       </div>
+      ${pillStatsHtml(own)}
       ${legendHtml()}
       <div class="wp-nat-curve-slot" id="wp-nat-curve-hourly"></div>
       <div class="wp-nat-lv-tip" hidden></div>
@@ -143,6 +147,65 @@ function coverageHtml(tl) {
     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
   });
   return `<p class="wp-nat-curve-note">${escapeHtml(natT('curveCoverage').replace('{date}', when))}</p>`;
+}
+
+/* ── Pillati: adesso, all'inizio della finestra, differenza ──
+   Richiesta dell'utente (2026-10-15): «vorrei sapere quanti sono pillati
+   ora precisamente e quanti lo erano in base a cosa seleziono tra
+   24/48/72, e la differenza». Dalla curva non si legge: ogni suo punto è
+   il MASSIMO di un'ora, e l'ultimo è l'ora chiusa prima di adesso.
+   Due modi di contare, e la differenza si fa SEMPRE fra due numeri dello
+   stesso tipo — un istante esatto contro un massimo orario darebbe un
+   "+30" che è solo il metodo:
+     · ESATTO, dal server (`pill.instant`, vedi TAKES_KEEP_MS in
+       server/damageTimeline.js): chi era sotto pillola in quell'istante,
+       dall'ora vera di ogni presa. Il server lo sa solo da quando tiene il
+       registro: "adesso" subito dopo il deploy, 72 ore fa dopo ~2 giorni e
+       mezzo; finché manca risponde null;
+     · ORARIO, dalla curva: l'ultima ora chiusa contro la stessa ora del
+       giorno {h} ore prima. Si usa quando uno dei due esatti manca, e la
+       nota sotto lo dice. */
+function pillStatsHtml(tl) {
+  const lang = document.documentElement.lang || undefined;
+  const hm = (ms) => new Date(ms).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' });
+  const day = (ms) => new Date(ms).toLocaleDateString(lang, { weekday: 'short' });
+  const inst = tl.pill?.instant;
+  const ago = inst?.ago?.find(a => a.h === _hours);
+
+  let now, then, exact;
+  if (inst?.now?.n != null && ago?.n != null) {
+    exact = true;
+    now = { n: inst.now.n, sub: natT('pillAtTime').replace('{time}', hm(inst.now.at)) };
+    then = { n: ago.n, sub: `${day(ago.at)} ${natT('pillAtTime').replace('{time}', hm(ago.at))}` };
+  } else {
+    exact = false;
+    const rows = tl.series.filter(r => r.p != null);
+    const last = rows[rows.length - 1];
+    const prev = last && rows.find(r => r.t === last.t - _hours * HOUR_MS);
+    if (!last || !prev) return '';
+    const span = (r) => natT('pillHourSpan').replace('{day}', day(r.t)).replace('{from}', hm(r.t)).replace('{to}', hm(r.to || r.t + HOUR_MS));
+    now = { n: last.p, sub: span(last) };
+    then = { n: prev.p, sub: span(prev) };
+  }
+
+  const diff = now.n - then.n;
+  const pct = then.n ? Math.round((diff / then.n) * 100) : null;
+  const sign = (v) => (v > 0 ? '+' : v < 0 ? '−' : '±');
+  const cls = diff > 0 ? ' up' : diff < 0 ? ' down' : '';
+  const tile = (label, n, sub, extra = '') => `
+    <div class="wp-nat-pill-tile${extra}">
+      <span class="wp-nat-pill-lab">${escapeHtml(label)}</span>
+      <strong>${n}</strong>
+      <span class="wp-nat-pill-sub">${escapeHtml(sub)}</span>
+    </div>`;
+  return `
+    <div class="wp-nat-pill-stats">
+      ${tile(natT('pillNow'), now.n, now.sub)}
+      ${tile(natT('pillAgo').replace('{h}', _hours), then.n, then.sub)}
+      ${tile(natT('pillDiff'), `${sign(diff)}${Math.abs(diff)}`,
+        pct == null ? '—' : `${sign(pct)}${Math.abs(pct)}%`, ` wp-nat-pill-diff${cls}`)}
+    </div>
+    <p class="wp-nat-curve-note wp-nat-pill-note">${escapeHtml(exact ? natT('pillExactNote') : natT('pillHourNote').replace('{h}', _hours))}</p>`;
 }
 
 function legendHtml() {
