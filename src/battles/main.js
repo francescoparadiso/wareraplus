@@ -30,7 +30,7 @@ import '../styles/battles.css';
 import { btlT } from './i18n.js';
 import { getBattleArchive, getWarExpenses, getLiveBattles } from './api.js';
 import { renderBattleList, wireBattleList } from './battleList.js';
-import { renderBattleDetail, wireBattleDetail, loadBattleDetail, resetBattleDetail } from './battleDetail.js';
+import { renderBattleDetail, wireBattleDetail, loadBattleDetail, resetBattleDetail, refreshBattleDetail } from './battleDetail.js';
 import { renderWarExpenses, wireWarExpenses } from './warExpenses.js';
 import { trackEvent } from '../shared/analytics.js';
 import { syncBack } from '../app/backNav.js';
@@ -188,8 +188,16 @@ async function ensureData() {
 
    Si salta anche a scheda nascosta (document.hidden): a monitor spento
    nessuno la sta leggendo.
+
+   ── CON UNA BATTAGLIA IN CORSO APERTA ─────────────────────────────
+   Prima il giro, a scheda aperta, non faceva niente: classifiche e
+   testata restavano quelle del clic (segnalato dall'utente il
+   2026-10-15). Ora la scheda di una battaglia viva si rilegge a ogni
+   tick del gioco (2 minuti, vedi battleFront.js: le classifiche cambiano
+   solo lì, più spesso sarebbe la stessa risposta). L'elenco resta a 4.
    ══════════════════════════════════════════════════════════════ */
 const LIVE_REFRESH_MS = 4 * 60 * 1000;
+const OPEN_LIVE_REFRESH_MS = 2 * 60 * 1000;
 let _liveTimer = null;
 
 async function refreshLive({ force = false } = {}) {
@@ -202,10 +210,18 @@ async function refreshLive({ force = false } = {}) {
 function startLiveRefresh() {
   if (_liveTimer) return;
   _liveTimer = setInterval(async () => {
-    if (_tab !== 'archive' || _openBattle || document.hidden) return;
+    if (_tab !== 'archive' || document.hidden) return;
+    if (_openBattle) {
+      const b = _openBattle;
+      if (!b.live) return;   // una battaglia finita non cambia più
+      await refreshBattleDetail(b, () => paintBody());
+      return;
+    }
+    // Il timer batte ogni 2 minuti per la scheda aperta; l'elenco resta a 4.
+    if (_archive?.liveAt && Date.now() - _archive.liveAt < LIVE_REFRESH_MS - 5000) return;
     await refreshLive({ force: true });
     if (_tab === 'archive' && !_openBattle) paintBody();
-  }, LIVE_REFRESH_MS);
+  }, OPEN_LIVE_REFRESH_MS);
 }
 
 /** Ferma il giro. Esportata perché la chiami la chiusura dell'overlay:

@@ -600,6 +600,23 @@ function headCost(battle) {
   };
 }
 
+/* ── Danno in testata ──
+   Di una battaglia IN CORSO la riga dell'elenco viene da /battles, che il
+   server rilegge ogni 3 minuti e il client tiene altri 4: la testata
+   diceva 208,1M mentre le tabelle sotto, lette dal gioco un attimo prima,
+   sommavano 208,8M (segnalato il 2026-10-15). Con le classifiche in mano
+   la testata È la loro somma — stessa fonte, stesso istante. Non se sono
+   troncate (oltre 100 nazioni per lato): lì la somma direbbe meno del
+   vero, e si torna alla riga. Le battaglie finite non cambiano più, e
+   la riga dell'archivio resta il dato. */
+function headDamage(battle) {
+  const side = (k) => _detail.sides[k].reduce((s, r) => s + r.damage, 0);
+  if (battle.live && _detail && !_detail.truncated?.attacker && !_detail.truncated?.defender) {
+    return side('defender') + side('attacker');
+  }
+  return (battle.defender.damages || 0) + (battle.attacker.damages || 0);
+}
+
 export function renderBattleDetail(battle) {
   const cost = headCost(battle);
   const head = `
@@ -614,8 +631,10 @@ export function renderBattleDetail(battle) {
       <div class="wp-btl-card"><span>${btlT('colRegion')}</span><strong class="wp-btl-card-sm">${escapeHtml(regionName(battle.regionId) || '—')}</strong></div>
       <div class="wp-btl-card"><span>${battle.live ? btlT('colWhenMixed') : btlT('colWhen')}</span><strong class="wp-btl-card-sm">${battle.live
         ? `<span class="wp-btl-livedot"></span>${btlT('liveNow')}`
-        : fmtDate(battle.endedAt)}</strong></div>
-      <div class="wp-btl-card"><span>${btlT('colDamage')}</span><strong>${fmtNum((battle.defender.damages || 0) + (battle.attacker.damages || 0))}</strong></div>
+        : fmtDate(battle.endedAt)}</strong>${battle.live && _detail && _detailAt
+        ? `<em>${btlT('detailUpdated', { time: new Date(_detailAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) })}</em>`
+        : ''}</div>
+      <div class="wp-btl-card"><span>${btlT('colDamage')}</span><strong>${fmtNum(headDamage(battle))}</strong></div>
       <div class="wp-btl-card"><span>${btlT('colBounty')}</span><strong>${fmtMoney(cost.bounty)}</strong></div>
       <div class="wp-btl-card"><span>${btlT('colContracts')}</span><strong>${fmtMoney(cost.contracts)}</strong>
         <em>${btlT('contractsCount', { n: cost.count ?? 0 })}</em></div>
@@ -714,6 +733,7 @@ export async function loadBattleDetail(battle, repaint) {
   // `live`: su una battaglia in corso le classifiche cambiano ad ogni tick,
   // quindi api.js non le memorizza — riaprirla ridà i numeri aggiornati.
   _detail = await getBattleDetail(battle.id, { live: Boolean(battle.live) });
+  _detailAt = Date.now();
   repaint();
   // In parallelo: i nomi delle unita' dei contratti e la lista dei
   // finanziamenti. Sono indipendenti, e in serie l'utente aspetterebbe
@@ -726,6 +746,40 @@ export async function loadBattleDetail(battle, repaint) {
     fetchBattleTimeline(battle.id, { live: Boolean(battle.live) }).then(d => { _tl = d; }),
     loadAllianceRegistry(),
   ]);
+  repaint();
+}
+
+/* ── Battaglia IN CORSO con la scheda aperta ──
+   Segnalato dall'utente (2026-10-15, «questi dati non mi sembrano
+   aggiornati»): il giro di aggiornamento in main.js si fermava appena si
+   apriva una battaglia, quindi classifiche, taglia e contratti restavano
+   quelli del clic per tutto il tempo in cui la scheda stava aperta — su
+   una battaglia viva, ore. Questa rilegge tutto ciò che si muove senza
+   azzerare niente: scheda, "mostra tutte" e unità aperte restano dove
+   sono, e niente "Caricamento…" al posto delle tabelle.
+   Le cache sotto (taglia e andamento) durano 60 s: chiamata ogni tick
+   (2 minuti) rilegge davvero. */
+let _detailAt = 0;   // quando sono arrivate le classifiche mostrate
+
+export async function refreshBattleDetail(battle, repaint) {
+  if (!battle?.live || !_detail) return;
+  const id = battle.id;
+  const [detail, spend, tl, mu] = await Promise.all([
+    getBattleDetail(id, { live: true }),
+    import('../diplomacy/battleSpending.js').then(m => m.fetchBattleSpending(id)).catch(() => null),
+    fetchBattleTimeline(id, { live: true }),
+    _muState === 'open' ? getBattleMuBreakdown(id, { live: true }) : Promise.resolve(null),
+  ]);
+  if (_wired.battle?.id !== id) return;   // nel frattempo si è passati a un'altra
+  // Un giro andato storto non cancella quello che c'era: meglio i numeri
+  // di due minuti fa che una tabella vuota.
+  if (detail) { _detail = detail; _detailAt = Date.now(); }
+  if (spend) _spend = spend;
+  if (tl) _tl = tl;
+  if (mu) _mu = mu;
+  // Contratti nuovi = unità nuove da battezzare (le altre sono già in _muInfo).
+  await resolveMuBriefs((_detail?.contracts || []).map(c => c.mu));
+  if (_wired.battle?.id !== id) return;
   repaint();
 }
 
