@@ -270,7 +270,8 @@ wareraPlus/
     │   │                        bottone. Cade da sola uscendo dalla vista.
     │   ├── blocDamageCurves.js ← NUOVO — danno ora per ora + pillati di un
     │   │                        GRUPPO di nazioni: nella scheda di un'alleanza e,
-    │   │                        sovrapposti, nel Fazione 1 vs 2. Il server somma
+    │   │                        sovrapposti, nel Fazione 1 vs 2 e nel 1 vs 2 di
+    │   │                        Statistiche nazioni (nationCompare.js). Il server somma
     │   │                        con /damage-timeline?countryIds=a,b,c e ripete
     │   │                        `countryIds` nella risposta: ⚠️ un server vecchio
     │   │                        ignora il parametro e manda il MONDO, quindi senza
