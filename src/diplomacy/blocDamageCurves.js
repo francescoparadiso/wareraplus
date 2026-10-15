@@ -48,14 +48,25 @@
    ⚠️ È un cancello di INTERFACCIA: la serie per nazione resta pubblica
    (/damage-timeline sul cache-server, la usa la scheda nazione), quindi
    qui si decide cosa mostrare, non si protegge un dato segreto.
+
+   ── PILLATI A UN ISTANTE (2026-10-15) ────────────────────────────
+   «I grafici delle pill devono dare quei dati ovunque»: come la scheda
+   nazione, anche qui la linea dei pillati è un conteggio ogni 15 minuti
+   fino ad adesso, sopra il grafico ci sono pillati adesso / {h} fa /
+   differenza per ogni gruppo, e le finestre arrivano a 7 e 14 giorni.
+   Il calcolo sta in src/shared/pillInstants.js, condiviso; il server
+   somma il gruppo anche per `pill.instant` e `pill.fine`.
    ══════════════════════════════════════════════════════════════ */
 
 import { WARERA_CACHE_BASE } from './config.js';
 import { bT } from './blocStatsI18n.js';
 import { getToken, leggiRuoli } from '../private/api.js';
+import { finePoints, pillCompare, pillSegments } from '../shared/pillInstants.js';
 
 const HOUR_MS = 3600 * 1000;
-const RANGES = [24, 48, 72];
+const RANGES = [24, 48, 72, 7 * 24, 14 * 24];
+/** "24h", "7g": l'etichetta di una finestra, nei bottoni e in "{h} fa". */
+const rangeLabel = (h) => (h > 72 && h % 24 === 0 ? bT('{n}d', { n: h / 24 }) : bT('{n}h', { n: h }));
 const RANGE_KEY = 'we_bloc_curve_hours';
 const PILL_COLOR = '#a371f7';
 const FALLBACK_PARALLEL = 6;
@@ -88,7 +99,9 @@ async function cacheJson(path) {
   }
 }
 
-const qs = (extra) => new URLSearchParams({ hours: String(Math.max(...RANGES)), days: '14', ...extra });
+// Un'ora in più della finestra più larga: "{h} fa" sulle hh:30 più vicine
+// può cadere un'ora prima dell'inizio esatto della finestra.
+const qs = (extra) => new URLSearchParams({ hours: String(Math.max(...RANGES) + 1), days: '14', ...extra });
 
 /** Serie sommata di un gruppo di nazioni, o null (server giù, gruppo
  *  sconosciuto). */
@@ -180,7 +193,9 @@ async function sumOneByOne(list) {
     ...(r.partial ? { partial: 1 } : {}),
   }));
 
-  return { ...parts[0], known: true, series, daily };
+  // `pill.instant`/`pill.fine` sono della prima nazione, non del gruppo:
+  // via, così il riquadro ricade sui punti orari sommati qui sopra.
+  return { ...parts[0], pill: { ...(parts[0].pill || {}), instant: null, fine: null }, known: true, series, daily };
 }
 
 /* ── Chi può vederli ─────────────────────────────────────────────── */
@@ -251,9 +266,10 @@ function paint(host, groups, asked) {
         <div class="bs-cv-head">
           ${legendHtml(groups, multi)}
           <div class="bs-cv-range" role="group">
-            ${RANGES.map(h => `<button type="button" data-h="${h}" class="${h === _hours ? 'active' : ''}">${h}h</button>`).join('')}
+            ${RANGES.map(h => `<button type="button" data-h="${h}" class="${h === _hours ? 'active' : ''}">${rangeLabel(h)}</button>`).join('')}
           </div>
         </div>
+        ${pillStatsHtml(groups, multi)}
         <div class="bs-cv-slot" data-slot="hourly"></div>
         <div class="bs-cv-tip" hidden></div>
         ${peakHtml(groups)}
@@ -300,18 +316,63 @@ function coverageHtml(tl) {
 }
 
 function legendHtml(groups, multi) {
+  const fine = groups.some(g => g.tl.pill?.fine);
   if (!multi) {
     const g = groups[0];
     return `<ul class="bs-cv-legend">
       <li><span class="bs-cv-sw" style="background:${g.color}"></span>${bT('Damage per hour')}</li>
-      <li><span class="bs-cv-sw bs-cv-sw-line" style="background:${PILL_COLOR}"></span>${bT('Pilled players')}</li>
+      <li><span class="bs-cv-sw bs-cv-sw-line" style="background:${PILL_COLOR}"></span>${bT(fine ? 'Pilled players (every 15 min)' : 'Pilled players')}</li>
     </ul>`;
   }
   return `<ul class="bs-cv-legend">
     ${groups.map(g => `<li><span class="bs-cv-sw" style="background:${g.color}"></span>${esc(g.label)}</li>`).join('')}
     <li class="bs-cv-legend-key"><span class="bs-cv-key-solid"></span>${bT('damage')}
-      <span class="bs-cv-key-dots"></span>${bT('pilled')}</li>
+      <span class="bs-cv-key-dots"></span>${bT(fine ? 'pilled, every 15 min' : 'pilled')}</li>
   </ul>`;
+}
+
+/** Pillati adesso, {h} fa e differenza: tre caselle per un gruppo solo,
+ *  una tabella (una riga per lato) nel confronto. Vedi pillCompare. */
+function pillStatsHtml(groups, multi) {
+  const hm = (ms) => new Date(ms).toLocaleTimeString(lang(), { hour: '2-digit', minute: '2-digit' });
+  const at = (ms, withDay) => `${withDay ? `${new Date(ms).toLocaleDateString(lang(), { weekday: 'short' })} ` : ''}${bT('at {time}', { time: hm(ms) })}`;
+  const rows = groups.map(g => ({ g, c: pillCompare(g.tl, _hours) })).filter(r => r.c);
+  if (!rows.length) return '';
+  const sign = (v) => (v > 0 ? '+' : v < 0 ? '−' : '±');
+  const diff = (c) => {
+    const d = c.now.n - c.then.n;
+    const pct = c.then.n ? Math.round((d / c.then.n) * 100) : null;
+    return { up: d > 0, n: `${sign(d)}${Math.abs(d)}`, pct: pct == null ? '—' : `${sign(pct)}${Math.abs(pct)}%` };
+  };
+  const ago = bT('{h} ago', { h: rangeLabel(_hours) });
+  let html;
+  if (!multi) {
+    const { c } = rows[0];
+    const d = diff(c);
+    const tile = (label, n, sub, cls = '') => `<div class="bs-cv-ptile${cls}"><span>${esc(label)}</span><strong>${n}</strong><em>${esc(sub)}</em></div>`;
+    html = `<div class="bs-cv-pills">
+      ${tile(bT('Pilled now'), c.now.n, at(c.now.at, false))}
+      ${tile(ago, c.then.n, at(c.then.at, true))}
+      ${tile(bT('Change'), d.n, d.pct, ` bs-cv-pdiff${d.up ? ' up' : ''}`)}
+    </div>`;
+  } else {
+    html = `<table class="bs-cv-ptable">
+      <thead><tr><th></th><th>${esc(bT('Pilled now'))}</th><th>${esc(ago)}</th><th>${esc(bT('Change'))}</th></tr></thead>
+      <tbody>${rows.map(({ g, c }) => {
+        const d = diff(c);
+        return `<tr>
+          <td class="bs-cv-pname"><span class="bs-cv-sw" style="background:${g.color}"></span><span>${esc(g.label)}</span></td>
+          <td><strong>${c.now.n}</strong><em>${esc(at(c.now.at, false))}</em></td>
+          <td><strong>${c.then.n}</strong><em>${esc(at(c.then.at, true))}</em></td>
+          <td class="bs-cv-pdiff${d.up ? ' up' : ''}"><strong>${d.n}</strong><em>${d.pct}</em></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+  }
+  const exact = rows.every(r => r.c.exact);
+  return html + `<p class="bs-cv-note bs-cv-pnote">${esc(exact
+    ? bT('Exact count at that instant, from the time each pill was taken. Pills taken in the last ~90 minutes may not be counted yet.')
+    : bT('The {h}-ago value comes from the older hourly archive, which counted who was pilled at half past each hour: it is the closest half hour to that moment. It becomes exact to the minute as the 15-minute record fills up.', { h: rangeLabel(_hours) }))}</p>`;
 }
 
 /** L'ora di punta di ogni gruppo, e quanti erano pillati in quell'ora. */
@@ -370,11 +431,20 @@ function drawHourly(slot, groups, multi) {
 
   const rate = (r) => (r?.d == null ? null : r.d / ((r.min || 60) / 60));
   const maxD = Math.max(1, ...rows.flatMap(r => r.v.map(x => rate(x) || 0)));
-  const maxP = Math.max(1, ...rows.flatMap(r => r.v.map(x => x?.p || 0)));
+  // Pillati ogni 15 minuti, fino ad adesso (vedi la testata e
+  // src/shared/pillInstants.js). Il danno resta orario.
+  const fines = groups.map(g => finePoints(g.tl, t0));
+  const maxP = Math.max(1, ...rows.flatMap(r => r.v.map(x => x?.p || 0)), ...fines.flat().map(p => p.v || 0));
   const hasDamage = rows.some(r => r.v.some(x => x?.d != null));
 
+  // L'asse arriva fino all'ultimo punto dei pillati, che va oltre l'ultima
+  // ora chiusa del danno: per l'ora in corso una riga finta, solo per
+  // tooltip ed etichette.
+  const lastTo = rows[rows.length - 1].to;
+  const tEnd = Math.max(lastTo, ...fines.map(f => (f.length ? f[f.length - 1].t : 0)));
+  const allRows = tEnd > lastTo ? [...rows, { t: lastTo, to: lastTo + HOUR_MS, v: groups.map(() => null), open: true }] : rows;
   const tStart = rows[0].t;
-  const span = Math.max(1, rows[rows.length - 1].to - tStart);
+  const span = Math.max(1, tEnd - tStart);
   const x = (t) => PAD.left + ((t - tStart) / span) * plotW;
   const xMid = (r) => x(r.t + (r.to - r.t) / 2);
   const yD = (v) => PAD.top + plotH - (v / maxD) * plotH;
@@ -403,45 +473,57 @@ function drawHourly(slot, groups, multi) {
     body += dSegs.map(seg => `<path d="${pathOf(seg, yD)}" fill="none" stroke="${g.color}" stroke-width="2"
       stroke-linejoin="round" stroke-linecap="round"/>`).join('');
 
-    // Pillati: coda ancora da assestare attenuata (vedi testata).
-    const settled = g.tl.pill?.settledUntil ?? Infinity;
+    // Pillati: punti orari (le hh:30) dove la curva fine non arriva, poi
+    // ogni 15 minuti; coda ancora da assestare attenuata (vedi testata).
+    const fine = fines[gi];
+    const settled = fine.length ? (g.tl.pill?.instant?.fresh ?? Infinity) : (g.tl.pill?.settledUntil ?? Infinity);
     const pColor = multi ? g.color : PILL_COLOR;
     const pStyle = multi ? ' stroke-dasharray="1.5 3.5" stroke-width="2.4"' : ' stroke-width="2"';
-    const pPath = (pts, faded) => (pts.length < 2 ? '' : `<path d="${pathOf(pts, yP)}" fill="none" stroke="${pColor}"${pStyle}
-      stroke-linejoin="round" stroke-linecap="round"${faded ? ' stroke-opacity=".4"' : ''}/>`);
-    body += segments(rows, r => r.v[gi]?.p ?? null).map(seg => {
-      const cut = seg.findIndex(({ i }) => rows[i].t > settled);
+    const pPath = (pts, faded) => (pts.length < 2 ? '' : `<path d="${pts.map((p, k) => `${k ? 'L' : 'M'}${x(p.t).toFixed(1)},${yP(p.v).toFixed(1)}`).join(' ')}"
+      fill="none" stroke="${pColor}"${pStyle} stroke-linejoin="round" stroke-linecap="round"${faded ? ' stroke-opacity=".4"' : ''}/>`);
+    body += pillSegments(rows.map(r => ({ t: r.t, p: r.v[gi]?.p ?? null })), fine).map(seg => {
+      const cut = seg.findIndex(p => p.t > settled);
       if (cut === -1) return pPath(seg, false);
       return pPath(seg.slice(0, cut + 1), false) + pPath(seg.slice(Math.max(0, cut - 1)), true);
     }).join('');
   });
 
-  const labels = rows.map(r => {
+  // Oltre le 72 ore: un'etichetta a mezzanotte col giorno del mese, invece
+  // di 56 numeri ogni 6 ore.
+  const long = _hours > 72;
+  const labels = allRows.map(r => {
     const dt = new Date(r.t);
-    if (dt.getMinutes() !== 0 || dt.getHours() % 6 !== 0) return '';
-    return `<text class="bs-cv-axis" x="${x(r.t).toFixed(1)}" y="${H - 6}" text-anchor="middle">${dt.getHours()}</text>`;
+    if (dt.getMinutes() !== 0 || dt.getHours() % (long ? 24 : 6) !== 0) return '';
+    const txt = long ? dt.toLocaleDateString(lang(), { day: 'numeric', month: 'numeric' }) : String(dt.getHours());
+    return `<text class="bs-cv-axis" x="${x(r.t).toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(txt)}</text>`;
   }).join('');
-  const hits = rows.map((r, i) => `<rect class="bs-cv-hit" x="${x(r.t).toFixed(1)}" y="${PAD.top}"
-    width="${Math.max(1, x(r.to) - x(r.t)).toFixed(1)}" height="${plotH}" data-i="${i}" fill="transparent"/>`).join('');
+  const hits = allRows.map((r, i) => `<rect class="bs-cv-hit" x="${x(r.t).toFixed(1)}" y="${PAD.top}"
+    width="${Math.max(1, x(Math.min(r.to, tEnd)) - x(r.t)).toFixed(1)}" height="${plotH}" data-i="${i}" fill="transparent"/>`).join('');
 
   slot.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="bs-cv-svg" role="img"
       aria-label="${esc(bT('Hourly damage & pilled players'))}">${grid}${body}${labels}${hits}</svg>`
     + (hasDamage ? '' : `<p class="bs-cv-note">${bT('Hourly damage starts filling in after the first full hour.')}</p>`);
 
-  bindTip(slot, rows, (r) => {
+  bindTip(slot, allRows, (r) => {
     const from = new Date(r.t), to = new Date(r.to);
     const hm = (d) => d.toLocaleTimeString(lang(), { hour: '2-digit', minute: '2-digit' });
     const head = `${from.toLocaleDateString(lang(), { weekday: 'short' })} ${hm(from)}–${hm(to)}`;
     const items = groups.map((g, gi) => {
       const v = r.v[gi];
       const name = multi ? `<li class="bs-cv-tip-group"><span class="bs-cv-sw" style="background:${g.color}"></span>${esc(g.label)}</li>` : '';
-      const dmg = v?.d == null
+      const dmg = r.open ? ''
+        : v?.d == null
         ? `<li><span>${bT('not measured')}</span></li>`
         : `<li><span>${bT('Damage')}</span><strong>${fmt(v.d)}</strong></li>`;
-      const pill = v?.p == null ? '' : `<li><span>${bT('Pilled players')}</span><strong>${v.p}</strong></li>`;
+      // I quarti d'ora di quest'ora, se c'è la curva fine; se no il punto orario.
+      const q = fines[gi].filter(p => p.v != null && p.t >= r.t && p.t < r.to);
+      const pill = q.length
+        ? `<li><span>${bT('pilled, every 15 min')}</span><strong>${q.map(p => p.v).join(' · ')}</strong></li>`
+        : v?.p == null ? '' : `<li><span>${bT('Pilled players')}</span><strong>${v.p}</strong></li>`;
       return name + dmg + pill;
     }).join('');
-    return `<div class="bs-cv-tip-head">${esc(head)}</div><ul>${items}</ul>`;
+    const open = r.open ? `<li class="bs-cv-tip-open">${bT('Hour in progress: its damage is counted when the hour ends.')}</li>` : '';
+    return `<div class="bs-cv-tip-head">${esc(head)}</div><ul>${open}${items}</ul>`;
   });
 }
 
@@ -575,6 +657,32 @@ function injectStyles() {
     .bs-cv-tip li{display:flex;justify-content:space-between;gap:12px}
     .bs-cv-tip li.bs-cv-tip-group{justify-content:flex-start;gap:6px;font-weight:600;margin-top:3px}
     .bs-cv-tip-warn{color:#e3b341}
+    .bs-cv-tip li.bs-cv-tip-open{color:#8b949e;font-size:11px;max-width:230px}
+    /* Pillati adesso / {h} fa / differenza (pillStatsHtml) */
+    .bs-cv-pills{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:6px 0 6px}
+    .bs-cv-ptile{display:flex;flex-direction:column;gap:1px;min-width:0;padding:6px 10px;border-radius:9px;border:1px solid rgba(255,255,255,.1)}
+    .bs-cv-ptile span{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#8b949e}
+    .bs-cv-ptile strong{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;color:#a371f7}
+    .bs-cv-ptile em,.bs-cv-ptable em{font-style:normal;font-size:11px;color:#8b949e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .bs-cv-ptile.bs-cv-pdiff strong{color:#c9d1d9}
+    .bs-cv-pdiff.up strong{color:#a371f7}
+    .bs-cv-ptile.bs-cv-pdiff.up{background:rgba(163,113,247,.08);border-color:rgba(163,113,247,.45)}
+    .bs-cv-ptable{width:100%;border-collapse:collapse;margin:6px 0 4px;font-size:12px;table-layout:fixed}
+    .bs-cv-ptable th{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:#8b949e;text-align:left;padding:2px 6px}
+    .bs-cv-ptable th:first-child{width:34%}
+    .bs-cv-ptable td{padding:4px 6px;border-top:1px solid rgba(255,255,255,.07);vertical-align:top}
+    .bs-cv-ptable td strong{display:block;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;color:#a371f7}
+    .bs-cv-ptable td.bs-cv-pdiff strong{color:#c9d1d9}
+    .bs-cv-ptable td.bs-cv-pdiff.up strong{color:#a371f7}
+    .bs-cv-ptable em{display:block}
+    .bs-cv-pname{display:flex;align-items:center;gap:6px;min-width:0;color:#c9d1d9}
+    .bs-cv-pname span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bs-cv-pnote{font-size:11px}
+    body.light-theme .bs-cv-ptile{border-color:rgba(0,0,0,.12)}
+    body.light-theme .bs-cv-ptile strong,body.light-theme .bs-cv-ptable td strong,body.light-theme .bs-cv-pdiff.up strong{color:#8250df}
+    body.light-theme .bs-cv-ptile.bs-cv-pdiff strong,body.light-theme .bs-cv-ptable td.bs-cv-pdiff strong,body.light-theme .bs-cv-pname{color:#24292f}
+    body.light-theme .bs-cv-ptable td{border-top-color:rgba(0,0,0,.08)}
+    @media (max-width:480px){.bs-cv-ptile strong{font-size:16px}.bs-cv-ptable td strong{font-size:13px}}
     body.light-theme .bs-cv-title{color:#24292f}
     body.light-theme .bs-cv-card{background:rgba(240,230,210,.6);border-color:rgba(0,0,0,.1)}
     body.light-theme .bs-cv-grid{stroke:rgba(0,0,0,.08)}

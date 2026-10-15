@@ -55,6 +55,7 @@
 import { natT } from './i18n.js';
 import { fetchDamageTimeline } from './api.js';
 import { escapeHtml, fmtCompact } from '../mu/ui.js';
+import { finePoints, pillCompare, pillSegments } from '../shared/pillInstants.js';
 
 const DMG_COLOR = '#e5484d';      // stessa tinta della "guerra" nella ciambella
 const PILL_COLOR = '#a371f7';
@@ -157,41 +158,28 @@ function coverageHtml(tl) {
 /* ── Pillati: adesso, all'inizio della finestra, differenza ──
    Richiesta dell'utente (2026-10-15): «vorrei sapere quanti sono pillati
    ora precisamente e quanti lo erano in base a cosa seleziono tra
-   24/48/72, e la differenza». Dalla curva non si legge: ogni suo punto è
-   il MASSIMO di un'ora, e l'ultimo è l'ora chiusa prima di adesso.
-   Due modi di contare, e la differenza si fa SEMPRE fra due numeri dello
-   stesso tipo — un istante esatto contro un massimo orario darebbe un
-   "+30" che è solo il metodo:
-     · ESATTO, dal server (`pill.instant`, vedi TAKES_KEEP_MS in
-       server/damageTimeline.js): chi era sotto pillola in quell'istante,
-       dall'ora vera di ogni presa. Il server lo sa solo da quando tiene il
-       registro: "adesso" subito dopo il deploy, 72 ore fa dopo ~2 giorni e
-       mezzo; finché manca risponde null;
-     · ORARIO, dalla curva: l'ultima ora chiusa contro la stessa ora del
-       giorno {h} ore prima. Si usa quando uno dei due esatti manca, e la
-       nota sotto lo dice. */
+   24/48/72, e la differenza».
+   ⚠️ Corretto lo stesso giorno («se l'ultimo valore è 49 perché mi segna
+   39?»). La prima versione credeva che il punto orario fosse il MASSIMO
+   dell'ora, e per non confrontarlo con un istante esatto ripiegava su due
+   ore intere anche per "adesso": la casella mostrava l'ora chiusa
+   precedente. Ma il punto orario è anch'esso un ISTANTE: _pillSlots nel
+   server conta chi è pillato al CENTRO di ogni secchio, cioè alle hh:30
+   (misurato: 08:00 → 39, coi quarti d'ora 15·30·39·42). Quindi:
+     · ADESSO è sempre il conteggio esatto di adesso (`pill.instant.now`);
+       solo un server che non lo manda ricade sull'ultima hh:30;
+     · {h} FA è esatto se il registro arriva fin lì (`pill.instant.ago`),
+       altrimenti il conteggio delle hh:30 più vicine a quel momento — un
+       istante anche lui, al massimo mezz'ora più in là, e la casella dice
+       quale. La differenza fra i due è quindi sempre fra due istanti. */
 function pillStatsHtml(tl) {
   const lang = document.documentElement.lang || undefined;
   const hm = (ms) => new Date(ms).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' });
   const day = (ms) => new Date(ms).toLocaleDateString(lang, { weekday: 'short' });
-  const inst = tl.pill?.instant;
-  const ago = inst?.ago?.find(a => a.h === _hours);
-
-  let now, then, exact;
-  if (inst?.now?.n != null && ago?.n != null) {
-    exact = true;
-    now = { n: inst.now.n, sub: natT('pillAtTime').replace('{time}', hm(inst.now.at)) };
-    then = { n: ago.n, sub: `${day(ago.at)} ${natT('pillAtTime').replace('{time}', hm(ago.at))}` };
-  } else {
-    exact = false;
-    const rows = tl.series.filter(r => r.p != null);
-    const last = rows[rows.length - 1];
-    const prev = last && rows.find(r => r.t === last.t - _hours * HOUR_MS);
-    if (!last || !prev) return '';
-    const span = (r) => natT('pillHourSpan').replace('{day}', day(r.t)).replace('{from}', hm(r.t)).replace('{to}', hm(r.to || r.t + HOUR_MS));
-    now = { n: last.p, sub: span(last) };
-    then = { n: prev.p, sub: span(prev) };
-  }
+  const at = (ms, withDay) => `${withDay ? `${day(ms)} ` : ''}${natT('pillAtTime').replace('{time}', hm(ms))}`;
+  const cmp = pillCompare(tl, _hours);
+  if (!cmp) return '';
+  const { now, then, exact } = cmp;
 
   const diff = now.n - then.n;
   const pct = then.n ? Math.round((diff / then.n) * 100) : null;
@@ -205,8 +193,8 @@ function pillStatsHtml(tl) {
     </div>`;
   return `
     <div class="wp-nat-pill-stats">
-      ${tile(natT('pillNow'), now.n, now.sub)}
-      ${tile(natT('pillAgo').replace('{h}', rangeLabel(_hours)), then.n, then.sub)}
+      ${tile(natT('pillNow'), now.n, at(now.at, false))}
+      ${tile(natT('pillAgo').replace('{h}', rangeLabel(_hours)), then.n, at(then.at, true))}
       ${tile(natT('pillDiff'), `${sign(diff)}${Math.abs(diff)}`,
         pct == null ? '—' : `${sign(pct)}${Math.abs(pct)}%`, ` wp-nat-pill-diff${cls}`)}
     </div>
@@ -296,15 +284,13 @@ function drawHourly(tl) {
   // vera di ogni presa (`pill.fine`, vedi TAKES_KEEP_MS nel server), fino
   // ad ADESSO — l'ora in corso compresa, perché per le pillole non c'è
   // niente da aspettare. Prima che il registro del server arrivi così
-  // indietro i punti sono null, e lì resta la curva oraria di prima (il
-  // massimo dell'ora), più tenue: è un'altra misura e non la si fa passare
-  // per la stessa.
+  // indietro i punti sono null, e lì restano i punti orari: anche loro
+  // istanti (le hh:30, vedi pillStatsHtml), quindi la linea continua senza
+  // cambiare stile — solo più rada.
   const fine = finePoints(tl, t0);
-  const fineStart = fine.find(p => p.v != null)?.t ?? Infinity;
-  const hourlyPill = (r) => (r.t + HOUR_MS / 2 < fineStart ? r.p : null);
 
   const maxD = Math.max(...rows.map(r => rate(r) || 0), 1);
-  const maxP = Math.max(...rows.map(r => hourlyPill(r) || 0), ...fine.map(p => p.v || 0), 1);
+  const maxP = Math.max(...rows.map(r => r.p || 0), ...fine.map(p => p.v || 0), 1);
 
   // Asse x sul TEMPO, non sull'indice: con punti di durata diversa una
   // spaziatura uniforme li mostrerebbe tutti larghi uguale, e un buco di
@@ -374,17 +360,11 @@ function drawHourly(tl) {
     // pieno e il tratteggiato resta un buco largo un punto.
     return draw(pts.slice(0, cutAt + 1), false) + draw(pts.slice(Math.max(0, cutAt - 1)), true);
   };
-  const hourlySegs = segments(rows, hourlyPill)
-    .map(seg => seg.map(({ i, v }) => ({ t: rows[i].t, x: xMid(rows[i]), v })));
-  const fineSegs = [];
-  let cur = [];
-  for (const p of fine) {
-    if (p.v == null) { if (cur.length) fineSegs.push(cur); cur = []; continue; }
-    cur.push({ t: p.t, x: x(p.t), v: p.v });
-  }
-  if (cur.length) fineSegs.push(cur);
-  const line = hourlySegs.map(seg => pillPath(seg, tl.pill?.settledUntil ?? Infinity, fineSegs.length > 0)).join('')
-    + fineSegs.map(seg => pillPath(seg, tl.pill?.instant?.fresh ?? Infinity, false)).join('');
+  // Ultimo tratto tratteggiato: con la curva fine dove il giro dei
+  // cittadini non è ancora passato (`fresh`), senza come prima.
+  const settled = fine.length ? (tl.pill?.instant?.fresh ?? Infinity) : (tl.pill?.settledUntil ?? Infinity);
+  const line = pillSegments(rows, fine)
+    .map(seg => pillPath(seg.map(p => ({ ...p, x: x(p.t) })), settled, false)).join('');
 
   // Etichette dell'ora: ogni 6 ore, nel fuso di chi guarda. Gli slot sono
   // istanti assoluti, quindi la conversione è esatta — ed è l'ora locale
@@ -416,15 +396,6 @@ function drawHourly(tl) {
     + (hasDamage ? '' : `<p class="wp-nat-curve-pending">${escapeHtml(natT('curveDamagePending'))}</p>`);
 
   bindTip(slot, allRows, (r) => hourlyTip(r, fine.filter(p => p.v != null && p.t >= r.t && p.t < (r.to || r.t + HOUR_MS))));
-}
-
-/** I punti della curva fine dei pillati dentro la finestra: [{ t, v }],
- *  v null dove il registro del server non arriva. [] con un server che
- *  non la manda. */
-function finePoints(tl, t0) {
-  const f = tl.pill?.fine;
-  if (!f || !Array.isArray(f.n) || !f.step) return [];
-  return f.n.map((v, k) => ({ t: f.from + k * f.step, v })).filter(p => p.t >= t0);
 }
 
 /** Spezza la serie in tratti continui, saltando i valori nulli: una linea

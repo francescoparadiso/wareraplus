@@ -506,9 +506,13 @@ a velocità molto diverse, e vale la pena saperlo prima di crederlo rotto:
   `pill.instant` e `pill.fine`, contati sull'ora vera di ogni presa (file
   `pill-takes`, 14 giorni + 12 ore, in memoria): "adesso" è esatto subito
   dopo il deploy, la curva fine si allunga di un giorno al giorno fino a
-  due settimane. Dove il registro non arriva il client usa la curva
-  oraria (più tenue) e confronta due ORE, dichiarandolo: mai un istante
-  esatto contro un massimo orario. Il danno resta orario.
+  due settimane. Dove il registro non arriva il client usa i punti orari
+  dell'archivio di prima, dichiarandolo. ⚠️ Quei punti NON sono il
+  massimo dell'ora: `_pillSlots` conta chi è pillato al centro del
+  secchio, le hh:30 — sono istanti anche loro, e la linea continua.
+  Il danno resta orario. Il calcolo lato client è uno solo,
+  `src/shared/pillInstants.js`, per la scheda nazione e per i grafici di
+  gruppo (scheda alleanza, Faction 1 vs 2, 1 vs 2 nazioni).
 
 ⚠️ Non provare a riempire il danno orario dall'archivio battaglie: `ad`/`dd`
 di `battleArchive.js` sono il totale di uno schieramento a battaglia
