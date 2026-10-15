@@ -35,11 +35,12 @@ import { state } from '../diplomacy/state.js';
 import { escapeHtml } from '../diplomacy/utils.js';
 import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 import { btlT } from './i18n.js';
-import { getBattleDetail, getBattleMuBreakdown } from './api.js';
+import { getBattleDetail, getBattleMuBreakdown, getRoundRanking } from './api.js';
 import { fetchMoneyTransfers, transfersFor, windowIsShort } from './moneyTransfers.js';
 import { fetchBattleTimeline, timelineSectionHtml, wireTimeline, resetTimeline } from './battleTimeline.js';
 import {
   loadBonusRules, fetchBattleOrders, loadMe, myPlayerId, sideContext, sideNationRows, personalBonus,
+  orderPct, PRIORITIES,
 } from '../shared/battleBonus.js';
 import { fetchActiveBattles } from '../diplomacy/battleHeatmap.js';
 import { bvT } from '../diplomacy/bonusView.js';
@@ -402,10 +403,10 @@ function allianceOf(countryId, ts) {
   return { id, name: id ? state.allianceMap?.get(id)?.name || null : null, then: null, today: true };
 }
 
-function allianceRows(sideKey, ts) {
+function allianceRows(sideKey, ts, sides = _detail?.sides) {
   const by = new Map();
   let today = false;
-  for (const r of _detail?.sides?.[sideKey] || []) {
+  for (const r of sides?.[sideKey] || []) {
     const a = allianceOf(r.id, ts);
     if (a.today) today = true;
     const key = a.id || '';
@@ -471,13 +472,15 @@ function allianceTable(rows, sideKey, battle, opts) {
     </div>`;
 }
 
-function alliancesHtml(battle) {
+/** `sides`: le classifiche di un round (roundSides), o niente per la
+ *  battaglia intera. */
+function alliancesHtml(battle, sides = null) {
   // Finché il registro non ha risposto non si disegna niente: mostrare
   // prima l'appartenenza di oggi e poi spostare le righe sarebbe peggio.
   if (!_allyTried || !_detail) return '';
   const ts = _detail.startedAt || battle.endedAt || Date.now();
-  const def = allianceRows('defender', ts);
-  const atk = allianceRows('attacker', ts);
+  const def = allianceRows('defender', ts, sides || _detail.sides);
+  const atk = allianceRows('attacker', ts, sides || _detail.sides);
   if (!def.rows.length && !atk.rows.length) return '';
   // La stessa alleanza su tutti e due i lati: membri che si combattono,
   // ed è proprio la cosa che una tabella per alleanza deve far vedere.
@@ -680,13 +683,34 @@ export function renderBattleDetail(battle) {
     { id: 'contracts', label: btlT('tabContracts'), n: _detail.contracts.length },
   ].filter(Boolean);
 
+  // Le tre schede "chi ha fatto cosa" si possono guardare round per round
+  // (roundBarHtml). Senza round scelto restano esattamente com'erano.
+  const roundBar = ['nations', 'alliances', 'mu'].includes(_dtab) ? roundBarHtml(battle) : '';
+  const rCountry = _round && (_dtab === 'nations' || _dtab === 'alliances') ? roundSides('country') : null;
+  const rWait = (r) => (r === 'loading' ? `<div class="wp-btl-loading">${btlT('loading')}</div>`
+    : r === 'error' ? `<p class="wp-btl-foot">${btlT('roundError')}</p>` : null);
+
   let body;
-  if (_dtab === 'alliances') body = alliancesHtml(battle) || `<div class="wp-btl-loading">${btlT('loading')}</div>`;
+  if (rCountry && rWait(rCountry)) body = rWait(rCountry);
+  else if (_dtab === 'alliances') body = alliancesHtml(battle, rCountry) || `<div class="wp-btl-loading">${btlT('loading')}</div>`;
   else if (_dtab === 'bonus') body = bonusHtml(battle);
-  else if (_dtab === 'mu') body = muSectionHtml(battle);
+  else if (_dtab === 'mu') body = _round ? (rWait(roundSides('mu')) || muRoundHtml(battle, roundSides('mu'))) : muSectionHtml(battle);
   else if (_dtab === 'timeline') body = timeline;
   else if (_dtab === 'funders') body = fundersHtml(battle);
   else if (_dtab === 'contracts') body = contractsHtml(_detail.contracts, _detail.contractsTruncated);
+  // Un round: le stesse tabelle, senza le colonne che sono della battaglia
+  // intera (contratti, versamenti dei finanziatori). Il prezzo per 1k resta:
+  // incassato ÷ danno di quel round.
+  else if (rCountry) body = `
+      <p class="wp-btl-foot wp-btl-foot-tight">${btlT('earnedNote')}</p>
+      <div class="wp-btl-sides">
+        ${['defender', 'attacker'].map(k => sideTable(rCountry[k], k, battle, {
+          label: btlT(k), color: `var(--wp-btl-${k === 'defender' ? 'def' : 'atk'})`, countryId: battle[k].countryId,
+          expanded: _expanded[k], entityName: nm, entityFlag: flagHtml,
+          pay: { byCountry: new Map(), totContracts: 0 },
+          entityHeader: btlT('colNation'), truncated: rCountry.truncated?.[k] })).join('')}
+      </div>
+      <p class="wp-btl-foot wp-btl-foot-tight">${btlT('paidPerKNote')}</p>`;
   else body = `
       <p class="wp-btl-foot wp-btl-foot-tight">${btlT('earnedNote')}</p>
       <div class="wp-btl-sides">
@@ -712,7 +736,82 @@ export function renderBattleDetail(battle) {
             aria-selected="${_dtab === t.id}" data-dtab="${t.id}">${t.label}${
             t.n != null ? `<span class="wp-btl-dtab-n">${t.n}</span>` : ''}</button>`).join('')}
       </nav>
+      ${roundBar}
       ${body}
+    </div>`;
+}
+
+/* ══ ROUND PER ROUND ═══════════════════════════════════════
+   Richiesta dell'utente (2026-10-15): «oltre all'aggregato le tabelle
+   divise per round, mettendo in evidenza il round in corso se la
+   battaglia è attiva». Una fila di bottoni sopra Nazioni, Alleanze e
+   Unità: "Tutta la battaglia" (le tabelle di sempre) e un bottone per
+   round, col vincitore e i punti se è chiuso, il pallino rosso se è
+   quello in corso. Le classifiche del round si scaricano alla prima
+   apertura (getRoundRanking in api.js: quattro procedure in un batch);
+   quelle dei round chiusi restano in memoria, quella del round in corso
+   si rilegge a ogni giro di refreshBattleDetail come le altre.
+   Con un round solo la fila non c'è: sarebbe la battaglia intera due volte.
+   ─────────────────────────────────────────────────────────── */
+let _round = null;          // id del round in vista, null = tutta la battaglia
+const _rk = new Map();      // `${roundId}|${type}` -> 'loading' | 'error' | { data, live }
+
+function roundSides(type) {
+  const v = _rk.get(`${_round}|${type}`);
+  if (!v) return 'loading';
+  return typeof v === 'string' ? v : v.data;
+}
+
+function roundBarHtml(battle) {
+  const rounds = _detail?.rounds || [];
+  if (rounds.length < 2) return '';
+  const chip = (id, inner, cls = '', title = '') => `
+    <button type="button" class="wp-btl-rchip${_round === id ? ' active' : ''}${cls}" data-round="${id || ''}"
+      ${title ? `title="${escapeHtml(title)}"` : ''}>${inner}</button>`;
+  return `
+    <div class="wp-btl-rounds" role="group" aria-label="${escapeHtml(btlT('roundsLabel'))}">
+      ${chip(null, escapeHtml(btlT('roundAll')))}
+      ${rounds.map(r => {
+        const name = escapeHtml(btlT('roundN', { n: r.number }));
+        if (r.live) {
+          return chip(r.id, `<span class="wp-btl-livedot"></span>${name} <em>${escapeHtml(btlT('liveNow'))}</em>`, ' live');
+        }
+        const winner = r.wonBy ? battle[r.wonBy]?.countryId : null;
+        const pts = r.points ? `${r.points.defender}–${r.points.attacker}` : '';
+        const title = winner ? btlT('roundWonBy', { name: nationName(winner) || '—', pts }) : '';
+        return chip(r.id, `${name}${winner ? ` ${flagHtml(winner)}` : ''}${pts ? ` <em>${pts}</em>` : ''}`, '', title);
+      }).join('')}
+    </div>
+    ${(rounds.find(r => r.id === _round)?.live)
+      ? `<p class="wp-btl-foot wp-btl-foot-tight">${btlT('roundLiveNote')}</p>` : ''}`;
+}
+
+/** Scarica le classifiche di un round (se non ci sono già) e ridisegna. */
+async function loadRound(battle, roundId, type, repaint, { force = false } = {}) {
+  const key = `${roundId}|${type}`;
+  if (!force && _rk.has(key)) return;
+  const live = !!_detail?.rounds?.find(r => r.id === roundId)?.live;
+  if (!_rk.has(key)) _rk.set(key, 'loading');
+  const data = await getRoundRanking(roundId, type, { live });
+  if (_wired.battle?.id !== battle.id) return;
+  // Un giro andato storto su dati che c'erano già: si tengono quelli.
+  if (data) _rk.set(key, { data, live });
+  else if (!force || typeof _rk.get(key) === 'string') _rk.set(key, 'error');
+  if (data && type === 'mu') {
+    await resolveMuBriefs([...data.defender, ...data.attacker].map(r => r.id));
+    if (_wired.battle?.id !== battle.id) return;
+  }
+  repaint();
+}
+
+/** Unità militari di un round: stessa tabella della battaglia intera. */
+function muRoundHtml(battle, r) {
+  return `
+    <div class="wp-btl-sides">
+      ${['defender', 'attacker'].map(k => sideTable(r[k], k, battle, {
+        label: btlT(k), color: `var(--wp-btl-${k === 'defender' ? 'def' : 'atk'})`, countryId: battle[k].countryId,
+        expanded: _expanded[k], entityCell: muCellHtml,
+        entityHeader: btlT('colUnit'), truncated: r.truncated?.[k] })).join('')}
     </div>`;
 }
 
@@ -721,6 +820,8 @@ export function renderBattleDetail(battle) {
  *  completa quando le classifiche atterrano: nessuna schermata vuota. */
 export async function loadBattleDetail(battle, repaint) {
   _detail = null;
+  _round = null;      // gli id dei round sono di quella battaglia
+  _rk.clear();
   _mu = null;
   _money = null;
   _spend = null;
@@ -777,6 +878,12 @@ export async function refreshBattleDetail(battle, repaint) {
   if (spend) _spend = spend;
   if (tl) _tl = tl;
   if (mu) _mu = mu;
+  // Le classifiche di round scaricate quando il round era in corso: si
+  // rileggono (se nel frattempo è finito, questa è l'ultima volta e poi
+  // restano in memoria come le altre).
+  await Promise.all([..._rk.entries()]
+    .filter(([, v]) => v?.live)
+    .map(([key]) => { const [roundId, type] = key.split('|'); return loadRound(battle, roundId, type, () => {}, { force: true }); }));
   // Contratti nuovi = unità nuove da battezzare (le altre sono già in _muInfo).
   await resolveMuBriefs((_detail?.contracts || []).map(c => c.mu));
   if (_wired.battle?.id !== id) return;
@@ -843,6 +950,17 @@ export function wireBattleDetail(root, battle, { onBack, repaint }) {
         import('../app/playersOverlay.js').then(m => m.openPlayersView()).catch(() => {});
         return;
       }
+      const rb = e.target.closest?.('[data-round]');
+      if (rb) {
+        _round = rb.dataset.round || null;
+        _expanded = { attacker: false, defender: false };
+        _wired.repaint?.();
+        return;
+      }
+      if (bmanClick(e.target)) {
+        _wired.repaint?.();
+        return;
+      }
       if (e.target.closest?.('#wp-btl-ctr-more')) {
         _ctrAll = !_ctrAll;
         _wired.repaint?.();
@@ -860,7 +978,10 @@ export function wireBattleDetail(root, battle, { onBack, repaint }) {
 
   // Scheda Unità militari: la si carica quando la si apre (2 chiamate in
   // più + la directory), non prima — è la scheda che si guarda di meno.
-  if (_dtab === 'mu' && _muState === 'closed') loadMuSection(battle, repaint);
+  if (_dtab === 'mu' && _muState === 'closed' && !_round) loadMuSection(battle, repaint);
+  if (_round && ['nations', 'alliances', 'mu'].includes(_dtab)) {
+    loadRound(battle, _round, _dtab === 'mu' ? 'mu' : 'country', repaint);
+  }
   if (_dtab === 'bonus' && _bonus == null) loadBonus(battle, repaint);
   root.querySelector('#wp-btl-mu-open')?.addEventListener('click', () => loadMuSection(battle, repaint));
 }
@@ -945,11 +1066,84 @@ function bonusChips(parts, side) {
   return out.join('');
 }
 
+/* ── Bonus dell'unità, a mano ──
+   Richiesta dell'utente (2026-10-15): «aggiungi nella sezione bonus un
+   toggle per aggiungere manualmente il bonus MU e il QG MU». Le righe per
+   nazione contano solo le voci della NAZIONE (vedi NATION_KEYS in
+   battleBonus.js): ordine e QG dell'unità dipendono dal giocatore. Chi
+   vuole sapere "io, con la mia unità, dove rendo di più" — senza aver
+   impostato "Sono io", o per un'unità che non è la sua — li accende qui:
+   si sommano a ogni riga e a "Qualunque altra nazione", con lo stesso
+   valore su tutti e due i lati (sono dell'unità, non del lato).
+   Percentuali dalle regole del gioco (orderPct, rules.hq), non scritte qui.
+   Preferenza del singolo browser: localStorage, e se non c'è si parte
+   spenti. "Il tuo bonus" resta com'è: usa già ordine e QG VERI della tua
+   unità, e sommarci questi li conterebbe due volte. */
+const BMAN_KEY = 'we_btl_bonus_manual';
+let _bman = (() => {
+  const def = { order: false, priority: 'medium', hq: false, level: 1 };
+  try { return { ...def, ...JSON.parse(localStorage.getItem(BMAN_KEY) || '{}') }; } catch { return def; }
+})();
+function saveBman() {
+  try { localStorage.setItem(BMAN_KEY, JSON.stringify(_bman)); } catch { /* storage negato */ }
+}
+
+/** Le voci accese, nella forma delle parti di battleBonus ({ muOrder, muHq }). */
+function bmanParts(rules) {
+  const out = {};
+  if (_bman.order) out.muOrder = orderPct(rules.muOrder, _bman.priority);
+  const lv = Math.min(_bman.level, rules.hq.length - 1);
+  if (_bman.hq && lv > 0) out.muHq = rules.hq[lv] || 0;
+  return out;
+}
+
+function bmanHtml(rules) {
+  const sw = (key, label) => `
+    <button type="button" class="wp-btl-bman-sw" role="switch" aria-checked="${_bman[key]}" data-bman="${key}">
+      <i></i>${escapeHtml(label)}
+    </button>`;
+  const seg = (key, opts) => `
+    <div class="wp-btl-bman-seg${_bman[key === 'priority' ? 'order' : 'hq'] ? '' : ' off'}" role="group">
+      ${opts.map(([v, label, cls]) => `<button type="button" class="${cls || ''}${String(_bman[key]) === String(v) ? ' active' : ''}"
+        data-bman-${key}="${v}">${escapeHtml(label)}</button>`).join('')}
+    </div>`;
+  const prLabel = { high: 'prHigh', medium: 'prMedium', low: 'prLow' };
+  const levels = rules.hq.map((p, lv) => lv).filter(lv => lv > 0);
+  return `
+    <div class="wp-btl-bman">
+      <div class="wp-btl-bonus-title">${escapeHtml(btlT('bmanTitle'))}</div>
+      <div class="wp-btl-bman-rows">
+        <div class="wp-btl-bman-row">${sw('order', btlT('partMuOrder'))}
+          ${seg('priority', PRIORITIES.map(pr => [pr, `${btlT(prLabel[pr])} +${orderPct(rules.muOrder, pr)}%`, `o-${pr}`]))}</div>
+        <div class="wp-btl-bman-row">${sw('hq', btlT('partMuHq'))}
+          ${seg('level', levels.map(lv => [lv, `${btlT('lvN', { n: lv })} +${fmtPct(rules.hq[lv])}%`]))}</div>
+      </div>
+      <p class="wp-btl-foot wp-btl-foot-tight">${escapeHtml(btlT('bmanNote'))}</p>
+    </div>`;
+}
+
+/** Clic dentro il riquadro: true se l'ha gestito lui. */
+function bmanClick(target) {
+  const sw = target.closest?.('[data-bman]');
+  const pr = target.closest?.('[data-bman-priority]');
+  const lv = target.closest?.('[data-bman-level]');
+  if (sw) _bman[sw.dataset.bman] = !_bman[sw.dataset.bman];
+  // Scegliere un livello accende anche l'interruttore: è quello che si vuole.
+  else if (pr) { _bman.priority = pr.dataset.bmanPriority; _bman.order = true; }
+  else if (lv) { _bman.level = Number(lv.dataset.bmanLevel); _bman.hq = true; }
+  else return false;
+  saveBman();
+  return true;
+}
+
 function bonusHtml(battle) {
   if (_bonus == null || _bonus === 'loading') return `<div class="wp-btl-loading">${btlT('loading')}</div>`;
   if (_bonus === 'error') return `<div class="wp-btl-notice warn">${btlT('bonusError')}</div>`;
   const b = _bonus;
   const signed = (v) => `≈${v > 0 ? '+' : ''}${fmtPct(v)}%`;
+  const rules = b.ctxs.defender.rules;
+  const extra = bmanParts(rules);
+  const extraTot = Object.values(extra).reduce((s, v) => s + v, 0);
 
   let you = '';
   if (b.mine) {
@@ -976,12 +1170,16 @@ function bonusHtml(battle) {
       facts.push(!ctx.buildingKnown ? bvT('baseUnknown') : ctx.building ? bvT('base', { n: ctx.buildingLevel, p: ctx.building }) : bvT('baseOff'));
       if (ctx.revoltBar) facts.push(bvT('revolt', { p: fmtPct(Math.round(ctx.revoltBar * 1000) / 10) }));
     }
-    const rows = b.rows[side];
+    // Le voci dell'unità accese a mano si sommano a ogni riga, e chi non ha
+    // niente di suo prende comunque quelle: la riga "qualunque altra".
+    const rows = b.rows[side].map(r => ({ ...r, v: r.v + extraTot, parts: { ...r.parts, ...extra } }));
+    if (extraTot) rows.push({ id: null, v: extraTot, parts: extra });
     const max = Math.max(1, rows[0]?.v || 1);
     const list = rows.length ? rows.map(r => `
-      <div class="wp-btl-brow">
+      <div class="wp-btl-brow${r.id ? '' : ' wp-btl-brow-others'}">
         <div class="wp-btl-brow-top">
-          ${flagHtml(r.id)}<span class="wp-btl-brow-name">${escapeHtml(nationName(r.id) || '—')}</span>
+          ${r.id ? flagHtml(r.id) : '<span class="wp-btl-flag"></span>'}<span class="wp-btl-brow-name">${
+            escapeHtml(r.id ? nationName(r.id) || '—' : btlT('bonusOthers'))}</span>
           <strong>${signed(r.v)}</strong>
         </div>
         <div class="wp-btl-brow-bar"><i style="width:${Math.max(3, Math.round(r.v / max * 100))}%"></i></div>
@@ -998,6 +1196,7 @@ function bonusHtml(battle) {
     <p class="wp-btl-foot wp-btl-foot-tight">${btlT('bonusIntro')}</p>
     ${b.ordersKnown ? '' : `<div class="wp-btl-notice warn">${escapeHtml(bvT('ordersUnknown'))}</div>`}
     ${you}
+    ${bmanHtml(rules)}
     <div class="wp-btl-bonus-sides">${col('defender')}${col('attacker')}</div>
     <p class="wp-btl-foot">${escapeHtml(bvT('note'))}</p>`;
 }

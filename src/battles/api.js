@@ -411,6 +411,7 @@ export async function getBattleDetail(battleId, { live = false } = {}) {
         createdAt: _ts(a.createdAt),
       })).sort((a, b) => b.payout - a.payout),
       contractsTruncated: Boolean(auctions?.truncated),
+      rounds: _rounds(raw),
     };
 
     // Nessuna delle due classifiche ha risposto: è un errore di rete, non
@@ -422,6 +423,64 @@ export async function getBattleDetail(battleId, { live = false } = {}) {
     return detail;
   } catch (err) {
     console.warn('WarEra+ battaglie: dettaglio non disponibile', err);
+    return null;
+  }
+}
+
+/* ── I round di una battaglia ──
+   `battle.getById` (già nel batch del dettaglio) porta gli id dei round in
+   ordine e `roundsHistory`, una voce per round CHIUSO con vincitore, danni
+   e punti. Il round senza voce, su una battaglia attiva, è quello in corso.
+   ⚠️ L'id del round in corso è anche in `currentRound`: qui come stringa,
+   nel payload di /battles come oggetto col suo danno — si accettano tutti
+   e due. */
+function _rounds(raw) {
+  const ids = (Array.isArray(raw?.rounds) ? raw.rounds : [])
+    .map(r => (typeof r === 'string' ? r : r?._id)).filter(Boolean);
+  const hist = Array.isArray(raw?.roundsHistory) ? raw.roundsHistory : [];
+  const cur = typeof raw?.currentRound === 'string' ? raw.currentRound : raw?.currentRound?._id || null;
+  const active = raw?.isActive !== false && !raw?.endedAt;
+  return ids.map((id, i) => {
+    const h = hist[i] || null;
+    return {
+      id, number: i + 1,
+      live: active && !h && (id === cur || i === ids.length - 1),
+      wonBy: h?.wonBy || null,
+      points: h ? { attacker: Number(h.attackerPoints) || 0, defender: Number(h.defenderPoints) || 0 } : null,
+    };
+  });
+}
+
+/* ── Classifiche di UN round ──
+   Misurato il 2026-10-15 sulla Italia–Germania: `battleRanking.getRanking`
+   filtra per round con `roundId` DA SOLO — il round 1 dava 4.043.165 e
+   76.630.377, identici a `roundsHistory`. ⚠️ Con `battleId` accanto
+   risponde VUOTO (200, zero righe), senza errore: non aggiungerlo "per
+   sicurezza". Un round chiuso non cambia più e si memorizza; quello in
+   corso no. `type`: 'country' o 'mu'. */
+const _roundRankCache = new Map();   // `${roundId}|${type}` -> classifiche
+export async function getRoundRanking(roundId, type = 'country', { live = false } = {}) {
+  const key = `${roundId}|${type}`;
+  if (!live && _roundRankCache.has(key)) return _roundRankCache.get(key);
+  const rank = (dataType, side) => ['battleRanking.getRanking', { roundId, dataType, type, side, limit: 100 }];
+  try {
+    const [dAtk, dDef, mAtk, mDef] = await trpcBatch([
+      rank('damage', 'attacker'), rank('damage', 'defender'),
+      rank('money', 'attacker'), rank('money', 'defender'),
+    ]);
+    if (!dAtk && !dDef) return null;   // errore di rete, non un round vuoto
+    const out = {
+      attacker: _mergeSide(_rankRows(dAtk, type), _rankRows(mAtk, type)),
+      defender: _mergeSide(_rankRows(dDef, type), _rankRows(mDef, type)),
+      truncated: {
+        attacker: _isTruncated(dAtk) || _isTruncated(mAtk),
+        defender: _isTruncated(dDef) || _isTruncated(mDef),
+      },
+    };
+    if (!live) _roundRankCache.set(key, out);
+    return out;
+  } catch (err) {
+    console.warn('WarEra+ battaglie: classifica del round non disponibile', err);
     return null;
   }
 }

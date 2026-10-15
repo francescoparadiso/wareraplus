@@ -972,6 +972,57 @@ body.light-theme .wp-btl-dtab-n { background: rgba(0, 0, 0, .07); }
 .wp-btl-bchip.o-high { background: rgba(248,81,73,.18); }
 .wp-btl-bchip.o-medium { background: rgba(227,179,65,.2); }
 .wp-btl-bchip.o-low { background: rgba(63,185,80,.18); }
+/* Round per round (battleDetail.js: roundBarHtml): una fila di bottoni
+   sopra Nazioni, Alleanze e Unità. Il round in corso ha il bordo rosso
+   delle battaglie vive e il pallino che pulsa, così si trova a colpo d'occhio. */
+.wp-btl-rounds { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.wp-btl-rchip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  background: transparent; color: var(--wp-ov-text-dim, #8b949e);
+  border: 1px solid var(--wp-ov-border, #30363d);
+}
+.wp-btl-rchip em { font-style: normal; font-variant-numeric: tabular-nums; opacity: .8; }
+.wp-btl-rchip .wp-btl-flag { height: 11px; }
+.wp-btl-rchip:hover { color: inherit; }
+.wp-btl-rchip.active { color: inherit; border-color: currentColor; background: rgba(128,128,128,.14); font-weight: 700; }
+.wp-btl-rchip.live { color: #f85149; border-color: rgba(248,81,73,.55); background: rgba(248,81,73,.08); }
+.wp-btl-rchip.live.active { background: rgba(248,81,73,.18); border-color: #f85149; }
+/* Bonus dell'unità acceso a mano (battleDetail.js: bmanHtml): un
+   interruttore per voce, e accanto il livello. Spento = livelli attenuati
+   ma cliccabili (sceglierne uno accende anche l'interruttore). */
+.wp-btl-bman {
+  border: 1px dashed var(--wp-ov-border, #30363d); border-radius: 10px;
+  padding: 10px 12px; margin: 0 0 14px;
+}
+.wp-btl-bman-rows { display: flex; flex-direction: column; gap: 8px; }
+.wp-btl-bman-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.wp-btl-bman-sw {
+  display: inline-flex; align-items: center; gap: 8px; min-width: 130px;
+  background: none; border: 0; padding: 0; color: inherit; font: inherit; font-size: 13px; cursor: pointer;
+}
+.wp-btl-bman-sw i {
+  position: relative; width: 30px; height: 17px; border-radius: 999px; flex-shrink: 0;
+  background: rgba(128,128,128,.35); transition: background .15s;
+}
+.wp-btl-bman-sw i::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%;
+  background: #fff; transition: transform .15s;
+}
+.wp-btl-bman-sw[aria-checked="true"] i { background: #3fb950; }
+.wp-btl-bman-sw[aria-checked="true"] i::after { transform: translateX(13px); }
+.wp-btl-bman-seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.wp-btl-bman-seg.off { opacity: .45; }
+.wp-btl-bman-seg button {
+  font: inherit; font-size: 11px; padding: 2px 8px; border-radius: 6px; cursor: pointer;
+  background: transparent; color: var(--wp-ov-text-dim, #8b949e);
+  border: 1px solid rgba(128,128,128,.3);
+}
+.wp-btl-bman-seg button.active { color: inherit; border-color: currentColor; background: rgba(128,128,128,.14); font-weight: 700; }
+.wp-btl-bman-seg button.o-high.active { background: rgba(248,81,73,.18); border-color: rgba(248,81,73,.6); }
+.wp-btl-bman-seg button.o-medium.active { background: rgba(227,179,65,.2); border-color: rgba(227,179,65,.6); }
+.wp-btl-bman-seg button.o-low.active { background: rgba(63,185,80,.18); border-color: rgba(63,185,80,.6); }
+.wp-btl-brow-others .wp-btl-brow-name { font-style: italic; color: var(--wp-ov-text-dim, #8b949e); }
 body.light-theme .wp-btl-bonus-cell.best strong { color: #1a7f37; }
 @media (max-width: 760px) {
   .wp-btl-bonus-sides, .wp-btl-bonus-cells { grid-template-columns: 1fr; }

@@ -590,6 +590,11 @@ wareraPlus/
     │   │                          schieramento).
     │   │                          ⚠️ la colonna taglia qui è "incassato",
     │   │                          non "speso": coincidono solo sommando il lato.
+    │   │                          Nazioni, Alleanze e Unità anche ROUND PER ROUND
+    │   │                          (getRoundRanking: ⚠️ `roundId` DA SOLO, con
+    │   │                          `battleId` accanto risponde vuoto). In Bonus due
+    │   │                          interruttori sommano a mano ordine e QG d'unità.
+    │   │                          Una battaglia viva aperta si rilegge a ogni tick.
     │   ├── moneyTransfers.js ← NUOVO — i bonifici da tesoro a tesoro
     │   │                  (`transaction.getPaginatedTransactions`, tipo
     │   │                  countryMoneyTransfer). Sono POCHI: ~36 al giorno in tutto
