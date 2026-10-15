@@ -631,18 +631,19 @@ wareraPlus/
     │   │                          "Amministrazione" (admin.js). Una sezione chiusa non
     │   │                          carica niente; Contratti mostra comunque quante richieste
     │   │                          aspettano la firma di chi guarda.
-    │   ├── nazione.js           ← NUOVO — "La mia nazione", cruscotto a TUTTA LARGHEZZA
-    │   │                          (griglia a 12 colonne, span per scheda, una colonna sotto
-    │   │                          i 1100px): tesoro/classifiche/relazioni/governo, ultimi 14
-    │   │                          giorni (tesoro orario dal ticker, giocatori attivi, danno
-    │   │                          al giorno), allarmi dai confini, elezioni, la nostra
-    │   │                          forza contro ogni nemico (pillole + un colpo a testa, tutti
-    │   │                          letti dal vivo), cittadini (attività, stile, livelli),
-    │   │                          nemici, battaglie + 48 ore + bonifici 14 gg, guerra 30 gg
-    │   │                          (vinte/perse, avversari, spese), migliori giocatori, unità
-    │   │                          (anche "di fatto"), classifiche, regioni e confini.
-    │   │                          Grafici in SVG a mano. Dati da /nazione e /nazione/nemici:
-    │   │                          tutto da cache del cache-server, nessuna chiamata nuova.
+    │   ├── nazione.js           ← NUOVO — "La mia nazione". Dal 2026-10-15 a SEI SCHEDE
+    │   │                          interne sotto una testata fissa (nazione, ora della lettura,
+    │   │                          guerre / battaglie / allarmi nuovi): ADESSO (una frase sola
+    │   │                          scelta da sintesi() — regola e soglie scritte lì —, quattro
+    │   │                          numeri, chi ci minaccia, confini 24 h, cose da fare), FRONTE
+    │   │                          (una riga per nemico che si apre su pillole, potenziale,
+    │   │                          battaglie contro di lui, sue regioni al confine e suoi cambi;
+    │   │                          poi forza, battaglie + 48 ore, allarmi, regioni, guerra 30 gg),
+    │   │                          NAZIONE (numeri in tre gruppi con mini-curva, 14 giorni,
+    │   │                          classifiche, bonifici), PERSONE, POLITICA, IMPOSTAZIONI
+    │   │                          (canali Discord, accessi). Colori di stato a tre livelli
+    │   │                          (alto/medio/ok, `--liv` in private.css). Grafici in SVG a
+    │   │                          mano. Dati da /nazione e /nazione/nemici: nessuna chiamata nuova.
     │   ├── i18nNazione.js       ← dizionario (9 lingue) di nazione.js e delle sezioni
     │   ├── board.js, battles.js ← contratti mercenari (tavolo, battaglie, lista permessi)
     │   └── admin.js, selettori.js, api.js, i18n.js
