@@ -40,6 +40,7 @@ import { classifyPlaystyle, WAR_SKILLS, ECO_SKILLS } from '../mu/playstyle.js';
 import { candleChartSvg, attachCandleExplorer } from '../economy/candleChart.js';
 import { ecoT } from '../economy/i18n.js';
 import { syncBack } from '../app/backNav.js';
+import { trackEvent } from '../shared/analytics.js';
 import { animationsOn } from '../shared/motion.js';
 import { plyT } from './i18n.js';
 import {
@@ -479,7 +480,7 @@ function duelHtml() {
 function startDuel() {
   if (!_duel.a || !_duel.b) return;
   openPlayer(_duel.a.id, { tabs: false });
-  openCompare(_duel.b.id);
+  openCompare(_duel.b.id, { via: 'duel' });
 }
 
 /* ── Scheda di un giocatore ───────────────────────────────────── */
@@ -835,7 +836,7 @@ function wire() {
     if (open) { openPlayer(open.dataset.open); return; }
     if (t.closest('[data-compare]')) { _picking = !_picking; render(); return; }
     if (t.closest('#wp-ply-cmp-back')) { leaveCompare(); return; }
-    if (t.closest('#wp-ply-cmp-swap')) { const a = _pid, b = _cmpId; openPlayer(b).then(() => openCompare(a)); return; }
+    if (t.closest('#wp-ply-cmp-swap')) { const a = _pid, b = _cmpId; openPlayer(b).then(() => openCompare(a, { via: 'swap' })); return; }
     const loot = t.closest('[data-loot]');
     if (loot) {
       const id = loot.dataset.loot;
@@ -945,9 +946,12 @@ function pickerHtml() {
 }
 
 /** Apre il confronto fra il giocatore della scheda e `id`. Esportata:
- *  la usa l'overlay per i link ?player=A&vs=B. */
-export async function openCompare(id) {
+ *  la usa l'overlay per i link ?player=A&vs=B. `via` serve solo a Umami:
+ *  da dove si è arrivati al versus (ricerca nella scheda, 1 vs 1 dalla
+ *  partenza, scambio dei lati, link). */
+export async function openCompare(id, { via = 'search' } = {}) {
   if (!ID_RE.test(String(id || '')) || !_pid || id === _pid) return;
+  trackEvent('players-compare', { via });
   _picking = false;
   _cmpId = id;
   _cmp = null;

@@ -35,6 +35,7 @@ import { state } from '../diplomacy/state.js';
 import { escapeHtml } from '../diplomacy/utils.js';
 import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 import { btlT } from './i18n.js';
+import { trackEvent, trackThrottled } from '../shared/analytics.js';
 import { getBattleDetail, getBattleMuBreakdown, getRoundRanking } from './api.js';
 import { fetchMoneyTransfers, transfersFor, windowIsShort } from './moneyTransfers.js';
 import { fetchBattleTimeline, timelineSectionHtml, wireTimeline, resetTimeline } from './battleTimeline.js';
@@ -943,6 +944,7 @@ export function wireBattleDetail(root, battle, { onBack, repaint }) {
       const tab = e.target.closest?.('.wp-btl-dtab');
       if (tab) {
         _dtab = tab.dataset.dtab;
+        trackEvent('battle-detail-tab', { tab: _dtab });
         _wired.repaint?.();
         return;
       }
@@ -953,11 +955,14 @@ export function wireBattleDetail(root, battle, { onBack, repaint }) {
       const rb = e.target.closest?.('[data-round]');
       if (rb) {
         _round = rb.dataset.round || null;
+        trackEvent('battle-detail-round', { tab: _dtab, all: !_round });
         _expanded = { attacker: false, defender: false };
         _wired.repaint?.();
         return;
       }
       if (bmanClick(e.target)) {
+        // Throttle: chi regola il bonus a mano clicca più interruttori di fila.
+        trackThrottled('battle-bonus-manual', undefined, 30000);
         _wired.repaint?.();
         return;
       }
