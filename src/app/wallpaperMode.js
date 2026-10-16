@@ -348,6 +348,31 @@ export function startWallpaperMode() {
   applyProps();
   window.addEventListener('wareraplus:apikey-status', paintKeyStatus);
   window.addEventListener('wareraplus:langchange', () => { if (_infoEl) renderInfo(); });
+  startVersionWatch();
+}
+
+/* ── Aggiornamento automatico ──
+   Uno sfondo non si ricarica da solo per giorni, e qui il service worker
+   non c'e' (index.html lo toglie): senza questo resterebbe sul deploy con
+   cui e' partito. Ogni mezz'ora chiede /version.json (scritto a build time
+   da vite.config.js) e, se l'id e' cambiato, ricarica la pagina. In pausa
+   non fa niente; al ritorno dalla pausa controlla subito. */
+const VERSION_CHECK_MS = 30 * 60 * 1000;
+let _versionTimer = null;
+
+async function checkVersion() {
+  if (_paused) return;
+  try {
+    const r = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const { build } = await r.json();
+    if (build && typeof __WP_BUILD_ID__ === 'string' && build !== __WP_BUILD_ID__) window.location.reload();
+  } catch { /* offline o dev server senza version.json: si riprova al giro dopo */ }
+}
+
+function startVersionWatch() {
+  if (_versionTimer) return;
+  _versionTimer = setInterval(checkVersion, VERSION_CHECK_MS);
 }
 
 /* ── Applicazione ── */
@@ -447,7 +472,7 @@ function setPaused(paused) {
   if (paused === _paused) return;
   _paused = paused;
   if (paused) pauseMapBackgroundWork();
-  else resumeMapBackgroundWork();
+  else { resumeMapBackgroundWork(); checkVersion(); }
 }
 
 /* ── Fascia informativa + "i" ── */
