@@ -54,6 +54,7 @@
 
 import { natT } from './i18n.js';
 import { fetchDamageTimeline } from './api.js';
+import { trackEvent } from '../shared/analytics.js';
 import { escapeHtml, fmtCompact } from '../mu/ui.js';
 import { finePoints, pillCompare, pillSegments } from '../shared/pillInstants.js';
 
@@ -132,6 +133,7 @@ function paint(own, world) {
     const btn = e.target.closest('button[data-h]');
     if (!btn) return;
     _hours = Number(btn.dataset.h);
+    trackEvent('nations-damage-range', { hours: _hours });
     try { localStorage.setItem(RANGE_KEY, String(_hours)); } catch { /* storage negato */ }
     paint(own, world);
   });

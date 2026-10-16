@@ -44,7 +44,7 @@ export async function openPlayersView(userId, vsId) {
     _mod = await loadModule(() => import('../players/main.js'), 'players');
     if (userId) _mod.openPlayer(userId);
     await _mod.initPlayersView(rootEl);
-    if (userId && vsId) _mod.openCompare(vsId);
+    if (userId && vsId) _mod.openCompare(vsId, { via: 'link' });
   });
 
   trackEvent('players-view-open', { deepLink: !!userId });

@@ -41,6 +41,7 @@ import {
 import { nomeNazione, urlBandiera, coloreNazione } from './battles.js';
 import { state } from '../diplomacy/state.js';
 import { getLang } from '../shared/i18n.js';
+import { trackEvent } from '../shared/analytics.js';
 
 const CHIAVE_VISTI = 'wp_pv_confini_visti';
 // La scheda interna aperta (Adesso, Fronte, …): comodità di chi guarda.
@@ -612,7 +613,10 @@ export function creaQuadroNazione(ctx) {
 
   /** Cambia scheda. `nemico`: apre la sua riga nel Fronte e ci porta lo
    *  sguardo (il clic su una minaccia in Adesso). */
-  function cambiaVista(v, { nemico = null } = {}) {
+  /** `via` serve solo a Umami: la barra delle schede o una scorciatoia
+   *  (pillole in testa, voci di Adesso, riga di una minaccia). */
+  function cambiaVista(v, { nemico = null, via = 'shortcut' } = {}) {
+    trackEvent('private-nation-view', { view: v, via });
     vista = v;
     try { localStorage.setItem(CHIAVE_VISTA, v); } catch { /* resta per questa apertura */ }
     if (nemico) { apertiFronte.add(nemico); scorriA = `nemico-${nemico}`; } else scorriA = 'barra';
@@ -751,7 +755,7 @@ export function creaQuadroNazione(ctx) {
       b.appendChild(el('span', null, etichette[v]));
       // Gli allarmi nuovi si vedono anche da un'altra scheda: stanno nel Fronte.
       if (v === 'fronte' && nuovi().length) b.appendChild(el('span', 'wp-pv-scheda-n wp-pv-scheda-n-allarme', String(nuovi().length)));
-      b.addEventListener('click', () => cambiaVista(v));
+      b.addEventListener('click', () => cambiaVista(v, { via: 'tab' }));
       nav.appendChild(b);
     }
     return nav;
@@ -1714,7 +1718,7 @@ export function creaQuadroNazione(ctx) {
     const aperto = tabelleAperte.has(n.id);
     piede.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small',
       aperto ? nzT('hidePlayers') : `${nzT('allPlayers')} (${num(n.censiti)})`, () => {
-        if (aperto) tabelleAperte.delete(n.id); else tabelleAperte.add(n.id);
+        if (aperto) tabelleAperte.delete(n.id); else { tabelleAperte.add(n.id); trackEvent('private-nation-enemy-players'); }
         ctx.ridisegna();
       }));
     box.appendChild(piede);
