@@ -12,6 +12,27 @@
        PRIMA del primo layout, quindi script classico e stile in linea, non
        il modulo (che arriva a parsing finito). Vedi src/app/wallpaperMode.js. -->
   <script>if (/[?&]wallpaper=1(&|$)/.test(location.search)) document.documentElement.classList.add('wp-wallpaper');</script>
+  <!-- WarEra+ sfondo: NIENTE service worker nello sfondo. Uno sfondo resta
+       acceso per giorni senza ricaricarsi, e il service worker del live
+       gli serve il bundle del deploy precedente finche' non si ricarica
+       (2026-10-16: era il motivo per cui Wallpaper Engine sembrava non
+       aggiornarsi). Qui si disinstalla quello gia' presente, si svuota la
+       sua cache e si impedisce a registerSW.js di installarne uno nuovo;
+       l'aggiornamento lo fa il controllo versione di wallpaperMode.js.
+       Script classico in linea: deve girare prima di registerSW.js. -->
+  <script>
+    if (document.documentElement.classList.contains('wp-wallpaper') && 'serviceWorker' in navigator) {
+      try {
+        navigator.serviceWorker.register = function () { return new Promise(function () {}); };
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (r) { r.unregister(); });
+        }).catch(function () {});
+        if (window.caches) caches.keys().then(function (ks) {
+          ks.forEach(function (k) { caches.delete(k); });
+        }).catch(function () {});
+      } catch (e) {}
+    }
+  </script>
   <style>html.wp-wallpaper select { display: none !important; }</style>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>WarEra+</title>

@@ -20,9 +20,16 @@ import { VitePWA } from 'vite-plugin-pwa';
 const DEPLOY_ENV = process.env.WP_DEPLOY_ENV || process.env.VERCEL_ENV || 'local';
 const IS_LIVE = DEPLOY_ENV === 'production';
 
+// WarEra+: identificatore di questa build, scritto anche in /version.json.
+// Lo sfondo di Wallpaper Engine (senza service worker, resta acceso per
+// giorni) lo confronta ogni tanto con quello che il sito serve ora e si
+// ricarica quando cambia. Vedi src/app/wallpaperMode.js.
+const BUILD_ID = process.env.VERCEL_GIT_COMMIT_SHA || String(Date.now());
+
 export default defineConfig({
   define: {
     __WP_DEPLOY_ENV__: JSON.stringify(DEPLOY_ENV),
+    __WP_BUILD_ID__: JSON.stringify(BUILD_ID),
   },
 
   // Deploy su Vercel: root del dominio, nessun sub-path (a differenza del
@@ -35,6 +42,20 @@ export default defineConfig({
   server: { port: Number(process.env.PORT) || 5173 },
 
   plugins: [
+    // WarEra+: /version.json con l'id della build (vedi BUILD_ID sopra).
+    // Non e' nel precache (globPatterns non include json) e lo sfondo lo
+    // chiede con cache: 'no-store'.
+    {
+      name: 'wp-build-version',
+      generateBundle() {
+        this.emitFile({
+          type: 'asset',
+          fileName: 'version.json',
+          source: JSON.stringify({ build: BUILD_ID }),
+        });
+      },
+    },
+
     // WarEra+: la copia di prova non deve finire nei motori di ricerca.
     // Ha un URL pubblico (secondo progetto Vercel, vedi WP_DEPLOY_ENV
     // sopra), quindi senza questo prima o poi un giocatore ci arriva da
