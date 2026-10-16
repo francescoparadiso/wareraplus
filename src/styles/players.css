@@ -315,7 +315,8 @@ body.light-theme .wp-ply-duel { --vs-a: #be185d; --vs-b: #0369a1; }
    pieno, l'altro si spegne un po' — si legge chi vince senza leggere i
    numeri. Niente animazioni sulle barre: la schermata si ridisegna due
    o tre volte mentre arrivano posizioni ed equipaggiamento, e una barra
-   che ricresce a ogni giro sembrerebbe un difetto. Si muove solo il VS.
+   che ricresce a ogni giro sembrerebbe un difetto. Fuori dall’intro
+   (in fondo al file, una volta sola) si muove solo il VS.
    ══════════════════════════════════════════════════════════════ */
 .wp-vs { --vs-a: #ec4899; --vs-b: #38bdf8; margin-top: 4px; }
 body.light-theme .wp-vs { --vs-a: #be185d; --vs-b: #0369a1; }
@@ -453,4 +454,96 @@ body.wp-no-motion .wp-vs-badge { animation: none; }
   .wp-vs-label { font-size: 9.5px; }
   .wp-vs-slot { min-width: 52px; font-size: 9.5px; }
   .wp-vs-gear { padding: 6px 8px; font-size: 12px; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Intro del versus (.wp-vs-intro, una volta sola all'apertura)
+   ------------------------------------------------------------------
+   Richiesta dell'utente: le animazioni dopo "Confronta!". La regola
+   sopra ("niente animazioni sulle barre") resta vera per i ridisegni:
+   la classe c'è SOLO nel primo disegno completo, e render() tiene in
+   attesa gli altri finché l'intro non finisce (INTRO_MS in
+   players/main.js, da tenere oltre l'ultima animazione qui sotto).
+   Il disegno dopo è lo stato finale, quindi non si vede lo stacco.
+   Copione: i due entrano dai lati (0–0,7 s), la fenditura si apre, il
+   VS si schianta (0,5–0,95 s) con lampo, onda e scossa, il punteggio
+   conta da zero, poi la corona; sotto, i gruppi salgono uno dopo
+   l'altro e in ogni riga le due barre si scontrano nel punto di
+   divisione, col valore del vincitore che fa un balzo.
+   Con l'interruttore delle animazioni spento la classe non arriva.
+   ══════════════════════════════════════════════════════════════ */
+@keyframes wp-vs-in-a { from { transform: translateX(-140%) skewX(-10deg); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes wp-vs-in-b { from { transform: translateX(140%) skewX(10deg); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes wp-vs-slit { from { transform: rotate(12deg) scaleY(0); opacity: 0; } to { transform: rotate(12deg) scaleY(1); opacity: .35; } }
+@keyframes wp-vs-slam {
+  0% { transform: scale(4) rotate(-30deg); opacity: 0; }
+  60% { transform: scale(.82) rotate(4deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes wp-vs-shock {
+  0% { transform: translateX(-50%) scale(.6); opacity: 0; }
+  10% { opacity: .9; }
+  100% { transform: translateX(-50%) scale(3.4); opacity: 0; }
+}
+@keyframes wp-vs-flash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes wp-vs-shake {
+  0%, 100% { transform: none; }
+  20% { transform: translate(-6px, 2px); }
+  40% { transform: translate(5px, -2px); }
+  60% { transform: translate(-3px, 1px); }
+  80% { transform: translate(2px, 0); }
+}
+@keyframes wp-vs-pop { from { transform: scale(.3); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes wp-vs-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes wp-vs-crown { from { transform: translateY(-34px) scale(1.8) rotate(-20deg); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes wp-vs-rise { from { transform: translateY(26px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes wp-vs-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes wp-vs-win {
+  0%, 100% { transform: none; text-shadow: none; }
+  45% { transform: scale(1.3); text-shadow: 0 0 14px currentColor; }
+}
+@keyframes wp-vs-spin { from { transform: scale(.4) rotate(-40deg); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes wp-vs-side-a { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes wp-vs-side-b { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.wp-vs-intro .wp-vs-hero { animation: wp-vs-shake .38s .9s both; }
+.wp-vs-intro .wp-vs-hero::before { animation: wp-vs-slit .4s .35s ease-out both; }
+.wp-vs-intro .wp-vs-hero::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at 50% 38%, rgba(255, 255, 255, .5), transparent 62%);
+  animation: wp-vs-flash .55s .88s ease-out both;
+}
+.wp-vs-intro .wp-vs-fighter-a { animation: wp-vs-in-a .65s .05s cubic-bezier(.2, .9, .3, 1.2) both; }
+.wp-vs-intro .wp-vs-fighter-b { animation: wp-vs-in-b .65s .05s cubic-bezier(.2, .9, .3, 1.2) both; }
+.wp-vs-intro .wp-vs-badge {
+  animation: wp-vs-slam .45s .5s cubic-bezier(.3, 1.5, .5, 1) both, wp-vs-beat 2.4s 1.4s ease-in-out infinite;
+}
+.wp-vs-shock {
+  position: absolute; top: 0; left: 50%; width: 66px; height: 66px; border-radius: 50%;
+  border: 3px solid var(--vs-a); box-shadow: 0 0 0 3px var(--vs-b), 0 0 24px #fff;
+  pointer-events: none; opacity: 0;
+  animation: wp-vs-shock .7s .9s ease-out both;
+}
+.wp-vs-intro .wp-vs-score { animation: wp-vs-pop .4s .95s cubic-bezier(.3, 1.6, .5, 1) both; }
+.wp-vs-intro .wp-vs-verdict,
+.wp-vs-intro .wp-vs-center > .wp-ply-chip { animation: wp-vs-fade .4s 1.7s ease-out both; }
+.wp-vs-intro .wp-vs-leader::before { animation: wp-vs-crown .5s 1.75s cubic-bezier(.3, 1.6, .5, 1) both; }
+
+.wp-vs-intro .wp-vs-group { animation: wp-vs-rise .5s calc(1.1s + var(--g, 0) * .15s) ease-out both; }
+.wp-vs-row:nth-child(1) { --r: 1; } .wp-vs-row:nth-child(2) { --r: 2; } .wp-vs-row:nth-child(3) { --r: 3; }
+.wp-vs-row:nth-child(4) { --r: 4; } .wp-vs-row:nth-child(5) { --r: 5; } .wp-vs-row:nth-child(6) { --r: 6; }
+.wp-vs-row:nth-child(7) { --r: 7; } .wp-vs-row:nth-child(8) { --r: 8; } .wp-vs-row:nth-child(9) { --r: 9; }
+.wp-vs-row:nth-child(10) { --r: 10; } .wp-vs-row:nth-child(11) { --r: 11; }
+.wp-vs-intro .wp-vs-row { --t: calc(1.3s + var(--g, 0) * .15s + var(--r, 0) * .05s); }
+.wp-vs-intro .wp-vs-skilllist .wp-vs-row { --t: calc(1.3s + var(--g, 0) * .15s + var(--r, 0) * .03s); }
+.wp-vs-intro .wp-vs-bar-a { transform-origin: right; animation: wp-vs-grow .6s var(--t) cubic-bezier(.2, .8, .2, 1) both; }
+.wp-vs-intro .wp-vs-bar-b { transform-origin: left; animation: wp-vs-grow .6s var(--t) cubic-bezier(.2, .8, .2, 1) both; }
+.wp-vs-intro .wp-vs-wa .wp-vs-val-a b,
+.wp-vs-intro .wp-vs-wb .wp-vs-val-b b { display: inline-block; animation: wp-vs-win .45s calc(var(--t) + .35s) ease-out both; }
+.wp-vs-intro .wp-vs-radar { animation: wp-vs-spin .8s 1.75s cubic-bezier(.2, .9, .3, 1.1) both; }
+.wp-vs-intro .wp-vs-gear-a { animation: wp-vs-side-a .45s 1.9s ease-out both; }
+.wp-vs-intro .wp-vs-gear-b { animation: wp-vs-side-b .45s 1.9s ease-out both; }
+
+@media (max-width: 640px) {
+  .wp-vs-shock { width: 46px; height: 46px; }
 }

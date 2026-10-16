@@ -40,6 +40,7 @@ import { classifyPlaystyle, WAR_SKILLS, ECO_SKILLS } from '../mu/playstyle.js';
 import { candleChartSvg, attachCandleExplorer } from '../economy/candleChart.js';
 import { ecoT } from '../economy/i18n.js';
 import { syncBack } from '../app/backNav.js';
+import { animationsOn } from '../shared/motion.js';
 import { plyT } from './i18n.js';
 import {
   LEADERBOARDS, fetchPlayer, searchPlayers, fetchEquipment, fetchWealthHistory,
@@ -97,6 +98,10 @@ let _pickSearching = false;
 let _cmpId = null;
 let _cmp = null;             // { lite, natRanks, equip } del secondo giocatore
 let _cmpEquipA;              // equipaggiamento del primo, per il confronto
+let _cmpIntro = false;       // il prossimo versus completo parte con l'intro
+let _introUntil = 0;         // fino a quando l'intro è in scena (ms epoch)
+let _introTimer = null;
+const INTRO_MS = 2900;
 
 // 1 vs 1 dalla partenza: i due posti, ognuno con la sua ricerca
 let _duel = { a: null, b: null };          // { id, u, a } di chi occupa il posto
@@ -757,7 +762,21 @@ function skillsHtml(p, ps) {
 
 function render() {
   if (!_root) return;
-  _root.innerHTML = `<div class="wp-ply">${_pid && _cmpId ? compareHtml() : _pid ? playerHtml() : homeHtml()}</div>`;
+  // Durante l'intro del versus i ridisegni (posizioni ed equipaggiamento
+  // che arrivano, il nome dell'unità…) aspettano la fine: un innerHTML
+  // nuovo farebbe ripartire ogni animazione da capo.
+  if (_pid && _cmpId && Date.now() < _introUntil) {
+    if (!_introTimer) _introTimer = setTimeout(() => { _introTimer = null; render(); }, _introUntil - Date.now());
+    return;
+  }
+  let intro = false;
+  if (_cmpIntro && _pid && _cmpId && _lite && _cmp?.lite) {
+    _cmpIntro = false;
+    intro = animationsOn();
+    if (intro) _introUntil = Date.now() + INTRO_MS;
+  }
+  _root.innerHTML = `<div class="wp-ply">${_pid && _cmpId ? compareHtml(intro) : _pid ? playerHtml() : homeHtml()}</div>`;
+  if (intro) countUpScore();
   // Indietro del telefono/browser: dal confronto torna alla scheda, dalla
   // scheda alla partenza; l'URL porta ?player= (e ?vs=) finché sono aperti.
   syncBack('players/detail', !!_pid, () => { _pid = null; _cmpId = null; render(); }, () => !!_pid, { player: _pid || undefined });
@@ -879,6 +898,7 @@ export async function initPlayersView(container) {
  *  1 vs 1 la scheda non è ancora stata caricata, e parte qui. */
 function leaveCompare() {
   _cmpId = null;
+  _introUntil = 0;
   render();
   loadTab(_ptab);
 }
@@ -931,6 +951,8 @@ export async function openCompare(id) {
   _picking = false;
   _cmpId = id;
   _cmp = null;
+  _cmpIntro = true;
+  _introUntil = 0;
   if (!_root) return;
   render();
   _root.scrollTop = 0;
@@ -1024,7 +1046,20 @@ function radarSvg(a, b) {
   </svg>`;
 }
 
-function compareHtml() {
+/** Il punteggio dell'intro conta da 0 al valore vero, dopo lo schianto
+ *  del VS (stesso ritardo di wp-vs-pop in players.css). */
+function countUpScore() {
+  const els = [..._root.querySelectorAll('.wp-vs-hero [data-to]')];
+  const t0 = performance.now() + 950, dur = 700;
+  const step = (now) => {
+    const k = Math.max(0, Math.min(1, (now - t0) / dur));
+    els.forEach(el => { if (el.isConnected) el.textContent = String(Math.round(Number(el.dataset.to) * (1 - (1 - k) ** 3))); });
+    if (k < 1 && els.some(el => el.isConnected)) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function compareHtml(intro = false) {
   const a = _lite;
   const b = _cmp?.lite;
   const back = `<button type="button" class="wp-ply-back" id="wp-ply-cmp-back">← ${escapeHtml(plyT('cmpBack', { a: a?.username || '' }))}</button>`;
@@ -1104,26 +1139,29 @@ function compareHtml() {
 
   return `
     ${back}
-    <section class="wp-vs">
+    <section class="wp-vs${intro ? ' wp-vs-intro' : ''}">
       <div class="wp-vs-hero">
         ${fighter(a, psA, 'a')}
         <div class="wp-vs-center">
+          ${intro ? '<i class="wp-vs-shock"></i>' : ''}
           <span class="wp-vs-badge">VS</span>
-          <div class="wp-vs-score"><b class="wp-vs-sa">${winsA}</b><span>–</span><b class="wp-vs-sb">${winsB}</b></div>
+          <div class="wp-vs-score">${intro
+            ? `<b class="wp-vs-sa" data-to="${winsA}">0</b><span>–</span><b class="wp-vs-sb" data-to="${winsB}">0</b>`
+            : `<b class="wp-vs-sa">${winsA}</b><span>–</span><b class="wp-vs-sb">${winsB}</b>`}</div>
           <p class="wp-vs-verdict">${escapeHtml(verdict)}</p>
           <button type="button" class="wp-ply-chip" id="wp-ply-cmp-swap">⇄ ${escapeHtml(plyT('cmpSwap'))}</button>
         </div>
         ${fighter(b, psB, 'b')}
       </div>
 
-      ${groups.map(g => `
-        <div class="wp-vs-group">
+      ${groups.map((g, gi) => `
+        <div class="wp-vs-group" style="--g:${gi}">
           <h3 class="wp-vs-gtitle"><span>${g.icon}</span>${escapeHtml(g.title)}
             <em><b class="wp-vs-sa">${g.rows.filter(r => r.win === 1).length}</b> – <b class="wp-vs-sb">${g.rows.filter(r => r.win === 2).length}</b></em></h3>
           ${g.rows.map(r => r.html).join('')}
         </div>`).join('')}
 
-      <div class="wp-vs-group">
+      <div class="wp-vs-group" style="--g:3">
         <h3 class="wp-vs-gtitle"><span>◆</span>${escapeHtml(plyT('cmpSkills'))}</h3>
         <div class="wp-vs-skills">
           <div class="wp-vs-radarwrap">
@@ -1134,7 +1172,7 @@ function compareHtml() {
         </div>
       </div>
 
-      <div class="wp-vs-group">
+      <div class="wp-vs-group" style="--g:4">
         <h3 class="wp-vs-gtitle"><span>🛡</span>${escapeHtml(plyT('gear'))}</h3>
         ${gear}
       </div>
