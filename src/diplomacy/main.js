@@ -11,9 +11,11 @@ import { buildOriginalLabels, loadFlagImage } from './labels.js';
 import { API_BASE_URL } from './config.js';
 import { updateBattleMarkers } from './battleMarkers.js';
 import { loadRegions } from './regions.js';
-import { fetchCountriesViaCache, fetchMapDataViaCache, fetchAlliancesViaCache, fetchDiplomacyViaCache } from './cacheClient.js';
+import { fetchCountriesViaCache, fetchMapDataViaCache, fetchAlliancesViaCache, fetchDiplomacyViaCache, diplomacyEntry } from './cacheClient.js';
 import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
+// WarEra+: tasto Indietro (vedi src/app/backNav.js)
+import { pushBack, dropBack } from '../app/backNav.js';
 let battleMarkersTimer = null;
 
 // ── WarEra+ perf: pausa del polling marker battaglia ─────────────────
@@ -60,30 +62,107 @@ export function resumeBattleMarkersPolling() {
 // il server non risponde o i dati sono troppo vecchi — MAI un punto di
 // fallimento unico, l'app deve continuare a funzionare come prima di
 // questo modulo anche a VPS spento.
-async function _fetchCountriesAndMap() {
+// WarEra+ perf (2026-10-14): nazioni e mappa hanno ciascuna il suo
+// ripiego, invece di uno solo per la coppia. Serve a non legare le
+// alleanze e la diplomazia ad /map (3 MB, la più lenta delle due): quelle
+// hanno bisogno solo dell'elenco nazioni e partono appena c'è.
+async function _fetchCountries() {
   try {
-    const [nazioni, mapDataGlobal] = await Promise.all([fetchCountriesViaCache(), fetchMapDataViaCache()]);
-    return { nazioni, mapDataGlobal };
+    return await fetchCountriesViaCache();
   } catch (err) {
-    console.warn('[cache] countries/map non disponibili, fallback diretto:', err.message);
-    const [resN, resM] = await Promise.all([
-      fetch(`${API_BASE_URL}/trpc/country.getAllCountries`),
-      fetch(`${API_BASE_URL}/trpc/map.getMapData`),
-    ]);
-    if (!resN.ok || !resM.ok) throw new Error('Failed to fetch data');
-    const nationsData = await resN.json();
-    const mapData = await resM.json();
-    return { nazioni: nationsData.result.data, mapDataGlobal: mapData.result.data };
+    console.warn('[cache] countries non disponibili, fallback diretto:', err.message);
+    const res = await fetch(`${API_BASE_URL}/trpc/country.getAllCountries`);
+    if (!res.ok) throw new Error('Failed to fetch data');
+    return (await res.json()).result.data;
   }
 }
 
-async function refreshData() {
+async function _fetchMapData() {
+  try {
+    return await fetchMapDataViaCache();
+  } catch (err) {
+    console.warn('[cache] map non disponibile, fallback diretto:', err.message);
+    const res = await fetch(`${API_BASE_URL}/trpc/map.getMapData`);
+    if (!res.ok) throw new Error('Failed to fetch data');
+    return (await res.json()).result.data;
+  }
+}
+
+// ----- ALLEANZE CON GET BATCH -----
+async function _loadAlliances(nazioni) {
+  const uniqueAllianceIds = [...new Set(
+    nazioni
+      .map(nation => nation.allianceId)
+      .filter(id => id != null)
+  )];
+  if (!uniqueAllianceIds.length) return [];
+  try {
+    return await fetchAlliancesViaCache(uniqueAllianceIds);
+  } catch (err) {
+    console.warn('[cache] alleanze non disponibili, fallback diretto:', err.message);
+    // trpcBatch chunka automaticamente oltre MAX_BATCH (50) e gestisce 429/errori
+    const calls = uniqueAllianceIds.map(id => ['alliance.getById', { allianceId: id }]);
+    const results = await trpcBatch(calls);
+    return results.filter(Boolean);
+  }
+}
+
+// ----- DIPLOMAZIA (sworn enemy + defensive pacts) -----
+// Non lancia mai: un errore a metà del ripiego tiene quello che è arrivato.
+async function _loadDiplomacy(countryIds) {
+  try {
+    return await fetchDiplomacyViaCache(countryIds);
+  } catch (err) {
+    console.warn('[cache] diplomazia non disponibile, fallback diretto:', err.message);
+  }
+  const out = new Map();
+  try {
+    // trpcBatch chunka automaticamente a MAX_BATCH (50) elementi per POST
+    // e gestisce 429/errori per singolo item senza abortire l'intero giro.
+    for (let i = 0; i < countryIds.length; i += MAX_BATCH) {
+      const chunk = countryIds.slice(i, i + MAX_BATCH);
+      const calls = chunk.map(id => ['countryDiplomacy.getByCountry', { countryId: id }]);
+      const diplomacyResults = await trpcBatch(calls);
+      diplomacyResults.forEach((data, idx) => {
+        const nationId = chunk[idx];
+        if (!data) return;
+        out.set(nationId, diplomacyEntry(data));
+      });
+    }
+  } catch (diplErr) {
+    console.error('Errore caricamento diplomazia:', diplErr);
+  }
+  return out;
+}
+
+// WarEra+ perf (2026-10-14): i download dell'avvio partono SUBITO, in
+// init(), e non più al 'load' della mappa — e tutti insieme invece che
+// uno dopo l'altro. Prima la catena era: load della mappa → nazioni+mappa
+// → alleanze → diplomazia → layer → regioni. In una scheda aperta in
+// background (Ctrl+clic da Discord) il 'load' di MapLibre aspetta che la
+// scheda diventi visibile, quindi non si scaricava NIENTE finché non la
+// guardavi (misurato: prima richiesta a 15,9 s). Ora nazioni, mappa e
+// regioni partono insieme; alleanze e diplomazia appena ci sono le
+// nazioni, in parallelo fra loro. refreshData() li aspetta dove servono.
+function _startBootFetches() {
+  const countries = _fetchCountries();
+  const mapData = _fetchMapData();
+  const regions = loadRegions();             // scrive state.regionData, non lancia
+  const related = countries.then(nazioni => Promise.all([
+    _loadAlliances(nazioni),
+    _loadDiplomacy(nazioni.map(n => n._id)),
+  ]));
+  // Se una fallisce prima che refreshData() arrivi ad aspettarla, niente
+  // "Uncaught (in promise)": l'errore vero lo raccoglie l'await più sotto.
+  for (const p of [countries, mapData, related]) p.catch(() => {});
+  return { countries, mapData, regions, related };
+}
+
+async function refreshData(boot = _startBootFetches()) {
   try {
     showLoading();
-    const { nazioni, mapDataGlobal } = await _fetchCountriesAndMap();
-
+    const nazioni = await boot.countries;
     state.nazioniGlobal = nazioni;
-    state.mapDataGlobal = mapDataGlobal;
 
     state.nationMap.clear();
     state.nationByCode.clear();
@@ -92,25 +171,7 @@ async function refreshData() {
       if (n.code) state.nationByCode.set(n.code.toUpperCase(), n);
     });
 
-    // ----- CARICAMENTO ALLEANZE CON GET BATCH -----
-    const uniqueAllianceIds = [...new Set(
-      state.nazioniGlobal
-        .map(nation => nation.allianceId)
-        .filter(id => id != null)
-    )];
-
-    let alliances = [];
-    if (uniqueAllianceIds.length > 0) {
-      try {
-        alliances = await fetchAlliancesViaCache(uniqueAllianceIds);
-      } catch (err) {
-        console.warn('[cache] alleanze non disponibili, fallback diretto:', err.message);
-        // trpcBatch chunka automaticamente oltre MAX_BATCH (50) e gestisce 429/errori
-        const calls = uniqueAllianceIds.map(id => ['alliance.getById', { allianceId: id }]);
-        const results = await trpcBatch(calls);
-        alliances = results.filter(Boolean);
-      }
-    }
+    const [alliances, diplomacyData] = await boot.related;
 
     state.alliancesList = alliances;
     state.allianceColorMap.clear();
@@ -119,36 +180,8 @@ async function refreshData() {
     // perché ha bisogno di state.labelsData già popolato per calcolare le
     // coordinate delle label dei blocchi (altrimenti i nomi dei blocchi non
     // vengono disegnati in modalità "blocs").
-    // ----- FINE CARICAMENTO ALLEANZE -----
 
-    // ----- CARICAMENTO DIPLOMAZIA (sworn enemy + defensive pacts) -----
-    const countryIds = state.nazioniGlobal.map(n => n._id);
-    state.diplomacyData.clear();
-    try {
-      try {
-        state.diplomacyData = await fetchDiplomacyViaCache(countryIds);
-      } catch (err) {
-        console.warn('[cache] diplomazia non disponibile, fallback diretto:', err.message);
-        // trpcBatch chunka automaticamente a MAX_BATCH (50) elementi per POST
-        // e gestisce 429/errori per singolo item senza abortire l'intero giro.
-        for (let i = 0; i < countryIds.length; i += MAX_BATCH) {
-          const chunk = countryIds.slice(i, i + MAX_BATCH);
-          const calls = chunk.map(id => ['countryDiplomacy.getByCountry', { countryId: id }]);
-          const diplomacyResults = await trpcBatch(calls);
-          diplomacyResults.forEach((data, idx) => {
-            const nationId = chunk[idx];
-            if (!data) return;
-            state.diplomacyData.set(nationId, {
-              swornEnemy: data.swornEnemy?.enemy || null,
-              defensivePacts: (data.defensivePacts || []).map(p => p.partner),
-            });
-          });
-        }
-      }
-    } catch (diplErr) {
-      console.error('Errore caricamento diplomazia:', diplErr);
-    }
-    // ----- FINE CARICAMENTO DIPLOMAZIA -----
+    state.diplomacyData = diplomacyData;
 
     // Datalist autocomplete
     const datalist = document.getElementById('nazioniList');
@@ -157,8 +190,9 @@ async function refreshData() {
       .sort((a, b) => a.name.localeCompare(b.name))
       .forEach(n => datalist.appendChild(new Option(n.name)));
 
+    state.mapDataGlobal = await boot.mapData;
     await setupMapLayers();
-    await loadRegions();
+    await boot.regions;
 
     // Color map base
     state.nationBaseColorMap.clear();
@@ -404,6 +438,7 @@ let _openElectionsTimer = null;
 
 async function _loadOpenElections(force = false) {
   if (!force && state.openElections && Date.now() - state.openElectionsAt < OPEN_ELECTIONS_TTL) return;
+  const prev = state.openElections;
   try {
     const { fetchOpenElectionsViaCache } = await import('./cacheClient.js');
     state.openElections = await fetchOpenElectionsViaCache();
@@ -413,7 +448,22 @@ async function _loadOpenElections(force = false) {
     console.warn('[politics] elezioni aperte non disponibili:', err.message);
     if (!state.openElections) state.openElectionsError = 'Open elections are not available right now (cache server unreachable).';
   }
-  if (state.coloringMode === 'politics') { renderMap(); _refreshOverview('politics'); }
+  if (state.coloringMode === 'politics') {
+    // WarEra+ elezioni in diretta (electionsLive.js): se i voti sono saliti
+    // dal giro prima la tinta si scalda in transizione e la capitale batte;
+    // in quel caso il ridisegno lo fa lei alla fine, non qui.
+    const live = prev && prev !== state.openElections
+      ? await import('./electionsLive.js').then(m => m.onElectionsUpdate(prev, state.openElections)).catch(() => false)
+      : false;
+    if (!live) renderMap();
+    _refreshOverview('politics');
+    // WarEra+: le elezioni appena chiuse per il riepilogo (clic = rifà
+    // l'onda del vincitore, electionsLive.js). Non blocca niente: arrivano,
+    // e il riepilogo si ridisegna.
+    import('./electionsLive.js').then(m => m.loadRecentResults()).then((rows) => {
+      if (rows?.length && state.coloringMode === 'politics') _refreshOverview('politics');
+    }).catch(() => {});
+  }
 }
 
 document.getElementById('mode-politics')?.addEventListener('click', async () => {
@@ -441,6 +491,46 @@ document.getElementById('mode-travel')?.addEventListener('click', async () => {
   const { enterTravelView } = await import('./travelDistance.js');
   enterTravelView();
   setColoringMode('travel');
+});
+
+// WarEra+ vista Migrazioni: una richiesta per tutto il mondo
+// (/migration-flows), rinfrescata ogni 10 minuti a vista accesa — vedi
+// migrationFlows.js, che possiede dato, timer e frecce.
+document.getElementById('mode-migration')?.addEventListener('click', async () => {
+  _dimOtherSliders();
+  const third = document.getElementById('mode-slider-third');
+  if (third) third.style.opacity = '0.3';
+  trackEvent('view-mode-change', { mode: 'migration' });
+  const { enterMigrationView } = await import('./migrationFlows.js');
+  setColoringMode('migration');
+  await enterMigrationView();
+});
+
+// WarEra+ vista Finanziamenti: i bonifici fra tesori (stessa lista della
+// scheda battaglia, una per sessione) — vedi fundingFlows.js.
+document.getElementById('mode-funding')?.addEventListener('click', async () => {
+  _dimOtherSliders();
+  const third = document.getElementById('mode-slider-third');
+  if (third) third.style.opacity = '0.3';
+  trackEvent('view-mode-change', { mode: 'funding' });
+  const { enterFundingView } = await import('./fundingFlows.js');
+  setColoringMode('funding');
+  await enterFundingView();
+});
+
+// WarEra+ vista Bonus battaglia: si sceglie una battaglia sulla mappa e le
+// nazioni si colorano per il bonus danno che avrebbero lì — vedi bonusView.js.
+document.getElementById('mode-battleBonus')?.addEventListener('click', async () => {
+  _dimOtherSliders();
+  const third = document.getElementById('mode-slider-third');
+  if (third) third.style.opacity = '0.3';
+  trackEvent('view-mode-change', { mode: 'battleBonus' });
+  const { enterBonusView } = await import('./bonusView.js');
+  enterBonusView();
+  setColoringMode('battleBonus');
+  // Le battaglie si scelgono dai loro marcatori: se erano spenti, si accendono.
+  const toggle = document.getElementById('checkActiveBattles');
+  if (toggle && !toggle.checked) toggle.click();
 });
 
 document.getElementById('mode-playstyle')?.addEventListener('click', async () => {
@@ -493,6 +583,11 @@ document.getElementById('mode-playstyle')?.addEventListener('click', async () =>
     document.getElementById('map').style.display = 'none';
     document.getElementById('bloc-stats-page').style.display = 'block';
     trackEvent('bloc-stats-open');
+    // WarEra+ (additivo): Indietro chiude la pagina come la sua ✕.
+    pushBack('blocstats',
+      () => document.getElementById('bloc-stats-close')?.click(),
+      () => document.getElementById('bloc-stats-page')?.style.display === 'block',
+      { section: 'alliances' });
     // ── WarEra+ (additivo): sfondo a particelle viola della sezione e
     // pausa del lavoro di sfondo della mappa, come per gli altri overlay
     // di "Approfondimenti". Import dinamico + catch: se il modulo manca,
@@ -541,6 +636,7 @@ document.getElementById('mode-playstyle')?.addEventListener('click', async () =>
     document.getElementById('bloc-stats-page').style.display = 'none';
     document.getElementById('map').style.display = 'block';
     trackEvent('bloc-stats-close');
+    dropBack('blocstats'); // WarEra+
     // Simmetrica all'apertura: ferma le particelle e fa ripartire la mappa.
     import('../app/overlayChrome.js')
       .then(m => m.leaveOverlay(document.getElementById('bloc-stats-page')))
@@ -565,6 +661,8 @@ document.getElementById('checkActiveBattles').addEventListener('change', functio
 
 // ==================== INIT ====================
 async function init() {
+  // WarEra+ perf: i dati partono prima della mappa, vedi _startBootFetches.
+  const boot = _startBootFetches();
   initMap();
 // main.js - dopo initMap(), aggiungi:
 
@@ -583,7 +681,7 @@ if (sliderBottom) {
   state._lastBottomMode = 'weeklyDamage'; // Default
 }
   setupEventListeners();
-  state.map.on('load', refreshData);
+  state.map.on('load', () => refreshData(boot));
 }
 
 init();

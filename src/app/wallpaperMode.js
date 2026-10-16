@@ -53,6 +53,7 @@
 
 import { state } from '../diplomacy/state.js';
 import { getLang, setLang, getSupportedLangs } from '../shared/i18n.js';
+import { animationsOn, setAnimationsOn } from '../shared/motion.js';
 import { setUserApiKey, userApiKeyStatus } from '../shared/trpcProxy.js';
 import { pauseMapBackgroundWork, resumeMapBackgroundWork } from './mapIdle.js';
 
@@ -379,9 +380,9 @@ function applyProps() {
   if (changed('theme', p.theme) && state.theme !== p.theme) {
     document.getElementById('theme-toggle-btn')?.click();
   }
-  // Proprietà "Animazioni": l'interruttore unico (shared/motion.js) è
-  // ancora solo su dev. Finché non arriva su main la proprietà non fa
-  // niente; al merge di dev questo blocco torna quello di dev.
+  if (changed('animations', p.animations) && animationsOn() !== p.animations) {
+    setAnimationsOn(p.animations);
+  }
   if (changed('battles', p.battles)) setCheckbox('checkActiveBattles', p.battles);
   if (changed('blocLabels', p.blocLabels)) setCheckbox('wp-checkBlocLabels', p.blocLabels);
 

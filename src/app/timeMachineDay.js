@@ -82,6 +82,9 @@ export function fetchDay(day) {
         attackerPower: r[6], defenderPower: r[7],
         hits: r[8], balance: r[9],
         attackerDamage: r[10], defenderDamage: r[11],
+        // WarEra+: la regione la aggiunge il server in lettura (dayHistory.js:
+        // _regionOf), per le frecce di timeMachineBattles.js. null = non si sa.
+        regionId: r[12] || null,
       }));
       const out = {
         day: data?.day || day,

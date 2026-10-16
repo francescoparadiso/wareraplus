@@ -45,13 +45,23 @@ import { warIntensityRankedList, getWarIntensityStats } from '../diplomacy/warIn
 import { buildPlaystyleScale, getBalanceColor, getPlaystyleStats } from '../diplomacy/playstyleHeatmap.js';
 import { getTrendColor, getTrendStats } from '../diplomacy/playstyleTrendHeatmap.js';
 import { activeDeposits, depositsByCountry, getProductionColor, getProductionStats, productionRankedList, RESOURCE_TYPES } from '../diplomacy/productionHeatmap.js';
-import { openElectionRows, getPoliticsStats, POLITICS_COLORS } from '../diplomacy/politicsHeatmap.js';
+import { openElectionRows, getPoliticsStats, POLITICS_COLORS, turnoutColor } from '../diplomacy/politicsHeatmap.js';
+import { recentResults } from '../diplomacy/electionsLive.js';
 import { travelOverviewHtml } from '../diplomacy/travelDistance.js';
+import { mig, migrationRanking, getMigrationStats, focusFlows, migrationValue, migrationColor, migrationCanHover, migrationDays,
+  MIGRATION_DAYS, MIN_RATE_CITIZENS, OUT_COLOR, IN_COLOR } from '../diplomacy/migrationFlows.js';
+import { mT } from '../diplomacy/migrationI18n.js';
+import { fund, fundingAgg, fundingWindowShort, getFundingStats, fundingRanking, fundingFocus, fundingColor, fundingCanHover,
+  FUNDING_DAYS, IN_COLOR as FUND_IN, OUT_COLOR as FUND_OUT } from '../diplomacy/fundingFlows.js';
+import { fT } from '../diplomacy/fundingI18n.js';
+import { bonusState, bonusRanking, bvT, partsText, nationParts } from '../diplomacy/bonusView.js';
+import { bonusColor } from '../diplomacy/battleHeatmap.js';
+import { myPlayerId } from '../shared/battleBonus.js';
 
 /** Le viste che hanno un riepilogo. Chi chiama usa questo elenco per
  *  decidere se aprire il pannello: tenerlo qui evita che countryPanel.js
  *  e map.js abbiano due liste da tenere allineate a mano. */
-export const OVERVIEW_MODES = ['blocs', 'population', 'weeklyDamage', 'production', 'contested', 'warIntensity', 'playstyle', 'politics', 'travel'];
+export const OVERVIEW_MODES = ['blocs', 'population', 'weeklyDamage', 'production', 'contested', 'warIntensity', 'playstyle', 'politics', 'travel', 'migration', 'funding', 'battleBonus'];
 
 export function hasViewOverview(mode) {
   return OVERVIEW_MODES.includes(mode);
@@ -518,23 +528,472 @@ function politicsHtml() {
     + statsHtml([
       { label: t('vo_stat_voting'), value: fmt(s.voting) },
       { label: t('vo_stat_candidacy'), value: fmt(s.candidacy) },
-      { label: t('vo_stat_open_elections'), value: fmt(rows.length) },
+      { label: t('vo_stat_avg_turnout'), value: s.avgTurnout != null ? `${Math.round(s.avgTurnout * 100)}%` : '—' },
       { label: t('vo_stat_votes_cast'), value: fmt(s.votes) },
     ]);
-  if (!rows.length) return head + emptyHtml(t('vo_politics_empty'));
-  const maxVotes = Math.max(1, ...rows.map(r => r.votes));
+  if (!rows.length) return head + emptyHtml(t('vo_politics_empty')) + recentResultsHtml(now);
+  // Prima chi vota, dal più partecipato: la barra è l'affluenza (su scala
+  // 0–100%), con la stessa tinta della nazione sulla mappa. Le
+  // candidature restano in fondo, nell'ordine di apertura del voto.
+  rows.sort((a, b) => (a.phase === b.phase ? 0 : a.phase === 'voting' ? -1 : 1)
+    || (a.phase === 'voting' ? (b.turnout ?? -1) - (a.turnout ?? -1) : 0));
   return head + rows.map((r, i) => rowHtml({
     rank: i + 1,
     icon: r.nation ? flagImgHtml(r.countryId, r.nation, 'wp-vo-flag') : '',
     name: r.nation?.name || '—',
-    value: r.phase === 'voting' ? t('vo_votes_n', { n: fmt(r.votes) }) : t('vo_cand_n', { n: fmt(r.candidates) }),
+    value: r.phase === 'voting'
+      ? (r.turnout != null ? `${Math.round(r.turnout * 100)}% · ` : '') + t('vo_votes_n', { n: fmt(r.votes) })
+      : t('vo_cand_n', { n: fmt(r.candidates) }),
     sub: `${r.type === 'president' ? t('vo_pres') : t('vo_cong')} · ${r.phase === 'voting'
       ? t('vo_closes', { t: _politicsLeft((r.end || 0) - now) })
       : t('vo_opens', { t: _politicsLeft((r.start || 0) - now) })}`,
-    share: r.phase === 'voting' ? r.votes / maxVotes : 0.04,
-    color: POLITICS_COLORS[r.phase],
+    share: r.phase === 'voting' ? (r.turnout ?? 0) : 0.04,
+    color: r.phase === 'voting' ? turnoutColor(r.turnout) : POLITICS_COLORS[r.phase],
     dataset: ` data-vo-political="${escapeHtml(r.countryId)}"`,
-  })).join('');
+  })).join('') + recentResultsHtml(now);
+}
+
+/* WarEra+ — "Appena chiuse": le elezioni finite nelle ultime 48 ore, dalla
+   più recente. Un clic rifà sulla mappa l'onda del vincitore (che da sola
+   parte solo se l'elezione si chiude a vista aperta). */
+function recentResultsHtml(now) {
+  const rows = recentResults().slice(0, 12);
+  if (!rows.length) return '';
+  return `<div class="wp-panel-section-title">${escapeHtml(t('vo_recent_results'))}</div>`
+    + aboutHtml(t('vo_recent_hint'))
+    + rows.map((r, i) => rowHtml({
+      rank: i + 1,
+      icon: state.nationMap.get(r.countryId) ? flagImgHtml(r.countryId, state.nationMap.get(r.countryId), 'wp-vo-flag') : '',
+      name: state.nationMap.get(r.countryId)?.name || '—',
+      value: r.e.type === 'president' ? t('vo_pres') : t('vo_cong'),
+      sub: t('vo_closed_ago', { t: _politicsLeft(now - (r.end || now)) }),
+      share: 0.04,
+      color: '#e3b341',
+      dataset: ` data-vo-result="${escapeHtml(r.e._id)}"`,
+    })).join('');
+}
+
+/* ══════════════════ MIGRAZIONI ══════════════════
+   Il markup della vista Migrazioni (dato, colori e frecce stanno in
+   diplomacy/migrationFlows.js, i comandi li collega wireMigrationOverview).
+   Due livelli: il MONDO (chi guadagna, chi perde, i flussi più grossi) e
+   la NAZIONE cliccata (dove vanno i suoi, da dove arrivano gli altri).
+   Le righe mettono a fuoco una nazione, non aprono il suo pannello: per
+   quello c'è il bottone in fondo, che porta all'elenco per nome. */
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function migSigned(v, metric) {
+  if (v == null) return '—';
+  const abs = Math.abs(v);
+  const txt = metric === 'rate' ? abs.toFixed(abs >= 10 ? 0 : 1) : fmt(abs);
+  return v > 0 ? `+${txt}` : v < 0 ? `−${txt}` : '0';
+}
+
+function migSegHtml(label, attr, options, current) {
+  return `
+    <div class="wp-mig-seg" role="group" aria-label="${escapeHtml(label)}">
+      <span class="wp-mig-seg-label">${escapeHtml(label)}</span>
+      ${options.map(([v, text]) => `<button type="button" class="wp-travel-btn" data-${attr}="${v}" aria-pressed="${String(v) === String(current)}">${escapeHtml(text)}</button>`).join('')}
+    </div>`;
+}
+
+/** Le fasce di onestà: archivio più giovane della finestra, e chi resta
+ *  fuori dal conto. Un elenco filtrato che non lo dice sembra completo. */
+function migNotesHtml(d) {
+  let html = '';
+  const windowStart = (d.fetchedAt || Date.now()) - d.days * DAY_MS;
+  if (d.coverageFrom && d.coverageFrom > windowStart) {
+    html += `<div class="wp-mig-note">${escapeHtml(mT('The archive has been watching since {date}: moves before then do not show up, so this window is not full yet.', {
+      date: new Date(d.coverageFrom).toLocaleDateString(),
+    }))}</div>`;
+  }
+  const tot = d.totals || {};
+  if (tot.lowLevel || tot.inactive) {
+    html += `<div class="wp-mig-note">${escapeHtml(mT('Left out: {low} below level {lv}, {inactive} who only went inactive.', {
+      low: fmt(tot.lowLevel || 0), lv: d.minLevel || 10, inactive: fmt(tot.inactive || 0),
+    }))}</div>`;
+  }
+  return html;
+}
+
+/* Il cursore giorno per giorno (migrationFlows.js: IL TEMPO). Trenta
+   barre, una per giorno: senza nazione a fuoco gli spostamenti del mondo,
+   con una nazione il SUO saldo (verde sopra, rosso sotto) — è così che
+   si vede il giorno in cui parte un esodo. Una barra cliccata è quel
+   giorno sulla mappa; ▶ li scorre uno al secondo. Prima che l'archivio
+   guardasse: niente barra, un trattino in basso. */
+function migDayLabel(day) {
+  return new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+function migTimelineHtml(s) {
+  if (s.dailyError && !s.daily) return '';
+  const days = migrationDays();
+  if (!days.length) return `<div class="wp-mig-tl wp-mig-tl-empty">${escapeHtml(mT('Loading…'))}</div>`;
+  const focus = s.focus;
+  const val = d => {
+    if (!d.entry) return 0;
+    if (!focus) return d.entry.moves;
+    return d.entry.countries?.[focus]?.net || 0;
+  };
+  const W = 300, H = 64, gap = 2;
+  const bw = (W - gap * (days.length - 1)) / days.length;
+  const max = Math.max(1, ...days.map(d => Math.abs(val(d))));
+  const base = focus ? H / 2 : H - 1;
+  const half = focus ? H / 2 - 2 : H - 3;
+  const bars = days.map((d, i) => {
+    const x = (i * (bw + gap)).toFixed(1);
+    if (!d.watched) return `<rect x="${x}" y="${H - 2}" width="${bw.toFixed(1)}" height="1" class="wp-mig-tl-off"/>`;
+    const v = val(d);
+    const h = Math.max(1, Math.abs(v) / max * half);
+    const y = focus ? (v >= 0 ? base - h : base) : base - h;
+    const color = focus ? (v > 0 ? '#3fb950' : v < 0 ? '#f85149' : '#6e7681') : '#8b949e';
+    const sel = s.day === d.day ? ' wp-mig-tl-sel' : '';
+    const title = `${migDayLabel(d.day)} · ${focus ? migSigned(v, 'net') : fmt(v)}`;
+    // Una colonna trasparente alta tutto il grafico: il dito prende il
+    // giorno anche dove la barra è bassa.
+    return `<g class="wp-mig-tl-day${sel}" data-mig-day="${d.day}"><title>${escapeHtml(title)}</title>
+      <rect x="${x}" y="0" width="${bw.toFixed(1)}" height="${H}" fill="transparent"/>
+      <rect x="${x}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1" fill="${color}"/></g>`;
+  }).join('');
+  const axis = focus ? `<line x1="0" y1="${base}" x2="${W}" y2="${base}" class="wp-mig-tl-axis"/>` : '';
+  const selLabel = s.day ? migDayLabel(s.day) : mT('Click a day to see only its moves.');
+  return `
+    <div class="wp-mig-tl">
+      <div class="wp-mig-tl-head">
+        <span class="wp-mig-seg-label">${escapeHtml(focus ? mT('Balance day by day') : mT('Day by day'))}</span>
+        <button type="button" class="wp-travel-btn" data-mig-action="day-play" aria-pressed="${s.dayPlaying}">${s.dayPlaying ? '⏸' : '▶'}</button>
+        ${s.day ? `<button type="button" class="wp-travel-btn" data-mig-action="day-clear">✕ ${escapeHtml(mT('Whole window'))}</button>` : ''}
+      </div>
+      <svg class="wp-mig-tl-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(mT('Day by day'))}">${axis}${bars}</svg>
+      <div class="wp-mig-tl-foot"><span>${escapeHtml(migDayLabel(days[0].day))}</span><b>${escapeHtml(selLabel)}</b><span>${escapeHtml(migDayLabel(days[days.length - 1].day))}</span></div>
+    </div>`;
+}
+
+function migrationHtml() {
+  const s = mig();
+  const d = s.data;
+  const controls = migSegHtml(mT('Window'), 'mig-days',
+    // Con un giorno scelto nessuna finestra è "accesa": valgono le barre.
+    MIGRATION_DAYS.map(n => [n, n === 1 ? mT('24 hours') : mT('{n} days', { n })]), s.day ? null : s.days);
+  const about = aboutHtml(mT('Who changed citizenship. The game does not publish it: it is worked out by comparing every nation\'s citizen list hour by hour. Only players of level {lv}+ (or with prestige) count, and a player who simply went inactive is not a departure.', { lv: d?.minLevel || 10 }));
+
+  if (!d || d.days !== s.days) {
+    const msg = s.loading || !s.error ? mT('Loading…')
+      : s.error === 'missing' ? mT('Migration data is not available yet (cache server not updated).')
+        : mT('Cache server unreachable right now — reopen this view to retry.');
+    return headerHtml(mT('Migration')) + controls + emptyHtml(msg) + about;
+  }
+  if (s.focus) return migrationFocusHtml(s, d, controls);
+
+  const st = getMigrationStats();
+  const { gaining, losing, flows } = migrationRanking(10);
+  const metric = s.metric;
+  const metricSeg = migSegHtml(mT('Colour by'), 'mig-metric',
+    [['net', mT('Net')], ['rate', mT('Per 100 citizens')]], metric);
+  const hint = `<div class="wp-mig-hint">${escapeHtml(migrationCanHover()
+    ? mT('Click a nation to see where its players are going.')
+    : mT('Tap a nation to see where its players are going.'))}</div>`;
+
+  const maxAbs = Math.max(1e-9, ...[...gaining, ...losing].map(r => Math.abs(r.value)));
+  const nationRow = (r, i) => {
+    const nation = state.nationMap.get(r.id);
+    const sub = mT('in {i} · out {o}', { i: fmt(r.in), o: fmt(r.out) })
+      + (metric === 'rate' ? ` · ${migSigned(r.net, 'net')}` : '');
+    return rowHtml({
+      rank: i + 1,
+      icon: nation ? flagImgHtml(r.id, nation, 'wp-vo-flag') : '',
+      name: nation?.name || '—',
+      value: migSigned(r.value, metric),
+      sub,
+      share: Math.abs(r.value) / maxAbs,
+      color: migrationColor(r.value),
+      dataset: ` data-mig-country="${escapeHtml(r.id)}"`,
+    });
+  };
+  const maxFlow = Math.max(1, ...flows.map(f => f.n));
+  const flowRows = flows.map((f, i) => {
+    const a = state.nationMap.get(f.f), b = state.nationMap.get(f.t);
+    return rowHtml({
+      rank: i + 1,
+      icon: a ? flagImgHtml(f.f, a, 'wp-vo-flag') : '',
+      name: `${a?.name || '—'} → ${b?.name || '—'}`,
+      value: fmt(f.n),
+      share: f.n / maxFlow,
+      color: OUT_COLOR,
+      dataset: ` data-mig-country="${escapeHtml(f.f)}"`,
+    });
+  }).join('');
+
+  const section = (title, body) => body
+    ? `<div class="wp-panel-section-title wp-mig-title">${escapeHtml(title)}</div>${body}` : '';
+
+  const badge = s.day ? migDayLabel(s.day) : (s.days === 1 ? mT('24 hours') : mT('{n} days', { n: s.days }));
+  return headerHtml(mT('Migration'), badge)
+    + controls + metricSeg
+    + migTimelineHtml(s)
+    + statsHtml([
+      { label: mT('Moves'), value: fmt(st.moves) },
+      { label: mT('Players'), value: st.people == null ? '—' : fmt(st.people) },
+      { label: mT('Nations gaining'), value: fmt(st.gaining) },
+      { label: mT('Nations losing'), value: fmt(st.losing) },
+    ])
+    + hint
+    + (s.day ? '' : migNotesHtml(d))
+    + (st.moves
+      ? section(mT('Gaining players'), gaining.map(nationRow).join(''))
+        + section(mT('Losing players'), losing.map(nationRow).join(''))
+        + section(mT('Biggest flows'), flowRows)
+      : emptyHtml(mT(s.day ? 'No moves recorded on this day.' : 'No moves recorded in this window.')))
+    + about;
+}
+
+function migrationFocusHtml(s, d, controls) {
+  const id = s.focus;
+  const nation = state.nationMap.get(id);
+  const { out, in: inn, country } = focusFlows(id);
+  const c = country || { in: 0, out: 0, net: 0, citizens: 0 };
+  const rate = migrationValue(c, 'rate');
+  const dirSeg = migSegHtml(mT('Arrows'), 'mig-dir',
+    [['out', mT('Departures')], ['in', mT('Arrivals')], ['both', mT('Both')]], s.dir);
+
+  const partnerRows = (list, total, color, shareKey) => {
+    const max = Math.max(1, ...list.map(r => r.n));
+    return list.slice(0, TOP_NATIONS).map((r, i) => {
+      const n = state.nationMap.get(r.id);
+      return rowHtml({
+        rank: i + 1,
+        icon: n ? flagImgHtml(r.id, n, 'wp-vo-flag') : '',
+        name: n?.name || '—',
+        value: fmt(r.n),
+        sub: mT(shareKey, { p: Math.round(r.n / Math.max(1, total) * 100) }),
+        share: r.n / max,
+        color,
+        dataset: ` data-mig-country="${escapeHtml(r.id)}"`,
+      });
+    }).join('');
+  };
+
+  const flag = nation ? flagImgHtml(id, nation, 'wp-vo-flag') : '';
+  const body = (out.length || inn.length)
+    ? (out.length ? `<div class="wp-panel-section-title wp-mig-title"><span class="wp-mig-swatch" style="background:${OUT_COLOR}"></span>${escapeHtml(mT('Where they go'))}</div>`
+        + partnerRows(out, c.out, OUT_COLOR, '{p}% of departures') : '')
+      + (inn.length ? `<div class="wp-panel-section-title wp-mig-title"><span class="wp-mig-swatch" style="background:${IN_COLOR}"></span>${escapeHtml(mT('Where they come from'))}</div>`
+        + partnerRows(inn, c.in, IN_COLOR, '{p}% of arrivals') : '')
+    : emptyHtml(mT(s.day ? 'Nobody left or arrived on this day.' : 'Nobody left or arrived in this window.'));
+
+  const dayBadge = s.day ? `<span class="wp-panel-bloc" style="background:#58a6ff22;color:#58a6ff">${escapeHtml(migDayLabel(s.day))}</span>` : '';
+  return `<button class="wp-sphere-back" type="button" data-mig-action="unfocus">${escapeHtml(mT('← All nations'))}</button>`
+    + `<div class="wp-panel-header"><div><div class="wp-panel-name wp-mig-name">${flag}${escapeHtml(nation?.name || '—')}</div>${dayBadge}</div></div>`
+    + controls + dirSeg
+    + migTimelineHtml(s)
+    + statsHtml([
+      { label: mT('Arrived'), value: fmt(c.in) },
+      { label: mT('Left'), value: fmt(c.out) },
+      { label: mT('Balance'), value: migSigned(c.net, 'net') },
+      { label: mT('Per 100 citizens'), value: c.citizens >= MIN_RATE_CITIZENS ? migSigned(rate, 'rate') : '—' },
+    ])
+    + (s.day ? '' : migNotesHtml(d))
+    + body
+    + `<button type="button" class="wp-travel-btn wp-mig-open" data-mig-action="open-nation">${escapeHtml(mT('Players by name in the nation panel'))} ›</button>`;
+}
+
+/* ══════════════════ FINANZIAMENTI ══════════════════
+   Markup della vista Finanziamenti (dati, colori e monete in
+   diplomacy/fundingFlows.js, comandi in wireFundingOverview). Stessa
+   forma delle Migrazioni: il mondo, oppure la nazione cliccata. */
+
+function fundSegHtml(label, attr, options, current) {
+  return migSegHtml(label, attr, options, current);
+}
+
+function fundNotesHtml() {
+  const a = fundingAgg();
+  if (!a) return '';
+  if (!a.fromServer) return `<div class="wp-mig-note">${escapeHtml(fT('Cache server unreachable: only the last few days the game remembers.'))}</div>`;
+  if (fundingWindowShort()) {
+    return `<div class="wp-mig-note">${escapeHtml(fT('The archive starts on {date}: earlier transfers do not show up.', {
+      date: new Date(a.coverageFrom).toLocaleDateString(),
+    }))}</div>`;
+  }
+  return '';
+}
+
+const fundCount = n => (n === 1 ? fT('1 transfer') : fT('{n} transfers', { n: fmt(n) }));
+const fundSigned = v => (v > 0 ? `+${fmt(v)}` : v < 0 ? `−${fmt(-v)}` : '0');
+
+function fundingHtml() {
+  const s = fund();
+  const a = fundingAgg();
+  const controls = fundSegHtml(fT('Window'), 'fund-days',
+    FUNDING_DAYS.map(n => [n, n ? fT('{n} days', { n }) : fT('All')]), s.days);
+  const about = aboutHtml(fT('Money sent from treasury to treasury. Gold: nations receiving more than they send; violet: nations sending more than they receive. Click a nation to see who funds it and whom it funds.'));
+  if (!a) {
+    const msg = s.loading || !s.error ? fT('Loading…') : fT('Transfers are not available right now — reopen this view to retry.');
+    return headerHtml(fT('Funding')) + controls + emptyHtml(msg) + about;
+  }
+  if (s.focus) return fundingFocusHtml(s, controls);
+
+  const st = getFundingStats();
+  const { receivers, givers, flows } = fundingRanking(10);
+  const maxAbs = Math.max(1, ...[...receivers, ...givers].map(r => Math.abs(r.net)));
+  const nationRow = (r, i) => {
+    const nation = state.nationMap.get(r.id);
+    return rowHtml({
+      rank: i + 1,
+      icon: nation ? flagImgHtml(r.id, nation, 'wp-vo-flag') : '',
+      name: nation?.name || '—',
+      value: fundSigned(r.net),
+      sub: fT('received {i} · sent {o}', { i: fmt(r.in), o: fmt(r.out) }),
+      share: Math.abs(r.net) / maxAbs,
+      color: fundingColor(r.net),
+      dataset: ` data-fund-country="${escapeHtml(r.id)}"`,
+    });
+  };
+  const maxFlow = Math.max(1, ...flows.map(f => f.m));
+  const flowRows = flows.map((f, i) => {
+    const x = state.nationMap.get(f.f), y = state.nationMap.get(f.t);
+    return rowHtml({
+      rank: i + 1,
+      icon: x ? flagImgHtml(f.f, x, 'wp-vo-flag') : '',
+      name: `${x?.name || '—'} → ${y?.name || '—'}`,
+      value: fmt(f.m),
+      sub: fundCount(f.n),
+      share: f.m / maxFlow,
+      color: FUND_IN,
+      dataset: ` data-fund-country="${escapeHtml(f.t)}"`,
+    });
+  }).join('');
+  const section = (title, body) => body ? `<div class="wp-panel-section-title wp-mig-title">${escapeHtml(title)}</div>${body}` : '';
+  const hint = `<div class="wp-mig-hint">${escapeHtml(fundingCanHover() ? fT('Click a nation to see who funds it.') : fT('Tap a nation to see who funds it.'))}</div>`;
+
+  return headerHtml(fT('Funding'), s.days ? fT('{n} days', { n: s.days }) : fT('All'))
+    + controls
+    + statsHtml([
+      { label: fT('Money moved'), value: fmt(st.total) },
+      { label: fT('Transfers'), value: fmt(st.count) },
+      { label: fT('Receiving'), value: fmt(st.receivers) },
+      { label: fT('Giving'), value: fmt(st.givers) },
+    ])
+    + hint
+    + fundNotesHtml()
+    + (st.count
+      ? section(fT('Receive the most'), receivers.map(nationRow).join(''))
+        + section(fT('Give the most'), givers.map(nationRow).join(''))
+        + section(fT('Biggest flows'), flowRows)
+      : emptyHtml(fT('No transfers in this window.')))
+    + about;
+}
+
+/* ── WarEra+ vista Bonus battaglia (src/diplomacy/bonusView.js) ──────
+   Prima della scelta: istruzioni. Con una battaglia: i fatti della
+   battaglia (bunker, base, regione isolata, rivolta), il TUO bonus se
+   "Sono io" è impostato, e le nazioni a cui conviene difendere (blu) e
+   attaccare (rosso), ognuna col dettaglio delle sue voci. */
+function battleBonusHtml() {
+  const s = bonusState();
+  const about = aboutHtml(bvT('about'));
+  const fmtP = (v) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 10) / 10));
+  const signed = (v) => `≈${v > 0 ? '+' : ''}${fmtP(v)}%`;
+  const setMe = myPlayerId() ? '' : `<div class="wp-mig-note">${escapeHtml(bvT('setMe'))}
+      <button type="button" class="wp-bv-players" data-bv-players>${escapeHtml(bvT('openPlayers'))}</button></div>`;
+  if (!s.battle) return headerHtml(bvT('title')) + emptyHtml(bvT('pick')) + setMe + about;
+
+  const def = state.nationMap.get(s.battle.defender?.country);
+  const atk = state.nationMap.get(s.battle.attacker?.country);
+  const badge = `${def?.name || '—'} vs ${atk?.name || '—'}`;
+  if (s.loading || !s.rows) return headerHtml(bvT('title'), badge) + emptyHtml(bvT('loading')) + about;
+
+  const facts = [];
+  const dc = s.ctxs.defender, ac = s.ctxs.attacker;
+  facts.push(dc.building ? bvT('bunker', { n: dc.buildingLevel, p: dc.building }) : bvT('bunkerOff'));
+  facts.push(!ac.buildingKnown ? bvT('baseUnknown') : ac.building ? bvT('base', { n: ac.buildingLevel, p: ac.building }) : bvT('baseOff'));
+  if (dc.notLinked) facts.push(bvT('notLinked', { p: dc.notLinked }));
+  if (ac.revoltBar) facts.push(bvT('revolt', { p: fmtP(ac.revoltBar * 100) }));
+  const factsHtml = `<div class="wp-mig-hint">${facts.map(escapeHtml).join(' · ')}</div>`
+    + (s.ordersKnown ? '' : `<div class="wp-mig-note">${escapeHtml(bvT('ordersUnknown'))}</div>`);
+
+  let mineHtml = setMe;
+  if (s.mine) {
+    const best = s.mine.best;
+    mineHtml = `<div class="wp-panel-section-title wp-mig-title">${escapeHtml(bvT('you'))}</div>`
+      + statsHtml([
+        { label: `🛡️ ${bvT('defending')}`, value: signed(s.mine.defender.total) },
+        { label: `⚔️ ${bvT('attacking')}`, value: signed(s.mine.attacker.total) },
+      ])
+      + `<div class="wp-mig-hint">${escapeHtml(`${best === 'attacker' ? '⚔️' : '🛡️'} ${partsText(s.mine[best].parts, best)}`)}</div>`;
+  }
+
+  const max = Math.max(1, s.max);
+  const list = (side) => bonusRanking(side, 15).map((r, i) => {
+    const nation = state.nationMap.get(r.id);
+    return rowHtml({
+      rank: i + 1,
+      icon: nation ? flagImgHtml(r.id, nation, 'wp-vo-flag') : '',
+      name: nation?.name || '—',
+      value: signed(r.v),
+      sub: partsText(nationParts(r.parts), side),
+      share: r.v / max,
+      color: bonusColor(side, r.v / max),
+    });
+  }).join('');
+  const section = (title, body) => body ? `<div class="wp-panel-section-title wp-mig-title">${escapeHtml(title)}</div><div class="wp-bv-list">${body}</div>` : '';
+  const defList = list('defender');
+  const atkList = list('attacker');
+
+  return headerHtml(bvT('title'), badge)
+    + factsHtml
+    + mineHtml
+    + (defList || atkList
+      ? section(`🛡️ ${bvT('bestDefend')} · ${def?.name || ''}`, defList) + section(`⚔️ ${bvT('bestAttack')} · ${atk?.name || ''}`, atkList)
+      : emptyHtml(bvT('none')))
+    + `<div class="wp-mig-note">${escapeHtml(bvT('note'))}</div>`
+    + about;
+}
+
+function fundingFocusHtml(s, controls) {
+  const id = s.focus;
+  const nation = state.nationMap.get(id);
+  const f = fundingFocus(id);
+  const c = f.country || { in: 0, out: 0, net: 0, nIn: 0, nOut: 0 };
+  const dirSeg = fundSegHtml(fT('Arrows'), 'fund-dir',
+    [['in', fT('Incoming')], ['out', fT('Outgoing')], ['both', fT('Both')]], s.dir);
+  const partnerRows = (list, total, color, key) => {
+    const max = Math.max(1, ...list.map(r => r.m));
+    return list.slice(0, TOP_NATIONS).map((r, i) => {
+      const n = state.nationMap.get(r.id);
+      return rowHtml({
+        rank: i + 1,
+        icon: n ? flagImgHtml(r.id, n, 'wp-vo-flag') : '',
+        name: n?.name || '—',
+        value: fmt(r.m),
+        sub: `${fT(key, { p: Math.round(r.m / Math.max(1, total) * 100) })} · ${fundCount(r.n)}`,
+        share: r.m / max,
+        color,
+        dataset: ` data-fund-country="${escapeHtml(r.id)}"`,
+      });
+    }).join('');
+  };
+  const flag = nation ? flagImgHtml(id, nation, 'wp-vo-flag') : '';
+  const body = (f.in.length || f.out.length)
+    ? (f.in.length ? `<div class="wp-panel-section-title wp-mig-title"><span class="wp-mig-swatch" style="background:${FUND_IN}"></span>${escapeHtml(fT('Who funds it'))}</div>`
+        + partnerRows(f.in, c.in, FUND_IN, '{p}% of what it received') : '')
+      + (f.out.length ? `<div class="wp-panel-section-title wp-mig-title"><span class="wp-mig-swatch" style="background:${FUND_OUT}"></span>${escapeHtml(fT('Whom it funds'))}</div>`
+        + partnerRows(f.out, c.out, FUND_OUT, '{p}% of what it sent') : '')
+    : emptyHtml(fT('No transfers to or from this nation in this window.'));
+  return `<button class="wp-sphere-back" type="button" data-fund-action="unfocus">${escapeHtml(fT('← All nations'))}</button>`
+    + `<div class="wp-panel-header"><div><div class="wp-panel-name wp-mig-name">${flag}${escapeHtml(nation?.name || '—')}</div></div></div>`
+    + controls + dirSeg
+    + statsHtml([
+      { label: fT('Received'), value: fmt(c.in) },
+      { label: fT('Sent'), value: fmt(c.out) },
+      { label: fT('Balance'), value: fundSigned(c.net) },
+      { label: fT('Transfers'), value: fmt(c.nIn + c.nOut) },
+    ])
+    + fundNotesHtml()
+    + body
+    + `<button type="button" class="wp-travel-btn wp-mig-open" data-fund-action="open-nation">${escapeHtml(fT('Open the nation panel'))} ›</button>`;
 }
 
 /* I GIACIMENTI: l'altro bonus alla produzione, e l'unico che scade.
@@ -609,6 +1068,12 @@ export function buildViewOverviewHtml(mode) {
   // WarEra+ vista Distanze: tutto (numeri, giro delle casse, istogramma) sta
   // in travelDistance.js, che possiede anche lo stato della vista.
   if (mode === 'travel') return travelOverviewHtml();
+
+  if (mode === 'migration') return migrationHtml();
+
+  if (mode === 'funding') return fundingHtml();
+
+  if (mode === 'battleBonus') return battleBonusHtml();
 
   if (mode === 'contested') {
     const counts = state.contestedCounts;

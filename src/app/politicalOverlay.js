@@ -39,6 +39,7 @@ import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
 import { withModuleLoading } from '../shared/loadingScreen.js';
 import { pauseMapBackgroundWork, resumeMapBackgroundWork } from './mapIdle.js';
+import { pushBack, dropBack, updateBackParams } from './backNav.js';
 
 let overlayEl, backBtn, titleEl;
 
@@ -77,6 +78,9 @@ export async function openPoliticalView(countryId, countryName = '', options = {
   // è già aperto non deve contare due volte la pausa (mapIdle.js tiene un
   // contatore: due pause e una sola resume lascerebbero la mappa ferma).
   if (!wasOpen) pauseMapBackgroundWork();
+  // Indietro del browser/telefono = closePoliticalView (vedi backNav.js).
+  pushBack('political', closePoliticalView, isPoliticalViewOpen,
+    { section: 'political', country: countryId || undefined });
 
   // Import dinamico: scarica il chunk Political solo qui, alla prima
   // apertura reale (poi resta in cache del browser/module graph per le
@@ -89,6 +93,13 @@ export async function openPoliticalView(countryId, countryName = '', options = {
   await withModuleLoading('political', async () => {
     const { initPoliticalView, resumePoliticalRendering } = await loadModule(() => import('../political/main.js'), 'political');
     await initPoliticalView(countryId, options);
+    // WarEra+: aperta dal menù senza nazione, Political usa la sua di
+    // default (localStorage): nel link va quella vera, o chi lo apre
+    // vedrebbe la propria.
+    if (!countryId) {
+      const cfg = await import('../political/config.js');
+      updateBackParams('political', { country: cfg.currentCountryId });
+    }
     // WarEra+ perf: riavvia canvas/ticker se erano stati fermati da una
     // chiusura precedente (no-op alla primissima apertura — vedi
     // resumePoliticalRendering in political/main.js).
@@ -108,6 +119,7 @@ export function closePoliticalView() {
   const wasOpen = isPoliticalViewOpen();
   overlayEl.classList.remove('open');
   overlayEl.setAttribute('aria-hidden', 'true');
+  dropBack('political');
   // Guardia su wasOpen: closePoliticalView si può chiamare (Escape,
   // backBtn) anche quando l'overlay è già chiuso — non è una vera
   // "chiusura" da parte dell'utente, non ha senso contarla.

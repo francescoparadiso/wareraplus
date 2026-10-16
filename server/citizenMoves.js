@@ -232,6 +232,157 @@ function readCitizenMoves(countryId, days) {
   };
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   I FLUSSI DI TUTTO IL MONDO (/migration-flows, vista mappa "Migrazioni")
+   -----------------------------------------------------------------------
+   Richiesta dell'utente: una vista che mostri quali nazioni stanno
+   guadagnando giocatori e quali li stanno perdendo, e — cliccandone una —
+   verso dove li sta "esportando".
+
+   È lo stesso archivio di /citizen-moves, letto per COPPIE (da → a)
+   invece che per una nazione sola. Una differenza importante: là ogni
+   riga si rilegge dal vivo con getUserLite (poche decine di id), qui
+   sarebbero migliaia — tutto il mondo per una settimana. Quindi niente
+   chiamate: si usa la mappa utente → [nazione, …, statistiche] che il
+   giro della directory MU tiene già per ogni cittadino
+   (mu-user-countries, passata da chi chiama come `userInfo`).
+
+   ⚠️ Le "uscite dal censimento" (t: null) NON sono partenze: il censimento
+   elenca solo gli ATTIVI, e quasi tutte sono giocatori che si sono
+   spenti restando dove stavano. Si risolvono così, per utente e in ordine
+   di tempo:
+     · se lo stesso utente ha una riga DOPO, la sua nazione di allora è
+       la `f` di quella riga (è lì che è ricomparso);
+     · altrimenti vale la nazione di adesso da `userInfo` (il censimento
+       la aggiorna per gli attivi, getUserLite per gli altri);
+     · stessa nazione di partenza, o nazione ignota = inattivo, contato a
+       parte e fuori dai flussi.
+   Senza la prima regola chi sparisce da A, ricompare in B e poi va in C
+   verrebbe contato due volte in arrivo a C.
+
+   Stesso filtro di /citizen-moves: livello 10+ o prestigio, dal quinto
+   elemento di userInfo (citizenStats: [2] livello, [10] prestigio).
+   Livello ignoto = fuori. I numeri quindi possono differire di poco da
+   quelli del pannello nazione, che legge il livello dal vivo.
+
+   Si contano gli SPOSTAMENTI, non le persone: chi fa A→B, B→A, A→B in
+   una settimana pesa 2 su A→B e 1 su B→A. Contare persone per coppia
+   sembrava più pulito ma rompe il saldo (quel giocatore risulterebbe
+   tornato a casa, e A ci perderebbe zero invece di uno). `people` nei
+   totali dice quanti giocatori diversi ci sono dietro.
+   ═══════════════════════════════════════════════════════════════════════ */
+const FLOW_MIN_LEVEL = 10;
+
+// Il giorno di uno spostamento: giorno ITALIANO, la stessa griglia degli
+// altri archivi del server (dayHistory, priceHistory) e del client.
+const _dayFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
+/**
+ * @param {number} days
+ * @param {{ userInfo?: Object<string, Array>, citizens?: Object<string, {n:number,n10?:number}> }} ctx
+ */
+/* `daily` (richiesta dell'utente, 2026-10-11: «vedere quando è partito un
+   esodo»): gli stessi spostamenti divisi per giorno, ognuno con i suoi
+   saldi e le sue coppie. Stessa risoluzione delle uscite e stesso filtro
+   di livello della somma: la somma dei giorni È il totale. */
+function readMigrationFlows(days, { userInfo = {}, citizens = {}, daily = false } = {}) {
+  const store = _readMoves();
+  const now = Date.now();
+  const since = now - (days || 7) * 24 * 60 * 60 * 1000;
+
+  // Righe di ogni utente in ordine di tempo, TUTTE (anche quelle prima
+  // della finestra): per risolvere un'uscita serve sapere dove è
+  // ricomparso dopo, e "dopo" può essere fuori finestra solo in avanti.
+  const byUser = new Map();
+  for (const r of store.data) {
+    if (!byUser.has(r.u)) byUser.set(r.u, []);
+    byUser.get(r.u).push(r);
+  }
+
+  const pairs = new Map();   // "f>t" → spostamenti
+  const byDay = new Map();   // "YYYY-MM-DD" → Map("f>t" → spostamenti)
+  const people = new Set();
+  const inactive = new Set();
+  const lowLevel = new Set();
+  for (const [userId, rows] of byUser) {
+    rows.sort((a, b) => a.a - b.a);
+    const info = userInfo[userId];
+    const st = info?.[4];
+    const big = st && st[2] != null && (st[2] >= FLOW_MIN_LEVEL || (st[10] || 0) > 0);
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      if (r.a < since) continue;
+      let to = r.t;
+      if (!to) to = rows[i + 1]?.f || info?.[0] || null;
+      if (!to || to === r.f) { inactive.add(userId); continue; }
+      if (!big) { lowLevel.add(userId); continue; }
+      const key = `${r.f}>${to}`;
+      pairs.set(key, (pairs.get(key) || 0) + 1);
+      people.add(userId);
+      if (daily) {
+        const day = _dayFmt.format(new Date(r.a));
+        if (!byDay.has(day)) byDay.set(day, new Map());
+        const m = byDay.get(day);
+        m.set(key, (m.get(key) || 0) + 1);
+      }
+    }
+  }
+
+  const countries = {};
+  const touch = (id) => countries[id] || (countries[id] = { in: 0, out: 0, net: 0 });
+  const flows = [];
+  for (const [key, n] of pairs) {
+    const [f, t] = key.split('>');
+    flows.push({ f, t, n });
+    touch(f).out += n;
+    touch(t).in += n;
+  }
+  flows.sort((a, b) => b.n - a.n);
+  let movers = 0;
+  for (const [id, c] of Object.entries(countries)) {
+    c.net = c.in - c.out;
+    // Il denominatore del saldo relativo: i cittadini di livello 10+,
+    // perché i flussi contano solo quelli. Dove non si sa, gli attivi.
+    const cz = citizens[id];
+    c.citizens = cz ? (cz.n10 || cz.n || 0) : 0;
+    movers += c.in;
+  }
+
+  const out = {
+    fetchedAt: store.fetchedAt,
+    coverageFrom: store.startedAt,
+    retentionDays: RETENTION_DAYS,
+    days: days || 7,
+    minLevel: FLOW_MIN_LEVEL,
+    totals: { moves: movers, people: people.size, inactive: inactive.size, lowLevel: lowLevel.size },
+    countries,
+    flows,
+  };
+  if (daily) {
+    // Un giorno = { day, moves, countries: {id: {in, out, net}}, flows }.
+    // Solo i giorni con almeno uno spostamento: un giorno assente è "zero"
+    // se è dopo coverageFrom, "non si guardava" se è prima (lo dice il client).
+    out.daily = [...byDay.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([day, m]) => {
+      const cs = {};
+      const fl = [];
+      let moves = 0;
+      for (const [key, n] of m) {
+        const [f, t] = key.split('>');
+        fl.push({ f, t, n });
+        (cs[f] || (cs[f] = { in: 0, out: 0, net: 0 })).out += n;
+        (cs[t] || (cs[t] = { in: 0, out: 0, net: 0 })).in += n;
+        moves += n;
+      }
+      for (const c of Object.values(cs)) c.net = c.in - c.out;
+      fl.sort((a, b) => b.n - a.n);
+      return { day, moves, countries: cs, flows: fl };
+    });
+  }
+  return out;
+}
+
 function statoCitizenMoves() {
   const store = _readMoves();
   const snap = _readSnap();
@@ -250,5 +401,6 @@ module.exports = {
   initCitizenMoves,
   recordCensus,
   readCitizenMoves,
+  readMigrationFlows,
   statoCitizenMoves,
 };

@@ -12,6 +12,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { natT } from './i18n.js';
+import { scrollHintHtml } from '../shared/scrollHint.js';
 import { METRICS, metricValue } from './metrics.js';
 import { escapeHtml, flagImg } from '../mu/ui.js';
 
@@ -46,6 +47,7 @@ export function renderNationList(host, ctx) {
       <span class="wp-nat-count">${rows.length} ${escapeHtml(natT('nations'))}</span>
     </div>
     ${rows.length ? `
+      ${scrollHintHtml(900)}
       <div class="wp-nat-table-wrap"><div class="wp-nat-table">
         <div class="wp-nat-thead">${head}</div>
         ${body}

@@ -13,6 +13,7 @@ import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
 import { withModuleLoading } from '../shared/loadingScreen.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
+import { pushBack, dropBack } from './backNav.js';
 
 let overlayEl, backBtn, rootEl;
 
@@ -38,6 +39,8 @@ export async function openNewsView() {
   // di sfondo della mappa, che resta montata sotto l'overlay.
   // Dopo .open: a overlay nascosto il canvas misurerebbe 0x0.
   enterOverlay(overlayEl, 'news');
+  // Indietro del browser/telefono = closeNewsView (vedi backNav.js).
+  pushBack('news', closeNewsView, isNewsViewOpen, { section: 'news' });
 
   await withModuleLoading('news', async () => {
     const { initNewsView } = await loadModule(() => import('./newsView.js'), 'news');
@@ -52,6 +55,7 @@ export function closeNewsView() {
   overlayEl.classList.remove('open');
   overlayEl.setAttribute('aria-hidden', 'true');
   leaveOverlay(overlayEl);
+  dropBack('news');
 }
 
 export function isNewsViewOpen() {

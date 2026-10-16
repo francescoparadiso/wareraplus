@@ -728,6 +728,8 @@ body.light-theme .wp-panel-name {
 .wp-guide-overlay { --wp-ov-accent: #d29922; }   /* Guida: ambra */
 .wp-market-overlay { --wp-ov-accent: #e3b341; }  /* Rendite di produzione: oro */
 .wp-battles-overlay { --wp-ov-accent: #db6d28; } /* Battaglie: arancio bruciato */
+.wp-players-overlay { --wp-ov-accent: #ec4899; } /* Giocatori: rosa */
+body.light-theme .wp-players-overlay { --wp-ov-accent: #be185d; }
 /* L'oro chiaro sparisce sul fondo chiaro: sul tema chiaro l'accento della
    sezione diventa la sua versione scura (la stessa dichiarata come
    rgbLight in OVERLAY_TINTS, src/app/overlayChrome.js). */
@@ -3823,3 +3825,257 @@ body.light-theme .wp-travel-btn { color: #8b5a2b; border-color: rgba(139, 90, 43
 body.light-theme .wp-travel-btn[aria-pressed="true"] { background: #8b5a2b; color: #fff; }
 body.light-theme .wp-travel-leg-home { color: #8b5a2b; }
 body.light-theme .wp-travel-warn { color: #9a6700; }
+
+/* ── WarEra+ vista Migrazioni (src/diplomacy/migrationFlows.js) ──
+   I bottoni sono quelli della vista Distanze (.wp-travel-btn): stesso
+   pannello, stessa famiglia di comandi. Qui solo la loro disposizione e
+   le fasce di testo della vista. */
+.wp-mig-seg {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 8px;
+}
+.wp-mig-seg-label { font-size: 11px; color: #8b949e; min-width: 64px; }
+.wp-mig-hint { font-size: 12px; color: #c9d1d9; margin: 2px 0 8px; }
+.wp-mig-note {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #e3b341;
+  margin: 4px 0 8px;
+}
+.wp-mig-title { display: flex; align-items: center; gap: 6px; margin-top: 14px; }
+.wp-mig-swatch { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.wp-mig-name { display: flex; align-items: center; gap: 8px; }
+.wp-mig-open { display: block; width: 100%; margin: 14px 0 6px; padding: 7px 10px; font-size: 12px; }
+body.light-theme .wp-mig-hint { color: #2b2418; }
+body.light-theme .wp-mig-seg-label { color: #5c5347; }
+body.light-theme .wp-mig-note { color: #9a6700; }
+/* WarEra+ vista Bonus battaglia (viewOverview.js: battleBonusHtml). Il
+   dettaglio delle voci sotto ogni nazione va a capo invece di troncarsi:
+   è la risposta a "perché proprio lei", non un'etichetta. */
+.wp-bv-list .wp-vo-sub { white-space: normal; line-height: 1.35; }
+.wp-bv-players {
+  margin-left: 6px; font: inherit; font-size: 11px; cursor: pointer;
+  border-radius: 6px; padding: 2px 8px; background: transparent; color: inherit;
+  border: 1px solid currentColor;
+}
+
+/* ── WarEra+ replay della battaglia (src/diplomacy/battleReplay.js) ──
+   Sopra la scheda della battaglia chiusa (che sta a bottom: 55px). */
+#wp-replay-hud {
+  position: fixed;
+  left: 50%;
+  bottom: calc(108px + env(safe-area-inset-bottom, 0px));  /* rimisurato da placeHud */
+  transform: translateX(-50%);
+  z-index: 9100;  /* sopra la scheda della battaglia (9000) e il suo "All contributors" */
+  max-width: calc(100vw - 32px);
+  color: #e6edf3;
+  font-size: 12px;
+}
+#wp-replay-hud[hidden] { display: none; }
+.wp-replay-open {
+  font: inherit;
+  font-weight: 700;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 209, 102, .5);
+  background: rgba(13, 17, 23, .92);
+  color: #ffd166;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+}
+.wp-replay-open:hover { background: rgba(40, 32, 12, .95); }
+#wp-replay-hud.active .wp-replay-open { display: none; }
+.wp-replay-bar { display: none; }
+#wp-replay-hud.active .wp-replay-bar {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 420px) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  width: min(560px, calc(100vw - 32px));
+  border-radius: 12px;
+  background: rgba(13, 17, 23, .94);
+  border: 1px solid rgba(255, 209, 102, .35);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .5);
+}
+.wp-replay-btn {
+  font: inherit;
+  min-width: 32px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 209, 102, .35);
+  background: rgba(255, 209, 102, .08);
+  color: #ffd166;
+  cursor: pointer;
+}
+.wp-replay-x { color: #8b949e; border-color: transparent; background: none; }
+.wp-replay-range { width: 100%; accent-color: #ffd166; }
+.wp-replay-info { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.wp-replay-info b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.wp-replay-info span { color: #8b949e; font-variant-numeric: tabular-nums; }
+.wp-replay-note { flex-basis: 100%; font-size: 11px; color: #e3b341; }
+body.light-theme .wp-replay-open,
+body.light-theme #wp-replay-hud.active .wp-replay-bar {
+  background: rgba(250, 244, 230, .96);
+  border-color: rgba(139, 90, 43, .4);
+  color: #8b5a2b;
+}
+body.light-theme #wp-replay-hud { color: #2b2418; }
+body.light-theme .wp-replay-btn { color: #8b5a2b; border-color: rgba(139, 90, 43, .35); background: rgba(139, 90, 43, .06); }
+body.light-theme .wp-replay-info span { color: #5c5347; }
+body.light-theme .wp-replay-note { color: #9a6700; }
+
+/* Cursore giorno per giorno della vista Migrazioni (viewOverview.js). */
+.wp-mig-tl { margin: 4px 0 12px; }
+.wp-mig-tl-empty { font-size: 11.5px; color: #8b949e; }
+.wp-mig-tl-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.wp-mig-tl-svg { display: block; width: 100%; height: 64px; }
+.wp-mig-tl-day { cursor: pointer; }
+.wp-mig-tl-day:hover rect + rect { opacity: .75; }
+.wp-mig-tl-sel rect + rect { fill: #ffd166; }
+.wp-mig-tl-off { fill: #30363d; }
+.wp-mig-tl-axis { stroke: #30363d; stroke-width: 1; }
+.wp-mig-tl-foot { display: flex; justify-content: space-between; gap: 8px; font-size: 10.5px; color: #8b949e; margin-top: 2px; }
+.wp-mig-tl-foot b { color: #c9d1d9; font-weight: 600; text-align: center; }
+body.light-theme .wp-mig-tl-foot b { color: #2b2418; }
+body.light-theme .wp-mig-tl-off, body.light-theme .wp-mig-tl-axis { fill: #d8cfc0; stroke: #d8cfc0; }
+
+/* ── WarEra+ etichette dei ping sulla mappa (src/app/livePings.js) ── */
+.wp-ping-label {
+  pointer-events: none;
+  max-width: 240px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: rgba(13, 17, 23, .9);
+  border: 1px solid var(--ping-c, #ffd166);
+  color: #e6edf3;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: normal;
+  text-align: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
+  animation: wp-ping-label 4.5s ease forwards;
+}
+@keyframes wp-ping-label {
+  0% { opacity: 0; transform: translateY(6px); }
+  10% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-6px); }
+}
+body.light-theme .wp-ping-label { background: rgba(250, 244, 230, .95); color: #2b2418; }
+
+/* Comandi dei fili della vista Sfera (diplomacy/sphereLinks.js). */
+.wp-sphere-links-ctl { margin: 6px 0 10px; }
+
+/* WarEra+ animazioni spente nelle Impostazioni (src/shared/motion.js):
+   ferme anche quelle CSS delle aggiunte WarEra+. */
+body.wp-no-motion .wp-ping-label { animation: none; }
+
+/* Segni sul cursore del replay (battleReplay.js): sorpassi e ingressi. */
+.wp-replay-track { position: relative; padding-top: 16px; }
+.wp-replay-marks { position: absolute; left: 8px; right: 8px; top: 0; height: 16px; }
+.wp-replay-mark {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.wp-replay-mark.flip {
+  width: 0; height: 0; top: 4px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 8px solid #ffd166;
+}
+.wp-replay-mark.flip.attacker { border-top-color: #4d8dff; }
+.wp-replay-mark.flip.defender { border-top-color: #ff4d4d; }
+.wp-replay-mark.entry img { display: block; width: 14px; height: 10px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .5); }
+.wp-replay-mark.entry.attacker img { box-shadow: 0 0 0 1.5px #4d8dff; }
+.wp-replay-mark.entry.defender img { box-shadow: 0 0 0 1.5px #ff4d4d; }
+.wp-replay-mark:hover { filter: brightness(1.3); z-index: 1; }
+
+/* Notizie che portano sulla mappa (newsTicker.js / newsView.js → livePings.js). */
+.wp-ticker-message.wp-ticker-link { cursor: pointer; }
+.wp-ticker-message.wp-ticker-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.wp-news-item.wp-news-link, .wp-news-lead-title.wp-news-link { cursor: pointer; }
+.wp-news-item.wp-news-link:hover, .wp-news-lead-title.wp-news-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* WarEra+ marcatore di battaglia al sorpasso nel round (battleMarkers.js). */
+.battle-marker.wp-bm-flash-attacker { animation: wp-bm-flash-atk 2.4s ease-out; }
+.battle-marker.wp-bm-flash-defender { animation: wp-bm-flash-def 2.4s ease-out; }
+@keyframes wp-bm-flash-atk {
+  0% { filter: none; }
+  12% { filter: drop-shadow(0 0 10px #4d8dff) drop-shadow(0 0 4px #4d8dff) brightness(1.35); }
+  35% { filter: none; }
+  50% { filter: drop-shadow(0 0 8px #4d8dff) brightness(1.2); }
+  100% { filter: none; }
+}
+@keyframes wp-bm-flash-def {
+  0% { filter: none; }
+  12% { filter: drop-shadow(0 0 10px #ff4d4d) drop-shadow(0 0 4px #ff4d4d) brightness(1.35); }
+  35% { filter: none; }
+  50% { filter: drop-shadow(0 0 8px #ff4d4d) brightness(1.2); }
+  100% { filter: none; }
+}
+body.wp-no-motion .battle-marker.wp-bm-flash-attacker,
+body.wp-no-motion .battle-marker.wp-bm-flash-defender { animation: none; }
+
+
+/* ── WarEra+: numeri che contano e grafici che si disegnano ──────────
+   src/shared/reveal.js. Il sipario è un clip-path sull'<svg> intero (vale
+   per linee, barre, aree e candele allo stesso modo, senza sapere cosa c'è
+   dentro); le ciambelle ruotano entrando. Il badge del cambiamento sta
+   sopra la scheda (assoluto): non deve spostare niente mentre compare. */
+.wp-draw-in { animation: wp-draw-wipe 750ms cubic-bezier(.2, .7, .2, 1) both; }
+@keyframes wp-draw-wipe {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+.wp-draw-spin { animation: wp-draw-spin 650ms cubic-bezier(.2, .7, .2, 1) both; transform-origin: 50% 50%; }
+@keyframes wp-draw-spin {
+  from { opacity: 0; transform: rotate(-120deg) scale(.82); }
+  to   { opacity: 1; transform: none; }
+}
+.wp-num-counting { font-variant-numeric: tabular-nums; }
+.wp-num-delta {
+  position: absolute; top: 2px; right: 4px;
+  font-size: 10.5px; font-weight: 700; line-height: 1;
+  padding: 2px 5px; border-radius: 6px; pointer-events: none;
+  font-variant-numeric: tabular-nums;
+  animation: wp-num-delta 4.2s ease forwards;
+}
+.wp-num-delta.up   { color: #3fb950; background: rgba(63, 185, 80, .14); }
+.wp-num-delta.down { color: #f85149; background: rgba(248, 81, 73, .14); }
+@keyframes wp-num-delta {
+  0%   { opacity: 0; transform: translateY(4px); }
+  10%  { opacity: 1; transform: none; }
+  75%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-4px); }
+}
+body.wp-no-motion .wp-draw-in,
+body.wp-no-motion .wp-draw-spin { animation: none; }
+/* Senza animazioni il badge resta (è un'informazione), solo senza moto:
+   compare e se ne va col suo timer in reveal.js. */
+body.wp-no-motion .wp-num-delta { animation: none; }
+
+
+/* ── "Scorri di lato per tutte le colonne" (src/shared/scrollHint.js) ──
+   Sopra le tabelle dati che su telefono scorrono invece di perdere
+   colonne. Compare solo sotto la soglia in cui la tabella scorre. */
+.wp-scrollhint {
+  display: none;
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  color: var(--wp-ov-text-dim, #8b949e);
+  text-align: right;
+}
+@media (max-width: 900px) { .wp-scrollhint-900 { display: block; } }
+@media (max-width: 768px) { .wp-scrollhint-768 { display: block; } }
+@media (max-width: 560px) { .wp-scrollhint-560 { display: block; } }

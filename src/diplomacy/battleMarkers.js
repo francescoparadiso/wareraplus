@@ -611,6 +611,21 @@ function injectContribStyles() {
     @media (max-width: 520px) {
       .bfm-spend-c-wrap { grid-template-columns: 1fr; }
     }
+    /* WarEra+ — la card non esce mai dallo schermo. È ancorata in basso
+       e cresce verso l'alto: con "Battle spending" aperto, in una finestra
+       bassa, superava l'altezza disponibile e l'intestazione (nome della
+       battaglia, ripiega, chiudi) finiva sotto la barra in alto, fuori
+       portata. Ora sopra lascia lo spazio della barra e il resto scorre
+       dentro la card. 55px = il suo bottom, 64px = barra menù + ticker. */
+    #battle-tooltip-main {
+      max-height: calc(100vh - 55px - 64px - env(safe-area-inset-bottom, 0px));
+      max-height: calc(100dvh - 55px - 64px - env(safe-area-inset-bottom, 0px));
+      overflow-y: auto; overscroll-behavior: contain;
+      scrollbar-width: thin; scrollbar-color: rgba(128,128,128,.55) transparent;
+    }
+    #battle-tooltip-main::-webkit-scrollbar { width: 6px; }
+    #battle-tooltip-main::-webkit-scrollbar-track { background: transparent; }
+    #battle-tooltip-main::-webkit-scrollbar-thumb { background: rgba(128,128,128,.55); border-radius: 3px; }
     .bfm-contrib-mobile-section { display: none; overflow: hidden; }
     @media (max-width: 768px) {
       #battle-tooltip.bfm-contrib-mobile-open .bfm-contrib-mobile-section.bfm-contrib-has-data { display: block; }
@@ -1138,6 +1153,7 @@ function showBattleTooltip(battle, regionName, liveData, totalAttackerDmg, total
       applySpend();
       if (spendOpen) loadSpendingSection(battle, subColor, textColor);
     });
+
   }
 
   // Bottone "espandi" — presente sia sopra la colonna desktop sia sopra la
@@ -1269,6 +1285,19 @@ async function fetchRegionData(regionId) {
 // Batcha in un solo POST tutte le regioni non ancora in cache (era una
 // fetch sequenziale per battaglia). Vedi warera-api-batching.md.
 async function fetchRegionDataBatch(regionIds) {
+  // WarEra+ perf: posizione e nome di TUTTE le regioni sono già in
+  // state.regionData (region.getRegionsObject, caricata al boot prima del
+  // primo giro dei marker): region.getById resta solo per un id che lì
+  // manca (regione nuova fra due poll del server di cache).
+  for (const id of new Set(regionIds)) {
+    if (!id || state.regionCache.has(id)) continue;
+    const region = state.regionData?.[id];
+    if (!region?.position) continue;
+    state.regionCache.set(id, {
+      position: region.position,
+      name: region.name || region.mainCity || '',
+    });
+  }
   const toFetch = [...new Set(regionIds)].filter(id => id && !state.regionCache.has(id));
   if (!toFetch.length) return;
   const calls = toFetch.map(id => ['region.getById', { regionId: id }]);
@@ -1546,9 +1575,13 @@ function buildMarkerEl(battle, regionName, liveData, totalAttackerDmg, totalDefe
       return;
     }
 
-    showBattleTooltip(d.battle, d.regionName, d.liveData, d.totalAttackerDmg, d.totalDefenderDmg, d.trend);
+    // WarEra+ vista Bonus battaglia: niente riquadro grande (si sovrapponeva
+    // al pannello, che è dove stanno i bonus) e gli altri marcatori restano
+    // visibili, così si passa da una battaglia all'altra con un clic.
+    const bonusView = state.coloringMode === 'battleBonus' || (state.coloringMode === 'battleHeatmap' && state.bonusHeatmap);
+    if (!bonusView) showBattleTooltip(d.battle, d.regionName, d.liveData, d.totalAttackerDmg, d.totalDefenderDmg, d.trend);
     setBattleHeatmap(battleId);
-    hideAllMarkers();
+    if (!bonusView) hideAllMarkers();
     trackEvent('battle-marker-click', { region: d.regionName });
 
     const regionId = d.battle.regionId || d.battle.defender?.region || d.battle.attacker?.region;
@@ -1572,6 +1605,45 @@ function buildMarkerEl(battle, regionName, liveData, totalAttackerDmg, totalDefe
   // "medium" forzata sopra (minWidth/padding piu' generosi).
   Object.assign(el.style, { pointerEvents: 'auto', zIndex: 2000 });
   return el;
+}
+
+// ==================== WarEra+: il marcatore che reagisce al sorpasso ====
+// Richiesta dell'utente: quando in una battaglia cambia chi fa più danno
+// nel round in corso, il marcatore lampeggia nel colore del lato che è
+// passato avanti (attacco blu, difesa rosso, come la heatmap). Nessun dato
+// nuovo: il danno del round arriva già a ogni giro dei marcatori (live
+// data, o currentRound di getBattles). Si confronta il segno con quello del
+// giro prima, NELLO STESSO round (al cambio round il contatore riparte da
+// zero e il primo vantaggio non è un sorpasso). Animazione CSS, quindi
+// l'interruttore delle Impostazioni la spegne da sé (body.wp-no-motion).
+const _leadState = new Map();   // battleId → { round, sign }
+const _pendingFlash = new Map(); // battleId → 'attacker' | 'defender'
+const FLASH_MS = 2400;
+
+function _trackLead(battle, liveData) {
+  const live = liveData && (liveData.attackerDmg > 0 || liveData.defenderDmg > 0);
+  const atk = live ? liveData.attackerDmg : (battle.currentRound?.attacker?.damages || 0);
+  const def = live ? liveData.defenderDmg : (battle.currentRound?.defender?.damages || 0);
+  const sign = Math.sign(atk - def);
+  const round = battle.roundsHistory?.length ?? null;
+  const prev = _leadState.get(battle._id);
+  if (prev && prev.round === round && prev.sign && sign && sign !== prev.sign) {
+    _pendingFlash.set(battle._id, sign > 0 ? 'attacker' : 'defender');
+  }
+  if (sign || !prev || prev.round !== round) _leadState.set(battle._id, { round, sign });
+}
+
+function _playLeadFlashes() {
+  for (const [battleId, side] of _pendingFlash) {
+    const el = markers.get(battleId)?.marker?.getElement?.();
+    if (!el) continue;
+    const cls = `wp-bm-flash-${side}`;
+    el.classList.remove('wp-bm-flash-attacker', 'wp-bm-flash-defender');
+    void el.offsetWidth;   // riparte l'animazione anche se la classe c'era
+    el.classList.add(cls);
+    setTimeout(() => el.classList.remove(cls), FLASH_MS);
+  }
+  _pendingFlash.clear();
 }
 
 // ==================== UPDATE MARKERS ====================
@@ -1661,6 +1733,7 @@ export async function updateBattleMarkers() {
         const effDef = (liveData && (liveData.attackerDmg > 0 || liveData.defenderDmg > 0))
           ? liveData.defenderDmg : totalDefenderDmg;
         const trend = computeTrend(battle._id, effAtk, effDef);
+        _trackLead(battle, liveData);   // WarEra+: sorpasso nel round → lampo
 
         seen.add(battle._id);
         battleCache.set(battle._id, { battle, regionName, liveData, totalAttackerDmg, totalDefenderDmg, trend, centroid });
@@ -1681,6 +1754,8 @@ export async function updateBattleMarkers() {
       }
 
       _syncMarkersToViewport();
+      _playLeadFlashes();
+      for (const id of _leadState.keys()) if (!battleCache.has(id)) _leadState.delete(id);
     }
   } catch (err) {
     console.error('Error updating battle markers:', err);
@@ -1721,6 +1796,25 @@ export function clearMarkers() {
   });
   clusterMarkers.clear();
   battleCache.clear();
+}
+
+// WarEra+ — link condivisibile ?battle=<id> (vedi src/app/backNav.js):
+// apre la battaglia come un clic sul suo marker. I marker esistono solo per
+// le battaglie nel viewport, quindi prima si porta lì la mappa. Aspetta
+// (fino a ~15 s) il primo giro dei marker; false se la battaglia non è fra
+// quelle in corso (chiusa, o marker spenti dalle impostazioni).
+export async function openBattleById(battleId) {
+  for (let i = 0; i < 30 && !battleCache.has(battleId); i++) {
+    await new Promise(r => setTimeout(r, 500));
+  }
+  const d = battleCache.get(battleId);
+  if (!d || !state.map) return false;
+  state.map.jumpTo({ center: d.centroid, zoom: Math.max(state.map.getZoom(), 4) });
+  _syncMarkersToViewport();
+  const entry = markers.get(battleId);
+  if (!entry) return false;
+  entry.el.click();
+  return true;
 }
 
 // ==================== FORCE UPDATE ====================

@@ -67,19 +67,48 @@ export function getTimeMachineMap() {
   return _map;
 }
 
-// ==================== COSTRUZIONE DATI (stessa logica della versione
-// precedente in timeMachine.js, spostata qui insieme al "dove disegno") ====================
-function _buildFillGeoJSON(regionsMap) {
-  return {
-    type: 'FeatureCollection',
-    features: state.baseGeoJSON.features.map(f => {
-      const regionId = f.properties?.regionId;
-      const historicalCountryId = regionId && Object.prototype.hasOwnProperty.call(regionsMap, regionId)
-        ? regionsMap[regionId]
-        : f.properties?.countryId; // regione non presente nello storico (raro): fallback al dato live
-      return { ...f, properties: { ...f.properties, countryId: historicalCountryId } };
-    }),
-  };
+// ==================== COSTRUZIONE DATI ====================
+/* WarEra+ (richiesta dell'utente: "la time machine è estremamente
+   laggosa, non tiene il passo con le animazioni"). Prima ogni fotogramma
+   della riproduzione — ogni 60 ms — rimandava a MapLibre le 726 regioni
+   intere con il proprietario nuovo scritto nelle proprietà: misurato, ~100
+   ms di lavoro del worker per ogni setData, cioè una coda che non si
+   svuotava mai e una mappa sempre indietro rispetto a slider e frecce.
+
+   Adesso le geometrie si caricano UNA volta (proprietà di oggi, mai più
+   toccate) e il proprietario di allora è uno stato per regione
+   (setFeatureState, chiave regionId via promoteId): cambiarlo ridipinge
+   senza ritassellare niente, e si scrive solo per le regioni che sono
+   passate di mano dall'ultimo fotogramma. '' = nessun proprietario (la
+   regione esiste ma quel giorno non era di nessuno), che è diverso da
+   "stato assente" = regione fuori dallo storico, che tiene il dato live. */
+const OWNER = ['to-string', ['coalesce', ['feature-state', 'owner'], ['get', 'countryId']]];
+let _fillLoaded = false;
+let _owners = new Map();   // regionId → proprietario scritto nello stato
+
+function _ensureFillData() {
+  if (_fillLoaded) return;
+  const src = _map.getSource(SRC_FILL);
+  if (!src || !state.baseGeoJSON?.features) return;
+  src.setData(state.baseGeoJSON);
+  _fillLoaded = true;
+  _owners = new Map();
+}
+
+/** Scrive lo stato solo dove il proprietario è cambiato. Ritorna quante
+ *  regioni ha toccato. */
+function _applyOwners(regionsMap) {
+  let n = 0;
+  for (const f of state.baseGeoJSON.features) {
+    const rid = f.properties?.regionId;
+    if (!rid || !Object.prototype.hasOwnProperty.call(regionsMap, rid)) continue;
+    const owner = regionsMap[rid] ?? '';
+    if (_owners.get(rid) === owner) continue;
+    _owners.set(rid, owner);
+    _map.setFeatureState({ source: SRC_FILL, id: rid }, { owner });
+    n++;
+  }
+  return n;
 }
 
 // Un SOLO mesh (confine internazionale, ownership diversa) invece dei tre
@@ -110,7 +139,7 @@ function _buildBordersGeoJSON(regionsMap) {
 let _focus = null;
 
 function _focusColorExpr(f) {
-  const expr = ['match', ['get', 'countryId']];
+  const expr = ['match', OWNER];
   const visti = new Set();
   const ramo = (ids, colore) => {
     const nuovi = [...new Set(ids)].filter(id => id && !visti.has(id));
@@ -127,9 +156,17 @@ function _focusColorExpr(f) {
   return expr;
 }
 
+// Il colore si riscrive solo se l'espressione è cambiata (tema, nazione
+// selezionata, i suoi legami): la si chiede a ogni fotogramma, e la stessa
+// espressione due volte di fila è lavoro buttato.
+let _lastFillKey = '';
 function _applyFill() {
   if (!_map?.getLayer(TM_LYR_FILL)) return;
-  _map.setPaintProperty(TM_LYR_FILL, 'fill-color', _focus ? _focusColorExpr(_focus) : _fillColorExpr());
+  const expr = _focus ? _focusColorExpr(_focus) : _fillColorExpr();
+  const key = JSON.stringify(expr);
+  if (key === _lastFillKey) return;
+  _lastFillKey = key;
+  _map.setPaintProperty(TM_LYR_FILL, 'fill-color', expr);
 }
 
 /** { self, wars, pacts, sworn, allies, alliesColor } oppure null per tornare
@@ -141,7 +178,7 @@ export function setTimeMachineFocus(focus) {
 
 function _fillColorExpr() {
   const theme = THEMES[state.theme];
-  const expr = ['match', ['get', 'countryId']];
+  const expr = ['match', OWNER];
   for (const [id, color] of state.nationBaseColorMap.entries()) expr.push(id, color);
   expr.push(theme.DEFAULT_LAND);
   return expr;
@@ -246,7 +283,7 @@ function _createMap() {
     });
 
     _map.on('load', () => {
-      _map.addSource(SRC_FILL, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      _map.addSource(SRC_FILL, { type: 'geojson', data: { type: 'FeatureCollection', features: [] }, promoteId: 'regionId' });
       _map.addSource(SRC_BORDERS, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       _map.addLayer({ id: TM_LYR_FILL, type: 'fill', source: SRC_FILL, paint: { 'fill-color': theme.DEFAULT_LAND, 'fill-opacity': 0.9 } });
       _map.addLayer({ id: TM_LYR_BORDER, type: 'line', source: SRC_BORDERS, paint: { 'line-color': theme.BORDER_COLOR, 'line-width': 2.2 } });
@@ -302,21 +339,36 @@ export function deactivateTimeMachineMap() {
 // Applica un istante storico: SOLO qui, non nel chiamante — timeMachine.js
 // passa i dati già pronti (regionsMap dal server, labelEntries calcolati da
 // _buildLabelEntries), questo modulo si occupa solo del "dove disegno".
+// Ritorna true se il fotogramma ha cambiato qualche proprietario (il
+// chiamante salta classifica e frecce quando non è successo niente).
 export function renderTimeMachineFrame(regionsMap, labelEntries) {
-  if (!_map) return;
+  if (!_map || !state.baseGeoJSON?.features) return false;
   const fillSrc = _map.getSource(SRC_FILL);
   const borderSrc = _map.getSource(SRC_BORDERS);
-  if (!fillSrc || !borderSrc) return; // stile non ancora caricato (non dovrebbe succedere: activate() aspetta _createMap)
+  if (!fillSrc || !borderSrc) return false; // stile non ancora caricato (non dovrebbe succedere: activate() aspetta _createMap)
 
-  fillSrc.setData(_buildFillGeoJSON(regionsMap));
-  borderSrc.setData(_buildBordersGeoJSON(regionsMap));
+  _ensureFillData();
+  const first = !_bordersDrawn;
+  const changed = _applyOwners(regionsMap);
+  // I confini (topojson.mesh + una sola linea) costano ~10 ms: solo
+  // quando qualcuno è passato di mano.
+  if (changed || first) {
+    borderSrc.setData(_buildBordersGeoJSON(regionsMap));
+    _bordersDrawn = true;
+  }
   _applyFill();
   const theme = THEMES[state.theme];
-  _map.setPaintProperty(TM_LYR_BORDER, 'line-color', theme.BORDER_COLOR);
+  if (_lastBorderColor !== theme.BORDER_COLOR) {
+    _lastBorderColor = theme.BORDER_COLOR;
+    _map.setPaintProperty(TM_LYR_BORDER, 'line-color', theme.BORDER_COLOR);
+  }
 
   _labelEntries = labelEntries || [];
   _drawLabels();
+  return changed > 0 || first;
 }
+let _bordersDrawn = false;
+let _lastBorderColor = '';
 
 // Cattura il frame corrente (mappa + etichette, composte) come <canvas>
 // offscreen — usata da timeMachine.js per lo screenshot condivisibile

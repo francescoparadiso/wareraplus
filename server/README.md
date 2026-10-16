@@ -17,7 +17,7 @@ cartella `server/` non esiste. La chiave sta una cartella più in su, in
 `warEra/serverOracle/`, da cui il `../` nel percorso.
 
 ```bash
-scp -i ../serverOracle/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/languages.js server/battleArchive.js server/moneyTransfers.js server/damageTimeline.js server/priceHistory.js server/dayHistory.js server/labourHistory.js server/citizenMoves.js server/allianceHistory.js server/politicalHistory.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
+scp -i ../serverOracle/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/languages.js server/battleArchive.js server/moneyTransfers.js server/damageTimeline.js server/priceHistory.js server/dayHistory.js server/labourHistory.js server/citizenMoves.js server/allianceHistory.js server/politicalHistory.js server/battleTimeline.js server/companyCensus.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
 ```
 
 Manda **tutti** i moduli, non il solo `warera-cache-server.js`: i loro
@@ -30,7 +30,7 @@ che si ferma alla sintassi: eseguire il server per provarlo aprirebbe la
 porta 3001 e i cron accanto al processo pm2 gia' vivo.
 
 ```bash
-ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && for f in warera-cache-server.js proxyIndex.js languages.js battleArchive.js moneyTransfers.js damageTimeline.js priceHistory.js dayHistory.js labourHistory.js citizenMoves.js allianceHistory.js politicalHistory.js; do node --check \$f || exit 1; done && echo PREFLIGHT-OK"
+ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && for f in warera-cache-server.js proxyIndex.js languages.js battleArchive.js moneyTransfers.js damageTimeline.js priceHistory.js dayHistory.js labourHistory.js citizenMoves.js allianceHistory.js politicalHistory.js battleTimeline.js companyCensus.js; do node --check \$f || exit 1; done && echo PREFLIGHT-OK"
 ```
 
 Solo se stampa `PREFLIGHT-OK`:
@@ -39,10 +39,10 @@ Solo se stampa `PREFLIGHT-OK`:
 ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "pm2 restart warera-cache && sleep 20 && pm2 logs warera-cache --lines 40 --nostream"
 ```
 
-⚠️ **I file da copiare sono dodici, non uno.** `warera-cache-server.js`
-richiede dieci moduli (`proxyIndex`, `battleArchive`, `moneyTransfers`,
+⚠️ **I file da copiare sono tredici, non uno.** `warera-cache-server.js`
+richiede undici moduli (`proxyIndex`, `battleArchive`, `moneyTransfers`,
 `damageTimeline`, `priceHistory`, `dayHistory`, `labourHistory`,
-`citizenMoves`, `allianceHistory`, `politicalHistory`) e `proxyIndex` a sua volta richiede `languages`: se ne manca
+`citizenMoves`, `allianceHistory`, `politicalHistory`, `battleTimeline`) e `proxyIndex` a sua volta richiede `languages`: se ne manca
 uno il processo non parte proprio, e pm2 lo riavvia in loop. L'elenco qui
 sopra si ricava sempre cosi', invece di fidarsi della memoria:
 
@@ -256,6 +256,33 @@ zero, e chi non ha voce nello scatto resta fuori invece di far entrare in
 Al primissimo avvio, se il file non esiste, se ne fa uno subito: vale meno
 (parte dall'avvio, non dal cambio giorno) e infatti il client scrive
 "Since HH:MM" invece di "Today" finché non passano le 02:00.
+
+### Storico danni (`/damage-history`)
+
+`daily-damage-baseline.json` si riscrive ogni notte: serve al "danno di oggi"
+e basta. Lo stesso scatto delle 02:01 si **accoda** anche in
+`cache/damage-history.json`, una riga per giorno di gioco, mai potata
+(`archiveDailyDamage`): per ogni unità militare `[settimanale, totale,
+membri]`, per ogni nazione `[settimanale, totale]`. Il gioco non dice quanto
+ha fatto una MU in un giorno passato, e fino al 2026-10-12 l'unico storico
+erano i backup settimanali, che ruotano dopo quattro copie.
+
+Si salva anche il **totale di sempre** (`muDamages` / `countryDamages`)
+perché non si azzera al reset della settimana: danno fra due giorni qualsiasi
+= totale(dopo) − totale(prima), senza sapere quando è caduto il reset. Il
+primo scatto di un giorno vince (un riavvio non lo riscrive). ~40 KB al
+giorno, ~15 MB l'anno; il file sta in `cache/`, quindi `backup.sh` lo prende
+già.
+
+`src` dice da dove viene il giorno: `daily` (lo scatto delle 02:01),
+`backup` (ricostruito a posteriori dai backup settimanali: 20 e 27 set, 4 e
+11 ott 2026, MU e nazioni) o `dump` (dal dump PostgreSQL di terzi: solo
+nazioni, solo totale, giornaliero dal 19 giu al 17 set 2026, `t` messo a
+mezzogiorno UTC). Ora diversa da giorno a giorno: chi fa differenze usa `t`.
+
+`/damage-history?mu=<id>` o `?country=<id>` → `{ tz, id, kind, days: [{ day,
+t, src, weekly, total, members? }] }`. Una serie per richiesta: il file
+intero non va mandato al browser.
 
 ### Danno ora per ora e giocatori pillati (`/damage-timeline`)
 
@@ -671,3 +698,36 @@ curl -s https://warera-oracle.duckdns.org/warera-plus-api/health | python3 -m js
 # `giocatoriUltimoScatto` è il numero da guardare: decine di migliaia = la
 # classifica sta entrando, qualche centinaio = è rimasto solo il giro unità.
 ```
+
+## Round 8 — censimento aziende (`companyCensus.js`) e storico ricchezza (`/player-wealth`)
+
+Due rotte nuove per due schede nuove di Economia (Produzione, Ricchezza).
+
+**`/company-census`** — per risorsa: aziende di proprietari attivi, quante
+con dipendenti, dipendenti, salari e tasse sui salari al giorno; `?item=`
+aggiunge il dettaglio per nazione, `?countryId=` restringe a una nazione.
+Un giro al giorno alle **03:20 italiane** (~1.500 richieste lente, un'ora
+scarsa, tutte da api2 con la chiave): parte dai cittadini del censimento
+orario, chiede le loro aziende e poi `work.getStatsByCompany` per le sole
+aziende con dipendenti. Al **primo avvio** senza fotografia parte subito,
+senza aspettare la notte. Il motivo per cui non si sfoglia l'elenco di
+tutte le aziende (160.000+, ordinato per un campo che non è l'attività)
+sta in testa al file.
+
+⚠️ Le statistiche di lavoro sono **token-gated**: senza `WARERA_API_TOKEN`
+in pm2 i salari restano a zero. Si vede in `/health`:
+
+```bash
+curl -s https://warera-oracle.duckdns.org/warera-cache/health | python3 -m json.tool | grep -A14 companyCensus
+# copertura.statsOk deve essere uguale (o quasi) a copertura.statsAsked.
+```
+
+**`/player-wealth?userId=`** — lo storico ricchezza di un giocatore. Il
+dato non è qui: sta nel database di **warera-plus-api** (la classifica
+mondiale fotografata ogni notte), che il cache-server chiede sulla
+loopback a `http://127.0.0.1:3002/pubblico/ricchezza/giocatore/:id`
+(variabile `PLUS_API_LOCAL` per cambiarlo). Sempre l'istanza LIVE, anche
+per il deploy dev: è un dato pubblico in sola lettura e il database dev la
+classifica mondiale non ce l'ha. Quindi servono **due deploy**: questo
+file e `server/plusApi/` (vedi il suo README). Con uno solo dei due la
+rotta risponde 404/502 e la scheda mostra la sola ricchezza di adesso.

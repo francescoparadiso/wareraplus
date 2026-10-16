@@ -20,15 +20,20 @@ import { muT } from './i18n.js';
 import { renderMuList } from './muList.js';
 import { renderMuDetail } from './muDetail.js';
 import { renderMuRankings } from './ranking.js';
+import { renderMuCompare } from './muCompare.js';
 import { escapeHtml } from './ui.js';
 import { trackEvent } from '../shared/analytics.js';
 import { haSessionePlus } from '../app/privateOverlay.js';
 import { loadModule } from '../shared/lazyModule.js';
+import { syncBack, updateBackParams } from '../app/backNav.js';
 
 let rootEl = null;
 let directory = null;
-let tab = 'list';          // 'list' | 'ranking' | 'wealth'
+let tab = 'list';          // 'list' | 'ranking' | 'compare' | 'wealth'
 let pendingMuId = null;    // scheda da aprire appena la directory è pronta
+// Il confronto 1 vs 1 (muCompare.js): i due lati, le due ricerche e quale
+// casella aveva il cursore. Resta fra un'apertura e l'altra della sezione.
+const cmp = { a: null, b: null, qA: '', qB: '', focus: null };
 
 // ── La linguetta riservata ────────────────────────────────────────────
 // "Bilancio" compare SOLO a chi comanda in gioco un'unità italiana ed è
@@ -104,7 +109,46 @@ function ctx() {
     directory,
     onOpenMu: (muId) => { pendingMuId = muId; render(); },
     onBack: () => { pendingMuId = null; render(); },
+    // "Confronta" dalla scheda di un'unità: se A è già un'ALTRA unità e B è
+    // libero va in B (si è aperta una, poi l'altra: "questa contro quella"),
+    // altrimenti in A.
+    onCompare: (muId) => {
+      if (cmp.a && cmp.a !== muId && !cmp.b) cmp.b = muId;
+      else { cmp.a = muId; if (cmp.b === muId) cmp.b = null; }
+      tab = 'compare';
+      pendingMuId = null;
+      trackEvent('mu-compare-from-detail');
+      render();
+    },
   };
+}
+
+function compareCtx() {
+  return {
+    directory,
+    cmp,
+    onPick: (side, muId) => {
+      const other = side === 'a' ? 'b' : 'a';
+      if (cmp[other] === muId) cmp[other] = null;   // dall'altro lato si SPOSTA
+      cmp[side] = cmp[side] === muId ? null : muId; // ricliccata = via
+      cmp.focus = null;
+      if (cmp.a && cmp.b) trackEvent('mu-compare', { a: cmp.a, b: cmp.b });
+      render();
+    },
+    onClear: (side) => { cmp[side] = null; cmp.focus = null; render(); },
+    onSwap: () => { [cmp.a, cmp.b] = [cmp.b, cmp.a]; [cmp.qA, cmp.qB] = [cmp.qB, cmp.qA]; cmp.focus = null; render(); },
+    onSearch: (side, q) => { cmp[side === 'a' ? 'qA' : 'qB'] = q; cmp.focus = side; render(); },
+    onOpenMu: (muId) => { pendingMuId = muId; cmp.focus = null; render(); },
+  };
+}
+
+/** Link condivisibile (?section=mu&tab=compare&mua=&mub=) e scorciatoie:
+ *  scheda e lati da impostare PRIMA di initMuView (vedi src/main.js). */
+export function presetMuView({ tab: t, a, b } = {}) {
+  if (['list', 'ranking', 'compare'].includes(t)) tab = t;
+  if (a) cmp.a = a;
+  if (b && b !== a) cmp.b = b;
+  if (a || b) tab = 'compare';
 }
 
 function render() {
@@ -124,6 +168,7 @@ function render() {
       <nav class="wp-mu-tabs">
         <button type="button" class="wp-mu-tab${tab === 'list' ? ' active' : ''}" data-tab="list">${escapeHtml(muT('tabList'))}</button>
         <button type="button" class="wp-mu-tab${tab === 'ranking' ? ' active' : ''}" data-tab="ranking">${escapeHtml(muT('tabRanking'))}</button>
+        <button type="button" class="wp-mu-tab${tab === 'compare' ? ' active' : ''}" data-tab="compare">⚔ ${escapeHtml(muT('tabCompare'))}</button>
         ${bilancio ? `<button type="button" class="wp-mu-tab wp-mu-tab-riservata${tab === 'wealth' ? ' active' : ''}" data-tab="wealth">🔒 ${escapeHtml(muT('tabWealth'))}</button>` : ''}
       </nav>
       <div id="wp-mu-view"></div>
@@ -138,9 +183,20 @@ function render() {
   });
 
   const view = rootEl.querySelector('#wp-mu-view');
+  // WarEra+: con la scheda di un'unità aperta, Indietro torna all'elenco
+  // invece di chiudere la sezione (vedi app/backNav.js).
+  syncBack('mu/detail', !!pendingMuId, () => { pendingMuId = null; render(); }, () => !!pendingMuId,
+    { mu: pendingMuId });
+  // Nel link: la linguetta (se non è l'elenco) e i due lati del confronto.
+  updateBackParams('mu', {
+    tab: tab !== 'list' && tab !== 'wealth' ? tab : undefined,
+    mua: tab === 'compare' ? cmp.a || undefined : undefined,
+    mub: tab === 'compare' ? cmp.b || undefined : undefined,
+  });
   if (pendingMuId) renderMuDetail(view, pendingMuId, ctx());
   else if (tab === 'wealth' && bilancio) mostraBilancio(view);
   else if (tab === 'ranking') renderMuRankings(view, ctx());
+  else if (tab === 'compare') renderMuCompare(view, compareCtx());
   else renderMuList(view, ctx());
 }
 

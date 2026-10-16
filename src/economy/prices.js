@@ -31,7 +31,9 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { escapeHtml } from '../mu/ui.js';
+import { syncBack } from '../app/backNav.js';
 import { ecoT } from './i18n.js';
+import { scrollHintHtml } from '../shared/scrollHint.js';
 import { candleChartSvg, attachCandleExplorer } from './candleChart.js';
 import { variazione, priceChartSvg } from '../market/priceChart.js';
 import {
@@ -189,7 +191,7 @@ function elencoHtml() {
       <span class="wp-ecn-spark">${r.serie.length > 1 ? priceChartSvg(r.serie.slice(-30), { fmt: gold }) : ''}</span>
     </div>`).join('');
 
-  return `<div class="wp-ecn-table">${head}${body}</div>`;
+  return `${scrollHintHtml(900)}<div class="wp-ecn-table">${head}${body}</div>`;
 }
 
 // ── Disegno: la risorsa aperta ──────────────────────────────────────
@@ -259,6 +261,11 @@ function dettaglioHtml(code) {
 // ── Lo scheletro della scheda ───────────────────────────────────────
 function paint() {
   if (!_container) return;
+  // WarEra+: con la scheda di una risorsa aperta, Indietro torna all'elenco
+  // invece di chiudere Economia (vedi app/backNav.js). Cambiando scheda il
+  // contenitore si NASCONDE, non si smonta: da qui il controllo sui rect.
+  syncBack('economy/prices', !!_aperta, () => { _aperta = null; paint(); },
+    () => !!_aperta && _container.getClientRects().length > 0, { item: _aperta });
   const copertura = priceHistoryCoverage();
 
   _container.innerHTML = `
@@ -414,6 +421,13 @@ export async function initPricesTab(container) {
   _history = await loadPriceHistory(_giorni);
   await aggiorna();
   avviaTimer();
+}
+
+/** WarEra+ — apre la scheda di una risorsa (link ?section=economy&tab=prices
+ *  &item=). Prima di initPricesTab basta impostarla: il primo paint la vede. */
+export function openPriceItem(code) {
+  _aperta = code || null;
+  if (_container) paint();
 }
 
 /** Ridisegna con la lingua nuova, a sezione già aperta. */

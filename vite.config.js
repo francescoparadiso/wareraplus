@@ -65,8 +65,8 @@ export default defineConfig({
       // produzione o con una build locale a mano.
       selfDestroying: !IS_LIVE,
 
-      // Precache di tutto il bundle costruito (JS/CSS/HTML dell'app,
-      // incluso il Political View invariato sotto /political/).
+      // Precache di tutto il bundle costruito (JS/CSS/HTML dell'app).
+      // NON il vecchio Political View sotto /political/: vedi globIgnores.
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,csv}'],
         // WarEra+ perf (mobile): le illustrazioni decorative dell'oceano
@@ -79,7 +79,13 @@ export default defineConfig({
         // grazie alla regola runtime qui sotto.
         // Conseguenza accettata: alla PRIMA apertura offline gli easter egg
         // non ci sono. La mappa, i dati e tutta la UI sì — sono decorazioni.
-        globIgnores: ['**/icons/ocean/**'],
+        // Fuori anche public/political/ (2026-10-14): è il Political View
+        // ORIGINALE a script globali, non più raggiunto da nessun path
+        // dell'app dalla Fase 2 (quello vero è src/political/, nel bundle),
+        // ma era 19 voci su 70 del precache — ~480 KB scaricati in
+        // background da ogni installazione per una pagina che nessuno apre.
+        // Resta deployato e raggiungibile a mano come riferimento/rollback.
+        globIgnores: ['**/icons/ocean/**', 'political/**'],
         // I file politici sono tanti e alcuni superano il default:
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
 

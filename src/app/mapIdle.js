@@ -31,6 +31,16 @@ import { pauseShipAnimation as pauseShipsDark, resumeShipAnimation as resumeShip
 import { pauseShipAnimation as pauseShipsAntique, resumeShipAnimation as resumeShipsAntique } from '../diplomacy/antiqueTheme.js';
 import { pauseBattleMarkersPolling, resumeBattleMarkersPolling } from '../diplomacy/main.js';
 import { drawLabels, resizeLabelCanvas } from '../diplomacy/labels.js';
+// WarEra+: le comete animate della vista Migrazioni (un setData a ~30 fps).
+import { pauseMigrationFx, resumeMigrationFx } from '../diplomacy/migrationFlows.js';
+// WarEra+: onde d'impatto e trattini delle frecce sulla battaglia aperta.
+import { pauseBattleFlowFx, resumeBattleFlowFx } from '../diplomacy/battleFlows.js';
+import { pauseBattleReplay } from '../diplomacy/battleReplay.js';
+import { pauseSphereLinks, resumeSphereLinks } from '../diplomacy/sphereLinks.js';
+import { pauseFundingFx, resumeFundingFx } from '../diplomacy/fundingFlows.js';
+import { pauseDamagePulse, resumeDamagePulse } from '../diplomacy/damagePulse.js';
+import { pauseLivePings, resumeLivePings } from './livePings.js';
+import { pauseMapPulses, resumeMapPulses } from '../diplomacy/mapPulses.js';
 
 let _depth = 0;
 
@@ -42,6 +52,14 @@ export function pauseMapBackgroundWork() {
   pauseShipsDark();
   pauseShipsAntique();
   pauseBattleMarkersPolling();
+  pauseMigrationFx();
+  pauseBattleFlowFx();
+  pauseBattleReplay();
+  pauseSphereLinks();
+  pauseFundingFx();
+  pauseDamagePulse();
+  pauseLivePings();
+  pauseMapPulses();
 }
 
 /** Da chiamare quando l'overlay si chiude e la mappa torna visibile. */
@@ -58,6 +76,13 @@ export function resumeMapBackgroundWork() {
     resumeShipsAntique();
   }
   resumeBattleMarkersPolling();
+  resumeMigrationFx();
+  resumeBattleFlowFx();
+  resumeSphereLinks();
+  resumeFundingFx();
+  resumeDamagePulse();
+  resumeLivePings();
+  resumeMapPulses();
 
   // BUG FIX (mobile): stessa causa del ridisegno su 'idle'/'visibilitychange'
   // in labels.js — i nomi di nazioni e alleanze stanno su un canvas 2D a

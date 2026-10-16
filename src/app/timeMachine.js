@@ -63,6 +63,13 @@ import { dayKey, fetchDay, cachedDay, fuoriPortata } from './timeMachineDay.js';
 // dal lancio del gioco: a differenza della diplomazia, qui non esiste un
 // "fuori portata". Una richiesta per sessione, nessun ripiego.
 import { fetchPresidents } from '../political/plusApi.js';
+// WarEra+: le conquiste animate durante la riproduzione (freccia + onda).
+import { animateConquests, animateAlliances, clearConquests } from './timeMachineConquest.js';
+// WarEra+: guerre e patti della nazione selezionata come archi animati.
+import { setTimeMachineLinks, clearTimeMachineLinks } from './timeMachineLinks.js';
+// WarEra+: le battaglie del giorno come frecce dall'attaccante alla regione.
+import { setTimeMachineBattles, clearTimeMachineBattles } from './timeMachineBattles.js';
+import { pushBack, dropBack } from './backNav.js';
 
 let _presidents;          // undefined = mai chiesto, null = non disponibile
 
@@ -91,8 +98,21 @@ const STEP_MS = 24 * 60 * 60 * 1000;
 // PLAY_TICK_MS: cadenza NOMINALE del loop di playback, non la velocità
 // (vedi _playLoop — la velocità è calcolata sul tempo reale trascorso, non
 // su questo). 1x/2x/3x = 1/2/3 giorni di gioco al SECONDO reale.
-const PLAY_TICK_MS = 150;
-const PLAY_SPEEDS = [1, 2, 3]; // giorni/secondo — 4x rimosso su richiesta esplicita
+// WarEra+: con la riproduzione locale (vedi _localRegionsAt) un fotogramma
+// costa un millisecondo, quindi la cadenza può salire: 60 ms invece di 150
+// rende lo scorrimento fluido invece che a scatti.
+const PLAY_TICK_MS = 60;
+// giorni/secondo — 4x rimosso su richiesta esplicita; ¼x e ½x aggiunti
+// (richiesta dell'utente: "si muove troppo velocemente ed è caotica"), e ½x
+// è la partenza: a 1x i primi mesi, pieni di conquiste, passavano in un lampo.
+// WarEra+ (2026-10-15, di nuovo richiesta dell'utente: "va rallentata di
+// molto", le animazioni non tenevano il passo): via il 3x, aggiunto 0,1x,
+// e la partenza scende a ¼x — un giorno di gioco ogni quattro secondi, il
+// tempo perché il lampo di una conquista (~1,7 s) finisca prima della
+// successiva.
+const PLAY_SPEEDS = [0.1, 0.25, 0.5, 1, 2];
+const DEFAULT_SPEED_IDX = 1;
+const speedLabel = (s) => (s === 0.25 ? '¼x' : s === 0.5 ? '½x' : `${s}x`);
 
 // Il server semina la genesi (keyframe più vecchio) al 1 maggio 2025 — vedi
 // GENESIS_TS in server/warera-cache-server.js. Non serve duplicare la
@@ -176,7 +196,7 @@ let _labelRegionId = null; // Map: indice in state.labelsData -> regionId "sotto
 let _playing = false;
 let _playTimer = null;
 let _playLastTickAt = null; // Date.now() dell'ultimo frame applicato — vedi _playLoop
-let _speedIdx = 0; // indice in PLAY_SPEEDS
+let _speedIdx = DEFAULT_SPEED_IDX; // indice in PLAY_SPEEDS
 
 // Eventi (salto prossimo/precedente + "dal —" nel popup): UNA fetch sola
 // per sessione (l'intero storico), non una per interazione — vedi
@@ -185,6 +205,8 @@ let _speedIdx = 0; // indice in PLAY_SPEEDS
 // degrado grazioso, il resto della time machine funziona comunque.
 let _eventTsSorted = null; // number[] ordinato, per il salto prossimo/precedente
 let _eventsByRegion = null; // Map<regionId, {ts,toCountry}[]> ordinato per ts, per "dal —"
+let _eventsSorted = null; // WarEra+: gli stessi eventi in un elenco solo, per le conquiste animate
+let _lastRenderedTs = null; // istante dell'ultimo fotogramma applicato: le conquiste animate sono quelle in mezzo
 
 export function initTimeMachine() {
   _btn = document.getElementById('wp-time-machine-btn');
@@ -219,6 +241,8 @@ async function _activate(initialTs) {
 
   _active = true;
   state.timeMachineActive = true;
+  // Indietro del browser/telefono chiude la time machine (vedi backNav.js).
+  pushBack('tm', _deactivate, () => _active);
   _btn.classList.add('wp-time-machine-btn-active');
   // PERF: il pallino nave è puramente decorativo (schema seedato sempre
   // uguale, non dipende da nessun dato) — pausarlo (resta visibile, solo
@@ -263,7 +287,11 @@ async function _activate(initialTs) {
 function _deactivate() {
   _active = false;
   state.timeMachineActive = false;
+  dropBack('tm');
   trackEvent('time-machine-close');
+  clearConquests();
+  clearTimeMachineBattles();
+  _lastRenderedTs = null;
   _stopPlay();
   _btn.classList.remove('wp-time-machine-btn-active');
   if (_panel) _panel.classList.remove('open');
@@ -314,7 +342,7 @@ function _buildPanelIfNeeded() {
       <button id="wp-tm-prev-event" data-i18n-title="tm_prev_event" data-i18n-aria="tm_prev_event" title="${t('tm_prev_event')}" aria-label="${t('tm_prev_event')}" disabled>⏮</button>
       <button id="wp-tm-play" data-i18n-title="tm_play" data-i18n-aria="tm_play" title="${t('tm_play')}" aria-label="${t('tm_play')}">▶</button>
       <button id="wp-tm-next-event" data-i18n-title="tm_next_event" data-i18n-aria="tm_next_event" title="${t('tm_next_event')}" aria-label="${t('tm_next_event')}" disabled>⏭</button>
-      <button id="wp-tm-speed" data-i18n-title="tm_speed_title" data-i18n-aria="tm_speed_title" title="${t('tm_speed_title')}" aria-label="${t('tm_speed_title')}">1x</button>
+      <button id="wp-tm-speed" data-i18n-title="tm_speed_title" data-i18n-aria="tm_speed_title" title="${t('tm_speed_title')}" aria-label="${t('tm_speed_title')}">${speedLabel(PLAY_SPEEDS[_speedIdx])}</button>
       <!-- WarEra+ (richiesto): scelta diretta della data. Con ~490 giorni
            di storico su una traccia larga poche centinaia di pixel, lo
            slider non permette di "beccare" un giorno preciso; questo lo
@@ -692,6 +720,9 @@ function _stopPlay() {
   _playTimer = null;
   if (!_playing) return;
   _playing = false;
+  // L'URL in riproduzione si aggiorna una volta al secondo (_syncUrl):
+  // alla pausa si porta sul punto vero.
+  if (_slider && _active) _syncUrl(Number(_slider.value));
   if (_playBtn) {
     _playBtn.textContent = '▶';
     _playBtn.title = t('tm_play');
@@ -733,7 +764,7 @@ async function _playLoop() {
 
 function _cycleSpeed() {
   _speedIdx = (_speedIdx + 1) % PLAY_SPEEDS.length;
-  _speedBtn.textContent = `${PLAY_SPEEDS[_speedIdx]}x`;
+  _speedBtn.textContent = speedLabel(PLAY_SPEEDS[_speedIdx]);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -772,6 +803,7 @@ async function _loadEvents() {
       .slice()
       .sort((a, b) => a.ts - b.ts);
     _eventTsSorted = events.map(e => e.ts);
+    _eventsSorted = events;
     _eventsByRegion = new Map();
     for (const e of events) {
       if (!_eventsByRegion.has(e.regionId)) _eventsByRegion.set(e.regionId, []);
@@ -824,17 +856,26 @@ function _ownedSince(regionId, ts) {
 // (non pushState): muovere lo slider non deve riempire la cronologia del
 // browser di una entry per pixel trascinato.
 // ─────────────────────────────────────────────────────────────────────────
+// In riproduzione al massimo una volta al secondo: un replaceState ogni 60
+// ms supera il tetto dei browser (Safari lancia un errore dopo 100 in 30
+// secondi, e l'errore fermerebbe il ciclo di riproduzione).
+let _urlSyncedAt = 0;
 function _syncUrl(ts) {
+  const now = Date.now();
+  if (_playing && now - _urlSyncedAt < 1000) return;
+  _urlSyncedAt = now;
   const url = new URL(window.location.href);
   url.searchParams.set('tm', String(Math.round(ts)));
-  history.replaceState(null, '', url);
+  // history.state e non null: la voce può essere la sentinella del tasto
+  // Indietro (backNav.js), e azzerarne lo stato la renderebbe anonima.
+  history.replaceState(history.state, '', url);
 }
 
 function _clearUrl() {
   const url = new URL(window.location.href);
   if (!url.searchParams.has('tm')) return;
   url.searchParams.delete('tm');
-  history.replaceState(null, '', url);
+  history.replaceState(history.state, '', url);
 }
 
 // _applyToken: ogni chiamata a _fetchAndRender si prende un numero
@@ -848,15 +889,61 @@ let _applyToken = 0;
 // posizione nell'interfaccia (vedi _applyAt sotto per l'uso interattivo,
 // _playLoop per l'autoplay). Ritorna true se il rendering è stato
 // applicato, false se scartato (superato o fetch fallita).
+/* WarEra+: la riproduzione IN LOCALE. Prima ogni fotogramma del playback
+   (ogni 150 ms) chiedeva /region-history/at al server e aspettava: con una
+   risposta lenta il fotogramma dopo recuperava il tempo perso con un salto
+   lungo, e la mappa andava a strappi, con le conquiste animate di un
+   intervallo che la mappa aveva già superato. Ma gli eventi di passaggio
+   di mano sono già tutti in memoria (_eventsSorted, una fetch per sessione)
+   e il server non fa altro che applicarli alla fotografia di partenza —
+   verificato: fotografia del server + eventi in mezzo = fotografia del
+   server, zero differenze su 726 regioni a 20 e 60 giorni di distanza.
+   Quindi andando AVANTI da un fotogramma già mostrato si applicano gli
+   eventi in (ultimo, ts] e basta: niente rete, niente attese. Indietro, o
+   senza eventi caricati, si chiede al server come prima. */
+function _localRegionsAt(ts) {
+  if (!_lastRegions || !_eventsSorted || _lastRenderedTs == null || ts < _lastRenderedTs) return null;
+  const ev = _eventsSorted;
+  let lo = 0, hi = ev.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (ev[mid].ts <= _lastRenderedTs) lo = mid + 1; else hi = mid; }
+  const out = { ..._lastRegions };
+  for (let i = lo; i < ev.length && ev[i].ts <= ts; i++) out[ev[i].regionId] = ev[i].toCountry;
+  return out;
+}
+
+/* WarEra+ in riproduzione la gran parte dei fotogrammi (uno ogni 60 ms)
+   non cambia nessun proprietario: classifica (un innerHTML con cento
+   bandiere), frecce delle battaglie e legami della nazione selezionata si
+   rifanno solo quando qualcosa è passato di mano o è cambiato il giorno.
+   Fermi, o trascinando, si rifà tutto come prima. */
+let _sideDay = null;
+
 async function _fetchAndRender(ts) {
   const token = ++_applyToken;
   try {
-    const { regions } = await fetchRegionHistoryAtViaCache(ts);
+    const local = _localRegionsAt(ts);
+    const { regions } = local ? { regions: local } : await fetchRegionHistoryAtViaCache(ts);
     if (token !== _applyToken) return false; // superata da una richiesta più recente, scartata
     _lastRegions = regions;
-    renderTimeMachineFrame(regions, _buildLabelEntries(regions));
-    _updateStandings(regions);
-    _updateFocus(ts);
+    const changed = renderTimeMachineFrame(regions, _buildLabelEntries(regions));
+    // WarEra+: i passaggi di mano fra il fotogramma di prima e questo, come
+    // lampi dalla capitale del conquistatore (timeMachineConquest.js).
+    // Solo in avanti, e il modulo stesso si limita sui salti lunghi.
+    if (_lastRenderedTs != null && _eventsSorted) animateConquests(_eventsSorted, _lastRenderedTs, ts);
+    // WarEra+: e ingressi/uscite dai blocchi d'alleanza nello stesso intervallo.
+    if (_lastRenderedTs != null) animateAlliances(_lastRenderedTs, ts);
+    _lastRenderedTs = ts;
+    const giorno = dayKey(ts);
+    if (!_playing || changed || giorno !== _sideDay) {
+      _sideDay = giorno;
+      // WarEra+: le battaglie del giorno, se quel giorno è già in memoria; se
+      // non lo è (durante il playback non si scarica) via le frecce, invece di
+      // lasciare quelle di un altro giorno.
+      const giornoFrame = cachedDay(giorno);
+      setTimeMachineBattles(giornoFrame?.battles || null, regions, _focusId);
+      _updateStandings(regions);
+      _updateFocus(ts);
+    }
     return true;
   } catch (err) {
     console.warn('WarEra+ time machine: ricostruzione fallita:', err.message);
@@ -920,6 +1007,8 @@ function _scheduleDay(ts) {
 
 function _renderDay(giorno) {
   _updateDayBattles(giorno);
+  // WarEra+: il giorno è arrivato, le sue battaglie diventano frecce.
+  if (_slider && dayKey(Number(_slider.value)) === giorno) setTimeMachineBattles(cachedDay(giorno)?.battles || null, _lastRegions, _focusId);
   // Nazione selezionata: si riempie da se' quando i dati arrivano, senza
   // chiedere all'utente di ricliccare.
   if (_focusId && dayKey(Number(_slider.value)) === giorno) _updateFocus(Number(_slider.value));
@@ -1096,7 +1185,10 @@ function _setFocus(countryId, regionId = null) {
   _focusId = countryId;
   _focusRegion = regionId;
   trackEvent('time-machine-focus');
+  // Come Esc: Indietro toglie prima la nazione evidenziata, poi chiude.
+  pushBack('tm/focus', _clearFocus, () => !!_focusId);
   _updateFocus(Number(_slider.value));
+  _redrawDayBattles();
   // Le alleanze arrivano con una fetch per sessione (vedi
   // timeMachineAlliances.js): alla prima selezione, e poi si ridisegna.
   loadAllianceHistory().then(ok => { if (ok && _focusId) _updateFocus(Number(_slider.value)); });
@@ -1105,9 +1197,21 @@ function _setFocus(countryId, regionId = null) {
 function _clearFocus() {
   _focusId = null;
   _focusRegion = null;
+  dropBack('tm/focus');
   if (_focusEl) _focusEl.classList.remove('visible');
   document.body.classList.remove('wp-tm-has-focus');
   setTimeMachineFocus(null);
+  clearTimeMachineLinks();
+  _redrawDayBattles();
+}
+
+/* Le frecce delle battaglie dipendono anche dalla selezione (con una
+   nazione a fuoco solo le sue, senza le più pesanti del giorno): si
+   rifanno quando la selezione cambia. Mai a time machine chiusa — la
+   chiusura passa da _clearFocus dopo aver già spento le frecce. */
+function _redrawDayBattles() {
+  if (!_active || !_slider || !_lastRegions) return;
+  setTimeMachineBattles(cachedDay(dayKey(Number(_slider.value)))?.battles || null, _lastRegions, _focusId);
 }
 
 /** Chiamata a ogni fotogramma applicato (_fetchAndRender) e quando arriva
@@ -1136,8 +1240,14 @@ function _updateFocus(ts) {
   const alleati = al?.tipo === 'blocco' ? (al.membri || []) : (al?.alleati || []);
   const coloreAlleati = al?.tipo === 'blocco' ? BORDER_COLORS.ALLIANCE : COLORS.ALLY_DIRECT;
   const base = { self: _focusId, allies: alleati, alliesColor: coloreAlleati };
-  if (d) setTimeMachineFocus({ ...base, wars: d.wars, pacts: d.pacts, sworn: d.sworn });
-  else if (dati !== undefined) setTimeMachineFocus(base);
+  if (d) {
+    setTimeMachineFocus({ ...base, wars: d.wars, pacts: d.pacts, sworn: d.sworn });
+    // WarEra+: gli stessi legami come archi dalla sua capitale di quel giorno.
+    setTimeMachineLinks({ self: _focusId, wars: d.wars, pacts: d.pacts, sworn: d.sworn }, _lastRegions);
+  } else if (dati !== undefined) {
+    setTimeMachineFocus(base);
+    clearTimeMachineLinks();
+  }
   // dati === undefined: si tengono i colori del giorno prima (vedi testa).
 
   _renderFocus(ts, giorno, dati, d, fuori, al);

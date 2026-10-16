@@ -14,6 +14,7 @@ import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
 import { withModuleLoading } from '../shared/loadingScreen.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
+import { pushBack, dropBack } from './backNav.js';
 
 let overlayEl, backBtn, rootEl;
 
@@ -148,6 +149,8 @@ export async function openPrivateView() {
   rootEl.style.display = 'block';
 
   enterOverlay(overlayEl, 'private');
+  // Indietro del browser/telefono = closePrivateView (vedi backNav.js).
+  pushBack('private', closePrivateView, isPrivateViewOpen, { section: 'private' });
 
   await withModuleLoading('private', async () => {
     const mod = await loadModule(() => import('../private/main.js'), 'private');
@@ -170,6 +173,7 @@ export function closePrivateView() {
   overlayEl.classList.remove('open');
   overlayEl.setAttribute('aria-hidden', 'true');
   leaveOverlay(overlayEl);
+  dropBack('private');
 }
 
 export function isPrivateViewOpen() {

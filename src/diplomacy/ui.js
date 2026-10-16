@@ -10,9 +10,12 @@ import { getContestedStats, contestedLegendGradient } from './contestedHeatmap.j
 import { getWarIntensityStats, warIntensityLegendGradient } from './warIntensityHeatmap.js';
 import { getPlaystyleStats, playstyleLegendGradient } from './playstyleHeatmap.js';
 import { activeDeposits, getProductionStats, productionLegendGradient, RESOURCE_TYPES, scaleMax } from './productionHeatmap.js';
-import { getPoliticsStats, POLITICS_COLORS } from './politicsHeatmap.js';
+import { getPoliticsStats, POLITICS_COLORS, TURNOUT_MAX, TURNOUT_MID, turnoutLegendGradient } from './politicsHeatmap.js';
 import { getTravelStats, travelLegendGradient, regionName, HOPS_PER_BAR, STAMINA_PER_HOP, OIL_PER_EXTRA_HOP } from './travelDistance.js';
 import { getTrendStats, trendLegendGradient } from './playstyleTrendHeatmap.js';
+import { getMigrationStats, migrationLegendGradient, focusFlows, OUT_COLOR, IN_COLOR } from './migrationFlows.js';
+import { damagePulseInfo } from './damagePulse.js';
+import { fund, getFundingStats, fundingLegendGradient, fundingFocus, IN_COLOR as FUND_IN, OUT_COLOR as FUND_OUT } from './fundingFlows.js';
 import { mergedSphereGroups } from '../proxy/radar.js';
 import { flagImgHtml } from '../panel/nationFlag.js';
 
@@ -138,6 +141,7 @@ export function updateDynamicLegend() {
         <span style="font-size:10px; color:${subPop};">${fmtNumber(max)}</span>
       </div>
       <div class="legend-note">Higher = more orange</div>
+      <div class="legend-note">Breathing circles: active players gained (green) or lost (red) in the last 24 h, sized by the change</div>
     `;
     return;
   }
@@ -168,6 +172,16 @@ export function updateDynamicLegend() {
         <span style="font-size:10px; color:${sub};">${fmtNumber(max)}</span>
       </div>
       <div class="legend-note">Low = blue · High = red</div>
+      ${(() => {
+        // WarEra+: il battito sulle capitali (damagePulse.js).
+        const pi = damagePulseInfo();
+        if (pi.data?.hour) {
+          const h = t => new Date(t).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
+          return `<div class="legend-note">Pulse = damage of the last full hour (${h(pi.data.hour)}–${h(pi.data.to)}): bigger and faster = more damage · glow from amber to pink = more players on pills</div>`;
+        }
+        if (pi.error) return '<div class="legend-note">Hourly pulse not available (cache server).</div>';
+        return '';
+      })()}
     `;
     return;
   }
@@ -256,6 +270,85 @@ export function updateDynamicLegend() {
     return;
   }
 
+  // WarEra+ — Migrazioni: la scala del saldo (rosso perde, verde guadagna)
+  // e, con una nazione a fuoco, cosa vogliono dire i due colori delle
+  // frecce. Inglese fisso come le altre legende; il riepilogo tradotto sta
+  // nel pannello.
+  if (state.coloringMode === 'migration') {
+    const sub = THEMES[state.theme].TEXT_SECONDARY;
+    const m = state.migration;
+    const title = '<div class="legend-section-title">Migration</div>';
+    if (!m?.data || m.data.days !== m.days) {
+      const msg = m?.loading || !m?.error ? 'Loading citizenship changes…'
+        : m.error === 'missing' ? 'Migration data not available yet (cache server not updated).'
+          : 'Cache server unreachable right now — reopen this view to retry.';
+      box.innerHTML = `${title}<div class="legend-note">${msg}</div>`;
+      return;
+    }
+    const st = getMigrationStats();
+    const span = m.day
+      ? `on ${new Date(`${m.day}T12:00:00`).toLocaleDateString('en', { day: 'numeric', month: 'short' })}`
+      : m.days === 1 ? 'last 24 hours' : `last ${m.days} days`;
+    let arrows = '';
+    if (m.focus) {
+      const f = focusFlows(m.focus);
+      const name = escapeHtml(state.nationMap.get(m.focus)?.name || '—');
+      arrows = `
+      <div class="legend-item">
+        <div class="legend-bar" style="background:${OUT_COLOR};"></div>
+        <div class="legend-info"><div class="legend-name">Leaving ${name}</div><div class="legend-desc">${f.country?.out || 0} moves to ${f.out.length} nations</div></div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-bar" style="background:${IN_COLOR};"></div>
+        <div class="legend-info"><div class="legend-name">Arriving in ${name}</div><div class="legend-desc">${f.country?.in || 0} moves from ${f.in.length} nations</div></div>
+      </div>`;
+    }
+    box.innerHTML = `${title}
+      <div class="legend-scale" style="margin:4px 0;">
+        <div style="width:100%;height:14px;background:${migrationLegendGradient()};border-radius:3px;"></div>
+      </div>
+      <div class="legend-item" style="justify-content:space-between; padding:0 4px;">
+        <span style="font-size:10px; color:${sub};">losing</span>
+        <span style="font-size:10px; color:${sub};">${m.metric === 'rate' ? 'per 100 citizens' : 'net moves'}</span>
+        <span style="font-size:10px; color:${sub};">gaining</span>
+      </div>${arrows}
+      <div class="legend-note">${st.moves.toLocaleString()} citizenship changes of level ${m.data.minLevel || 10}+ players, ${span} · ${st.gaining} nations gaining, ${st.losing} losing · ${m.focus ? 'click it again or the sea to clear' : 'click a nation for its arrows'}</div>`;
+    return;
+  }
+
+  // WarEra+ — Finanziamenti: chi dà (viola) e chi riceve (oro), e con una
+  // nazione a fuoco il significato dei due colori delle frecce.
+  if (state.coloringMode === 'funding') {
+    const sub = THEMES[state.theme].TEXT_SECONDARY;
+    const f = fund();
+    const st = getFundingStats();
+    const title = '<div class="legend-section-title">Funding</div>';
+    if (!st) {
+      box.innerHTML = `${title}<div class="legend-note">${f.loading || !f.error ? 'Loading treasury transfers…' : 'Transfers not available right now — reopen this view to retry.'}</div>`;
+      return;
+    }
+    let arrows = '';
+    if (f.focus) {
+      const ff = fundingFocus(f.focus);
+      const name = escapeHtml(state.nationMap.get(f.focus)?.name || '—');
+      arrows = `
+      <div class="legend-item"><div class="legend-bar" style="background:${FUND_IN};"></div>
+        <div class="legend-info"><div class="legend-name">Funding ${name}</div><div class="legend-desc">${fmtNumber(ff.country?.in || 0)} from ${ff.in.length} nations</div></div></div>
+      <div class="legend-item"><div class="legend-bar" style="background:${FUND_OUT};"></div>
+        <div class="legend-info"><div class="legend-name">Funded by ${name}</div><div class="legend-desc">${fmtNumber(ff.country?.out || 0)} to ${ff.out.length} nations</div></div></div>`;
+    }
+    box.innerHTML = `${title}
+      <div class="legend-scale" style="margin:4px 0;">
+        <div style="width:100%;height:14px;background:${fundingLegendGradient()};border-radius:3px;"></div>
+      </div>
+      <div class="legend-item" style="justify-content:space-between; padding:0 4px;">
+        <span style="font-size:10px; color:${sub};">gives more</span>
+        <span style="font-size:10px; color:${sub};">gets more</span>
+      </div>${arrows}
+      <div class="legend-note">${st.count.toLocaleString()} treasury-to-treasury transfers, ${fmtNumber(st.total)} moved, ${f.days ? `last ${f.days} days` : 'whole archive'} · ${f.focus ? 'coins flow from payer to receiver · click the sea to clear' : 'click a nation for its arrows · coins rising (or falling, red) over a capital = treasury up (or down) 2%+ in the last 24 h'}</div>`;
+    return;
+  }
+
   if (state.coloringMode === 'politics') {
     if (!state.openElections) {
       box.innerHTML = `
@@ -264,17 +357,28 @@ export function updateDynamicLegend() {
       return;
     }
     const s = getPoliticsStats();
+    const sub = THEMES[state.theme].TEXT_SECONDARY;
+    // WarEra+: dove si vota la tinta è l'affluenza di adesso (voti /
+    // popolazione attiva), su scala fissa — vedi politicsHeatmap.js.
     box.innerHTML = `
       <div class="legend-section-title">Elections</div>
+      <div class="legend-name" style="margin-top:4px;">Voting now · turnout so far</div>
+      <div class="legend-scale" style="margin:4px 0;">
+        <div style="width:100%;height:14px;background:${turnoutLegendGradient()};border-radius:3px;"></div>
+      </div>
+      <div class="legend-item" style="justify-content:space-between; padding:0 4px;">
+        <span style="font-size:10px; color:${sub};">0%</span>
+        <span style="font-size:10px; color:${sub};">${Math.round(TURNOUT_MID * 100)}%</span>
+        <span style="font-size:10px; color:${sub};">${Math.round(TURNOUT_MAX * 100)}%</span>
+      </div>
       <div class="legend-item">
-        <div class="legend-bar" style="background:${POLITICS_COLORS.voting};"></div>
-        <div class="legend-info"><div class="legend-name">Voting now</div><div class="legend-desc">${s.voting} nations</div></div>
+        <div class="legend-info"><div class="legend-desc">${s.voting} nations voting${s.avgTurnout != null ? ` · average ${Math.round(s.avgTurnout * 100)}%, highest ${Math.round(s.maxTurnout * 100)}%` : ''}</div></div>
       </div>
       <div class="legend-item">
         <div class="legend-bar" style="background:${POLITICS_COLORS.candidacy};"></div>
         <div class="legend-info"><div class="legend-name">Candidacies open</div><div class="legend-desc">${s.candidacy} nations</div></div>
       </div>
-      <div class="legend-note">${s.presidential} presidential, ${s.congress} congress · ${s.votes.toLocaleString()} votes cast so far · refreshed every 3 minutes · click a nation in the panel to open its political view</div>`;
+      <div class="legend-note">${s.presidential} presidential, ${s.congress} congress · ${s.votes.toLocaleString()} votes cast so far · turnout = votes / active population · refreshed every 3 minutes · click a nation in the panel to open its political view</div>`;
     return;
   }
 
@@ -295,7 +399,7 @@ export function updateDynamicLegend() {
       </div>
       <div class="legend-note">Total = strategic resources + ruling-party ethics${stats.ethicsLoaded
         ? ` (${stats.withEthic} industrialist nations, +30% each on their specialised item)`
-        : ' — ethics still loading, showing resources only'} · grey = nothing (${stats.without} nations) · best +${stats.best}%, average +${stats.avg.toFixed(1)}% · regions by resource: ${spread} · ⛏ ${activeDeposits().length} temporary deposits (+30% on one item, few days) — listed in the panel</div>
+        : ' — ethics still loading, showing resources only'} · grey = nothing (${stats.without} nations) · best +${stats.best}%, average +${stats.avg.toFixed(1)}% · regions by resource: ${spread} · ⛏ ${activeDeposits().length} temporary deposits (+30% on one item, few days) — listed in the panel, pulsing on the map: faster = closer to expiry</div>
     `;
     return;
   }
@@ -510,6 +614,49 @@ export function updateDynamicLegend() {
   // ==================== BATTLE HEATMAP ====================
 // ui.js - sostituisci la sezione battleHeatmap nella funzione updateDynamicLegend
 
+  // ==================== WarEra+ BONUS BATTAGLIA ====================
+  // Vista Bonus battaglia (bonusView.js): prima della scelta una riga di
+  // istruzioni, poi la scala blu (difendere) / rosso (attaccare) fino al
+  // bonus massimo della battaglia, con lo stesso bottone d'uscita.
+  if (state.coloringMode === 'battleBonus') {
+    box.innerHTML = `
+      <div class="legend-section-title">🎖️ Battle bonus</div>
+      <div class="legend-note">Click a battle on the map: nations take the colour of the highest damage bonus their citizens would get there.</div>`;
+    return;
+  }
+  if (state.coloringMode === 'battleHeatmap' && state.battleHeatmapData && (state.battleBonusMap || state.bonusViewLoading)) {
+    const sub = THEMES[state.theme].TEXT_SECONDARY;
+    const bm = state.battleBonusMap;
+    const max = bm ? Math.round(bm.max * 10) / 10 : null;
+    box.innerHTML = `
+      <div class="legend-section-title">🎖️ Battle bonus</div>
+      <div class="legend-item"><span style="font-weight:bold;">${escapeHtml(state.battleHeatmapData.battleName)}</span></div>
+      ${bm ? `
+      <div class="legend-scale" style="margin: 4px 0;">
+        <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+          <span style="font-size:10px; color:#58a6ff; min-width:52px;">Defend</span>
+          <div style="flex:1; height:12px; background:linear-gradient(to right, rgb(150,190,255), rgb(0,68,255)); border-radius:3px;"></div>
+          <span style="font-size:10px; color:${sub};">up to +${max}%</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="font-size:10px; color:#ff6b6b; min-width:52px;">Attack</span>
+          <div style="flex:1; height:12px; background:linear-gradient(to right, rgb(255,150,150), rgb(255,0,0)); border-radius:3px;"></div>
+          <span style="font-size:10px; color:${sub};">up to +${max}%</span>
+        </div>
+        <div style="font-size:10px; color:${sub}; opacity:.8; margin-top:4px;">Each nation shows only its best side · grey = no specific bonus · details in the side panel</div>
+      </div>` : `<div class="legend-note">Calculating bonuses…</div>`}
+      <button id="exit-heatmap-btn" style="margin-top:8px; background:#ff4444; border:none; color:#fff; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:600; width:100%;">✕ Back to battle choice</button>
+    `;
+    setTimeout(() => {
+      const exitBtn = document.getElementById('exit-heatmap-btn');
+      if (exitBtn) exitBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        import('./battleMarkers.js').then(m => m.hideBattleTooltip());
+      });
+    }, 50);
+    return;
+  }
+
   // ==================== BATTLE HEATMAP ====================
   if (state.coloringMode === 'battleHeatmap' && state.battleHeatmapData) {
     const data = state.battleHeatmapData;
@@ -535,6 +682,7 @@ export function updateDynamicLegend() {
           <span style="font-size:10px; color:${THEMES[state.theme].TEXT_SECONDARY};">${fmtNumber(totalDefenderDmg)}</span>
         </div>
         <div style="font-size:10px; color:${THEMES[state.theme].TEXT_SECONDARY}; opacity:.8; margin-top:4px;">Share = nation damage / side total</div>
+        <div style="font-size:10px; color:${THEMES[state.theme].TEXT_SECONDARY}; opacity:.8; margin-top:2px;">Arrows: the top 5 nations per side (5%+ of their side), from the capital · thickness = damage dealt</div>
       </div>
       <button id="exit-heatmap-btn" style="margin-top:8px; background:#ff4444; border:none; color:#fff; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:600; width:100%; transition:background 0.15s;">✕ Exit Heatmap</button>
     `;

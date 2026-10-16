@@ -19,6 +19,10 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 const API = 'https://api6.warera.io/trpc';
+// Una risposta che non arriva non deve tenere ferma per sempre la promessa
+// condivisa di memo() (fonti.js): la nazione e i nemici resterebbero alla
+// lettura di prima finché il processo vive.
+const TIMEOUT_MS = 20_000;
 
 /** Errore che distingue "il gioco dice di no" da "il gioco non risponde".
  *  Servono due messaggi diversi: dire "gioco non raggiungibile" a chi ha
@@ -33,7 +37,7 @@ class TrpcError extends Error {
 
 async function trpcGet(proc, input) {
   const url = `${API}/${proc}?input=${encodeURIComponent(JSON.stringify(input))}`;
-  const res = await fetch(url, { headers: { accept: 'application/json' } });
+  const res = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(TIMEOUT_MS) });
 
   // Un 404 di tRPC ha comunque un corpo con l'errore dentro: si legge
   // quello invece di fermarsi al codice HTTP.
@@ -61,7 +65,7 @@ async function trpcBatch(chiamate) {
   const input = Object.fromEntries(chiamate.map(([, i], idx) => [idx, i]));
   const url = `${API}/${procs}?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`;
 
-  const res = await fetch(url, { headers: { accept: 'application/json' } });
+  const res = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) throw new Error(`batch: HTTP ${res.status}`);
   const body = await res.json();
   return (Array.isArray(body) ? body : [body]).map((x) => x?.result?.data ?? null);

@@ -198,18 +198,18 @@ body.light-theme .wp-mu-row:hover, body.light-theme .wp-mu-row:focus-visible { f
 /* Tinte per tier: leggere, servono a far leggere il livello "a colpo
    d'occhio" scorrendo la colonna, non a colorare la pagina. La barretta a
    sinistra è a piena saturazione, il fondo no. */
-.wp-mu-tint-bronze   { background: rgba(176, 106, 59, .11); border-left-color: #b06a3b; }
-.wp-mu-tint-silver   { background: rgba(185, 194, 204, .10); border-left-color: #b9c2cc; }
-.wp-mu-tint-gold     { background: rgba(227, 179, 65, .12);  border-left-color: #e3b341; }
-.wp-mu-tint-platinum { background: rgba(159, 214, 210, .12); border-left-color: #9fd6d2; }
-.wp-mu-tint-diamond  { background: rgba(126, 200, 245, .12); border-left-color: #7ec8f5; }
-.wp-mu-tint-master   { background: rgba(208, 126, 245, .14); border-left-color: #d07ef5; }
-body.light-theme .wp-mu-tint-bronze   { background: rgba(176, 106, 59, .13); }
-body.light-theme .wp-mu-tint-silver   { background: rgba(140, 152, 166, .13); }
-body.light-theme .wp-mu-tint-gold     { background: rgba(227, 179, 65, .18); }
-body.light-theme .wp-mu-tint-platinum { background: rgba(109, 190, 184, .16); }
-body.light-theme .wp-mu-tint-diamond  { background: rgba(90, 178, 235, .15); }
-body.light-theme .wp-mu-tint-master   { background: rgba(190, 106, 232, .15); }
+.wp-mu-tint-bronze   { background: rgba(176, 106, 59, .11); --wp-mu-tint: rgba(176, 106, 59, .11); border-left-color: #b06a3b; }
+.wp-mu-tint-silver   { background: rgba(185, 194, 204, .10); --wp-mu-tint: rgba(185, 194, 204, .10); border-left-color: #b9c2cc; }
+.wp-mu-tint-gold     { background: rgba(227, 179, 65, .12); --wp-mu-tint: rgba(227, 179, 65, .12);  border-left-color: #e3b341; }
+.wp-mu-tint-platinum { background: rgba(159, 214, 210, .12); --wp-mu-tint: rgba(159, 214, 210, .12); border-left-color: #9fd6d2; }
+.wp-mu-tint-diamond  { background: rgba(126, 200, 245, .12); --wp-mu-tint: rgba(126, 200, 245, .12); border-left-color: #7ec8f5; }
+.wp-mu-tint-master   { background: rgba(208, 126, 245, .14); --wp-mu-tint: rgba(208, 126, 245, .14); border-left-color: #d07ef5; }
+body.light-theme .wp-mu-tint-bronze   { background: rgba(176, 106, 59, .13); --wp-mu-tint: rgba(176, 106, 59, .13); }
+body.light-theme .wp-mu-tint-silver   { background: rgba(140, 152, 166, .13); --wp-mu-tint: rgba(140, 152, 166, .13); }
+body.light-theme .wp-mu-tint-gold     { background: rgba(227, 179, 65, .18); --wp-mu-tint: rgba(227, 179, 65, .18); }
+body.light-theme .wp-mu-tint-platinum { background: rgba(109, 190, 184, .16); --wp-mu-tint: rgba(109, 190, 184, .16); }
+body.light-theme .wp-mu-tint-diamond  { background: rgba(90, 178, 235, .15); --wp-mu-tint: rgba(90, 178, 235, .15); }
+body.light-theme .wp-mu-tint-master   { background: rgba(190, 106, 232, .15); --wp-mu-tint: rgba(190, 106, 232, .15); }
 
 .wp-mu-cell-pos { font-size: 12px; font-weight: 700; color: #6e7681; }
 .wp-mu-cell-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -686,38 +686,32 @@ body.light-theme .wp-mu-rank-country { color: #5b6473; }
   .wp-mu-rank-country { display: none; }
   .wp-mu-rank-pos { width: 30px; }
 
-  /* Su schermo stretto restano: #, nome, composizione, guerra/eco, membri,
-     danni settimanali. Cade la colonna NAZIONE, non la composizione: la
-     prima bandiera della composizione è quasi sempre la stessa nazione, e
-     quando non lo è (le "de facto") il caso interessante è proprio quello.
-     Le altre cinque classifiche restano fuori: chi le vuole ha il tab
-     Classifiche e la scheda della singola unità.
-
-     Attenzione all'ordine: con display:none la cella esce dal flusso della
-     griglia, quindi il template qui sotto descrive le colonne VISIBILI
-     nell'ordine in cui restano, non quelle originali. */
-  /* minmax(0, …) e non minmax(96px, …): con un minimo in pixel le colonne
-     non possono rimpicciolirsi sotto quella soglia e la riga sfora la
-     larghezza dello schermo. I testi hanno già l'ellissi, quindi possono
-     stringersi quanto serve. */
+  /* Prima su schermo stretto restavano #, nome, composizione, guerra/eco,
+     membri e danni settimanali: cadevano nazione, referral, "oggi" e cinque
+     classifiche su sei. Segnalazione dei giocatori 2026-10-15 (stessa
+     delle Rendite): da telefono quelle colonne non esistevano. Adesso ci
+     sono tutte, nell'ordine di sempre; il NOME resta fermo a sinistra (il
+     # scorre via sotto di lui, è solo una posizione) e il resto si scorre
+     di lato, con l'avviso sopra (src/shared/scrollHint.js). */
   .wp-mu-table {
-    /* La composizione ha la fetta più larga: è la colonna con più roba
-       dentro (due conteggi + bandiere + "+N"), e con meno spazio il "+N"
-       finiva tagliato. Il nome della nazione, che si accorcia, sta in
-       quella accanto. */
-    --wp-mu-cols: 18px minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, .82fr) 20px 56px;
-    overflow-x: visible;
+    --wp-mu-cols: 22px 124px 86px 118px 84px 40px 52px repeat(7, 62px);
+    overflow-x: auto;
   }
-  .wp-mu-thead, .wp-mu-row { min-width: 0; gap: 4px; font-size: 12px; }
+  .wp-mu-thead, .wp-mu-row { min-width: 0; width: max-content; gap: 4px; font-size: 12px; }
   .wp-mu-thead { padding: 0 4px 6px; }
   .wp-mu-row { padding: 7px 4px; }
-  /* Cade anche la 7ª (Referral): su schermo stretto le colonne visibili
-     devono restare le stesse di prima — #, nome, composizione, guerra/eco,
-     membri, danni settimanali — altrimenti la nuova colonna entrerebbe al
-     posto del settimanale, che è il metro di paragone principale. */
-  .wp-mu-th:nth-child(3), .wp-mu-row > :nth-child(3),
-  .wp-mu-th:nth-child(7), .wp-mu-row > :nth-child(7),
-  .wp-mu-th:nth-child(n+9), .wp-mu-row > :nth-child(n+9) { display: none; }
+  .wp-mu-thead > :nth-child(2), .wp-mu-row > :nth-child(2) {
+    position: sticky; left: 0; z-index: 1;
+    align-self: stretch; display: flex; align-items: center;
+    /* la tinta del livello della riga (--wp-mu-tint) sopra un fondo pieno */
+    background: linear-gradient(var(--wp-mu-tint, transparent), var(--wp-mu-tint, transparent)), #0d1117;
+    box-shadow: 6px 0 8px -6px rgba(0, 0, 0, .7);
+  }
+  body.light-theme .wp-mu-thead > :nth-child(2),
+  body.light-theme .wp-mu-row > :nth-child(2) {
+    background: linear-gradient(var(--wp-mu-tint, transparent), var(--wp-mu-tint, transparent)), #f4f6fa;
+    box-shadow: 6px 0 8px -6px rgba(0, 0, 0, .18);
+  }
   .wp-mu-cell-ps { gap: 5px; }
   .wp-mu-ps-chip { font-size: 11.5px; }
   .wp-mu-cell-country-name { font-size: 11px; }
@@ -991,11 +985,11 @@ body.light-theme .wp-mw-sc-giu { fill: #cf222e; }
    composizione resta (vedi il blocco a 768px: è la colonna che mostra le
    "de facto"), ma il nome riprende un po' di spazio, lo stemma si
    rimpicciolisce e il nome va su due righe invece di troncarsi.
-   In fondo al file: deve vincere sul blocco a 768px. */
+   In fondo al file: deve vincere sul blocco a 768px.
+   (2026-10-15: le colonne non si ridefiniscono più qui. Con la tabella che
+   scorre di lato le detta il blocco a 768px, tutte e quattordici; questo
+   ne descriveva sei e le altre otto andavano a capo sotto.) */
 @media (max-width: 480px) {
-  .wp-mu-table {
-    --wp-mu-cols: 18px minmax(0, 1.3fr) minmax(0, 1.1fr) minmax(0, .8fr) 20px 52px;
-  }
   .wp-mu-cell-name { gap: 5px; align-items: center; }
   .wp-mu-cell-name .wp-mu-avatar-sm { width: 18px; height: 18px; border-radius: 5px; flex-shrink: 0; }
   .wp-mu-name-text {
@@ -1011,3 +1005,65 @@ body.light-theme .wp-mw-sc-giu { fill: #cf222e; }
   .wp-mu-th { min-height: 32px; }
   .wp-mu-tab { min-height: 36px; }
 }
+
+
+/* ── WarEra+: confronto 1 vs 1 (src/mu/muCompare.js) ──────────────────
+   Barre, tabellone e selettori sono quelli del 1 vs 2 delle nazioni
+   (nations.css, importato dal modulo): qui solo le due schede in alto e
+   il bottone "Confronta" della scheda di un'unità. Blu = A, arancio = B,
+   gli stessi colori delle barre. */
+.wp-mu-cmp-cards {
+  display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: stretch;
+  margin-bottom: 16px;
+}
+.wp-mu-cmp-card {
+  position: relative; display: flex; gap: 12px; align-items: center; min-width: 0;
+  padding: 12px 34px 12px 12px;
+  background: var(--wp-ov-surface, #161b22);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: var(--wp-ov-radius, 12px);
+}
+.wp-mu-cmp-card-a { border-left: 3px solid #58a6ff; }
+.wp-mu-cmp-card-b { border-left: 3px solid #f0883e; }
+.wp-mu-cmp-card-empty {
+  flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px;
+  color: var(--wp-ov-text-dim, #8b949e); font-size: 12px;
+}
+.wp-mu-cmp-card-empty span { text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+.wp-mu-cmp-card-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.wp-mu-cmp-name {
+  background: none; border: 0; padding: 0; color: inherit; cursor: pointer; text-align: left;
+  font-size: 16px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wp-mu-cmp-name:hover { text-decoration: underline; }
+.wp-mu-cmp-meta {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 12px; color: var(--wp-ov-text-dim, #8b949e);
+}
+.wp-mu-cmp-meta strong { color: var(--wp-ov-text, #e6edf3); }
+.wp-mu-cmp-defacto { display: inline-flex; align-items: center; gap: 4px; font-style: italic; }
+.wp-mu-cmp-x {
+  position: absolute; top: 6px; right: 6px;
+  background: none; border: 0; color: var(--wp-ov-text-dim, #8b949e); cursor: pointer; font-size: 13px;
+}
+.wp-mu-cmp-x:hover { color: #f85149; }
+.wp-mu-cmp-swap {
+  align-self: center; width: 34px; height: 34px; border-radius: 50%;
+  background: var(--wp-ov-surface, #161b22); border: 1px solid var(--wp-ov-border, #30363d);
+  color: inherit; font-size: 16px; cursor: pointer;
+}
+.wp-mu-cmp-swap:hover:not(:disabled) { border-color: var(--wp-ov-accent, #39d0d8); }
+.wp-mu-cmp-swap:disabled { opacity: .35; cursor: default; }
+.wp-mu-cmp .wp-nat-pick .wp-mu-flag { flex-shrink: 0; }
+@media (max-width: 768px) {
+  .wp-mu-cmp-cards { grid-template-columns: 1fr; }
+  .wp-mu-cmp-swap { justify-self: center; transform: rotate(90deg); }
+}
+
+.wp-mu-compare-btn {
+  align-self: flex-start; margin-left: 4px;
+  padding: 6px 12px; border-radius: 999px;
+  background: var(--wp-ov-surface, #161b22); border: 1px solid var(--wp-ov-border, #30363d);
+  color: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.wp-mu-compare-btn:hover { border-color: #f0883e; color: #f0883e; }

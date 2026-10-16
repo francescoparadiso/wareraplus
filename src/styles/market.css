@@ -328,31 +328,67 @@ body.light-theme .wp-mkt-detail { border-bottom-color: #e3e7ee; }
   .wp-mkt-parts { grid-column: 1 / -1; }
 }
 
-/* WarEra+ — telefono (audit mobile 2026-09-24). La tabella è larga 1300px e
-   su 375 si vedevano risorsa, prezzo e mezzo costo: la colonna per cui la
-   vista esiste, la rendita per punto, stava fuori a destra dietro uno
-   scorrimento che niente annunciava. Qui restano le tre che rispondono
-   alla domanda — risorsa, rendita/pp, quanto guadagni al giorno — e il
-   resto è a un tocco, nella riga aperta. Ordine delle colonne: vedi il
-   commento su --wp-mkt-cols qui sopra (7 = rendita, 11 = tu /giorno). */
-/* Il riepilogo nella riga aperta esiste solo per il telefono: sopra i
-   560px quei numeri stanno già nelle colonne. */
+/* WarEra+ — telefono. Due giri:
+   · audit mobile 2026-09-24: la tabella è larga 1300px e su 375 si
+     vedevano risorsa, prezzo e mezzo costo, con la rendita per punto
+     fuori a destra dietro uno scorrimento che niente annunciava. La cura
+     fu tenere tre colonne e NASCONDERE le altre dieci;
+   · 2026-10-15, segnalazione dei giocatori: così da telefono non si
+     vedevano più "Rendita/pp base", bonus, regione, pareggio… e quelle
+     servono. Adesso ci sono TUTTE: le tre che rispondono alla domanda
+     (risorsa, rendita/pp, tu /giorno) vengono per prime con `order`, la
+     risorsa resta ferma a sinistra, e il resto si scorre di lato con un
+     avviso sopra la tabella che lo dice.
+   Ordine nel DOM: vedi il commento su --wp-mkt-cols qui sopra (7 =
+   rendita, 11 = tu /giorno). Le larghezze qui sotto sono nell'ordine
+   VISIVO, cioè dopo `order`. */
 .wp-mkt-dsumm { display: none; }
 
 @media (max-width: 560px) {
-  .wp-mkt-dsumm { display: block; }
   /* Le righe delle regioni nella riga aperta: coi minimi di sopra (302px
      più spazi) sfondavano i 315px disponibili e facevano scorrere di lato
      tutta la tabella. */
   .wp-mkt-regrow { grid-template-columns: minmax(0, 1fr) 50px 58px 40px; gap: 6px; }
   .wp-mkt-regrow .wp-mkt-region { min-width: 0; overflow: hidden; }
   .wp-mkt-table {
-    --wp-mkt-cols: minmax(0, 1.4fr) minmax(70px, 1fr) minmax(70px, 1fr);
+    /* risorsa · rendita · tu · vendita · costo MP · pp · base · bonus ·
+       regione · tassa · pareggio · lavoratore · tu in X giorni */
+    --wp-mkt-cols:
+      104px 74px 80px 78px 76px 34px 80px 56px 128px 58px 84px 84px 88px;
     min-width: 0;
+    width: max-content;
   }
-  .wp-mkt-thead > :is(:nth-child(2), :nth-child(3), :nth-child(4), :nth-child(5), :nth-child(6), :nth-child(8), :nth-child(9), :nth-child(10), :nth-child(12), :nth-child(13)),
-  .wp-mkt-row > :is(:nth-child(2), :nth-child(3), :nth-child(4), :nth-child(5), :nth-child(6), :nth-child(8), :nth-child(9), :nth-child(10), :nth-child(12), :nth-child(13)) {
-    display: none;
+  .wp-mkt-thead > *, .wp-mkt-row > * { order: 3; }
+  .wp-mkt-thead > :nth-child(1), .wp-mkt-row > :nth-child(1) { order: 0; }
+  .wp-mkt-thead > :nth-child(7), .wp-mkt-row > :nth-child(7) { order: 1; }
+  .wp-mkt-thead > :nth-child(11), .wp-mkt-row > :nth-child(11) { order: 2; }
+  /* La risorsa resta ferma mentre il resto scorre: senza, a metà tabella
+     non si sa più di che riga si stanno leggendo i numeri. Fondo pieno
+     (le righe ce l'hanno trasparente) e un'ombra sul bordo destro. */
+  .wp-mkt-thead > :nth-child(1), .wp-mkt-row > :nth-child(1) {
+    position: sticky; left: 0; z-index: 1;
+    margin-left: -8px; padding-left: 8px; align-self: stretch;
+    display: flex; flex-direction: column; justify-content: center;
+    background: var(--wp-ov-bg, #0d1117);
+    box-shadow: 6px 0 8px -6px rgba(0, 0, 0, .7);
+  }
+  body.light-theme .wp-mkt-thead > :nth-child(1),
+  body.light-theme .wp-mkt-row > :nth-child(1) {
+    background: var(--wp-ov-bg-light, #f4f6fa);
+    box-shadow: 6px 0 8px -6px rgba(0, 0, 0, .18);
+  }
+  .wp-mkt-row.open > :nth-child(1) {
+    background: color-mix(in srgb, var(--wp-ov-accent, #e3b341) 13%, var(--wp-ov-bg, #0d1117));
+  }
+  /* La riga aperta NON è larga quanto la tabella: resta della misura
+     dello schermo e ferma a sinistra, se no per leggerla bisognerebbe
+     scorrere di lato anche lei. */
+  .wp-mkt-table-wrap { container-type: inline-size; }
+  .wp-mkt-detail {
+    position: sticky; left: 0;
+    width: calc(100vw - 24px);   /* browser senza unità di contenitore */
+    width: 100cqw;               /* la larghezza vera del riquadro che scorre */
+    box-sizing: border-box;
   }
   .wp-mkt-th { min-height: 32px; white-space: normal; line-height: 1.2; }
   .wp-mkt-item { flex-direction: column; align-items: flex-start; gap: 2px; }

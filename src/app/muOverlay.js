@@ -14,6 +14,7 @@ import { trackEvent } from '../shared/analytics.js';
 import { loadModule } from '../shared/lazyModule.js';
 import { withModuleLoading } from '../shared/loadingScreen.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
+import { pushBack, dropBack } from './backNav.js';
 
 let overlayEl, backBtn, rootEl;
 
@@ -30,8 +31,10 @@ export function initMuOverlay() {
 }
 
 /** Apre la vista. Con `muId` salta direttamente alla scheda di
- *  quell'unità (preferiti, ricerca globale della barra menù). */
-export async function openMuView(muId) {
+ *  quell'unità (preferiti, ricerca globale della barra menù). `preset`:
+ *  linguetta e lati del confronto 1 vs 1 da un link condivisibile
+ *  ({ tab, a, b }, vedi mu/main.js:presetMuView). */
+export async function openMuView(muId, preset) {
   if (!overlayEl) return;
   overlayEl.classList.add('open');
   overlayEl.setAttribute('aria-hidden', 'false');
@@ -41,11 +44,14 @@ export async function openMuView(muId) {
   // di sfondo della mappa, che resta montata sotto l'overlay.
   // Dopo .open: a overlay nascosto il canvas misurerebbe 0x0.
   enterOverlay(overlayEl, 'mu');
+  // Indietro del browser/telefono = closeMuView (vedi backNav.js).
+  pushBack('mu', closeMuView, isMuViewOpen, { section: 'mu' });
 
   // Schermata di attesa su chunk + directory (shared/loadingScreen.js):
   // la prima apertura scarica ~550 KB di elenco unità, non è istantanea.
   await withModuleLoading('mu', async () => {
     const mod = await loadModule(() => import('../mu/main.js'), 'mu');
+    if (preset) mod.presetMuView(preset);
     if (muId) mod.openMuDetail(muId);
     await mod.initMuView(rootEl);
   });
@@ -58,6 +64,7 @@ export function closeMuView() {
   overlayEl.classList.remove('open');
   overlayEl.setAttribute('aria-hidden', 'true');
   leaveOverlay(overlayEl);
+  dropBack('mu');
 }
 
 export function isMuViewOpen() {

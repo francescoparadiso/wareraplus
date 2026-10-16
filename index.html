@@ -165,11 +165,23 @@
           <div id="mode-politics" class="mode-btn" data-i18n="mode_politics">🗳️ Elections</div>
           <!-- WarEra+: vista Distanze (src/diplomacy/travelDistance.js) -->
           <div id="mode-travel" class="mode-btn" data-i18n="mode_travel">🧭 Travel</div>
+          <!-- WarEra+: vista Migrazioni (src/diplomacy/migrationFlows.js) -->
+          <div id="mode-migration" class="mode-btn" data-i18n="mode_migration">🧳 Migration</div>
+          <!-- WarEra+: vista Finanziamenti (src/diplomacy/fundingFlows.js) -->
+          <div id="mode-funding" class="mode-btn" data-i18n="mode_funding">💰 Funding</div>
+          <!-- WarEra+: vista Bonus battaglia (src/diplomacy/bonusView.js) -->
+          <div id="mode-battleBonus" class="mode-btn" data-i18n="mode_battleBonus">🎖️ Battle bonus</div>
         </div>
 
         <label class="switch-container">
           <span class="switch-label" data-i18n="switch_active_battles">⚔️ Active Battles</span>
           <div class="switch"><input type="checkbox" id="checkActiveBattles" checked /><span class="slider"></span></div>
+        </label>
+
+        <!-- WarEra+: interruttore unico delle animazioni (src/shared/motion.js) -->
+        <label class="switch-container">
+          <span class="switch-label" data-i18n="switch_animations">✨ Animations</span>
+          <div class="switch"><input type="checkbox" id="wp-checkAnimations" checked /><span class="slider"></span></div>
         </label>
 
         <label class="switch-container">
@@ -430,6 +442,23 @@
       <span class="wp-political-title">Nation stats</span>
     </div>
     <div id="wp-nations-root" style="display:none;"></div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════
+       NUOVO — Overlay Giocatori (src/players/*)
+       Ricerca, classifiche mondiali e scheda di un giocatore (danni,
+       ricchezza, battaglie, abilità). Montata IN-PAGE dentro
+       #wp-players-root da src/players/main.js, aperta da
+       src/app/playersOverlay.js — anche cliccando un cittadino in
+       Statistiche nazioni. Stesso pattern degli altri overlay.
+       ════════════════════════════════════════════════════════════ -->
+  <div id="wp-players-overlay" class="wp-political-overlay wp-players-overlay" aria-hidden="true">
+    <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
+    <div class="wp-political-topbar">
+      <button id="wp-players-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
+      <span class="wp-political-title">Players</span>
+    </div>
+    <div id="wp-players-root" style="display:none;"></div>
   </div>
 
 

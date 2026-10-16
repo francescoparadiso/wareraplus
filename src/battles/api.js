@@ -252,19 +252,46 @@ export async function getBattleBounty(battleId, { live = false } = {}) {
   }
 }
 
+/* ── Tutte le aste aggiudicate di una battaglia ──
+   `limit` non passa 50, e una battaglia grossa ne ha molte di più: la
+   Francia–Italia del 13 ottobre 2026 ne aveva 169, e leggendo la sola
+   prima pagina la colonna "di cui contratti" mostrava 5.162 sul lato
+   francese contro 30.232 veri. Si insegue il cursore, una richiesta per
+   pagina, fino a MAX_AUCTION_PAGES; oltre si dichiara il troncamento.
+   `firstPage` permette di riusare la pagina già arrivata in un batch. */
+const MAX_AUCTION_PAGES = 12;
+async function _allWonAuctions(battleId, firstPage) {
+  let page = firstPage;
+  if (page === undefined) {
+    [page] = await trpcBatch([
+      ['mercenaryContractAuction.getPaginatedAuctions', { battleId, status: 'won', limit: 50 }],
+    ]);
+  }
+  if (!page) return null;
+  const items = [...(page.items || [])];
+  let cursor = page.nextCursor;
+  for (let p = 1; cursor && p < MAX_AUCTION_PAGES; p++) {
+    const [next] = await trpcBatch([
+      ['mercenaryContractAuction.getPaginatedAuctions', { battleId, status: 'won', limit: 50, cursor }],
+    ]);
+    if (!next?.items?.length) break;
+    items.push(...next.items);
+    cursor = next.nextCursor;
+  }
+  return { items, truncated: Boolean(cursor) };
+}
+
 /** Contratti mercenari aggiudicati di UNA battaglia, on-demand (fallback). */
 export async function getBattleContracts(battleId) {
   try {
-    const [res] = await trpcBatch([
-      ['mercenaryContractAuction.getPaginatedAuctions', { battleId, status: 'won', limit: 50 }],
-    ]);
+    const res = await _allWonAuctions(battleId);
     const items = res?.items || [];
     return {
       total: items.reduce((s, a) => s + (Number(a.currentPayout) || 0), 0),
       count: items.length,
-      // Oltre 50 contratti in una sola battaglia servirebbe il cursore: qui
-      // si dichiara il troncamento invece di mostrare un numero basso.
-      truncated: Boolean(res?.nextCursor),
+      // Oltre il tetto di pagine si dichiara il troncamento invece di
+      // mostrare un numero basso.
+      truncated: Boolean(res?.truncated),
     };
   } catch (err) {
     console.warn('WarEra+ battaglie: contratti non disponibili', err);
@@ -350,7 +377,7 @@ export async function getBattleDetail(battleId, { live = false } = {}) {
     // "durante" la battaglia. È pubblica come le altre quattro: nessun
     // consumo del proxy, e una procedura in più in un batch che c'era già
     // non è una richiesta in più.
-    const [dAtk, dDef, mAtk, mDef, auctions, raw] = await trpcBatch([
+    const [dAtk, dDef, mAtk, mDef, firstAuctions, raw] = await trpcBatch([
       rank('damage', 'country', 'attacker'),
       rank('damage', 'country', 'defender'),
       rank('money', 'country', 'attacker'),
@@ -358,6 +385,8 @@ export async function getBattleDetail(battleId, { live = false } = {}) {
       ['mercenaryContractAuction.getPaginatedAuctions', { battleId, status: 'won', limit: 50 }],
       ['battle.getById', { battleId }],
     ]);
+    // La prima pagina arriva nel batch; le altre solo se ci sono.
+    const auctions = await _allWonAuctions(battleId, firstAuctions);
 
     const detail = {
       startedAt: _ts(raw?.createdAt),
@@ -381,7 +410,8 @@ export async function getBattleDetail(battleId, { live = false } = {}) {
         minDamage: Number(a.minimumDamage) || 0,
         createdAt: _ts(a.createdAt),
       })).sort((a, b) => b.payout - a.payout),
-      contractsTruncated: Boolean(auctions?.nextCursor),
+      contractsTruncated: Boolean(auctions?.truncated),
+      rounds: _rounds(raw),
     };
 
     // Nessuna delle due classifiche ha risposto: è un errore di rete, non
@@ -393,6 +423,64 @@ export async function getBattleDetail(battleId, { live = false } = {}) {
     return detail;
   } catch (err) {
     console.warn('WarEra+ battaglie: dettaglio non disponibile', err);
+    return null;
+  }
+}
+
+/* ── I round di una battaglia ──
+   `battle.getById` (già nel batch del dettaglio) porta gli id dei round in
+   ordine e `roundsHistory`, una voce per round CHIUSO con vincitore, danni
+   e punti. Il round senza voce, su una battaglia attiva, è quello in corso.
+   ⚠️ L'id del round in corso è anche in `currentRound`: qui come stringa,
+   nel payload di /battles come oggetto col suo danno — si accettano tutti
+   e due. */
+function _rounds(raw) {
+  const ids = (Array.isArray(raw?.rounds) ? raw.rounds : [])
+    .map(r => (typeof r === 'string' ? r : r?._id)).filter(Boolean);
+  const hist = Array.isArray(raw?.roundsHistory) ? raw.roundsHistory : [];
+  const cur = typeof raw?.currentRound === 'string' ? raw.currentRound : raw?.currentRound?._id || null;
+  const active = raw?.isActive !== false && !raw?.endedAt;
+  return ids.map((id, i) => {
+    const h = hist[i] || null;
+    return {
+      id, number: i + 1,
+      live: active && !h && (id === cur || i === ids.length - 1),
+      wonBy: h?.wonBy || null,
+      points: h ? { attacker: Number(h.attackerPoints) || 0, defender: Number(h.defenderPoints) || 0 } : null,
+    };
+  });
+}
+
+/* ── Classifiche di UN round ──
+   Misurato il 2026-10-15 sulla Italia–Germania: `battleRanking.getRanking`
+   filtra per round con `roundId` DA SOLO — il round 1 dava 4.043.165 e
+   76.630.377, identici a `roundsHistory`. ⚠️ Con `battleId` accanto
+   risponde VUOTO (200, zero righe), senza errore: non aggiungerlo "per
+   sicurezza". Un round chiuso non cambia più e si memorizza; quello in
+   corso no. `type`: 'country' o 'mu'. */
+const _roundRankCache = new Map();   // `${roundId}|${type}` -> classifiche
+export async function getRoundRanking(roundId, type = 'country', { live = false } = {}) {
+  const key = `${roundId}|${type}`;
+  if (!live && _roundRankCache.has(key)) return _roundRankCache.get(key);
+  const rank = (dataType, side) => ['battleRanking.getRanking', { roundId, dataType, type, side, limit: 100 }];
+  try {
+    const [dAtk, dDef, mAtk, mDef] = await trpcBatch([
+      rank('damage', 'attacker'), rank('damage', 'defender'),
+      rank('money', 'attacker'), rank('money', 'defender'),
+    ]);
+    if (!dAtk && !dDef) return null;   // errore di rete, non un round vuoto
+    const out = {
+      attacker: _mergeSide(_rankRows(dAtk, type), _rankRows(mAtk, type)),
+      defender: _mergeSide(_rankRows(dDef, type), _rankRows(mDef, type)),
+      truncated: {
+        attacker: _isTruncated(dAtk) || _isTruncated(mAtk),
+        defender: _isTruncated(dDef) || _isTruncated(mDef),
+      },
+    };
+    if (!live) _roundRankCache.set(key, out);
+    return out;
+  } catch (err) {
+    console.warn('WarEra+ battaglie: classifica del round non disponibile', err);
     return null;
   }
 }

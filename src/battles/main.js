@@ -30,9 +30,10 @@ import '../styles/battles.css';
 import { btlT } from './i18n.js';
 import { getBattleArchive, getWarExpenses, getLiveBattles } from './api.js';
 import { renderBattleList, wireBattleList } from './battleList.js';
-import { renderBattleDetail, wireBattleDetail, loadBattleDetail, resetBattleDetail } from './battleDetail.js';
+import { renderBattleDetail, wireBattleDetail, loadBattleDetail, resetBattleDetail, refreshBattleDetail } from './battleDetail.js';
 import { renderWarExpenses, wireWarExpenses } from './warExpenses.js';
 import { trackEvent } from '../shared/analytics.js';
+import { syncBack } from '../app/backNav.js';
 
 let _container = null;
 let _tab = 'archive';       // 'archive' | 'expenses'
@@ -45,6 +46,7 @@ let _pendingCountryFilter = null;
 let _langHandler = null;
 // Battaglia aperta nel dettaglio (scomposizione per nazione). Null = elenco.
 let _openBattle = null;
+let _pendingBattleId = null; // WarEra+: da aprire appena c'è l'archivio (link ?battle=)
 
 const TABS = [
   { id: 'archive', key: 'tabArchive' },
@@ -75,6 +77,22 @@ function shellHtml() {
 function paintBody() {
   const body = document.getElementById('wp-btl-body');
   if (!body) return;
+
+  // WarEra+: battaglia chiesta da un link (?section=battles&battle=), aperta
+  // appena l'archivio è in memoria. Se non c'è (più vecchia di 90 giorni)
+  // resta l'elenco.
+  if (_tab === 'archive' && _pendingBattleId && _archive) {
+    const id = _pendingBattleId;
+    _pendingBattleId = null;
+    const found = (_archive.live || []).find(x => x.id === id) || _archive.battles.find(x => x.id === id);
+    if (found) { _openBattle = found; loadBattleDetail(found, () => paintBody()); }
+  }
+
+  // WarEra+: con la scheda di una battaglia aperta, Indietro torna
+  // all'archivio invece di chiudere la sezione (vedi app/backNav.js).
+  syncBack('battles/detail', _tab === 'archive' && !!_openBattle,
+    () => { _openBattle = null; resetBattleDetail(); paintBody(); },
+    () => _tab === 'archive' && !!_openBattle, { battle: _openBattle?.id });
 
   if (_tab === 'archive') {
     if (!_archive) { body.innerHTML = `<div class="wp-btl-loading">${btlT('loading')}</div>`; return; }
@@ -170,8 +188,16 @@ async function ensureData() {
 
    Si salta anche a scheda nascosta (document.hidden): a monitor spento
    nessuno la sta leggendo.
+
+   ── CON UNA BATTAGLIA IN CORSO APERTA ─────────────────────────────
+   Prima il giro, a scheda aperta, non faceva niente: classifiche e
+   testata restavano quelle del clic (segnalato dall'utente il
+   2026-10-15). Ora la scheda di una battaglia viva si rilegge a ogni
+   tick del gioco (2 minuti, vedi battleFront.js: le classifiche cambiano
+   solo lì, più spesso sarebbe la stessa risposta). L'elenco resta a 4.
    ══════════════════════════════════════════════════════════════ */
 const LIVE_REFRESH_MS = 4 * 60 * 1000;
+const OPEN_LIVE_REFRESH_MS = 2 * 60 * 1000;
 let _liveTimer = null;
 
 async function refreshLive({ force = false } = {}) {
@@ -184,14 +210,30 @@ async function refreshLive({ force = false } = {}) {
 function startLiveRefresh() {
   if (_liveTimer) return;
   _liveTimer = setInterval(async () => {
-    if (_tab !== 'archive' || _openBattle || document.hidden) return;
+    if (_tab !== 'archive' || document.hidden) return;
+    if (_openBattle) {
+      const b = _openBattle;
+      if (!b.live) return;   // una battaglia finita non cambia più
+      await refreshBattleDetail(b, () => paintBody());
+      return;
+    }
+    // Il timer batte ogni 2 minuti per la scheda aperta; l'elenco resta a 4.
+    if (_archive?.liveAt && Date.now() - _archive.liveAt < LIVE_REFRESH_MS - 5000) return;
     await refreshLive({ force: true });
     if (_tab === 'archive' && !_openBattle) paintBody();
-  }, LIVE_REFRESH_MS);
+  }, OPEN_LIVE_REFRESH_MS);
 }
 
 /** Ferma il giro. Esportata perché la chiami la chiusura dell'overlay:
  *  la vista non sa da sola quando smette di essere guardata. */
+/** WarEra+ — apre la scheda di una battaglia dell'archivio (link
+ *  condivisibile). Va chiamata PRIMA di initBattlesView. */
+export function openBattleDetail(battleId) {
+  _pendingBattleId = battleId;
+  _openBattle = null;
+  _tab = 'archive';
+}
+
 export function stopBattlesAutoRefresh() {
   if (_liveTimer) { clearInterval(_liveTimer); _liveTimer = null; }
 }

@@ -130,8 +130,9 @@ npm run preview   # testa la build in locale
   `index.html`, wrapper in `src/shared/analytics.js`). Il vecchio
   `public/political/` (invariato, non più caricato) usa ancora i propri CDN
   interni ma non è più raggiunto da nessun path attivo.
-- **PWA**: `vite-plugin-pwa` (Workbox). Precache completo. Runtime caching
-  differenziato per API tRPC (network-first, 10 min TTL), immagini/bandiere
+- **PWA**: `vite-plugin-pwa` (Workbox). Precache completo, tranne le
+  illustrazioni dell'oceano e il vecchio `public/political/` (globIgnores).
+  Runtime caching differenziato per API tRPC (network-first, 10 min TTL), immagini/bandiere
   (cache-first, 30gg), CSV esterni (stale-while-revalidate).
   Config in `vite.config.js`.
 - **Endpoint** (tutti in `src/diplomacy/config.js`): `API_BASE_URL`
@@ -164,575 +165,21 @@ npm run preview   # testa la build in locale
 
 ## Struttura del progetto
 
-```
-wareraPlus/
-├── index.html                  ← shell principale (markup Diplomacy + pannello + overlay)
-├── vite.config.js              ← build + PWA
-├── vercel.json
-├── server/
-│   ├── warera-cache-server.js  ← server di cache su VPS (Node, pm2) — poll periodico
-│   │                              delle API WarEra al posto dei browser utente
-│   ├── battleArchive.js        ← NUOVO — archivio battaglie concluse (90 gg) coi loro
-│   │                              costi + serie giornaliera delle spese per nazione.
-│   │                              Bootstrap SOLO fra le 02:00 e le 06:59 italiane
-│   │                              (gioco vuoto), giro incrementale tutto il giorno.
-│   │                              Endpoint: /battle-archive, /war-expenses,
-│   │                              /battle-archive/status.
-│   ├── moneyTransfers.js    ← NUOVO — archivio dei finanziamenti fra nazioni
-│   │                              (bonifici da tesoro a tesoro), retention 90 gg.
-│   │                              ⚠️ NIENTE bootstrap e non è una dimenticanza:
-│   │                              l'API tiene una finestra scorrevole di ~3
-│   │                              giorni (misurato: 104 righe / ~70 ore, poi il
-│   │                              cursore finisce), quindi i 90 giorni si
-│   │                              ACCUMULANO dal primo avvio e NON si recuperano
-│   │                              a ritroso. Endpoint: /money-transfers, che
-│   │                              espone `coverageFrom` — da quando in qua
-│   │                              l'archivio guardava.
-│   ├── damageTimeline.js       ← NUOVO — danno ORA PER ORA per nazione + quanti
-│   │                              giocatori erano sotto pillola in quell'ora.
-│   │                              Zero fetch proprie: campiona la cache `countries`
-│   │                              una volta all'ora alle :12 (il gioco ricalcola le
-│   │                              classifiche verso le hh:01: prima si campionava alle
-│   │                              :02 e il danno finiva sull'ora DOPO, e la mezz'ora
-│   │                              dava denti di sega — lo storico si riallinea in
-│   │                              lettura, vedi `lag` delle epoche) e legge `buffs` dentro le
-│   │                              risposte getUserLite che il giro cittadini scarica
-│   │                              già. ⚠️ le due metà si comportano in modo OPPOSTO —
-│   │                              il danno ACCUMULA dal primo avvio (è la differenza
-│   │                              fra due letture del cumulato settimanale, a ritroso
-│   │                              non esiste), le pillole si RICOSTRUISCONO indietro
-│   │                              di 23,5 ore da `buffEndAt`/`debuffEndAt`, quindi
-│   │                              quella curva c'è già al primo giro.
-│   │                              Endpoint: /damage-timeline.
-│   ├── citizenMoves.js         ← NUOVO — chi e' arrivato e chi se n'e' andato
-│   │                              da una nazione. ZERO fetch: confronta il censimento
-│   │                              cittadini (pollCitizens, gia' orario alle :36) con
-│   │                              quello dell'ora prima — WarEra dice solo dove uno sta
-│   │                              ADESSO, quindi un trasferimento E' per forza una
-│   │                              differenza fra due fotografie. ⚠️ accumula e non
-│   │                              recupera (come i bonifici): 7 giorni pieni una
-│   │                              settimana dopo il deploy, `coverageFrom` lo dichiara.
-│   │                              ⚠️ se il censimento nuovo e' molto piu' piccolo del
-│   │                              precedente il giro si SCARTA intero: una pagina persa
-│   │                              diventerebbe duecento partenze inventate.
-│   │                              ⚠️ user.getUsersByCountry elenca solo gli ATTIVI (3
-│   │                              giorni offline = fuori elenco, ma ancora cittadino):
-│   │                              una sparizione NON è una partenza. /citizen-moves
-│   │                              rilegge dal vivo chi compare (getUserLite, cache 1h):
-│   │                              stessa nazione = inattivo, contato a parte; e mostra
-│   │                              solo livello 10+ (o prestigio).
-│   │                              Endpoint: /citizen-moves.
-│   ├── priceHistory.js         ← NUOVO — storico dei prezzi: un campione all'ora di
-│   │                              itemTrading.getPrices (PUBBLICA, tutte le risorse
-│   │                              in una richiesta) ridotto a una candela al giorno
-│   │                              per risorsa. Rendite di produzione sa dire cosa
-│   │                              conviene ADESSO perché il gioco non pubblica altro;
-│   │                              da qui in poi sa anche da dove viene quel prezzo.
-│   │                              Endpoint: /price-history?days=N.
-│   ├── dayHistory.js           ← NUOVO — la giornata storica: diplomazia (patti,
-│   │                              guerre, nemico giurato, tesoro) e battaglie aperte,
-│   │                              giorno per giorno. Toglie alla time machine il suo
-│   │                              limite dichiarato — mostrava solo l'ownership perché
-│   │                              nient'altro era salvato nel tempo, e adesso questi
-│   │                              campi lo sono. Zero fetch: lo scatto delle 02:05
-│   │                              legge le cache countries/diplomacy/battles.
-│   │                              Endpoint: /day-history?day=YYYY-MM-DD.
-│   ├── allianceHistory.js      ← NUOVO — le alleanze nel tempo, per la time machine,
-│   │                              dal registro eventi del gioco (PUBBLICO, completo dal
-│   │                              lancio): BILATERALI dal 1 mag 2025 al 10 giu 2026, poi
-│   │                              a BLOCCO. ⚠️ il campo `allies` delle nazioni e' un
-│   │                              fossile del 10 giugno. ⚠️ i blocchi si rigiocano
-│   │                              ALL'INDIETRO da oggi (chi fonda non riceve "joined"),
-│   │                              e i cambi di nome non sono nel registro: si mostra il
-│   │                              nome di oggi + "allora si chiamava". Endpoint:
-│   │                              /alliance-history.
-│   ├── politicalHistory.js     ← NUOVO — storico politico. Elezioni RIASSUNTE e
-│   │                              presidenti nel tempo (completi dal lancio: sono già
-│   │                              in `elections-by-country`), più tre archivi che
-│   │                              ACCUMULANO dal deploy: iscritti ai partiti (un punto
-│   │                              quando il numero cambia, da pollParties), cambi di
-│   │                              casacca (diff orario utente→partito, stessa guardia
-│   │                              anti-giro-monco di citizenMoves) e governi (li passa
-│   │                              il radar dei proxy, che government.getByCountryId lo
-│   │                              chiede già ogni 6 ore). Zero fetch nuove.
-│   │                              Endpoint: /political-history, /political-overview,
-│   │                              /presidents.
-│   ├── labourHistory.js        ← NUOVO — lavoro e tasse: ogni pagamento di salario
-│   │                              del gioco, aggregato per nazione. Archivio CHIUSO
-│   │                              (29 lug → 17 set 2026) e senza poll: sono ~550.000
-│   │                              pagamenti al giorno, undicimila pagine da sfogliare.
-│   │                              ⚠️ DUE serie che non si sommano mai: per nazione del
-│   │                              LAVORATORE (salari incassati, tasse trattenute) e per
-│   │                              nazione dove OPERA l'azienda (il gettito vero, che è
-│   │                              chi incassa davvero). Endpoint: /labour-history.
-│   ├── import/                 ← NUOVO — import UNA TANTUM da un archivio esterno
-│   │   ├── bonifici.js            (il dump PostgreSQL di un altro tool della
-│   │   ├── ricchezza.js            comunità, passato dal suo autore). Servono solo
-│   │   ├── prezzi.js               per i dati che WarEra NON espone a ritroso:
-│   │   ├── diplomazia.js           bonifici fra tesori, ricchezza giornaliera dei
-│   │   ├── battaglie.js            giocatori, prezzi, diplomazia, battaglie aperte,
-│   │   ├── lavoro.js               salari e tasse.
-│   │   └── README.md               Vedi il suo README per la procedura e per le due
-│   │                               retention allargate (senza, il primo giro di
-│   │                               manutenzione pota quello che l'import ha appena
-│   │                               scritto).
-│   └── README.md               ← deploy a mano (scp + pm2 restart), vedi ⚠️ in fondo
-├── wallpaper/                  ← NUOVO — lo sfondo di Wallpaper Engine (Steam Workshop).
-│                                  NON contiene il tool: index.html porta la pagina sul
-│                                  sito con ?wallpaper=1 (src/app/wallpaperMode.js), le
-│                                  proprietà di project.json nell'URL e la chiave nel
-│                                  frammento #k=. ⚠️ Il browser di Wallpaper Engine va in
-│                                  CRASH su qualunque iframe di altro sito e su ogni
-│                                  <select> con antenato fixed/absolute: niente iframe, e
-│                                  con ?wallpaper=1 i <select> sono spenti (in linea in
-│                                  testa a index.html). Fuori da build e deploy Vercel.
-│                                  Prova, debug remoto e pubblicazione nel suo README.
-├── public/
-│   ├── icons/
-│   └── political/              ← Political View ORIGINALE (script globali), NON PIÙ USATO
-│       ├── index.html, style.css                a runtime — resta solo come riferimento/
-│       ├── config.js, api.js, main.js, ...       rollback fisico (Fase 2). Vedi src/political/
-│       └── parties_<countryId>.csv               per la versione attiva a moduli ES.
-└── src/
-    ├── main.js                 ← entry point: importa diplomacy/main.js, inizializza i
-    │                              componenti NUOVI, gestisce i deep-link ?country= e ?tm=
-    ├── diplomacy/               ← Diplomacy View (moduli ES) + aggiunte WarEra+
-    │   ├── main.js              ← init(), refreshData(), event listener della UI
-    │   ├── state.js             ← unico oggetto state condiviso (mutato in place)
-    │   ├── config.js            ← API_BASE_URL, WORKER_API_BASE, WARERA_CACHE_BASE,
-    │   │                          ECO_PROXY_BASE, COLORS, THEMES, LAYER_IDS
-    │   ├── map.js                ← MapLibre: layer, sorgenti, rendering
-    │   ├── ui.js, diplomacy.js, labels.js, patterns.js
-    │   ├── alliances.js, naps.js, sphereOfInfluence.js, blocs.js (dead, vedi sotto)
-    │   ├── battleMarkers.js, battleHeatmap.js, battleFront.js, battleFront/
-    │   ├── battleSpending.js  ← NUOVO — quanto è costata una battaglia: taglie
-    │   │                        pagate (classifica "money" per nazione) + contratti
-    │   │                        mercenari aggiudicati, per schieramento. Tre procedure
-    │   │                        PUBBLICHE su api6 (nessun consumo del Worker), un
-    │   │                        batch per aggiornamento, cache 60s. Il tooltip
-    │   │                        battaglia lo carica solo alla prima apertura della
-    │   │                        sezione "Battle spending". Gemello lato archivio:
-    │   │                        src/battles/api.js (stesse procedure, altra scala).
-    │   ├── builderPreview.js ← NUOVO — le alleanze costruite in Alliance
-    │   │                        Builder dipinte SULLA MAPPA ("Show on map"):
-    │   │                        una fotografia dei blocchi del builder in
-    │   │                        state.builderPreview, che vista Alleanze,
-    │   │                        etichette, legenda e riepilogo pannello
-    │   │                        leggono PRIMA di blocColorMap/externalBlocsInfo
-    │   │                        (dato di gioco, mai toccato). Non è un
-    │   │                        collegamento vivo: si aggiorna ripremendo il
-    │   │                        bottone. Cade da sola uscendo dalla vista.
-    │   ├── blocDamageCurves.js ← NUOVO — danno ora per ora + pillati di un
-    │   │                        GRUPPO di nazioni: nella scheda di un'alleanza e,
-    │   │                        sovrapposti, nel Fazione 1 vs 2. Il server somma
-    │   │                        con /damage-timeline?countryIds=a,b,c e ripete
-    │   │                        `countryIds` nella risposta: ⚠️ un server vecchio
-    │   │                        ignora il parametro e manda il MONDO, quindi senza
-    │   │                        quell'eco si ricade sulle nazioni una per una
-    │   │                        (una volta per sessione ciascuna, 6 alla volta).
-    │   │                        ⚠️ Visibili SOLO ai GOVERNI P.A.S.T.A. verificati
-    │   │                        (Discord + personaggio, /roles/me →
-    │   │                        nazione.abilitata E capacita.gestisceNazione non
-    │   │                        vuota: presidente, vice, ministri — il cittadino
-    │   │                        comune no) + admin: senza token nessuna richiesta
-    │   │                        e la sezione non compare. Cancello di interfaccia,
-    │   │                        la serie per nazione resta pubblica.
-    │   ├── blocStatsI18n.js ← NUOVO — traduzioni (9 lingue) di Statistiche
-    │   │                        alleanze: la CHIAVE è il testo inglese, bT('Weekly
-    │   │                        damage'), e ciò che manca ricade sull'inglese.
-    │   ├── dualBadges.js, blocStats.js, weeklyDamage.js, population.js,
-    │   │   regions.js, nationTooltip.js, utils.js
-    │   ├── cacheClient.js       ← NUOVO — client del server di cache: OGNI funzione ha
-    │   │                          fallback se il VPS non risponde (mai un nuovo SPOF)
-    │   ├── contestedHeatmap.js, warIntensityHeatmap.js, playstyleHeatmap.js,
-    │   │   playstyleTrendHeatmap.js  ← NUOVE viste mappa (regioni contese, storico
-    │   │                                bellico, guerra vs eco, trend stile di gioco)
-    │   ├── borderStyle.js       ← NUOVO — bordi come nella mappa del gioco: interni nella
-    │   │                          tinta della nazione, nazionali colorati per relazione
-    │   ├── oceanRoutes.js       ← NUOVO — geometria condivisa delle rotte marittime
-    │   ├── oceanBackground.js   ← NUOVO — rotte animate, tema scuro
-    │   ├── travelDistance.js    ← NUOVO — vista mappa "Distanze" (idea dal tool di
-    │   │                          nioKi, ni0ki.github.io/warera-distance-map): clic su
-    │   │                          una regione → tutte le altre colorate per numero di
-    │   │                          confini da attraversare (BFS su `neighbors` delle
-    │   │                          geometrie di state.mapDataGlobal, zero fetch), percorso
-    │   │                          col mouse, istogramma e giro ottimale fino a 5 casse di
-    │   │                          legno (Held-Karp, con un ritorno gratis a casa).
-    │   │                          ⚠️ i costi (10 stamina a regione, poi 2 barili) NON
-    │   │                          sono in gameConfig: sono della patch 0.26.1, costanti
-    │   │                          in testa al file. Testi in travelI18n.js (9 lingue).
-    │   ├── politicsHeatmap.js   ← NUOVO — vista mappa "Elezioni": dove si vota (rosso)
-    │   │                          e dove sono aperte le candidature (oro), da
-    │   │                          /elections?open=1 (la rotta dei ticker)
-    │   ├── antiqueTheme.js      ← NUOVO — estetica "mappa antica", tema chiaro
-    │   ├── darkFleetTheme.js    ← NUOVO — easter egg illustrati, tema scuro
-    │   ├── oceanImages.js, shipTooltip.js  ← icone delle illustrazioni + tooltip navi
-    │   └── data/antarctica.geo.json
-    ├── political/               ← Political View a moduli ES, attiva a runtime (Fase 2)
-    │   ├── main.js              ← orchestratore: initPoliticalView(countryId, {openSenate})
-    │   ├── config.js            ← stato condiviso (export let + setter), tema, cache TTL
-    │   ├── api.js               ← localFetch, adapter su shared/trpcClient.js
-    │   ├── loading.js, i18n.js, ui.js, ticker.js, domTemplate.js, backgroundCanvas.js
-    │   ├── parliament.js, senate.js, congress.js, presidential.js, party.js,
-    │   │   organizer.js, panels.js
-    │   ├── (nessun equivalente di embed.js — era dead code nell'originale, non portato)
-    │   ├── links.js             ← NUOVO — ponti verso Unità Militari e Statistiche
-    │   │                          nazioni: unità + guerra/eco nella scheda giocatore e
-    │   │                          nella "Composizione" del partito, da getUserLite che
-    │   │                          Political scarica GIÀ (porta `mu` e `skills`)
-    │   ├── history.js, world.js ← NUOVO — viste "Storia" (presidenti, affluenza,
-    │   │                          iscritti, cambi di casacca, governi) e "Mondo"
-    │   │                          (calendario elettorale + confronto fra nazioni)
-    │   ├── simUncertainty.js    ← NUOVO — intervallo 80% dei seggi nel simulatore,
-    │   │                          dalla volatilità storica della nazione (mediana delle
-    │   │                          ultime 5 coppie di congressi). Retrotest su 25
-    │   │                          nazioni: copertura 88,8%, larghezza media 4 seggi
-    │   └── plusApi.js, plusCharts.js, plusViews.js, plusI18n.js (9 lingue)
-    ├── mu/                       ← NUOVO — Esplora Unità Militari
-    │   ├── main.js              ← initMuView(container) + openMuDetail(muId)
-    │   ├── api.js               ← directory dal server di cache (/mu-directory) con
-    │   │                          fallback a paginazione diretta; dettaglio e membri
-    │   │                          on-demand. La directory sta in MEMORIA per la
-    │   │                          sessione (~550 KB), mai in localStorage.
-    │   ├── i18n.js, ui.js       ← dizionario locale (9 lingue) e pezzi di UI comuni
-    │   ├── playstyle.js         ← classificatore guerra/economia dai punti abilità
-    │   │                          (gemello di classifyPlaystyle nel cache-server: se
-    │   │                          cambi soglie o elenchi di skill, cambiali in tutti e due)
-    │   ├── muList.js            ← elenco a TABELLA (colonne ordinabili, righe tinte
-    │   │                          per tier, colonna "Composizione" coi membri per
-    │   │                          nazione + marchio "de facto"), blocchi da 60 righe
-    │   ├── muDetail.js          ← scheda unità: sei classifiche + composizione per
-    │   │                          nazionalità (calcolata dal vivo sui membri) + membri
-    │   ├── ranking.js           ← classifiche, ordinate dalla directory (zero fetch)
-    │   ├── muWealth.js          ← NUOVO — linguetta "Bilancio", l'unica parte CHIUSA
-    │   │                          della vista. DUE schermate: ELENCO delle unità con i
-    │   │                          loro numeri (zero fetch a WarEra: il server lo calcola
-    │   │                          in SQL, quindi "chi sta perdendo" si legge invece di
-    │   │                          aprire trenta schede — con ricerca, filtri e colonne
-    │   │                          ordinabili) e SCHEDA di una unità, che legge la
-    │   │                          ricchezza dal vivo perché le serve il giorno IN CORSO.
-    │   │                          Chi comanda UNA sola unità salta l'elenco. Verdetto
-    │   │                          guadagna/perde/in pari, barre sulla linea dello zero.
-    │   │                          Compare solo a chi COMANDA in gioco un'unità italiana
-    │   │                          o de facto italiana ed è entrato con Discord. Chunk a
-    │   │                          parte: import() alla prima apertura.
-    │   └── wealthApi.js         ← NUOVO — client di /wealth sull'area riservata. Se non
-    │                              c'è un token NON parte nessuna richiesta: la vista
-    │                              unità è pubblica e si apre migliaia di volte.
-    ├── nations/                  ← NUOVO — Statistiche nazioni
-    │   ├── main.js              ← initNationsView(container) + openNationDetail(countryId);
-    │   │                          tab panoramica / 1 vs 2 / grafici + scheda nazione
-    │   ├── api.js               ← nazioni da state.nazioniGlobal (zero fetch) e elenco
-    │   │                          cittadini dal cache-server (/country-citizens), con
-    │   │                          fallback diretto LIMITATO a 150 utenti se il server manca
-    │   ├── metrics.js           ← le metriche in un posto solo (panoramica, 1vs2 e scheda
-    │   │                          leggono le stesse definizioni)
-    │   ├── charts.js            ← ciambelle/barre in SVG scritto a mano, niente Chart.js
-    │   ├── labourSection.js     ← NUOVO — "Lavoro e tasse" nella scheda nazione:
-    │   │                          salari incassati dai cittadini, quota guadagnata
-    │   │                          fuori casa, tasse trattenute, gettito dello Stato,
-    │   │                          chi li paga e per cosa lavorano. ⚠️ trattenute e
-    │   │                          gettito NON si sommano: le prime le incassa la
-    │   │                          nazione dove opera l'azienda. Archivio chiuso, e la
-    │   │                          fascia in cima lo dichiara.
-    │   ├── damageCurves.js      ← NUOVO — nella scheda nazione: il danno ORA PER ORA
-    │   │                          con sopra, sullo stesso riquadro e su un secondo
-    │   │                          asse, la linea dei giocatori PILLATI (item `cocain`,
-    │   │                          +60% attacco per 8 ore). Le due serie stanno insieme
-    │   │                          apposta: la domanda è se il picco di danno cade dove
-    │   │                          cade il picco di pillole. Sotto, la curva del danno
-    │   │                          a 14 giorni. Dati da /damage-timeline; se il server
-    │   │                          non ce l'ha la sezione non compare.
-    │   │                          ⚠️ un'ora senza misura è `d: null` e si disegna come
-    │   │                          BUCO (barra assente, linea spezzata), mai come zero.
-    │   ├── nationList.js, nationCompare.js, nationDetail.js, i18n.js (9 lingue)
-    ├── economy/                  ← NUOVO — Economia: UNA voce di Approfondimenti,
-    │   │                            TRE schede. Prima erano due voci separate
-    │   │                            ("Ottimizzatore industriale" e "Rendite di
-    │   │                            produzione") e i prezzi non avevano casa: erano
-    │   │                            separate per come sono NATE, non per come si
-    │   │                            usano. Le tre domande sono un discorso solo, e
-    │   │                            nell'ordine in cui si fanno — quanto vale la
-    │   │                            roba, cosa conviene produrre, come sistemo la
-    │   │                            MIA azienda.
-    │   │                            ⚠️ Per AFFIANCAMENTO, non per fusione:
-    │   │                            src/market/* e src/eco/* non sono toccati
-    │   │                            dentro. Ogni scheda ha il suo contenitore, ci si
-    │   │                            monta la vista di prima con la sua
-    │   │                            init*(container), e cambiare scheda NASCONDE
-    │   │                            invece di smontare — tornare sulle Rendite
-    │   │                            ritrova paga, giorni e riga aperta com'erano.
-    │   │                            Restano quindi TRE dizionari (economy/i18n.js,
-    │   │                            market/i18n.js, testi interni di eco/main.js) e
-    │   │                            TRE fogli di stile: è voluto.
-    │   ├── main.js               ← initEconomyView(container, {tab}) +
-    │   │                          stopEconomyView(). import() per scheda alla prima
-    │   │                          apertura: chi entra per i prezzi non si scarica
-    │   │                          anche l'Ottimizzatore. Cambiando scheda ferma il
-    │   │                          timer di quella che si lascia e lo riattacca
-    │   │                          rientrando (le tre init* sono riapribili).
-    │   ├── prices.js             ← NUOVO — la scheda PREZZI, l'unica parte davvero
-    │   │                          nuova: elenco di tutte le risorse con prezzo,
-    │   │                          denaro/lettera del libro ordini e variazioni
-    │   │                          24h/7g/30g, e per ognuna la sua scheda col
-    │   │                          grafico. ZERO fetch proprie — prezzi e libro
-    │   │                          ordini li chiede a market/api.js (stessa cache,
-    │   │                          stesso TTL: aprire questa scheda dopo le Rendite
-    │   │                          non ricompra niente), lo storico a /price-history.
-    │   └── candleChart.js        ← NUOVO — le candele (SVG a mano). ⚠️ NON sostituisce
-    │                              market/priceChart.js: quello disegna le sole
-    │                              chiusure perché sta in una riga alta 88px, questo
-    │                              massimo/minimo/corpo perché ha una pagina. Un
-    │                              giorno senza candela è un BUCO in entrambi.
-    ├── eco/                      ← NUOVO — Ottimizzatore industriale (port del bot Discord
-    │   │                            "WarEra Eco Optimizer" di ArgusIA — attribuzione
-    │   │                            obbligatoria in cima alla vista). Dal 2026-09-19
-    │   │                            è la TERZA SCHEDA di src/economy/, non più una
-    │   │                            voce di menù sua: il codice qui dentro non è
-    │   │                            cambiato, cambia solo chi chiama initEcoView().
-    │   ├── main.js              ← orchestratore + rendering (era bot.py + embeds.py)
-    │   ├── api.js               ← ecoCall via ECO_PROXY_BASE (Worker), dati di gioco
-    │   ├── gameData.js, resolve.js, account.js, wage.js
-    │   └── skills.js, positioning.js, workers.js, hiring.js  ← logica pura (hiring = nuova)
-    ├── market/                   ← NUOVO — Rendite di produzione: la classifica di
-    │   │                            mercato... e dal 2026-09-19 la SECONDA SCHEDA di
-    │   │                            src/economy/, non più una voce di menù sua (il
-    │   │                            codice non è cambiato, cambia chi chiama
-    │   │                            initMarketView()). Sotto, la descrizione di
-    │   │                            sempre:
-    │   │                            mercato di tutte le risorse per rendita al punto
-    │   │                            produzione. Gemella dell'Ottimizzatore per chi
-    │   │                            un'azienda non ce l'ha ancora (cosa produrre, dove
-    │   │                            aprirla): NON chiede uno username, si apre e mostra.
-    │   ├── main.js               ← initMarketView(container) + stopMarketAutoRefresh():
-    │   │                          tabella, ordinamenti, riga espandibile, simulatore paga
-    │   ├── api.js                ← due orologi: prezzi + libro ordini (PUBBLICI, diretti
-    │   │                          su api6, TTL 5 min, giro automatico mentre è aperta) e
-    │   │                          regioni consigliate (token-gated via ecoBatch → proxy,
-    │   │                          TTL 30 min + localStorage). Un refresh completo = 2
-    │   │                          richieste HTTP. Regioni e tasse: zero fetch. Più una
-    │   │                          terza cosa, sola per sessione: lo STORICO dal server
-    │   │                          di cache (/price-history), senza fallback — il gioco
-    │   │                          non sa dire quanto costava ieri, quindi se il server
-    │   │                          non ce l'ha la sezione non compare e basta.
-    │   ├── priceChart.js         ← NUOVO — la linea delle chiusure (SVG a mano, come
-    │   │                          nations/charts.js) + variazione 7/30 giorni. Un
-    │   │                          giorno senza candela è un BUCO: la linea si spezza,
-    │   │                          mai uno zero.
-    │   ├── model.js              ← formule PURE (la stessa di eco/gameData.js, ma con i
-    │   │                          prezzi eseguibili) + paga di pareggio, guadagno
-    │   │                          giornaliero per paga offerta e bonus FEDELTÀ allo
-    │   │                          slider dei giorni (+1%/giorno fino a 10, letto da
-    │   │                          gameConfig.worker, come eco/workers.js). Cambiare
-    │   │                          paga o giorni non costa una richiesta.
-    │   └── i18n.js               ← dizionario locale (9 lingue)
-    ├── battles/                  ← NUOVO — Battaglie: una voce, due schede.
-    │   │                            "Archivio battaglie" (in corso + concluse, con danno,
-    │   │                            taglia pagata e contratti mercenari) e "Spese di
-    │   │                            guerra" (quanto spende ogni nazione al giorno).
-    │   ├── api.js                ← server di cache (/battle-archive, /war-expenses) con
-    │   │                          fallback nel browser: ~10 giorni di elenco e i costi
-    │   │                          caricati SOLO per la riga che l'utente apre. Mai 800
-    │   │                          richieste per riempire una tabella. Le battaglie IN
-    │   │                          CORSO (getLiveBattles) riusano fetchActiveBattles()
-    │   │                          di battleHeatmap.js — stessa sorgente dei marker
-    │   │                          sulla mappa, nessuna fetch nuova, TTL 4 min contro i
-    │   │                          ~2 della mappa. Su una battaglia viva le cache per
-    │   │                          battaglia si saltano ({live:true}): taglia,
-    │   │                          classifiche e dettaglio crescono ancora.
-    │   ├── battleDetail.js       ← scheda di UNA battaglia: scomposizione per
-    │   │                          nazione e per unità militare (danno, quota del
-    │   │                          lato, taglia INCASSATA) + elenco dei contratti
-    │   │                          mercenari, e in CIMA i FINANZIATORI: le nazioni che
-    │   │                          hanno versato nel tesoro dei due belligeranti mentre
-    │   │                          la battaglia era aperta (due tabelle, una per
-    │   │                          schieramento).
-    │   │                          ⚠️ la colonna taglia qui è "incassato",
-    │   │                          non "speso": coincidono solo sommando il lato.
-    │   ├── moneyTransfers.js ← NUOVO — i bonifici da tesoro a tesoro
-    │   │                  (`transaction.getPaginatedTransactions`, tipo
-    │   │                  countryMoneyTransfer). Sono POCHI: ~36 al giorno in tutto
-    │   │                  il mondo e il cursore si esaurisce in tre pagine, quindi
-    │   │                  si scarica UNA lista per sessione e la si filtra in
-    │   │                  memoria sulla finestra della singola battaglia — aprire
-    │   │                  venti battaglie costa quanto aprirne una. ⚠️ procedura
-    │   │                  TOKEN-GATED (401 su api6): passa dal proxy, unica della
-    │   │                  sezione a farlo. Lo storico copre ~3 giorni: per una
-    │   │                  battaglia più vecchia la vista dice "fuori portata", non
-    │   │                  "nessun finanziamento".
-    │   ├── main.js, battleList.js, warExpenses.js, i18n.js (9 lingue)
-    ├── guide/                    ← NUOVO — Guida "Come si usa": SOLO testo statico
-    │   ├── main.js                  (zero fetch, zero stato) + i18n.js a 9 lingue.
-    │   └── i18n.js                  È la vista più leggera dell'app, deve restarlo.
-    ├── private/                  ← NUOVO — Area riservata (login Discord + personaggio
-    │   │                            verificato). Parla SOLO con warera-plus-api
-    │   │                            (server/plusApi/, processo separato, vedi il suo README).
-    │   ├── main.js              ← la vista: profilo a sinistra; a destra PRIMA quello che
-    │   │                          ogni cittadino VEDE (la sua nazione), POI quello che si
-    │   │                          FA, in due sezioni apribili chiuse di partenza:
-    │   │                          "Contratti mercenari" (il tavolo, board.js) e
-    │   │                          "Amministrazione" (admin.js). Una sezione chiusa non
-    │   │                          carica niente; Contratti mostra comunque quante richieste
-    │   │                          aspettano la firma di chi guarda.
-    │   ├── nazione.js           ← NUOVO — "La mia nazione", cruscotto a TUTTA LARGHEZZA
-    │   │                          (griglia a 12 colonne, span per scheda, una colonna sotto
-    │   │                          i 1100px): tesoro/classifiche/relazioni/governo, ultimi 14
-    │   │                          giorni (tesoro orario dal ticker, giocatori attivi, danno
-    │   │                          al giorno), allarmi dai confini, elezioni, la nostra
-    │   │                          forza contro ogni nemico (pillole + un colpo a testa, tutti
-    │   │                          letti dal vivo), cittadini (attività, stile, livelli),
-    │   │                          nemici, battaglie + 48 ore + bonifici 14 gg, guerra 30 gg
-    │   │                          (vinte/perse, avversari, spese), migliori giocatori, unità
-    │   │                          (anche "di fatto"), classifiche, regioni e confini.
-    │   │                          Grafici in SVG a mano. Dati da /nazione e /nazione/nemici:
-    │   │                          tutto da cache del cache-server, nessuna chiamata nuova.
-    │   ├── i18nNazione.js       ← dizionario (9 lingue) di nazione.js e delle sezioni
-    │   ├── board.js, battles.js ← contratti mercenari (tavolo, battaglie, lista permessi)
-    │   └── admin.js, selettori.js, api.js, i18n.js
-    ├── panel/                   ← NUOVO
-    │   ├── countryPanel.js      ← pannello laterale nazione (+ riepilogo sfere e viste)
-    │   ├── nationWatch.js       ← NUOVO — il blocco "sotto osservazione" in CIMA al
-    │   │                          pannello: proxy (CSV + rilevati dal radar), guerra/eco
-    │   │                          col travaso a 24h, e chi e' arrivato/partito in 7
-    │   │                          giorni. Richiesta dell'utente: e' un problema di
-    │   │                          ORDINE — il pannello apriva col grafico del
-    │   │                          parlamento, che cambia alle elezioni, mentre la roba
-    │   │                          che cambia ogni giorno stava sotto o non c'era.
-    │   │                          ⚠️ la sezione movimenti NON ha ripiego (/citizen-moves,
-    │   │                          nessuna chiamata diretta equivalente esiste): senza
-    │   │                          server non compare, come /damage-timeline.
-    │   │                          ⚠️ la sezione sfera ha un contenitore suo
-    │   │                          (#wp-panel-sphere-watch) perche' il radar arriva dopo:
-    │   │                          rigenerare tutto il blocco staccherebbe dal documento
-    │   │                          il nodo che renderPlaystyle si e' gia' preso.
-    │   ├── viewOverview.js      ← contenuto del riepilogo che si apre entrando in una
-    │   │                          vista mappa (alleanze, popolazione, danni sett.,
-    │   │                          regioni contese, storico bellico, guerra vs eco):
-    │   │                          classifica + descrizione per le viste non ovvie.
-    │   │                          Solo markup/dati — apertura, linguetta mobile e
-    │   │                          click stanno in countryPanel.js
-    │   ├── nationFlag.js        ← bandiera/codice ISO di una nazione, condivisi dai
-    │   │                          due pannelli (erano privati in countryPanel.js)
-    │   ├── parliamentChart.js   ← grafico emiciclo nel pannello (nativo, indipendente da src/political/)
-    │   └── panelResize.js       ← drag per ridimensionare il pannello
-    ├── app/                     ← NUOVO — orchestrazione integrazione
-    │   ├── politicalOverlay.js ← apre Political in-page (import() dinamico di src/political/main.js)
-    │   ├── muOverlay.js        ← apre Esplora Unità Militari
-    │   ├── nationsOverlay.js   ← apre Statistiche nazioni
-    │   ├── economyOverlay.js   ← apre Economia (prezzi + rendite + ottimizzatore) e
-    │   │                         alla chiusura ferma i timer di TUTTE le schede
-    │   │                         aperte, non solo di quella in vista. Prende il
-    │   │                         posto di ecoOverlay.js e marketOverlay.js, che
-    │   │                         non esistono più.
-    │   ├── battlesOverlay.js   ← apre Battaglie (archivio + spese di guerra) e alla
-    │   │                         chiusura ferma il giro delle battaglie in corso
-    │   ├── visitorCounter.js   ← NUOVO — pill "N visite · ● M" in #wp-bottom-credits,
-    │   │                         accanto a Ko-fi e all'autore. Due numeri diversi: le
-    │   │                         VISITE (cumulative) da /visits sul server di cache,
-    │   │                         che parte dal totale misurato da Vercel Analytics fino
-    │   │                         al 2026-08-31 (1325, seme lato SERVER: cambiarlo non
-    │   │                         richiede un deploy del client), e gli ONLINE ADESSO
-    │   │                         (pallino verde), che il server conta in memoria su una
-    │   │                         finestra di 5 minuti. Il client ripassa ogni minuto
-    │   │                         con `count=0` — "ci sono ancora" senza gonfiare il
-    │   │                         totale — e smette a scheda nascosta, così una scheda
-    │   │                         dimenticata esce dal conto da sola. Il ritmo lo detta
-    │   │                         il server (`heartbeatMs` nella risposta).
-    │   │                         Nessun IP registrato: il browser si genera un id
-    │   │                         casuale in localStorage, che serve solo a non contare
-    │   │                         due volte nello stesso giorno. Server giù = niente
-    │   │                         pill; server vecchio che non manda `online` = pill con
-    │   │                         le sole visite. Mai un numero inventato.
-    │   │                         Pill unica in tre parti: visite | ● online (sito +
-    │   │                         sfondi Wallpaper Engine accesi, li somma il server) |
-    │   │                         🖥 iscritti su Wallpaper Engine (letti da Steam ogni
-    │   │                         ora, link al Workshop). Gli sfondi battono con
-    │   │                         `source=wallpaper`: entrano negli online, MAI nelle
-    │   │                         visite. Dentro lo sfondo la pill è in sola lettura.
-    │   ├── wallpaperMode.js    ← NUOVO — modalità sfondo (?wallpaper=1, flag in
-    │   │                         shared/wallpaper.js): niente contatori né analytics,
-    │   │                         niente barra menù e crediti (wallpaper.css), riepiloghi
-    │   │                         delle viste dietro la linguetta anche su desktop, fascia
-    │   │                         "i" (la tastiera non arriva a uno sfondo). Proprietà
-    │   │                         dall'involucro (wallpaper/) via URL all'avvio, poi la
-    │   │                         pagina stessa definisce wallpaperPropertyListener (WE
-    │   │                         la richiama dal vivo, verificato); chiave API dal
-    │   │                         frammento #k=, tolta subito, in memoria.
-    │   │                         setPaused → mapIdle. Niente <select> visibili: crash.
-    │   ├── newsOverlay.js      ← apre la vista News
-    │   ├── guideOverlay.js     ← apre la Guida "Come si usa"
-    │   ├── newsTicker.js       ← ticker in cima alla mappa: battaglie, elezioni, nuove
-    │   │                         guerre, sworn enemy, popolazione, tesoro. Le ultime
-    │   │                         quattro arrivano già pronte dal server (/ticker), non
-    │   │                         più da snapshot in localStorage. Tetto per categoria
-    │   │                         (CAT_CAP) così una sola non monopolizza il ticker.
-    │   ├── newsView.js         ← vista "News": lo STESSO materiale del ticker, completo,
-    │   │                         fermo e raggruppato per categoria. Zero fetch nuove —
-    │   │                         riusa getNewsGroups() del ticker.
-    │   ├── timeMachine.js      ← ownership storica delle regioni a uno slider temporale
-    │   │                         (dati dal server: keyframe + replay lato VPS). Scope
-    │   │                         volutamente ridotto: solo ownership + nome + bandiera.
-    │   │                         Deep-link ?tm=<epoch ms>.
-    │   ├── timeMachineDay.js   ← NUOVO — la giornata storica per la time machine
-    │   │                         (/day-history): patti, guerre, nemico giurato nel
-    │   │                         popup del click e battaglie aperte sotto la
-    │   │                         classifica del territorio. Una fetch per giorno
-    │   │                         FERMATO, mai una per fotogramma di playback, e
-    │   │                         nessun fallback: se il server non ce l'ha, le
-    │   │                         sezioni non compaiono.
-    │   ├── timeMachineMap.js   ← SECONDA mappa MapLibre dedicata e alleggerita (3 layer)
-    │   │                         usata dalla time machine; la principale viene nascosta,
-    │   │                         non toccata. timeMachine.js tiene tutta la logica.
-    │   ├── desktopMenuBar.js   ← barra menù desktop (Viste mappa / Approfondimenti /
-    │   │                         Impostazioni, ricerca ⌘K, Preferiti)
-    │   ├── mobileMenuBar.js    ← equivalente mobile (drawer)
-    │   ├── pins.js             ← store dei Preferiti (nazioni/alleanze/unità), localStorage
-    │   ├── overlayChrome.js    ← chrome condiviso degli overlay: sfondo a particelle nella
-    │   │                         tinta della sezione + pausa mappa
-    │   ├── mapIdle.js          ← pausa/riprende il lavoro di sfondo della mappa (pallini
-    │   │                         nave, polling marker battaglia) mentre un overlay la copre
-    │   ├── themeSync.js        ← sincronizza tema (localStorage 'we_theme') con Political
-    │   ├── langSync.js         ← stessa cosa per la LINGUA (era un bug reale: Political
-    │   │                         restava in inglese dopo un cambio lingua nello shell)
-    │   ├── battleToggle.js     ← bottone dedicato show/hide battaglie
-    │   ├── blocLabelsToggle.js ← toggle nomi alleanze
-    │   └── authorPill.js       ← pill autore accanto al bottone Ko-fi
-    ├── shared/
-    │   ├── particlesBackground.js ← motore dello sfondo a particelle, condiviso da tutte
-    │   │                            le sezioni (Political oro, Eco verde, MU rosso,
-    │   │                            News blu, Alleanze viola)
-    │   ├── loadingScreen.js    ← schermata di attesa comune fra il clic e il primo pixel
-    │   │                          di contenuto delle sezioni caricate a richiesta
-    │   ├── lazyModule.js       ← import() dinamico con rete di sicurezza (in produzione
-    │   │                          un chunk può sparire dopo un deploy: retry/reload)
-    │   ├── i18n.js             ← traduzioni condivise dello shell, 9 lingue
-    │   │                          (namespace diverso da src/political/i18n.js)
-    │   ├── countries.js        ← getAllCountries() legge state.nazioniGlobal (sola lettura)
-    │   ├── allianceBonus.js    ← ricalcola il bonus danno d'alleanza (l'API non lo espone)
-    │   ├── dailyDamage.js      ← "danno di oggi" per nazioni/alleanze/unità, dalla
-    │   │                          differenza fra due snapshot del cumulato settimanale
-    │   ├── analytics.js        ← wrapper su Umami (trackEvent)
-    │   ├── wallpaper.js        ← NUOVO — solo il flag IS_WALLPAPER (?wallpaper=1),
-    │   │                          letto da main.js, analytics.js, countryPanel.js
-    │   └── trpcClient.js       ← client tRPC unificato: trpcBatchManual (stile Diplomacy)
-    │                              + trpcCall (stile Political), cache namespaced
-    │                              we_<namespace>_*. src/diplomacy/utils.js:trpcBatch NON
-    │                              tocca questo file (resta la sua implementazione locale).
-    └── styles/
-        ├── diplomacy.css       ← CSS Diplomacy estratto (era inline nell'HTML originale)
-        ├── shell.css           ← namespace `wp-*`
-        ├── political.css       ← da public/political/style.css, OGNI selettore scopato
-        │                          sotto #wp-political-root (c'era una collisione reale
-        │                          con .panel, già usata dalla shell)
-        ├── economy.css         ← NUOVO — scheletro della sezione Economia + scheda
-        │                          Prezzi. ⚠️ namespace `wp-ecn-*` e NON `wp-eco-*`:
-        │                          quello se lo tiene eco.css (l'Ottimizzatore, che
-        │                          ora è una scheda della stessa sezione) e i suoi
-        │                          .wp-eco-item/.wp-eco-delta/.wp-eco-note
-        │                          atterravano sulla tabella dei prezzi.
-        └── menubar.css, mobile-menubar.css, mu.css, nations.css, news.css,
-            eco.css, guide.css, market.css, battles.css
-```
+L'albero commentato file per file — cosa fa ogni modulo, da dove prende i
+dati, i ⚠️ di ciascuno — sta in **`STRUTTURA.md`**: leggilo prima di
+toccare un'area che non conosci, e aggiorna lì la riga del modulo quando
+ne aggiungi o ne sposti uno. In breve:
+
+- `src/main.js` è l'entry point (deep-link, init dei componenti nuovi);
+  `src/diplomacy/` la mappa e le sue viste, con `state.js` come unico stato;
+- una cartella per sezione (`political/`, `mu/`, `nations/`, `players/`,
+  `economy/` + `eco/` + `market/`, `battles/`, `guide/`, `private/`),
+  ognuna aperta in overlay da `src/app/*Overlay.js` con `import()`;
+- `src/panel/` il pannello laterale, `src/app/` lo shell (barre menù,
+  ticker, time machine, tasto Indietro, sfondo), `src/shared/` i pezzi comuni;
+- `server/` il cache-server del VPS e i suoi archivi, `wallpaper/` lo
+  sfondo di Wallpaper Engine, `public/political/` il Political originale
+  (non più usato).
 
 ⚠️ **Attenzione ai nomi duplicati tra le due varianti di Political**:
 `config.js`, `main.js`, `ui.js`, `i18n.js`, `api.js`, `loading.js`,
@@ -803,10 +250,10 @@ Node su VPS esterno (`WARERA_CACHE_BASE`), gestito con pm2. Polla le API
 WarEra una volta per tutti invece di lasciare che lo faccia ogni browser —
 serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`,
 `/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
-`/citizen-moves`,
-`/daily-damage`, `/damage-timeline`, `/price-history`, `/day-history`,
+`/citizen-moves`, `/migration-flows`, `/battle-timeline`,
+`/daily-damage`, `/damage-history`, `/damage-timeline`, `/damage-pulse`, `/price-history`, `/day-history`,
 `/alliance-history`,
-`/labour-history`,
+`/labour-history`, `/company-census`, `/player-wealth`,
 `/political-history`, `/political-overview`, `/presidents`,
 `/ticker` + `/ticker/summary`,
 `/region-history/{at,range,events,contested,war-intensity}`, `/alliances`,
@@ -822,6 +269,14 @@ valore). Senza key la route funziona lo stesso ma WarEra limita a 100/min e
 risponde 401 sui tre endpoint token-gated dell'Ottimizzatore — quindi dopo
 un redeploy che perde l'env var il sintomo è "Ottimizzatore in stato setup".
 Lato client ci arriva `src/shared/trpcProxy.js` (vedi sopra).
+
+Nelle **rotte** i file di cache non si rileggono a ogni richiesta: un file
+servito com'è passa da `sendCacheFile` (letto e compresso una volta per
+versione), uno da filtrare da `readCacheShared` (parsato una volta per
+versione, oggetto CONDIVISO: mai modificarlo). `readCache` resta per i poll
+e per chi scrive (`/visits`). Mai `readCacheShared` su file enormi letti di
+rado (`bootstrap-raw-battles`, 255 MB): resterebbero in RAM, e il VPS ne ha
+954 MB in tutto.
 
 Regola di progetto in `src/diplomacy/cacheClient.js`: **ogni** funzione ha un
 fallback se il VPS non risponde — il server è un'ottimizzazione, mai un nuovo
@@ -1046,6 +501,19 @@ a velocità molto diverse, e vale la pena saperlo prima di crederlo rotto:
   qua, la vista lo dichiara in una fascia, e la curva a 14 giorni è piena
   dopo 14 giorni.
 
+- i **pillati a un istante** (adesso / 24h-14g fa, in cima al grafico
+  orario) e la **linea dei pillati ogni 15 minuti** vengono da
+  `pill.instant` e `pill.fine`, contati sull'ora vera di ogni presa (file
+  `pill-takes`, 14 giorni + 12 ore, in memoria): "adesso" è esatto subito
+  dopo il deploy, la curva fine si allunga di un giorno al giorno fino a
+  due settimane. Dove il registro non arriva il client usa i punti orari
+  dell'archivio di prima, dichiarandolo. ⚠️ Quei punti NON sono il
+  massimo dell'ora: `_pillSlots` conta chi è pillato al centro del
+  secchio, le hh:30 — sono istanti anche loro, e la linea continua.
+  Il danno resta orario. Il calcolo lato client è uno solo,
+  `src/shared/pillInstants.js`, per la scheda nazione e per i grafici di
+  gruppo (scheda alleanza, Faction 1 vs 2, 1 vs 2 nazioni).
+
 ⚠️ Non provare a riempire il danno orario dall'archivio battaglie: `ad`/`dd`
 di `battleArchive.js` sono il totale di uno schieramento a battaglia
 CONCLUSA, e spalmarli sulle ore produrrebbe una curva credibile e inventata
@@ -1074,6 +542,25 @@ settembre 2026) ci sono subito solo se si lancia anche `import/prezzi.js`,
 perché `itemTrading.getPrices` dice quanto costa ADESSO e ieri non esiste da
 nessuna parte. Stesso vincolo di bonifici e ricchezza, stessa soluzione: un
 archivio di terzi importato una volta sola.
+
+Le schede **Produzione** e **Ricchezza** di Economia (`src/economy/production.js`,
+`src/economy/playerWealth.js`) dipendono da DUE deploy diversi, e conviene
+saperlo prima di crederle rotte:
+
+- **Produzione** vuole il cache-server con `server/companyCensus.js`. Senza,
+  la scheda dice "non disponibile" e basta. Dopo il deploy il primo giro
+  parte subito (un'ora scarsa, `available: false` finché non finisce), poi
+  uno a notte alle 03:20. Il primo giro riempie 31 giorni di salari a
+  ritroso, ma solo delle aziende che hanno dipendenti OGGI: quei giorni la
+  vista li dichiara "ricostruiti" (`measuredFrom`). Aziende e dipendenti
+  invece sono una fotografia e la loro storia si accumula dal deploy.
+- **Ricchezza** vuole il cache-server (`/player-wealth`) E warera-plus-api
+  (la rotta pubblica `/pubblico/ricchezza/giocatore/:id`, chiesta sulla
+  loopback all'istanza LIVE anche dal deploy dev). Con uno solo dei due la
+  scheda mostra la ricchezza di adesso (da getUserLite, che funziona sempre)
+  e dichiara che l'archivio manca. Lo storico c'è subito: è la classifica
+  mondiale che plusApi fotografa ogni notte dal 2026-09-19, più l'import dal
+  19 giugno.
 
 La **time machine** mostrava solo l'ownership per una ragione scritta in
 testa a `src/app/timeMachine.js`: gli altri dati «non sono mai stati salvati

@@ -50,11 +50,19 @@ import { escapeHtml } from '../mu/ui.js';
 import { ecoT } from './i18n.js';
 import { loadModule } from '../shared/lazyModule.js';
 import { trackEvent } from '../shared/analytics.js';
+import { updateBackParams } from '../app/backNav.js';
 
+// WarEra+ 2026-10-08: due schede in più. "Produzione" sta subito dopo i
+// Prezzi perché continua la stessa domanda (chi produce questa roba, e
+// dove); "Ricchezza" in fondo perché è l'unica che guarda UN giocatore
+// invece del mercato. Stesso schema delle altre: import() alla prima
+// apertura, nascoste e non smontate al cambio scheda.
 const TABS = [
   { id: 'prices', key: 'tabPrices' },
+  { id: 'production', key: 'tabProduction' },
   { id: 'yields', key: 'tabYields' },
   { id: 'optimizer', key: 'tabOptimizer' },
+  { id: 'wealth', key: 'tabWealth' },
 ];
 
 let _container = null;
@@ -99,6 +107,10 @@ async function apri(id) {
     const el = document.getElementById(`wp-ecn-panel-${t.id}`);
     if (el) el.style.display = t.id === id ? 'block' : 'none';
   }
+  // WarEra+: la scheda finisce nel link condivisibile (?section=economy&tab=).
+  // DOPO aver nascosto le altre: la risorsa aperta nei Prezzi esce dal link
+  // solo quando la sua scheda non si vede più.
+  updateBackParams('economy', { tab: id });
   _container?.querySelectorAll('.wp-ecn-tab').forEach(b => {
     const on = b.dataset.tab === id;
     b.classList.toggle('active', on);
@@ -119,6 +131,14 @@ async function apri(id) {
       const m = await loadModule(() => import('./prices.js'), 'economy');
       await m.initPricesTab(host);
       _montate.set(id, { stop: m.stopPricesTab, retranslate: m.retranslatePricesTab });
+    } else if (id === 'production') {
+      const m = await loadModule(() => import('./production.js'), 'economy');
+      await m.initProductionTab(host);
+      _montate.set(id, { stop: m.stopProductionTab, retranslate: m.retranslateProductionTab });
+    } else if (id === 'wealth') {
+      const m = await loadModule(() => import('./playerWealth.js'), 'economy');
+      await m.initWealthTab(host);
+      _montate.set(id, { stop: m.stopWealthTab, retranslate: m.retranslateWealthTab });
     } else if (id === 'yields') {
       const m = await loadModule(() => import('../market/main.js'), 'economy');
       await m.initMarketView(host);

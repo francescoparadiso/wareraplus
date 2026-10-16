@@ -153,7 +153,7 @@ const {
 // e' per forza una differenza fra due fotografie. ⚠️ accumula e non
 // recupera, come i bonifici. Vedi il blocco in testa a server/citizenMoves.js.
 const {
-  initCitizenMoves, recordCensus, readCitizenMoves, statoCitizenMoves,
+  initCitizenMoves, recordCensus, readCitizenMoves, readMigrationFlows, statoCitizenMoves,
 } = require('./citizenMoves');
 // WarEra+ storico politico: elezioni riassunte e presidenti nel tempo
 // (completi dal lancio, sono gia' in `elections-by-country`), piu' tre
@@ -176,7 +176,7 @@ const {
 // blocco in testa a server/damageTimeline.js.
 const {
   initDamageTimeline, sampleDamage, refreshPillConfig, recordPills,
-  readTimeline, timelineStatus,
+  readTimeline, readPulse, timelineStatus,
 } = require('./damageTimeline');
 // WarEra+ storico dei prezzi: un campione all'ora di `itemTrading.getPrices`
 // (pubblica, tutte le risorse in una richiesta) ridotto a una candela al
@@ -202,6 +202,20 @@ const {
 const {
   initLabourHistory, readLabour, statoLabour,
 } = require('./labourHistory');
+// WarEra+ andamento delle battaglie: un campione al minuto (danno e punti
+// del round) e il danno per nazione a ogni tick, per vedere QUANDO una
+// nazione entra e se la battaglia si gira lì. Il gioco non lo tiene: si
+// accumula dal deploy. Vedi il blocco in testa a server/battleTimeline.js.
+const {
+  initBattleTimeline, pollBattleTimeline, readBattleTimeline, statoBattleTimeline,
+} = require('./battleTimeline');
+// WarEra+ censimento aziende: per risorsa quante aziende, quanti dipendenti
+// e quante tasse sui salari incassa lo Stato dove operano. Un giro al
+// giorno di notte, partendo dai cittadini attivi del censimento. Vedi il
+// blocco in testa a server/companyCensus.js.
+const {
+  initCompanyCensus, runCompanyCensus, companyCensusDovuto, readCompanyCensus, statoCompanyCensus,
+} = require('./companyCensus');
 
 const app = express();
 const PORT = 3001;
@@ -291,7 +305,35 @@ function readCache(name, fallback) {
   catch (err) { console.error(`Errore leggendo cache ${name}:`, err.message); return fallback; }
 }
 
-// `compact: true` scrive senza indentazione. Serve per i file che crescono
+// WarEra+ perf (2026-10-14): le ROTTE che leggono un file di cache lo
+// rileggevano e riparsavano da zero a ogni richiesta, sul processo unico
+// che serve tutti. Misurato sul VPS: ticker-history (13 MB) 434 ms di
+// parse — e /ticker/summary lo chiede ogni browser ogni 5 minuti —,
+// elections-by-country (6 MB) 219 ms, mu-user-countries (5 MB) 183 ms.
+// In quei momenti anche /map di chi apre il tool aspettava in coda.
+// Qui il file si parsa UNA volta per versione (mtime+size, come
+// sendCacheFile) e l'oggetto si riusa: ~75 MB di heap fissi in tutto,
+// contro picchi della stessa misura a ogni richiesta.
+// ⚠️ L'oggetto restituito è CONDIVISO fra le richieste: solo per chi lo
+// legge e basta. Chi lo modifica (i poll, /visits) usa readCache.
+// ⚠️ Mai per file enormi letti di rado (bootstrap-raw-battles, 255 MB):
+// resterebbero in memoria per sempre.
+const _readMemo = new Map(); // name -> { key, data }
+
+function readCacheShared(name, fallback) {
+  let st;
+  try { st = fs.statSync(path.join(CACHE_DIR, `${name}.json`)); } catch { return fallback; }
+  const key = `${st.mtimeMs}:${st.size}`;
+  const hit = _readMemo.get(name);
+  if (hit && hit.key === key) return hit.data;
+  const data = readCache(name, undefined);   // file a metà scrittura: niente memo, si riprova
+  if (data === undefined) return fallback;
+  _readMemo.set(name, { key, data });
+  return data;
+}
+
+// `compact: true` (oggi il default, vedi writeCache) scrive senza
+// indentazione. Era nato per i file che crescono
 // molto (ticker-history: con la ritenzione a 14 giorni sono decine di
 // migliaia di eventi, riletti e riscritti ad ogni poll) — l'indentazione lì
 // è il ~35% del file, cioè lettura, parse e scrittura più lenti ad ogni giro
@@ -329,7 +371,13 @@ function sendCacheFile(req, res, name, fallback) {
   return res.send(memo.raw);
 }
 
-function writeCache(name, data, { compact = false } = {}) {
+// WarEra+ perf (2026-10-14): compatto è diventato il DEFAULT. I file serviti
+// tali e quali da sendCacheFile uscivano indentati, e /map pesava 16,4 MB
+// invece di 3,2 (906 KB gzip invece di 667): ogni utente li scaricava,
+// decomprimeva e analizzava al boot. Sui cinque endpoint dell'avvio
+// (map, countries, regions, battles, diplomacy) -22% di gzip. Chi vuole
+// rileggere un file a occhio passi `compact: false`.
+function writeCache(name, data, { compact = true } = {}) {
   const json = compact ? JSON.stringify(data) : JSON.stringify(data, null, 2);
   fs.writeFileSync(path.join(CACHE_DIR, `${name}.json`), json);
 }
@@ -397,6 +445,24 @@ initMoneyTransfers({
 initDamageTimeline({
   trpcBatch: (...args) => trpcBatch(...args),
   readCache, writeCache,
+});
+
+// Andamento battaglie: riceve anche fetchActiveBattles (paginazione con la
+// chiave del server, stessa di pollBattles) invece di rifarsela.
+initBattleTimeline({
+  trpcBatch: (...args) => trpcBatch(...args),
+  fetchActiveBattles: () => fetchActiveBattles(),
+  readCache, writeCache,
+});
+
+// Censimento aziende: trpcBatch (le statistiche di lavoro vogliono la
+// chiave, quindi passano da useWorker = api2 col token del server) e il
+// nome del file del censimento cittadini, da cui prende i proprietari.
+// Getter per riferimento tardivo: CITIZENS_FILE e' dichiarata piu' in basso.
+initCompanyCensus({
+  trpcBatch: (...args) => trpcBatch(...args),
+  readCache, writeCache,
+  get citizensFile() { return CITIZENS_FILE; },
 });
 
 // ---------------------------------------------------------------------------
@@ -1930,9 +1996,75 @@ function snapshotDailyDamage() {
       if (typeof v === 'number') byMu[m._id] = v;
     }
 
-    writeCache(DAILY_DAMAGE_FILE, { takenAt: Date.now(), tz: DAILY_DAMAGE_TZ, byCountry, byMu }, { compact: true });
+    const takenAt = Date.now();
+    writeCache(DAILY_DAMAGE_FILE, { takenAt, tz: DAILY_DAMAGE_TZ, byCountry, byMu }, { compact: true });
     console.log(`[daily-damage] scatto salvato: ${Object.keys(byCountry).length} nazioni, ${Object.keys(byMu).length} unità`);
+    archiveDailyDamage(countries, mus, takenAt);
   } catch (err) { console.error('[daily-damage] scatto fallito:', err.message); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// STORICO DANNI — lo scatto delle 02:00, conservato giorno per giorno
+// -----------------------------------------------------------------------
+// daily-damage-baseline si riscrive ogni notte: serve al "danno di oggi" e
+// basta. Ma il danno di una MU in un giorno passato non esiste da nessuna
+// parte nel gioco (solo il settimanale corrente e il totale di sempre), e
+// fino a qui l'unico storico erano i backup settimanali, che ruotano dopo
+// quattro copie. Quindi lo stesso scatto si accoda anche qui, una riga per
+// giorno di gioco, e non si pota.
+//
+// Si salva anche il TOTALE di sempre (muDamages / countryDamages), non solo
+// il settimanale: il totale non si azzera al reset della settimana, quindi
+// danno fra due giorni qualsiasi = totale(dopo) − totale(prima), senza
+// dover sapere quando è caduto il reset.
+//
+// Forma: { v, tz, days: { 'YYYY-MM-DD': { t, src, mu: { id: [settimanale,
+// totale, membri] }, country: { id: [settimanale, totale] } } } }
+// `src` è 'daily' per lo scatto delle 02:00, 'backup' per i giorni
+// ricostruiti a posteriori dai backup (stessi campi, ora diversa: `t` dice
+// quale). Il primo scatto di un giorno vince: un riavvio non lo riscrive.
+// Peso: ~40 KB al giorno, ~15 MB l'anno.
+// ═══════════════════════════════════════════════════════════════════════
+const DAMAGE_HISTORY_FILE = 'damage-history';
+const _romeDay = new Intl.DateTimeFormat('sv-SE', { timeZone: DAILY_DAMAGE_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+
+function archiveDailyDamage(countries, mus, takenAt) {
+  try {
+    const day = _romeDay.format(new Date(takenAt));
+    const hist = readCache(DAMAGE_HISTORY_FILE, null) || { v: 1, tz: DAILY_DAMAGE_TZ, days: {} };
+    if (hist.days[day]) return;
+    const num = (x) => (typeof x === 'number' ? x : null);
+    const mu = {};
+    for (const m of mus) {
+      const w = num(m?.rankings?.muWeeklyDamages?.value), tot = num(m?.rankings?.muDamages?.value);
+      if (w == null && tot == null) continue;
+      mu[m._id] = [w, tot, num(m?.memberCount)];
+    }
+    const country = {};
+    for (const n of countries) {
+      const w = num(n?.rankings?.weeklyCountryDamages?.value), tot = num(n?.rankings?.countryDamages?.value);
+      if (w == null && tot == null) continue;
+      country[n._id] = [w, tot];
+    }
+    hist.days[day] = { t: takenAt, src: 'daily', mu, country };
+    writeCache(DAMAGE_HISTORY_FILE, hist, { compact: true });
+    console.log(`[damage-history] ${day} archiviato: ${Object.keys(mu).length} unità, ${Object.keys(country).length} nazioni (${Object.keys(hist.days).length} giorni in archivio)`);
+  } catch (err) { console.error('[damage-history] archiviazione fallita:', err.message); }
+}
+
+/** Serie di UNA unità o nazione dallo storico: [{ day, t, src, weekly, total, members? }]. */
+function readDamageHistory({ mu, country }) {
+  const hist = readCache(DAMAGE_HISTORY_FILE, { days: {} });
+  const out = [];
+  for (const day of Object.keys(hist.days).sort()) {
+    const d = hist.days[day];
+    const row = mu ? d.mu?.[mu] : d.country?.[country];
+    if (!row) continue;
+    out.push(mu
+      ? { day, t: d.t, src: d.src, weekly: row[0], total: row[1], members: row[2] }
+      : { day, t: d.t, src: d.src, weekly: row[0], total: row[1] });
+  }
+  return out;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2380,11 +2512,25 @@ cron.schedule('40 */6 * * *', () => { refreshPillConfig().catch(() => {}); });
 // tutte le risorse: ventiquattro al giorno in totale.
 cron.schedule('27 * * * *', pollPrices);
 
+// WarEra+ andamento battaglie: ogni minuto, al secondo :40. Il tick dura
+// 2 minuti esatti, quindi un tick su due cade fra due giri e nessuno si
+// perde. Il :40 tiene il giro lontano dallo scatto dei cron al minuto :00
+// (gli altri poll partono tutti lì). Costo: 1 pagina di getBattles + un
+// batch di classifiche solo per le battaglie col tick avanzato.
+cron.schedule('40 * * * * *', pollBattleTimeline);
+
 // La giornata storica: uno scatto al giorno alle 02:05 italiane. Dopo il
 // cambio giorno di gioco (02:00) e dopo il poll delle nazioni delle :00,
 // cosi' legge la cache appena riscritta invece di quella di ieri.
 cron.schedule('5 2 * * *', () => {
   try { snapshotDay(); } catch (err) { console.error('[day-history] scatto fallito:', err.message); }
+}, { timezone: DAILY_DAMAGE_TZ });
+
+// WarEra+ censimento aziende: un giro al giorno alle 03:20 italiane, a
+// gioco vuoto (~1.500 richieste lente, un'ora scarsa). Dopo il cambio
+// giorno di gioco, quindi i salari di ieri sono una giornata intera.
+cron.schedule('20 3 * * *', () => {
+  runCompanyCensus().catch(err => console.error('[company-census] cron:', err.message));
 }, { timezone: DAILY_DAMAGE_TZ });
 
 // Primo giro completo all'avvio (in ordine: countries prima, perché tutto
@@ -2448,6 +2594,13 @@ cron.schedule('5 2 * * *', () => {
   // conto ogni volta.
   if (!readCache('proxy-index', null)) pollProxyIndex();
 
+  // Censimento aziende: solo se non c'e' mai stata una fotografia, e senza
+  // await (un'ora di giro lento). Ai riavvii successivi ci pensa il cron
+  // delle 03:20, cosi' un pm2 restart a meta' pomeriggio non lo rifa'.
+  if (companyCensusDovuto()) {
+    runCompanyCensus({ motivo: 'primo avvio' }).catch(err => console.error('[company-census] avvio:', err.message));
+  }
+
   if (!readCache('region-contest-counts', null)) recomputeContestCounts();
   if (!readCache('region-war-intensity', null)) computeHistoricalWarIntensity();
 })();
@@ -2462,12 +2615,12 @@ app.get('/alliances', (req, res) => sendCacheFile(req, res, 'alliances', { fetch
 
 app.get('/parties', (req, res) => {
   const { countryId } = req.query;
-  const cache = readCache('parties-by-country', { fetchedAt: null, data: {} });
+  const cache = readCacheShared('parties-by-country', { fetchedAt: null, data: {} });
   const list = countryId ? (cache.data[countryId] || []) : [];
   res.json({ fetchedAt: cache.fetchedAt, data: list });
 });
 
-app.get('/parties-detail', (req, res) => res.json(readCache('parties-detail', { fetchedAt: null, data: [] })));
+app.get('/parties-detail', (req, res) => sendCacheFile(req, res, 'parties-detail', { fetchedAt: null, data: [] }));
 
 // `countryId` = una nazione (risposta: array, forma storica).
 // `countryIds` = più nazioni in UNA richiesta (risposta: {countryId: array}).
@@ -2491,8 +2644,23 @@ function _electionTs(s) {
 }
 
 app.get('/elections', (req, res) => {
-  const { countryId, countryIds, open } = req.query;
-  const cache = readCache('elections-by-country', { fetchedAt: null, data: {} });
+  const { countryId, countryIds, open, closed } = req.query;
+  const cache = readCacheShared('elections-by-country', { fetchedAt: null, data: {} });
+  // WarEra+: `?closed=H` — le elezioni il cui voto si è chiuso nelle ultime
+  // H ore (massimo una settimana), per tutte le nazioni. Le usa il riepilogo
+  // della vista Elezioni ("Appena chiuse"), che a un clic rifà sulla mappa
+  // l'onda del vincitore (src/diplomacy/electionsLive.js). Poche righe.
+  if (closed) {
+    const now = Date.now();
+    const hours = Math.min(168, Math.max(1, Number(closed) || 48));
+    const since = now - hours * 3600e3;
+    const out = {};
+    for (const [id, list] of Object.entries(cache.data || {})) {
+      const chiuse = (list || []).filter(e => { const t = _electionTs(e.votesEndAt); return t >= since && t <= now; });
+      if (chiuse.length) out[id] = chiuse;
+    }
+    return res.json({ fetchedAt: cache.fetchedAt, closed: true, hours, data: out });
+  }
   if (open) {
     const now = Date.now();
     const out = {};
@@ -2548,7 +2716,7 @@ app.get('/users-lite', async (req, res) => {
 // piu' quanti si sono registrati nelle ultime 24 ore e negli ultimi 7 giorni.
 // Gli elenchi di userId restano sul server: al client servono i conteggi.
 app.get('/citizens', (req, res) => {
-  const cache = readCache(CITIZENS_FILE, { fetchedAt: null, data: {} });
+  const cache = readCacheShared(CITIZENS_FILE, { fetchedAt: null, data: {} });
   const out = {};
   for (const [countryId, row] of Object.entries(cache.data || {})) {
     if (req.query.countryId && req.query.countryId !== countryId) continue;
@@ -2572,11 +2740,11 @@ app.get('/country-citizens', (req, res) => {
   // in più su elenchi che arrivano a 3.500 righe.
   const combat = req.query.fields === 'combat';
 
-  const census = readCache(CITIZENS_FILE, { fetchedAt: null, data: {} });
+  const census = readCacheShared(CITIZENS_FILE, { fetchedAt: null, data: {} });
   const row = census.data?.[countryId];
   if (!row) return res.json({ fetchedAt: census.fetchedAt, total: 0, known: 0, data: [] });
 
-  const userCountries = readCache(MU_USER_COUNTRIES_FILE, { data: {} }).data || {};
+  const userCountries = readCacheShared(MU_USER_COUNTRIES_FILE, { data: {} }).data || {};
   const out = [];
   for (const id of row.ids || []) {
     const entry = userCountries[id];
@@ -2620,7 +2788,16 @@ app.get('/mu-directory', (req, res) => sendCacheFile(req, res, 'mu-directory', {
 app.get('/mu-playstyle-by-country', (req, res) => sendCacheFile(req, res, 'mu-playstyle-by-country', { fetchedAt: null, data: {} }));
 // Scatto del danno settimanale al cambio giorno di gioco — vedi
 // snapshotDailyDamage. { takenAt, tz, byCountry: {countryId: danno} }
-app.get('/daily-damage', (req, res) => res.json(readCache(DAILY_DAMAGE_FILE, { takenAt: null, tz: DAILY_DAMAGE_TZ, byCountry: {}, byMu: {} })));
+app.get('/daily-damage', (req, res) => sendCacheFile(req, res, DAILY_DAMAGE_FILE, { takenAt: null, tz: DAILY_DAMAGE_TZ, byCountry: {}, byMu: {} }));
+// Storico giornaliero del danno di UNA unità (?mu=id) o nazione (?country=id)
+// — vedi archiveDailyDamage. Una serie per richiesta: il file intero cresce
+// di ~40 KB al giorno e non va mandato al browser.
+app.get('/damage-history', (req, res) => {
+  const mu = typeof req.query.mu === 'string' ? req.query.mu : null;
+  const country = typeof req.query.country === 'string' ? req.query.country : null;
+  if (!mu === !country) return res.status(400).json({ error: 'serve ?mu=<id> oppure ?country=<id>' });
+  res.json({ tz: DAILY_DAMAGE_TZ, id: mu || country, kind: mu ? 'mu' : 'country', days: readDamageHistory({ mu, country }) });
+});
 
 // Storico di UNA nazione: [[ts, war, eco, mixed, undecided, known], ...].
 // Una nazione per richiesta e non tutto insieme: il file intero è di qualche
@@ -2637,7 +2814,7 @@ app.get('/daily-damage', (req, res) => res.json(readCache(DAILY_DAMAGE_FILE, { t
 // che chiede `countryId` (singolo) non riceve mai qualcosa di inatteso.
 app.get('/mu-playstyle-history', (req, res) => {
   const { countryId, countryIds } = req.query;
-  const cache = readCache(MU_PLAYSTYLE_HISTORY_FILE, { fetchedAt: null, data: {} });
+  const cache = readCacheShared(MU_PLAYSTYLE_HISTORY_FILE, { fetchedAt: null, data: {} });
   const since = req.query.since ? Number(req.query.since) : 0;
   const seriesOf = id => (cache.data[id] || []).filter(row => row[0] >= since);
 
@@ -2653,7 +2830,7 @@ app.get('/mu-playstyle-history', (req, res) => {
 });
 
 app.get('/ticker', (req, res) => {
-  const storico = readCache('ticker-history', []);
+  const storico = readCacheShared('ticker-history', []);
   const since = req.query.since ? Number(req.query.since) : 0;
   res.json(storico.filter(e => e.timestamp >= since));
 });
@@ -2721,7 +2898,7 @@ function _aggregateTickerWindow(events, sinceTs) {
 }
 
 app.get('/ticker/summary', (req, res) => {
-  const storico = readCache('ticker-history', []);
+  const storico = readCacheShared('ticker-history', []);
   const windows = String(req.query.windows || '')
     .split(',')
     .map(w => Number(w))
@@ -2747,8 +2924,8 @@ app.get('/ticker/summary', (req, res) => {
 
 // WarEra+ nuovi — time machine
 app.get('/region-history/range', (req, res) => {
-  const keyframes = readCache(REGION_KEYFRAMES_FILE, []);
-  const events = readCache(REGION_EVENTS_FILE, []);
+  const keyframes = readCacheShared(REGION_KEYFRAMES_FILE, []);
+  const events = readCacheShared(REGION_EVENTS_FILE, []);
   if (!keyframes.length) return res.json({ min: null, max: null });
   const allTs = [...keyframes.map(k => k.ts), ...events.map(e => e.ts), Date.now()];
   res.json({ min: Math.min(...allTs), max: Math.max(...allTs) });
@@ -2756,20 +2933,20 @@ app.get('/region-history/range', (req, res) => {
 
 app.get('/region-history/at', (req, res) => {
   const ts = req.query.ts ? Number(req.query.ts) : Date.now();
-  const keyframes = readCache(REGION_KEYFRAMES_FILE, []);
-  const events = readCache(REGION_EVENTS_FILE, []);
+  const keyframes = readCacheShared(REGION_KEYFRAMES_FILE, []);
+  const events = readCacheShared(REGION_EVENTS_FILE, []);
   const result = _reconstructRegionsAt(keyframes, events, ts);
   res.json({ requestedTs: ts, baseTs: result.ts, regions: result.regions });
 });
 
-app.get('/region-history/contested', (req, res) => res.json(readCache('region-contest-counts', { fetchedAt: null, data: {} })));
+app.get('/region-history/contested', (req, res) => sendCacheFile(req, res, 'region-contest-counts', { fetchedAt: null, data: {} }));
 
-app.get('/region-history/war-intensity', (req, res) => res.json(readCache('region-war-intensity', { fetchedAt: null, data: {} })));
+app.get('/region-history/war-intensity', (req, res) => sendCacheFile(req, res, 'region-war-intensity', { fetchedAt: null, data: {} }));
 
 app.get('/region-history/events', (req, res) => {
   const since = req.query.since ? Number(req.query.since) : 0;
   const until = req.query.until ? Number(req.query.until) : Date.now();
-  const events = readCache(REGION_EVENTS_FILE, []);
+  const events = readCacheShared(REGION_EVENTS_FILE, []);
   res.json(events.filter(e => e.ts >= since && e.ts <= until));
 });
 
@@ -2785,7 +2962,7 @@ app.get('/region-history/external-status', (req, res) => {
   }));
 });
 
-app.get('/credit-profiles', (req, res) => res.json(readCache('credit-profiles', { fetchedAt: null, data: {} })));
+app.get('/credit-profiles', (req, res) => sendCacheFile(req, res, 'credit-profiles', { fetchedAt: null, data: {} }));
 
 // ── Archivio battaglie e spese di guerra (server/battleArchive.js) ──
 // /battle-archive porta le righe compatte (chiavi corte: il file viaggia
@@ -2910,6 +3087,37 @@ app.get('/citizen-moves', async (req, res) => {
   }
 });
 
+// WarEra+ flussi migratori di tutto il mondo (vista mappa "Migrazioni",
+// src/diplomacy/migrationFlows.js): lo stesso archivio di /citizen-moves
+// letto per coppie da → a. Zero chiamate a WarEra — livello e nazione di
+// adesso vengono da mu-user-countries, vedi readMigrationFlows. Il
+// risultato cambia solo quando il censimento orario aggiunge righe, quindi
+// si tiene in memoria dieci minuti per finestra: rileggere i diciassettemila
+// utenti a ogni visita sarebbe lavoro buttato.
+const MIGRATION_TTL_MS = 10 * 60 * 1000;
+const _migrationCache = new Map();   // days → { at, body }
+app.get('/migration-flows', (req, res) => {
+  const days = Math.min(30, Math.max(1, Number(req.query.days) || 7));
+  // `daily=1`: anche la divisione giorno per giorno (cursore nel tempo
+  // della vista Migrazioni). Chiave di cache separata: pesa di più.
+  const daily = req.query.daily === '1';
+  const ckey = `${days}${daily ? 'd' : ''}`;
+  try {
+    const hit = _migrationCache.get(ckey);
+    if (hit && Date.now() - hit.at < MIGRATION_TTL_MS) return res.json(hit.body);
+    const userInfo = readCacheShared(MU_USER_COUNTRIES_FILE, { data: {} }).data || {};
+    const census = readCacheShared(CITIZENS_FILE, { data: {} }).data || {};
+    const citizens = {};
+    for (const [id, c] of Object.entries(census)) citizens[id] = { n: c.n || 0, n10: c.n10 || 0 };
+    const body = readMigrationFlows(days, { userInfo, citizens, daily });
+    _migrationCache.set(ckey, { at: Date.now(), body });
+    res.json(body);
+  } catch (err) {
+    console.error('[migration-flows] richiesta fallita:', err.message);
+    res.status(500).json({ error: 'migration-flows non disponibile' });
+  }
+});
+
 // Danno ora per ora + giocatori pillati (server/damageTimeline.js).
 // Senza `countryId` risponde col mondo (somma di tutte le nazioni), che e'
 // il metro di paragone della singola: "il picco delle 21 e' suo o e' di
@@ -2927,6 +3135,26 @@ app.get('/damage-timeline', (req, res) => {
   res.json(readTimeline({ countryId: req.query.countryId || null, countryIds, hours, days }));
 });
 
+// WarEra+ il danno dell'ultima ora di TUTTE le nazioni, coi pillati di
+// quell'ora (server/damageTimeline.js: readPulse) — il battito della vista
+// Danni. Tre array paralleli: ids, d, p. Cinque minuti in memoria: l'ora
+// cambia una volta all'ora.
+let _pulseCache = null;
+app.get('/damage-pulse', (req, res) => {
+  if (!_pulseCache || Date.now() - _pulseCache.at > 5 * 60 * 1000) _pulseCache = { at: Date.now(), body: readPulse() };
+  res.json(_pulseCache.body);
+});
+
+// Andamento di UNA battaglia (server/battleTimeline.js). 404 se questo
+// archivio non l'ha mai vista — aperta e chiusa prima del deploy — e il
+// client in quel caso non mostra la sezione: non c'è una curva da
+// ricostruire, il gioco non la conserva.
+app.get('/battle-timeline', (req, res) => {
+  const data = readBattleTimeline(String(req.query.battleId || ''));
+  if (!data) return res.status(404).json({ error: 'battaglia non registrata', coverage: statoBattleTimeline() });
+  res.json(data);
+});
+
 // Storico dei prezzi (server/priceHistory.js): una candela al giorno per
 // risorsa. `days` e' la finestra chiesta, `coverageFrom` quella che c'e'
 // davvero — la vista disegna la seconda e dichiara la differenza invece di
@@ -2934,6 +3162,49 @@ app.get('/damage-timeline', (req, res) => {
 app.get('/price-history', (req, res) => {
   const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 365);
   res.json(readPriceHistory(days));
+});
+
+// Censimento aziende (server/companyCensus.js): per risorsa aziende,
+// dipendenti, salari e tasse sui salari. `item` aggiunge il dettaglio per
+// nazione di quella risorsa, `countryId` restringe tutto a una nazione.
+// `available: false` finche' il primo giro non e' finito.
+app.get('/company-census', (req, res) => {
+  const item = /^[A-Za-z0-9]{1,40}$/.test(String(req.query.item || '')) ? String(req.query.item) : null;
+  const countryId = /^[a-f0-9]{24}$/.test(String(req.query.countryId || '')) ? String(req.query.countryId) : null;
+  const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
+  res.json(readCompanyCensus({ item, countryId, days }));
+});
+
+// Lo storico ricchezza di un giocatore. L'archivio sta nel database di
+// warera-plus-api (la classifica mondiale fotografata ogni notte, dal 19
+// giugno), che qui si chiede sulla loopback. Sempre all'istanza LIVE, anche
+// dal deploy dev: e' un dato pubblico in sola lettura, e il database dev la
+// classifica mondiale non ce l'ha. Vedi il blocco "storico di un giocatore"
+// in server/plusApi/wealth.js.
+// Memoria di 10 minuti per giocatore: lo scatto e' uno al giorno, e chi
+// apre la vista la ridisegna piu' volte (lingua, periodo).
+const PLUS_API_LOCAL = (process.env.PLUS_API_LOCAL || 'http://127.0.0.1:3002').replace(/\/+$/, '');
+const PLAYER_WEALTH_TTL_MS = 10 * 60 * 1000;
+const PLAYER_WEALTH_MAX = 500;
+const _playerWealth = new Map();   // userId -> { at, body }
+app.get('/player-wealth', async (req, res) => {
+  const userId = String(req.query.userId || '');
+  if (!/^[a-f0-9]{24}$/.test(userId)) return res.status(400).json({ error: 'userId non valido' });
+  const memo = _playerWealth.get(userId);
+  if (memo && Date.now() - memo.at < PLAYER_WEALTH_TTL_MS) return res.json(memo.body);
+  try {
+    const r = await fetch(`${PLUS_API_LOCAL}/pubblico/ricchezza/giocatore/${userId}`, { signal: AbortSignal.timeout(8000) });
+    // 404 = warera-plus-api non ancora rideployato con la rotta: la vista
+    // lo tratta come "archivio non disponibile", non come un errore.
+    if (!r.ok) return res.status(r.status === 404 ? 404 : 502).json({ error: 'archivio ricchezza non disponibile' });
+    const body = await r.json();
+    if (_playerWealth.size >= PLAYER_WEALTH_MAX) _playerWealth.delete(_playerWealth.keys().next().value);
+    _playerWealth.set(userId, { at: Date.now(), body });
+    res.json(body);
+  } catch (err) {
+    console.warn('[player-wealth] area riservata non raggiungibile:', err.message);
+    res.status(502).json({ error: 'archivio ricchezza non disponibile' });
+  }
 });
 
 // La giornata storica (server/dayHistory.js): diplomazia e battaglie aperte
@@ -3088,6 +3359,106 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000).unref?.();
 
+// ── Micro-cache del proxy ──────────────────────────────────────────────
+// Il passthrough qui sopra mandava a WarEra OGNI richiesta di OGNI utente,
+// e tutte con la stessa key: il tetto di 500/min e' uno solo per l'intero
+// tool. Ma i client chiedono quasi sempre la stessa cosa nello stesso
+// momento — i marker battaglia, per dirne una, ripassano ogni 30 s con lo
+// stesso batch di getLiveBattleData su ogni mappa aperta — quindi la
+// stessa risposta si puo' dare a tutti per qualche secondo.
+//
+// E' sicuro perche' la risposta dipende SOLO da metodo + URL + body: questa
+// route non inoltra header del client (niente cookie, niente Authorization
+// dell'utente), solo la NOSTRA key, uguale per tutti. Due richieste
+// identiche ricevono da WarEra la stessa cosa, chiunque le mandi.
+//
+// Due pezzi, e servono tutti e due:
+//   - la cache: 10 s per le sole risposte 200. Un 429 o un 5xx non si
+//     tiene: il client ha il suo backoff e deve vederli freschi;
+//   - l'accorpamento delle richieste IN VOLO: senza, mille client che
+//     chiedono nello stesso secondo mancano tutti la cache (la prima
+//     risposta non e' ancora arrivata) e partono mille chiamate. Cosi' ne
+//     parte una e le altre aspettano quella.
+// 10 s e non di piu' (scelta esplicita): e' il giro della heatmap
+// battaglia, quindi un client che ripassa trova sempre un dato nuovo, e
+// fra tutti i client insieme a WarEra arriva al massimo una chiamata ogni
+// 10 s per richiesta uguale.
+const PROXY_CACHE_TTL_MS = 10 * 1000;
+// Tetti di memoria: il VPS ha meno di un GB e questa e' una comodita', non
+// un archivio. Una risposta piu' grossa di 4 MB si serve e non si tiene.
+const PROXY_CACHE_MAX_BYTES = 64 * 1024 * 1024;
+const PROXY_CACHE_MAX_ENTRY = 4 * 1024 * 1024;
+
+const _proxyCache = new Map();    // chiave -> { at, status, contentType, buf }
+const _proxyInflight = new Map(); // chiave -> Promise<risposta upstream>
+let _proxyCacheBytes = 0;
+const _proxyCacheStats = { hits: 0, shared: 0, misses: 0 };
+
+function _proxyCacheGet(key) {
+  const hit = _proxyCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > PROXY_CACHE_TTL_MS) {
+    _proxyCache.delete(key);
+    _proxyCacheBytes -= hit.buf.length;
+    return null;
+  }
+  return hit;
+}
+
+function _proxyCachePut(key, entry) {
+  if (entry.status !== 200 || entry.buf.length > PROXY_CACHE_MAX_ENTRY) return;
+  const old = _proxyCache.get(key);
+  if (old) { _proxyCache.delete(key); _proxyCacheBytes -= old.buf.length; }
+  _proxyCache.set(key, entry);
+  _proxyCacheBytes += entry.buf.length;
+  // La Map tiene l'ordine d'inserimento: i primi sono i piu' vecchi.
+  for (const [k, v] of _proxyCache) {
+    if (_proxyCacheBytes <= PROXY_CACHE_MAX_BYTES) break;
+    _proxyCache.delete(k);
+    _proxyCacheBytes -= v.buf.length;
+  }
+}
+
+// Le voci scadute che nessuno richiede piu' non si ripulirebbero da sole.
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of _proxyCache) {
+    if (now - v.at > PROXY_CACHE_TTL_MS) { _proxyCache.delete(k); _proxyCacheBytes -= v.buf.length; }
+  }
+}, 60 * 1000).unref?.();
+
+/** La chiamata vera a WarEra, ridotta a quello che serve per rispondere:
+ *  e' la stessa per tutti quelli che la stanno aspettando. */
+async function _proxyUpstream(target, method, contentType, body) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
+  try {
+    const headers = {
+      // `identity`: stesso accorgimento del Worker — con la compressione
+      // attiva i body di errore di WarEra tornavano corrotti.
+      'Accept-Encoding': 'identity',
+    };
+    if (WARERA_API_TOKEN) headers['X-API-Key'] = WARERA_API_TOKEN;
+
+    const init = { method, headers, signal: controller.signal };
+    if (method === 'POST') {
+      headers['Content-Type'] = contentType || 'application/json';
+      init.body = body;
+    }
+
+    const upstream = await fetch(target, init);
+    return {
+      at: Date.now(),
+      status: upstream.status,
+      contentType: upstream.headers.get('content-type') || 'application/json',
+      retryAfter: upstream.headers.get('retry-after'),
+      buf: Buffer.from(await upstream.arrayBuffer()),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function _trpcProxy(req, res) {
   const ip = req.headers['x-real-ip'] || req.ip || 'sconosciuto';
   if (_proxyRateExceeded(ip)) {
@@ -3101,33 +3472,43 @@ async function _trpcProxy(req, res) {
   const search = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
   const target = TRPC_UPSTREAM + suffix + search;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
   try {
-    const headers = {
-      // `identity`: stesso accorgimento del Worker — con la compressione
-      // attiva i body di errore di WarEra tornavano corrotti.
-      'Accept-Encoding': 'identity',
-    };
-    if (WARERA_API_TOKEN) headers['X-API-Key'] = WARERA_API_TOKEN;
+    const body = req.method === 'POST' ? await _readRawBody(req) : null;
+    // Il body fa parte della chiave: i batch POST di Political portano le
+    // procedure nell'URL ma gli input nel body.
+    const key = `${req.method} ${suffix}${search}${body ? '\n' + body.toString('utf8') : ''}`;
 
-    const init = { method: req.method, headers, signal: controller.signal };
-    if (req.method === 'POST') {
-      headers['Content-Type'] = req.headers['content-type'] || 'application/json';
-      init.body = await _readRawBody(req);
+    let out = _proxyCacheGet(key);
+    let how = 'HIT';
+    if (out) {
+      _proxyCacheStats.hits++;
+    } else if (_proxyInflight.has(key)) {
+      out = await _proxyInflight.get(key);
+      how = 'SHARED';
+      _proxyCacheStats.shared++;
+    } else {
+      const p = _proxyUpstream(target, req.method, req.headers['content-type'], body);
+      _proxyInflight.set(key, p);
+      try {
+        out = await p;
+      } finally {
+        _proxyInflight.delete(key);
+      }
+      _proxyCachePut(key, out);
+      how = 'MISS';
+      _proxyCacheStats.misses++;
     }
 
-    const upstream = await fetch(target, init);
-    const buf = Buffer.from(await upstream.arrayBuffer());
-    res.status(upstream.status);
-    res.set('Content-Type', upstream.headers.get('content-type') || 'application/json');
+    res.status(out.status);
+    res.set('Content-Type', out.contentType);
+    res.set('X-Proxy-Cache', how);
     // Il 429 di WarEra deve arrivare al client COME 429, con il suo
     // Retry-After: e' su quello che trpcBatch calcola il backoff.
-    const retryAfter = upstream.headers.get('retry-after');
-    if (retryAfter) res.set('Retry-After', retryAfter);
+    if (out.retryAfter) res.set('Retry-After', out.retryAfter);
 
     // Stesso criterio del middleware gzip in testa al file (che intercetta
     // solo res.json, non res.send: qui il body e' gia' un Buffer grezzo).
+    const buf = out.buf;
     const wantsGzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
     if (!wantsGzip || buf.length < GZIP_MIN_BYTES) return res.send(buf);
     zlib.gzip(buf, (err, gz) => {
@@ -3141,8 +3522,6 @@ async function _trpcProxy(req, res) {
     // (-> ricadi sul Worker) da un errore applicativo.
     console.error('[proxy] fallito:', req.path.slice(0, 120), '-', err.message);
     if (!res.headersSent) res.status(502).send('Proxy error: ' + err.message);
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -3357,7 +3736,13 @@ app.get('/health', (req, res) => res.json({
   now: Date.now(),
   // Solo se c'e', mai il valore: serve a verificare dopo un deploy che
   // pm2 abbia davvero l'env var, senza doverla stampare.
-  trpcProxy: { ready: true, apiKey: WARERA_API_TOKEN ? 'caricata' : 'MANCANTE' },
+  // `cache`: quante richieste la micro-cache ha risparmiato a WarEra
+  // (hits + shared) contro quante ne sono partite davvero (misses).
+  trpcProxy: {
+    ready: true,
+    apiKey: WARERA_API_TOKEN ? 'caricata' : 'MANCANTE',
+    cache: { ..._proxyCacheStats, entries: _proxyCache.size, bytes: _proxyCacheBytes },
+  },
   // Quanto e' avanti l'archivio battaglie: dopo un deploy dice a colpo
   // d'occhio se il bootstrap notturno ha gia' girato o se le due viste
   // stanno ancora lavorando in modalita' ridotta.
@@ -3385,9 +3770,16 @@ app.get('/health', (req, res) => res.json({
   // Lavoro e tasse: archivio chiuso, `archivioChiuso: true` lo dichiara.
   // Se `nazioni` e' 0 l'import non e' mai stato fatto (import/lavoro.js).
   labour: statoLabour(),
+  // Censimento aziende: quando ha girato l'ultima volta e su quanto.
+  // `copertura.statsOk` < `statsAsked` vuol dire statistiche perse (di
+  // solito la chiave): i salari di quel giro sono sottostimati.
+  companyCensus: statoCompanyCensus(),
   // Storico politico: elezioni riassunte (complete) e i tre archivi che
   // accumulano, ognuno col suo `copreDa`.
   politicalHistory: statoPoliticalHistory(),
+  // Andamento battaglie: da quando registra, quante vive in memoria e
+  // quante chiuse su disco. Accumula dal deploy, non si recupera.
+  battleTimeline: statoBattleTimeline(),
 }));
 
 app.listen(PORT, '127.0.0.1', () => {

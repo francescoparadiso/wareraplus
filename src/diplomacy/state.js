@@ -55,6 +55,10 @@ export const state = {
   borderPairs: [], // [{ key: 'idA|idB', a, b }] — vista ATTUALE
   borderPairsOriginal: [], // le stesse coppie sui confini di inizio partita (vista ORIGINALE)
   battleHeatmapData: null,
+  // WarEra+: mappa colorata per bonus di battaglia (battleHeatmap.js: setBattleBonusMap)
+  battleBonusMap: null,
+  bonusViewLoading: false,
+  bonusHeatmap: false,      // WarEra+: heatmap aperta dalla vista Bonus battaglia  // WarEra+: vista Bonus battaglia, calcolo in corso
   // WarEra+ heatmap storiche: caricate su richiesta alla prima attivazione
   // della relativa vista, poi tenute qui per la sessione (dati che cambiano
   // lentamente, non vale un refetch ad ogni cambio di modalità).
@@ -74,6 +78,17 @@ export const state = {
   // WarEra+ vista Distanze (travelDistance.js): { origin, target, home, cases, pick },
   // creato alla prima apertura; la casa sopravvive in localStorage (we_travel_home).
   travel: null,
+  // WarEra+ vista Migrazioni (migrationFlows.js): { data, error, days, metric,
+  // focus, dir }, creato alla prima apertura. `data` è /migration-flows.
+  migration: null,
+  // WarEra+ replay della battaglia (battleReplay.js): { active, maxDamage }
+  // mentre si riproduce, altrimenti null.
+  battleReplay: null,
+  // WarEra+ vista Finanziamenti (fundingFlows.js): { data, days, focus, dir, … }
+  funding: null,
+  // WarEra+ la sfera aperta nel pannello (countryPanel.js), per i fili
+  // della vista Sfera (sphereLinks.js). null = nessuna.
+  selectedSphereId: null,
   regionData: null,
   regionCache: new Map(), // regionId → { position: [lng,lat], name: string }
 

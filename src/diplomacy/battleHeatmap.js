@@ -6,6 +6,8 @@ import { renderMap, captureHeatmapFadeFrom, startHeatmapFadeIn, clearHeatmapFade
 import { updateDynamicLegend } from './ui.js';
 import { fetchActiveBattlesViaCache } from './cacheClient.js';
 import { trackEvent } from '../shared/analytics.js';
+// WarEra+: tasto Indietro (vedi src/app/backNav.js)
+import { pushBack, dropBack } from '../app/backNav.js';
 
 const BATTLE_NEUTRAL = '#2a2d33';
 
@@ -23,7 +25,9 @@ const MIN_SIDE_SHARE = 0.01;
 //     (richiesta dell'utente: nascondere i nomi dei paesi che non hanno
 //     combattuto, sia per togliere rumore sia perché così i nomi di chi
 //     ha combattuto non perdono più le collisioni contro i vicini muti).
-function computeHighlightedIds(nations) {
+// WarEra+: esportata per il replay (battleReplay.js), che ricalcola chi è
+// evidenziato sulla classifica di un istante passato con la STESSA regola.
+export function computeHighlightedIds(nations) {
   let totalAttacker = 0, totalDefender = 0;
   nations.forEach(n => {
     if (n.side === 'attacker') totalAttacker += n.totalDamage;
@@ -413,10 +417,13 @@ export async function setBattleHeatmap(battleId) {
     const regionName = (regionId && state.regionCache?.get(regionId)?.name) || 'Unknown';
 
     // AGGIORNA I DATI
+    state.battleBonusMap = null; // WarEra+: la mappa dei bonus è della battaglia di prima
     state.battleHeatmapData = {
       battleId,
       battleName,
       region: regionName,
+      // WarEra+: dove arrivano le frecce del danno (battleFlows.js).
+      regionId: regionId || null,
       nations,
       maxDamage,
       rankingRaw: rankingData,
@@ -429,10 +436,18 @@ export async function setBattleHeatmap(battleId) {
     // sfuma in sopra (vedi map.js, blocco "Dissolvenza in ingresso della
     // heatmap battaglia" — spiega anche perché fill-color-transition di
     // MapLibre qui non funziona e perché la dissolvenza è invertita).
-    const fading = captureHeatmapFadeFrom();
+    // WarEra+: arrivati dalla vista Bonus battaglia la mappa la dipingono i
+    // bonus (bonusView.js). Niente dissolvenza: a fine corsa rimetterebbe il
+    // grigio di partenza SOPRA i colori dei bonus arrivati nel frattempo.
+    state.bonusHeatmap = savedColoringMode === 'battleBonus';
+    const fading = !state.bonusHeatmap && captureHeatmapFadeFrom();
 
     state.coloringMode = 'battleHeatmap';
     currentBattleId = battleId;
+    // WarEra+: Indietro lascia la battaglia come Esc — hideBattleTooltip
+    // chiude il tooltip ed esce dalla heatmap (vedi diplomacy/main.js).
+    pushBack('battle', () => import('./battleMarkers.js').then(m => m.hideBattleTooltip()),
+      () => state.coloringMode === 'battleHeatmap', { battle: battleId });
 
     // Ferma il vecchio live update e avvia quello nuovo
     stopLiveUpdates();
@@ -442,6 +457,11 @@ export async function setBattleHeatmap(battleId) {
     renderMap();
     if (fading) startHeatmapFadeIn();
     updateDynamicLegend();
+    // WarEra+: arrivati dalla vista Bonus battaglia, si calcolano i bonus
+    // (bonusView.js) e la mappa passa a quelli.
+    if (savedColoringMode === 'battleBonus') {
+      import('./bonusView.js').then(m => m.onBattleSelected(details || { _id: battleId }));
+    }
     console.log('Heatmap updated for battle:', battleName);
     
   } catch (err) {
@@ -454,11 +474,15 @@ export function exitBattleHeatmap() {
   
   if (state.coloringMode === 'battleHeatmap') {
     const previousMode = savedColoringMode || 'diplomacy';
+    dropBack('battle'); // WarEra+
     console.log('Returning to mode:', previousMode);
     trackEvent('battle-heatmap-exit');
 
     state.coloringMode = previousMode;
     state.battleHeatmapData = null;
+    state.battleBonusMap = null;
+    state.bonusHeatmap = false;
+    if (previousMode === 'battleBonus') import('./bonusView.js').then(m => m.onBattleCleared());
     currentBattleId = null;
 
     stopLiveUpdates();
@@ -485,6 +509,8 @@ export function exitBattleHeatmap() {
     updateDynamicLegend();
   } else {
     state.battleHeatmapData = null;
+    state.battleBonusMap = null;
+    state.bonusHeatmap = false;
     currentBattleId = null;
     renderMap();
     updateDynamicLegend();
@@ -499,6 +525,10 @@ function startLiveUpdates(battleId) {
       return;
     }
     if (document.hidden) return; // WarEra+ perf: nessuno sta guardando
+    // WarEra+: col replay attivo la classifica mostrata è quella di un
+    // istante passato (battleReplay.js); riscriverla con quella di adesso
+    // farebbe saltare la mappa avanti a ogni giro.
+    if (state.battleReplay?.active) return;
     try {
       const rankingData = await fetchBattleRanking(battleId);
       if (rankingData && rankingData.length) {
@@ -527,11 +557,59 @@ function stopLiveUpdates() {
   }
 }
 
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — la heatmap per BONUS invece che per danno
+   ------------------------------------------------------------------
+   Quando si entra in una battaglia dalla vista "Bonus battaglia"
+   (bonusView.js), la mappa non mostra chi ha fatto danno ma il bonus
+   più alto che ogni nazione avrebbe lì: BLU se le conviene difendere,
+   ROSSO se le conviene attaccare (richiesta esplicita: al contrario
+   della heatmap del danno), più pieno fino al massimo della battaglia.
+   Tutto il resto della heatmap (zoom, tooltip, Indietro) è invariato.
+   `data`: { battleId, values: Map(countryId -> {side, v}), max } | null
+   ══════════════════════════════════════════════════════════════ */
+export function setBattleBonusMap(data) {
+  state.battleBonusMap = data || null;
+  clearHeatmapFade();
+  renderMap();
+}
+
+/** Dentro la heatmap, arrivati dalla vista Bonus battaglia? */
+export function isBonusHeatmap() {
+  return state.coloringMode === 'battleHeatmap' && savedColoringMode === 'battleBonus';
+}
+
+export function bonusColor(side, t) {
+  const k = Math.min(1, Math.max(0.15, t));
+  return side === 'attacker'
+    ? `rgb(255,${Math.round(176 - 176 * k)},${Math.round(176 - 176 * k)})`
+    : `rgb(${Math.round(176 - 176 * k)},${Math.round(212 - 144 * k)},255)`;
+}
+
+function buildBonusColorExpression(bm, prop, isOriginal) {
+  const expr = isOriginal ? ['match', ['to-string', ['get', prop]]] : ['match', ['get', prop]];
+  const max = Math.max(1, bm.max || 0);
+  let n = 0;
+  for (const [id, { side, v }] of bm.values) {
+    if (!(v > 0)) continue;
+    expr.push(isOriginal ? id.toString() : id, bonusColor(side, v / max));
+    n++;
+  }
+  if (!n) return BATTLE_NEUTRAL;
+  expr.push(BATTLE_NEUTRAL);
+  return expr;
+}
+
 // ============ ESPRESSIONE COLORE ============
 
 export function buildBattleHeatmapColorExpression(isOriginal = false) {
   const prop = isOriginal ? 'initialCountryId' : 'countryId';
   if (!state.battleHeatmapData) return BATTLE_NEUTRAL;
+  const bm = state.battleBonusMap;
+  if (bm && bm.battleId === state.battleHeatmapData.battleId) return buildBonusColorExpression(bm, prop, isOriginal);
+  // Vista Bonus battaglia, calcolo ancora in corso: grigio, mai il danno
+  // per un istante (sarebbe un'altra lettura della stessa mappa).
+  if (savedColoringMode === 'battleBonus') return BATTLE_NEUTRAL;
   const { nations } = state.battleHeatmapData;
   const colorMap = new Map();
 

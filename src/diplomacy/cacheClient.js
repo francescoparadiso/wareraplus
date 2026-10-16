@@ -60,7 +60,12 @@ function _tripCircuit() {
   _circuitOpenUntil = Date.now() + CIRCUIT_BREAKER_MS;
 }
 
-async function _fetchCacheJson(path) {
+// WarEra+: la soglia vale per i poll da 3-15 minuti. Gli endpoint che il
+// server aggiorna più di rado la passano più larga (`maxStalenessMs`),
+// altrimenti il dato buono viene scartato per gran parte del suo ciclo:
+// /regions (poll orario) andava sulla chiamata diretta a WarEra dal
+// minuto 35 al 15 dell'ora dopo, /credit-profiles (ogni 6 ore) quasi sempre.
+async function _fetchCacheJson(path, maxStalenessMs = MAX_STALENESS_MS) {
   if (_circuitOpen()) throw new Error('cache: circuit breaker aperto (server irraggiungibile di recente)');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -68,7 +73,7 @@ async function _fetchCacheJson(path) {
     const res = await fetch(`${WARERA_CACHE_BASE}${path}`, { signal: controller.signal });
     if (!res.ok) throw new Error(`cache HTTP ${res.status}`);
     const json = await res.json();
-    if (typeof json.fetchedAt === 'number' && (Date.now() - json.fetchedAt) > MAX_STALENESS_MS) {
+    if (typeof json.fetchedAt === 'number' && (Date.now() - json.fetchedAt) > maxStalenessMs) {
       throw new Error(`cache dato scaduto (${Math.round((Date.now() - json.fetchedAt) / 1000)}s)`);
     }
     return json;
@@ -124,7 +129,8 @@ export async function fetchMapDataViaCache() {
 /** region.getRegionsObject — ritorna l'oggetto {regionId: region}, stessa
  *  forma di quanto ritorna la fetch diretta in regions.js. */
 export async function fetchRegionsViaCache() {
-  const json = await _fetchCacheJson('/regions');
+  // Poll orario (:15) sul server: un'ora + margine per un giro saltato.
+  const json = await _fetchCacheJson('/regions', 75 * 60 * 1000);
   const data = json.data?.result?.data ?? json.data;
   if (!data || typeof data !== 'object') throw new Error('cache /regions: forma inattesa');
   return data;
@@ -165,6 +171,22 @@ export async function fetchAlliancesViaCache(allianceIds) {
   return allianceIds.map(id => byId.get(id)).filter(Boolean);
 }
 
+/** Una voce di state.diplomacyData dalla risposta grezza di
+ *  countryDiplomacy.getByCountry. `swornEnemy` e `defensivePacts` (solo
+ *  id) sono la forma storica che il resto del codice legge; `swornBonus`
+ *  e `pactBonus` (partner -> %) sono WarEra+ (2026-10-14) per i bonus di
+ *  battaglia (src/shared/battleBonus.js): il gioco li espone per coppia,
+ *  e prima venivano buttati. Usata anche dal ripiego diretto in main.js. */
+export function diplomacyEntry(data) {
+  const pacts = data?.defensivePacts || [];
+  return {
+    swornEnemy: data?.swornEnemy?.enemy || null,
+    defensivePacts: pacts.map(p => p.partner),
+    swornBonus: Number(data?.swornEnemy?.bonusPercent) || 0,
+    pactBonus: Object.fromEntries(pacts.map(p => [p.partner, Number(p.bonusPercent) || 0])),
+  };
+}
+
 /** countryDiplomacy.getByCountry in batch — stesso principio di
  *  fetchAlliancesViaCache: filtra sul sottoinsieme richiesto, fallisce (e
  *  fa ricadere il chiamante sulla via diretta) se manca qualcosa. Ritorna
@@ -181,10 +203,7 @@ export async function fetchDiplomacyViaCache(countryIds) {
   for (const id of countryIds) {
     const data = byId.get(id);
     if (!data) continue;
-    result.set(id, {
-      swornEnemy: data.swornEnemy?.enemy || null,
-      defensivePacts: (data.defensivePacts || []).map(p => p.partner),
-    });
+    result.set(id, diplomacyEntry(data));
   }
   return result;
 }
@@ -562,6 +581,53 @@ export async function fetchVisitsViaCache(visitorId, { count = true, source = ''
   }
 }
 
+/** WarEra+ — Censimento aziende (server/companyCensus.js): per risorsa
+ *  aziende di proprietari attivi, quante con dipendenti, dipendenti,
+ *  salari e tasse sui salari al giorno. `item` aggiunge il dettaglio per
+ *  nazione, `countryId` restringe a una nazione.
+ *
+ *  Nessun ripiego diretto, e non per pigrizia: dal browser servirebbero
+ *  ~50.000 chiamate e la chiave API. Se il server non ce l'ha (null, o
+ *  `available: false` prima del primo giro) la vista lo dice e basta.
+ *  In memoria per 10 minuti per combinazione: il dato cambia una volta
+ *  al giorno. */
+const _censusMemo = new Map();
+const CENSUS_TTL_MS = 10 * 60 * 1000;
+export async function fetchCompanyCensusViaCache({ item = null, countryId = null, days = 30 } = {}) {
+  const q = new URLSearchParams({ days: String(days) });
+  if (item) q.set('item', item);
+  if (countryId) q.set('countryId', countryId);
+  const key = q.toString();
+  const memo = _censusMemo.get(key);
+  if (memo && Date.now() - memo.at < CENSUS_TTL_MS) return memo.json;
+  try {
+    const json = await _fetchCacheJsonRaw(`/company-census?${key}`);
+    if (!json || typeof json.available !== 'boolean') return null;
+    _censusMemo.set(key, { at: Date.now(), json });
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /company-census non disponibile:', err.message);
+    return null;
+  }
+}
+
+/** WarEra+ — Storico ricchezza di UN giocatore: { userId, username,
+ *  days: [[giorno, ricchezza]], rank, rankBefore, archiveFrom }. Viene
+ *  dall'archivio della classifica mondiale (uno scatto al giorno dal 19
+ *  giugno 2026), che solo il VPS possiede: il gioco dice la ricchezza di
+ *  ADESSO e nient'altro. null se il server non risponde o non ha ancora
+ *  la rotta — la vista mostra comunque la ricchezza di adesso. */
+export async function fetchPlayerWealthViaCache(userId) {
+  try {
+    const json = await _fetchCacheJsonRaw(`/player-wealth?userId=${encodeURIComponent(userId)}`);
+    if (!json || !Array.isArray(json.days)) return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /player-wealth non disponibile:', err.message);
+    return null;
+  }
+}
+
 /** Serie giornaliera per nazione: { fetchedAt, retentionDays, tz, byDay }
  *  con byDay[YYYY-MM-DD][countryId] = {bounty, contracts, contractCount,
  *  battles}. Ritorna null se il server non ce l'ha. */
@@ -768,7 +834,8 @@ export async function fetchCreditProfileViaCache(key) {
   const userId = CREDIT_PROFILE_USER_IDS[key];
   if (!userId) throw new Error(`credit profile sconosciuto: '${key}'`);
   try {
-    const json = await _fetchCacheJson('/credit-profiles');
+    // Poll ogni 6 ore sul server (avatar e nomi dei crediti: cambiano di rado).
+    const json = await _fetchCacheJson('/credit-profiles', 6.5 * 60 * 60 * 1000);
     const data = json.data?.[key];
     if (!data) throw new Error(`cache /credit-profiles: '${key}' assente`);
     return data;

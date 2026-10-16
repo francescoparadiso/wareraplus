@@ -78,6 +78,46 @@ const AVERAGED = new Set(['taxes', 'unrest', 'dev', 'coreDev', 'perCit']);
 // fra nazioni diverse mescolerebbe guadagni e perdite non confrontabili.
 const SKIPPED = new Set(['regions']);
 
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Danno ora per ora e pillati dei due schieramenti
+   ------------------------------------------------------------------
+   Richiesta dell'utente (2026-10-15): «nel 1vs2 delle nazioni abilita
+   anche i grafici delle pill e damage come per le alleanze, ma anche qui
+   sempre solo per chi fa parte di un governo in P.A.S.T.A.».
+   È lo stesso modulo del Faction 1 vs 2 (diplomacy/blocDamageCurves.js),
+   con i due gruppi = le nazioni di A e di B, nei colori dei due lati.
+   Il cancello (governo P.A.S.T.A. o admin) sta TUTTO lì dentro: per gli
+   altri il contenitore resta vuoto e non parte nessuna richiesta.
+
+   Il render qui si rifà a ogni lettera digitata nelle caselle di ricerca:
+   se gli schieramenti (e la lingua) non sono cambiati si rimette al suo
+   posto il grafico già disegnato, invece di ridisegnarlo da "Caricamento…"
+   ad ogni tasto.
+   ══════════════════════════════════════════════════════════════ */
+const CURVE_COLORS = { a: '#58a6ff', b: '#f0883e' };   // i colori di nations.css
+// Riuso solo entro REUSE_MS dal disegno: la vista riaperta un'ora dopo
+// ridisegna (e rilegge la serie, che il server allunga ogni ora) invece di
+// mostrare quella vecchia.
+const REUSE_MS = 2 * 60 * 1000;
+let _curve = { key: '', el: null, at: 0 };
+
+function montaCurve(host, a, b, nomeLato) {
+  const slot = host.querySelector('.wp-nat-vs-curves');
+  if (!slot) { _curve = { key: '', el: null, at: 0 }; return; }
+  const key = [document.documentElement.lang, a.map(n => n._id).join(','), b.map(n => n._id).join(',')].join('|');
+  if (_curve.key === key && _curve.el && Date.now() - _curve.at < REUSE_MS) {
+    slot.replaceWith(_curve.el);
+    return;
+  }
+  _curve = { key, el: slot, at: Date.now() };
+  const groups = [['a', a], ['b', b]]
+    .filter(([, list]) => list.length)
+    .map(([side, list]) => ({ label: nomeLato(list), color: CURVE_COLORS[side], ids: list.map(n => n._id) }));
+  import('../diplomacy/blocDamageCurves.js')
+    .then(m => m.renderGroupCurves(slot, groups))
+    .catch(() => { slot.innerHTML = ''; });
+}
+
 export function renderNationCompare(host, ctx) {
   const { nations, sides } = ctx;   // sides: Map(countryId → 'a' | 'b')
 
@@ -194,12 +234,14 @@ export function renderNationCompare(host, ctx) {
       <button type="button" class="wp-nat-reset" id="wp-nat-reset">${escapeHtml(natT('reset'))}</button>
     </div>
 
-    ${(a.length || b.length) ? `${tabellone}<ul class="wp-nat-vs">${rows}</ul>` : ''}
+    ${(a.length || b.length) ? `${tabellone}<ul class="wp-nat-vs">${rows}</ul><div class="wp-nat-vs-curves"></div>` : ''}
 
     <div class="wp-nat-pickers">
       ${pickerHtml('a')}
       ${pickerHtml('b')}
     </div>`;
+
+  montaCurve(host, a, b, nomeLato);
 
   // Griglia: il lato è quello dell'elenco su cui si è cliccato.
   host.querySelectorAll('.wp-nat-pick').forEach(el => {

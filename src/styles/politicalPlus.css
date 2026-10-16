@@ -308,6 +308,12 @@ html[data-theme="light"] .pc-modal-overlay {
 .pc-bar-fill { height: 100%; border-radius: 4px; transition: width .6s cubic-bezier(.2, .8, .2, 1); }
 .pc-bar-caption { font-size: .7rem; color: var(--pc-text3); margin-top: 5px; min-height: 1em; }
 .pc-stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+/* WarEra+ (2026-10-14): su desktop la scheda giocatore usa più spazio —
+   380px erano la misura del telefono anche su un monitor da 1920. */
+@media (min-width: 900px) {
+  .pc-modal-box { width: min(540px, 100%); }
+  .pc-stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 .pc-stat {
   background: var(--pc-s2); border: 1px solid var(--pc-bd); border-radius: 8px; padding: 7px 9px;
   display: flex; flex-direction: column; gap: 2px;

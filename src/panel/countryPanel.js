@@ -39,6 +39,7 @@ import { nationWatchHtml, paintNationWatch, wireNationWatch, refreshSphereWatch 
 // WarEra+ radar dei proxy: le sfere mostrate non sono più solo quelle del CSV.
 import { mergedSphereGroups, proxiesOfPrimary, patronOf, runRadar, isRadarReady, MAP_THRESHOLD } from '../proxy/radar.js';
 import { IS_WALLPAPER } from '../shared/wallpaper.js';
+import { syncBack, dropBack } from '../app/backNav.js';
 
 // Stella di pin per l'intestazione del pannello (nazione o alleanza).
 function pinStarHtml(type, id) {
@@ -116,6 +117,7 @@ function showPanelPeek(title) {
   el.innerHTML = `<span class="wp-panel-peek-title">${escapeHtml(title)}</span>
                   <span class="wp-panel-peek-cta">${t('see_details')} ›</span>`;
   el.hidden = false;
+  syncPanelBack();
 }
 
 function hidePanelPeek() {
@@ -127,6 +129,50 @@ function openPanelNow() {
   panelEl.setAttribute('aria-hidden', 'false');
   document.body.classList.add('wp-panel-open');
   updateBackBar();
+  syncPanelBack();
+}
+
+/* ── Tasto Indietro del browser/telefono (WarEra+, vedi app/backNav.js) ──
+   Il pannello è un livello solo quando mostra una SELEZIONE (nazione,
+   alleanza, sfera). Il riepilogo che si apre da solo entrando in una vista
+   mappa appartiene alla vista: lì Indietro esce dalla vista in un colpo,
+   e il riepilogo si chiude con lei — non servono due pressioni.
+   Indietro fa la stessa risalita della barra "Indietro" mobile. */
+function panelHasSelection() {
+  return !!(currentNationId || currentBlocId || currentSphereId);
+}
+function panelShown() {
+  return !!panelEl?.classList.contains('open') || (!!peekEl && !peekEl.hidden);
+}
+function syncPanelBack() {
+  // Nel link: la selezione del pannello (?country= / ?alliance= / ?sphere=).
+  const params = currentSphereId ? { sphere: currentSphereId }
+    : currentBlocId ? { alliance: currentBlocId }
+    : { country: currentNationId };
+  syncBack('panel', panelHasSelection(), onPanelBack, () => panelShown() && panelHasSelection(), params);
+}
+function onPanelBack() {
+  if (panelEl.classList.contains('open')) panelGoBack('browser-back');
+  else closePanel(); // solo la linguetta "Vedi dettagli" (mobile)
+  // Risalendo al riepilogo la selezione non c'è più e il livello cade;
+  // dalla sfera al riepilogo delle sfere idem.
+  if (panelShown()) syncPanelBack();
+}
+
+/** Un livello su: dal dettaglio di una sfera al riepilogo delle sfere, dal
+ *  dettaglio di una nazione/alleanza al riepilogo della vista da cui si
+ *  era arrivati; altrimenti si chiude il pannello. */
+function panelGoBack(via) {
+  if (currentSphereId) { renderSphereOverviewPanel(); return; }
+  // Stessa risalita di un livello per le altre viste: dal dettaglio di
+  // una nazione/alleanza si torna al riepilogo della vista che si stava
+  // guardando, non alla mappa nuda.
+  if (overviewOrigin && (currentNationId || currentBlocId)) {
+    renderViewOverviewPanel(overviewOrigin);
+    return;
+  }
+  trackEvent('nation-panel-close', { via });
+  closePanel();
 }
 
 /* ── Barra "Indietro" in cima al pannello (WarEra+, solo mobile) ──
@@ -154,18 +200,7 @@ function ensureBackBar() {
   backLabelEl = document.createElement('button');
   backLabelEl.type = 'button';
   backLabelEl.className = 'wp-panel-back-btn';
-  backLabelEl.addEventListener('click', () => {
-    if (currentSphereId) { renderSphereOverviewPanel(); return; }
-    // Stessa risalita di un livello per le altre viste: dal dettaglio di
-    // una nazione/alleanza si torna al riepilogo della vista che si stava
-    // guardando, non alla mappa nuda.
-    if (overviewOrigin && (currentNationId || currentBlocId)) {
-      renderViewOverviewPanel(overviewOrigin);
-      return;
-    }
-    trackEvent('nation-panel-close', { via: 'mobile-back' });
-    closePanel();
-  });
+  backLabelEl.addEventListener('click', () => panelGoBack('mobile-back'));
 
   const closeInBar = document.createElement('button');
   closeInBar.type = 'button';
@@ -501,7 +536,7 @@ function render(nationId) {
   if (!nation) return;
   currentNationId = nationId;
   currentBlocId = null;
-  currentSphereId = null;
+  _setSphere(null);
   sphereOverviewOpen = false;
   currentOverviewMode = null;
   contentEl.innerHTML = overviewBackHtml() + buildPanelHtml(nation);
@@ -764,6 +799,14 @@ let currentOverviewMode = null;
 // il dettaglio sfera con #wp-sphere-back), non solo nella barra mobile.
 let overviewOrigin = null;
 let currentSphereId = null;
+// WarEra+: la sfera aperta è anche in state.selectedSphereId, perché i fili
+// sulla mappa (diplomacy/sphereLinks.js) disegnano di partenza solo quella.
+function _setSphere(id) {
+  currentSphereId = id;
+  if (state.selectedSphereId === id) return;
+  state.selectedSphereId = id;
+  if (state.coloringMode === 'sphereOfInfluence') import('../diplomacy/sphereLinks.js').then(m => m.syncSphereLinks()).catch(() => {});
+}
 let sphereOverviewOpen = false;   // il riepilogo di TUTTE le sfere è quello aperto
 
 function sphereStats(nation) {
@@ -894,7 +937,7 @@ function buildSpherePanelHtml(primaryId) {
 function renderSpherePanel(primaryId) {
   // WarEra+: vale anche per le potenze che esistono solo grazie al radar.
   if (!mergedSphereGroups().some(g => g.primaryId === primaryId)) return;
-  currentSphereId = primaryId;
+  _setSphere(primaryId);
   currentNationId = null;
   currentBlocId = null;
   sphereOverviewOpen = false;
@@ -909,6 +952,23 @@ function renderSpherePanel(primaryId) {
     openPanelNow();
   }
   wirePinStar();
+
+  // WarEra+: i comandi dei fili sulla mappa, subito sotto l'intestazione.
+  import('../diplomacy/sphereLinks.js').then(m => {
+    if (currentSphereId !== primaryId) return;
+    const head = contentEl.querySelector('.wp-panel-header');
+    if (!head || contentEl.querySelector('.wp-sphere-links-ctl')) return;
+    head.insertAdjacentHTML('afterend', m.sphereLinksControlHtml());
+    // Ridisegna solo il riquadro dei comandi (i bottoni accesi), non la
+    // scheda: si ricollega ogni volta il riquadro nuovo, e basta.
+    const remount = () => {
+      const old = contentEl.querySelector('.wp-sphere-links-ctl');
+      if (!old) return;
+      old.outerHTML = m.sphereLinksControlHtml();
+      m.wireSphereLinkControls(contentEl.querySelector('.wp-sphere-links-ctl'), remount);
+    };
+    m.wireSphereLinkControls(contentEl.querySelector('.wp-sphere-links-ctl'), remount);
+  }).catch(() => {});
 
   // Ogni riga apre il pannello della SINGOLA nazione: è il livello di
   // dettaglio sotto la sfera (parlamento, alleanze, guerre della nazione).
@@ -1053,7 +1113,7 @@ function buildSphereOverviewHtml() {
 
 export function renderSphereOverviewPanel() {
   if (!contentEl) return;
-  currentSphereId = null;
+  _setSphere(null);
   currentNationId = null;
   currentBlocId = null;
   sphereOverviewOpen = true;
@@ -1065,6 +1125,14 @@ export function renderSphereOverviewPanel() {
   } else {
     openPanelNow();
   }
+  // WarEra+: i comandi dei fili sulla mappa (sphereLinks.js), sopra l'elenco.
+  import('../diplomacy/sphereLinks.js').then(m => {
+    if (!sphereOverviewOpen || contentEl.querySelector('.wp-sphere-links-ctl')) return;
+    const anchor = contentEl.querySelector('.wp-sphere-disclaimer');
+    if (!anchor) return;
+    anchor.insertAdjacentHTML('afterend', m.sphereLinksControlHtml({ inOverview: true }));
+    m.wireSphereLinkControls(contentEl.querySelector('.wp-sphere-links-ctl'), () => renderSphereOverviewPanel());
+  }).catch(() => {});
 
   contentEl.querySelectorAll('[data-sphere-open]').forEach(el => {
     el.addEventListener('click', (e) => {
@@ -1150,7 +1218,7 @@ export function renderViewOverviewPanel(mode) {
   overviewOrigin = mode;
   currentNationId = null;
   currentBlocId = null;
-  currentSphereId = null;
+  _setSphere(null);
   sphereOverviewOpen = false;
   contentEl.innerHTML = html;
 
@@ -1170,6 +1238,14 @@ export function renderViewOverviewPanel(mode) {
 
   // WarEra+ vista Distanze: bottoni del giro delle casse.
   if (mode === 'travel') import('../diplomacy/travelDistance.js').then(m => m.wireTravelOverview(contentEl));
+  // WarEra+ vista Migrazioni: finestra, metrica, direzione delle frecce e
+  // righe che mettono a fuoco una nazione (non aprono il suo pannello).
+  if (mode === 'migration') import('../diplomacy/migrationFlows.js').then(m => m.wireMigrationOverview(contentEl));
+  if (mode === 'funding') import('../diplomacy/fundingFlows.js').then(m => m.wireFundingOverview(contentEl));
+  // WarEra+ vista Bonus battaglia: il bottone per impostare "Sono io".
+  contentEl.querySelector('[data-bv-players]')?.addEventListener('click', () => {
+    import('../app/playersOverlay.js').then(m => m.openPlayersView());
+  });
 
   // WarEra+ vista Elezioni: la riga apre la situazione politica della
   // nazione, non il suo pannello.
@@ -1178,6 +1254,13 @@ export function renderViewOverviewPanel(mode) {
       const id = el.dataset.voPolitical;
       trackEvent('view-overview-click', { mode, target: 'political' });
       openPoliticalView(id, state.nationMap.get(id)?.name || '');
+    });
+  });
+  // WarEra+ "Appena chiuse": la riga rifà sulla mappa l'esito dell'elezione.
+  contentEl.querySelectorAll('.wp-vo-row[data-vo-result]').forEach(el => {
+    el.addEventListener('click', () => {
+      trackEvent('view-overview-click', { mode, target: 'election-result' });
+      import('../diplomacy/electionsLive.js').then(m => m.replayResult(el.dataset.voResult));
     });
   });
 
@@ -1469,7 +1552,7 @@ function renderBlocPanel(allianceId) {
   if (!alliance) return;
   currentBlocId = allianceId;
   currentNationId = null;
-  currentSphereId = null;
+  _setSphere(null);
   sphereOverviewOpen = false;
   currentOverviewMode = null;
   contentEl.innerHTML = overviewBackHtml() + buildBlocPanelHtml(allianceId);
@@ -1523,11 +1606,12 @@ export function closePanel() {
   document.body.classList.remove('wp-panel-open');
   currentNationId = null;
   currentBlocId = null;
-  currentSphereId = null;
+  _setSphere(null);
   sphereOverviewOpen = false;
   currentOverviewMode = null;
   overviewOrigin = null;
   _blocQueueToken++; // interrompe qualunque coda di caricamento parlamenti in corso
+  dropBack('panel');
 }
 
 export function getCurrentNationId() {
@@ -1606,6 +1690,14 @@ export function initCountryPanel() {
     // allo stesso evento click MapLibre, andrebbero in conflitto (uno
     // mostrerebbe la singola nazione, l'altro il blocco).
     if (state.coloringMode === 'blocs') return;
+    // WarEra+: in vista Migrazioni il click mette a fuoco la nazione nel
+    // riepilogo della vista (map.js → migrationFlows.js); aprire qui il
+    // pannello nazione lo sostituirebbe, frecce senza spiegazione.
+    if (state.coloringMode === 'migration' || state.coloringMode === 'funding') return;
+    // WarEra+ (feedback utente): in vista Distanze il click sceglie
+    // partenza, casa o casse (map.js → travelDistance.js) e il riepilogo
+    // della vista mostra il percorso: il pannello nazione lo copriva.
+    if (state.coloringMode === 'travel') return;
     // WarEra+ (feedback utente): su mobile il pannello a schermo intero non
     // si apre più da solo al click — nasconderebbe mappa/diplomazia sotto
     // finché non lo si chiude. nationTooltip.js mostra un tooltip leggero

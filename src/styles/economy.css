@@ -363,40 +363,40 @@ body.light-theme .wp-ecn-type-product { background: rgba(9, 105, 218, .12); colo
 .wp-ecn-tip-n { margin-top: 4px; font-size: 11px; color: var(--wp-ov-text-dim, #8b949e); }
 
 /* ── Telefono ────────────────────────────────────────────────── */
-/* Sotto i 900px le tre colonne di variazione e la sparkline sparirebbero
-   in una riga illeggibile: si tolgono 7g/30g e il grafichino, e restano
-   prezzo, denaro e lettera del mercato. L'andamento completo è a un tocco
-   di distanza, nella scheda della risorsa. */
+/* Prima (audit mobile 2026-09-24) sotto i 900px cadevano 7g, 30g e il
+   grafichino, e sotto i 560 anche denaro e lettera: restavano risorsa,
+   prezzo e 24h. Segnalazione dei giocatori 2026-10-15: così da telefono
+   mezza tabella non esisteva. Adesso le colonne ci sono TUTTE, la risorsa
+   resta ferma a sinistra e il resto scorre di lato, con l'avviso sopra
+   (src/shared/scrollHint.js). Stessa ricetta di Rendite e Produzione. */
 @media (max-width: 900px) {
+  .wp-ecn-table { overflow-x: auto; }
   .wp-ecn-thead,
   .wp-ecn-row {
-    grid-template-columns: minmax(110px, 1.5fr) repeat(3, minmax(58px, 1fr)) minmax(52px, .8fr);
+    grid-template-columns: 112px 74px 74px 74px 60px 60px 60px 96px;
+    gap: 6px;
+    width: max-content;
+    min-width: 100%;
+    box-sizing: border-box;
   }
-  .wp-ecn-th:nth-child(6),
-  .wp-ecn-th:nth-child(7),
-  .wp-ecn-th:nth-child(8),
-  .wp-ecn-row > *:nth-child(6),
-  .wp-ecn-row > *:nth-child(7),
-  .wp-ecn-row > *:nth-child(8) { display: none; }
+  .wp-ecn-thead > :first-child,
+  .wp-ecn-row > :first-child {
+    position: sticky; left: 0; z-index: 1;
+    margin-left: -10px; padding-left: 10px; align-self: stretch;
+    display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+    background: var(--wp-ov-bg, #0d1117);
+    box-shadow: 6px 0 8px -6px rgba(0, 0, 0, .7);
+  }
+  body.light-theme .wp-ecn-thead > :first-child,
+  body.light-theme .wp-ecn-row > :first-child {
+    background: var(--wp-ov-bg-light, #f4f6fa);
+    box-shadow: 6px 0 8px -6px rgba(0, 0, 0, .18);
+  }
   .wp-ecn-tools { width: 100%; }
   .wp-ecn-search { flex: 1; min-width: 0; }
 }
 
-/* WarEra+ — telefono vero (audit mobile 2026-09-24). A 375px anche le
-   cinque colonne di sopra non ci stavano: i soli minimi facevano 336px più
-   spazi e margini, e la colonna 24h usciva a destra dentro uno scorrimento
-   orizzontale che niente annunciava. Qui restano risorsa, prezzo e 24h:
-   denaro e lettera sono a un tocco, nella scheda della risorsa. */
 @media (max-width: 560px) {
-  .wp-ecn-thead,
-  .wp-ecn-row {
-    grid-template-columns: minmax(0, 1.6fr) minmax(64px, 1fr) minmax(56px, .8fr);
-    gap: 6px;
-  }
-  .wp-ecn-th:nth-child(3),
-  .wp-ecn-th:nth-child(4),
-  .wp-ecn-row > *:nth-child(3),
-  .wp-ecn-row > *:nth-child(4) { display: none; }
   /* L'etichetta "prodotto / materia prima" sotto il nome invece che
      accanto: accanto si mangiava metà della colonna. */
   .wp-ecn-item { flex-direction: column; align-items: flex-start; gap: 2px; }
@@ -404,15 +404,192 @@ body.light-theme .wp-ecn-type-product { background: rgba(9, 105, 218, .12); colo
   /* Intestazioni ordinabili: alte quanto un dito, non 15px. */
   .wp-ecn-th { min-height: 32px; }
   .wp-ecn-refresh { min-height: 36px; }
-  /* Le tre schede non ci stanno comunque: scorrono, ma il bordo destro
-     sfuma e dice che ce n'è ancora. */
-  .wp-ecn-tabs.wp-ecn-tabs-more {
-    -webkit-mask-image: linear-gradient(to right, #000 82%, transparent);
-    mask-image: linear-gradient(to right, #000 82%, transparent);
+  /* Le tre schede TUTTE in vista, una colonna ciascuna, col nome che va a
+     capo. Prima la riga scorreva: aprendo l'Ottimizzatore la scheda attiva
+     veniva portata in vista e "Prezzi dei beni" usciva dal bordo SINISTRO,
+     dove la sfumatura (solo a destra) non diceva niente — da telefono la
+     sezione sembrava avere due schede su tre (segnalato 2026-10-07). */
+  .wp-ecn-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2px;
+    overflow: visible;
   }
-  .wp-ecn-tab { padding: 10px 11px; }
+  .wp-ecn-tab {
+    padding: 9px 4px;
+    white-space: normal;
+    line-height: 1.25;
+    text-align: center;
+    font-size: 12.5px;
+    min-height: 44px;
+  }
   /* Prezzo e tre variazioni: vanno a capo invece di uscire. */
   .wp-ecn-dprice { flex-wrap: wrap; row-gap: 4px; }
   .wp-ecn-dprice strong { width: 100%; }
   .wp-ecn-chartbar { flex-wrap: wrap; row-gap: 6px; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ 2026-10-08 — schede PRODUZIONE e RICCHEZZA
+   ------------------------------------------------------------------
+   Classi proprie (`wp-ecn-pt*`, `wp-ecn-prow`) e non quelle della
+   tabella Prezzi: le regole del telefono qui sopra nascondono le
+   colonne PER POSIZIONE (nth-child), e su una tabella con altre
+   colonne toglierebbero proprio quella delle tasse.
+   ══════════════════════════════════════════════════════════════ */
+.wp-ecn-select {
+  appearance: none;
+  background: var(--wp-ov-surface-2, #161b22);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 8px;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 7px 10px;
+  max-width: 220px;
+}
+.wp-ecn-select:focus { outline: none; border-color: var(--wp-ov-accent, #3fb950); }
+
+.wp-ecn-ptable { margin-top: 12px; font-variant-numeric: tabular-nums; }
+.wp-ecn-pthead,
+.wp-ecn-prow {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.4fr) repeat(5, minmax(70px, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+.wp-ecn-pthead {
+  padding: 0 10px 7px;
+  border-bottom: 1px solid var(--wp-ov-border, #30363d);
+}
+.wp-ecn-pth {
+  appearance: none;
+  background: none;
+  border: none;
+  color: var(--wp-ov-text-dim, #8b949e);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  text-align: left;
+  padding: 0;
+}
+button.wp-ecn-pth { cursor: pointer; }
+.wp-ecn-pth.wp-ecn-num { text-align: right; }
+button.wp-ecn-pth:hover { color: var(--wp-ov-text, #e6edf3); }
+.wp-ecn-pth.active { color: var(--wp-ov-accent, #3fb950); }
+.wp-ecn-prow {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--wp-ov-border-soft, rgba(110, 118, 129, .18));
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .12s;
+}
+.wp-ecn-prow:hover { background: var(--wp-ov-surface-2, rgba(110, 118, 129, .09)); }
+.wp-ecn-prow:focus-visible { outline: 2px solid var(--wp-ov-accent, #3fb950); outline-offset: -2px; }
+.wp-ecn-prow-static, .wp-ecn-ptotal { cursor: default; }
+.wp-ecn-prow-static:hover, .wp-ecn-ptotal:hover { background: none; }
+.wp-ecn-ptotal { font-weight: 700; border-bottom: none; border-top: 1px solid var(--wp-ov-border, #30363d); }
+.wp-ecn-prow-mine { background: var(--wp-ov-surface-2, rgba(110, 118, 129, .12)); }
+.wp-ecn-pcountry { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.wp-ecn-pcountry span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-ecn-flag { width: 18px; height: 13px; object-fit: cover; border-radius: 2px; flex: 0 0 auto; vertical-align: -2px; }
+.wp-ecn-psec {
+  margin: 18px 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--wp-ov-text-dim, #8b949e);
+}
+
+/* Ricchezza: ricerca, candidati, scheda del giocatore */
+.wp-ecn-wform { margin: 0; }
+.wp-ecn-wcands {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  margin: 8px 0 4px;
+}
+.wp-ecn-wcand {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 10px;
+  background: var(--wp-ov-surface-2, #161b22);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.wp-ecn-wcand:hover { border-color: var(--wp-ov-accent, #3fb950); }
+.wp-ecn-wcname { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.wp-ecn-wcname small { display: block; font-weight: 400; color: var(--wp-ov-text-dim, #8b949e); font-size: 11.5px; }
+.wp-ecn-wavatar {
+  position: relative;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex: 0 0 auto;
+  background: var(--wp-ov-border, #30363d);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700;
+}
+.wp-ecn-wavatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.wp-ecn-wavatar-lg { width: 52px; height: 52px; font-size: 20px; }
+.wp-ecn-whead { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 6px; }
+.wp-ecn-whead h3 { margin: 0; font-size: 19px; }
+.wp-ecn-wwho { flex: 1; min-width: 0; }
+.wp-ecn-wmine { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--wp-ov-accent, #3fb950); font-weight: 600; }
+.wp-ecn-wstats strong { font-size: 18px; font-weight: 800; }
+.wp-ecn-wstats small { display: block; font-size: 11px; }
+.wp-ecn-wdays { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }
+.wp-ecn-wdays ul { list-style: none; margin: 0; padding: 0; font-variant-numeric: tabular-nums; }
+.wp-ecn-wdays li {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--wp-ov-border-soft, rgba(110, 118, 129, .18));
+  font-size: 12.5px;
+}
+
+/* Produzione: fino a 560px le sei colonne ci stanno (minimi ~400px). Sotto
+   prima ne restavano tre; adesso ci sono tutte e la tabella scorre, con la
+   prima colonna ferma (vedi la tabella Prezzi qui sopra, stessa ricetta). */
+@media (max-width: 560px) {
+  .wp-ecn-ptable { overflow-x: auto; }
+  .wp-ecn-pthead,
+  .wp-ecn-prow {
+    grid-template-columns: 104px 70px 76px 76px 84px 84px;
+    gap: 6px;
+    width: max-content;
+    min-width: 100%;
+    box-sizing: border-box;
+  }
+  .wp-ecn-pthead > :first-child,
+  .wp-ecn-prow > :first-child {
+    position: sticky; left: 0; z-index: 1;
+    margin-left: -10px; padding-left: 10px; align-self: stretch;
+    display: flex; align-items: center;
+    background: var(--wp-ov-bg, #0d1117);
+    box-shadow: 6px 0 8px -6px rgba(0, 0, 0, .7);
+  }
+  body.light-theme .wp-ecn-pthead > :first-child,
+  body.light-theme .wp-ecn-prow > :first-child {
+    background: var(--wp-ov-bg-light, #f4f6fa);
+    box-shadow: 6px 0 8px -6px rgba(0, 0, 0, .18);
+  }
+  .wp-ecn-select { max-width: none; flex: 1; min-width: 0; }
+  .wp-ecn-tools { flex-wrap: wrap; }
+  .wp-ecn-wdays { grid-template-columns: 1fr; }
+  /* Nome e nazione si prendono la riga: "il tuo personaggio" va sotto,
+     invece di spezzare "lv 45" su due righe. */
+  .wp-ecn-wwho { flex: 1 1 calc(100% - 64px); }
+  /* Cinque schede: tre sopra e due sotto, sempre tutte in vista (vedi la
+     regola delle tre schede più su, stesso motivo). */
+  .wp-ecn-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

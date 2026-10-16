@@ -99,6 +99,7 @@ function paintHeader() {
         </div>
         <button type="button" class="wp-mu-pin${pinned ? ' wp-mu-pin-on' : ''}" id="wp-mu-pin"
                 title="${escapeHtml(muT(pinned ? 'unpin' : 'pin'))}" aria-label="${escapeHtml(muT(pinned ? 'unpin' : 'pin'))}">★</button>
+        ${ctx.onCompare ? `<button type="button" class="wp-mu-compare-btn" id="wp-mu-compare">⚔ ${escapeHtml(muT('cmpCompare'))}</button>` : ''}
       </header>
 
       <section class="wp-mu-stats-grid">
@@ -155,6 +156,8 @@ function paintHeader() {
   }
 
   hostEl.querySelector('#wp-mu-back').addEventListener('click', () => ctx.onBack());
+  // WarEra+: dritti al confronto 1 vs 1 con questa unità già scelta.
+  hostEl.querySelector('#wp-mu-compare')?.addEventListener('click', () => ctx.onCompare(m._id));
   hostEl.querySelector('#wp-mu-pin').addEventListener('click', (e) => {
     const now = togglePin('mu', m._id, { name: m.name, avatarUrl: m.avatarUrl, country: m.country });
     e.currentTarget.classList.toggle('wp-mu-pin-on', now);

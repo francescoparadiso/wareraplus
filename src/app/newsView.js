@@ -274,6 +274,19 @@ function renderBody() {
     </section>`).join('');
 
   body.innerHTML = `${lead}<div class="wp-news-columns">${sections}</div>`;
+  // WarEra+: una notizia cliccata chiude la vista e si "trova" sulla mappa
+  // (newsTicker.js: newsTargetFor → livePings.js: pingNewsTarget).
+  body.querySelectorAll('.wp-news-item, .wp-news-lead-title').forEach(el => {
+    import('./newsTicker.js').then(({ newsTargetFor }) => {
+      const target = newsTargetFor(el.textContent);
+      if (!target) return;
+      el.classList.add('wp-news-link');
+      el.addEventListener('click', () => {
+        import('./newsOverlay.js').then(m => m.closeNewsView()).catch(() => {});
+        import('./livePings.js').then(m => setTimeout(() => m.pingNewsTarget(target, el.textContent), 350)).catch(() => {});
+      });
+    });
+  });
 }
 
 function bindSearch() {
