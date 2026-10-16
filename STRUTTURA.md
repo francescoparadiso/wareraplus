@@ -449,7 +449,8 @@ wareraPlus/
     │   │                            NELLA SUA NAZIONE (/country-citizens), e cinque schede —
     │   │                            Battaglie (col bottino, poolLoot), Ricchezza
     │   │                            (/player-wealth), Aziende e lavoro, Politica, Abilità ed
-    │   │                            equipaggiamento. Confronto 1 vs 1 dalla scheda.
+    │   │                            equipaggiamento. Confronto 1 vs 1 dalla scheda
+    │   │                            o dalla partenza (riquadro "1 vs 1", due posti).
     │   │                            ?section=players&player=ID(&vs=ID).
     │   │                            ⚠️ work.getStatsByUserId (con chiave, via proxy) è la
     │   │                            somma ESATTA di getStatsByCompany sulle SUE aziende:

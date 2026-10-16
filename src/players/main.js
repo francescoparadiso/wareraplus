@@ -16,8 +16,11 @@
       nazione; sotto cinque schede: Battaglie (col bottino di ognuna),
       Ricchezza nel tempo, Aziende e lavoro, Politica, Abilità ed
       equipaggiamento.
-   3. CONFRONTO 1 VS 1 — dalla scheda, "Confronta con…": due giocatori
-      affiancati, riga per riga, col migliore dei due evidenziato.
+   3. CONFRONTO 1 VS 1 — dalla scheda, "Confronta con…", o direttamente
+      dalla partenza (riquadro "1 vs 1": due posti da riempire con la
+      ricerca o le scorciatoie, richiesta dell'utente — prima bisognava
+      aprire uno dei due e cercare l'altro): due giocatori affiancati,
+      riga per riga, col migliore dei due evidenziato.
 
    "Sono io" è la STESSA chiave della scheda Ricchezza di Economia
    (`we_my_player`): dirlo in un posto vale anche nell'altro. I visti di
@@ -94,6 +97,13 @@ let _pickSearching = false;
 let _cmpId = null;
 let _cmp = null;             // { lite, natRanks, equip } del secondo giocatore
 let _cmpEquipA;              // equipaggiamento del primo, per il confronto
+
+// 1 vs 1 dalla partenza: i due posti, ognuno con la sua ricerca
+let _duel = { a: null, b: null };          // { id, u, a } di chi occupa il posto
+let _duelQ = { a: '', b: '' };
+let _duelCands = { a: null, b: null };
+let _duelSearching = { a: false, b: false };
+let _duelInit = false;       // "Sono io" va nel primo posto una volta sola
 
 /* ── Piccoli aiuti ─────────────────────────────────────────────── */
 
@@ -182,8 +192,11 @@ function boardTop() {
 }
 
 /** Apre la scheda di un giocatore. Esportata: è quella che chiamano gli
- *  altri pezzi del tool (elenco cittadini, overlay con ?player=). */
-export async function openPlayer(id) {
+ *  altri pezzi del tool (elenco cittadini, overlay con ?player=).
+ *  `tabs: false` = non caricare ancora la scheda aperta: il 1 vs 1 della
+ *  partenza apre subito il confronto, e le battaglie (~7 richieste)
+ *  servono solo se poi si torna alla scheda. */
+export async function openPlayer(id, { tabs = true } = {}) {
   if (!ID_RE.test(String(id || ''))) return;
   _pid = id;
   _lite = null;
@@ -215,7 +228,7 @@ export async function openPlayer(id) {
   render();
   if (lite?.mu) resolveMuName(lite.mu, id);
   if (lite) fetchNationRanks(lite).then(r => { if (_pid === id) { _natRanks = r; render(); } }).catch(() => {});
-  loadTab(_ptab);
+  if (tabs || !_cmpId) loadTab(_ptab);
 }
 
 async function resolveMuName(muId, pid) {
@@ -332,6 +345,8 @@ function homeHtml() {
     ${cands}
     ${chips.length ? `<div class="wp-ply-recent"><span class="wp-ply-dim">${escapeHtml(plyT('recent'))}</span>${chips.join('')}</div>` : ''}
 
+    ${duelHtml()}
+
     <h3 class="wp-ply-h3">${escapeHtml(plyT('boardsTitle'))}</h3>
     <div class="wp-ply-boardbar">
       <div class="wp-ply-pills">${LEADERBOARDS.map(t => `
@@ -342,6 +357,124 @@ function homeHtml() {
       </select>
     </div>
     ${board}`;
+}
+
+/* ── 1 vs 1 dalla partenza ────────────────────────────────────── */
+/* Due posti, A (rosa) e B (azzurro) come nel versus: ognuno si riempie
+   con la sua ricerca, o toccando una scorciatoia (Io, visti di recente),
+   che va nel primo posto libero. "Sono io" occupa A la prima volta che
+   si vede la partenza: il caso più comune è "io contro qualcuno". */
+
+function duelInit() {
+  if (_duelInit) return;
+  _duelInit = true;
+  const mine = safeGet(MINE_KEY);
+  if (!mine || !ID_RE.test(mine) || _duel.a || _duel.b) return;
+  const r = recents().find(x => x.id === mine);
+  _duel.a = { id: mine, u: r?.u || '', a: r?.a || '' };
+  if (!r?.u) duelResolve('a', mine);
+}
+
+/** Nome e avatar di chi è entrato in un posto con il solo id. */
+function duelResolve(slot, id) {
+  fetchNames([id]).then(got => {
+    const n = got.get(id);
+    if (!n || _duel[slot]?.id !== id) return;
+    _duel[slot] = { id, u: n.username || '', a: n.avatarUrl || '' };
+    if (!_pid) render();
+  }).catch(() => {});
+}
+
+function duelSet(slot, p) {
+  const other = slot === 'a' ? 'b' : 'a';
+  if (_duel[other]?.id === p.id) return;      // lo stesso contro sé stesso no
+  _duel[slot] = p;
+  _duelCands[slot] = null;
+  _duelQ[slot] = '';
+  if (!p.u) duelResolve(slot, p.id);
+  render();
+}
+
+async function doDuelSearch(slot) {
+  if (_duelQ[slot].trim().length < 2) return;
+  _duelSearching[slot] = true;
+  _duelCands[slot] = null;
+  render();
+  const other = _duel[slot === 'a' ? 'b' : 'a']?.id;
+  try { _duelCands[slot] = (await searchPlayers(_duelQ[slot])).filter(c => c.id !== other); }
+  catch (_) { _duelCands[slot] = []; }
+  _duelSearching[slot] = false;
+  if (_duelCands[slot].length === 1) {
+    const { id, lite } = _duelCands[slot][0];
+    duelSet(slot, { id, u: lite.username || '', a: lite.avatarUrl || '' });
+    return;
+  }
+  render();
+}
+
+function duelSlotHtml(slot) {
+  const p = _duel[slot];
+  if (p) {
+    return `
+      <div class="wp-ply-duel-slot wp-ply-duel-${slot} wp-ply-duel-full">
+        ${avatarImg(p.a, p.u, 'wp-ply-av wp-ply-duel-av')}
+        <b class="wp-ply-duel-name">${escapeHtml(p.u || '…')}</b>
+        <button type="button" class="wp-ply-chip" data-duel-clear="${slot}">${escapeHtml(plyT('duelClear'))}</button>
+      </div>`;
+  }
+  let cands = '';
+  if (_duelSearching[slot]) cands = `<div class="wp-ply-loading">${escapeHtml(plyT('searching'))}</div>`;
+  else if (_duelCands[slot] && !_duelCands[slot].length) cands = `<p class="wp-ply-note">${escapeHtml(plyT('noResults'))}</p>`;
+  else if (_duelCands[slot]) {
+    cands = `<div class="wp-ply-duel-cands">${_duelCands[slot].map(({ id, lite }) => `
+      <button type="button" class="wp-ply-cand" data-duel-pick="${slot}" data-id="${escapeHtml(id)}" data-u="${escapeHtml(lite.username || '')}" data-a="${escapeHtml(lite.avatarUrl || '')}">
+        ${avatarImg(lite.avatarUrl, lite.username, 'wp-ply-av')}
+        <span class="wp-ply-cand-name">${escapeHtml(lite.username)}
+          <small>${flagImg(lite.country, 'wp-ply-flag')} ${escapeHtml(countryName(lite.country))} · lv ${escapeHtml(lite.leveling?.level ?? '—')}</small></span>
+      </button>`).join('')}</div>`;
+  }
+  return `
+    <div class="wp-ply-duel-slot wp-ply-duel-${slot}">
+      <form class="wp-ply-search wp-ply-duel-search" data-duel-form="${slot}">
+        <input type="search" placeholder="${escapeHtml(plyT(slot === 'a' ? 'duelPhA' : 'duelPhB'))}" value="${escapeHtml(_duelQ[slot])}" autocomplete="off">
+        <button type="submit"${_duelSearching[slot] ? ' disabled' : ''}>${escapeHtml(plyT('go'))}</button>
+      </form>
+      ${cands}
+    </div>`;
+}
+
+function duelHtml() {
+  duelInit();
+  const taken = new Set([_duel.a?.id, _duel.b?.id].filter(Boolean));
+  const mine = safeGet(MINE_KEY);
+  // Le scorciatoie servono solo finché c'è un posto libero.
+  const chips = taken.size < 2 ? [
+    mine && ID_RE.test(mine) && !taken.has(mine) ? `<button type="button" class="wp-ply-chip wp-ply-chip-me" data-duel-add="${escapeHtml(mine)}">★ ${escapeHtml(plyT('me'))}</button>` : '',
+    ...recents().filter(r => r.id !== mine && !taken.has(r.id)).map(r => `
+      <button type="button" class="wp-ply-chip" data-duel-add="${escapeHtml(r.id)}" data-u="${escapeHtml(r.u || '')}" data-a="${escapeHtml(r.a || '')}">
+        ${avatarImg(r.a, r.u, 'wp-ply-av wp-ply-av-xs')}<span>${escapeHtml(r.u || r.id)}</span></button>`),
+  ].filter(Boolean) : [];
+  const ready = !!(_duel.a && _duel.b);
+  return `
+    <section class="wp-ply-duel">
+      <h3 class="wp-ply-h3 wp-ply-h3-first">⚖ ${escapeHtml(plyT('duelTitle'))}</h3>
+      <p class="wp-ply-sub">${escapeHtml(plyT('duelSub'))}</p>
+      <div class="wp-ply-duel-grid">
+        ${duelSlotHtml('a')}
+        <span class="wp-ply-duel-vs">VS</span>
+        ${duelSlotHtml('b')}
+      </div>
+      ${chips.length ? `<div class="wp-ply-recent">${chips.join('')}</div>` : ''}
+      <button type="button" class="wp-ply-duel-go" id="wp-ply-duel-go"${ready ? '' : ' disabled'}>${escapeHtml(plyT('duelGo'))}</button>
+    </section>`;
+}
+
+/** Apre il confronto dei due posti: la scheda di A (senza caricarne le
+ *  schede) e subito il versus contro B, come un link ?player=A&vs=B. */
+function startDuel() {
+  if (!_duel.a || !_duel.b) return;
+  openPlayer(_duel.a.id, { tabs: false });
+  openCompare(_duel.b.id);
 }
 
 /* ── Scheda di un giocatore ───────────────────────────────────── */
@@ -628,7 +761,7 @@ function render() {
   // Indietro del telefono/browser: dal confronto torna alla scheda, dalla
   // scheda alla partenza; l'URL porta ?player= (e ?vs=) finché sono aperti.
   syncBack('players/detail', !!_pid, () => { _pid = null; _cmpId = null; render(); }, () => !!_pid, { player: _pid || undefined });
-  syncBack('players/detail/compare', !!(_pid && _cmpId), () => { _cmpId = null; render(); }, () => !!(_pid && _cmpId), { vs: _cmpId || undefined });
+  syncBack('players/detail/compare', !!(_pid && _cmpId), leaveCompare, () => !!(_pid && _cmpId), { vs: _cmpId || undefined });
   if (_pid && _ptab === 'wealth') drawWealthChart();
   // La classifica parte la prima volta che si vede la partenza — anche
   // tornandoci da una scheda aperta con un link diretto.
@@ -641,6 +774,13 @@ function wire() {
       e.preventDefault();
       _pickQ = e.target.querySelector('input')?.value || '';
       doPickSearch();
+      return;
+    }
+    const duelForm = e.target.dataset?.duelForm;
+    if (duelForm) {
+      e.preventDefault();
+      _duelQ[duelForm] = e.target.querySelector('input')?.value || '';
+      doDuelSearch(duelForm);
       return;
     }
     if (e.target.id !== 'wp-ply-search') return;
@@ -661,10 +801,21 @@ function wire() {
     const t = e.target;
     const vs = t.closest('[data-vs]');
     if (vs) { openCompare(vs.dataset.vs); return; }
+    const dPick = t.closest('[data-duel-pick]');
+    if (dPick) { duelSet(dPick.dataset.duelPick, { id: dPick.dataset.id, u: dPick.dataset.u || '', a: dPick.dataset.a || '' }); return; }
+    const dAdd = t.closest('[data-duel-add]');
+    if (dAdd) {
+      const slot = !_duel.a ? 'a' : !_duel.b ? 'b' : null;
+      if (slot) duelSet(slot, { id: dAdd.dataset.duelAdd, u: dAdd.dataset.u || '', a: dAdd.dataset.a || '' });
+      return;
+    }
+    const dClear = t.closest('[data-duel-clear]');
+    if (dClear) { _duel[dClear.dataset.duelClear] = null; render(); return; }
+    if (t.closest('#wp-ply-duel-go')) { startDuel(); return; }
     const open = t.closest('[data-open]');
     if (open) { openPlayer(open.dataset.open); return; }
     if (t.closest('[data-compare]')) { _picking = !_picking; render(); return; }
-    if (t.closest('#wp-ply-cmp-back')) { _cmpId = null; render(); return; }
+    if (t.closest('#wp-ply-cmp-back')) { leaveCompare(); return; }
     if (t.closest('#wp-ply-cmp-swap')) { const a = _pid, b = _cmpId; openPlayer(b).then(() => openCompare(a)); return; }
     const loot = t.closest('[data-loot]');
     if (loot) {
@@ -723,6 +874,14 @@ export async function initPlayersView(container) {
 }
 
 /* ── Confronto ─────────────────────────────────────────────────── */
+
+/** Dal confronto alla scheda del primo: se il confronto era partito dal
+ *  1 vs 1 la scheda non è ancora stata caricata, e parte qui. */
+function leaveCompare() {
+  _cmpId = null;
+  render();
+  loadTab(_ptab);
+}
 
 async function doPickSearch() {
   if (_pickQ.trim().length < 2) return;
@@ -869,8 +1028,8 @@ function compareHtml() {
   const a = _lite;
   const b = _cmp?.lite;
   const back = `<button type="button" class="wp-ply-back" id="wp-ply-cmp-back">← ${escapeHtml(plyT('cmpBack', { a: a?.username || '' }))}</button>`;
-  if (!a) return back;
-  if (!_cmp) return `${back}<div class="wp-ply-loading">${escapeHtml(plyT('loading'))}</div>`;
+  if (!a && !_loading) return back;
+  if (!a || !_cmp) return `${back}<div class="wp-ply-loading">${escapeHtml(plyT('loading'))}</div>`;
   if (!b) return `${back}<p class="wp-ply-note">${escapeHtml(plyT('notFound'))}</p>`;
 
   const psA = classifyPlaystyle(a), psB = classifyPlaystyle(b);
