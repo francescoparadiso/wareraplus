@@ -1,5 +1,6 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { state } from './state.js';
+import { gameNationColor } from './gameColors.js';
 import { hashColor, showLoading, hideLoading, trpcBatch, MAX_BATCH } from './utils.js';
 import { showToast, updateDynamicLegend } from './ui.js';
 import { initMap, renderMap, setupMapLayers, cercaNazione, resetDiplomazia, setMapSource, setColoringMode } from './map.js';
@@ -195,12 +196,16 @@ async function refreshData(boot = _startBootFetches()) {
     await boot.regions;
 
     // Color map base
+    // WarEra+: prima il colore di gioco (scheme + mapAccent), poi la tinta
+    // dell'etichetta, poi l'hash — vedi gameColors.js per il perché.
     state.nationBaseColorMap.clear();
     state.labelsData.forEach(label => {
       if (label.properties?.countryId) state.nationBaseColorMap.set(label.properties.countryId, label.properties.strokeColor);
     });
     state.nazioniGlobal.forEach(n => {
-      if (!state.nationBaseColorMap.has(n._id)) state.nationBaseColorMap.set(n._id, n.color || hashColor(n._id));
+      const game = gameNationColor(n);
+      if (game) state.nationBaseColorMap.set(n._id, game);
+      else if (!state.nationBaseColorMap.has(n._id)) state.nationBaseColorMap.set(n._id, n.color || hashColor(n._id));
     });
 
     buildOriginalLabels();

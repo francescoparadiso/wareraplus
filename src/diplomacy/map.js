@@ -3,6 +3,7 @@ import maplibregl from 'maplibre-gl';
 import * as topojson from 'topojson-client';
 import { buildBorderFeatures, buildInnerBorderColorExpression, buildRelationBorderColorExpression } from './borderStyle.js';
 import { state } from './state.js';
+import { gameNationColor } from './gameColors.js';
 import { COLORS, LAYER_IDS, THEMES } from './config.js';
 import {
   buildMultiBlocPatternExpression, getMultiBlocPatternExpression, getMultiBlocPatternExpressionOriginal,
@@ -686,6 +687,9 @@ export function renderMap() {
   } else if (state.mapSource === 'actual') {
     const styleMap = {};
     state.labelsData.forEach(l => { if (l.properties?.countryId) styleMap[l.properties.countryId] = l.properties.strokeColor; });
+    // WarEra+: i colori di gioco (scheme+accento, vedi gameColors.js) hanno la
+    // precedenza sulla tinta dell'etichetta e coprono anche i paesi senza etichetta.
+    state.nazioniGlobal.forEach(n => { const c = gameNationColor(n); if (c) styleMap[n._id] = c; });
     fillExpr = buildDiplomacyColorExpression(directWars, directAllies, enemyAllies, styleMap);
   } else {
     fillExpr = buildOriginalColorExpression(directWars, directAllies, enemyAllies);
