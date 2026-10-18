@@ -379,6 +379,12 @@ wareraPlus/
     │   ├── history.js, world.js ← NUOVO — viste "Storia" (presidenti, affluenza,
     │   │                          iscritti, cambi di casacca, governi) e "Mondo"
     │   │                          (calendario elettorale + confronto fra nazioni)
+    │   ├── membersChart.js      ← NUOVO — "Iscritti nel tempo" della Storia, esplorabile:
+    │   │                          TUTTI i partiti (niente più taglio ai 6 più grandi di
+    │   │                          adesso, che nascondeva quelli in declino), legenda che
+    │   │                          spegne/isola, zoom, striscia, riquadro, Allarga.
+    │   │                          ⚠️ da allargato toglie il blur al .panel (fa da
+    │   │                          contenitore ai fixed)
     │   ├── simUncertainty.js    ← NUOVO — intervallo 80% dei seggi nel simulatore,
     │   │                          dalla volatilità storica della nazione (mediana delle
     │   │                          ultime 5 coppie di congressi). Retrotest su 25
