@@ -630,6 +630,15 @@ wareraPlus/
     │   │                  ⚠️ una battaglia già aperta al primo sguardo ha la prima
     │   │                  lettura come FONDO (`baseAt`): chi c'era non è un
     │   │                  ingresso. Testi in timelineI18n.js (9 lingue).
+    │   ├── timelineChart.js ← NUOVO — il grafico di battleTimeline.js reso
+    │   │                  esplorabile: zoom (rotella, pizzico, trascinamento,
+    │   │                  scorciatoie per round), striscia di navigazione per
+    │   │                  spostarsi, riquadro al passaggio, "Allarga" a tutta
+    │   │                  finestra (alza l'overlay sopra le barre del menu) e
+    │   │                  sorpassi vicini raggruppati in una pillola "2–5".
+    │   │                  Disegna a pixel veri (ridisegna al resize) e accorpa
+    │   │                  le barre a 2px come MEDIA pesata sul tempo; lo zoom
+    │   │                  sopravvive ai repaint della scheda (battaglie vive).
     │   ├── main.js, battleList.js, warExpenses.js, i18n.js (9 lingue)
     ├── guide/                    ← NUOVO — Guida "Come si usa": SOLO testo statico
     │   ├── main.js                  (zero fetch, zero stato) + i18n.js a 9 lingue.

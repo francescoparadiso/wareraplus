@@ -30,6 +30,7 @@
 import { WARERA_CACHE_BASE } from '../diplomacy/config.js';
 import { escapeHtml } from '../diplomacy/utils.js';
 import { tlT } from './timelineI18n.js';
+import { chartBlockHtml, wireChart, resetChart } from './timelineChart.js';
 
 const GAP_MS = 3.5 * 60 * 1000;     // fra due campioni al minuto: oltre è un buco
 const WINDOW_MS = 10 * 60 * 1000;    // "chi ha spinto prima del sorpasso"
@@ -187,7 +188,7 @@ export function analyzeTimeline(tl) {
     flips.push({ t, round: r, side, top, sideWin, oppWin: sumWindow(other, from, to, null) });
   }
 
-  return { S, iv, flips, entries, preexisting: preSet.size };
+  return { S, iv, flips, entries, preexisting: preSet.size, gapMs: GAP_MS };
 }
 
 /* ── Formattazione ────────────────────────────────────────────── */
@@ -207,93 +208,8 @@ function fmtTime(ms, withDay) {
 
 /* ── Grafico ──────────────────────────────────────────────────── */
 
-const W = 760, PAD_L = 46, PAD_R = 10;
-const A_TOP = 8, A_H = 132;          // danno al minuto, specchiato
-const B_TOP = A_TOP + A_H + 16, B_H = 74; // punti del round
-const H = B_TOP + B_H + 20;
-const IW = W - PAD_L - PAD_R;
-
-// Geometria dell'ultimo grafico disegnato, per il tooltip (wireTimeline).
-let _chart = null;
-
-function chartSvg(an, tl) {
-  const { S, iv, flips } = an;
-  const t0 = S[0][0];
-  const t1 = Math.max(S[S.length - 1][0], t0 + 60000);
-  const x = (t) => PAD_L + (t - t0) / (t1 - t0) * IW;
-  const withDay = t1 - t0 > 20 * 3600 * 1000;
-  const maxRate = Math.max(1, ...iv.filter(v => !v.gap).flatMap(v => [v.a, v.d]));
-  const mid = A_TOP + A_H / 2;
-  const half = A_H / 2 - 2;
-  const maxPts = Math.max(300, ...S.map(s => Math.max(s[5], s[6])));
-  const yP = (p) => B_TOP + B_H - p / maxPts * B_H;
-
-  const bars = iv.filter(v => !v.gap).map(v => {
-    const x0 = x(v.t0), w = Math.max(0.8, x(v.t1) - x0 - 0.4);
-    const hd = v.d / maxRate * half, ha = v.a / maxRate * half;
-    return `<rect class="wp-btl-tl-def" x="${x0.toFixed(1)}" y="${(mid - hd).toFixed(1)}" width="${w.toFixed(1)}" height="${hd.toFixed(1)}"/>`
-      + `<rect class="wp-btl-tl-atk" x="${x0.toFixed(1)}" y="${mid.toFixed(1)}" width="${w.toFixed(1)}" height="${ha.toFixed(1)}"/>`;
-  }).join('');
-
-  // Punti: una spezzata per round e per lato, interrotta dai buchi.
-  const lines = { a: [], d: [] };
-  let segA = [], segD = [];
-  const flush = () => {
-    if (segA.length > 1) lines.a.push(segA.join(' '));
-    if (segD.length > 1) lines.d.push(segD.join(' '));
-    segA = []; segD = [];
-  };
-  S.forEach((s, i) => {
-    const p = S[i - 1];
-    if (p && (p[1] !== s[1] || s[0] - p[0] > GAP_MS)) flush();
-    segA.push(`${x(s[0]).toFixed(1)},${yP(s[5]).toFixed(1)}`);
-    segD.push(`${x(s[0]).toFixed(1)},${yP(s[6]).toFixed(1)}`);
-  });
-  flush();
-
-  const roundMarks = S.filter((s, i) => i > 0 && s[1] !== S[i - 1][1]).map(s => {
-    const xx = x(s[0]).toFixed(1);
-    return `<line class="wp-btl-tl-round" x1="${xx}" x2="${xx}" y1="${A_TOP}" y2="${B_TOP + B_H}"/>`
-      + `<text class="wp-btl-axislbl" x="${(+xx + 3).toFixed(1)}" y="${B_TOP + 9}">R${s[1]}</text>`;
-  }).join('');
-
-  const flipMarks = flips.map((f, i) => {
-    const xx = x(f.t).toFixed(1);
-    return `<line class="wp-btl-tl-flip" x1="${xx}" x2="${xx}" y1="${A_TOP}" y2="${B_TOP + B_H}"/>`
-      + `<circle class="wp-btl-tl-flipdot" cx="${xx}" cy="${A_TOP + 6}" r="6.5"/>`
-      + `<text class="wp-btl-tl-flipnum" x="${xx}" y="${A_TOP + 9}">${i + 1}</text>`;
-  }).join('');
-
-  // Asse del tempo: ~6 etichette.
-  const nLab = 6;
-  const xLabels = Array.from({ length: nLab + 1 }, (_, i) => t0 + (t1 - t0) * i / nLab).map((t, i) => {
-    const anchor = i === 0 ? 'start' : i === nLab ? 'end' : 'middle';
-    return `<text class="wp-btl-axislbl" x="${x(t).toFixed(1)}" y="${H - 5}" text-anchor="${anchor}">${escapeHtml(fmtTime(t, withDay))}</text>`;
-  }).join('');
-
-  _chart = { t0, t1, iv, S, withDay };
-
-  return `
-    <svg class="wp-btl-chart wp-btl-tl-svg" viewBox="0 0 ${W} ${H}" width="100%" role="img"
-      aria-label="${escapeHtml(tlT('title'))}">
-      <text class="wp-btl-axislbl" x="${PAD_L - 4}" y="${A_TOP + 9}" text-anchor="end">${fmtNum(maxRate)}</text>
-      <text class="wp-btl-axislbl" x="${PAD_L - 4}" y="${A_TOP + A_H - 2}" text-anchor="end">${fmtNum(maxRate)}</text>
-      <text class="wp-btl-axislbl" x="${PAD_L - 4}" y="${mid + 3}" text-anchor="end">0</text>
-      <line class="wp-btl-axis" x1="${PAD_L}" x2="${W - PAD_R}" y1="${mid}" y2="${mid}"/>
-      ${bars}
-      <text class="wp-btl-axislbl" x="${PAD_L - 4}" y="${B_TOP + 8}" text-anchor="end">${maxPts}</text>
-      <text class="wp-btl-axislbl" x="${PAD_L - 4}" y="${B_TOP + B_H}" text-anchor="end">0</text>
-      <line class="wp-btl-axis" x1="${PAD_L}" x2="${W - PAD_R}" y1="${B_TOP + B_H}" y2="${B_TOP + B_H}"/>
-      <line class="wp-btl-tl-goal" x1="${PAD_L}" x2="${W - PAD_R}" y1="${yP(300).toFixed(1)}" y2="${yP(300).toFixed(1)}"/>
-      ${lines.d.map(pts => `<polyline class="wp-btl-tl-pdef" points="${pts}"/>`).join('')}
-      ${lines.a.map(pts => `<polyline class="wp-btl-tl-patk" points="${pts}"/>`).join('')}
-      ${roundMarks}
-      ${flipMarks}
-      ${xLabels}
-      <line class="wp-btl-tl-cursor" x1="0" x2="0" y1="${A_TOP}" y2="${B_TOP + B_H}" visibility="hidden"/>
-      <rect class="wp-btl-tl-hit" x="${PAD_L}" y="${A_TOP}" width="${IW}" height="${B_TOP + B_H - A_TOP}" fill="transparent"/>
-    </svg>`;
-}
+// Zoom, spostamento, riquadro e "allarga" stanno in timelineChart.js: qui
+// resta solo dove il grafico si mette nella sezione.
 
 /* ── Sezione ──────────────────────────────────────────────────── */
 
@@ -315,10 +231,10 @@ export function timelineSectionHtml(tl, { nationName, flagHtml }) {
 
   const flipsHtml = an.flips.length ? `
     <ol class="wp-btl-tl-flips">
-      ${an.flips.map(f => {
+      ${an.flips.map((f, i) => {
         const leader = f.side === 'attacker' ? tl.attacker : tl.defender;
         return `
-        <li class="wp-btl-tl-fliprow wp-btl-tl-${f.side}">
+        <li class="wp-btl-tl-fliprow wp-btl-tl-${f.side}" data-flip="${i}">
           <div class="wp-btl-tl-fliphead">
             <span class="wp-btl-tl-when">${escapeHtml(fmtTime(f.t, withDay))}</span>
             <strong>${tlT('flipLine', { n: nat(leader), r: f.round })}</strong>
@@ -366,17 +282,7 @@ export function timelineSectionHtml(tl, { nationName, flagHtml }) {
   return `
     <h3 class="wp-btl-h3">${tlT('title')} <span class="wp-btl-sub">${tlT('sub')}</span></h3>
     <p class="wp-btl-foot wp-btl-foot-tight">${coverage}${tl.live ? ' ' + tlT('liveNote') : ''}</p>
-    <div class="wp-btl-chartwrap wp-btl-tl-wrap">
-      ${chartSvg(an, tl)}
-      <div class="wp-btl-tl-tip" hidden></div>
-    </div>
-    <div class="wp-btl-legend">
-      <span class="wp-btl-key"><i class="wp-btl-tl-swdef"></i>${tlT('defender')}</span>
-      <span class="wp-btl-key"><i class="wp-btl-tl-swatk"></i>${tlT('attacker')}</span>
-      <span class="wp-btl-key">▮ ${tlT('legendDmg')}</span>
-      <span class="wp-btl-key">╱ ${tlT('legendPts')}</span>
-      <span class="wp-btl-key"><i class="wp-btl-tl-swflip"></i>${tlT('legendFlip')}</span>
-    </div>
+    ${chartBlockHtml(an, tl, { nationName })}
     ${anyGap ? `<p class="wp-btl-foot wp-btl-foot-tight">${tlT('gapNote')}</p>` : ''}
 
     <h3 class="wp-btl-h3">${tlT('flipsTitle')}</h3>
@@ -393,37 +299,8 @@ function _chartDaySpan(an) {
   return S.length > 1 && S[S.length - 1][0] - S[0][0] > 20 * 3600 * 1000;
 }
 
-/** Tooltip sul grafico: l'intervallo sotto il cursore. Da richiamare a
- *  ogni repaint (l'SVG è nuovo ogni volta, quindi niente doppioni). */
-export function wireTimeline(root) {
-  const svg = root.querySelector('.wp-btl-tl-svg');
-  const tip = root.querySelector('.wp-btl-tl-tip');
-  const cursor = svg?.querySelector('.wp-btl-tl-cursor');
-  if (!svg || !tip || !_chart) return;
-  const chart = _chart;
+/** Gesti del grafico (zoom, spostamento, riquadro): da richiamare a ogni
+ *  repaint, l'HTML è nuovo ogni volta. Lo zoom sopravvive ai repaint. */
+export function wireTimeline(root) { wireChart(root); }
 
-  const hide = () => { tip.hidden = true; cursor?.setAttribute('visibility', 'hidden'); };
-  svg.addEventListener('mouseleave', hide);
-  svg.addEventListener('mousemove', (e) => {
-    const rect = svg.getBoundingClientRect();
-    const vx = (e.clientX - rect.left) / rect.width * W;
-    const t = chart.t0 + (vx - PAD_L) / IW * (chart.t1 - chart.t0);
-    const v = chart.iv.find(it => t >= it.t0 && t <= it.t1);
-    if (!v || v.gap) return hide();
-    cursor?.setAttribute('x1', vx.toFixed(1));
-    cursor?.setAttribute('x2', vx.toFixed(1));
-    cursor?.setAttribute('visibility', 'visible');
-    tip.innerHTML = `
-      <div class="wp-btl-tl-tiphead">${escapeHtml(fmtTime(v.t1, chart.withDay))} · ${tlT('tipRound', { r: v.round })}</div>
-      <div><i class="wp-btl-tl-swdef"></i>${tlT('defender')}: <b>${fmtNum(v.d)}${tlT('perMin')}</b> · ${v.dp} ${tlT('points')}</div>
-      <div><i class="wp-btl-tl-swatk"></i>${tlT('attacker')}: <b>${fmtNum(v.a)}${tlT('perMin')}</b> · ${v.ap} ${tlT('points')}</div>`;
-    tip.hidden = false;
-    const wrap = tip.parentElement.getBoundingClientRect();
-    const px = e.clientX - wrap.left + tip.parentElement.scrollLeft;
-    const left = px + 14 + tip.offsetWidth > tip.parentElement.scrollWidth ? px - tip.offsetWidth - 14 : px + 14;
-    tip.style.left = `${Math.max(0, left)}px`;
-    tip.style.top = `${Math.max(0, e.clientY - wrap.top - 10)}px`;
-  });
-}
-
-export function resetTimeline() { _chart = null; }
+export function resetTimeline() { resetChart(); }
