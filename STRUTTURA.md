@@ -22,6 +22,14 @@ wareraPlus/
 │   │                              (gioco vuoto), giro incrementale tutto il giorno.
 │   │                              Endpoint: /battle-archive, /war-expenses,
 │   │                              /battle-archive/status.
+│   ├── muBattleDamage.js       ← NUOVO — danni di OGNI unità giorno per giorno, sommati
+│   │                              battaglia per battaglia dalla classifica per unità
+│   │                              (battleRanking type 'mu'). Giro incrementale ogni 20
+│   │                              min sulle battaglie dell'archivio; recupero di TUTTE
+│   │                              le battaglie note (dal mag 2025) solo di notte, 75 al
+│   │                              minuto, ~una notte. ⚠️ il giorno è quello in cui la
+│   │                              battaglia FINISCE (UTC): settimane e cumulati sì,
+│   │                              barre giornaliere no. Endpoint: /mu-damage-history.
 │   ├── moneyTransfers.js    ← NUOVO — archivio dei finanziamenti fra nazioni
 │   │                              (bonifici da tesoro a tesoro), retention 90 gg.
 │   │                              ⚠️ NIENTE bootstrap e non è una dimenticanza:
@@ -146,6 +154,9 @@ wareraPlus/
 │   │   ├── diplomazia.js           bonifici fra tesori, ricchezza giornaliera dei
 │   │   ├── battaglie.js            giocatori, prezzi, diplomazia, battaglie aperte,
 │   │   ├── lavoro.js               salari e tasse.
+│   │   ├── muBattleSeed.js         (questo NON viene dal dump: estrae id e fine delle
+│   │   │                            15.240 battaglie del vecchio bootstrap da 255 MB,
+│   │   │                            il seme del recupero di muBattleDamage.js)
 │   │   └── README.md               Vedi il suo README per la procedura e per le due
 │   │                               retention allargate (senza, il primo giro di
 │   │                               manutenzione pota quello che l'import ha appena
@@ -390,11 +401,12 @@ wareraPlus/
     │   │                          nazionalità (calcolata dal vivo sui membri) + membri
     │   ├── ranking.js           ← classifiche, ordinate dalla directory (zero fetch)
     │   ├── muCompare.js         ← NUOVO — linguetta "⚔ 1 vs 1": un'unità contro un'altra,
-    │   │                          stessa grafica e regole del 1 vs 2 nazioni (versusBarHtml
-    │   │                          e classi wp-nat-* di nations.css, importato dal modulo):
-    │   │                          sei classifiche, membri, danni e ricchezza per membro, e
-    │   │                          come giocano i membri (se il server di cache c'è). Zero
-    │   │                          fetch. Bottone "Confronta" nella scheda di un'unità.
+    │   │                          nello stile del versus comune (shared/versus.js): sei
+    │   │                          classifiche, membri, danni e ricchezza per membro, come
+    │   │                          giocano i membri, e "DANNI NEL TEMPO" — distacco cumulato
+    │   │                          e settimane, di serie da quando esistono entrambe, da
+    │   │                          /mu-damage-history (senza rotta il riquadro non c'è).
+    │   │                          Bottone "Confronta" nella scheda di un'unità.
     │   │                          Link: ?section=mu&tab=compare&mua=&mub=.
     │   ├── muWealth.js          ← NUOVO — linguetta "Bilancio", l'unica parte CHIUSA
     │   │                          della vista. DUE schermate: ELENCO delle unità con i
@@ -467,7 +479,7 @@ wareraPlus/
     │   │                          ≈ 7 richieste, "cerca più indietro" fino a 31. Il
     │   │                          riepilogo NON dice lo schieramento: la vista non indovina.
     │   │                          I 404 in console sono i batch dove non ha combattuto.
-    │   └── main.js, i18n.js (9 lingue); stile in styles/players.css (wp-ply-*)
+    │   └── main.js, i18n.js (9 lingue); stile in styles/players.css (wp-ply-*), il versus in styles/versus.css
     ├── economy/                  ← NUOVO — Economia: UNA voce di Approfondimenti,
     │   │                            TRE schede. Prima erano due voci separate
     │   │                            ("Ottimizzatore industriale" e "Rendite di
@@ -877,6 +889,11 @@ wareraPlus/
     │   │                          Unità, Spese di guerra, Statistiche nazioni). Prima
     │   │                          colonna ferma, il resto scorre (2026-10-15: da
     │   │                          telefono non si vedeva più "Rendita/pp base").
+    │   ├── versus.js           ← NUOVO (2026-10-18) — i pezzi di TUTTI i confronti 1 vs 1
+    │   │                          (giocatori, unità, nazioni, fazioni di Statistiche
+    │   │                          alleanze): vsRow (tiro alla fune), vsGroup, vsFighter,
+    │   │                          vsHero, countUpScore. Nato dal versus dei giocatori;
+    │   │                          stile in styles/versus.css, importato da qui.
     │   ├── wallpaper.js        ← NUOVO — solo il flag IS_WALLPAPER (?wallpaper=1),
     │   │                          letto da main.js, analytics.js, countryPanel.js
     │   └── trpcClient.js       ← client tRPC unificato: trpcBatchManual (stile Diplomacy)
@@ -895,6 +912,10 @@ wareraPlus/
         │                          ora è una scheda della stessa sezione) e i suoi
         │                          .wp-eco-item/.wp-eco-delta/.wp-eco-note
         │                          atterravano sulla tabella dei prezzi.
+        ├── versus.css          ← NUOVO — lo stile dei confronti 1 vs 1 (wp-vs-*), uscito
+        │                          da players.css. Colori dei lati in --vs-a/--vs-b sulla
+        │                          radice: le fazioni li ridefiniscono (blu/verde) sul
+        │                          loro contenitore. .wp-vs-scope ricolora i selettori.
         └── menubar.css, mobile-menubar.css, mu.css, nations.css, news.css,
             eco.css, guide.css, market.css, battles.css
 ```

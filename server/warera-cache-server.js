@@ -133,6 +133,14 @@ const {
   readBattleArchive, readWarExpenses, readArchiveStatus,
   BOOT_TZ: BOOT_ARCHIVE_TZ,
 } = require('./battleArchive');
+// WarEra+ danni delle unita' giorno per giorno, sommati battaglia per
+// battaglia dalla classifica per unita': lo storico che il 1 vs 1 delle
+// unita' disegna. Vive accanto all'archivio battaglie e ne legge il file,
+// senza toccarlo. Vedi server/muBattleDamage.js.
+const {
+  initMuBattleDamage, pollMuBattleDamage, pollMuBattleDamageBackfill,
+  readMuDamageHistory, muBattleDamageStatus, MU_DAMAGE_TZ,
+} = require('./muBattleDamage');
 // WarEra+ finanziamenti fra nazioni: chi versa nel tesoro di chi. Modulo a
 // se' come i due sopra. ⚠️ niente bootstrap, e non e' una dimenticanza:
 // l'API tiene solo ~3 giorni di bonifici, quindi i 90 giorni si ACCUMULANO
@@ -404,6 +412,13 @@ initProxyIndex({
 initBattleArchive({
   trpcBatch: (...args) => trpcBatch(...args),
   readCache, writeCache,
+});
+
+// Danni per unita': classifiche pubbliche (api6, niente chiave), e la rotta
+// legge con readCacheShared come le altre.
+initMuBattleDamage({
+  trpcBatch: (...args) => trpcBatch(...args),
+  readCache, readCacheShared, writeCache,
 });
 
 // Prezzi: gli bastano trpcBatch (la procedura e' pubblica, niente chiave)
@@ -2482,6 +2497,12 @@ cron.schedule('16,36,56 * * * *', pollMercArchive);         // ogni 20 min, :16
 // di un riavvio pm2 in pieno giorno (il primo giro non passa dal cron).
 cron.schedule('* 2-6 * * *', pollBattleArchiveBootstrap, { timezone: BOOT_ARCHIVE_TZ });
 cron.schedule('* 2-6 * * *', pollMercArchiveBootstrap, { timezone: BOOT_ARCHIVE_TZ });
+// Danni per unita' (server/muBattleDamage.js): il giro incrementale tre
+// minuti dopo quello dell'archivio, da cui prende le battaglie nuove; il
+// recupero di notte come i bootstrap qui sopra, al secondo :30 per non
+// partire nello stesso istante.
+cron.schedule('9,29,49 * * * *', pollMuBattleDamage);       // ogni 20 min, :09
+cron.schedule('30 * 2-6 * * *', pollMuBattleDamageBackfill, { timezone: MU_DAMAGE_TZ });
 // Finanziamenti fra nazioni: ~36 al giorno in tutto il mondo, e il giro si
 // ferma al primo id gia' visto — cioe' quasi sempre UNA richiesta. Offset
 // :11 per non cadere addosso ai due giri dell'archivio (:06 e :16).
@@ -2558,6 +2579,9 @@ cron.schedule('20 3 * * *', () => {
   // si chiama qui — parte da solo alla prima notte utile (vedi cron sopra).
   await pollBattleArchive();
   await pollMercArchive();
+  // Danni per unita': dopo l'archivio, da cui legge. Il primo giro della sua
+  // vita costruisce anche la coda del recupero (che pero' gira solo di notte).
+  pollMuBattleDamage().catch(err => console.error('[mu-battle-damage] avvio:', err.message));
   // Finanziamenti: giro subito e non al primo cron. Non è impazienza —
   // la finestra che l'API espone è di ~3 giorni e scorre, quindi ogni
   // minuto in cui questo modulo non guarda è un pezzo di storico che si
@@ -2963,6 +2987,17 @@ app.get('/region-history/external-status', (req, res) => {
 });
 
 app.get('/credit-profiles', (req, res) => sendCacheFile(req, res, 'credit-profiles', { fetchedAt: null, data: {} }));
+
+// ── Danni per unita' giorno per giorno (server/muBattleDamage.js) ──
+// ?ids=a,b (fino a 10). Il giorno e' quello UTC in cui la battaglia FINISCE:
+// giusto per settimane e cumulati, rumoroso giorno per giorno (vedi la testa
+// del modulo). `coverageFrom` e' il primo giorno di cui sono state contate
+// tutte le battaglie: prima, il client non disegna niente.
+app.get('/mu-damage-history', (req, res) => {
+  const ids = String(req.query.ids || '').split(',').map(s => s.trim()).filter(s => /^[0-9a-f]{24}$/i.test(s));
+  if (!ids.length) return res.status(400).json({ error: 'serve ?ids=<id>,<id>' });
+  res.json(readMuDamageHistory(ids));
+});
 
 // ── Archivio battaglie e spese di guerra (server/battleArchive.js) ──
 // /battle-archive porta le righe compatte (chiavi corte: il file viaggia
@@ -3747,6 +3782,9 @@ app.get('/health', (req, res) => res.json({
   // d'occhio se il bootstrap notturno ha gia' girato o se le due viste
   // stanno ancora lavorando in modalita' ridotta.
   battleArchive: readArchiveStatus(),
+  // Danni per unita': `pending` scende di notte fino a zero, `coverageFrom`
+  // dice fin dove arriva lo storico del 1 vs 1 delle unita'.
+  muBattleDamage: muBattleDamageStatus(),
   // Quanto indietro arrivano i finanziamenti. Subito dopo un deploy copre
   // i ~3 giorni che l'API ricorda, e da li' cresce da solo.
   moneyTransfers: readMoneyTransfersStatus(),

@@ -21,20 +21,27 @@
    Le metriche sommate sono quelle di metrics.js — tasse e malcontento
    restano fuori, sommarli non vorrebbe dire niente (sono percentuali di
    cose diverse); si mostra invece la media.
+
+   STILE: dal 2026-10-18 il versus dei giocatori, comune a tutti i
+   confronti (src/shared/versus.js), al posto delle barre "A contro B" di
+   charts.js. Richiesta dell'utente: un modo solo di leggere un confronto.
    ══════════════════════════════════════════════════════════════ */
 
 import { natT } from './i18n.js';
 import { METRICS, metricValue } from './metrics.js';
-import { versusBarHtml } from './charts.js';
 import { escapeHtml, flagImg, fmtCompact } from '../mu/ui.js';
+import { vsRow, vsGroup, vsTally, vsFighter, vsHero, countUpScore } from '../shared/versus.js';
+import { animationsOn } from '../shared/motion.js';
+
+let _lastSides = null;   // l'ultimo schieramento completo disegnato: l'intro parte solo su uno nuovo
 
 /* ══════════════════════════════════════════════════════════════
    WarEra+ — Chi è in vantaggio (come nel Faction 1 vs 2 delle alleanze)
    ------------------------------------------------------------------
-   Ogni metrica ha un verso (`cmp` in metrics.js). Chi vince la riga va in
-   grassetto col suo vantaggio (+34%, ×2,3 oltre il doppio, differenza
-   quando c'è uno zero), il perdente si spegne; guerre, tasse e quote di
-   build sono neutre. In cima un tabellone: chi è avanti in quante misure.
+   Ogni metrica ha un verso (`cmp` in metrics.js). Chi vince la riga prende
+   il colore del suo lato, il perdente si spegne; guerre, tasse e quote di
+   build sono neutre (vsRow `neutral`), il malcontento vince col valore più
+   basso (`lower`). In cima il punteggio: chi è avanti in quante misure.
    Sotto, le BUILD dei giocatori (guerra/economia), dal censimento del
    server di cache: arrivano con una fetch per sessione, e finché non ci
    sono il gruppo non compare (mai zeri inventati).
@@ -62,13 +69,6 @@ function sommaBuild(list) {
   return out.known ? out : null;
 }
 
-function vantaggio(hi, lo, fmt) {
-  if (lo > 0) {
-    const r = hi / lo;
-    return r >= 2 ? '×' + r.toFixed(1) : '+' + ((r - 1) * 100).toFixed(0) + '%';
-  }
-  return '+' + fmt(hi - lo);
-}
 
 const sost = (s, vars) => Object.entries(vars).reduce((t, [k, v]) => t.split('{' + k + '}').join(String(v)), s);
 
@@ -94,7 +94,12 @@ const SKIPPED = new Set(['regions']);
    posto il grafico già disegnato, invece di ridisegnarlo da "Caricamento…"
    ad ogni tasto.
    ══════════════════════════════════════════════════════════════ */
-const CURVE_COLORS = { a: '#58a6ff', b: '#f0883e' };   // i colori di nations.css
+// I colori dei due lati del versus (--vs-a/--vs-b di versus.css), letti al
+// momento: cambiano col tema chiaro/scuro.
+const curveColors = () => {
+  const cs = getComputedStyle(document.body);
+  return { a: cs.getPropertyValue('--vs-a').trim() || '#ec4899', b: cs.getPropertyValue('--vs-b').trim() || '#38bdf8' };
+};
 // Riuso solo entro REUSE_MS dal disegno: la vista riaperta un'ora dopo
 // ridisegna (e rilegge la serie, che il server allunga ogni ora) invece di
 // mostrare quella vecchia.
@@ -112,10 +117,42 @@ function montaCurve(host, a, b, nomeLato) {
   _curve = { key, el: slot, at: Date.now() };
   const groups = [['a', a], ['b', b]]
     .filter(([, list]) => list.length)
-    .map(([side, list]) => ({ label: nomeLato(list), color: CURVE_COLORS[side], ids: list.map(n => n._id) }));
+    .map(([side, list]) => ({ label: nomeLato(list), color: curveColors()[side], ids: list.map(n => n._id) }));
   import('../diplomacy/blocDamageCurves.js')
     .then(m => m.renderGroupCurves(slot, groups))
     .catch(() => { slot.innerHTML = ''; });
+}
+
+/* Le metriche in due riquadri, come i gruppi del versus dei giocatori.
+   Una metrica che metrics.js aggiunge un giorno e che qui non è elencata
+   finisce nel primo: meglio una riga in più che una misura sparita. */
+const GROUPS = [
+  { key: 'war', title: 'vsGroupWar', icon: '⚔', metrics: ['weekly', 'total', 'perCit', 'bounty', 'allies', 'wars'] },
+  { key: 'eco', title: 'vsGroupEco', icon: '💰', metrics: ['pop', 'wealth', 'dev', 'coreDev', 'prod', 'taxes', 'unrest'] },
+];
+
+/** Il ritratto di un lato: la bandiera se è una nazione sola, la prima
+ *  bandiera col numero se sono di più (e sotto la fila di tutte). */
+function fighterLato(list, side, leader, nomeLato) {
+  if (!list.length) {
+    return vsFighter({
+      side,
+      avatar: '<span class="wp-vs-av wp-vs-av-empty">?</span>',
+      name: `<span class="wp-vs-name wp-vs-name-empty">${escapeHtml(natT(side === 'a' ? 'sideA' : 'sideB'))}</span>`,
+      sub: escapeHtml(natT('noSelection')),
+    });
+  }
+  const many = list.length > 1;
+  return vsFighter({
+    side, leader,
+    avatar: `<span class="wp-vs-av wp-vs-av-flag">${flagImg(list[0]._id, '')}${many ? `<b class="wp-vs-av-count">${list.length}</b>` : ''}</span>`,
+    name: `<span class="wp-vs-name">${escapeHtml(nomeLato(list))}</span>`,
+    lines: [many ? `<div class="wp-vs-flags">${list.map(n => flagImg(n._id, '')).join('')}</div>` : ''],
+    tags: [
+      many ? `<span class="wp-vs-lv">${escapeHtml(sost(natT('vsNations'), { n: list.length }))}</span>` : '',
+      `<span class="wp-vs-lv">${escapeHtml(natT('citizens'))} ${escapeHtml(fmtCompact(list.reduce((s, n) => s + metricValue(n, 'pop'), 0)))}</span>`,
+    ],
+  });
 }
 
 export function renderNationCompare(host, ctx) {
@@ -124,68 +161,66 @@ export function renderNationCompare(host, ctx) {
   const listOf = side => nations.filter(n => sides.get(n._id) === side);
   const a = listOf('a');
   const b = listOf('b');
+  const bothSides = a.length && b.length;
+  const nomeLato = list => list.map(n => n.name).join(' + ');
 
   const agg = (list, m) => {
     if (!list.length) return 0;
     const sum = list.reduce((s, n) => s + metricValue(n, m.key), 0);
     return AVERAGED.has(m.key) ? sum / list.length : sum;
   };
-
-  const tally = { a: 0, b: 0, pari: 0, tot: 0 };
-  const riga = (label, va, vb, fmt, cmp = 1) => {
-    if (cmp === 0) return versusBarHtml({ label, a: va, b: vb, fmt, neutral: true });
-    tally.tot++;
-    // cmp -1: vince il valore più basso (malcontento).
-    const aMeglio = cmp === 1 ? va > vb : va < vb;
-    const bMeglio = cmp === 1 ? vb > va : vb < va;
-    if (!aMeglio && !bMeglio) { tally.pari++; return versusBarHtml({ label, a: va, b: vb, fmt, lowerNote: cmp === -1 ? natT('vsLower') : '' }); }
-    const win = aMeglio ? 'a' : 'b';
-    tally[win]++;
-    const hi = Math.max(va, vb), lo = Math.min(va, vb);
-    // Dove vince il più basso il vantaggio è "quanto meno": differenza.
-    const adv = cmp === -1 ? '−' + fmt(hi - lo) : vantaggio(hi, lo, fmt);
-    return versusBarHtml({ label, a: va, b: vb, fmt, win, adv, lowerNote: cmp === -1 ? natT('vsLower') : '' });
+  // cmp 0 = neutra (si vede, non si conta), -1 = vince il più basso.
+  const riga = (m) => {
+    const lower = m.cmp === -1;
+    const label = natT(m.label) + (lower ? ` (${natT('vsLower')})` : '');
+    return vsRow(label, agg(a, m), agg(b, m), { fmt: m.fmt, lower, neutral: m.cmp === 0 });
   };
 
-  const bothSides = a.length && b.length;
-  let rows = METRICS.filter(m => !SKIPPED.has(m.key))
-    .map(m => riga(natT(m.label), agg(a, m), agg(b, m), m.fmt, bothSides ? (m.cmp ?? 1) : 0))
-    .join('');
-
-  // Build dei giocatori: le QUOTE sono neutre, i CONTEGGI no (più giocatori
-  // da guerra = più forza militare).
+  let section = '';
+  let intro = false;
   if (bothSides) {
+    const byKey = new Map(METRICS.filter(m => !SKIPPED.has(m.key)).map(m => [m.key, m]));
+    const groups = GROUPS.map(g => ({ title: natT(g.title), icon: g.icon, rows: g.metrics.filter(k => byKey.has(k)).map(k => riga(byKey.get(k))) }));
+    const listed = new Set(GROUPS.flatMap(g => g.metrics));
+    for (const [k, m] of byKey) if (!listed.has(k)) groups[0].rows.push(riga(m));
+
+    // Build dei giocatori: le QUOTE sono neutre, i CONTEGGI no (più giocatori
+    // da guerra = più forza militare).
     if (!_ps) caricaBuild(() => { if (host.isConnected) renderNationCompare(host, ctx); });
     const pa = sommaBuild(a), pb = sommaBuild(b);
     if (pa && pb) {
       const pct = v => v.toFixed(1) + '%';
       const q = (p, k) => (p[k] / p.known) * 100;
-      rows += `<li class="wp-nat-vs-group">${escapeHtml(natT('vsBuilds'))}</li>`
-        + riga(natT('vsWarPct'), q(pa, 'war'), q(pb, 'war'), pct, 0)
-        + riga(natT('vsEcoPct'), q(pa, 'eco'), q(pb, 'eco'), pct, 0)
-        + riga(natT('vsWarN'), pa.war, pb.war, fmtCompact)
-        + riga(natT('vsEcoN'), pa.eco, pb.eco, fmtCompact)
-        + riga(natT('vsHybN'), pa.mixed, pb.mixed, fmtCompact, 0);
+      groups.push({ title: natT('vsBuilds'), icon: '🎯', rows: [
+        vsRow(natT('vsWarN'), pa.war, pb.war, { fmt: fmtCompact }),
+        vsRow(natT('vsEcoN'), pa.eco, pb.eco, { fmt: fmtCompact }),
+        vsRow(natT('vsWarPct'), q(pa, 'war'), q(pb, 'war'), { fmt: pct, neutral: true }),
+        vsRow(natT('vsEcoPct'), q(pa, 'eco'), q(pb, 'eco'), { fmt: pct, neutral: true }),
+        vsRow(natT('vsHybN'), pa.mixed, pb.mixed, { fmt: fmtCompact, neutral: true }),
+      ] });
     }
-  }
 
-  const nomeLato = list => list.map(n => n.name).join(' + ');
-  const tabellone = !bothSides
-    ? `<p class="wp-nat-vs-note">${escapeHtml(natT('vsPick'))}</p>`
-    : `<div class="wp-nat-score">
-        ${['a', 'b'].map(l => {
-          const vinte = tally[l], altre = tally[l === 'a' ? 'b' : 'a'];
-          return `<div class="wp-nat-score-side wp-nat-score-${l}${vinte > altre ? ' lead' : ''}">
-            <div class="wp-nat-score-n">${vinte}</div>
-            <div class="wp-nat-score-name">${escapeHtml(nomeLato(l === 'a' ? a : b))}</div>
-            <div class="wp-nat-score-sub">${escapeHtml(sost(natT('vsAhead'), { n: vinte, t: tally.tot }))}</div>
-          </div>`;
-        }).join(`<div class="wp-nat-score-mid">
-            <div class="wp-nat-score-bar"><span class="a" style="width:${(tally.a / tally.tot) * 100}%"></span><span class="pari" style="width:${(tally.pari / tally.tot) * 100}%"></span><span class="b" style="width:${(tally.b / tally.tot) * 100}%"></span></div>
-            ${tally.pari ? `<div class="wp-nat-score-even">${escapeHtml(natT('vsEven'))} · ${tally.pari}</div>` : ''}
-          </div>`)}
-      </div>
-      <p class="wp-nat-vs-note">${escapeHtml(sost(natT('vsNote'), { t: tally.tot }))}</p>`;
+    const t = vsTally(groups.flatMap(g => g.rows));
+    const verdict = t.a === t.b
+      ? sost(natT('vsTie'), { n: t.a })
+      : sost(natT('vsLead'), { name: nomeLato(t.a > t.b ? a : b), n: Math.max(t.a, t.b), t: t.tot });
+    // L'intro solo per uno schieramento nuovo: la ricerca ridisegna a ogni
+    // lettera, e le barre ripartirebbero ogni volta.
+    const key = [a.map(n => n._id).sort().join(','), b.map(n => n._id).sort().join(',')].sort().join('|');
+    if (key !== _lastSides) { _lastSides = key; intro = animationsOn(); }
+    section = `
+      <section class="wp-vs${intro ? ' wp-vs-intro' : ''}">
+        ${vsHero({ a: fighterLato(a, 'a', t.a > t.b, nomeLato), b: fighterLato(b, 'b', t.b > t.a, nomeLato), winsA: t.a, winsB: t.b, verdict, intro })}
+        ${groups.map((g, gi) => vsGroup({ ...g, g: gi })).join('')}
+      </section>
+      <p class="wp-vs-note">${escapeHtml(sost(natT('vsNote'), { t: t.tot }))}</p>
+      <div class="wp-nat-vs-curves"></div>`;
+  } else {
+    section = `
+      <section class="wp-vs">
+        ${vsHero({ a: fighterLato(a, 'a', false, nomeLato), b: fighterLato(b, 'b', false, nomeLato), winsA: 0, winsB: 0, verdict: natT('vsPick'), score: false })}
+      </section>`;
+  }
 
   const chip = n => `
     <button type="button" class="wp-nat-chip wp-nat-chip-${sides.get(n._id)}" data-country="${escapeHtml(n._id)}">
@@ -220,27 +255,29 @@ export function renderNationCompare(host, ctx) {
   };
 
   host.innerHTML = `
-    <p class="wp-nat-hint">${escapeHtml(natT('pickSide'))}</p>
+    <div class="wp-vs-scope">
+      ${section}
 
-    <div class="wp-nat-sides">
-      <div class="wp-nat-side wp-nat-side-a">
-        <h4>${escapeHtml(natT('sideA'))} <span>${a.length}</span></h4>
-        <div class="wp-nat-chips">${a.map(chip).join('') || `<span class="wp-nat-empty-inline">${escapeHtml(natT('noSelection'))}</span>`}</div>
+      <p class="wp-nat-hint">${escapeHtml(natT('pickSide'))}</p>
+      <div class="wp-nat-sides">
+        <div class="wp-nat-side wp-nat-side-a">
+          <h4>${escapeHtml(natT('sideA'))} <span>${a.length}</span></h4>
+          <div class="wp-nat-chips">${a.map(chip).join('') || `<span class="wp-nat-empty-inline">${escapeHtml(natT('noSelection'))}</span>`}</div>
+        </div>
+        <div class="wp-nat-side wp-nat-side-b">
+          <h4>${escapeHtml(natT('sideB'))} <span>${b.length}</span></h4>
+          <div class="wp-nat-chips">${b.map(chip).join('') || `<span class="wp-nat-empty-inline">${escapeHtml(natT('noSelection'))}</span>`}</div>
+        </div>
+        <button type="button" class="wp-nat-reset" id="wp-nat-reset">${escapeHtml(natT('reset'))}</button>
       </div>
-      <div class="wp-nat-side wp-nat-side-b">
-        <h4>${escapeHtml(natT('sideB'))} <span>${b.length}</span></h4>
-        <div class="wp-nat-chips">${b.map(chip).join('') || `<span class="wp-nat-empty-inline">${escapeHtml(natT('noSelection'))}</span>`}</div>
+
+      <div class="wp-nat-pickers">
+        ${pickerHtml('a')}
+        ${pickerHtml('b')}
       </div>
-      <button type="button" class="wp-nat-reset" id="wp-nat-reset">${escapeHtml(natT('reset'))}</button>
-    </div>
-
-    ${(a.length || b.length) ? `${tabellone}<ul class="wp-nat-vs">${rows}</ul><div class="wp-nat-vs-curves"></div>` : ''}
-
-    <div class="wp-nat-pickers">
-      ${pickerHtml('a')}
-      ${pickerHtml('b')}
     </div>`;
 
+  if (intro) countUpScore(host);
   montaCurve(host, a, b, nomeLato);
 
   // Griglia: il lato è quello dell'elenco su cui si è cliccato.

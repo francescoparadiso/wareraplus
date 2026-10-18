@@ -308,3 +308,36 @@ export function fetchUsersLite(userIds) {
     trpcCall('user.getUserLite', { userId: id }).catch(() => null)
   ));
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Danni di un'unità giorno per giorno (/mu-damage-history)
+   ------------------------------------------------------------------
+   Per il 1 vs 1 (muCompare.js): quanto ha fatto ogni unità, sommato
+   battaglia per battaglia dal server di cache (server/muBattleDamage.js).
+   Il giorno è quello UTC in cui la battaglia FINISCE: va bene per
+   settimane e cumulati, non per barre giornaliere.
+
+   Una richiesta per coppia, tenuta in memoria per la sessione (lo storico
+   cambia ogni 20 minuti, e chi confronta due unità guarda e torna). Il
+   server vecchio risponde 404 → null, e la sezione non compare: è un di
+   più, non deve rompere il confronto.
+   ══════════════════════════════════════════════════════════════ */
+const _muDamageCache = new Map();
+
+export function fetchMuDamageHistory(muIds) {
+  const ids = [...new Set((muIds || []).filter(Boolean))].sort();
+  if (!ids.length) return Promise.resolve(null);
+  const key = ids.join(',');
+  if (!_muDamageCache.has(key)) {
+    const p = _fetchCacheJson(`/mu-damage-history?ids=${encodeURIComponent(key)}`)
+      .then(json => (json && json.data && typeof json.data === 'object' ? json : null))
+      .catch(err => {
+        console.warn('WarEra+ mu: /mu-damage-history non disponibile:', err.message);
+        _muDamageCache.delete(key); // riprovabile alla prossima coppia uguale
+        return null;
+      });
+    _muDamageCache.set(key, p);
+  }
+  return _muDamageCache.get(key);
+}
+

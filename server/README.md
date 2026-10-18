@@ -8,6 +8,19 @@ deployarlo da qui — il deploy resta manuale sul VPS.
 
 ## Deploy di un aggiornamento
 
+> **Danni per unità (`muBattleDamage.js`, 2026-10-18).** Oltre al modulo,
+> UNA volta sola il seme del recupero (nel repo sta in `import/`, sul VPS
+> accanto agli altri import, nella cartella del server):
+>
+> ```bash
+> scp -i ../serverOracle/ssh-key-2026-08-18.key server/import/muBattleSeed.js ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
+> ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && node --max-old-space-size=700 muBattleSeed.js"
+> ```
+>
+> Legge `bootstrap-raw-battles.json` (255 MB) in un processo suo e scrive
+> `cache/mu-backfill-seed.json`. Si può lanciare prima o dopo il riavvio: se
+> la coda del recupero esiste già, il modulo ci aggiunge il seme al giro dopo.
+
 Host attuale: `ubuntu@79.72.45.17` (`warera-oracle.duckdns.org`), chiave e
 appunti in `warEra/serverOracle/`. In pratica:
 
@@ -17,7 +30,7 @@ cartella `server/` non esiste. La chiave sta una cartella più in su, in
 `warEra/serverOracle/`, da cui il `../` nel percorso.
 
 ```bash
-scp -i ../serverOracle/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/languages.js server/battleArchive.js server/moneyTransfers.js server/damageTimeline.js server/priceHistory.js server/dayHistory.js server/labourHistory.js server/citizenMoves.js server/allianceHistory.js server/politicalHistory.js server/battleTimeline.js server/companyCensus.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
+scp -i ../serverOracle/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/languages.js server/battleArchive.js server/moneyTransfers.js server/damageTimeline.js server/priceHistory.js server/dayHistory.js server/labourHistory.js server/citizenMoves.js server/allianceHistory.js server/politicalHistory.js server/battleTimeline.js server/companyCensus.js server/muBattleDamage.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
 ```
 
 Manda **tutti** i moduli, non il solo `warera-cache-server.js`: i loro
@@ -30,7 +43,7 @@ che si ferma alla sintassi: eseguire il server per provarlo aprirebbe la
 porta 3001 e i cron accanto al processo pm2 gia' vivo.
 
 ```bash
-ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && for f in warera-cache-server.js proxyIndex.js languages.js battleArchive.js moneyTransfers.js damageTimeline.js priceHistory.js dayHistory.js labourHistory.js citizenMoves.js allianceHistory.js politicalHistory.js battleTimeline.js companyCensus.js; do node --check \$f || exit 1; done && echo PREFLIGHT-OK"
+ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && for f in warera-cache-server.js proxyIndex.js languages.js battleArchive.js moneyTransfers.js damageTimeline.js priceHistory.js dayHistory.js labourHistory.js citizenMoves.js allianceHistory.js politicalHistory.js battleTimeline.js companyCensus.js muBattleDamage.js; do node --check \$f || exit 1; done && echo PREFLIGHT-OK"
 ```
 
 Solo se stampa `PREFLIGHT-OK`:

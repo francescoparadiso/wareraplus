@@ -76,6 +76,8 @@ const N_DICT = {
     vsAhead: "ahead in {n} of {t}",
     vsEven: "even",
     vsNote: "Counted on {t} measures; wars, taxes and build shares are shown but not scored.",
+    // il 1 vs 2 nello stile del versus (nationCompare.js)
+    vsGroupWar: "War", vsGroupEco: "Economy & state", vsLead: "{name} is ahead in {n} of {t}", vsTie: "Dead even: {n} each", vsNations: "{n} nations",
     vsPick: "Add at least one nation to each side to see who is ahead.",
     vsBuilds: "Builds · mobilization",
     vsWarPct: "War players %",
@@ -148,6 +150,8 @@ const N_DICT = {
     vsAhead: "in vantaggio in {n} su {t}",
     vsEven: "pari",
     vsNote: "Contato su {t} misure; guerre, tasse e quote di build si vedono ma non contano.",
+    // il 1 vs 2 nello stile del versus (nationCompare.js)
+    vsGroupWar: "Guerra", vsGroupEco: "Economia e Stato", vsLead: "{name} è avanti in {n} misure su {t}", vsTie: "Pari: {n} a testa", vsNations: "{n} nazioni",
     vsPick: "Aggiungi almeno una nazione per parte per vedere chi è in vantaggio.",
     vsBuilds: "Build · mobilitazione",
     vsWarPct: "% giocatori di guerra",
@@ -220,6 +224,8 @@ const N_DICT = {
     vsAhead: "por delante en {n} de {t}",
     vsEven: "empate",
     vsNote: "Contado sobre {t} medidas; guerras, impuestos y porcentajes de build se muestran pero no puntúan.",
+    // il 1 vs 2 nello stile del versus (nationCompare.js)
+    vsGroupWar: "Guerra", vsGroupEco: "Economía y Estado", vsLead: "{name} va por delante en {n} de {t}", vsTie: "Empate: {n} cada uno", vsNations: "{n} naciones",
     vsPick: "Añade al menos una nación a cada lado para ver quién va por delante.",
     vsBuilds: "Builds · movilización",
     vsWarPct: "% jugadores de guerra",
@@ -292,6 +298,8 @@ const N_DICT = {
     vsAhead: "vorn in {n} von {t}",
     vsEven: "gleichauf",
     vsNote: "Gezählt über {t} Werte; Kriege, Steuern und Build-Anteile werden gezeigt, aber nicht gewertet.",
+    // il 1 vs 2 nello stile del versus (nationCompare.js)
+    vsGroupWar: "Krieg", vsGroupEco: "Wirtschaft & Staat", vsLead: "{name} liegt in {n} von {t} vorn", vsTie: "Gleichstand: je {n}", vsNations: "{n} Nationen",
     vsPick: "Füge jeder Seite mindestens eine Nation hinzu, um zu sehen, wer vorn liegt.",
     vsBuilds: "Builds · Mobilisierung",
     vsWarPct: "% Kriegsspieler",
@@ -364,6 +372,8 @@ const N_DICT = {
     vsAhead: "en tête sur {n} de {t}",
     vsEven: "égalité",
     vsNote: "Compté sur {t} mesures ; guerres, impôts et parts de build sont affichés mais pas comptés.",
+    // il 1 vs 2 nello stile del versus (nationCompare.js)
+    vsGroupWar: "Guerre", vsGroupEco: "Économie et État", vsLead: "{name} mène sur {n} de {t}", vsTie: "Égalité : {n} chacun", vsNations: "{n} nations",
     vsPick: "Ajoute au moins une nation de chaque côté pour voir qui est en tête.",
     vsBuilds: "Builds · mobilisation",
     vsWarPct: "% joueurs de guerre",
@@ -436,6 +446,8 @@ const N_DICT = {
     vsAhead: "voor in {n} van {t}",
     vsEven: "gelijk",
     vsNote: "Geteld op {t} waarden; oorlogen, belastingen en buildaandelen worden getoond maar niet meegeteld.",
+    // il 1 vs 2 nello stile del versus (nationCompare.js)
+    vsGroupWar: "Oorlog", vsGroupEco: "Economie & staat", vsLead: "{name} staat voor in {n} van {t}", vsTie: "Gelijk: {n} elk", vsNations: "{n} naties",
     vsPick: "Voeg aan elke kant minstens één land toe om te zien wie voor staat.",
     vsBuilds: "Builds · mobilisatie",
     vsWarPct: "% oorlogsspelers",
@@ -508,6 +520,8 @@ const N_DICT = {
     vsAhead: "leder i {n} av {t}",
     vsEven: "jämnt",
     vsNote: "Räknat på {t} mått; krig, skatter och buildandelar visas men räknas inte.",
+    // il 1 vs 2 nello stile del versus (nationCompare.js)
+    vsGroupWar: "Krig", vsGroupEco: "Ekonomi & stat", vsLead: "{name} leder i {n} av {t}", vsTie: "Lika: {n} var", vsNations: "{n} nationer",
     vsPick: "Lägg till minst en nation på varje sida för att se vem som leder.",
     vsBuilds: "Builds · mobilisering",
     vsWarPct: "% krigsspelare",
@@ -580,6 +594,8 @@ const N_DICT = {
     vsAhead: "à frente em {n} de {t}",
     vsEven: "empate",
     vsNote: "Contado em {t} medidas; guerras, impostos e parcelas de build aparecem mas não contam.",
+    // il 1 vs 2 nello stile del versus (nationCompare.js)
+    vsGroupWar: "Guerra", vsGroupEco: "Economia e Estado", vsLead: "{name} está à frente em {n} de {t}", vsTie: "Empate: {n} cada", vsNations: "{n} nações",
     vsPick: "Adicione pelo menos uma nação de cada lado para ver quem está à frente.",
     vsBuilds: "Builds · mobilização",
     vsWarPct: "% jogadores de guerra",
@@ -652,6 +668,8 @@ const N_DICT = {
     vsAhead: "متقدم في {n} من {t}",
     vsEven: "تعادل",
     vsNote: "محسوب على {t} مقياسًا؛ الحروب والضرائب ونسب البناء معروضة لكنها لا تُحتسب.",
+    // il 1 vs 2 nello stile del versus (nationCompare.js)
+    vsGroupWar: "الحرب", vsGroupEco: "الاقتصاد والدولة", vsLead: "{name} متقدم في {n} من {t}", vsTie: "تعادل: {n} لكل جانب", vsNations: "{n} دول",
     vsPick: "أضف دولة واحدة على الأقل في كل جهة لترى من المتقدم.",
     vsBuilds: "البناءات · التعبئة",
     vsWarPct: "% لاعبي الحرب",

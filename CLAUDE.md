@@ -258,6 +258,7 @@ serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`
 `/ticker` + `/ticker/summary`,
 `/region-history/{at,range,events,contested,war-intensity}`, `/alliances`,
 `/battles`, `/elections`, `/parties`, `/users-lite`, `/credit-profiles`,
+`/mu-damage-history`,
 `/visits`, `/health`.
 
 Espone inoltre **`/trpc/*`**: un proxy passthrough verso `api2.warera.io`
@@ -416,6 +417,19 @@ un buco di copertura per un "nessuno ha finanziato".
 Le **battaglie in corso** in cima all'archivio sono l'unica parte della
 sezione che NON dipende da un rideploy: arrivano da `/battles`, che il server
 serve già, e senza server ricadono sul Worker come i marker della mappa.
+
+I **danni nel tempo** del 1 vs 1 delle unità (`src/mu/muCompare.js` +
+`server/muBattleDamage.js`) dipendono da `/mu-damage-history`: senza
+rideploy la rotta risponde 404 e il riquadro "Danni nel tempo" non compare,
+mentre il resto del confronto è identico. Dopo il deploy il giro diurno
+conta solo le battaglie NUOVE; tutte le altre (archivio + il seme di
+`import/muBattleSeed.js`, dal maggio 2025) le recupera la notte, fra le
+02:00 e le 06:59, 75 al minuto: una notte. Fino ad allora il riquadro
+dichiara da che giorno parte (`coverageFrom`) e quante battaglie mancano.
+⚠️ Il giorno è quello in cui la battaglia FINISCE (UTC): verificato contro
+gli scatti, su un mese torna entro l'1%, ma giorno per giorno è rumoroso
+(una battaglia dura anche un giorno intero). Per questo settimane e
+cumulato, mai barre giornaliere. `/health` → `muBattleDamage`.
 
 Il **Bilancio unità** (`src/mu/muWealth.js` + `server/plusApi/wealth.js`)
 dipende dal redeploy di **warera-plus-api**, non del cache-server: finché
