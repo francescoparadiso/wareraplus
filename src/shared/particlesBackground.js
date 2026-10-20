@@ -37,6 +37,16 @@ const GLOW_SPRITE_SIZE = 64;
 // indistinguibile dal continuo, ma sono 6 sprite per tema in tutto.
 const GLOW_STEPS = 6;
 
+// Il numero di nodi segue l'area del canvas invece di essere fisso. Con
+// 60 nodi sempre, uno schermo di telefono (~390×700) ne aveva quanti un
+// monitor da 1920×1000, cioè quattro-cinque volte la densità, e con linee
+// lunghe fino a 180px — mezza larghezza dello schermo — il campo era una
+// ragnatela fitta. Tarato perché un desktop da ~1280×720 in su resti ai
+// 60 di prima; un telefono ne tiene una quindicina.
+const AREA_PER_NODE = 16000;   // px² di canvas per nodo
+const MIN_NODES = 12;
+const MAX_NODES = 60;
+
 function parseRgb(str) {
   const [r, g, b] = String(str).split(',').map(n => parseFloat(n) || 0);
   return [r, g, b];
@@ -55,8 +65,9 @@ function mixRgb(a, b, t) {
  * @param {string} [opts.rgbLight]  - prima tinta sul tema chiaro
  * @param {string} [opts.rgbLight2] - seconda tinta sul tema chiaro
  * @param {() => boolean} [opts.isLight] - come stabilire il tema attivo
- * @param {number} [opts.count]     - numero di nodi
+ * @param {number} [opts.count]     - numero di nodi (default: in base all'area)
  * @param {number} [opts.maxDist]   - distanza massima per tracciare una linea
+ *                                    (default: in base al lato corto)
  * @returns {() => void} stop
  */
 export function startParticles(canvas, opts = {}) {
@@ -70,8 +81,6 @@ export function startParticles(canvas, opts = {}) {
                     parseRgb(opts.rgbDark2 || opts.rgbDark || '197,150,74')];
   const rampLight = [parseRgb(opts.rgbLight || '130,95,38'),
                      parseRgb(opts.rgbLight2 || opts.rgbLight || '130,95,38')];
-  const NODE_COUNT = opts.count || 60;
-  const MAX_DIST = opts.maxDist || 180;
   // Default: il tema chiaro dello shell è `body.light-theme`, quello di
   // Political è l'attributo data-theme sull'<html> — accettiamo entrambi,
   // così lo stesso modulo va bene in tutti e due i contesti.
@@ -79,7 +88,7 @@ export function startParticles(canvas, opts = {}) {
     document.body.classList.contains('light-theme') ||
     document.documentElement.getAttribute('data-theme') === 'light');
 
-  let W, H, nodes = [], animId;
+  let W, H, maxDist, nodes = [], animId;
   let stopped = false;
   let frameToggle = false;
   let glowSprites = null;          // una per gradino della rampa
@@ -119,9 +128,20 @@ export function startParticles(canvas, opts = {}) {
     H = canvas.height = Math.max(1, Math.round(r.height) || window.innerHeight);
   }
 
-  function init() {
-    resize();
-    nodes = Array.from({ length: NODE_COUNT }, () => ({
+  function nodeTarget() {
+    if (opts.count) return opts.count;
+    return Math.max(MIN_NODES, Math.min(MAX_NODES, Math.round(W * H / AREA_PER_NODE)));
+  }
+
+  // Le linee si accorciano col lato corto: 180px su un telefono sono metà
+  // schermo, e collegherebbero quasi ogni nodo a quasi ogni altro.
+  function linkTarget() {
+    if (opts.maxDist) return opts.maxDist;
+    return Math.max(110, Math.min(180, Math.min(W, H) * 0.33));
+  }
+
+  function newNode() {
+    return {
       x: Math.random() * W,
       y: Math.random() * H,
       vx: (Math.random() - 0.5) * 0.35,
@@ -130,7 +150,13 @@ export function startParticles(canvas, opts = {}) {
       // Posizione fissa sulla rampa fra le due tinte della sezione: i
       // nodi restano riconoscibili individualmente invece di pulsare.
       t: Math.random(),
-    }));
+    };
+  }
+
+  function init() {
+    resize();
+    maxDist = linkTarget();
+    nodes = Array.from({ length: nodeTarget() }, newNode);
   }
 
   function color(alpha, isLight, t) {
@@ -155,8 +181,8 @@ export function startParticles(canvas, opts = {}) {
           const dx = nodes[i].x - nodes[j].x;
           const dy = nodes[i].y - nodes[j].y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < MAX_DIST) {
-            const a = (1 - dist / MAX_DIST) * 0.65;
+          if (dist < maxDist) {
+            const a = (1 - dist / maxDist) * 0.65;
             ctx.beginPath();
             ctx.moveTo(nodes[i].x, nodes[i].y);
             ctx.lineTo(nodes[j].x, nodes[j].y);
@@ -191,6 +217,17 @@ export function startParticles(canvas, opts = {}) {
     // quando la finestra si rimpicciolisce.
     if (oldW && oldH) {
       nodes.forEach(n => { n.x = n.x / oldW * W; n.y = n.y / oldH * H; });
+    }
+    maxDist = linkTarget();
+    // Il numero di nodi si riallinea solo su un cambio vero (finestra
+    // ridimensionata, telefono ruotato con area diversa): la barra degli
+    // indirizzi che sul telefono compare e sparisce sposta l'altezza di
+    // poche decine di pixel, e un pallino che nasce o svanisce a ogni
+    // scroll si noterebbe più della densità di un nodo in più.
+    const target = nodeTarget();
+    if (Math.abs(target - nodes.length) >= Math.max(2, nodes.length * 0.2)) {
+      if (target < nodes.length) nodes.length = target;
+      else while (nodes.length < target) nodes.push(newNode());
     }
   };
 
