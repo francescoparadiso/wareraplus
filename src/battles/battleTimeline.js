@@ -13,6 +13,8 @@
       cambia, chi del lato che passa avanti ha fatto il danno nei 10
       minuti prima, con "appena entrata" su chi è arrivato lì;
    3. gli INGRESSI — per ogni nazione, il primo tick in cui compare.
+   Più, nello stesso grafico (stesso asse dei tempi), i SOLDI SPESI:
+   totale, taglia e contratti cumulati — vedi analyzeMoney più sotto.
 
    ⚠️ Niente fallback e niente ricostruzione: il gioco non conserva
    l'andamento di una battaglia (vedi la testata del modulo server), e un
@@ -191,6 +193,70 @@ export function analyzeTimeline(tl) {
   return { S, iv, flips, entries, preexisting: preSet.size, gapMs: GAP_MS };
 }
 
+/* ── Soldi spesi nel tempo ────────────────────────────────────────
+   Richiesta dell'utente (2026-10-20): accanto al danno, «un grafico dei
+   soldi spesi, con 3 linee: totale, solo taglia, solo contratti».
+   Cumulati, cioè "speso finora", per tutti e due i lati insieme; il
+   riquadro li divide per lato.
+
+   - TAGLIA: quanto è SCESO il salvadanaio di un lato fra due campioni
+     (campi 7-8 di `s`, dal deploy del 2026-10-20). Non è una stima: è il
+     salvadanaio stesso. Una salita è una ricarica e vale zero pagato. I
+     buchi di lettura non fanno perdere niente (la discesa attraverso il
+     buco è quella vera), solo la sua distribuzione nel tempo. Prima del
+     primo campione col salvadanaio la taglia NON si sa: le linee taglia e
+     totale partono da lì (`bountyFrom`) e la nota lo dice.
+   - CONTRATTI: il compenso pattuito di ogni contratto aggiudicato,
+     contato quando l'asta si chiude (`awardedAt`). Viene dalle aste, non
+     dal server, quindi c'è sempre — anche per le battaglie registrate
+     prima di quel deploy. ⚠️ È un impegno preso a quell'ora: l'unità lo
+     incassa a danno consegnato, più tardi.
+   Le due voci si sommano senza doppi conteggi: è la stessa regola del
+   totale in testa alla scheda (vedi src/diplomacy/battleSpending.js). */
+
+const _drop = (p, c) => (p != null && c != null && c < p ? p - c : 0);
+
+/** @returns {null | { pts:[t, taglia difesa, taglia attacco, contratti difesa, contratti attacco][],
+ *            bountyFrom:number|null, hasContracts:boolean, total:number }} */
+export function analyzeMoney(S, contracts, T0, T1) {
+  const ctr = (contracts || [])
+    .filter(c => c && c.payout > 0)
+    .map(c => ({ t: Math.min(T1, Math.max(T0, c.awardedAt || c.createdAt || T0)), side: c.side, v: c.payout }))
+    .sort((a, b) => a.t - b.t);
+  const pool = S.filter(s => s.length > 8);
+  if (!ctr.length && !pool.length) return null;
+
+  // Tutti gli istanti in cui qualcosa cambia, in ordine: i campioni col
+  // salvadanaio e le aste chiuse. A ogni istante il cumulato delle 4 voci.
+  const pts = [];
+  let bD = 0, bA = 0, cD = 0, cA = 0;
+  let i = 0, j = 0, prev = null;
+  const push = (t) => {
+    const last = pts[pts.length - 1];
+    if (last && last[0] === t) { last[1] = bD; last[2] = bA; last[3] = cD; last[4] = cA; }
+    else pts.push([t, bD, bA, cD, cA]);
+  };
+  // i contratti chiusi prima del primo campione partono da T0
+  push(T0);
+  while (i < pool.length || j < ctr.length) {
+    if (j < ctr.length && (i >= pool.length || ctr[j].t <= pool[i][0])) {
+      const c = ctr[j++];
+      if (c.side === 'defender') cD += c.v; else cA += c.v;
+      push(c.t);
+    } else {
+      const s = pool[i++];
+      if (prev) { bA += _drop(prev[7], s[7]); bD += _drop(prev[8], s[8]); }
+      prev = s;
+      push(s[0]);
+    }
+  }
+  if (pts[pts.length - 1][0] < T1) push(T1);
+  const last = pts[pts.length - 1];
+  const total = last[1] + last[2] + last[3] + last[4];
+  if (total <= 0) return null;
+  return { pts, bountyFrom: pool.length ? pool[0][0] : null, hasContracts: ctr.length > 0, total };
+}
+
 /* ── Formattazione ────────────────────────────────────────────── */
 
 function fmtNum(n) {
@@ -215,11 +281,14 @@ function fmtTime(ms, withDay) {
 
 /**
  * @param tl        risposta di /battle-timeline, o null/undefined
- * @param helpers   { nationName(id), flagHtml(id) } — quelli della scheda
+ * @param helpers   { nationName(id), flagHtml(id) } — quelli della scheda;
+ *                  `contracts` (aggiudicati, da getBattleDetail) per i soldi spesi
  */
-export function timelineSectionHtml(tl, { nationName, flagHtml }) {
+export function timelineSectionHtml(tl, { nationName, flagHtml, contracts = null, contractsTruncated = false }) {
   if (!tl || !Array.isArray(tl.s) || tl.s.length < 2) return '';
   const an = analyzeTimeline(tl);
+  const T0 = an.S[0][0];
+  an.money = analyzeMoney(an.S, contracts, T0, Math.max(an.S[an.S.length - 1][0], T0 + 60000));
   const nat = (id) => `${flagHtml(id)}${escapeHtml(nationName(id) || '—')}`;
   const sideLbl = (s) => s === 'attacker' ? tlT('attacker') : tlT('defender');
   const withDay = _chartDaySpan(an);
@@ -284,6 +353,7 @@ export function timelineSectionHtml(tl, { nationName, flagHtml }) {
     <p class="wp-btl-foot wp-btl-foot-tight">${coverage}${tl.live ? ' ' + tlT('liveNote') : ''}</p>
     ${chartBlockHtml(an, tl, { nationName })}
     ${anyGap ? `<p class="wp-btl-foot wp-btl-foot-tight">${tlT('gapNote')}</p>` : ''}
+    ${moneyNoteHtml(an.money, tl, contractsTruncated)}
 
     <h3 class="wp-btl-h3">${tlT('flipsTitle')}</h3>
     ${flipsHtml}
@@ -292,6 +362,18 @@ export function timelineSectionHtml(tl, { nationName, flagHtml }) {
     ${an.preexisting ? `<p class="wp-btl-foot wp-btl-foot-tight">${tlT('alreadyIn', { n: an.preexisting })}</p>` : ''}
     ${entriesHtml}
     <p class="wp-btl-foot wp-btl-foot-tight">${tlT('precisionNote')}${tl.truncated ? ' ' + tlT('truncatedNote') : ''}</p>`;
+}
+
+/** Cosa c'è e cosa no nel pannello dei soldi spesi. */
+function moneyNoteHtml(m, tl, contractsTruncated) {
+  if (!m) return '';
+  const parts = [tlT('moneyNote')];
+  if (m.bountyFrom == null) parts.push(tlT('moneyNoBounty'));
+  else if (m.bountyFrom > (tl.createdAt || m.bountyFrom) + 3 * 60 * 1000) {
+    parts.push(tlT('moneyBountyFrom', { t: escapeHtml(fmtTime(m.bountyFrom, true)) }));
+  }
+  if (contractsTruncated) parts.push(tlT('moneyCtrTruncated'));
+  return `<p class="wp-btl-foot wp-btl-foot-tight">${parts.join(' ')}</p>`;
 }
 
 function _chartDaySpan(an) {

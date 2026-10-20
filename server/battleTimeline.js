@@ -21,7 +21,10 @@
 
    ── Due serie, a due ritmi ─────────────────────────────────────
    1. `s` — UN CAMPIONE AL MINUTO per battaglia attiva:
-        [t, round, ticksCount, dannoAtk, dannoDef, puntiAtk, puntiDef]
+        [t, round, ticksCount, dannoAtk, dannoDef, puntiAtk, puntiDef,
+         salvadanaioAtk, salvadanaioDef]
+      (gli ultimi due dal 2026-10-20: la taglia pagata nel tempo, vedi
+      _sampleOf; null = quel lato non ha una taglia)
       Danni e punti sono quelli del ROUND corrente (si azzerano al cambio
       round). Costa una richiesta al minuto in tutto: battle.getBattles
       pagina da 100 e porta già `currentRound` di tutte (~25 attive).
@@ -114,6 +117,14 @@ function _newRecord(b, now) {
   };
 }
 
+// WarEra+ (2026-10-20) — il salvadanaio della taglia, per il grafico dei
+// soldi spesi. battle.getBattles lo porta già (`moneyPool` per lato, assente
+// se quel lato non ha mai messo una taglia), quindi non costa richieste:
+// quanto è uscito fra due minuti è quanto è sceso. Una RICARICA lo fa
+// salire, e il client la tratta come zero pagato in quel minuto — se nello
+// stesso minuto c'è anche un pagamento si perde quello, ed è l'unico errore.
+const _pool = (v) => (Number.isFinite(v) ? Math.round(v * 100) / 100 : null);
+
 function _sampleOf(b, now) {
   const cr = b.currentRound || {};
   return [
@@ -124,6 +135,8 @@ function _sampleOf(b, now) {
     cr.defender?.damages || 0,
     cr.attacker?.points || 0,
     cr.defender?.points || 0,
+    _pool(b.attacker?.moneyPool),
+    _pool(b.defender?.moneyPool),
   ];
 }
 
@@ -279,7 +292,9 @@ function _public(rec) {
     coverageFrom: rec.coverageFrom,
     baseAt: rec.baseAt,
     truncated: Boolean(rec.truncated),
-    sampleFields: ['t', 'round', 'ticks', 'atkDamage', 'defDamage', 'atkPoints', 'defPoints'],
+    // Gli ultimi due ci sono solo nei campioni dal 2026-10-20: prima di
+    // quel deploy i campioni hanno 7 campi e la taglia nel tempo non c'è.
+    sampleFields: ['t', 'round', 'ticks', 'atkDamage', 'defDamage', 'atkPoints', 'defPoints', 'atkPool', 'defPool'],
     s: rec.s,
     tickFields: ['t', 'round', 'ticks', 'atkByCountry', 'defByCountry'],
     k: rec.k,

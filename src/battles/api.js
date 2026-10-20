@@ -409,6 +409,10 @@ export async function getBattleDetail(battleId, { live = false } = {}) {
         perK: Number(a.currentPerK) || 0,
         minDamage: Number(a.minimumDamage) || 0,
         createdAt: _ts(a.createdAt),
+        // Quando l'asta si è chiusa, cioè quando il compenso è stato
+        // pattuito: è il momento in cui il grafico dei soldi spesi
+        // (Andamento) conta il contratto.
+        awardedAt: _ts(a.expiresAt) || _ts(a.createdAt),
       })).sort((a, b) => b.payout - a.payout),
       contractsTruncated: Boolean(auctions?.truncated),
       rounds: _rounds(raw),

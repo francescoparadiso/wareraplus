@@ -132,6 +132,9 @@ wareraPlus/
 │   │                              colpi, roundsHistory = solo i finali). Battaglie vive
 │   │                              in memoria, chiuse in cache/battle-timeline/<id>.json.gz,
 │   │                              nessuna potatura (~250 MB/anno stimati).
+│   │                              Dal 2026-10-20 ogni campione porta anche il
+│   │                              salvadanaio della taglia dei due lati (gratis: è
+│   │                              già in getBattles) → la taglia pagata nel tempo.
 │   │                              Endpoint: /battle-timeline?battleId=.
 │   ├── companyCensus.js        ← NUOVO — per risorsa: aziende di proprietari
 │   │                              ATTIVI, quante con dipendenti, dipendenti,
@@ -644,6 +647,11 @@ wareraPlus/
     │   │                  ⚠️ una battaglia già aperta al primo sguardo ha la prima
     │   │                  lettura come FONDO (`baseAt`): chi c'era non è un
     │   │                  ingresso. Testi in timelineI18n.js (9 lingue).
+    │   │                  + SOLDI SPESI (analyzeMoney): totale, taglia e
+    │   │                  contratti cumulati. Taglia = discesa del salvadanaio
+    │   │                  (solo battaglie registrate dopo il rideploy del
+    │   │                  2026-10-20), contratti = aste aggiudicate all'ora di
+    │   │                  chiusura (ci sono sempre).
     │   ├── timelineChart.js ← NUOVO — il grafico di battleTimeline.js reso
     │   │                  esplorabile: zoom (rotella, pizzico, trascinamento,
     │   │                  scorciatoie per round), striscia di navigazione per

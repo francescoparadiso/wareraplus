@@ -899,6 +899,27 @@ body.light-theme .wp-btl-tl-tip { background: var(--wp-ov-bg-light, #f4f6fa); }
 .wp-btl-tl-swatk { background: var(--wp-btl-atk); }
 .wp-btl-tl-swflip { background: var(--wp-btl-flip); }
 
+/* WarEra+ — soldi spesi nel grafico dell'andamento (terzo pannello):
+   taglia e contratti nei colori di sempre, il totale nel colore del testo. */
+.wp-btl-tl-mtot, .wp-btl-tl-mb, .wp-btl-tl-mc { fill: none; stroke-linejoin: round; }
+.wp-btl-tl-mtot { stroke: var(--wp-ov-text, #e6edf3); stroke-width: 2.2; }
+.wp-btl-tl-mb { stroke: var(--wp-btl-bounty); stroke-width: 1.7; }
+.wp-btl-tl-mc { stroke: var(--wp-btl-contracts); stroke-width: 1.7; }
+.wp-btl-tl-dotmtot { fill: var(--wp-ov-text, #e6edf3); }
+.wp-btl-tl-dotmb { fill: var(--wp-btl-bounty); }
+.wp-btl-tl-dotmc { fill: var(--wp-btl-contracts); }
+.wp-btl-tl-swmtot { background: var(--wp-ov-text, #e6edf3); }
+.wp-btl-tl-swmb { background: var(--wp-btl-bounty); }
+.wp-btl-tl-swmc { background: var(--wp-btl-contracts); }
+.wp-btl-tl-tip i.wp-btl-tl-swmtot,
+.wp-btl-tl-tip i.wp-btl-tl-swmb,
+.wp-btl-tl-tip i.wp-btl-tl-swmc { height: 3px; vertical-align: middle; }
+.wp-btl-legend .wp-btl-tl-mkeys { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.wp-btl-legend .wp-btl-tl-mkeys i { width: 12px; height: 3px; border-radius: 2px; display: inline-block; margin-right: 5px; vertical-align: middle; }
+.wp-btl-tl-tipmoney { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--wp-ov-border, #30363d); }
+.wp-btl-tl-tipmoney .wp-btl-tl-tipsub { margin-left: 4px; }
+.wp-btl-tl-tipmoney > .wp-btl-tl-tipsub:first-child { margin-left: 0; }
+
 .wp-btl-tl-flips { list-style: none; margin: 0 0 6px; padding: 0; counter-reset: flip; }
 .wp-btl-tl-fliprow {
   counter-increment: flip;

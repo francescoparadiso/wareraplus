@@ -104,6 +104,10 @@ export function chartBlockHtml(an, tl, { nationName }) {
         <span class="wp-btl-key">▮ ${tlT('legendDmg')}</span>
         <span class="wp-btl-key">╱ ${tlT('legendPts')}</span>
         <span class="wp-btl-key"><i class="wp-btl-tl-swflip"></i>${tlT('legendFlip')}</span>
+        ${an.money ? `<span class="wp-btl-key wp-btl-tl-mkeys">${tlT('legendMoney')}:
+          ${an.money.bountyFrom != null ? `<span><i class="wp-btl-tl-swmtot"></i>${tlT('moneyTotal')}</span>
+          <span><i class="wp-btl-tl-swmb"></i>${tlT('moneyBounty')}</span>` : ''}
+          ${an.money.hasContracts ? `<span><i class="wp-btl-tl-swmc"></i>${tlT('moneyContracts')}</span>` : ''}</span>` : ''}
         <span class="wp-btl-tl-hint">${escapeHtml(tlT(coarse ? 'hintTouch' : 'hintMouse'))}</span>
       </div>
     </div>`;
@@ -138,6 +142,13 @@ function fmtNum(n) {
   if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
   return String(Math.round(n));
 }
+// come nella scheda battaglia: i soldi sono cifre piccole, coi decimali
+function fmtMoney(n) {
+  if (n == null || !Number.isFinite(n)) return '—';
+  if (n >= 10000) return Math.round(n).toLocaleString();
+  if (n >= 10) return n.toFixed(0);
+  return n.toFixed(2);
+}
 const _dayKey = (ms) => new Date(ms).toDateString();
 function fmtClock(ms) {
   return new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
@@ -170,14 +181,21 @@ function clampView(from, to) {
 
 function layout(W, Hhost) {
   const narrow = W < 600;
+  const money = Boolean(_st.an.money);
   let aH = narrow ? 130 : 168, bH = narrow ? 76 : 92;
+  let cH = money ? (narrow ? 84 : 104) : 0;
   if (_st.expanded && Hhost) {
-    const avail = Math.max(220, Hhost - A_TOP - GAP_AB - AXIS_H);
-    aH = Math.round(avail * 0.62);
-    bH = avail - aH;
+    const avail = Math.max(money ? 300 : 220, Hhost - A_TOP - GAP_AB * (money ? 2 : 1) - AXIS_H);
+    aH = Math.round(avail * (money ? 0.48 : 0.62));
+    if (money) { bH = Math.round(avail * 0.24); cH = avail - aH - bH; }
+    else bH = avail - aH;
   }
   const B_TOP = A_TOP + aH + GAP_AB;
-  return { W, IW: W - PAD_L - PAD_R, aH, bH, B_TOP, H: B_TOP + bH + AXIS_H, narrow };
+  // C = il pannello dei soldi spesi (assente se la battaglia non ne ha);
+  // BOT = il fondo dell'ultimo pannello, dove sta l'asse dei tempi.
+  const C_TOP = B_TOP + bH + (money ? GAP_AB : 0);
+  const BOT = money ? C_TOP + cH : B_TOP + bH;
+  return { W, IW: W - PAD_L - PAD_R, aH, bH, cH, B_TOP, C_TOP, BOT, H: BOT + AXIS_H, narrow };
 }
 
 /** Barre accorpate: ogni tratto largo almeno BUCKET_PX è una barra, il
@@ -260,7 +278,7 @@ function draw(stage) {
   const W = Math.max(280, Math.round(host.clientWidth));
   _st.lastW = W;
   const L = layout(W, _st.expanded ? host.clientHeight : 0);
-  const { IW, aH, bH, B_TOP, H } = L;
+  const { IW, aH, bH, cH, B_TOP, C_TOP, BOT, H } = L;
   const { an } = _st;
   const { from, to } = currentView();
   const pxPerMs = IW / (to - from);
@@ -309,9 +327,11 @@ function draw(stage) {
   }
   flush();
 
+  const money = moneyPaths(an.money, from, to, x, C_TOP, cH);
+
   const roundMarks = _st.rounds.slice(1).filter(r => r.from >= from && r.from <= to).map(r => {
     const xx = x(r.from).toFixed(1);
-    return `<line class="wp-btl-tl-round" x1="${xx}" x2="${xx}" y1="${A_TOP}" y2="${B_TOP + bH}"/>`
+    return `<line class="wp-btl-tl-round" x1="${xx}" x2="${xx}" y1="${A_TOP}" y2="${BOT}"/>`
       + `<text class="wp-btl-axislbl" x="${(+xx + 3).toFixed(1)}" y="${B_TOP + 9}">${escapeHtml(tlT('roundShort', { r: r.r }))}</text>`;
   }).join('');
 
@@ -319,7 +339,7 @@ function draw(stage) {
   const flipLines = an.flips.map(f => {
     const xx = x(f.t);
     if (xx < x0 - 1 || xx > x1 + 1) return '';
-    return `<line class="wp-btl-tl-flip" x1="${xx.toFixed(1)}" x2="${xx.toFixed(1)}" y1="${PILL_Y + 7}" y2="${B_TOP + bH}"/>`;
+    return `<line class="wp-btl-tl-flip" x1="${xx.toFixed(1)}" x2="${xx.toFixed(1)}" y1="${PILL_Y + 7}" y2="${BOT}"/>`;
   }).join('');
   const pills = clusters.map((c, ci) => {
     const multi = c.idx.length > 1;
@@ -347,7 +367,7 @@ function draw(stage) {
     let xx = x(t), anchor = 'middle';
     if (xx - est / 2 < x0) { xx = Math.max(x0, xx - 2); anchor = 'start'; }
     else if (xx + est / 2 > x1) { xx = Math.min(x1, xx + 2); anchor = 'end'; }
-    return `<line class="wp-btl-tl-tick" x1="${x(t).toFixed(1)}" x2="${x(t).toFixed(1)}" y1="${B_TOP + bH}" y2="${B_TOP + bH + 3}"/>`
+    return `<line class="wp-btl-tl-tick" x1="${x(t).toFixed(1)}" x2="${x(t).toFixed(1)}" y1="${BOT}" y2="${BOT + 3}"/>`
       + `<text class="wp-btl-axislbl" x="${xx.toFixed(1)}" y="${H - 5}" text-anchor="${anchor}">${escapeHtml(txt)}</text>`;
   }).join('');
 
@@ -370,19 +390,79 @@ function draw(stage) {
       ${lines.d.map(pts => `<polyline class="wp-btl-tl-pdef" points="${pts}"/>`).join('')}
       ${lines.a.map(pts => `<polyline class="wp-btl-tl-patk" points="${pts}"/>`).join('')}
     </g>
+    ${money.svg}
     ${roundMarks}
     ${flipLines}
     ${xLabels}
-    <rect class="wp-btl-tl-brush" x="0" y="${A_TOP}" width="0" height="${B_TOP + bH - A_TOP}" visibility="hidden"/>
-    <line class="wp-btl-tl-cursor" x1="0" x2="0" y1="${A_TOP}" y2="${B_TOP + bH}" visibility="hidden"/>
+    <rect class="wp-btl-tl-brush" x="0" y="${A_TOP}" width="0" height="${BOT - A_TOP}" visibility="hidden"/>
+    <line class="wp-btl-tl-cursor" x1="0" x2="0" y1="${A_TOP}" y2="${BOT}" visibility="hidden"/>
     <circle class="wp-btl-tl-dot wp-btl-tl-dotdef" r="3.2" cx="0" cy="0" visibility="hidden"/>
     <circle class="wp-btl-tl-dot wp-btl-tl-dotatk" r="3.2" cx="0" cy="0" visibility="hidden"/>
-    <rect class="wp-btl-tl-hit" x="${x0}" y="${A_TOP}" width="${IW}" height="${B_TOP + bH - A_TOP}"/>
+    ${an.money ? `<circle class="wp-btl-tl-dot wp-btl-tl-dotmtot" r="3.2" cx="0" cy="0" visibility="hidden"/>
+    <circle class="wp-btl-tl-dot wp-btl-tl-dotmb" r="3.2" cx="0" cy="0" visibility="hidden"/>
+    <circle class="wp-btl-tl-dot wp-btl-tl-dotmc" r="3.2" cx="0" cy="0" visibility="hidden"/>` : ''}
+    <rect class="wp-btl-tl-hit" x="${x0}" y="${A_TOP}" width="${IW}" height="${BOT - A_TOP}"/>
     ${pills}`;
 
-  _geo = { from, to, pxPerMs, x0, x1, IW, bk, clusters, yP, A_TOP, B_TOP, bH, H };
+  _geo = { from, to, pxPerMs, x0, x1, IW, bk, clusters, yP, yM: money.yM, A_TOP, B_TOP, bH, H };
   drawNav(nav, W, from, to);
   updateBar(stage, from, to);
+}
+
+/* ── Soldi spesi ──────────────────────────────────────────────── */
+
+// pts: [t, taglia difesa, taglia attacco, contratti difesa, contratti attacco],
+// cumulati (battleTimeline.js: analyzeMoney).
+
+/** Il punto in vigore all'istante t (l'ultimo con tempo <= t). */
+function moneyAt(m, t) {
+  const P = m.pts;
+  if (t < P[0][0]) return P[0];
+  let lo = 0, hi = P.length - 1;
+  while (lo < hi) { const k = (lo + hi + 1) >> 1; if (P[k][0] <= t) lo = k; else hi = k - 1; }
+  return P[lo];
+}
+const _mB = (p) => p[1] + p[2];
+const _mC = (p) => p[3] + p[4];
+
+/** Le tre linee, a gradini: sono cumulati, fra due letture il valore resta
+ *  quello della lettura prima. La scala va da 0 a quanto si è speso alla
+ *  fine del tratto visibile, come il danno si adatta a ciò che si vede.
+ *  Taglia e totale partono da bountyFrom: prima la taglia non si sa, e un
+ *  totale fatto di soli contratti si leggerebbe come "taglia zero". */
+function moneyPaths(m, from, to, x, top, h) {
+  if (!m || !h) return { svg: '', yM: null };
+  const end = moneyAt(m, to);
+  const max = Math.max(1, _mB(end) + _mC(end));
+  const yM = (v) => top + h - v / max * (h - 4);
+  const xL = x(from) - 2, xR = x(to) + 2;
+  const line = (val, start) => {
+    const P = m.pts;
+    let d = '';
+    for (let i = 0; i < P.length; i++) {
+      const t = P[i][0];
+      if (start != null && t < start) continue;
+      if (t > to) break;
+      // un punto superato dal successivo prima di "from" non si vede
+      if (i + 1 < P.length && P[i + 1][0] <= from && !(start != null && P[i + 1][0] < start)) continue;
+      const xx = Math.max(xL, x(t)).toFixed(1);
+      const yy = yM(val(P[i])).toFixed(1);
+      d += d ? `H${xx}V${yy}` : `M${xx} ${yy}`;
+    }
+    if (d) d += `H${Math.min(xR, x(m.pts[m.pts.length - 1][0])).toFixed(1)}`;
+    return d;
+  };
+  const showB = m.bountyFrom != null;
+  const svg = `
+    <text class="wp-btl-axislbl" x="${PAD_L - 4}" y="${top + 8}" text-anchor="end">${fmtMoney(max)}</text>
+    <text class="wp-btl-axislbl" x="${PAD_L - 4}" y="${top + h}" text-anchor="end">0</text>
+    <line class="wp-btl-axis" x1="${PAD_L}" x2="${(PAD_L + (x(to) - x(from))).toFixed(1)}" y1="${top + h}" y2="${top + h}"/>
+    <g clip-path="url(#wp-btl-tl-clip)">
+      ${m.hasContracts ? `<path class="wp-btl-tl-mc" d="${line(_mC)}"/>` : ''}
+      ${showB ? `<path class="wp-btl-tl-mb" d="${line(_mB, m.bountyFrom)}"/>` : ''}
+      ${showB ? `<path class="wp-btl-tl-mtot" d="${line(p => _mB(p) + _mC(p), m.bountyFrom)}"/>` : ''}
+    </g>`;
+  return { svg, yM };
 }
 
 /** La striscia di navigazione: tutta la battaglia (danno dei due lati
@@ -479,7 +559,9 @@ function tipHtmlAt(px) {
   _st.an.flips.forEach((f, i) => {
     if (Math.abs(g.x0 + (f.t - g.from) * g.pxPerMs - px) <= FLIP_NEAR_PX) near.push(i);
   });
-  if (!b && !near.length) return null;
+  const mt = b ? b.t1 : t;
+  const mp = _st.an.money ? moneyAt(_st.an.money, mt) : null;
+  if (!b && !near.length && !mp) return null;
   const head = b
     ? (b.n > 1 ? `${fmtClock(b.t0)}–${fmtClock(b.t1)}` : fmtClock(b.t1))
     : fmtClock(t);
@@ -495,8 +577,22 @@ function tipHtmlAt(px) {
       <div><i class="wp-btl-tl-swatk"></i>${tlT('attacker')}: <b>${fmtNum(b.a)}${tlT('perMin')}</b> · ${b.ap} ${tlT('points')}</div>
       <div class="wp-btl-tl-tipsub">${tlT('tipRoundDmg')}: ${fmtNum(b.dd)} · ${fmtNum(b.ad)}</div>
       ${b.n > 1 ? `<div class="wp-btl-tl-tipsub">${tlT('tipAvg', { n: b.n })}</div>` : ''}` : ''}
+      ${mp ? moneyTipHtml(mp, mt) : ''}
       ${near.map(flipLineHtml).join('')}`,
+    m: mp,
   };
+}
+
+function moneyTipHtml(p, t) {
+  const m = _st.an.money;
+  const knowB = m.bountyFrom != null && t >= m.bountyFrom;
+  const split = (d, a) => `<span class="wp-btl-tl-tipsub">${tlT('defShort')} ${fmtMoney(d)} · ${tlT('atkShort')} ${fmtMoney(a)}</span>`;
+  return `<div class="wp-btl-tl-tipmoney">
+      <div class="wp-btl-tl-tipsub">${tlT('moneyTipHead')}</div>
+      ${knowB ? `<div><i class="wp-btl-tl-swmtot"></i>${tlT('moneyTotal')}: <b>${fmtMoney(_mB(p) + _mC(p))}</b> ${split(p[1] + p[3], p[2] + p[4])}</div>
+      <div><i class="wp-btl-tl-swmb"></i>${tlT('moneyBounty')}: <b>${fmtMoney(_mB(p))}</b> ${split(p[1], p[2])}</div>` : ''}
+      ${m.hasContracts ? `<div><i class="wp-btl-tl-swmc"></i>${tlT('moneyContracts')}: <b>${fmtMoney(_mC(p))}</b> ${split(p[3], p[4])}</div>` : ''}
+    </div>`;
 }
 
 /* ── Gesti ────────────────────────────────────────────────────── */
@@ -561,7 +657,7 @@ export function wireChart(root) {
     pinned = false;
     svg.querySelectorAll('.wp-btl-tl-cursor, .wp-btl-tl-dot').forEach(el => el.setAttribute('visibility', 'hidden'));
   }
-  const showTip = (px, clientY, html, b) => {
+  const showTip = (px, clientY, html, b, mp = null) => {
     const cursor = svg.querySelector('.wp-btl-tl-cursor');
     cursor?.setAttribute('x1', px.toFixed(1));
     cursor?.setAttribute('x2', px.toFixed(1));
@@ -572,6 +668,21 @@ export function wireChart(root) {
       da.setAttribute('cx', px.toFixed(1)); da.setAttribute('cy', _geo.yP(b.ap).toFixed(1)); da.setAttribute('visibility', 'visible');
     } else {
       dd?.setAttribute('visibility', 'hidden'); da?.setAttribute('visibility', 'hidden');
+    }
+    // i pallini sulle tre linee dei soldi, dove la linea c'è
+    const m = _st.an.money;
+    const mt = _geo.from + (px - _geo.x0) / _geo.pxPerMs;
+    const knowB = Boolean(mp && m.bountyFrom != null && mt >= m.bountyFrom);
+    for (const [cls, val, show] of [
+      ['.wp-btl-tl-dotmtot', mp && _mB(mp) + _mC(mp), knowB],
+      ['.wp-btl-tl-dotmb', mp && _mB(mp), knowB],
+      ['.wp-btl-tl-dotmc', mp && _mC(mp), Boolean(mp && m.hasContracts)],
+    ]) {
+      const el = svg.querySelector(cls);
+      if (!el) continue;
+      if (show && _geo.yM) {
+        el.setAttribute('cx', px.toFixed(1)); el.setAttribute('cy', _geo.yM(val).toFixed(1)); el.setAttribute('visibility', 'visible');
+      } else el.setAttribute('visibility', 'hidden');
     }
     tip.innerHTML = html;
     tip.hidden = false;
@@ -598,7 +709,7 @@ export function wireChart(root) {
     const px = svgX(e);
     const r = tipHtmlAt(px);
     if (!r) return hideTip();
-    showTip(px, e.clientY, r.html, r.b);
+    showTip(px, e.clientY, r.html, r.b, r.m);
   };
 
   /* clic su un'etichetta: il gruppo si ingrandisce, il singolo porta
