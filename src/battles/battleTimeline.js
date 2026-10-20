@@ -239,8 +239,9 @@ const _sideDmg = (prev, s, k, rounds) => {
 };
 
 /** @returns {null | { pts:[t, taglia difesa, taglia attacco, contratti difesa, contratti attacco][],
- *            bountyFrom:number|null, hasContracts:boolean, total:number, resets:number }} */
-export function analyzeMoney(S, contracts, T0, T1, rounds = null) {
+ *            bountyFrom:number|null, pre:{defender,attacker}, hasContracts:boolean,
+ *            total:number, resets:number }} */
+export function analyzeMoney(S, contracts, T0, T1, rounds = null, { bountyNow = null, createdAt = null } = {}) {
   // ultima tariffa osservata per lato (soldi per 1k danni), per i minuti
   // in cui il salvadanaio è stato sostituito
   const lastRate = { 7: null, 8: null };
@@ -287,10 +288,28 @@ export function analyzeMoney(S, contracts, T0, T1, rounds = null) {
     }
   }
   if (pts[pts.length - 1][0] < T1) push(T1);
+
+  // La taglia pagata PRIMA del primo campione col salvadanaio (battaglia
+  // già aperta al deploy, o al primo sguardo): il minuto per minuto non
+  // c'è, ma il totale sì — è quello della testata della scheda (stima
+  // dalle classifiche, battleSpending.js). La differenza fra quel totale
+  // e il registrato entra come PUNTO DI PARTENZA a bountyFrom, così la
+  // fine delle linee coincide con la scheda Nazioni. Segnalato
+  // dall'utente il giorno stesso: «i valori sulla timeline non tornano».
+  // Solo se la registrazione è partita a battaglia già aperta: se c'era
+  // dall'inizio, la differenza sarebbe solo l'errore della stima.
+  const bountyFrom = pool.length ? pool[0][0] : null;
+  const pre = { defender: 0, attacker: 0 };
+  if (bountyFrom != null && bountyNow && createdAt != null && bountyFrom > createdAt + 3 * 60 * 1000) {
+    pre.defender = Math.max(0, (bountyNow.defender ?? 0) - bD);
+    pre.attacker = Math.max(0, (bountyNow.attacker ?? 0) - bA);
+    for (const p of pts) if (p[0] >= bountyFrom) { p[1] += pre.defender; p[2] += pre.attacker; }
+  }
+
   const last = pts[pts.length - 1];
   const total = last[1] + last[2] + last[3] + last[4];
   if (total <= 0) return null;
-  return { pts, bountyFrom: pool.length ? pool[0][0] : null, hasContracts: ctr.length > 0, total, resets };
+  return { pts, bountyFrom, pre, hasContracts: ctr.length > 0, total, resets };
 }
 
 /* ── Formattazione ────────────────────────────────────────────── */
@@ -301,6 +320,12 @@ function fmtNum(n) {
   if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
   if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
   return String(Math.round(n));
+}
+function fmtMoney(n) {
+  if (n == null || !Number.isFinite(n)) return '—';
+  if (n >= 10000) return Math.round(n).toLocaleString();
+  if (n >= 10) return n.toFixed(0);
+  return n.toFixed(2);
 }
 function fmtTime(ms, withDay) {
   return new Date(ms).toLocaleString(undefined, withDay
@@ -315,18 +340,37 @@ function fmtTime(ms, withDay) {
 
 /* ── Sezione ──────────────────────────────────────────────────── */
 
-/**
- * @param tl        risposta di /battle-timeline, o null/undefined
- * @param helpers   { nationName(id), flagHtml(id) } — quelli della scheda;
- *                  `contracts` (aggiudicati, da getBattleDetail) per i soldi spesi
- */
-export function timelineSectionHtml(tl, { nationName, flagHtml, contracts = null, contractsTruncated = false }) {
-  if (!tl || !Array.isArray(tl.s) || tl.s.length < 2) return '';
+/* Le due schede ("Timeline battaglia" e "Timeline taglie", richiesta
+   dell'utente del 2026-10-20) partono dalla stessa analisi: si rifà per
+   ognuna (è qualche millisecondo) invece di tenerne una copia, così non
+   c'è niente da invalidare quando una battaglia viva si aggiorna. */
+function prepare(tl, { contracts = null, bountyNow = null } = {}) {
+  if (!tl || !Array.isArray(tl.s) || tl.s.length < 2) return null;
   const an = analyzeTimeline(tl);
   const T0 = an.S[0][0];
-  an.money = analyzeMoney(an.S, contracts, T0, Math.max(an.S[an.S.length - 1][0], T0 + 60000), tl.rounds);
+  an.money = analyzeMoney(an.S, contracts, T0, Math.max(an.S[an.S.length - 1][0], T0 + 60000), tl.rounds,
+    { bountyNow, createdAt: tl.createdAt ?? null });
+  return an;
+}
+
+/**
+ * Scheda "Timeline battaglia": danno, punti, sorpassi, ingressi.
+ * @param tl        risposta di /battle-timeline, o null/undefined
+ * @param helpers   { nationName(id), flagHtml(id) } — quelli della scheda;
+ *                  `contracts` (aggiudicati, da getBattleDetail) e `bountyNow`
+ *                  ({defender, attacker}, la taglia della testata) per i soldi
+ */
+export function timelineSectionHtml(tl, helpers) {
+  const an = prepare(tl, helpers);
+  if (!an) return '';
+  const { nationName, flagHtml } = helpers;
   const nat = (id) => `${flagHtml(id)}${escapeHtml(nationName(id) || '—')}`;
-  const sideLbl = (s) => s === 'attacker' ? tlT('attacker') : tlT('defender');
+  // il lato col nome della sua nazione (richiesta dell'utente); "Difesa" /
+  // "Attacco" solo se la nazione non c'è (resistenze, tornei)
+  const sideLbl = (s) => {
+    const id = s === 'attacker' ? tl.attacker : tl.defender;
+    return id && nationName(id) ? nat(id) : tlT(s);
+  };
   const withDay = _chartDaySpan(an);
 
   const coverage = tl.baseAt
@@ -390,11 +434,6 @@ export function timelineSectionHtml(tl, { nationName, flagHtml, contracts = null
     ${chartBlockHtml(an, tl, { nationName }, 'battle')}
     ${anyGap ? `<p class="wp-btl-foot wp-btl-foot-tight">${tlT('gapNote')}</p>` : ''}
 
-    ${an.money ? `
-    <h3 class="wp-btl-h3">${tlT('moneyTitle')} <span class="wp-btl-sub">${tlT('moneySub')}</span></h3>
-    ${chartBlockHtml(an, tl, { nationName }, 'money')}
-    ${moneyNoteHtml(an.money, tl, contractsTruncated)}` : ''}
-
     <h3 class="wp-btl-h3">${tlT('flipsTitle')}</h3>
     ${flipsHtml}
 
@@ -404,12 +443,35 @@ export function timelineSectionHtml(tl, { nationName, flagHtml, contracts = null
     <p class="wp-btl-foot wp-btl-foot-tight">${tlT('precisionNote')}${tl.truncated ? ' ' + tlT('truncatedNote') : ''}</p>`;
 }
 
+/**
+ * Scheda "Timeline taglie": soldi spesi nel tempo, per lato. '' se la
+ * battaglia non ha né taglia registrata né contratti.
+ */
+export function bountySectionHtml(tl, helpers) {
+  const an = prepare(tl, helpers);
+  if (!an?.money) return '';
+  const { nationName, flagHtml, contractsTruncated = false } = helpers;
+  const nat = (id) => `${flagHtml(id)}${escapeHtml(nationName(id) || '—')}`;
+  return `
+    <h3 class="wp-btl-h3">${tlT('moneyTitle')} <span class="wp-btl-sub">${tlT('moneySub')}</span></h3>
+    ${chartBlockHtml(an, tl, { nationName }, 'money')}
+    ${moneyNoteHtml(an.money, tl, contractsTruncated, nat)}`;
+}
+
 /** Cosa c'è e cosa no nel pannello dei soldi spesi. */
-function moneyNoteHtml(m, tl, contractsTruncated) {
+function moneyNoteHtml(m, tl, contractsTruncated, nat) {
   if (!m) return '';
   const parts = [tlT('moneyNote')];
+  const late = m.bountyFrom != null && m.bountyFrom > (tl.createdAt || m.bountyFrom) + 3 * 60 * 1000;
   if (m.bountyFrom == null) parts.push(tlT('moneyNoBounty'));
-  else if (m.bountyFrom > (tl.createdAt || m.bountyFrom) + 3 * 60 * 1000) {
+  else if (late && (m.pre.defender > 0 || m.pre.attacker > 0)) {
+    const who = (side) => (tl[side] && nat(tl[side])) || tlT(side);
+    parts.push(tlT('moneyBountyPre', {
+      t: escapeHtml(fmtTime(m.bountyFrom, true)),
+      d: `${who('defender')} ${fmtMoney(m.pre.defender)}`,
+      a: `${who('attacker')} ${fmtMoney(m.pre.attacker)}`,
+    }));
+  } else if (late) {
     parts.push(tlT('moneyBountyFrom', { t: escapeHtml(fmtTime(m.bountyFrom, true)) }));
   }
   if (m.resets) parts.push(tlT('moneyResets', { n: m.resets }));

@@ -58,6 +58,8 @@ const TL_DICT = {
     toggleHint: 'click a legend item to show or hide it',
     moneyUnavailable: 'not recorded for this battle',
     moneyResets: 'Bounty pool replaced by a new bounty: {n}. Those drops are not money paid; for those minutes the payout is estimated at the rate seen just before.',
+    moneyGapLbl: 'bounty not recorded minute by minute here',
+    moneyBountyPre: 'The bounty is recorded minute by minute from {t}. What was paid before ({d} · {a}) comes from the battle total, the same as at the top of the page: it is the starting point of the lines at {t}, without a curve.',
   },
   it: {
     title: 'Andamento della battaglia',
@@ -107,6 +109,8 @@ const TL_DICT = {
     toggleHint: 'clic su una voce della legenda per mostrarla o nasconderla',
     moneyUnavailable: 'non registrata per questa battaglia',
     moneyResets: 'Salvadanaio della taglia sostituito da una taglia nuova: {n}. Quei cali non sono soldi pagati; in quei minuti il pagato è stimato con la tariffa vista subito prima.',
+    moneyGapLbl: 'qui la taglia non è registrata minuto per minuto',
+    moneyBountyPre: 'La taglia è registrata minuto per minuto dalle {t}. Quella pagata prima ({d} · {a}) viene dal totale della battaglia, lo stesso della testata: è il punto di partenza delle linee alle {t}, senza andamento.',
   },
   es: {
     title: 'Evolución de la batalla',
@@ -156,6 +160,8 @@ const TL_DICT = {
     toggleHint: 'clic en un elemento de la leyenda para mostrarlo u ocultarlo',
     moneyUnavailable: 'no registrada para esta batalla',
     moneyResets: 'Hucha de la recompensa sustituida por una nueva: {n}. Esas bajadas no son dinero pagado; en esos minutos el pago se estima con la tarifa vista justo antes.',
+    moneyGapLbl: 'aquí la recompensa no está registrada minuto a minuto',
+    moneyBountyPre: 'La recompensa se registra minuto a minuto desde las {t}. Lo pagado antes ({d} · {a}) viene del total de la batalla, el mismo de la cabecera: es el punto de partida de las líneas a las {t}, sin evolución.',
   },
   de: {
     title: 'Schlachtverlauf',
@@ -205,6 +211,8 @@ const TL_DICT = {
     toggleHint: 'Legendeneintrag anklicken, um ihn ein- oder auszublenden',
     moneyUnavailable: 'für diese Schlacht nicht aufgezeichnet',
     moneyResets: 'Kopfgeldtopf durch ein neues Kopfgeld ersetzt: {n}. Diese Rückgänge sind kein gezahltes Geld; in diesen Minuten wird die Zahlung mit dem zuvor gesehenen Satz geschätzt.',
+    moneyGapLbl: 'hier ist das Kopfgeld nicht minütlich aufgezeichnet',
+    moneyBountyPre: 'Das Kopfgeld wird ab {t} minütlich aufgezeichnet. Was vorher gezahlt wurde ({d} · {a}), stammt aus der Gesamtsumme der Schlacht wie oben auf der Seite: es ist der Startpunkt der Linien um {t}, ohne Verlauf.',
   },
   fr: {
     title: 'Déroulé de la bataille',
@@ -254,6 +262,8 @@ const TL_DICT = {
     toggleHint: 'cliquez sur un élément de la légende pour l’afficher ou le masquer',
     moneyUnavailable: 'non enregistrée pour cette bataille',
     moneyResets: 'Cagnotte de la prime remplacée par une nouvelle prime : {n}. Ces baisses ne sont pas de l’argent payé ; pour ces minutes le paiement est estimé au taux observé juste avant.',
+    moneyGapLbl: 'ici la prime n’est pas enregistrée minute par minute',
+    moneyBountyPre: 'La prime est enregistrée minute par minute depuis {t}. Ce qui a été payé avant ({d} · {a}) vient du total de la bataille, le même qu’en haut de la page : c’est le point de départ des lignes à {t}, sans évolution.',
   },
   nl: {
     title: 'Verloop van de slag',
@@ -303,6 +313,8 @@ const TL_DICT = {
     toggleHint: 'klik op een legenda-item om het te tonen of te verbergen',
     moneyUnavailable: 'niet vastgelegd voor deze strijd',
     moneyResets: 'Premiepot vervangen door een nieuwe premie: {n}. Die dalingen zijn geen betaald geld; voor die minuten wordt de betaling geschat met het tarief van vlak ervoor.',
+    moneyGapLbl: 'hier is de premie niet per minuut vastgelegd',
+    moneyBountyPre: 'De premie wordt vanaf {t} per minuut vastgelegd. Wat eerder is betaald ({d} · {a}) komt uit het totaal van de strijd, hetzelfde als bovenaan: het is het startpunt van de lijnen om {t}, zonder verloop.',
   },
   sv: {
     title: 'Slagets förlopp',
@@ -352,6 +364,8 @@ const TL_DICT = {
     toggleHint: 'klicka på en post i förklaringen för att visa eller dölja den',
     moneyUnavailable: 'inte inspelad för denna strid',
     moneyResets: 'Belöningspotten ersatt av en ny belöning: {n}. De minskningarna är inte utbetalda pengar; för de minuterna uppskattas utbetalningen med taxan strax innan.',
+    moneyGapLbl: 'här är belöningen inte inspelad minut för minut',
+    moneyBountyPre: 'Belöningen spelas in minut för minut från {t}. Det som betalades innan ({d} · {a}) kommer från stridens totalsumma, samma som högst upp: det är linjernas startpunkt kl. {t}, utan förlopp.',
   },
   pt: {
     title: 'Evolução da batalha',
@@ -401,6 +415,8 @@ const TL_DICT = {
     toggleHint: 'clique num item da legenda para o mostrar ou ocultar',
     moneyUnavailable: 'não registada para esta batalha',
     moneyResets: 'Cofre da recompensa substituído por uma nova recompensa: {n}. Essas descidas não são dinheiro pago; nesses minutos o pagamento é estimado com a taxa vista logo antes.',
+    moneyGapLbl: 'aqui a recompensa não está registada minuto a minuto',
+    moneyBountyPre: 'A recompensa é registada minuto a minuto desde as {t}. O que foi pago antes ({d} · {a}) vem do total da batalha, o mesmo do topo: é o ponto de partida das linhas às {t}, sem evolução.',
   },
   ar: {
     title: 'مجرى المعركة',
@@ -450,6 +466,8 @@ const TL_DICT = {
     toggleHint: 'انقر على عنصر في المفتاح لإظهاره أو إخفائه',
     moneyUnavailable: 'غير مسجّلة لهذه المعركة',
     moneyResets: 'استُبدل صندوق المكافأة بمكافأة جديدة: {n}. هذه الانخفاضات ليست أموالاً مدفوعة؛ ويُقدَّر المدفوع في تلك الدقائق بالمعدل الملاحظ قبلها مباشرة.',
+    moneyGapLbl: 'هنا لم تُسجَّل المكافأة دقيقة بدقيقة',
+    moneyBountyPre: 'تُسجَّل المكافأة دقيقة بدقيقة منذ {t}. ما دُفع قبل ذلك ({d} · {a}) مأخوذ من إجمالي المعركة كما في أعلى الصفحة: هو نقطة بداية الخطوط عند {t}، بلا مسار.',
   },
 };
 

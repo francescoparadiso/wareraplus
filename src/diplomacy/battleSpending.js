@@ -65,10 +65,15 @@ import { trpcBatch } from './utils.js';
 const AUCTION_PAGE = 50;
 const RANKING_LIMIT = 100;
 // Quante pagine extra si è disposti a inseguire col cursore prima di
-// dichiarare il dato troncato. Una battaglia con oltre 250 contratti
-// aggiudicati non si è mai vista; il tetto c'è per non trasformare un
-// caso limite in una raffica di richieste.
-const MAX_EXTRA_PAGES = 4;
+// dichiarare il dato troncato. Il tetto c'è per non trasformare un caso
+// limite in una raffica di richieste.
+// WarEra+ (2026-10-20): era 4 (250 contratti), «mai vista una battaglia
+// oltre». Vista: 300 aggiudicati, e la testata della scheda battaglia
+// diceva 250 contratti mentre la scheda Contratti (src/battles/api.js,
+// 12 pagine) ne contava 300. Peggio, i 50 mancanti finivano nella TAGLIA
+// stimata (bountyFromUnits toglie solo i contratti che conosce): 92.831
+// invece di ~73.000. Ora stesso tetto di api.js: 1 + 11 = 12 pagine.
+const MAX_EXTRA_PAGES = 11;
 
 // Cache in memoria per la sessione: il tooltip battaglia si riapre spesso
 // sullo stesso marker mentre si guarda la mappa, e questi numeri si

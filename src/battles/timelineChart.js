@@ -188,6 +188,13 @@ export function chartBlockHtml(an, tl, { nationName }, kind = 'battle') {
     </div>`;
 }
 
+/** Il lato col nome della sua nazione (richiesta dell'utente, 2026-10-20);
+ *  "Difesa" / "Attacco" solo se la nazione non c'è (resistenze, tornei). */
+function sideName(side) {
+  const id = side === 'defender' ? _st.tl.defender : _st.tl.attacker;
+  return escapeHtml((id && _st.nationName(id)) || tlT(side));
+}
+
 function togHtml(id, inner, title = '') {
   const av = !id.startsWith('m') || moneyAvail(id);
   return `<button type="button" class="wp-btl-key wp-btl-tl-tog${on(id) ? '' : ' is-off'}" data-series="${id}"
@@ -196,8 +203,8 @@ function togHtml(id, inner, title = '') {
 
 function battleLegendHtml() {
   return `
-    ${togHtml('def', `<i class="wp-btl-tl-swdef"></i>${tlT('defender')}`)}
-    ${togHtml('atk', `<i class="wp-btl-tl-swatk"></i>${tlT('attacker')}`)}
+    ${togHtml('def', `<i class="wp-btl-tl-swdef"></i>${sideName('defender')}`)}
+    ${togHtml('atk', `<i class="wp-btl-tl-swatk"></i>${sideName('attacker')}`)}
     ${togHtml('dmg', `▮ ${tlT('legendDmg')}`)}
     ${togHtml('pts', `╱ ${tlT('legendPts')}`)}
     ${togHtml('flip', `<i class="wp-btl-tl-swflip"></i>${tlT('legendFlip')}`)}`;
@@ -215,8 +222,8 @@ function moneyLegendHtml() {
       ${togHtml('mb', `${dashSw('b')}${tlT('moneyBounty')}`)}
       ${togHtml('mc', `${dashSw('c')}${tlT('moneyContracts')}`)}</span>
     <span class="wp-btl-tl-leggrp"><span class="wp-btl-tl-leglbl">${tlT('legendSide')}:</span>
-      ${togHtml('mdef', `<i class="wp-btl-tl-swdef"></i>${tlT('defender')}`)}
-      ${togHtml('matk', `<i class="wp-btl-tl-swatk"></i>${tlT('attacker')}`)}
+      ${togHtml('mdef', `<i class="wp-btl-tl-swdef"></i>${sideName('defender')}`)}
+      ${togHtml('matk', `<i class="wp-btl-tl-swatk"></i>${sideName('attacker')}`)}
       ${togHtml('msum', `<i class="wp-btl-tl-swmsum"></i>${tlT('sideSum')}`)}</span>`;
 }
 
@@ -626,8 +633,22 @@ function drawMoney(stage, svg, W, Hhost, from, to) {
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('width', W);
   svg.setAttribute('height', H);
+  // Prima del primo campione col salvadanaio la taglia non ha andamento:
+  // c'è solo il totale (il punto di partenza delle linee, vedi
+  // analyzeMoney). La fascia lo dice invece di lasciare un vuoto muto.
+  const m = _st.an.money;
+  let gap = '';
+  if (m.bountyFrom != null && m.bountyFrom > _st.T0 + 3 * 60 * 1000 && (on('mtot') || on('mb'))) {
+    const gx0 = Math.max(x0, x(_st.T0)), gx1 = Math.min(x1, x(m.bountyFrom));
+    if (gx1 > gx0 + 1) {
+      gap = `<rect class="wp-btl-tl-mgap" x="${gx0.toFixed(1)}" y="${M_TOP}" width="${(gx1 - gx0).toFixed(1)}" height="${cH}"/>`
+        + (gx1 - gx0 > 120 ? `<text class="wp-btl-axislbl wp-btl-tl-mgaplbl" x="${((gx0 + gx1) / 2).toFixed(1)}" y="${M_TOP + cH / 2}" text-anchor="middle">${escapeHtml(tlT('moneyGapLbl'))}</text>` : '');
+    }
+  }
+
   svg.innerHTML = `
     <defs><clipPath id="wp-btl-tl-clip-money"><rect x="${x0}" y="0" width="${IW}" height="${H}"/></clipPath></defs>
+    ${gap}
     ${marksHtml(from, to, x, M_TOP, BOT, M_TOP + 9)}
     ${money.svg}
     <line class="wp-btl-axis" x1="${x0}" x2="${x1}" y1="${BOT}" y2="${BOT}"/>
@@ -775,7 +796,7 @@ function battleTipAt(px) {
     const parts = [];
     if (dmg) parts.push(`<b>${fmtNum(isD ? b.d : b.a)}${tlT('perMin')}</b>`);
     if (pts) parts.push(`${isD ? b.dp : b.ap} ${tlT('points')}`);
-    return `<div><i class="wp-btl-tl-sw${isD ? 'def' : 'atk'}"></i>${tlT(side)}: ${parts.join(' · ')}</div>`;
+    return `<div><i class="wp-btl-tl-sw${isD ? 'def' : 'atk'}"></i>${sideName(side)}: ${parts.join(' · ')}</div>`;
   };
   const dots = [];
   if (b && g.showB) {
@@ -805,7 +826,7 @@ function moneyTipAt(px) {
   const knowB = m.bountyFrom != null && t >= m.bountyFrom;
   const sides = LATI.filter(([, id]) => on(id)).map(([s]) => s);
   const voci = VOCI.filter(([, id]) => on(id)).map(([v]) => v);
-  const sideLbl = { def: tlT('defShort'), atk: tlT('atkShort'), sum: tlT('sideSum') };
+  const sideLbl = { def: sideName('defender'), atk: sideName('attacker'), sum: escapeHtml(tlT('sideSum')) };
   const vLbl = { tot: tlT('moneyTotal'), b: tlT('moneyBounty'), c: tlT('moneyContracts') };
   const known = (v) => v === 'c' || knowB;
   const dots = [];
@@ -819,7 +840,7 @@ function moneyTipAt(px) {
       <div class="wp-btl-tl-tiphead">${escapeHtml(dayPrefix(g, t) + fmtClock(t))} · ${tlT('tipRound', { r: roundAt(t) })}</div>
       <div class="wp-btl-tl-tipsub">${tlT('moneyTipHead')}</div>
       <table class="wp-btl-tl-tiptab">
-        <tr><th></th>${sides.map(s => `<th class="wp-btl-tl-tt-${s}">${escapeHtml(sideLbl[s])}</th>`).join('')}</tr>
+        <tr><th></th>${sides.map(s => `<th class="wp-btl-tl-tt-${s}">${sideLbl[s]}</th>`).join('')}</tr>
         ${voci.map(v => `<tr><td>${dashSw(v)}${escapeHtml(vLbl[v])}</td>${
           sides.map(s => `<td>${known(v) ? fmtMoney(mVal(v, s, p)) : '—'}</td>`).join('')}</tr>`).join('')}
       </table>

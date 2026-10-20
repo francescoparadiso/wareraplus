@@ -38,7 +38,7 @@ import { btlT } from './i18n.js';
 import { trackEvent, trackThrottled } from '../shared/analytics.js';
 import { getBattleDetail, getBattleMuBreakdown, getRoundRanking } from './api.js';
 import { fetchMoneyTransfers, transfersFor, windowIsShort } from './moneyTransfers.js';
-import { fetchBattleTimeline, timelineSectionHtml, wireTimeline, resetTimeline } from './battleTimeline.js';
+import { fetchBattleTimeline, timelineSectionHtml, bountySectionHtml, wireTimeline, resetTimeline } from './battleTimeline.js';
 import {
   loadBonusRules, fetchBattleOrders, loadMe, myPlayerId, sideContext, sideNationRows, personalBonus,
   orderPct, PRIORITIES,
@@ -685,14 +685,21 @@ export function renderBattleDetail(battle) {
   const payAtk = payPerK('attacker');
   const anyCtr = payDef.totContracts > 0 || payAtk.totContracts > 0;
 
-  const timeline = timelineSectionHtml(_tl, {
+  // Due schede dalla stessa registrazione: "Timeline battaglia" (danno) e
+  // "Timeline taglie" (soldi spesi). La taglia della testata serve alla
+  // seconda per la parte pagata prima che il server la registrasse.
+  const tlHelpers = {
     nationName: nm, flagHtml,
     contracts: _detail?.contracts, contractsTruncated: Boolean(_detail?.contractsTruncated),
-  });
-  // La scheda Andamento esiste solo se il server ha registrato la
-  // battaglia: chi la teneva aperta e passa a una che non ce l'ha torna
-  // alle nazioni invece di guardare una scheda vuota.
+    bountyNow: _spend ? { defender: _spend.bounty.defender?.total, attacker: _spend.bounty.attacker?.total } : null,
+  };
+  const timeline = timelineSectionHtml(_tl, tlHelpers);
+  const bountyTl = timeline ? bountySectionHtml(_tl, tlHelpers) : '';
+  // Le schede esistono solo se il server ha registrato la battaglia: chi
+  // le teneva aperte e passa a una che non ce l'ha torna alle nazioni
+  // invece di guardare una scheda vuota.
   if (_dtab === 'timeline' && !timeline) _dtab = 'nations';
+  if (_dtab === 'bountyTl' && !bountyTl) _dtab = 'nations';
   if (_dtab === 'bonus' && !battle.live) _dtab = 'nations';
   const nFunders = _money && wFrom
     ? transfersFor(_money, battle.defender.countryId, wFrom, wTo).length
@@ -709,6 +716,7 @@ export function renderBattleDetail(battle) {
     { id: 'alliances', label: btlT('tabAlliances') },
     { id: 'mu', label: btlT('tabMu') },
     timeline && { id: 'timeline', label: btlT('tabTimeline') },
+    bountyTl && { id: 'bountyTl', label: btlT('tabBountyTl') },
     { id: 'funders', label: btlT('tabFunders'), n: nFunders },
     { id: 'contracts', label: btlT('tabContracts'), n: _detail.contracts.length },
   ].filter(Boolean);
@@ -726,6 +734,7 @@ export function renderBattleDetail(battle) {
   else if (_dtab === 'bonus') body = bonusHtml(battle);
   else if (_dtab === 'mu') body = _round ? (rWait(roundSides('mu')) || muRoundHtml(battle, roundSides('mu'))) : muSectionHtml(battle);
   else if (_dtab === 'timeline') body = timeline;
+  else if (_dtab === 'bountyTl') body = bountyTl;
   else if (_dtab === 'funders') body = fundersHtml(battle);
   else if (_dtab === 'contracts') body = contractsHtml(_detail.contracts, _detail.contractsTruncated);
   // Un round: le stesse tabelle, senza le colonne che sono della battaglia

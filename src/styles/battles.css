@@ -915,6 +915,10 @@ body.light-theme .wp-btl-tl-tip { background: var(--wp-ov-bg-light, #f4f6fa); }
 .wp-btl-tl-mdot-atk { fill: var(--wp-btl-atk); }
 .wp-btl-tl-mdot-sum { fill: var(--wp-ov-text, #e6edf3); }
 .wp-btl-tl-swmsum { background: var(--wp-ov-text, #e6edf3); }
+/* il tratto prima che la taglia fosse registrata: c'è solo il totale */
+.wp-btl-tl-mgap { fill: color-mix(in srgb, var(--wp-ov-text-dim, #8b949e) 9%, transparent); }
+.wp-btl-tl-mgaplbl { font-style: italic; }
+.wp-btl-tl-side .wp-btl-flag { vertical-align: -2px; margin-right: 4px; }
 .wp-btl-legend i.wp-btl-tl-swmsum { width: 9px; height: 9px; border-radius: 2px; display: inline-block; margin-right: 5px; }
 /* il campione del tratto: linea nel colore del testo */
 .wp-btl-tl-dash { flex: none; overflow: visible; vertical-align: middle; margin-right: 5px; }
