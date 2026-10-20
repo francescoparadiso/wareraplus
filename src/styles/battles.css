@@ -854,6 +854,8 @@ body.wp-no-motion .wp-btl-tl-fliprow.wp-btl-tl-flash { animation: none; outline:
 .wp-btl-tl-goal { stroke: var(--wp-ov-border, #30363d); stroke-dasharray: 2 3; }
 .wp-btl-tl-round { stroke: var(--wp-ov-text-dim, #8b949e); stroke-dasharray: 4 3; opacity: .6; }
 .wp-btl-tl-flip { stroke: var(--wp-btl-flip); stroke-width: 1.4; opacity: .9; }
+/* nei soldi i sorpassi sono solo un riferimento: tenui, sotto le linee */
+.wp-btl-tl-stage[data-kind="money"] .wp-btl-tl-flip { stroke-width: 1; opacity: .28; }
 .wp-btl-tl-flipdot { fill: var(--wp-btl-flip); }
 .wp-btl-tl-flipnum { fill: #0d1117; font-size: 8.5px; font-weight: 700; text-anchor: middle; }
 .wp-btl-tl-cursor { stroke: var(--wp-ov-text, #e6edf3); stroke-width: 1; opacity: .5; pointer-events: none; }
@@ -899,26 +901,49 @@ body.light-theme .wp-btl-tl-tip { background: var(--wp-ov-bg-light, #f4f6fa); }
 .wp-btl-tl-swatk { background: var(--wp-btl-atk); }
 .wp-btl-tl-swflip { background: var(--wp-btl-flip); }
 
-/* WarEra+ — soldi spesi nel grafico dell'andamento (terzo pannello):
-   taglia e contratti nei colori di sempre, il totale nel colore del testo. */
-.wp-btl-tl-mtot, .wp-btl-tl-mb, .wp-btl-tl-mc { fill: none; stroke-linejoin: round; }
-.wp-btl-tl-mtot { stroke: var(--wp-ov-text, #e6edf3); stroke-width: 2.2; }
-.wp-btl-tl-mb { stroke: var(--wp-btl-bounty); stroke-width: 1.7; }
-.wp-btl-tl-mc { stroke: var(--wp-btl-contracts); stroke-width: 1.7; }
-.wp-btl-tl-dotmtot { fill: var(--wp-ov-text, #e6edf3); }
-.wp-btl-tl-dotmb { fill: var(--wp-btl-bounty); }
-.wp-btl-tl-dotmc { fill: var(--wp-btl-contracts); }
-.wp-btl-tl-swmtot { background: var(--wp-ov-text, #e6edf3); }
-.wp-btl-tl-swmb { background: var(--wp-btl-bounty); }
-.wp-btl-tl-swmc { background: var(--wp-btl-contracts); }
-.wp-btl-tl-tip i.wp-btl-tl-swmtot,
-.wp-btl-tl-tip i.wp-btl-tl-swmb,
-.wp-btl-tl-tip i.wp-btl-tl-swmc { height: 3px; vertical-align: middle; }
-.wp-btl-legend .wp-btl-tl-mkeys { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-.wp-btl-legend .wp-btl-tl-mkeys i { width: 12px; height: 3px; border-radius: 2px; display: inline-block; margin-right: 5px; vertical-align: middle; }
-.wp-btl-tl-tipmoney { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--wp-ov-border, #30363d); }
-.wp-btl-tl-tipmoney .wp-btl-tl-tipsub { margin-left: 4px; }
-.wp-btl-tl-tipmoney > .wp-btl-tl-tipsub:first-child { margin-left: 0; }
+/* WarEra+ — soldi spesi (sezione a sé sotto l'andamento): il COLORE è
+   il lato (difesa, attacco, somma nel colore del testo), il TRATTO è la
+   voce (totale pieno, taglia a trattini, contratti a puntini). */
+.wp-btl-tl-m { fill: none; stroke-linejoin: round; stroke-width: 1.8; }
+.wp-btl-tl-m-tot { stroke-width: 2.4; }
+.wp-btl-tl-m-b { stroke-dasharray: 7 4; }
+.wp-btl-tl-m-c { stroke-dasharray: 1.5 3.5; stroke-linecap: round; stroke-width: 2.2; }
+.wp-btl-tl-ms-def { stroke: var(--wp-btl-def); }
+.wp-btl-tl-ms-atk { stroke: var(--wp-btl-atk); }
+.wp-btl-tl-ms-sum { stroke: var(--wp-ov-text, #e6edf3); }
+.wp-btl-tl-mdot-def { fill: var(--wp-btl-def); }
+.wp-btl-tl-mdot-atk { fill: var(--wp-btl-atk); }
+.wp-btl-tl-mdot-sum { fill: var(--wp-ov-text, #e6edf3); }
+.wp-btl-tl-swmsum { background: var(--wp-ov-text, #e6edf3); }
+.wp-btl-legend i.wp-btl-tl-swmsum { width: 9px; height: 9px; border-radius: 2px; display: inline-block; margin-right: 5px; }
+/* il campione del tratto: linea nel colore del testo */
+.wp-btl-tl-dash { flex: none; overflow: visible; vertical-align: middle; margin-right: 5px; }
+.wp-btl-tl-dash line { fill: none; stroke: currentColor; stroke-width: 2; }
+.wp-btl-tl-dash line.wp-btl-tl-m-tot { stroke-width: 2.6; }
+.wp-btl-tl-dash line.wp-btl-tl-m-b { stroke-dasharray: 5 3; }
+.wp-btl-tl-dash line.wp-btl-tl-m-c { stroke-dasharray: 1.5 3; stroke-linecap: round; stroke-width: 2.4; }
+
+/* Interruttori della legenda: ogni voce si accende e si spegne. */
+.wp-btl-tl-tog {
+  font: inherit; color: inherit; background: none; cursor: pointer;
+  border: 1px solid transparent; border-radius: 999px; padding: 2px 8px 2px 6px;
+  transition: opacity .15s, border-color .15s, background .15s;
+}
+.wp-btl-tl-tog:hover:not(:disabled) { border-color: var(--wp-ov-border, #30363d); color: var(--wp-ov-text, #e6edf3); }
+.wp-btl-tl-tog:focus-visible { outline: 2px solid var(--wp-btl-link-hover, #79c0ff); outline-offset: 1px; }
+.wp-btl-tl-tog.is-off { opacity: .42; text-decoration: line-through; }
+.wp-btl-tl-tog:disabled { opacity: .3; cursor: not-allowed; text-decoration: line-through; }
+.wp-btl-tl-stage .wp-btl-legend { align-items: center; gap: 4px 6px; }
+.wp-btl-tl-leggrp { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; margin-right: 10px; }
+.wp-btl-tl-leglbl { font-weight: 600; margin-right: 2px; }
+
+/* Riquadro dei soldi: una tabellina voce × lato. */
+.wp-btl-tl-tiptab { border-collapse: collapse; margin-top: 3px; }
+.wp-btl-tl-tiptab th { font-size: 10px; font-weight: 600; color: var(--wp-ov-text-dim, #8b949e); text-align: right; padding: 0 0 2px 12px; }
+.wp-btl-tl-tiptab td { text-align: right; padding: 1px 0 1px 12px; font-weight: 600; }
+.wp-btl-tl-tiptab td:first-child { text-align: left; padding-left: 0; font-weight: 400; display: flex; align-items: center; }
+.wp-btl-tl-tiptab th.wp-btl-tl-tt-def { color: var(--wp-btl-def); }
+.wp-btl-tl-tiptab th.wp-btl-tl-tt-atk { color: var(--wp-btl-atk); }
 
 .wp-btl-tl-flips { list-style: none; margin: 0 0 6px; padding: 0; counter-reset: flip; }
 .wp-btl-tl-fliprow {

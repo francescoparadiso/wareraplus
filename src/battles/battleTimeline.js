@@ -13,8 +13,9 @@
       cambia, chi del lato che passa avanti ha fatto il danno nei 10
       minuti prima, con "appena entrata" su chi è arrivato lì;
    3. gli INGRESSI — per ogni nazione, il primo tick in cui compare.
-   Più, nello stesso grafico (stesso asse dei tempi), i SOLDI SPESI:
-   totale, taglia e contratti cumulati — vedi analyzeMoney più sotto.
+   Più, in una sezione sua ma con lo stesso intervallo di zoom, i SOLDI
+   SPESI: totale, taglia e contratti cumulati, per lato — vedi
+   analyzeMoney più sotto e la testata di timelineChart.js.
 
    ⚠️ Niente fallback e niente ricostruzione: il gioco non conserva
    l'andamento di una battaglia (vedi la testata del modulo server), e un
@@ -196,8 +197,8 @@ export function analyzeTimeline(tl) {
 /* ── Soldi spesi nel tempo ────────────────────────────────────────
    Richiesta dell'utente (2026-10-20): accanto al danno, «un grafico dei
    soldi spesi, con 3 linee: totale, solo taglia, solo contratti».
-   Cumulati, cioè "speso finora", per tutti e due i lati insieme; il
-   riquadro li divide per lato.
+   Cumulati, cioè "speso finora"; poi (stesso giorno) in una sezione a
+   parte e divisi fra difesa e attacco, con la somma dei lati a scelta.
 
    - TAGLIA: quanto è SCESO il salvadanaio di un lato fra due campioni
      (campi 7-8 di `s`, dal deploy del 2026-10-20). Non è una stima: è il
@@ -214,11 +215,46 @@ export function analyzeTimeline(tl) {
    Le due voci si sommano senza doppi conteggi: è la stessa regola del
    totale in testa alla scheda (vedi src/diplomacy/battleSpending.js). */
 
-const _drop = (p, c) => (p != null && c != null && c < p ? p - c : 0);
+/* ⚠️ UN CALO DEL SALVADANAIO NON È SEMPRE TAGLIA PAGATA (misurato il
+   2026-10-20 sulla prima ora di registrazione): quando una nazione RIMETTE
+   la taglia (tariffa nuova, `bountyEffectiveAt` nuovo) il salvadanaio
+   vecchio sparisce in un minuto — 7.834 → 800 con 0,75M di danno, cioè
+   9,4 per 1k contro le 0,01–0,15 che si pagano davvero. Contarlo come
+   speso gonfiava la linea di migliaia in un punto solo.
+   Quindi un calo vale come pagato solo se è compatibile col danno fatto
+   da quel lato in quell'intervallo: sopra MAX_PER_K per 1k è una
+   sostituzione, e per quel minuto si stima il pagato con la tariffa
+   osservata nei minuti prima (mai più del calo). La regola regge anche sui
+   campioni già salvati, che non portano la tariffa. Resta un errore
+   piccolo: una sostituzione con un salvadanaio di poco più basso, che
+   sembra un pagamento. */
+const MAX_PER_K = 1;
+const _sideDmg = (prev, s, k, rounds) => {
+  // danno di un lato fra due campioni: il contatore è del round e riparte
+  // da zero al cambio, il pezzo mancante lo dà il risultato del round
+  if (s[1] === prev[1]) return Math.max(0, s[k] - prev[k]);
+  const fin = rounds?.[prev[1] - 1];
+  const finK = k === 3 ? fin?.attackerDamages : fin?.defenderDamages;
+  return (finK != null ? Math.max(0, finK - prev[k]) : 0) + s[k];
+};
 
 /** @returns {null | { pts:[t, taglia difesa, taglia attacco, contratti difesa, contratti attacco][],
- *            bountyFrom:number|null, hasContracts:boolean, total:number }} */
-export function analyzeMoney(S, contracts, T0, T1) {
+ *            bountyFrom:number|null, hasContracts:boolean, total:number, resets:number }} */
+export function analyzeMoney(S, contracts, T0, T1, rounds = null) {
+  // ultima tariffa osservata per lato (soldi per 1k danni), per i minuti
+  // in cui il salvadanaio è stato sostituito
+  const lastRate = { 7: null, 8: null };
+  let resets = 0;
+  const paid = (prev, s, k) => {
+    const p = prev[k], c = s[k];
+    if (p == null || c == null || c >= p) return 0;
+    const drop = p - c;
+    const dmg = _sideDmg(prev, s, k === 7 ? 3 : 4, rounds);
+    const perK = dmg > 0 ? drop / dmg * 1000 : Infinity;
+    if (perK <= MAX_PER_K) { lastRate[k] = perK; return drop; }
+    resets++;
+    return lastRate[k] != null ? Math.min(drop, dmg * lastRate[k] / 1000) : 0;
+  };
   const ctr = (contracts || [])
     .filter(c => c && c.payout > 0)
     .map(c => ({ t: Math.min(T1, Math.max(T0, c.awardedAt || c.createdAt || T0)), side: c.side, v: c.payout }))
@@ -245,7 +281,7 @@ export function analyzeMoney(S, contracts, T0, T1) {
       push(c.t);
     } else {
       const s = pool[i++];
-      if (prev) { bA += _drop(prev[7], s[7]); bD += _drop(prev[8], s[8]); }
+      if (prev) { bA += paid(prev, s, 7); bD += paid(prev, s, 8); }
       prev = s;
       push(s[0]);
     }
@@ -254,7 +290,7 @@ export function analyzeMoney(S, contracts, T0, T1) {
   const last = pts[pts.length - 1];
   const total = last[1] + last[2] + last[3] + last[4];
   if (total <= 0) return null;
-  return { pts, bountyFrom: pool.length ? pool[0][0] : null, hasContracts: ctr.length > 0, total };
+  return { pts, bountyFrom: pool.length ? pool[0][0] : null, hasContracts: ctr.length > 0, total, resets };
 }
 
 /* ── Formattazione ────────────────────────────────────────────── */
@@ -288,7 +324,7 @@ export function timelineSectionHtml(tl, { nationName, flagHtml, contracts = null
   if (!tl || !Array.isArray(tl.s) || tl.s.length < 2) return '';
   const an = analyzeTimeline(tl);
   const T0 = an.S[0][0];
-  an.money = analyzeMoney(an.S, contracts, T0, Math.max(an.S[an.S.length - 1][0], T0 + 60000));
+  an.money = analyzeMoney(an.S, contracts, T0, Math.max(an.S[an.S.length - 1][0], T0 + 60000), tl.rounds);
   const nat = (id) => `${flagHtml(id)}${escapeHtml(nationName(id) || '—')}`;
   const sideLbl = (s) => s === 'attacker' ? tlT('attacker') : tlT('defender');
   const withDay = _chartDaySpan(an);
@@ -351,9 +387,13 @@ export function timelineSectionHtml(tl, { nationName, flagHtml, contracts = null
   return `
     <h3 class="wp-btl-h3">${tlT('title')} <span class="wp-btl-sub">${tlT('sub')}</span></h3>
     <p class="wp-btl-foot wp-btl-foot-tight">${coverage}${tl.live ? ' ' + tlT('liveNote') : ''}</p>
-    ${chartBlockHtml(an, tl, { nationName })}
+    ${chartBlockHtml(an, tl, { nationName }, 'battle')}
     ${anyGap ? `<p class="wp-btl-foot wp-btl-foot-tight">${tlT('gapNote')}</p>` : ''}
-    ${moneyNoteHtml(an.money, tl, contractsTruncated)}
+
+    ${an.money ? `
+    <h3 class="wp-btl-h3">${tlT('moneyTitle')} <span class="wp-btl-sub">${tlT('moneySub')}</span></h3>
+    ${chartBlockHtml(an, tl, { nationName }, 'money')}
+    ${moneyNoteHtml(an.money, tl, contractsTruncated)}` : ''}
 
     <h3 class="wp-btl-h3">${tlT('flipsTitle')}</h3>
     ${flipsHtml}
@@ -372,6 +412,7 @@ function moneyNoteHtml(m, tl, contractsTruncated) {
   else if (m.bountyFrom > (tl.createdAt || m.bountyFrom) + 3 * 60 * 1000) {
     parts.push(tlT('moneyBountyFrom', { t: escapeHtml(fmtTime(m.bountyFrom, true)) }));
   }
+  if (m.resets) parts.push(tlT('moneyResets', { n: m.resets }));
   if (contractsTruncated) parts.push(tlT('moneyCtrTruncated'));
   return `<p class="wp-btl-foot wp-btl-foot-tight">${parts.join(' ')}</p>`;
 }

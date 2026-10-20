@@ -647,11 +647,13 @@ wareraPlus/
     │   │                  ⚠️ una battaglia già aperta al primo sguardo ha la prima
     │   │                  lettura come FONDO (`baseAt`): chi c'era non è un
     │   │                  ingresso. Testi in timelineI18n.js (9 lingue).
-    │   │                  + SOLDI SPESI (analyzeMoney): totale, taglia e
-    │   │                  contratti cumulati. Taglia = discesa del salvadanaio
-    │   │                  (solo battaglie registrate dopo il rideploy del
-    │   │                  2026-10-20), contratti = aste aggiudicate all'ora di
-    │   │                  chiusura (ci sono sempre).
+    │   │                  + SOLDI SPESI (analyzeMoney), sezione a sé: totale,
+    │   │                  taglia e contratti cumulati, per lato. Taglia =
+    │   │                  discesa del salvadanaio (solo battaglie registrate
+    │   │                  dopo il rideploy del 2026-10-20); ⚠️ un calo oltre
+    │   │                  1 per 1k di danno è una taglia RIMESSA, non pagata.
+    │   │                  Contratti = aste aggiudicate all'ora di chiusura
+    │   │                  (ci sono sempre).
     │   ├── timelineChart.js ← NUOVO — il grafico di battleTimeline.js reso
     │   │                  esplorabile: zoom (rotella, pizzico, trascinamento,
     │   │                  scorciatoie per round), striscia di navigazione per
@@ -661,6 +663,9 @@ wareraPlus/
     │   │                  Disegna a pixel veri (ridisegna al resize) e accorpa
     │   │                  le barre a 2px come MEDIA pesata sul tempo; lo zoom
     │   │                  sopravvive ai repaint della scheda (battaglie vive).
+    │   │                  Due stage (danno | soldi) con lo STESSO intervallo, e
+    │   │                  legenda a interruttori (localStorage wp_btl_tl_hidden):
+    │   │                  nei soldi voce × lato, colore = lato, tratto = voce.
     │   ├── main.js, battleList.js, warExpenses.js, i18n.js (9 lingue)
     ├── guide/                    ← NUOVO — Guida "Come si usa": SOLO testo statico
     │   ├── main.js                  (zero fetch, zero stato) + i18n.js a 9 lingue.
