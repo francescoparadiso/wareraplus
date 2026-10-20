@@ -161,6 +161,14 @@ wareraPlus/
 │   │                               retention allargate (senza, il primo giro di
 │   │                               manutenzione pota quello che l'import ha appena
 │   │                               scritto).
+│   ├── backup.sh               ← NUOVO — copia degli archivi che non si rifanno (cache/ +
+│   │                              i due plus.sqlite con VACUUM INTO) in ~/backup, 4 a
+│   │                              rotazione, cron domenica 04:00 UTC. Stesso disco.
+│   ├── backup-bucket.sh        ← NUOVO — porta la copia FUORI dal VPS: bucket Oracle
+│   │                              `warera-backup`, ogni giorno alle 04:30 UTC
+│   │                              (giornaliero/ 30 gg, settimanale/ 180 gg, li pota il
+│   │                              bucket). Il VPS entra come instance principal e può
+│   │                              solo aggiungere: niente delete, niente overwrite.
 │   └── README.md               ← deploy a mano (scp + pm2 restart), vedi ⚠️ in fondo
 ├── wallpaper/                  ← NUOVO — lo sfondo di Wallpaper Engine (Steam Workshop).
 │                                  NON contiene il tool: index.html porta la pagina sul

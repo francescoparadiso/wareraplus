@@ -637,8 +637,13 @@ Nella stessa direzione, due cose sullo stesso giorno:
   due sqlite (un `cp` con il WAL acceso prende un database a metà), tar
   della `cache/` senza `bootstrap-raw-battles.json` (244 MB che il bootstrap
   notturno rifà da solo), 4 copie a rotazione, cron domenica 04:00, 174 MB a
-  giro. ⚠️ è sullo **stesso disco**: il passo che conta è l'`rsync` che se
-  le porta via, documentato in `server/README.md`.
+  giro. ⚠️ è sullo **stesso disco**: dal 2026-10-20 il passo che se le porta
+  via è `server/backup-bucket.sh`, ogni giorno alle 04:30 UTC nel bucket
+  Oracle `warera-backup` (giornaliero/ 30 gg, settimanale/ 180 gg, li pota il
+  bucket da sé). Il VPS può solo AGGIUNGERE file al bucket — la policy non
+  gli dà delete né overwrite — quindi non provare a far pulire lo script:
+  fallirebbe, ed è voluto. Restano le copie a mano sul PC (`rsync`, vedi
+  `server/README.md`): il bucket sta sullo stesso account Oracle del VPS.
 
 L'unico archivio rimasto con una scadenza è `dayHistory.js` (400 giorni,
 cioè maggio 2027), e lì il vincolo è la **RAM** e non il disco: tiene
