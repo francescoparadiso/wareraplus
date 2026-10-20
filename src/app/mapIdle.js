@@ -6,13 +6,15 @@
    `display:none`, quindi tutto il suo lavoro periodico continua a
    girare invisibile sotto l'overlay. Due voci contano davvero:
 
-   1. Il pallino "nave" delle rotte oceaniche (oceanRoutes.js: makeRunner)
-      chiama `source.setData(...)` ogni 1500ms, e OGNI setData forza un
-      repaint WebGL di MapLibre, che a sua volta trascina `drawLabels`
-      (labels.js, agganciata a `map.on('render')`). Puramente decorativo:
-      fermarlo mentre nessuno guarda la mappa non perde nulla — è lo
-      stesso ragionamento (e le stesse funzioni) già usato da
-      src/app/timeMachine.js quando nasconde la mappa principale.
+   1. Le navi delle rotte oceaniche (shipOverlay.js). Fino al 2026-10-20
+      erano un setData ogni 1500ms, e OGNI setData forzava un repaint
+      WebGL di MapLibre, che a sua volta trascinava `drawLabels`
+      (labels.js, agganciata a `map.on('render')`). Oggi stanno su un
+      canvas a parte e non toccano più la mappa, ma hanno comunque un
+      loro piccolo ciclo di disegno: fermarlo mentre nessuno guarda la
+      mappa non perde nulla — è lo stesso ragionamento (e le stesse
+      funzioni) già usato da src/app/timeMachine.js quando nasconde la
+      mappa principale.
    2. Il polling dei marker battaglia ogni 30s (diplomacy/main.js):
       richieste di rete i cui risultati nessuno sta vedendo. Alla ripresa
       si fa subito un giro di aggiornamento, così i marker non restano

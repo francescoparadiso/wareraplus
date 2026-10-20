@@ -375,8 +375,9 @@ export function drawLabels() {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     const textY = startY + (cachedFlag ? flagH + 2 : 0);
-    // WarEra+ perf: shadowBlur tolto — drawLabels gira ~5-6 volte/sec per
-    // sempre (trainato dall'animazione delle navi, vedi oceanRoutes.js) e
+    // WarEra+ perf: shadowBlur tolto — drawLabels girava ~5-6 volte/sec per
+    // sempre (trainato dall'animazione delle navi, che dal 2026-10-20 non
+    // passa più da MapLibre: shipOverlay.js) e
     // shadowBlur è tra le operazioni più costose di Canvas2D (va
     // ricalcolato via software ad ogni chiamata che lo ha attivo). Lo
     // strokeText nero sottostante da solo basta per la leggibilità — era un

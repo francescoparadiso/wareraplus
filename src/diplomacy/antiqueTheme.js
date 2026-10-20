@@ -49,7 +49,10 @@ import { LAYER_IDS } from './config.js';
 import { loadOceanImages, OCEAN_IMAGE_IDS } from './oceanImages.js';
 
 const { SRC_REGIONS } = LAYER_IDS;
-import { buildRoutesData, makeRunner } from './oceanRoutes.js';
+import { buildRoutesData } from './oceanRoutes.js';
+// WarEra+: le navi sono un canvas a parte condiviso col tema scuro
+// (shipOverlay.js — vedi lì il perché), non più un layer di questo tema.
+import { initShipOverlay, showShips, hideShips, runShips, freezeShips } from './shipOverlay.js';
 // WarEra+: l'interruttore unico delle animazioni (Impostazioni).
 import { animationsOn } from '../shared/motion.js';
 
@@ -71,7 +74,6 @@ const LAND_MUTE_OPACITY = 0.14;
 const LYR = {
   routes: 'wp-antique-routes',
   routeNodes: 'wp-antique-route-nodes',
-  routeShips: 'wp-antique-route-ships',
 };
 
 // Marroncino/inchiostro invece di ciano — "devono seguire il tema".
@@ -142,11 +144,12 @@ const WAVE_ICON_SIZE_BY_ZOOM = [
   8, ['*', ['get', 'scale'], WAVE_BASE_ICON_SIZE * Math.pow(2, 8 - 1.7)],
 ];
 
-let _stopShips = null;
-let _shipsArgs = null; // { map, sourceId, sampledPaths, opts } — per riavviare dopo il tema scuro
+// Stesso colore e opacità del vecchio layer 'circle' delle navi.
+const SHIP_STYLE = { color: COLOR.routeShip, opacity: 0.9 };
+const SHIP_OWNER = 'antique';
 
 function _stopAnimations() {
-  if (_stopShips) { _stopShips(); _stopShips = null; }
+  freezeShips(SHIP_OWNER);
 }
 function _startAnimations() {
   // Vedi la nota gemella in oceanBackground.js:startAnimations — la guardia
@@ -155,19 +158,17 @@ function _startAnimations() {
   // sapere quale sia attivo.
   if (globalState.theme !== 'light') return; // rotte "seppia": solo tema chiaro
   if (!animationsOn()) return; // WarEra+: animazioni spente nelle Impostazioni (shared/motion.js)
-  if (!_stopShips && _shipsArgs) {
-    _stopShips = makeRunner(_shipsArgs.map, _shipsArgs.sourceId, _shipsArgs.sampledPaths, _shipsArgs.opts);
-  }
+  runShips(SHIP_OWNER);
 }
 
 // WarEra+ — vedi commento gemello in oceanBackground.js (pauseShipAnimation/
-// resumeShipAnimation): stessa idea, versione tema chiaro. Solo uno dei due
-// temi ha un runner attivo alla volta (_stopShips è null nell'altro),
-// quindi timeMachine.js può chiamare entrambe le coppie senza controllare
-// quale tema è attivo — quella del tema inattivo è un no-op.
-// NB: questa invariante era FALSA fino al fix qui sotto in initAntiqueTheme
-// (entrambi i runner giravano insieme, misurato); ora regge davvero perché
-// l'avvio passa solo da applyAntiqueTheme()/applyOceanTheme().
+// resumeShipAnimation): stessa idea, versione tema chiaro. Le navi sono di
+// un tema alla volta (il "proprietario" in shipOverlay.js), quindi
+// timeMachine.js può chiamare entrambe le coppie senza controllare quale
+// tema è attivo — quella del tema inattivo è un no-op.
+// NB: questa invariante era FALSA fino al fix in initAntiqueTheme
+// (entrambi i runner giravano insieme, misurato); regge perché l'avvio
+// passa solo da applyAntiqueTheme()/applyOceanTheme().
 export function pauseShipAnimation() { _stopAnimations(); }
 export function resumeShipAnimation() { _startAnimations(); }
 
@@ -206,7 +207,6 @@ export async function initAntiqueTheme(map, beforeLayerId) {
     const routes = buildRoutesData();
     const routesSrc = addSrc('routes', routes.lines);
     const routeNodesSrc = addSrc('route-nodes', routes.nodes);
-    const routeShipsSrc = addSrc('route-ships', { type: 'FeatureCollection', features: [] });
     map.addLayer({
       id: LYR.routes, type: 'line', source: routesSrc,
       layout: { visibility: 'none', 'line-cap': 'round' },
@@ -217,25 +217,14 @@ export async function initAntiqueTheme(map, beforeLayerId) {
       layout: { visibility: 'none' },
       paint: { 'circle-radius': 1.8, 'circle-color': COLOR.routeNode, 'circle-opacity': 0.7 },
     }, beforeLayerId);
-    map.addLayer({
-      id: LYR.routeShips, type: 'circle', source: routeShipsSrc,
-      layout: { visibility: 'none' },
-      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 2.6, 4, 3.6, 8, 5], 'circle-color': COLOR.routeShip, 'circle-opacity': 0.9 },
-    }, beforeLayerId);
-    // WarEra+ perf: 1500ms (era 500ms, prima ancora 180ms) — vedi nota in
-    // oceanBackground.js (stessa animazione/geometria, solo temi diversi).
-    // BUG FIX perf (misurato: il runner di QUESTO tema girava anche a tema
-    // scuro attivo, animando layer con visibility:'none'). Qui c'era un
-    // makeRunner() incondizionato. Race: initAntiqueTheme è `async` e
-    // map.js:124 NON la attende — chiama applyAntiqueTheme(state) subito
-    // dopo, quando `_initialized` è già true ma `_stopShips` è ancora null
-    // perché l'await più sotto non si è risolto. Lo _stopAnimations() di
-    // applyAntiqueTheme finiva quindi nel vuoto, e questa riga faceva
-    // partire il runner DOPO, senza più nessuno a fermarlo.
-    // Ora si registrano solo gli argomenti: chi decide se avviarlo è
-    // applyAntiqueTheme(), richiamata in fondo a questa init (sotto) a
+    // Navi: canvas condiviso (shipOverlay.js), qui si crea soltanto.
+    // BUG FIX perf storico (misurato: il runner di QUESTO tema girava anche
+    // a tema scuro attivo, animando layer con visibility:'none'). Qui c'era
+    // un makeRunner() incondizionato, partito DOPO l'await e quindi dopo lo
+    // _stopAnimations() di applyAntiqueTheme. Chi decide se avviare le navi
+    // resta applyAntiqueTheme(), richiamata in fondo a questa init (sotto) a
     // await ormai risolti.
-    _shipsArgs = { map, sourceId: routeShipsSrc, sampledPaths: routes.sampledPaths, opts: { intervalMs: 1500, speedRange: [0.12, 0.22], withBearing: true, particlesPerPath: 1 } };
+    initShipOverlay(map);
 
     // --- Tinta piatta per smorzare i colori nazione (vedi nota sopra
     // LAND_MUTE_COLOR) — NESSUN beforeId: si aggiunge sopra a LYR_FILL/le
@@ -342,7 +331,7 @@ export function applyAntiqueTheme(state) {
   Object.values(LYR).forEach(id => {
     if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', light ? 'visible' : 'none');
   });
-  if (light) _startAnimations(); else _stopAnimations();
+  if (light) { showShips(SHIP_OWNER, SHIP_STYLE); _startAnimations(); } else hideShips(SHIP_OWNER);
 
   if (map.getLayer(LYR_ANTIQUE_MARKERS)) {
     map.setLayoutProperty(LYR_ANTIQUE_MARKERS, 'visibility', light ? 'visible' : 'none');

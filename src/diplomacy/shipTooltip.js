@@ -1,12 +1,12 @@
 /* ══════════════════════════════════════════════════════════════
    WarEra+ — tooltip dei pallini "nave" delle rotte marittime
    ------------------------------------------------------------------
-   I pallini animati sulle rotte (oceanRoutes.js: makeRunner, disegnati
-   da oceanBackground.js sul tema scuro e da antiqueTheme.js su quello
-   chiaro) erano puramente decorativi e muti. Qui si aggiunge un
-   micro-tooltip scherzoso al passaggio del mouse — "sto trasportando
-   spezie da Gibilterra a Suez" — senza toccare né l'animazione né i
-   layer esistenti.
+   I pallini animati sulle rotte (shipOverlay.js, un canvas sopra la
+   mappa con lo stile del tema scuro o di quello chiaro) erano puramente
+   decorativi e muti. Qui si aggiunge un micro-tooltip scherzoso al
+   passaggio del mouse — "sto trasportando spezie da Gibilterra a Suez" —
+   senza toccare l'animazione. Le navi vanno avanti e indietro: sulla via
+   del ritorno Da e A si scambiano.
 
    VINCOLO DICHIARATO DALL'UTENTE: impatto sulle prestazioni nullo o
    minimo. Come viene rispettato, in ordine di importanza:
@@ -14,10 +14,10 @@
    1. NIENTE listener delegati di MapLibre (`map.on('mousemove', layerId)`):
       quelli fanno una queryRenderedFeatures ad OGNI evento mousemove del
       browser, senza throttle. Qui il mousemove è nostro, passivo, e la
-      query gira al massimo UNA VOLTA PER FRAME (guardia requestAnimationFrame).
-   2. La query si limita ai due layer dei pallini (13 punti in tutto) e a
-      una bbox di 8px attorno al cursore — il resto della mappa non viene
-      mai interrogato.
+      ricerca gira al massimo UNA VOLTA PER FRAME (guardia requestAnimationFrame).
+   2. La ricerca guarda solo le posizioni a schermo dell'ultimo disegno
+      delle navi (shipOverlay.js: shipAt, 13 punti o poco più) entro 8px
+      dal cursore — la mappa non viene mai interrogata.
    3. Si esce SUBITO, prima di qualsiasi query, quando: la mappa si sta
       muovendo (pan/zoom), un overlay copre la mappa (body.wp-subview-open),
       la tab è nascosta, o il puntatore non è un mouse (touch: niente hover,
@@ -31,14 +31,8 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { ROUTE_ENDPOINTS } from './oceanRoutes.js';
+import { shipAt } from './shipOverlay.js';
 import { getLang } from '../shared/i18n.js';
-
-// Gli id dei due layer dei pallini nave: quello del tema scuro
-// (oceanBackground.js) e quello del tema chiaro (antiqueTheme.js). Ne è
-// visibile sempre e solo uno — l'altro ha visibility:'none' e
-// queryRenderedFeatures non lo restituisce, quindi si possono chiedere
-// entrambi senza doversi ricordare quale tema è attivo.
-const SHIP_LAYERS = ['wp-ocean-route-ships', 'wp-antique-route-ships'];
 
 const HIT_PADDING = 8; // px attorno al cursore: i pallini sono da 2.6-5px
 
@@ -143,7 +137,7 @@ function dict() {
 let _tipEl = null;
 let _initialized = false;
 let _rafPending = false;
-let _lastKey = null; // "routeIdx:cargo" della nave attualmente mostrata
+let _lastKey = null; // "routeIdx:cargo:verso" della nave attualmente mostrata
 
 function tipEl() {
   if (_tipEl && _tipEl.isConnected) return _tipEl;
@@ -172,14 +166,16 @@ function show(text, x, y) {
   el.classList.add('visible');
 }
 
-function textFor(routeIdx, cargoIdx) {
+function textFor(routeIdx, cargoIdx, back) {
   const ends = ROUTE_ENDPOINTS[routeIdx];
   if (!ends || !ends.from || !ends.to) return null;
   const d = dict();
+  const from = back ? ends.to : ends.from;
+  const to = back ? ends.from : ends.to;
   return d.line
     .replace('{cargo}', d.cargo[cargoIdx % d.cargo.length])
-    .replace('{from}', d.choke[ends.from] || ends.from)
-    .replace('{to}', d.choke[ends.to] || ends.to);
+    .replace('{from}', d.choke[from] || from)
+    .replace('{to}', d.choke[to] || to);
 }
 
 /**
@@ -208,18 +204,9 @@ export function initShipTooltip(map) {
       _rafPending = false;
       const rect = canvas.getBoundingClientRect();
       const px = x - rect.left, py = y - rect.top;
-      const layers = SHIP_LAYERS.filter(id => map.getLayer(id));
-      if (!layers.length) { hide(); return; }
-      let feats;
-      try {
-        feats = map.queryRenderedFeatures(
-          [[px - HIT_PADDING, py - HIT_PADDING], [px + HIT_PADDING, py + HIT_PADDING]],
-          { layers }
-        );
-      } catch (_) { return; } // stile in ricarica (cambio tema): si riproverà al prossimo movimento
-      if (!feats.length) { hide(); return; }
-      const p = feats[0].properties || {};
-      const key = `${p.routeIdx}:${p.cargo}`;
+      const p = shipAt(px, py, HIT_PADDING);
+      if (!p) { hide(); return; }
+      const key = `${p.routeIdx}:${p.cargo}:${p.back ? 1 : 0}`;
       // Stessa nave del frame precedente: si aggiorna solo la posizione,
       // niente ricostruzione della stringa né scrittura di textContent.
       if (key === _lastKey) {
@@ -228,7 +215,7 @@ export function initShipTooltip(map) {
         if (_tipEl) _tipEl.style.transform = `translate(${Math.max(4, left)}px, ${Math.max(4, y - 34)}px)`;
         return;
       }
-      const text = textFor(Number(p.routeIdx), Number(p.cargo) || 0);
+      const text = textFor(p.routeIdx, p.cargo, p.back);
       if (!text) { hide(); return; }
       _lastKey = key;
       show(text, x, y);

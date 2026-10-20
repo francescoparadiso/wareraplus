@@ -91,7 +91,8 @@ export function initMap() {
     // sorgente cambia, MapLibre ri-esegue il "symbol placement" e per
     // tutta la durata del fade tiene `_placementDirty` attivo, cioè
     // continua a ridisegnare a frame pieno. Con i pallini-nave decorativi
-    // che fanno setData ogni 1,5s (oceanRoutes.js:makeRunner) la mappa non
+    // che facevano setData ogni 1,5s (vecchio oceanRoutes.js:makeRunner;
+    // dal 2026-10-20 stanno su un canvas a parte, shipOverlay.js) la mappa non
     // tornava MAI idle: 30 secondi di immobilità totale producevano ~470
     // repaint WebGL, concentrati in burst da ~110 frame in un secondo.
     // Con fadeDuration:0 gli stessi 30 secondi ne producono 22 (-95%).

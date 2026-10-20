@@ -183,6 +183,10 @@ wareraPlus/
 │                                  con ?wallpaper=1 i <select> sono spenti (in linea in
 │                                  testa a index.html). Fuori da build e deploy Vercel.
 │                                  Prova, debug remoto e pubblicazione nel suo README.
+├── tools/
+│   └── checkOceanRoutes.mjs    ← NUOVO — `npm run check:routes`: prova le rotte
+│                                  marittime contro i poligoni di map.getMapData (esce 1
+│                                  se una passa sopra la terraferma). Fuori dal bundle.
 ├── public/
 │   ├── icons/
 │   └── political/              ← Political View ORIGINALE (script globali), NON PIÙ USATO
@@ -319,6 +323,10 @@ wareraPlus/
     │   ├── borderStyle.js       ← NUOVO — bordi come nella mappa del gioco: interni nella
     │   │                          tinta della nazione, nazionali colorati per relazione
     │   ├── oceanRoutes.js       ← NUOVO — geometria condivisa delle rotte marittime
+    │   │                          (stretti e tappe IN MARE: `npm run check:routes`)
+    │   ├── shipOverlay.js       ← NUOVO — le navi delle rotte su un canvas sopra la
+    │   │                          mappa: moto fluido a velocità costante, zero repaint
+    │   │                          di MapLibre, condiviso dai due temi
     │   ├── oceanBackground.js   ← NUOVO — rotte animate, tema scuro
     │   ├── travelDistance.js    ← NUOVO — vista mappa "Distanze" (idea dal tool di
     │   │                          nioKi, ni0ki.github.io/warera-distance-map): clic su

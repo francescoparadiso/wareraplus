@@ -26,7 +26,10 @@
 //   chiaro (mappa "pergamena") tramite applyOceanTheme() — quel tema ha
 //   la sua estetica dedicata, vedi antiqueTheme.js.
 
-import { buildRoutesData, makeRunner } from './oceanRoutes.js';
+import { buildRoutesData } from './oceanRoutes.js';
+// WarEra+: le navi non sono più un layer MapLibre ma un canvas a parte,
+// condiviso col tema chiaro (shipOverlay.js — vedi lì il perché).
+import { initShipOverlay, showShips, hideShips, runShips, freezeShips } from './shipOverlay.js';
 // Rinominato in import per non confondersi col parametro `state` di
 // applyOceanTheme(state) — stesso schema già usato in antiqueTheme.js.
 import { state as globalState } from './state.js';
@@ -38,7 +41,6 @@ const SRC_PREFIX = 'wp-ocean-';
 const LYR = {
   routes: 'wp-ocean-routes',
   routeNodes: 'wp-ocean-route-nodes',
-  routeShips: 'wp-ocean-route-ships',
 };
 
 const COLOR = {
@@ -47,13 +49,12 @@ const COLOR = {
   routeShip: '#8fe8ff',
 };
 
-let _stopShips = null;
-// Riferimento salvato per poter riavviare l'animazione dopo che il tema
-// chiaro l'aveva fermata, senza dover ricalcolare i sampledPaths.
-let _shipsArgs = null;   // { map, sourceId, sampledPaths, opts }
+// Stesso colore e opacità del vecchio layer 'circle' delle navi.
+const SHIP_STYLE = { color: COLOR.routeShip, opacity: 0.85 };
+const SHIP_OWNER = 'dark';
 
 function stopAnimations() {
-  if (_stopShips) { _stopShips(); _stopShips = null; }
+  freezeShips(SHIP_OWNER);
 }
 
 function startAnimations() {
@@ -67,9 +68,7 @@ function startAnimations() {
   // layer nascosti.
   if (globalState.theme === 'light') return; // rotte "futuristiche": solo tema scuro
   if (!animationsOn()) return; // WarEra+: animazioni spente nelle Impostazioni (shared/motion.js)
-  if (!_stopShips && _shipsArgs) {
-    _stopShips = makeRunner(_shipsArgs.map, _shipsArgs.sourceId, _shipsArgs.sampledPaths, _shipsArgs.opts);
-  }
+  runShips(SHIP_OWNER);
 }
 
 // WarEra+ (feedback utente: rendering in ritardo durante la time machine —
@@ -77,8 +76,9 @@ function startAnimations() {
 // stesso schema seedato, non dipende dai dati). A differenza di
 // setOceanBackgroundVisible sopra, questi NON toccano la visibilità dei
 // layer (le rotte/navi restano visibili, solo ferme) — pensati per essere
-// richiamati da timeMachine.js mentre è aperta, per liberare il thread
-// principale dal repaint ogni 500ms mentre il playback ne ha più bisogno.
+// richiamati da timeMachine.js mentre è aperta. Oggi le navi non fanno più
+// ridisegnare la mappa (shipOverlay.js), ma fermarle libera comunque il
+// loro piccolo ciclo di disegno.
 export function pauseShipAnimation() { stopAnimations(); }
 export function resumeShipAnimation() { startAnimations(); }
 
@@ -109,7 +109,6 @@ export function initOceanBackground(map, beforeLayerId) {
   const routes = buildRoutesData();
   const routesSrc = addSrc('routes', routes.lines);
   const routeNodesSrc = addSrc('route-nodes', routes.nodes);
-  const routeShipsSrc = addSrc('route-ships', { type: 'FeatureCollection', features: [] });
   map.addLayer({
     id: LYR.routes, type: 'line', source: routesSrc,
     layout: { 'line-cap': 'round' },
@@ -119,26 +118,13 @@ export function initOceanBackground(map, beforeLayerId) {
     id: LYR.routeNodes, type: 'circle', source: routeNodesSrc,
     paint: { 'circle-radius': 1.8, 'circle-color': COLOR.routeNode, 'circle-opacity': 0.55 },
   }, beforeLayerId);
-  map.addLayer({
-    id: LYR.routeShips, type: 'circle', source: routeShipsSrc,
-    paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 2.6, 4, 3.6, 8, 5], 'circle-color': COLOR.routeShip, 'circle-opacity': 0.85 },
-  }, beforeLayerId);
-  // 1 pallino "nave" per rotta.
-  // WarEra+ perf: era 180ms, poi 500ms (~5.5 -> ~2 repaint MapLibre/sec per
-  // sempre, mai in pausa mentre l'app è aperta — vedi labels.js: trainava
-  // anche drawLabels ad ogni giro, bound a map.on('render')). Ulteriore
-  // richiesta esplicita dell'utente: rallentare ancora per ridurre il
-  // costo sul thread principale — 1500ms (~3x meno repaint/sec di 500ms).
-  // `speed` (avanzamento per tick) resta invariato: intervalMs più lungo
-  // rallenta ANCHE il movimento percepito (stesso passo, meno spesso), non
-  // solo il costo — coerente con "rallenta il movimento" chiesto.
-  // WarEra+ perf: qui c'era anche un makeRunner() incondizionato. Ora si
-  // registrano solo gli argomenti e a decidere se avviarlo è
-  // applyOceanTheme() qui sotto (via setOceanBackgroundVisible), che
-  // conosce il tema attivo — così il runner del tema NON attivo non gira
-  // a vuoto animando layer nascosti. Stessa correzione applicata al
-  // gemello di antiqueTheme.js.
-  _shipsArgs = { map, sourceId: routeShipsSrc, sampledPaths: routes.sampledPaths, opts: { intervalMs: 1500, speedRange: [0.12, 0.22], withBearing: true, particlesPerPath: 1 } };
+  // 1 pallino "nave" per rotta. Era un layer 'circle' aggiornato con un
+  // setData ogni 1,5 s (prima ancora 500 e 180 ms, allungati per non far
+  // ridisegnare la mappa — e drawLabels con lei — così spesso). Ora le navi
+  // stanno su un canvas a parte che scorre fluido senza toccare MapLibre:
+  // vedi shipOverlay.js. A decidere se avviarle resta applyOceanTheme() qui
+  // sotto (via setOceanBackgroundVisible), che conosce il tema attivo.
+  initShipOverlay(map);
 
   // Era `applyOceanTheme()` senza argomento: `state?.map` risultava
   // undefined e la funzione usciva subito, rendendo la riga un no-op
@@ -155,11 +141,12 @@ export function setOceanBackgroundVisible(map, visible) {
   Object.values(LYR).forEach(id => {
     if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
   });
-  if (visible) startAnimations(); else stopAnimations();
+  if (visible) { showShips(SHIP_OWNER, SHIP_STYLE); startAnimations(); } else hideShips(SHIP_OWNER);
 }
 
 /**
- * Mostra/nasconde una singola categoria (routes | routeNodes | routeShips).
+ * Mostra/nasconde una singola categoria (routes | routeNodes). Le navi non
+ * sono più un layer: seguono setOceanBackgroundVisible.
  */
 export function setOceanCategoryVisible(map, category, visible) {
   const id = LYR[category];
