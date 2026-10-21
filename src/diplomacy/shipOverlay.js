@@ -51,9 +51,10 @@
 
 import { buildShipPaths, CARGO_COUNT } from './oceanRoutes.js';
 
-// Gradi Mercator al secondo: la mediana delle velocità delle vecchie navi
-// (0,03-0,36 secondo la rotta), ora uguale per tutte.
-const SPEED = 0.1;
+// Gradi Mercator al secondo, uguale per tutte le navi. Partita dalla
+// mediana delle vecchie (0,1; erano 0,03-0,36 secondo la rotta), poi +20%
+// su richiesta (2026-10-21).
+const SPEED = 0.12;
 const SPEED_JITTER = 0.15;   // ±15% per nave, così non avanzano a passo d'oca
 const STEP_PX = 0.25;        // spostamento massimo fra due ridisegni
 // Un buco più lungo di così (tab in background, PC in sospensione) non fa
