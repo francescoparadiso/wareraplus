@@ -657,6 +657,9 @@ export function renderBattleDetail(battle) {
       ${flagHtml(battle.attacker.countryId)}${escapeHtml(nationName(battle.attacker.countryId) || '—')}
       <span class="wp-btl-type">${typeLabel(battle.type)}</span>
     </h2>
+    ${_tl?.k?.length >= 3 && _tl?.s?.length
+      ? `<button type="button" class="wp-btl-replay" data-btl-replay>▶ ${btlT('replayOnMap')}</button>`
+      : ''}
     <div class="wp-btl-cards">
       <div class="wp-btl-card"><span>${btlT('colRegion')}</span><strong class="wp-btl-card-sm">${escapeHtml(regionName(battle.regionId) || '—')}</strong></div>
       <div class="wp-btl-card"><span>${battle.live ? btlT('colWhenMixed') : btlT('colWhen')}</span><strong class="wp-btl-card-sm">${battle.live
@@ -993,6 +996,17 @@ export function wireBattleDetail(root, battle, { onBack, repaint }) {
   if (!root.dataset.btlDetailWired) {
     root.dataset.btlDetailWired = '1';
     root.addEventListener('click', (e) => {
+      // Replay sulla mappa (battleReplay.js): si chiude la sezione e la
+      // battaglia si riproduce dove è stata combattuta.
+      const rp = e.target.closest?.('[data-btl-replay]');
+      if (rp) {
+        const id = _wired.battle?.id;
+        if (!id) return;
+        trackEvent('battle-replay-from-archive');
+        import('../app/battlesOverlay.js').then(m => m.closeBattlesView());
+        import('../diplomacy/battleReplay.js').then(m => m.replayOnMap(id));
+        return;
+      }
       const tab = e.target.closest?.('.wp-btl-dtab');
       if (tab) {
         _dtab = tab.dataset.dtab;

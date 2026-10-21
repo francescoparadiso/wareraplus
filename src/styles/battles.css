@@ -397,6 +397,23 @@ body.light-theme .wp-btl-row:hover { background: rgba(0, 0, 0, .035); }
 .wp-btl-back:hover,
 .wp-btl-seebattles:hover { color: var(--wp-ov-accent, #e5484d); border-color: var(--wp-ov-accent, #e5484d); }
 .wp-btl-seebattles { margin-top: 14px; }
+/* Replay della battaglia sulla mappa (battleReplay.js: replayOnMap), solo
+   per le battaglie registrate dal server. Oro come il bottone del replay
+   sopra la scheda battaglia. */
+.wp-btl-replay {
+  appearance: none;
+  margin: 2px 0 12px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 209, 102, .5);
+  background: rgba(255, 209, 102, .08);
+  color: #ffd166;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.wp-btl-replay:hover { background: rgba(255, 209, 102, .16); }
+body.light-theme .wp-btl-replay { color: #8b5a2b; border-color: rgba(139, 90, 43, .45); background: rgba(139, 90, 43, .06); }
 
 .wp-btl-dtitle {
   display: flex;
