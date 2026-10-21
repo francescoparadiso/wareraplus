@@ -52,11 +52,11 @@
 import { buildShipPaths, CARGO_COUNT } from './oceanRoutes.js';
 
 // Gradi Mercator al secondo, uguale per tutte le navi. Richiesta
-// (2026-10-21): 2 px al secondo alla vista mondo, cioè a zoom 2, dove un
+// (2026-10-21): 3 px al secondo alla vista mondo, cioè a zoom 2, dove un
 // grado vale 512·2²/360 ≈ 5,7 px. A ogni livello di zoom in più i px al
 // secondo raddoppiano: la nave va alla stessa velocità SULLA MAPPA.
 // (Le vecchie navi andavano a 0,03-0,36 secondo la rotta, mediana 0,1.)
-const SPEED = 0.35;
+const SPEED = 0.53;
 const SPEED_JITTER = 0.15;   // ±15% per nave, così non avanzano a passo d'oca
 const STEP_PX = 0.25;        // spostamento massimo fra due ridisegni
 // Un buco più lungo di così (tab in background, PC in sospensione) non fa
