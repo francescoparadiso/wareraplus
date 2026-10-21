@@ -3918,35 +3918,54 @@ body.light-theme .wp-mig-note { color: #9a6700; }
 .wp-replay-info b { font-size: 14px; font-variant-numeric: tabular-nums; }
 .wp-replay-info span { color: #8b949e; font-variant-numeric: tabular-nums; }
 .wp-replay-note { flex-basis: 100%; font-size: 11px; color: #e3b341; }
-/* Il muro della battaglia nel replay: stessa formula e colori del widget
-   della scheda (battleFront.js) — difensori a sinistra, attaccanti a
-   destra, fronte d'oro. --front lo scrive renderHud a ogni fotogramma. */
+/* Il muro della battaglia nel replay: stesso campo del widget della
+   scheda (battleFront.js) — difensori a sinistra, attaccanti a destra,
+   fronte d'oro, unità che marciano. In CIMA alla barra (grid-row 1: gli
+   altri elementi scorrono sotto da soli). --front lo scrive renderHud a
+   ogni fotogramma. */
 .wp-replay-wall {
   --front: 50%;
   grid-column: 1 / -1;
+  grid-row: 1;
   position: relative;
-  height: 18px;
-  border-radius: 6px;
+  height: 72px;
+  border-radius: 8px;
   overflow: hidden;
   background: #16283a;
 }
+@media (max-width: 760px) { .wp-replay-wall { height: 56px; } }
 .wp-replay-wall[hidden] { display: none; }
 .wp-replay-wall-atk { position: absolute; top: 0; right: 0; bottom: 0; left: var(--front); background: #391f16; }
 .wp-replay-wall-origin { position: absolute; top: 0; bottom: 0; left: 50%; border-left: 1px dashed rgba(255, 255, 255, .25); }
 .wp-replay-wall-front {
   position: absolute; top: 0; bottom: 0; left: var(--front);
   width: 2px; margin-left: -1px;
-  background: #e2ac4d; box-shadow: 0 0 8px 1px rgba(226, 172, 77, .45);
+  background: #e2ac4d; box-shadow: 0 0 10px 1px rgba(226, 172, 77, .45);
 }
+.wp-replay-wall-units { position: absolute; inset: 0; }
+.wp-replay-unit {
+  position: absolute; width: 4px; height: 4px; margin: -2px 0 0 -2px;
+  border-radius: 50%; opacity: 0;
+}
+.wp-replay-unit.def { background: #8fc3e8; }
+.wp-replay-unit.atk { background: #ef9269; }
+.wp-replay-unit.tank { width: 8px; height: 5px; margin: -2.5px 0 0 -4px; border-radius: 1.5px; }
 /* Un fotogramma del replay ogni 100 ms: la transizione breve li raccorda. */
 .wp-replay-wall-atk, .wp-replay-wall-front { transition: left 160ms linear; }
-body.wp-no-motion .wp-replay-wall-atk, body.wp-no-motion .wp-replay-wall-front { transition: none; }
-.wp-replay-wall-pct {
-  position: absolute; top: 50%; transform: translateY(-50%);
-  font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+.wp-replay-unit { transition: left 160ms linear, opacity 300ms; }
+body.wp-no-motion .wp-replay-wall-atk,
+body.wp-no-motion .wp-replay-wall-front,
+body.wp-no-motion .wp-replay-unit { transition: none; }
+.wp-replay-wall-side, .wp-replay-wall-pct {
+  position: absolute; z-index: 1;
+  font-size: 11px; font-weight: 700; text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
 }
-.wp-replay-wall-pct.d { left: 6px; color: #8fc3e8; }
-.wp-replay-wall-pct.a { right: 6px; color: #ef9269; }
+.wp-replay-wall-side { top: 5px; display: flex; align-items: center; gap: 5px; max-width: 45%; }
+.wp-replay-wall-side span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-replay-wall-side img { width: 16px; height: 11px; object-fit: cover; border-radius: 2px; flex: none; }
+.wp-replay-wall-pct { bottom: 5px; font-variant-numeric: tabular-nums; }
+.wp-replay-wall-side.d, .wp-replay-wall-pct.d { left: 7px; color: #8fc3e8; }
+.wp-replay-wall-side.a, .wp-replay-wall-pct.a { right: 7px; color: #ef9269; flex-direction: row-reverse; }
 body.light-theme .wp-replay-open,
 body.light-theme #wp-replay-hud.active .wp-replay-bar {
   background: rgba(250, 244, 230, .96);

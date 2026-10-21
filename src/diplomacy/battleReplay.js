@@ -29,12 +29,16 @@
        momento.
 
    ── Il muro (richiesta dell'utente, 2026-10-21) ────────────────
-   Sulla mappa si vedeva solo il danno per nazione; ora sotto il cursore
+   Sulla mappa si vedeva solo il danno per nazione; ora in cima alla barra
    c'è anche il MURO della scheda battaglia (battleFront.js) che va avanti
-   e indietro: stessa formula (fronte = 50 + (quota difensori − 0,5) × 130,
-   fra 12 e 88), stessi colori, difensori a sinistra. Il dato è il danno
-   del ROUND in corso dei campioni al minuto (`s` di /battle-timeline),
-   quindi a ogni cambio di round il muro torna al centro, come nel gioco.
+   e indietro: stesso campo coi due territori, stessa linea del fronte
+   (50 + (quota difensori − 0,5) × 130, fra 12 e 88), stesse unità che
+   marciano col fronte e si infittiscono dal lato che fa più danno, stessi
+   colori, difensori a sinistra. La prima versione era una striscia alta
+   18 px sotto il cursore, e l'utente non la riconosceva come il muro.
+   Il dato è il danno del ROUND in corso dei campioni al minuto (`s` di
+   /battle-timeline): a ogni cambio di round il muro torna al centro,
+   come nel gioco.
 
    ⚠️ L'archivio ACCUMULA dal 2026-10-07: una battaglia chiusa prima non
    ha replay, e il bottone non compare. Una battaglia già aperta al primo
@@ -135,6 +139,11 @@ function lastIndexAtOrBefore(arr, t, key = x => x.t) {
    è fermo: si scivola verso il successivo solo in quell'ultimo minuto (e
    mai a cavallo di due round, dove il danno riparte da zero). */
 const WALL_SPAN = 130, WALL_MIN = 12, WALL_MAX = 88;   // come battleFront.js: render()
+// Unità per lato come battleFront.js: MIN sempre in campo, MAX dal lato che
+// fa tutto il danno; l'ultimo quarto sono carri.
+const IS_NARROW = Math.min(window.innerWidth, window.innerHeight) <= 760;
+const WALL_MIN_UNITS = 4, WALL_MAX_UNITS = IS_NARROW ? 7 : 10;
+let _wallUnits = { def: [], atk: [] };   // { el, offset } creati una volta con la barra
 
 function wallAt(T) {
   if (!_S?.length) return null;
@@ -377,13 +386,29 @@ function showHud() {
         <div class="wp-replay-wall" hidden>
           <div class="wp-replay-wall-atk"></div>
           <div class="wp-replay-wall-origin"></div>
+          <div class="wp-replay-wall-units"></div>
           <div class="wp-replay-wall-front"></div>
+          <span class="wp-replay-wall-side d"></span>
+          <span class="wp-replay-wall-side a"></span>
           <span class="wp-replay-wall-pct d"></span>
           <span class="wp-replay-wall-pct a"></span>
         </div>
         <div class="wp-replay-info"></div>
       </div>`;
     document.body.appendChild(_hud);
+    // Le unità del muro: posizione (distanza dal fronte, altezza) fissata
+    // qui una volta sola, così marciano col fronte invece di saltare.
+    const unitsEl = _hud.querySelector('.wp-replay-wall-units');
+    for (const side of ['def', 'atk']) {
+      for (let i = 0; i < WALL_MAX_UNITS; i++) {
+        const el = document.createElement('div');
+        const tank = i >= WALL_MAX_UNITS - Math.max(1, Math.round(WALL_MAX_UNITS * 0.25));
+        el.className = `wp-replay-unit ${side}${tank ? ' tank' : ''}`;
+        el.style.top = `${12 + Math.random() * 76}%`;
+        unitsEl.appendChild(el);
+        _wallUnits[side].push({ el, offset: 3 + Math.random() * 26 });
+      }
+    }
     _hud.addEventListener('click', (e) => {
       // Un segno sul cursore: il replay salta lì e si ferma.
       const mark = e.target.closest('[data-replay-mark]');
@@ -503,9 +528,32 @@ function renderHud() {
   if (wall) {
     wallEl.style.setProperty('--front', `${wall.front.toFixed(2)}%`);
     const dp = Math.round(wall.defShare * 100);
-    wallEl.querySelector('.d').textContent = `${dp}%`;
-    wallEl.querySelector('.a').textContent = `${100 - dp}%`;
+    wallEl.querySelector('.wp-replay-wall-pct.d').textContent = `${dp}%`;
+    wallEl.querySelector('.wp-replay-wall-pct.a').textContent = `${100 - dp}%`;
     wallEl.title = rT('Front line: damage share in the current round');
+    // Unità: quante per lato secondo la quota, ognuna alla sua distanza
+    // dal fronte (stessa regola di battleFront.js: renderUnits).
+    for (const [side, share] of [['def', wall.defShare], ['atk', 1 - wall.defShare]]) {
+      const count = Math.round(WALL_MIN_UNITS + (WALL_MAX_UNITS - WALL_MIN_UNITS) * share);
+      _wallUnits[side].forEach((u, i) => {
+        const on = i < count;
+        u.el.style.opacity = on ? '1' : '0';
+        if (!on) return;
+        const pct = side === 'def' ? wall.front - u.offset : wall.front + u.offset;
+        u.el.style.left = `${Math.min(98, Math.max(1, pct)).toFixed(2)}%`;
+      });
+    }
+    // Chi sta da che parte: bandiera e nome, come in cima alla scheda.
+    if (wallEl.dataset.for !== String(_battleId)) {
+      wallEl.dataset.for = String(_battleId);
+      for (const [cls, id] of [['d', _tl?.defender], ['a', _tl?.attacker]]) {
+        const n = id ? state.nationMap.get(id) : null;
+        const flag = n ? getFlagUrl(getNationCode(id, n)) : null;
+        wallEl.querySelector(`.wp-replay-wall-side.${cls}`).innerHTML = n
+          ? `${flag ? `<img src="${flag}" alt="" onerror="this.remove()">` : ''}<span>${n.name}</span>`
+          : '';
+      }
+    }
   }
   // Round e punti dal campione al minuto più vicino (prima di T).
   const si = _S?.length ? lastIndexAtOrBefore(_S, T, s => s[0]) : -1;
