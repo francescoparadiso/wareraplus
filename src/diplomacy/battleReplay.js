@@ -28,6 +28,14 @@
        invece di restare sempre "piene" rispetto a chi è primo in quel
        momento.
 
+   ── Il muro (richiesta dell'utente, 2026-10-21) ────────────────
+   Sulla mappa si vedeva solo il danno per nazione; ora sotto il cursore
+   c'è anche il MURO della scheda battaglia (battleFront.js) che va avanti
+   e indietro: stessa formula (fronte = 50 + (quota difensori − 0,5) × 130,
+   fra 12 e 88), stessi colori, difensori a sinistra. Il dato è il danno
+   del ROUND in corso dei campioni al minuto (`s` di /battle-timeline),
+   quindi a ogni cambio di round il muro torna al centro, come nel gioco.
+
    ⚠️ L'archivio ACCUMULA dal 2026-10-07: una battaglia chiusa prima non
    ha replay, e il bottone non compare. Una battaglia già aperta al primo
    sguardo del server ha la prima lettura come FONDO (`baseAt`): tutto il
@@ -61,6 +69,7 @@ const T = {
   'Attackers take the lead': ['Gli attaccanti passano avanti', 'Los atacantes toman la delantera', 'Die Angreifer gehen in Führung', 'Les attaquants prennent l’avantage', 'De aanvallers nemen de leiding', 'Anfallarna tar ledningen', 'Os atacantes passam à frente', 'المهاجمون يتقدمون'],
   'Defenders take the lead': ['I difensori passano avanti', 'Los defensores toman la delantera', 'Die Verteidiger gehen in Führung', 'Les défenseurs prennent l’avantage', 'De verdedigers nemen de leiding', 'Försvararna tar ledningen', 'Os defensores passam à frente', 'المدافعون يتقدمون'],
   '{name} joins': ['Entra {name}', 'Entra {name}', '{name} steigt ein', '{name} entre', '{name} doet mee', '{name} går in', 'Entra {name}', 'تنضم {name}'],
+  'Front line: damage share in the current round': ['Il muro: quota di danno nel round in corso', 'El frente: reparto del daño en la ronda actual', 'Die Front: Schadensanteil in der laufenden Runde', 'Le front : part des dégâts dans la manche en cours', 'Het front: aandeel in de schade deze ronde', 'Fronten: andel av skadan i pågående rond', 'A frente: parte do dano na ronda atual', 'خط الجبهة: حصة الضرر في الجولة الحالية'],
   'Recorded from {time}: damage done before arrives all at once.': [
     'Registrata dalle {time}: il danno fatto prima arriva tutto in un colpo.',
     'Registrada desde las {time}: el daño anterior llega de golpe.',
@@ -117,6 +126,33 @@ function lastIndexAtOrBefore(arr, t, key = x => x.t) {
     if (key(arr[mid]) <= t) { ans = mid; lo = mid + 1; } else hi = mid - 1;
   }
   return ans;
+}
+
+/* ── Il muro a un istante ──
+   Campioni `s`: [t, round, ticks, dannoAtk, dannoDef, puntiAtk, puntiDef, …],
+   danno del round in corso. Il server salva un campione solo quando
+   qualcosa cambia, quindi fino a un minuto prima del successivo il valore
+   è fermo: si scivola verso il successivo solo in quell'ultimo minuto (e
+   mai a cavallo di due round, dove il danno riparte da zero). */
+const WALL_SPAN = 130, WALL_MIN = 12, WALL_MAX = 88;   // come battleFront.js: render()
+
+function wallAt(T) {
+  if (!_S?.length) return null;
+  const i = lastIndexAtOrBefore(_S, T, s => s[0]);
+  if (i < 0) return null;
+  const a = _S[i], b = _S[i + 1];
+  let atk = a[3] || 0, def = a[4] || 0;
+  if (b && b[1] === a[1]) {
+    const from = Math.max(a[0], b[0] - 60000);
+    if (T > from) {
+      const f = (T - from) / (b[0] - from);
+      atk += ((b[3] || 0) - atk) * f;
+      def += ((b[4] || 0) - def) * f;
+    }
+  }
+  const tot = atk + def;
+  const defShare = tot > 0 ? def / tot : 0.5;
+  return { defShare, front: Math.min(WALL_MAX, Math.max(WALL_MIN, 50 + (defShare - 0.5) * WALL_SPAN)) };
 }
 
 /* ── Stato del modulo ── */
@@ -338,6 +374,13 @@ function showHud() {
         </div>
         <button type="button" class="wp-replay-btn wp-replay-speed" data-replay="speed"></button>
         <button type="button" class="wp-replay-btn wp-replay-x" data-replay="close">✕</button>
+        <div class="wp-replay-wall" hidden>
+          <div class="wp-replay-wall-atk"></div>
+          <div class="wp-replay-wall-origin"></div>
+          <div class="wp-replay-wall-front"></div>
+          <span class="wp-replay-wall-pct d"></span>
+          <span class="wp-replay-wall-pct a"></span>
+        </div>
         <div class="wp-replay-info"></div>
       </div>`;
     document.body.appendChild(_hud);
@@ -454,6 +497,16 @@ function renderHud() {
   const T = _T ?? _range.t0;
   const range = _hud.querySelector('.wp-replay-range');
   if (document.activeElement !== range) range.value = String(Math.round((T - _range.t0) / (_range.t1 - _range.t0) * 1000));
+  const wallEl = _hud.querySelector('.wp-replay-wall');
+  const wall = wallAt(T);
+  wallEl.hidden = !wall;
+  if (wall) {
+    wallEl.style.setProperty('--front', `${wall.front.toFixed(2)}%`);
+    const dp = Math.round(wall.defShare * 100);
+    wallEl.querySelector('.d').textContent = `${dp}%`;
+    wallEl.querySelector('.a').textContent = `${100 - dp}%`;
+    wallEl.title = rT('Front line: damage share in the current round');
+  }
   // Round e punti dal campione al minuto più vicino (prima di T).
   const si = _S?.length ? lastIndexAtOrBefore(_S, T, s => s[0]) : -1;
   const s = si >= 0 ? _S[si] : null;
