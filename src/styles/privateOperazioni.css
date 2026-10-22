@@ -81,6 +81,55 @@ body.light-theme #wp-private-root .wp-pv-op-st-annullata { --st: #94a3b8; }
 .wp-pv-op-flow { cursor: grab; touch-action: pan-y; }
 .wp-pv-op-flow.trascina { cursor: grabbing; user-select: none; }
 .wp-pv-op-carta { cursor: pointer; }
+
+/* ── Lavorare sul grafico ─────────────────────────────────────────── */
+/* Grafico a sinistra, pannello (dettaglio, modulo, battaglie) a destra;
+   sotto i 1100 px il pannello va sotto. */
+.wp-pv-op-corpo { display: grid; grid-template-columns: minmax(0, 1fr) 19rem; gap: 1rem; align-items: start; }
+.wp-pv-op-principale { display: flex; flex-direction: column; gap: .6rem; min-width: 0; }
+.wp-pv-op-lato { display: flex; flex-direction: column; gap: .8rem; min-width: 0; position: sticky; top: .5rem; }
+@media (max-width: 1100px) { .wp-pv-op-corpo { grid-template-columns: minmax(0, 1fr); } .wp-pv-op-lato { position: static; } }
+.wp-pv-op-lato .wp-pv-op-griglia-campi { grid-template-columns: minmax(0, 1fr); }
+
+.wp-pv-op-carta.muovibile { touch-action: none; }
+.wp-pv-op-carta.in-volo { z-index: 5; opacity: .85; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); cursor: grabbing; transition: none; }
+.wp-pv-op-maniglia {
+  position: absolute; right: -1px; top: 50%; transform: translateY(-50%);
+  width: 10px; height: 26px; border-radius: 5px 0 0 5px;
+  background: var(--st, var(--pv-accent)); opacity: .35; cursor: crosshair;
+}
+.wp-pv-op-carta:hover .wp-pv-op-maniglia { opacity: .9; }
+.wp-pv-op-carta .wp-pv-op-pill { cursor: pointer; }
+.wp-pv-op-freccia.nuova { stroke: var(--pv-accent); stroke-width: 2; stroke-dasharray: none; }
+/* Il tratto invisibile e largo su cui si clicca una freccia. */
+.wp-pv-op-freccia-presa { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; cursor: pointer; }
+.wp-pv-op-freccia-presa:hover { stroke: color-mix(in srgb, var(--pv-danger) 30%, transparent); }
+
+.wp-pv-op-menu, .wp-pv-op-rapido {
+  position: absolute; z-index: 6;
+  background: var(--pv-op-fondo); border: 1px solid var(--pv-rule); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+}
+.wp-pv-op-menu { display: flex; flex-direction: column; padding: 4px; min-width: 9rem; }
+.wp-pv-op-menu-voce { appearance: none; border: 0; background: transparent; text-align: left; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.wp-pv-op-menu-voce:hover, .wp-pv-op-menu-voce:focus-visible { background: var(--pv-hover); outline: none; }
+.wp-pv-op-menu-voce.attuale { outline: 1px solid var(--pv-rule); }
+.wp-pv-op-rapido { display: flex; flex-direction: column; gap: .45rem; padding: .6rem; width: 15rem; cursor: default; }
+.wp-pv-op-rapido-testa { display: flex; align-items: center; justify-content: space-between; font-size: .85rem; }
+.wp-pv-op-rapido .wp-pv-input { padding: .4rem .55rem; font-size: .85rem; }
+.wp-pv-op-rapido .wp-pv-error { margin: 0; font-size: .78rem; }
+.wp-pv-op-x { padding: 0 .45rem; font-size: 1.1rem; line-height: 1.4; background: transparent; color: var(--pv-ink-soft); border: 0; }
+.wp-pv-op-x:hover { color: var(--pv-ink); }
+.wp-pv-op-dettaglio-testa .wp-pv-op-x { margin-left: auto; }
+
+/* La colonna delle battaglie aperte. */
+.wp-pv-op-battaglie { display: flex; flex-direction: column; gap: .35rem; max-height: 26rem; overflow-y: auto; padding-right: .2rem; }
+.wp-pv-op-batt { display: flex; align-items: center; gap: .5rem; padding: .35rem .5rem; border: 1px solid var(--pv-rule); border-radius: 7px; }
+.wp-pv-op-batt.nostra { border-color: color-mix(in srgb, var(--pv-accent) 50%, var(--pv-rule)); }
+.wp-pv-op-batt-testo { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.wp-pv-op-batt-nome { font-size: .8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-pv-op-batt-sub { font-size: .72rem; color: var(--pv-ink-soft); }
+.wp-pv-op-batt-gia { font-size: .72rem; color: var(--pv-ink-soft); font-style: italic; white-space: nowrap; }
 /* La coda di una battaglia: da quando potrebbe finire al più presto a
    quando al più tardi, a righe diagonali sul colore della barra. */
 .wp-pv-op-coda {

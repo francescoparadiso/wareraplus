@@ -218,6 +218,8 @@ export function creaOperazioni(ctx) {
   // I due moduli: nodi che restano fra un ridisegno e l'altro.
   let moduloOp = null;          // { nodo, modifica: bool }
   let moduloPasso = null;       // { nodo, id: number|null }
+  let rapido = null;            // aggiunta rapida aperta sul grafico: { nodo, x, y }
+  let menuStato = null;         // id del passo col menu dello stato aperto
 
   const opzioni = () => ({ paese: ctx.paese?.() || null, archiviate });
   // Sotto la lente il server rifiuta ogni scrittura: i bottoni del governo
@@ -324,9 +326,8 @@ export function creaOperazioni(ctx) {
 
     const op = operazioneScelta();
     if (op) wrap.appendChild(cardOperazione(op));
-    else if (!moduloOp) {
-      testa.appendChild(el('p', 'wp-pv-body', pianifica() ? opT('emptyPlanner') : opT('emptyViewer')));
-    }
+    else if (pianifica()) wrap.appendChild(cardOperazione(bozza()));
+    else testa.appendChild(el('p', 'wp-pv-body', opT('emptyViewer')));
     return wrap;
   }
 
@@ -414,6 +415,11 @@ export function creaOperazioni(ctx) {
     testa.appendChild(nomi);
 
     const azioni = el('div', 'wp-pv-op-azioni');
+    testa.appendChild(azioni);
+    card.appendChild(testa);
+    // La bozza non ha ancora niente da mostrare sulla mappa, modificare o
+    // archiviare: solo il grafico.
+    if (!op.id) return cardCorpo(card, op, { numero, stati, perId });
     const conRegione = op.passi.some((p) => p.regione);
     const mappa = bottone('wp-pv-btn-primary wp-pv-btn-small', opT('showOnMap'), () => {
       trackEvent('private-operation-map');
@@ -438,21 +444,162 @@ export function creaOperazioni(ctx) {
         if (r) { sceltaId = null; passoAperto = null; moduloPasso = null; ctx.ridisegna(); }
       }));
     }
-    testa.appendChild(azioni);
-    card.appendChild(testa);
     if (moduloOp?.modifica) card.appendChild(moduloOp.nodo);
+    return cardCorpo(card, op, { numero, stati, perId });
+  }
 
-    if (!op.passi.length) {
-      card.appendChild(el('p', 'wp-pv-body', pianifica() ? opT('noStepsPlanner') : opT('noSteps')));
-    } else {
-      card.appendChild(flowchart(op, { numero, stati }));
-      card.appendChild(legenda());
+  function cardCorpo(card, op, { numero, stati, perId }) {
+    // Il grafico a sinistra, il pannello a destra: aprire un passo o un
+    // modulo non fa più scorrere la pagina via dalla linea del tempo. Chi
+    // pianifica vede il grafico anche vuoto: è lì che si clicca per
+    // aggiungere.
+    const modificabile = pianifica() && op.stato !== 'archiviata';
+    if (!op.passi.length && !modificabile) {
+      card.appendChild(el('p', 'wp-pv-body', opT('noSteps')));
+      return card;
     }
+    if (!op.id) card.appendChild(el('p', 'wp-pv-note', opT('draftHint')));
+    else if (!op.passi.length) card.appendChild(el('p', 'wp-pv-note', opT('noStepsPlanner2')));
+    const corpo = el('div', 'wp-pv-op-corpo');
+    const principale = el('div', 'wp-pv-op-principale');
+    principale.appendChild(flowchart(op, { numero, stati }));
+    principale.appendChild(legenda());
+    corpo.appendChild(principale);
 
+    const lato = el('aside', 'wp-pv-op-lato');
     const aperto = passoAperto != null ? perId.get(passoAperto) : null;
-    if (moduloPasso) card.appendChild(moduloPasso.nodo);
-    else if (aperto) card.appendChild(dettaglioPasso(op, aperto, { numero, stati }));
+    if (moduloPasso) lato.appendChild(moduloPasso.nodo);
+    else if (aperto) lato.appendChild(dettaglioPasso(op, aperto, { numero, stati }));
+    if (modificabile) lato.appendChild(colonnaBattaglie(op));
+    if (lato.childNodes.length) corpo.appendChild(lato);
+    card.appendChild(corpo);
     return card;
+  }
+
+  /** Un'operazione che ancora non esiste: chi pianifica e non ne ha
+   *  nessuna vede subito il grafico, e la prima cosa che aggiunge la crea
+   *  (idOperazione) — senza passare da "Nuova operazione". */
+  function bozza() {
+    const data = new Date().toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' });
+    return { id: null, titolo: t('draftTitle', { data }), nota: null, stato: 'attiva', passi: [] };
+  }
+
+  /** L'id dell'operazione, creandola se è la bozza. */
+  async function idOperazione(op) {
+    if (op.id) return op.id;
+    const r = await creaOperazione({ titolo: op.titolo }, opzioni());
+    dati = { ...dati, ...r };
+    sceltaId = r.creata;
+    try { localStorage.setItem(CHIAVE_SCELTA, String(r.creata)); } catch { /* resta per questa apertura */ }
+    trackEvent('private-operation-create');
+    return r.creata;
+  }
+
+  /** Aggiunge un passo e lo apre nel pannello. */
+  async function aggiungi(op, corpo) {
+    const r = await scrivi(async () => aggiungiPasso(await idOperazione(op), corpo, opzioni()));
+    if (!r) return false;
+    passoAperto = r.creato ?? null;
+    rapido = null; moduloPasso = null;
+    trackEvent('private-operation-step');
+    ctx.ridisegna();
+    return true;
+  }
+
+  // ── Battaglie aperte, da aggiungere con un clic ──────────────────
+
+  function corpoDaBattaglia(b) {
+    const noi = dati.countryId;
+    const nostra = b.attacker?.country === noi || b.defender?.country === noi;
+    const tipo = !nostra ? 'altro' : b.type === 'resistance' ? 'rivolta' : b.attacker?.country === noi ? 'attacco' : 'difesa';
+    return {
+      tipo,
+      regione: b.defender?.region || null,
+      daRegione: tipo === 'attacco' ? (b.attacker?.region || null) : null,
+      quando: Date.parse(b.createdAt),
+      battaglia: b._id,
+    };
+  }
+
+  function colonnaBattaglie(op) {
+    const box = el('div', 'wp-pv-op-battaglie');
+    box.appendChild(el('span', 'wp-pv-label', opT('battlesTitle')));
+    const noi = dati.countryId;
+    const gia = new Set(op.passi.map((p) => p.battaglia).filter(Boolean));
+    const nostra = (b) => b.attacker?.country === noi || b.defender?.country === noi;
+    const tutte = [...viveId.values()].sort((a, b) => Number(nostra(b)) - Number(nostra(a)));
+    if (!tutte.length) { box.appendChild(el('p', 'wp-pv-note', opT('battlesNone'))); return box; }
+    for (const b of tutte) {
+      const r = el('div', `wp-pv-op-batt${nostra(b) ? ' nostra' : ''}`);
+      const testo = el('div', 'wp-pv-op-batt-testo');
+      testo.appendChild(el('span', 'wp-pv-op-batt-nome', etichettaBattaglia(b)));
+      testo.appendChild(el('span', 'wp-pv-op-batt-sub', testoBattaglia(b)));
+      r.appendChild(testo);
+      if (gia.has(b._id)) r.appendChild(el('span', 'wp-pv-op-batt-gia', opT('battlesAdded')));
+      else {
+        const piu = bottone('wp-pv-btn-quiet wp-pv-btn-small', '+', () => aggiungi(op, corpoDaBattaglia(b)));
+        piu.title = opT('battlesAdd'); piu.setAttribute('aria-label', `${opT('battlesAdd')}: ${etichettaBattaglia(b)}`);
+        piu.disabled = occupato;
+        r.appendChild(piu);
+      }
+      box.appendChild(r);
+    }
+    return box;
+  }
+
+  // ── Aggiunta rapida sul grafico ──────────────────────────────────
+  // Un clic su un punto vuoto apre un riquadrino lì: cosa e dove, l'ora è
+  // quella del punto. Invio salva. Il resto sta dietro "Altri dettagli".
+
+  function apriRapido(op, { x, y, tipo, quando }) {
+    indiceRegioni();
+    const f = el('form', 'wp-pv-op-rapido');
+    const sel = el('select', 'wp-pv-select wp-pv-select-piccola');
+    for (const k of TIPI) sel.appendChild(Object.assign(el('option', null, opT(`kind_${k}`)), { value: k }));
+    sel.value = tipo;
+    const dl = el('datalist');
+    dl.id = 'wp-pv-op-regioni-rapido';
+    riempiDatalist(dl, _etichette);
+    const reg = el('input', 'wp-pv-input');
+    reg.setAttribute('list', dl.id);
+    reg.placeholder = opT('regionPh');
+    reg.autocomplete = 'off';
+    const testa = el('div', 'wp-pv-op-rapido-testa');
+    testa.appendChild(el('strong', null, quando ? oraBreve(quando) : opT('noTime')));
+    const chiudi = bottone('wp-pv-op-x', '×', () => { rapido = null; ctx.ridisegna(); });
+    chiudi.setAttribute('aria-label', opT('close'));
+    testa.appendChild(chiudi);
+    const avviso = el('p', 'wp-pv-error');
+    avviso.hidden = true;
+    const azioni = el('div', 'wp-pv-op-azioni');
+    const ok = el('button', 'wp-pv-btn wp-pv-btn-primary wp-pv-btn-small', opT('quickAdd'));
+    ok.type = 'submit';
+    azioni.appendChild(ok);
+    azioni.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', opT('moreDetails'), () => {
+      const id = idDaEtichetta(reg.value);
+      rapido = null;
+      apriModuloPasso(op, null, { tipo: sel.value, quando, regione: id || null });
+    }));
+    f.append(testa, sel, reg, dl, avviso, azioni);
+    f.addEventListener('keydown', (e) => { if (e.key === 'Escape') { rapido = null; ctx.ridisegna(); } });
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = idDaEtichetta(reg.value);
+      if (id === undefined) { avviso.textContent = opT('regionUnknown'); avviso.hidden = false; return; }
+      // Un attacco parte da una regione nostra confinante: se ce n'è una
+      // sola la si mette da sé, altrimenti si sceglie nei dettagli.
+      let da = null;
+      if (sel.value === 'attacco' && id) {
+        const nostre = regionNeighbors(id).filter((r) => state.regionData?.[r]?.country === dati.countryId);
+        if (nostre.length === 1) da = nostre[0];
+      }
+      const fatto = await aggiungi(op, { tipo: sel.value, regione: id, daRegione: da, quando });
+      if (!fatto) { avviso.textContent = messaggio || opT('errServer'); avviso.hidden = false; messaggio = null; }
+    });
+    rapido = { nodo: f, x, y };
+    passoAperto = null; moduloPasso = null; menuStato = null;
+    ctx.ridisegna();
+    requestAnimationFrame(() => reg.focus());
   }
 
   // ── Guerre e priorità ────────────────────────────────────────────
@@ -584,8 +731,14 @@ export function creaOperazioni(ctx) {
     return { pos, corsie, w, h: y + 6, t0, t1, xDi, tDi, xAsse0, pxOra, tacche, xSenza: senzaOra ? xSenza : null };
   }
 
+  /** L'istante di un punto del grafico, al quarto d'ora; nella colonna
+   *  "senza orario" nessun istante. */
+  const istanteDi = (L, x) => (x >= L.xAsse0 - 10 ? Math.round(L.tDi(x) / 900_000) * 900_000 : null);
+  const corsiaDiTipo = (tipo) => CORSIE.find(([, tipi]) => tipi.includes(tipo))?.[0];
+
   function flowchart(op, { numero, stati }) {
     const L = disposizione(op.passi);
+    const modificabile = pianifica() && op.stato !== 'archiviata';
     const guscio = el('div', 'wp-pv-op-guscio');
     const scorre = el('div', 'wp-pv-op-flow');
     const tela = el('div', 'wp-pv-op-tela');
@@ -613,7 +766,7 @@ export function creaOperazioni(ctx) {
       scorre.scrollTo({ left: L.xDi(Date.now()) - scorre.clientWidth / 4, behavior: 'smooth' });
     });
     strumento('6h ▶', opT('panFwd'), () => sposta(6));
-    barra.appendChild(el('span', 'wp-pv-op-suggerimento', pianifica() ? opT('chartHintPlan') : opT('chartHint')));
+    barra.appendChild(el('span', 'wp-pv-op-suggerimento', modificabile ? opT('chartHintPlan2') : opT('chartHint')));
     guscio.appendChild(barra);
 
     for (const [i, c] of L.corsie.entries()) {
@@ -688,9 +841,47 @@ export function creaOperazioni(ctx) {
           class: `wp-pv-op-freccia${fatto ? '' : ' attesa'}`,
           'marker-end': `url(#${fatto ? 'wp-pv-op-punta' : 'wp-pv-op-punta-attesa'})`,
         }));
+        // Sopra, un tratto largo e invisibile su cui si clicca per togliere
+        // la freccia: la linea da 1,6 px sarebbe impossibile da prendere.
+        if (modificabile) {
+          const presa = svg('path', { d, class: 'wp-pv-op-freccia-presa' });
+          const titolo = svg('title');
+          titolo.textContent = opT('arrowHint');
+          presa.appendChild(titolo);
+          presa.addEventListener('click', () => {
+            if (!window.confirm(opT('arrowRemove'))) return;
+            scrivi(() => modificaPasso(op.id, p.id, { dopo: p.dopo.filter((x) => x !== da) }, opzioni()));
+          });
+          s.appendChild(presa);
+        }
       }
     }
     tela.appendChild(s);
+
+    // Tirare una freccia: dalla maniglia a destra di una scheda fino a
+    // un'altra scheda, che diventa "dopo" la prima.
+    const iniziaFreccia = (p, q, e) => {
+      e.preventDefault(); e.stopPropagation();
+      const r0 = tela.getBoundingClientRect();
+      const x1 = q.x + q.w, y1 = q.y + CARTA_H / 2;
+      const linea = svg('path', { class: 'wp-pv-op-freccia nuova', 'marker-end': 'url(#wp-pv-op-punta)' });
+      s.appendChild(linea);
+      const muovi = (ev) => {
+        const x2 = ev.clientX - r0.left, y2 = ev.clientY - r0.top;
+        linea.setAttribute('d', `M${x1} ${y1} C ${x1 + 40} ${y1}, ${x2 - 40} ${y2}, ${x2} ${y2}`);
+      };
+      const fine = (ev) => {
+        window.removeEventListener('pointermove', muovi);
+        window.removeEventListener('pointerup', fine);
+        linea.remove();
+        const sotto = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.wp-pv-op-carta');
+        const verso = sotto ? perId.get(Number(sotto.dataset.id)) : null;
+        if (!verso || verso.id === p.id || verso.dopo.includes(p.id)) return;
+        scrivi(() => modificaPasso(op.id, verso.id, { dopo: [...verso.dopo, p.id] }, opzioni()));
+      };
+      window.addEventListener('pointermove', muovi);
+      window.addEventListener('pointerup', fine);
+    };
 
     for (const p of op.passi) {
       const q = L.pos.get(p.id);
@@ -704,7 +895,36 @@ export function creaOperazioni(ctx) {
         coda.title = opT('battleRange');
         tela.appendChild(coda);
       }
-      tela.appendChild(cartaPasso(p, q, { n: numero.get(p.id), stato: stati.get(p.id) }));
+      tela.appendChild(cartaPasso(p, q, { n: numero.get(p.id), stato: stati.get(p.id) }, { op, L, modificabile, iniziaFreccia }));
+    }
+    // Il menu dello stato, sotto la scheda che l'ha aperto.
+    const qm = menuStato != null ? L.pos.get(menuStato) : null;
+    const pm = qm ? perId.get(menuStato) : null;
+    if (pm) {
+      const m = el('div', 'wp-pv-op-menu');
+      m.style.left = `${qm.x}px`;
+      m.style.top = `${qm.y + CARTA_H + 4}px`;
+      m.setAttribute('role', 'menu');
+      for (const st of STATI) {
+        const b = el('button', `wp-pv-op-menu-voce wp-pv-op-st-${st}${st === pm.stato ? ' attuale' : ''}`);
+        b.type = 'button';
+        b.setAttribute('role', 'menuitem');
+        b.appendChild(el('span', 'wp-pv-op-pill', opT(`st_${st}`)));
+        b.addEventListener('click', () => {
+          menuStato = null;
+          if (st === pm.stato) { ctx.ridisegna(); return; }
+          scrivi(() => modificaPasso(op.id, pm.id, { stato: st }, opzioni()));
+        });
+        m.appendChild(b);
+      }
+      tela.appendChild(m);
+    }
+    // L'aggiunta rapida, dove si è cliccato (stesso nodo fra un ridisegno e
+    // l'altro: non perde quello che si sta scrivendo).
+    if (rapido) {
+      rapido.nodo.style.left = `${Math.max(4, Math.min(rapido.x, L.w - 236))}px`;
+      rapido.nodo.style.top = `${Math.max(4, Math.min(rapido.y, L.h - 170))}px`;
+      tela.appendChild(rapido.nodo);
     }
     scorre.appendChild(tela);
     guscio.appendChild(scorre);
@@ -713,7 +933,14 @@ export function creaOperazioni(ctx) {
     // vuoto, aggiunge un passo lì (solo a chi pianifica).
     let tiro = null;
     scorre.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || e.target.closest('.wp-pv-op-carta')) return;
+      if (e.button !== 0 || e.target.closest('.wp-pv-op-carta, .wp-pv-op-menu, .wp-pv-op-rapido, .wp-pv-op-freccia-presa')) return;
+      // Un clic fuori chiude il menu dello stato o l'aggiunta rapida, e
+      // basta: non apre subito un'altra aggiunta.
+      if (menuStato != null || rapido) {
+        menuStato = null; rapido = null;
+        ctx.ridisegna();
+        return;
+      }
       tiro = { x: e.clientX, sl: scorre.scrollLeft, mosso: false };
       scorre.setPointerCapture(e.pointerId);
     });
@@ -726,14 +953,12 @@ export function creaOperazioni(ctx) {
     const fineTiro = (e, clic) => {
       const t = tiro; tiro = null;
       scorre.classList.remove('trascina');
-      if (!clic || !t || t.mosso || !pianifica() || op.stato === 'archiviata') return;
+      if (!clic || !t || t.mosso || !modificabile) return;
       const r = tela.getBoundingClientRect();
       const x = e.clientX - r.left, yy = e.clientY - r.top;
       const corsia = L.corsie.find((c) => yy >= c.y && yy < c.y + c.h);
       if (!corsia) return;
-      // Nella colonna "senza orario" il passo nasce senza orario.
-      const quando = x >= L.xAsse0 - 10 ? Math.round(L.tDi(x) / 900_000) * 900_000 : null;
-      apriModuloPasso(op, null, { tipo: TIPO_DI_CORSIA[corsia.k], quando });
+      apriRapido(op, { x, y: yy, tipo: TIPO_DI_CORSIA[corsia.k], quando: istanteDi(L, x) });
     };
     scorre.addEventListener('pointerup', (e) => fineTiro(e, true));
     scorre.addEventListener('pointercancel', (e) => fineTiro(e, false));
@@ -755,9 +980,10 @@ export function creaOperazioni(ctx) {
   }
 
 
-  function cartaPasso(p, q, { n, stato }) {
-    const c = el('button', `wp-pv-op-carta wp-pv-op-st-${stato}${passoAperto === p.id ? ' scelta' : ''}`);
+  function cartaPasso(p, q, { n, stato }, { op, L, modificabile, iniziaFreccia }) {
+    const c = el('button', `wp-pv-op-carta wp-pv-op-st-${stato}${passoAperto === p.id ? ' scelta' : ''}${modificabile ? ' muovibile' : ''}`);
     c.type = 'button';
+    c.dataset.id = String(p.id);
     c.style.left = `${q.x}px`;
     c.style.top = `${q.y}px`;
     c.style.width = `${q.w || CARTA_W}px`;
@@ -797,9 +1023,67 @@ export function creaOperazioni(ctx) {
 
     const descr = [`${n}.`, opT(`kind_${p.tipo}`), titolo, oraBreve(p.quando), opT(`st_${stato}`)].filter(Boolean).join(', ');
     c.setAttribute('aria-label', descr);
-    c.addEventListener('click', () => {
+
+    // La maniglia per tirare una freccia verso il passo che viene dopo.
+    if (modificabile) {
+      const m = el('span', 'wp-pv-op-maniglia');
+      m.title = opT('handleHint');
+      m.setAttribute('aria-hidden', 'true');
+      m.addEventListener('pointerdown', (e) => iniziaFreccia(p, q, e));
+      c.appendChild(m);
+    }
+
+    // Trascinare la scheda: in orizzontale cambia l'orario (al quarto
+    // d'ora), in un'altra corsia cambia il tipo. Una battaglia agganciata ha
+    // l'orario del gioco: si sposta solo fra le corsie.
+    let volo = null;
+    let appenaMossa = false;
+    if (modificabile) {
+      const fisso = Boolean(p.battaglia);
+      c.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || e.target.closest('.wp-pv-op-pill, .wp-pv-op-maniglia')) return;
+        volo = { x: e.clientX, y: e.clientY, mosso: false };
+        c.setPointerCapture(e.pointerId);
+      });
+      c.addEventListener('pointermove', (e) => {
+        if (!volo) return;
+        const dx = fisso ? 0 : e.clientX - volo.x, dy = e.clientY - volo.y;
+        if (!volo.mosso && Math.hypot(dx, dy) < 6) return;
+        volo.mosso = true;
+        c.classList.add('in-volo');
+        c.style.transform = `translate(${dx}px, ${dy}px)`;
+      });
+      c.addEventListener('pointerup', (e) => {
+        const v = volo; volo = null;
+        if (!v?.mosso) return;
+        appenaMossa = true;
+        c.classList.remove('in-volo');
+        const dx = fisso ? 0 : e.clientX - v.x, dy = e.clientY - v.y;
+        const cy = q.y + CARTA_H / 2 + dy;
+        const corsia = L.corsie.find((k) => cy >= k.y && cy < k.y + k.h);
+        const cambi = {};
+        if (!fisso && Math.abs(dx) >= 6) {
+          const nuovo = istanteDi(L, q.x + dx);
+          if (nuovo !== (p.quando || null)) cambi.quando = nuovo;
+        }
+        if (corsia && corsia.k !== corsiaDiTipo(p.tipo)) cambi.tipo = TIPO_DI_CORSIA[corsia.k];
+        if (!Object.keys(cambi).length) { c.style.transform = ''; return; }
+        scrivi(() => modificaPasso(op.id, p.id, cambi, opzioni()));
+      });
+    }
+
+    c.addEventListener('click', (e) => {
+      if (appenaMossa) { appenaMossa = false; return; }
+      // Un clic sulla pillola dello stato apre il menu per cambiarlo: il
+      // gesto più frequente, senza passare dal dettaglio.
+      if (e.target.closest('.wp-pv-op-pill') && op.id && op.stato !== 'archiviata' && !ctx.lente()) {
+        menuStato = menuStato === p.id ? null : p.id;
+        rapido = null;
+        ctx.ridisegna();
+        return;
+      }
       passoAperto = passoAperto === p.id ? null : p.id;
-      moduloPasso = null;
+      moduloPasso = null; menuStato = null; rapido = null;
       ctx.ridisegna();
     });
     return c;
@@ -822,8 +1106,11 @@ export function creaOperazioni(ctx) {
     const box = el('div', `wp-pv-op-dettaglio wp-pv-op-st-${stati.get(p.id)}`);
     const testa = el('div', 'wp-pv-op-dettaglio-testa');
     testa.appendChild(el('span', 'wp-pv-op-num', String(numero.get(p.id))));
-    testa.appendChild(el('strong', null, p.titolo || opT(`kind_${p.tipo}`)));
+    testa.appendChild(el('strong', null, p.titolo || (p.regione ? regionName(p.regione) : opT(`kind_${p.tipo}`))));
     testa.appendChild(el('span', `wp-pv-op-pill wp-pv-op-st-${stati.get(p.id)}`, opT(`st_${stati.get(p.id)}`)));
+    const chiudi = bottone('wp-pv-op-x', '×', () => { passoAperto = null; ctx.ridisegna(); });
+    chiudi.setAttribute('aria-label', opT('close'));
+    testa.appendChild(chiudi);
     box.appendChild(testa);
 
     const righe = el('dl', 'wp-pv-op-fatti');
@@ -885,6 +1172,7 @@ export function creaOperazioni(ctx) {
     moduloPasso = { nodo: creaModuloPasso(op, p, preimpostati), id: p?.id ?? null };
     passoAperto = p?.id ?? null;
     ctx.ridisegna();
+    rapido = null; menuStato = null;
     moduloPasso.nodo.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
@@ -916,7 +1204,8 @@ export function creaOperazioni(ctx) {
     const regione = el('input', 'wp-pv-input');
     regione.setAttribute('list', dlTutte.id);
     regione.placeholder = opT('regionPh');
-    regione.value = p?.regione ? etichettaRegione(p.regione) : '';
+    const regionePre = p ? p.regione : preimpostati.regione;
+    regione.value = regionePre ? etichettaRegione(regionePre) : '';
     regione.autocomplete = 'off';
 
     const daRegione = el('input', 'wp-pv-input');
@@ -1078,11 +1367,16 @@ export function creaOperazioni(ctx) {
         battaglia: battaglia.value || null,
         dopo: spunte.filter((cb) => cb.checked).map((cb) => Number(cb.value)),
       };
-      const r = await scrivi(() => (p ? modificaPasso(op.id, p.id, corpo, opzioni()) : aggiungiPasso(op.id, corpo, opzioni())));
+      // Un passo nuovo passa da aggiungi(), che crea anche l'operazione se
+      // è ancora la bozza.
+      if (!p) {
+        if (!(await aggiungi(op, corpo))) { dire(messaggio); messaggio = null; ctx.ridisegna(); }
+        return;
+      }
+      const r = await scrivi(() => modificaPasso(op.id, p.id, corpo, opzioni()));
       if (!r) { dire(messaggio); messaggio = null; ctx.ridisegna(); return; }
       moduloPasso = null;
-      passoAperto = p ? p.id : (r.creato ?? null);
-      if (!p) trackEvent('private-operation-step');
+      passoAperto = p.id;
       ctx.ridisegna();
     });
     return f;

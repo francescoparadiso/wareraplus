@@ -711,7 +711,14 @@ wareraPlus/
     │   │                          (tratteggiate finché il precedente non è fatto). "In attesa"
     │   │                          si RICAVA dalle frecce, non si salva. Regioni scelte per nome
     │   │                          (datalist), la partenza di un attacco fra le confinanti
-    │   │                          (regionNeighbors). Badge "battaglia aperta" da /battles. Dati
+    │   │                          (regionNeighbors). Badge "battaglia aperta" da /battles.
+    │   │                          Si lavora SUL GRAFICO: clic su un punto vuoto = aggiunta
+    │   │                          rapida (cosa + dove, ora del punto); trascinare una scheda
+    │   │                          cambia orario/corsia; dalla maniglia destra si tira una
+    │   │                          freccia; clic su una freccia la toglie; clic sulla pillola
+    │   │                          = menu dello stato. Pannello a destra con dettaglio, modulo
+    │   │                          completo e battaglie aperte da aggiungere col "+". Senza
+    │   │                          operazioni c'è una bozza: il primo passo la crea. Dati
     │   │                          da /operazioni (server/plusApi/operazioni.js). Stili in
     │   │                          src/styles/privateOperazioni.css.
     │   ├── mappaOperazione.js   ← "Vedi sulla mappa": chiude l'area e disegna l'operazione
