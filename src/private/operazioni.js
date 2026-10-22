@@ -467,7 +467,12 @@ export function creaOperazioni(ctx) {
     const noi = dati?.countryId;
     const b = p.battaglia ? viveId.get(p.battaglia) : null;
     let nemico = null;
-    if (b) nemico = b.attacker?.country === noi ? b.defender?.country : b.attacker?.country;
+    // Una battaglia che non riguarda la nostra nazione non ha una guerra
+    // nostra: niente priorità, o si mostrerebbe quella di un'altra.
+    if (b) {
+      if (b.attacker?.country !== noi && b.defender?.country !== noi) return null;
+      nemico = b.attacker?.country === noi ? b.defender?.country : b.attacker?.country;
+    }
     else if (p.tipo === 'attacco') nemico = state.regionData?.[p.regione]?.country;
     else if (p.tipo === 'difesa') nemico = state.regionData?.[p.daRegione]?.country;
     return nemico && nemico !== noi ? guerraCon(nemico) : null;
@@ -880,18 +885,24 @@ export function creaOperazioni(ctx) {
     const noi = dati.countryId;
     const battaglia = el('select', 'wp-pv-select');
     battaglia.appendChild(Object.assign(el('option', null, opT('battleNone')), { value: '' }));
-    const nostre = [...viveId.values()].filter((b) => b.attacker?.country === noi || b.defender?.country === noi);
+    // Tutte le battaglie aperte, non solo le nostre (un alleato, un fronte
+    // da seguire): le nostre prima, poi le altre in un gruppo a parte.
+    const sono = (b) => b.attacker?.country === noi || b.defender?.country === noi;
+    const nostre = [...viveId.values()];
+    const voce = (b) => Object.assign(el('option', null, `${etichettaBattaglia(b)} · ${testoBattaglia(b)}`), { value: b._id });
+    const gNostre = el('optgroup'); gNostre.label = opT('battleOurs');
+    const gAltre = el('optgroup'); gAltre.label = opT('battleOthers');
     if (p?.battaglia && !viveId.has(p.battaglia)) {
       battaglia.appendChild(Object.assign(el('option', null, opT('battleClosed')), { value: p.battaglia }));
     }
-    for (const b of nostre) {
-      battaglia.appendChild(Object.assign(el('option', null, `${etichettaBattaglia(b)} · ${testoBattaglia(b)}`), { value: b._id }));
-    }
+    for (const b of nostre) (sono(b) ? gNostre : gAltre).appendChild(voce(b));
+    if (gNostre.children.length) battaglia.appendChild(gNostre);
+    if (gAltre.children.length) battaglia.appendChild(gAltre);
     battaglia.value = p?.battaglia || '';
     battaglia.addEventListener('change', () => {
       const b = viveId.get(battaglia.value);
       if (!b) return;
-      tipo.value = b.type === 'resistance' ? 'rivolta' : b.attacker?.country === noi ? 'attacco' : 'difesa';
+      tipo.value = !sono(b) ? 'altro' : b.type === 'resistance' ? 'rivolta' : b.attacker?.country === noi ? 'attacco' : 'difesa';
       tipo.dispatchEvent(new Event('change'));
       regione.value = b.defender?.region ? etichettaRegione(b.defender.region) : '';
       daRegione.value = tipo.value === 'attacco' && b.attacker?.region ? etichettaRegione(b.attacker.region) : '';
