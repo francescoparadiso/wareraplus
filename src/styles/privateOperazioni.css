@@ -133,16 +133,18 @@ body.light-theme #wp-private-root .wp-pv-op-st-annullata { --st: #94a3b8; }
 }
 /* La pillola: effetto (verde, 8 h) e malus (rosso, 15 h 30) sotto la
    scheda, lunghi quanto durano. */
-.wp-pv-op-pill-effetto, .wp-pv-op-pill-malus { position: absolute; box-sizing: border-box; pointer-events: auto; }
-.wp-pv-op-pill-effetto { background: rgba(52, 211, 153, .42); border: 2px solid #34d399; border-right: 0; border-radius: 10px 0 0 10px; }
-.wp-pv-op-pill-malus { background: rgba(248, 113, 113, .32); border: 2px solid #f87171; border-left: 0; border-radius: 0 10px 10px 0; }
+/* Sfondo a tutta altezza: tenue dentro, bordo verticale netto, così si
+   legge senza coprire le schede delle altre corsie. */
+.wp-pv-op-pill-effetto, .wp-pv-op-pill-malus { position: absolute; box-sizing: border-box; pointer-events: none; }
+.wp-pv-op-pill-effetto { background: rgba(52, 211, 153, .13); border-left: 2px solid #34d399; }
+.wp-pv-op-pill-malus { background: rgba(248, 113, 113, .10); border-right: 2px dashed #f87171; }
 .wp-pv-op-pill-durata {
-  position: absolute; right: 6px; bottom: 3px;
-  font-size: .68rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
-  pointer-events: none;
+  position: absolute; right: 6px; top: 4px;
+  padding: 0 5px; border-radius: 6px;
+  font-size: .68rem; font-weight: 700; color: #fff;
 }
-/* La scheda della pillola lascia vedere le fasce sotto. */
-.wp-pv-op-carta.pillola { background: color-mix(in srgb, var(--pv-op-fondo) 45%, transparent); backdrop-filter: none; }
+.wp-pv-op-pill-effetto .wp-pv-op-pill-durata { background: #059669; }
+.wp-pv-op-pill-malus .wp-pv-op-pill-durata { background: #dc2626; }
 
 /* La guida dell'orario sotto il mouse. */
 .wp-pv-op-guida {

@@ -843,7 +843,9 @@ export function creaOperazioni(ctx) {
       for (const c of qui) {
         let r = righe.findIndex((fine) => fine + 8 <= c.x);
         if (r < 0) { r = righe.length; righe.push(0); }
-        righe[r] = c.x + Math.max(c.w + c.coda + c.buffer, c.pillola ? c.pillola.effetto + c.pillola.malus : 0);
+        // La pillola è uno sfondo a tutta altezza: nella sua corsia occupa
+        // solo la scheda, e due pillole vicine stanno sulla stessa riga.
+        righe[r] = c.x + c.w + c.coda + c.buffer;
         pos.set(c.p.id, { x: c.x, y: y + CORSIA_PAD + r * (CARTA_H + GAP_Y), w: c.w, coda: c.coda, pillola: c.pillola, buffer: c.buffer });
       }
       // Anche la corsia vuota si disegna: è dove si clicca per aggiungere.
@@ -914,6 +916,29 @@ export function creaOperazioni(ctx) {
       fascia.style.height = `${c.h}px`;
       fascia.appendChild(el('span', 'wp-pv-op-corsia-nome', opT(`lane_${c.k}`)));
       tela.appendChild(fascia);
+    }
+
+    // La pillola come SFONDO di tutto il grafico: una fascia verde per le 8
+    // ore di effetto e una rossa per le 15 h 30 di malus, a tutta altezza,
+    // sopra le corsie e sotto schede e frecce. Così si vede cosa cade dentro
+    // l'effetto della pillola in ogni corsia, e la scheda resta piccola nella
+    // sua.
+    for (const p of op.passi) {
+      const q = L.pos.get(p.id);
+      if (!q?.pillola) continue;
+      for (const [cls, x, larg, tit, testo] of [
+        ['wp-pv-op-pill-effetto', q.x, q.pillola.effetto, opT('pillBuff'), '8 h'],
+        ['wp-pv-op-pill-malus', q.x + q.pillola.effetto, q.pillola.malus, opT('pillMalus'), '15 h 30'],
+      ]) {
+        const f = el('div', cls);
+        f.style.left = `${x}px`;
+        f.style.top = `${ASSE_H}px`;
+        f.style.width = `${larg}px`;
+        f.style.height = `${L.h - ASSE_H}px`;
+        f.title = tit;
+        f.appendChild(el('span', 'wp-pv-op-pill-durata', testo));
+        tela.appendChild(f);
+      }
     }
 
     const s = svg('svg', { class: 'wp-pv-op-svg', width: L.w, height: L.h, viewBox: `0 0 ${L.w} ${L.h}`, 'aria-hidden': 'true' });
@@ -1025,26 +1050,6 @@ export function creaOperazioni(ctx) {
     for (const p of op.passi) {
       const q = L.pos.get(p.id);
       if (!q) continue;
-      // La pillola: una fascia verde per l'effetto e una rossa per il
-      // malus, sotto la scheda, lunghe quanto durano davvero.
-      // Più alte della scheda e con la durata scritta in fondo: la scheda
-      // sopra è trasparente, e il verde deve leggersi anche quando le 8 ore
-      // sono larghe quanto lei.
-      if (q.pillola) {
-        for (const [cls, x, larg, tit, testo] of [
-          ['wp-pv-op-pill-effetto', q.x, q.pillola.effetto, opT('pillBuff'), '8 h'],
-          ['wp-pv-op-pill-malus', q.x + q.pillola.effetto, q.pillola.malus, opT('pillMalus'), '15 h 30'],
-        ]) {
-          const f = el('div', cls);
-          f.style.left = `${x}px`;
-          f.style.top = `${q.y - 6}px`;
-          f.style.width = `${larg}px`;
-          f.style.height = `${CARTA_H + 12}px`;
-          f.title = tit;
-          f.appendChild(el('span', 'wp-pv-op-pill-durata', testo));
-          tela.appendChild(f);
-        }
-      }
       if (q.coda > 0) {
         const coda = el('div', 'wp-pv-op-coda');
         coda.style.left = `${q.x + q.w}px`;
