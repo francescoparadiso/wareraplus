@@ -50,6 +50,9 @@ const TIPI = new Set(['attacco', 'difesa', 'rivolta', 'pillole', 'contratto', 'a
 const STATI_PASSO = new Set(['da_fare', 'in_corso', 'fatta', 'fallita', 'annullata']);
 const STATI_OPERAZIONE = new Set(['attiva', 'archiviata']);
 const PRIORITA = new Set(['alta', 'media', 'bassa']);
+// Chi ha una regione di partenza: l'attacco (da dove partiamo) e la difesa
+// (da dove ci attaccano).
+const CON_PARTENZA = new Set(['attacco', 'difesa']);
 const ID_GIOCO = /^[a-f0-9]{24}$/i;
 
 // Tetti larghi rispetto all'uso, stretti rispetto all'abuso: una nazione
@@ -187,7 +190,7 @@ function campiPasso(body, { nuovo }) {
   // partenza non vuol dire niente e si butta, invece di restare appesa a
   // un passo diventato "rivolta" dopo una modifica.
   const tipo = c.kind;
-  if (tipo && tipo !== 'attacco') c.from_region_id = null;
+  if (tipo && !CON_PARTENZA.has(tipo)) c.from_region_id = null;
   if (c.from_region_id && c.region_id && c.from_region_id === c.region_id) throw new Rifiuto('regioni_uguali');
   return c;
 }
@@ -424,7 +427,7 @@ function buildOperazioniRouter({ requireAuth, risolviIdentita, bloccaScrittureSo
     const campi = campiPasso(b, { nuovo: false });
     // La regione di partenza si giudica sul tipo che il passo AVRÀ.
     const tipo = campi.kind || p.kind;
-    if (tipo !== 'attacco') campi.from_region_id = null;
+    if (!CON_PARTENZA.has(tipo)) campi.from_region_id = null;
     const regione = 'region_id' in campi ? campi.region_id : p.region_id;
     const da = 'from_region_id' in campi ? campi.from_region_id : p.from_region_id;
     if (regione && da && regione === da) throw new Rifiuto('regioni_uguali');

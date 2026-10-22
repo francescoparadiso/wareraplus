@@ -42,14 +42,21 @@ import {
   aggiungiPasso, modificaPasso, eliminaPasso, battaglieInCorso, ApiError,
 } from './api.js';
 import { nomeNazione, etichettaBattaglia } from './battles.js';
-import { stimaBattaglia } from '../shared/battleTiming.js';
+import { stimaBattaglia, stimaPianificata, BUFFER_CONQUISTA } from '../shared/battleTiming.js';
+
+// Attacchi, rivolte e difese senza una battaglia agganciata: si stima la
+// fine come se la battaglia partisse all'orario del passo.
+const BATTAGLIA_PIANIFICATA = new Set(['attacco', 'rivolta', 'difesa']);
 import { state } from '../diplomacy/state.js';
 import { regionName, regionNeighbors } from '../diplomacy/travelDistance.js';
 import { mostraOperazione } from './mappaOperazione.js';
 import { statoVisto, numeriPassi, oraBreve, etichettaRegione } from './operazioniComuni.js';
 import { trackEvent } from '../shared/analytics.js';
 
-const TIPI = ['attacco', 'difesa', 'rivolta', 'pillole', 'contratto', 'altro'];
+// I tipi che si scelgono. "Contratto" è uscito dal menu il 2026-10-22 (non
+// serviva): il server lo accetta ancora, e un passo vecchio di quel tipo
+// si vede e si modifica come prima (vedi creaModuloPasso).
+const TIPI = ['attacco', 'difesa', 'rivolta', 'pillole', 'altro'];
 const STATI = ['da_fare', 'in_corso', 'fatta', 'fallita', 'annullata'];
 const PRIORITA = ['alta', 'media', 'bassa'];
 const CORSIE = [
@@ -83,6 +90,8 @@ const CHIAVE_BATTAGLIE = 'wp_pv_op_battaglie';
 // Fine del round e della battaglia: il calcolo è condiviso con la sezione
 // Battaglie e i marker della mappa (src/shared/battleTiming.js).
 const fineBattaglia = stimaBattaglia;
+
+// (fineDiPasso è dentro creaOperazioni: le battaglie vive stanno lì.)
 
 function testoBattaglia(b) {
   const f = fineBattaglia(b);
@@ -182,10 +191,11 @@ function idDaEtichetta(testo) {
 // difende), poi l'elenco delle regioni è solo quello che ha senso:
 //   attacco → le regioni straniere che toccano le sue;
 //   rivolta → le sue regioni d'origine oggi in mano ad altri;
-//   difesa  → le sue regioni di confine.
+//   difesa  → la nazione è chi ATTACCA: le NOSTRE regioni che la toccano,
+//             e "da dove" le sue regioni che toccano la nostra.
 // Gli altri tipi tengono l'elenco intero (null).
 
-function regioniCandidate(tipo, paese) {
+function regioniCandidate(tipo, paese, noi) {
   const tutte = state.regionData || {};
   if (!paese) return null;
   const sue = Object.keys(tutte).filter((id) => tutte[id]?.country === paese);
@@ -196,7 +206,10 @@ function regioniCandidate(tipo, paese) {
     return [...s];
   }
   if (tipo === 'rivolta') return Object.keys(tutte).filter((id) => tutte[id]?.initialCountry === paese && tutte[id]?.country !== paese);
-  if (tipo === 'difesa') return sue.filter((id) => regionNeighbors(id).some(straniera));
+  if (tipo === 'difesa') {
+    return Object.keys(tutte).filter((id) => tutte[id]?.country === noi
+      && regionNeighbors(id).some((v) => tutte[v]?.country === paese));
+  }
   return null;
 }
 
@@ -219,6 +232,8 @@ function selettoreNazione(noi, valore) {
 }
 
 const CON_NAZIONE = new Set(['attacco', 'rivolta', 'difesa']);
+// I tipi che hanno una regione di partenza: chi attacca parte da lì.
+const CON_PARTENZA = new Set(['attacco', 'difesa']);
 
 function riempiDatalist(dl, etichette) {
   dl.textContent = '';
@@ -558,7 +573,7 @@ export function creaOperazioni(ctx) {
     return {
       tipo,
       regione: b.defender?.region || null,
-      daRegione: tipo === 'attacco' ? (b.attacker?.region || null) : null,
+      daRegione: CON_PARTENZA.has(tipo) ? (b.attacker?.region || null) : null,
       quando: Date.parse(b.createdAt),
       battaglia: b._id,
     };
@@ -650,10 +665,14 @@ export function creaOperazioni(ctx) {
     reg.autocomplete = 'off';
     const aggiorna = () => {
       naz.hidden = !CON_NAZIONE.has(sel.value);
-      const cand = CON_NAZIONE.has(sel.value) ? regioniCandidate(sel.value, naz.value) : null;
+      const cand = CON_NAZIONE.has(sel.value) ? regioniCandidate(sel.value, naz.value, dati.countryId) : null;
       riempiDatalist(dl, cand ? etichetteDi(cand) : _etichette);
     };
-    sel.addEventListener('change', aggiorna);
+    sel.addEventListener('change', () => {
+      if (sel.value === 'difesa' && naz.value === dati.countryId && dati.guerre?.[0]?.nemico) naz.value = dati.guerre[0].nemico;
+      else if (sel.value === 'attacco') naz.value = dati.countryId;
+      aggiorna();
+    });
     naz.addEventListener('change', aggiorna);
     aggiorna();
     const testa = el('div', 'wp-pv-op-rapido-testa');
@@ -681,7 +700,7 @@ export function creaOperazioni(ctx) {
       // Un attacco parte da una regione della nazione scelta che confina:
       // se ce n'è una sola la si mette da sé, altrimenti nei dettagli.
       let da = null;
-      if (sel.value === 'attacco' && id) {
+      if (CON_PARTENZA.has(sel.value) && id) {
         const partenze = partenzeVerso(naz.value, id);
         if (partenze.length === 1) da = partenze[0];
       }
@@ -754,6 +773,15 @@ export function creaOperazioni(ctx) {
     return box;
   }
 
+  /** Fine stimata di un passo: la battaglia agganciata, oppure quella
+   *  pianificata per attacchi, rivolte e difese con un orario. */
+  function fineDiPasso(p) {
+    const b = p.battaglia ? viveId.get(p.battaglia) : null;
+    if (b) return stimaBattaglia(b);
+    if (p.quando && BATTAGLIA_PIANIFICATA.has(p.tipo)) return stimaPianificata(p.quando);
+    return null;
+  }
+
   // ── Il flowchart ─────────────────────────────────────────────────
   // Una linea del tempo che si esplora: si trascina per spostarsi, si
   // ingrandisce con + e −, "Adesso" riporta al presente. Il periodo mostrato
@@ -775,12 +803,16 @@ export function creaOperazioni(ctx) {
       if (p.tipo === 'pillole' && p.quando) {
         return { p, da: p.quando, finePrima: null, fineUltima: null, fineMalus: p.quando + PILLOLA_EFFETTO + PILLOLA_MALUS };
       }
+      if (p.quando && !p.battaglia && BATTAGLIA_PIANIFICATA.has(p.tipo)) {
+        const s = stimaPianificata(p.quando);
+        return { p, da: p.quando, finePrima: s.prima, fineUltima: s.ultima };
+      }
       return { p, da: p.quando || null, finePrima: null, fineUltima: null };
     });
     const senzaOra = estesi.filter((e) => !e.da).length;
     const xSenza = ETICHETTA_W + 10;
     const xAsse0 = ETICHETTA_W + (senzaOra ? SENZA_ORARIO_W : 0) + 14;
-    const tutti = estesi.flatMap((e) => [e.da, e.fineUltima, e.fineMalus]).filter(Boolean);
+    const tutti = estesi.flatMap((e) => [e.da, e.fineUltima && e.fineUltima + BUFFER_CONQUISTA, e.fineMalus]).filter(Boolean);
     const t0 = Math.floor(Math.min(ora, ...tutti) / ORA) * ORA - 2 * ORA;
     const t1 = Math.ceil(Math.max(ora, ...tutti) / ORA) * ORA + 3 * ORA;
     const ore = (t1 - t0) / ORA;
@@ -799,7 +831,10 @@ export function creaOperazioni(ctx) {
           const w = e.finePrima ? Math.max(CARTA_W, ((e.finePrima - e.da) / ORA) * pxOra) : CARTA_W;
           const coda = e.fineUltima ? Math.max(0, ((e.fineUltima - e.finePrima) / ORA) * pxOra) : 0;
           const pillola = e.fineMalus ? { effetto: (PILLOLA_EFFETTO / ORA) * pxOra, malus: (PILLOLA_MALUS / ORA) * pxOra } : null;
-          return { p: e.p, x, w, coda, pillola };
+          // Dopo la fine più lontana, l'ora in cui la regione appena
+          // conquistata non si può attaccare.
+          const buffer = e.fineUltima ? (BUFFER_CONQUISTA / ORA) * pxOra : 0;
+          return { p: e.p, x, w, coda, pillola, buffer };
         })
         .sort((a, b) => (a.x - b.x) || (a.p.id - b.p.id));
       // Due schede che si toccherebbero scendono su righe diverse della
@@ -808,8 +843,8 @@ export function creaOperazioni(ctx) {
       for (const c of qui) {
         let r = righe.findIndex((fine) => fine + 8 <= c.x);
         if (r < 0) { r = righe.length; righe.push(0); }
-        righe[r] = c.x + Math.max(c.w + c.coda, c.pillola ? c.pillola.effetto + c.pillola.malus : 0);
-        pos.set(c.p.id, { x: c.x, y: y + CORSIA_PAD + r * (CARTA_H + GAP_Y), w: c.w, coda: c.coda, pillola: c.pillola });
+        righe[r] = c.x + Math.max(c.w + c.coda + c.buffer, c.pillola ? c.pillola.effetto + c.pillola.malus : 0);
+        pos.set(c.p.id, { x: c.x, y: y + CORSIA_PAD + r * (CARTA_H + GAP_Y), w: c.w, coda: c.coda, pillola: c.pillola, buffer: c.buffer });
       }
       // Anche la corsia vuota si disegna: è dove si clicca per aggiungere.
       const h = CORSIA_PAD * 2 + Math.max(1, righe.length) * (CARTA_H + GAP_Y) - GAP_Y;
@@ -817,7 +852,7 @@ export function creaOperazioni(ctx) {
       y += h;
     }
     let w = xDi(t1) + 12;
-    for (const q of pos.values()) w = Math.max(w, q.x + q.w + q.coda + 16, q.pillola ? q.x + q.pillola.effetto + q.pillola.malus + 16 : 0);
+    for (const q of pos.values()) w = Math.max(w, q.x + q.w + q.coda + (q.buffer || 0) + 16, q.pillola ? q.x + q.pillola.effetto + q.pillola.malus + 16 : 0);
 
     // Le tacche dell'asse: ogni ora quando c'è spazio, poi ogni 3, 6, 12.
     const tacche = [];
@@ -1019,6 +1054,19 @@ export function creaOperazioni(ctx) {
         coda.title = opT('battleRange');
         tela.appendChild(coda);
       }
+      // L'ora dopo la conquista: la regione non è attaccabile. Si disegna
+      // dopo la fine più lontana, col testo che dice la finestra intera.
+      if (q.buffer > 0) {
+        const fp = fineDiPasso(p);
+        const buf = el('div', 'wp-pv-op-buffer');
+        buf.style.left = `${q.x + q.w + q.coda}px`;
+        buf.style.top = `${q.y}px`;
+        buf.style.width = `${q.buffer}px`;
+        buf.style.height = `${CARTA_H}px`;
+        buf.appendChild(el('span', null, '+1 h'));
+        if (fp) buf.title = t('bufferHint', { da: oraBreve(fp.prima + BUFFER_CONQUISTA), a: oraBreve(fp.ultima + BUFFER_CONQUISTA) });
+        tela.appendChild(buf);
+      }
       tela.appendChild(cartaPasso(p, q, { n: numero.get(p.id), stato: stati.get(p.id) }, { op, L, modificabile, iniziaFreccia }));
     }
     // Il menu dello stato, sotto la scheda che l'ha aperto.
@@ -1154,7 +1202,9 @@ export function creaOperazioni(ctx) {
     const b = p.battaglia ? viveId.get(p.battaglia) : null;
     const sotto = b ? testoBattaglia(b)
       : p.battaglia ? opT('battleClosed')
-        : [oraBreve(p.quando), p.incaricato].filter(Boolean).join(' · ');
+        : p.quando && BATTAGLIA_PIANIFICATA.has(p.tipo)
+          ? [oraBreve(p.quando), t('plannedEnd', { da: oraBreve(stimaPianificata(p.quando).prima), a: oraBreve(stimaPianificata(p.quando).ultima) })].join(' · ')
+          : [oraBreve(p.quando), p.incaricato].filter(Boolean).join(' · ');
     if (sotto) c.appendChild(el('span', 'wp-pv-op-carta-sub', sotto));
 
     const piede = el('span', 'wp-pv-op-carta-piede');
@@ -1273,6 +1323,11 @@ export function creaOperazioni(ctx) {
     fatto(opT('fFrom'), etichettaRegione(p.daRegione));
     fatto(opT('fWhen'), p.quando ? new Date(p.quando).toLocaleString(undefined,
       { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : null);
+    if (!p.battaglia && p.quando && BATTAGLIA_PIANIFICATA.has(p.tipo)) {
+      const s = stimaPianificata(p.quando);
+      fatto(opT('fEstEnd'), t('plannedEndLong', { da: oraBreve(s.prima), a: oraBreve(s.ultima) }));
+      fatto(opT('fReattack'), t('reattackWindow', { da: oraBreve(s.prima + BUFFER_CONQUISTA), a: oraBreve(s.ultima + BUFFER_CONQUISTA) }));
+    }
     fatto(opT('fPriority'), opT(`prio_${p.priorita}`));
     fatto(opT('fAssignee'), p.incaricato);
     const prima = p.dopo.map((id) => `${numero.get(id)}`).filter(Boolean);
@@ -1284,6 +1339,7 @@ export function creaOperazioni(ctx) {
       if (b) {
         const fb = fineBattaglia(b);
         fatto(opT('fRound'), t('roundEnds', { n: fb.round, pa: fb.pa, pd: fb.pd, dura: durata(fb.fineRound - Date.now()), ora: oraBreve(fb.fineRound) }));
+        fatto(opT('fReattack'), t('reattackWindow', { da: oraBreve(fb.prima + BUFFER_CONQUISTA), a: oraBreve(fb.ultima + BUFFER_CONQUISTA) }));
       }
     }
     const g = guerraDelPasso(p);
@@ -1336,7 +1392,7 @@ export function creaOperazioni(ctx) {
     f.appendChild(el('h4', 'wp-pv-op-modulo-titolo', p ? opT('editStep') : opT('addStep')));
 
     const tipo = el('select', 'wp-pv-select');
-    for (const k of TIPI) {
+    for (const k of (p && !TIPI.includes(p.tipo) ? [...TIPI, p.tipo] : TIPI)) {
       const o = el('option', null, opT(`kind_${k}`));
       o.value = k;
       tipo.appendChild(o);
@@ -1352,8 +1408,9 @@ export function creaOperazioni(ctx) {
     const noiPaese = dati.countryId;
     const nazionePre = p?.tipo === 'attacco' && p.daRegione ? state.regionData?.[p.daRegione]?.country
       : p?.tipo === 'rivolta' && p.regione ? state.regionData?.[p.regione]?.initialCountry
-        : p?.tipo === 'difesa' && p.regione ? state.regionData?.[p.regione]?.country : null;
-    const nazione = selettoreNazione(noiPaese, nazionePre);
+        : p?.tipo === 'difesa' && p.daRegione ? state.regionData?.[p.daRegione]?.country : null;
+    const nazione = selettoreNazione(noiPaese, nazionePre
+      || ((p?.tipo || preimpostati.tipo) === 'difesa' ? dati.guerre?.[0]?.nemico : null));
     const dlTutte = el('datalist');
     dlTutte.id = 'wp-pv-op-regioni';
     const dlVicine = el('datalist');
@@ -1375,18 +1432,24 @@ export function creaOperazioni(ctx) {
     const aggiornaVicine = () => {
       const id = idDaEtichetta(regione.value);
       if (!id) { riempiDatalist(dlVicine, []); return; }
-      const partenze = tipo.value === 'attacco' ? partenzeVerso(nazione.value, id) : [];
+      const partenze = CON_PARTENZA.has(tipo.value) ? partenzeVerso(nazione.value, id) : [];
       riempiDatalist(dlVicine, etichetteDi(partenze.length ? partenze : regionNeighbors(id)));
       if (partenze.length === 1 && !idDaEtichetta(daRegione.value)) daRegione.value = etichettaRegione(partenze[0]);
     };
     const aggiornaRegioni = () => {
-      const cand = CON_NAZIONE.has(tipo.value) ? regioniCandidate(tipo.value, nazione.value) : null;
+      const cand = CON_NAZIONE.has(tipo.value) ? regioniCandidate(tipo.value, nazione.value, noiPaese) : null;
       riempiDatalist(dlTutte, cand ? etichetteDi(cand) : _etichette);
       aggiornaVicine();
     };
     regione.addEventListener('change', aggiornaVicine);
     nazione.addEventListener('change', () => { daRegione.value = ''; aggiornaRegioni(); });
-    tipo.addEventListener('change', aggiornaRegioni);
+    tipo.addEventListener('change', () => {
+      // In difesa la nazione è chi attacca: se è rimasta la nostra, la si
+      // porta sul primo nemico con cui siamo in guerra.
+      if (tipo.value === 'difesa' && nazione.value === noiPaese && dati.guerre?.[0]?.nemico) nazione.value = dati.guerre[0].nemico;
+      else if (tipo.value !== 'difesa' && nazione.value !== noiPaese && tipo.value === 'attacco') nazione.value = noiPaese;
+      aggiornaRegioni();
+    });
     aggiornaRegioni();
 
     const quando = el('input', 'wp-pv-input');
@@ -1436,11 +1499,11 @@ export function creaOperazioni(ctx) {
       const b = viveId.get(battaglia.value);
       if (!b) return;
       tipo.value = !sono(b) ? 'altro' : b.type === 'resistance' ? 'rivolta' : b.attacker?.country === noi ? 'attacco' : 'difesa';
-      const chi = tipo.value === 'difesa' ? b.defender?.country : b.attacker?.country;
+      const chi = b.attacker?.country;
       if (chi && CON_NAZIONE.has(tipo.value)) nazione.value = chi;
       tipo.dispatchEvent(new Event('change'));
       regione.value = b.defender?.region ? etichettaRegione(b.defender.region) : '';
-      daRegione.value = tipo.value === 'attacco' && b.attacker?.region ? etichettaRegione(b.attacker.region) : '';
+      daRegione.value = CON_PARTENZA.has(tipo.value) && b.attacker?.region ? etichettaRegione(b.attacker.region) : '';
       aggiornaVicine();
       quando.value = perCampoOrario(Date.parse(b.createdAt));
     });
@@ -1464,7 +1527,7 @@ export function creaOperazioni(ctx) {
     f.appendChild(griglia);
     f.appendChild(dlTutte);
     f.appendChild(dlVicine);
-    const mostraDa = () => { campoDa.hidden = tipo.value !== 'attacco'; campoNazione.hidden = !CON_NAZIONE.has(tipo.value); };
+    const mostraDa = () => { campoDa.hidden = !CON_PARTENZA.has(tipo.value); campoNazione.hidden = !CON_NAZIONE.has(tipo.value); };
     tipo.addEventListener('change', mostraDa);
     mostraDa();
 
@@ -1522,7 +1585,7 @@ export function creaOperazioni(ctx) {
       avviso.hidden = true;
       const idRegione = idDaEtichetta(regione.value);
       if (idRegione === undefined) return dire(opT('regionUnknown'));
-      const idDa = tipo.value === 'attacco' ? idDaEtichetta(daRegione.value) : null;
+      const idDa = CON_PARTENZA.has(tipo.value) ? idDaEtichetta(daRegione.value) : null;
       if (idDa === undefined) return dire(opT('fromUnknown'));
       if (idDa && idRegione && idDa === idRegione) return dire(opT('err_regioni_uguali'));
       const corpo = {

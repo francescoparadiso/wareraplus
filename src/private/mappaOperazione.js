@@ -101,7 +101,9 @@ function costruisci(op, { stati }) {
     const stato = stati.get(p.id) || p.stato;
     const colore = COLORI_STATO[stato] || COLORI_STATO.da_fare;
     feats.push(feature({ type: 'Point', coordinates: dove }, { ruolo: 'bersaglio', colore }));
-    const da = p.tipo === 'attacco' ? posizione(p.daRegione) : null;
+    // Attacco: da noi verso di loro. Difesa: da loro verso di noi. In
+    // tutti e due i casi la freccia va da daRegione a regione.
+    const da = p.tipo === 'attacco' || p.tipo === 'difesa' ? posizione(p.daRegione) : null;
     if (!da) continue;
     regioni.add(p.daRegione);
     const { coords } = arc(da, dove);
@@ -206,7 +208,7 @@ function aggiungiCartellini(map, op, { numero, stati }) {
 function inquadra(map, op) {
   const punti = [];
   for (const p of op.passi) {
-    for (const id of [p.regione, p.tipo === 'attacco' ? p.daRegione : null]) {
+    for (const id of [p.regione, p.tipo === 'attacco' || p.tipo === 'difesa' ? p.daRegione : null]) {
       const q = posizione(id);
       if (q) punti.push(q);
     }

@@ -123,6 +123,14 @@ body.light-theme #wp-private-root .wp-pv-op-st-annullata { --st: #94a3b8; }
 .wp-pv-op-dettaglio-testa .wp-pv-op-x { margin-left: auto; }
 
 /* La colonna delle battaglie aperte. */
+/* L'ora dopo la conquista in cui la regione non è attaccabile. */
+.wp-pv-op-buffer {
+  position: absolute; box-sizing: border-box;
+  display: flex; align-items: flex-end; justify-content: flex-end; padding: 0 5px 4px 0;
+  border: 1px dashed #f59e0b; border-left: 0; border-radius: 0 8px 8px 0;
+  background: repeating-linear-gradient(45deg, rgba(245, 158, 11, .14) 0 6px, transparent 6px 12px);
+  font-size: .66rem; font-weight: 700; color: #f59e0b;
+}
 /* La pillola: effetto (verde, 8 h) e malus (rosso, 15 h 30) sotto la
    scheda, lunghi quanto durano. */
 .wp-pv-op-pill-effetto, .wp-pv-op-pill-malus { position: absolute; box-sizing: border-box; pointer-events: auto; }
