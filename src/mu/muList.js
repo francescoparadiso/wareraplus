@@ -84,7 +84,19 @@ const SORTS = {
   // -1 (non 0) per chi non ha il dato: ordinando per "Oggi" le unità senza
   // scatto restano in fondo invece di mescolarsi a chi oggi non ha colpito.
   today: { get: m => muDamageToday(m) ?? -1 },
+  // -1 per chi non ha danno settimanale in classifica o non ha membri:
+  // stessa ragione di "Oggi", restano in fondo.
+  perMember: { get: m => weeklyPerMember(m) ?? -1 },
 };
+
+/** Danno settimanale diviso per i membri di ADESSO. Si divide per tutti,
+ *  anche per chi non ha combattuto (è lo stesso metro del per cittadino
+ *  delle nazioni): la media sui soli combattenti sta nella scheda
+ *  dell'unità, che ha il danno di ogni membro — qui ci sono solo i totali. */
+function weeklyPerMember(m) {
+  const v = m.rankings?.muWeeklyDamages?.value;
+  return v == null || !m.memberCount ? null : v / m.memberCount;
+}
 
 // Stato della vista. Vive qui e non in main.js perché è tutto e solo suo:
 // riaprendo la vista l'utente ritrova ricerca e ordinamento come li aveva
@@ -229,8 +241,9 @@ function headerHtml() {
       ${th('members', muT('colMembers'), 'wp-mu-th-num')}
       ${th('referrals', muT('colReferrals'), 'wp-mu-th-num')}
       ${METRICS.map((m, i) => th(m.id, muT(m.short), 'wp-mu-th-num')
-          // "Oggi" sta subito dopo il settimanale, da cui è ricavata.
-          + (i === 0 ? th('today', muT('colToday'), 'wp-mu-th-num') : '')).join('')}
+          // "Oggi" e "Per membro" stanno subito dopo il settimanale, da cui
+          // sono ricavate.
+          + (i === 0 ? th('today', muT('colToday'), 'wp-mu-th-num') + th('perMember', muT('colPerMember'), 'wp-mu-th-num') : '')).join('')}
     </div>`;
 }
 
@@ -351,6 +364,13 @@ function todayCell(m) {
   </span>`;
 }
 
+function perMemberCell(m) {
+  const v = weeklyPerMember(m);
+  return `<span class="wp-mu-cell-num${sortId === 'perMember' ? ' wp-mu-cell-sorted' : ''}">
+    ${v == null ? '<span class="wp-mu-cell-empty">—</span>' : escapeHtml(fmtCompact(v))}
+  </span>`;
+}
+
 /* ── Colonna "Referral" (WarEra+) ──
    Quanti giocatori hanno portato nel gioco, in tutto, i membri di questa
    unita'. WarEra non pubblica chi ha invitato chi (vedi il blocco in testa
@@ -409,7 +429,7 @@ function rowHtml(m, position) {
         const t = tierOf(m.rankings?.[metric.id]);
         return `<span class="wp-mu-cell-num${metric.id === sortId ? ' wp-mu-cell-sorted' : ''}">
           ${v == null ? '<span class="wp-mu-cell-empty">—</span>' : `${escapeHtml(fmtCompact(v))}<span class="wp-mu-cell-rank wp-mu-rank-${t}">#${m.rankings[metric.id].rank}</span>`}
-        </span>` + (i === 0 ? todayCell(m) : '');
+        </span>` + (i === 0 ? todayCell(m) + perMemberCell(m) : '');
       }).join('')}
     </div>`;
 }

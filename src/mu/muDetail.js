@@ -105,6 +105,7 @@ function paintHeader() {
       <section class="wp-mu-stats-grid">
         ${MU_RANKING_TYPES.map(type => statCard(type, m.rankings?.[type])).join('')}
         ${todayCardHtml()}
+        ${fighterCardHtml()}
       </section>
 
       <section id="wp-mu-playstyle"></section>
@@ -281,6 +282,37 @@ function paintTodayCard(mu) {
   });
 }
 
+/* ── Danno settimanale per combattente (WarEra+) ──
+   L'elenco unità divide il settimanale per TUTTI i membri, perché lì ha
+   solo i totali. Qui invece c'è il danno di ognuno (user.getUserLite, già
+   scaricato per l'elenco membri), quindi si può fare la media sui soli
+   membri che questa settimana hanno colpito: un'unità con metà membri
+   eco non sembra più debole di quanto sono i suoi soldati.
+
+   ⚠️ È il danno settimanale DEL GIOCATORE, ovunque l'abbia fatto: chi è
+   entrato a metà settimana porta anche quello fatto prima, sotto un'altra
+   unità. Per questo la media non si ricava da muWeeklyDamages, e i due
+   numeri possono non tornare fra loro. */
+function fighterCardHtml() {
+  return `
+    <div class="wp-mu-statcard" id="wp-mu-fighters" hidden>
+      <div class="wp-mu-statcard-label">${escapeHtml(muT('perFighter'))}</div>
+      <div class="wp-mu-statcard-value" id="wp-mu-fighters-value">—</div>
+      <div class="wp-mu-statcard-rank"><span class="wp-mu-unranked" id="wp-mu-fighters-note"></span></div>
+    </div>`;
+}
+
+function paintFighterCard(users, total) {
+  const box = hostEl?.querySelector('#wp-mu-fighters');
+  if (!box) return;
+  const dmg = users.map(u => u.rankings?.weeklyUserDamages?.value ?? 0).filter(v => v > 0);
+  const sum = dmg.reduce((a, v) => a + v, 0);
+  hostEl.querySelector('#wp-mu-fighters-value').textContent = dmg.length ? fmtFull(Math.round(sum / dmg.length)) : '—';
+  hostEl.querySelector('#wp-mu-fighters-note').textContent =
+    muT('fightersOf').replace('{n}', dmg.length).replace('{m}', total);
+  box.hidden = false;
+}
+
 function statCard(type, ranking) {
   return `
     <div class="wp-mu-statcard">
@@ -376,6 +408,7 @@ async function paintMembers(detail) {
   const comp = compositionFromUsers(users, ids.length);
   paintComposition(comp);
   paintPlaystyle(countPlaystyles(users));
+  paintFighterCard(users, ids.length);
   const badge = hostEl.querySelector('#wp-mu-head-defacto');
   if (badge) badge.innerHTML = deFactoBadge(dominantCountry({ ...currentMu, composition: comp }));
 

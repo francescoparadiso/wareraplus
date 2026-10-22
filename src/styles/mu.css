@@ -128,9 +128,9 @@ body.light-theme .wp-mu-count { color: #5b6473; }
    scorrimento resta solo come ultima rete, sotto ai minimi qui sotto. */
 .wp-mu-table {
   /* #, nome, nazione, composizione, guerra/eco, membri, referral, poi le sei
-     classifiche piu' la colonna "Oggi" (ricavata dal settimanale, le sta
-     subito accanto) */
-  --wp-mu-cols: 30px minmax(104px, 1.15fr) minmax(76px, .75fr) minmax(112px, 1fr) minmax(80px, .72fr) 44px repeat(8, minmax(58px, .7fr));
+     classifiche piu' le colonne "Oggi" e "Per membro" (ricavate dal
+     settimanale, gli stanno subito accanto) */
+  --wp-mu-cols: 30px minmax(104px, 1.15fr) minmax(76px, .75fr) minmax(112px, 1fr) minmax(80px, .72fr) 44px repeat(9, minmax(58px, .7fr));
   overflow-x: auto;
 }
 .wp-mu-thead, .wp-mu-row {
@@ -142,7 +142,7 @@ body.light-theme .wp-mu-count { color: #5b6473; }
      scorre, sopra le colonne si allargano da sole con le fr. Sta sotto
      al max-width della pagina apposta — la riga intera deve entrare
      senza trascinamento su un portatile normale. */
-  min-width: 990px;
+  min-width: 1054px;
 }
 .wp-mu-thead {
   position: sticky;
@@ -670,7 +670,7 @@ body.light-theme .wp-mu-rank-country { color: #5b6473; }
    necessaria di una cella numerica. Stessa rinuncia già fatta su mobile. */
 @media (max-width: 1120px) {
   .wp-mu-table {
-    --wp-mu-cols: 26px minmax(0, 1.15fr) minmax(0, .75fr) minmax(0, 1fr) minmax(0, .72fr) 40px repeat(8, minmax(52px, .7fr));
+    --wp-mu-cols: 26px minmax(0, 1.15fr) minmax(0, .75fr) minmax(0, 1fr) minmax(0, .72fr) 40px repeat(9, minmax(52px, .7fr));
   }
   .wp-mu-thead, .wp-mu-row { min-width: 620px; gap: 5px; }
   .wp-mu-cell-rank { display: none; }
@@ -694,7 +694,7 @@ body.light-theme .wp-mu-rank-country { color: #5b6473; }
      # scorre via sotto di lui, è solo una posizione) e il resto si scorre
      di lato, con l'avviso sopra (src/shared/scrollHint.js). */
   .wp-mu-table {
-    --wp-mu-cols: 22px 124px 86px 118px 84px 40px 52px repeat(7, 62px);
+    --wp-mu-cols: 22px 124px 86px 118px 84px 40px 52px repeat(8, 62px);
     overflow-x: auto;
   }
   .wp-mu-thead, .wp-mu-row { min-width: 0; width: max-content; gap: 4px; font-size: 12px; }
