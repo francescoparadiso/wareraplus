@@ -1225,6 +1225,7 @@ function showBlocPopup(blocId) {
       <span class="col ${sortKey === 'totalDmg' ? 'active' : ''}" data-key="totalDmg" style="flex:1">${bT('Total Dmg')}</span>
       <span class="col ${sortKey === 'money' ? 'active' : ''}" data-key="money" style="flex:1">${bT('Wealth')}</span>
       <span class="col ${sortKey === 'pop' ? 'active' : ''}" data-key="pop" style="flex:1">${bT('Pop')}</span>
+      <span class="col ${sortKey === 'dpd' ? 'active' : ''}" data-key="dpd" style="flex:1" title="${bT('Weekly damage per point of core development')}">${bT('Dmg/Core')}</span>
       <span class="col ${sortKey === 'wars' ? 'active' : ''}" data-key="wars" style="min-width:40px">${bT('Wars')}</span>
       <span class="col ${sortKey === 'warPct' ? 'active' : ''}" data-key="warPct" style="min-width:48px" title="${bT('Share of players with a war build')}">${bT('War %')}</span>
     </div>
