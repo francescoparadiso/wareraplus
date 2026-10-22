@@ -68,6 +68,7 @@ const SENZA_ORARIO_W = CARTA_W + 30;
 const ORA = 3600_000;
 
 const CHIAVE_SCELTA = 'wp_pv_op_scelta';
+const CHIAVE_BATTAGLIE = 'wp_pv_op_battaglie';
 
 // ── Battaglie aperte ────────────────────────────────────────────────
 // Ogni round dura 6 ore dal suo inizio (`currentRound.createdAt`), e
@@ -220,6 +221,9 @@ export function creaOperazioni(ctx) {
   let moduloPasso = null;       // { nodo, id: number|null }
   let rapido = null;            // aggiunta rapida aperta sul grafico: { nodo, x, y }
   let menuStato = null;         // id del passo col menu dello stato aperto
+  let battaglieVisibili = (() => { try { return localStorage.getItem(CHIAVE_BATTAGLIE) !== '0'; } catch { return true; } })();
+  let cercaBatt = null;         // campo di ricerca delle battaglie (sopravvive ai ridisegni)
+  let riempiBatt = null;        // ridisegna solo l'elenco filtrato
 
   const opzioni = () => ({ paese: ctx.paese?.() || null, archiviate });
   // Sotto la lente il server rifiuta ogni scrittura: i bottoni del governo
@@ -470,8 +474,11 @@ export function creaOperazioni(ctx) {
     const aperto = passoAperto != null ? perId.get(passoAperto) : null;
     if (moduloPasso) lato.appendChild(moduloPasso.nodo);
     else if (aperto) lato.appendChild(dettaglioPasso(op, aperto, { numero, stati }));
-    if (modificabile) lato.appendChild(colonnaBattaglie(op));
+    if (modificabile && battaglieVisibili) lato.appendChild(colonnaBattaglie(op));
+    // Pannello vuoto (battaglie chiuse, nessun passo aperto): il grafico
+    // prende tutta la larghezza.
     if (lato.childNodes.length) corpo.appendChild(lato);
+    else corpo.classList.add('senza-lato');
     card.appendChild(corpo);
     return card;
   }
@@ -521,14 +528,52 @@ export function creaOperazioni(ctx) {
     };
   }
 
+  /** Il pannello delle battaglie: si chiude dalla × e si riapre dal
+   *  bottone "Battaglie" sopra il grafico (preferenza del browser). La
+   *  ricerca filtra per regione e nazioni e ridisegna solo l'elenco, così il
+   *  campo non perde il cursore a ogni lettera. */
   function colonnaBattaglie(op) {
     const box = el('div', 'wp-pv-op-battaglie');
-    box.appendChild(el('span', 'wp-pv-label', opT('battlesTitle')));
+    const testa = el('div', 'wp-pv-op-batt-testa');
+    testa.appendChild(el('span', 'wp-pv-label', opT('battlesTitle')));
+    const chiudi = bottone('wp-pv-op-x', '×', () => impostaBattaglieVisibili(false));
+    chiudi.setAttribute('aria-label', opT('battlesHide'));
+    chiudi.title = opT('battlesHide');
+    testa.appendChild(chiudi);
+    box.appendChild(testa);
+    if (!viveId.size) { box.appendChild(el('p', 'wp-pv-note', opT('battlesNone'))); return box; }
+    if (!cercaBatt) {
+      cercaBatt = el('input', 'wp-pv-input wp-pv-op-batt-cerca');
+      cercaBatt.type = 'search';
+      cercaBatt.autocomplete = 'off';
+      cercaBatt.addEventListener('input', () => riempiBatt?.());
+    }
+    cercaBatt.placeholder = opT('battlesSearch');
+    box.appendChild(cercaBatt);
+    const lista = el('div', 'wp-pv-op-batt-lista');
+    box.appendChild(lista);
+    riempiBatt = () => riempiListaBattaglie(op, lista, cercaBatt.value);
+    riempiBatt();
+    return box;
+  }
+
+  function impostaBattaglieVisibili(si) {
+    battaglieVisibili = si;
+    try { localStorage.setItem(CHIAVE_BATTAGLIE, si ? '1' : '0'); } catch { /* resta per questa apertura */ }
+    ctx.ridisegna();
+  }
+
+  function riempiListaBattaglie(op, lista, testo) {
+    lista.textContent = '';
     const noi = dati.countryId;
     const gia = new Set(op.passi.map((p) => p.battaglia).filter(Boolean));
     const nostra = (b) => b.attacker?.country === noi || b.defender?.country === noi;
-    const tutte = [...viveId.values()].sort((a, b) => Number(nostra(b)) - Number(nostra(a)));
-    if (!tutte.length) { box.appendChild(el('p', 'wp-pv-note', opT('battlesNone'))); return box; }
+    const q = String(testo || '').trim().toLowerCase();
+    const tutte = [...viveId.values()]
+      .filter((b) => !q || etichettaBattaglia(b).toLowerCase().includes(q))
+      .sort((a, b) => Number(nostra(b)) - Number(nostra(a)));
+    if (!tutte.length) { lista.appendChild(el('p', 'wp-pv-note', opT('battlesNoMatch'))); return; }
+    const box = lista;
     for (const b of tutte) {
       const r = el('div', `wp-pv-op-batt${nostra(b) ? ' nostra' : ''}`);
       const testo = el('div', 'wp-pv-op-batt-testo');
@@ -544,7 +589,6 @@ export function creaOperazioni(ctx) {
       }
       box.appendChild(r);
     }
-    return box;
   }
 
   // ── Aggiunta rapida sul grafico ──────────────────────────────────
@@ -766,6 +810,13 @@ export function creaOperazioni(ctx) {
       scorre.scrollTo({ left: L.xDi(Date.now()) - scorre.clientWidth / 4, behavior: 'smooth' });
     });
     strumento('6h ▶', opT('panFwd'), () => sposta(6));
+    // Riapre (o chiude) il pannello delle battaglie a destra.
+    if (modificabile) {
+      const b = bottone(`wp-pv-btn-quiet wp-pv-btn-small wp-pv-op-batt-interruttore${battaglieVisibili ? ' attivo' : ''}`,
+        `${opT('battlesToggle')} (${viveId.size}) ${battaglieVisibili ? '▸' : '◂'}`, () => impostaBattaglieVisibili(!battaglieVisibili));
+      b.setAttribute('aria-pressed', String(battaglieVisibili));
+      barra.appendChild(b);
+    }
     barra.appendChild(el('span', 'wp-pv-op-suggerimento', modificabile ? opT('chartHintPlan2') : opT('chartHint')));
     guscio.appendChild(barra);
 

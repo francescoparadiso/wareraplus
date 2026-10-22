@@ -123,7 +123,12 @@ body.light-theme #wp-private-root .wp-pv-op-st-annullata { --st: #94a3b8; }
 .wp-pv-op-dettaglio-testa .wp-pv-op-x { margin-left: auto; }
 
 /* La colonna delle battaglie aperte. */
-.wp-pv-op-battaglie { display: flex; flex-direction: column; gap: .35rem; max-height: 26rem; overflow-y: auto; padding-right: .2rem; }
+.wp-pv-op-corpo.senza-lato { grid-template-columns: minmax(0, 1fr); }
+.wp-pv-op-battaglie { display: flex; flex-direction: column; gap: .4rem; }
+.wp-pv-op-batt-testa { display: flex; align-items: center; justify-content: space-between; }
+.wp-pv-op-batt-cerca { padding: .4rem .55rem; font-size: .85rem; }
+.wp-pv-op-batt-lista { display: flex; flex-direction: column; gap: .35rem; max-height: 26rem; overflow-y: auto; padding-right: .2rem; }
+.wp-pv-op-batt-interruttore.attivo { border-color: var(--pv-accent); color: var(--pv-ink); }
 .wp-pv-op-batt { display: flex; align-items: center; gap: .5rem; padding: .35rem .5rem; border: 1px solid var(--pv-rule); border-radius: 7px; }
 .wp-pv-op-batt.nostra { border-color: color-mix(in srgb, var(--pv-accent) 50%, var(--pv-rule)); }
 .wp-pv-op-batt-testo { display: flex; flex-direction: column; min-width: 0; flex: 1; }
