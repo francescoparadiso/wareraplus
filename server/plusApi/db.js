@@ -336,6 +336,54 @@ CREATE TABLE IF NOT EXISTS nation_access (
   PRIMARY KEY (country_id, war_user_id)
 );
 
+-- Le operazioni della nazione: una catena di passi con un orario
+-- (rivolte, attacchi, pillole, contratti) e le frecce fra un passo e
+-- quello che deve venire dopo. Vedi operazioni.js.
+CREATE TABLE IF NOT EXISTS operation (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  country_id TEXT    NOT NULL,
+  title      TEXT    NOT NULL,
+  note       TEXT,
+  status     TEXT    NOT NULL DEFAULT 'attiva',   -- attiva | archiviata
+  created_by INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  updated_by INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_operation_country ON operation(country_id, status);
+
+-- "In attesa" NON è uno stato salvato: è un passo da fare con almeno un
+-- precedente non ancora fatto, e si ricava dalle frecce. Salvarlo vorrebbe
+-- dire ricordarsi di aggiornarlo ogni volta che un altro passo cambia.
+CREATE TABLE IF NOT EXISTS op_step (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  operation_id   INTEGER NOT NULL REFERENCES operation(id) ON DELETE CASCADE,
+  kind           TEXT    NOT NULL,                 -- attacco | difesa | rivolta | pillole | contratto | altro
+  title          TEXT,
+  region_id      TEXT,                             -- dove succede
+  from_region_id TEXT,                             -- da dove si attacca
+  at             INTEGER,                          -- orario previsto (ms UTC)
+  priority       TEXT    NOT NULL DEFAULT 'media', -- alta | media | bassa
+  assignee       TEXT,                             -- testo libero: un'unità, una persona
+  status         TEXT    NOT NULL DEFAULT 'da_fare', -- da_fare | in_corso | fatta | fallita | annullata
+  note           TEXT,
+  created_by     INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  updated_by     INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_at     INTEGER NOT NULL,
+  updated_at     INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_op_step_operation ON op_step(operation_id);
+
+-- Le frecce: from_step va fatto prima di to_step. Una tabella e non un
+-- elenco dentro il passo, così cancellare un passo porta via da sé le
+-- frecce che lo toccano (ON DELETE CASCADE) invece di lasciarne di orfane.
+CREATE TABLE IF NOT EXISTS op_link (
+  from_step INTEGER NOT NULL REFERENCES op_step(id) ON DELETE CASCADE,
+  to_step   INTEGER NOT NULL REFERENCES op_step(id) ON DELETE CASCADE,
+  PRIMARY KEY (from_step, to_step)
+);
+CREATE INDEX IF NOT EXISTS idx_op_link_to ON op_link(to_step);
+
 -- ⚠️ L'indice su (mu_id, slot) NON sta qui ma in migrate(). SCHEMA gira
 -- PRIMA delle migrazioni: su un database che ha ancora la colonna day
 -- la CREATE TABLE viene saltata (IF NOT EXISTS) ma la CREATE INDEX no, e
@@ -1057,6 +1105,114 @@ function togliAccessoNazione(countryId, warUserId) {
     .run(countryId, warUserId).changes || 0;
 }
 
+// ---------------------------------------------------------------------------
+// OPERAZIONI
+// ---------------------------------------------------------------------------
+// Solo lettura e scrittura: chi può cosa, e che forma esce, lo decide
+// operazioni.js.
+
+const segnaposti = (n) => new Array(n).fill('?').join(',');
+
+function listaOperazioni(countryId, { archiviate = false, limit = 100 } = {}) {
+  const sql = archiviate
+    ? 'SELECT * FROM operation WHERE country_id = ? ORDER BY updated_at DESC LIMIT ?'
+    : "SELECT * FROM operation WHERE country_id = ? AND status != 'archiviata' ORDER BY updated_at DESC LIMIT ?";
+  return getDb().prepare(sql).all(countryId, limit);
+}
+
+function contaOperazioniAttive(countryId) {
+  return getDb().prepare("SELECT COUNT(*) AS n FROM operation WHERE country_id = ? AND status != 'archiviata'")
+    .get(countryId)?.n || 0;
+}
+
+function getOperazione(id) {
+  return getDb().prepare('SELECT * FROM operation WHERE id = ?').get(id) || null;
+}
+
+function creaOperazione({ countryId, titolo, nota, createdBy }) {
+  const ora = Date.now();
+  const info = getDb().prepare(`
+    INSERT INTO operation (country_id, title, note, status, created_by, updated_by, created_at, updated_at)
+    VALUES (?, ?, ?, 'attiva', ?, ?, ?, ?)`)
+    .run(countryId, titolo, nota || null, createdBy || null, createdBy || null, ora, ora);
+  return getOperazione(info.lastInsertRowid);
+}
+
+/** Aggiorna i campi dati e segna chi e quando. Chiamata anche senza campi
+ *  quando cambia un PASSO: l'operazione toccata per ultima sale in cima. */
+function aggiornaOperazione(id, campi, updatedBy) {
+  const chiavi = Object.keys(campi || {});
+  const set = chiavi.map((k) => `${k} = ?`).join(', ');
+  getDb().prepare(`UPDATE operation SET ${set ? `${set}, ` : ''}updated_by = ?, updated_at = ? WHERE id = ?`)
+    .run(...chiavi.map((k) => campi[k]), updatedBy || null, Date.now(), id);
+  return getOperazione(id);
+}
+
+function eliminaOperazione(id) {
+  return getDb().prepare('DELETE FROM operation WHERE id = ?').run(id).changes || 0;
+}
+
+function passiDi(operationIds) {
+  if (!operationIds.length) return [];
+  return getDb().prepare(`SELECT * FROM op_step WHERE operation_id IN (${segnaposti(operationIds.length)})
+    ORDER BY at IS NULL, at, id`).all(...operationIds);
+}
+
+function frecceDi(operationIds) {
+  if (!operationIds.length) return [];
+  return getDb().prepare(`SELECT l.from_step, l.to_step FROM op_link l
+    JOIN op_step s ON s.id = l.to_step
+    WHERE s.operation_id IN (${segnaposti(operationIds.length)})`).all(...operationIds);
+}
+
+function contaPassi(operationId) {
+  return getDb().prepare('SELECT COUNT(*) AS n FROM op_step WHERE operation_id = ?').get(operationId)?.n || 0;
+}
+
+function getPasso(id) {
+  return getDb().prepare('SELECT * FROM op_step WHERE id = ?').get(id) || null;
+}
+
+const CAMPI_PASSO = ['kind', 'title', 'region_id', 'from_region_id', 'at', 'priority', 'assignee', 'status', 'note'];
+
+function creaPasso(operationId, campi, createdBy) {
+  const ora = Date.now();
+  const valori = CAMPI_PASSO.map((k) => (campi[k] === undefined ? null : campi[k]));
+  const info = getDb().prepare(`
+    INSERT INTO op_step (operation_id, ${CAMPI_PASSO.join(', ')}, created_by, updated_by, created_at, updated_at)
+    VALUES (?, ${segnaposti(CAMPI_PASSO.length)}, ?, ?, ?, ?)`)
+    .run(operationId, ...valori, createdBy || null, createdBy || null, ora, ora);
+  return getPasso(info.lastInsertRowid);
+}
+
+function aggiornaPasso(id, campi, updatedBy) {
+  const chiavi = Object.keys(campi || {}).filter((k) => CAMPI_PASSO.includes(k));
+  const set = chiavi.map((k) => `${k} = ?`).join(', ');
+  getDb().prepare(`UPDATE op_step SET ${set ? `${set}, ` : ''}updated_by = ?, updated_at = ? WHERE id = ?`)
+    .run(...chiavi.map((k) => campi[k]), updatedBy || null, Date.now(), id);
+  return getPasso(id);
+}
+
+function eliminaPasso(id) {
+  return getDb().prepare('DELETE FROM op_step WHERE id = ?').run(id).changes || 0;
+}
+
+/** Sostituisce le frecce che ENTRANO in un passo. In una transazione: a
+ *  metà, il passo resterebbe senza i suoi precedenti. */
+function impostaPrecedenti(stepId, fromIds) {
+  const d = getDb();
+  d.exec('BEGIN');
+  try {
+    d.prepare('DELETE FROM op_link WHERE to_step = ?').run(stepId);
+    const ins = d.prepare('INSERT OR IGNORE INTO op_link (from_step, to_step) VALUES (?, ?)');
+    for (const f of fromIds) ins.run(f, stepId);
+    d.exec('COMMIT');
+  } catch (err) {
+    d.exec('ROLLBACK');
+    throw err;
+  }
+}
+
 function dbStatus() {
   const one = (sql) => {
     try { return getDb().prepare(sql).get()?.n ?? 0; } catch { return null; }
@@ -1089,6 +1245,8 @@ function dbStatus() {
     eventiConfini: one('SELECT COUNT(*) AS n FROM border_event'),
     accessiNazione: one('SELECT COUNT(*) AS n FROM nation_access'),
     fotografieNazioni: one('SELECT COUNT(*) AS n FROM nation_snapshot'),
+    operazioni: one('SELECT COUNT(*) AS n FROM operation'),
+    passiOperazioni: one('SELECT COUNT(*) AS n FROM op_step'),
   };
 }
 
@@ -1109,6 +1267,8 @@ module.exports = {
   leggiStatoConfini, salvaStatoConfini, registraEventiConfini, eventiConfini,
   potaEventiConfini, inizioSorveglianzaConfini,
   accessiNazione, haAccessoNazione, aggiungiAccessoNazione, togliAccessoNazione,
+  listaOperazioni, contaOperazioniAttive, getOperazione, creaOperazione, aggiornaOperazione, eliminaOperazione,
+  passiDi, frecceDi, contaPassi, getPasso, creaPasso, aggiornaPasso, eliminaPasso, impostaPrecedenti,
   salvaIstantanea, istantaneaVicina, istantaneaPiuVecchia, potaIstantanee,
   audit, dbStatus,
 };

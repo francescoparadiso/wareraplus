@@ -638,29 +638,34 @@ async function idGoverno(countryId) {
 // Rotte
 // ---------------------------------------------------------------------------
 
+/** Di quale nazione si parla, e se chi guarda la governa. Fuori dal router
+ *  perché la usano anche le operazioni (operazioni.js): chi vede la nazione
+ *  vede i suoi piani, e un secondo posto in cui deciderlo sarebbe un
+ *  secondo posto in cui sbagliare. */
+async function contestoNazione(req) {
+  const eff = await calcolaEffettivi(req.identita, {});
+  let countryId = eff.derivati?.countryId || null;
+  const amministra = Boolean(req.account.is_admin) && !req.lente;
+  const scelto = String(req.query.paese || '').trim();
+  if (amministra && /^[a-f0-9]{24}$/i.test(scelto)) countryId = scelto;
+  if (!countryId && amministra) countryId = nazioniAmmesse()[0] || null;
+  const cap = eff.capacita || {};
+  const governa = Boolean(countryId && (cap.gestisceNazione || []).includes(countryId));
+  // La delega si controlla sulla nazione di cui il giocatore è cittadino
+  // ADESSO: cambiata cittadinanza, `countryId` è un altro e la riga non
+  // combacia più, senza che nessuno debba ricordarsi di toglierla.
+  const delegato = Boolean(countryId && haAccessoNazione(countryId, req.identita?.war_user_id));
+  const via = governa ? 'governo' : delegato ? 'delega' : amministra ? 'admin' : null;
+  return { countryId, governa, amministra, delegato, via, accesso: Boolean(via) };
+}
+
 function buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione }) {
   const router = express.Router();
   // Stessa catena del tavolo: sotto la lente si guarda con gli occhi del
   // bersaglio, filtro nazione compreso, e non si scrive.
   router.use(requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione);
 
-  /** Di quale nazione si parla, e se chi guarda la governa. */
-  async function contesto(req) {
-    const eff = await calcolaEffettivi(req.identita, {});
-    let countryId = eff.derivati?.countryId || null;
-    const amministra = Boolean(req.account.is_admin) && !req.lente;
-    const scelto = String(req.query.paese || '').trim();
-    if (amministra && /^[a-f0-9]{24}$/i.test(scelto)) countryId = scelto;
-    if (!countryId && amministra) countryId = nazioniAmmesse()[0] || null;
-    const cap = eff.capacita || {};
-    const governa = Boolean(countryId && (cap.gestisceNazione || []).includes(countryId));
-    // La delega si controlla sulla nazione di cui il giocatore è cittadino
-    // ADESSO: cambiata cittadinanza, `countryId` è un altro e la riga non
-    // combacia più, senza che nessuno debba ricordarsi di toglierla.
-    const delegato = Boolean(countryId && haAccessoNazione(countryId, req.identita?.war_user_id));
-    const via = governa ? 'governo' : delegato ? 'delega' : amministra ? 'admin' : null;
-    return { countryId, governa, amministra, delegato, via, accesso: Boolean(via) };
-  }
+  const contesto = contestoNazione;
 
   const puoGestire = (ctx) => ctx.governa || ctx.amministra;
 
@@ -870,4 +875,4 @@ function buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSotto
   return router;
 }
 
-module.exports = { buildNazioneRouter, quadroNazione, relazione, paesiMappa };
+module.exports = { buildNazioneRouter, contestoNazione, formaGoverno, quadroNazione, relazione, paesiMappa };

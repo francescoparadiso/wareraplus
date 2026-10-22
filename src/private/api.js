@@ -366,3 +366,42 @@ export function impostaCanaleAlleanza(url, { paese = null } = {}) {
 export function impostaCanaleConfini(url, { paese = null } = {}) {
   return callOrThrow(conPaese('/nazione/canale-confini', paese), { url });
 }
+
+// ---------------------------------------------------------------------------
+// Le operazioni della nazione
+// ---------------------------------------------------------------------------
+// Ogni scrittura risponde con l'elenco intero già aggiornato: la lavagna si
+// ridisegna da quello, senza una seconda lettura. `archiviate` viaggia anche
+// sulle scritture perché l'elenco che torna sia quello che si sta guardando.
+
+function percorsoOperazioni(sotto, { paese = null, archiviate = false } = {}) {
+  return conPaese(`/operazioni${sotto}${archiviate ? '?archiviate=1' : ''}`, paese);
+}
+
+export function leggiOperazioni({ asAccount = null, ...opz } = {}) {
+  return getJson(conLente(percorsoOperazioni('', opz), asAccount));
+}
+
+export function creaOperazione(dati, opz) {
+  return callOrThrow(percorsoOperazioni('', opz), dati);
+}
+
+export function modificaOperazione(id, dati, opz) {
+  return callOrThrow(percorsoOperazioni(`/${id}`, opz), dati);
+}
+
+export function eliminaOperazione(id, opz) {
+  return callOrThrow(percorsoOperazioni(`/${id}/remove`, opz));
+}
+
+export function aggiungiPasso(opId, dati, opz) {
+  return callOrThrow(percorsoOperazioni(`/${opId}/passi`, opz), dati);
+}
+
+export function modificaPasso(opId, passoId, dati, opz) {
+  return callOrThrow(percorsoOperazioni(`/${opId}/passi/${passoId}`, opz), dati);
+}
+
+export function eliminaPasso(opId, passoId, opz) {
+  return callOrThrow(percorsoOperazioni(`/${opId}/passi/${passoId}/remove`, opz));
+}

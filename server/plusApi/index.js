@@ -49,6 +49,8 @@ const { buildWealthRouter, buildWealthPublicRouter, initWealth, statoRicchezza }
 const { initWatcher, statoWatcher } = require('./watcher');
 // La mia nazione: quadro, confini sorvegliati, nemici. Vedi nazione.js.
 const { buildNazioneRouter } = require('./nazione');
+// La lavagna delle operazioni della nazione. Vedi operazioni.js.
+const { buildOperazioniRouter } = require('./operazioni');
 const { initConfini, statoConfini } = require('./confini');
 // Le fotografie orarie per le frecce "rispetto a 24 ore fa" della scheda.
 const { initIstantanee, statoIstantanee } = require('./istantanee');
@@ -171,6 +173,10 @@ app.use('/pubblico/ricchezza', buildWealthPublicRouter());
 // gioco richiesto, solo il filtro nazione. È la parte dell'area che non
 // dipende dall'avere una carica.
 app.use('/nazione', buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione }));
+
+// I piani della nazione: li vede chi vede la nazione, li scrive il governo
+// (gli stati dei passi, chiunque li veda). Vedi operazioni.js.
+app.use('/operazioni', buildOperazioniRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione }));
 
 app.use('/auth', buildAuthRouter({
   env: WP_ENV,

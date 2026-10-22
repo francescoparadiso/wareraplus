@@ -704,6 +704,25 @@ wareraPlus/
     │   │                          (alto/medio/ok, `--liv` in private.css). Grafici in SVG a
     │   │                          mano. Dati da /nazione e /nazione/nemici: nessuna chiamata nuova.
     │   ├── i18nNazione.js       ← dizionario (9 lingue) di nazione.js e delle sezioni
+    │   ├── operazioni.js        ← NUOVO (2026-10-22) — pagina "Operazioni", subito dopo la
+    │   │                          nazione: la lavagna dei piani. Un flowchart su un asse
+    │   │                          orario — corsie rivolte / fronte / supporto, una scheda per
+    │   │                          passo all'ora prevista, frecce SVG "questo dopo quello"
+    │   │                          (tratteggiate finché il precedente non è fatto). "In attesa"
+    │   │                          si RICAVA dalle frecce, non si salva. Regioni scelte per nome
+    │   │                          (datalist), la partenza di un attacco fra le confinanti
+    │   │                          (regionNeighbors). Badge "battaglia aperta" da /battles. Dati
+    │   │                          da /operazioni (server/plusApi/operazioni.js). Stili in
+    │   │                          src/styles/privateOperazioni.css.
+    │   ├── mappaOperazione.js   ← "Vedi sulla mappa": chiude l'area e disegna l'operazione
+    │   │                          sulla mappa PRINCIPALE (archi regione→regione con punta,
+    │   │                          cerchi e cartellini numerati, barra in basso con i passi,
+    │   │                          "Torna alla lavagna"). Toglie tutto alla chiusura. ⚠️ il
+    │   │                          punto di una regione è regionAnchor (geometria della mappa),
+    │   │                          NON regionData.position: vedi travelDistance.js.
+    │   ├── operazioniComuni.js  ← numero, stato ricavato, orario e colori di un passo:
+    │   │                          condivisi da lavagna e mappa
+    │   ├── i18nOperazioni.js    ← dizionario (9 lingue) delle operazioni
     │   ├── board.js, battles.js ← contratti mercenari (tavolo, battaglie, lista permessi)
     │   └── admin.js, selettori.js, api.js, i18n.js
     ├── panel/                   ← NUOVO

@@ -495,6 +495,17 @@ amministrazione restano identici. Tre cose da sapere prima di crederla rotta:
   (stesso blocco), MAI dal campo `allies`, fossile del 10 giugno: l'Italia
   vi ha ancora la Francia, con cui è in guerra.
 
+Le **Operazioni** dell'area riservata (`src/private/operazioni.js` +
+`mappaOperazione.js` + `server/plusApi/operazioni.js`, dal 2026-10-22) sono
+la lavagna dei piani: passi in sequenza con orari e frecce, e "Vedi sulla
+mappa". Dipendono dal redeploy di **warera-plus-api**: finché non lo fai
+`/operazioni` risponde 404 e la pagina dice che il server non le ha ancora
+(nessun guasto). Le vede chi vede "La mia nazione" — stessa funzione,
+`contestoNazione` — le scrive il governo, lo stato di un passo lo sposta
+chiunque le veda. ⚠️ Sulla mappa il punto di una regione è `regionAnchor`
+(geometria della mappa), NON `state.regionData[id].position`: per alcune
+regioni quella è la città di un'altra (Romagna & Tuscany = Milano).
+
 Il **danno ora per ora** e la **curva a 14 giorni** nella scheda nazione
 (`src/nations/damageCurves.js` + `server/damageTimeline.js`) dipendono da
 `/damage-timeline`: finché non rideployi la sezione non compare affatto —

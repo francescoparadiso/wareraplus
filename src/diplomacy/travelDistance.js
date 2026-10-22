@@ -132,6 +132,23 @@ export function regionName(id) {
   return state.regionData?.[id]?.name || _labelNames.get(id) || '—';
 }
 
+/** WarEra+: le regioni confinanti, dallo stesso grafo del viaggio. Le usa
+ *  la lavagna delle operazioni (src/private/operazioni.js) per proporre da
+ *  dove si può attaccare una regione: si attacca solo da un confine. */
+export function regionNeighbors(id) {
+  return graph().get(id) || [];
+}
+
+/** WarEra+: il punto della regione COME LA DISEGNA LA MAPPA (posizione della
+ *  geometria, ripiego sull'etichetta). Non `state.regionData[id].position`:
+ *  per alcune regioni quella è la città di un'altra — il 22/10/2026 Romagna
+ *  & Tuscany aveva la stessa di Northwestern Italy (Milano), e una freccia
+ *  fra le due finiva lunga zero. */
+export function regionAnchor(id) {
+  graph();
+  return _pos.get(id) || null;
+}
+
 function regionCountryId(id) {
   return state.regionData?.[id]?.country || null;
 }

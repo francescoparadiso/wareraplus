@@ -2726,5 +2726,11 @@ export function creaQuadroNazione(ctx) {
     if (!dati && !caricamento && !errore && !negato) carica();
   }
 
-  return { render, ricarica: carica, precarica, nuovi: () => (dati ? nuovi().length : 0) };
+  return {
+    render, ricarica: carica, precarica, nuovi: () => (dati ? nuovi().length : 0),
+    // Per la pagina Operazioni (main.js): la vede chi vede questa, sulla
+    // stessa nazione. null = non si sa ancora (quadro non arrivato).
+    accesso: () => (dati ? true : negato ? false : null),
+    paese: () => dati?.paese?.id || paeseScelto || null,
+  };
 }

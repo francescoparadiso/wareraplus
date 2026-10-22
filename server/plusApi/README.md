@@ -176,6 +176,27 @@ delle nazioni abilitate ogni ora alle :15 (tabella `nation_snapshot`,
 numeri confrontano con la fotografia più vecchia e scrivono quale.
 `/health` riporta `istantanee` con l'ultima fotografia.
 
+## Le operazioni (`operazioni.js`)
+
+La lavagna dei piani della nazione: un'operazione è una catena di passi
+(attacco, difesa, rivolta, pillole, contratto, altro) con regione, orario,
+priorità, incaricato e stato, più le frecce "questo dopo quello". Le vede
+chi vede la nazione (`contestoNazione` in `nazione.js`, stessa regola);
+le scrive il governo; lo **stato** di un passo lo sposta chiunque le veda.
+
+- `GET /operazioni` (`?archiviate=1` per includere le archiviate)
+- `POST /operazioni` — nuova (`titolo`, `nota`)
+- `POST /operazioni/:id` — titolo, nota, `stato` attiva/archiviata
+- `POST /operazioni/:id/remove`
+- `POST /operazioni/:id/passi` — nuovo passo (`dopo: [id…]` per le frecce)
+- `POST /operazioni/:id/passi/:pid` — modifica; senza governo solo `{stato}`
+- `POST /operazioni/:id/passi/:pid/remove`
+
+Ogni scrittura risponde con l'elenco intero aggiornato. Tre tabelle nuove
+(`operation`, `op_step`, `op_link`) nate dalla `CREATE TABLE IF NOT EXISTS`
+al primo riavvio: nessuna migrazione. Le frecce che chiuderebbero un cerchio
+si rifiutano (`ciclo`). `/health` → `db.operazioni`, `db.passiOperazioni`.
+
 ## Aggiornare
 
 ```bash
@@ -190,7 +211,7 @@ Poi il preflight, e solo se stampa `PREFLIGHT-OK`:
 
 ```bash
 ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 \
-  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && node --check wealth.js && node --check fonti.js && node --check confini.js && node --check nemici.js && node --check nazione.js && node --check istantanee.js && echo PREFLIGHT-OK"
+  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && node --check wealth.js && node --check fonti.js && node --check confini.js && node --check nemici.js && node --check nazione.js && node --check istantanee.js && node --check operazioni.js && echo PREFLIGHT-OK"
 ```
 
 ```bash

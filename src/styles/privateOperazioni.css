@@ -1,0 +1,292 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Area riservata: le operazioni
+   ------------------------------------------------------------------
+   La lavagna dei piani (src/private/operazioni.js) e il suo disegno
+   sulla mappa (src/private/mappaOperazione.js). In un file suo e non
+   in coda a private.css, che passa le 1.700 righe; importato da
+   operazioni.js, quindi arriva solo con l'area riservata. Le variabili
+   (--pv-*) sono quelle di #wp-private-root in private.css.
+
+   La lavagna è un flowchart su un asse orario: corsie orizzontali per
+   natura del passo, schede posizionate all'ora prevista, frecce SVG fra
+   un passo e quello dopo. La tela ha una larghezza sua e scorre in
+   orizzontale dentro la card: un piano di tre giorni non si stringe in
+   700 px.
+
+   I colori degli stati sono gli stessi delle frecce sulla mappa
+   (COLORI_STATO in operazioniComuni.js); in tema chiaro si scuriscono,
+   perché un grigio-azzurro chiaro su fondo bianco non si legge.
+   ══════════════════════════════════════════════════════════════ */
+#wp-private-root { --pv-op-fondo: #12181f; }
+body.light-theme #wp-private-root { --pv-op-fondo: #ffffff; }
+
+.wp-pv-op-st-da_fare   { --st: #cbd5e1; }
+.wp-pv-op-st-attesa    { --st: #f59e0b; }
+.wp-pv-op-st-in_corso  { --st: #60a5fa; }
+.wp-pv-op-st-fatta     { --st: #34d399; }
+.wp-pv-op-st-fallita   { --st: #f87171; }
+.wp-pv-op-st-annullata { --st: #94a3b8; }
+body.light-theme #wp-private-root .wp-pv-op-st-da_fare   { --st: #64748b; }
+body.light-theme #wp-private-root .wp-pv-op-st-attesa    { --st: #b45309; }
+body.light-theme #wp-private-root .wp-pv-op-st-in_corso  { --st: #2563eb; }
+body.light-theme #wp-private-root .wp-pv-op-st-fatta     { --st: #059669; }
+body.light-theme #wp-private-root .wp-pv-op-st-fallita   { --st: #dc2626; }
+body.light-theme #wp-private-root .wp-pv-op-st-annullata { --st: #94a3b8; }
+
+.wp-pv-op { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+.wp-pv-op-testa, .wp-pv-op-card { align-items: stretch; min-width: 0; }
+
+/* ── Le operazioni, una pillola ciascuna ──────────────────────────── */
+.wp-pv-op-barra { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; }
+.wp-pv-op-chip {
+  appearance: none;
+  display: inline-flex; align-items: center; gap: .45rem;
+  border: 1px solid var(--pv-rule);
+  background: transparent;
+  color: var(--pv-ink);
+  border-radius: 99px;
+  padding: .35rem .85rem;
+  font: inherit; font-size: .86rem;
+  cursor: pointer;
+}
+.wp-pv-op-chip:hover { border-color: var(--pv-accent); }
+.wp-pv-op-chip:focus-visible { outline: 2px solid var(--pv-accent); outline-offset: 2px; }
+.wp-pv-op-chip.attiva { background: var(--pv-accent-soft); border-color: var(--pv-accent); }
+.wp-pv-op-chip.archiviata { font-style: italic; color: var(--pv-ink-soft); }
+.wp-pv-op-chip-n { font-size: .74rem; color: var(--pv-ink-soft); }
+.wp-pv-op-arch { margin-left: auto; font-size: .82rem; color: var(--pv-ink-soft); }
+
+/* ── Testata dell'operazione scelta ───────────────────────────────── */
+.wp-pv-op-card-testa { display: flex; flex-wrap: wrap; gap: .75rem 1rem; justify-content: space-between; align-items: flex-start; }
+.wp-pv-op-card-nomi { display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
+.wp-pv-op-titolo { margin: 0; font-size: 1.15rem; font-weight: 700; }
+.wp-pv-op-meta { margin: 0; font-size: .75rem; color: var(--pv-ink-soft); }
+.wp-pv-op-azioni { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.wp-pv-op-pericolo:hover:not(:disabled) { border-color: var(--pv-danger); color: var(--pv-danger); }
+
+/* ── La tela ──────────────────────────────────────────────────────── */
+.wp-pv-op-flow {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--pv-rule);
+  border-radius: 8px;
+  background: var(--pv-surface);
+}
+.wp-pv-op-tela { position: relative; }
+.wp-pv-op-corsia { position: absolute; left: 0; right: 0; border-top: 1px solid var(--pv-rule); }
+.wp-pv-op-corsia.dispari { background: var(--pv-surface-2); }
+.wp-pv-op-corsia-nome {
+  position: absolute; left: 10px; top: 10px; width: 72px;
+  font-size: .7rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--pv-ink-soft);
+}
+.wp-pv-op-svg { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.wp-pv-op-griglia { stroke: var(--pv-rule); stroke-width: 1; }
+.wp-pv-op-adesso { stroke: #f87171; stroke-width: 1.5; }
+.wp-pv-op-freccia { fill: none; stroke: var(--pv-ink-soft); stroke-width: 1.6; }
+.wp-pv-op-freccia.attesa { stroke-dasharray: 5 4; }
+.wp-pv-op-punta { fill: var(--pv-ink-soft); }
+.wp-pv-op-tacca {
+  position: absolute; top: 7px; transform: translateX(-50%);
+  font-size: .7rem; color: var(--pv-ink-soft); white-space: nowrap;
+}
+.wp-pv-op-tacca-senza { transform: none; font-style: italic; }
+.wp-pv-op-adesso-testo { position: absolute; bottom: 3px; font-size: .7rem; font-weight: 600; color: #f87171; }
+
+/* ── Le schede ────────────────────────────────────────────────────── */
+.wp-pv-op-carta {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 6px 8px;
+  text-align: left;
+  font: inherit;
+  color: var(--pv-ink);
+  background: color-mix(in srgb, var(--st) 9%, var(--pv-op-fondo));
+  border: 1px solid color-mix(in srgb, var(--st) 60%, transparent);
+  border-radius: 8px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.wp-pv-op-carta:hover { border-color: var(--st); }
+.wp-pv-op-carta:focus-visible { outline: 2px solid var(--pv-accent); outline-offset: 2px; }
+.wp-pv-op-carta.scelta { box-shadow: 0 0 0 2px var(--pv-accent); }
+.wp-pv-op-carta.wp-pv-op-st-annullata .wp-pv-op-carta-tit { text-decoration: line-through; color: var(--pv-ink-soft); }
+.wp-pv-op-carta-testa {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  font-size: .66rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--pv-ink-soft);
+}
+.wp-pv-op-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 9px;
+  background: var(--st, var(--pv-accent));
+  color: #0b1220;
+  font-size: .7rem; font-weight: 800; letter-spacing: 0;
+}
+body.light-theme #wp-private-root .wp-pv-op-num { color: #fff; }
+.wp-pv-op-prio { margin-left: auto; color: var(--pv-danger); font-weight: 800; font-size: .85rem; }
+.wp-pv-op-carta-tit, .wp-pv-op-carta-sub {
+  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wp-pv-op-carta-tit { font-weight: 600; font-size: .88rem; }
+.wp-pv-op-carta-sub { font-size: .75rem; color: var(--pv-ink-soft); }
+.wp-pv-op-carta-piede { display: flex; gap: 4px; margin-top: auto; max-width: 100%; overflow: hidden; }
+.wp-pv-op-pill {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--st) 22%, transparent);
+  color: var(--st);
+  font-size: .68rem; font-weight: 600; white-space: nowrap;
+}
+.wp-pv-op-viva {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: rgba(248, 113, 113, .18);
+  color: #f87171;
+  font-size: .68rem; font-weight: 600; white-space: nowrap;
+}
+body.light-theme #wp-private-root .wp-pv-op-viva { color: #b42318; }
+
+.wp-pv-op-legenda { display: flex; flex-wrap: wrap; gap: .4rem .6rem; align-items: center; }
+.wp-pv-op-legenda-nota { font-size: .75rem; color: var(--pv-ink-soft); }
+
+/* ── Il passo aperto ──────────────────────────────────────────────── */
+.wp-pv-op-dettaglio {
+  display: flex; flex-direction: column; gap: .65rem;
+  padding: .85rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--st) 45%, var(--pv-rule));
+  border-radius: 8px;
+  background: var(--pv-surface-2);
+}
+.wp-pv-op-dettaglio-testa { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.wp-pv-op-fatti { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .25rem 1rem; margin: 0; font-size: .88rem; }
+.wp-pv-op-fatti dt { color: var(--pv-ink-soft); }
+.wp-pv-op-fatti dd { margin: 0; overflow-wrap: anywhere; }
+.wp-pv-op-sposta { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.wp-pv-op-sposta .wp-pv-btn { border-color: color-mix(in srgb, var(--st) 55%, transparent); color: var(--st); }
+.wp-pv-op-sposta .wp-pv-btn:hover:not(:disabled) { border-color: var(--st); color: var(--st); }
+
+/* ── I moduli ─────────────────────────────────────────────────────── */
+.wp-pv-op-modulo {
+  display: flex; flex-direction: column; gap: .65rem;
+  padding: .9rem 1rem;
+  border: 1px dashed var(--pv-rule);
+  border-radius: 8px;
+}
+.wp-pv-op-modulo-titolo { margin: 0; font-size: .95rem; }
+.wp-pv-op-griglia-campi { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: .6rem .8rem; }
+.wp-pv-op-dopo {
+  display: flex; flex-wrap: wrap; gap: .3rem 1rem;
+  margin: 0; padding: .55rem .75rem;
+  border: 1px solid var(--pv-rule);
+  border-radius: 8px;
+}
+.wp-pv-op-dopo legend { padding: 0 .3rem; }
+.wp-pv-op-dopo .wp-pv-check { font-size: .85rem; }
+.wp-pv-op-dopo .wp-pv-check:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+.wp-pv-op-nota { resize: vertical; min-height: 3rem; }
+/* Il calendario di datetime-local segue il tema solo se glielo si dice. */
+#wp-private-root .wp-pv-op-modulo input[type="datetime-local"] { color-scheme: dark; }
+body.light-theme #wp-private-root .wp-pv-op-modulo input[type="datetime-local"] { color-scheme: light; }
+
+@media (max-width: 760px) {
+  .wp-pv-op-arch { margin-left: 0; }
+  .wp-pv-op-fatti { grid-template-columns: minmax(0, 1fr); }
+  .wp-pv-op-fatti dd { margin-bottom: .35rem; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Sulla mappa (src/private/mappaOperazione.js)
+   ------------------------------------------------------------------
+   Le uniche regole fuori da #wp-private-root: i cartellini stanno
+   dentro la mappa (marker MapLibre) e la barra sopra di lei, cioè
+   fuori dall'area riservata, che a quel punto è chiusa. Prefisso wp-op-
+   perché non incontrino niente di Diplomacy.
+   ══════════════════════════════════════════════════════════════ */
+/* Sopra ai marker delle battaglie (2000): sulla stessa regione il
+   riquadro della battaglia copriva il numero del passo. */
+.maplibregl-marker.wp-op-segno { z-index: 2100; }
+.wp-op-segno {
+  display: flex; align-items: center; gap: 5px;
+  padding: 2px 9px 2px 3px;
+  border-radius: 99px;
+  background: rgba(13, 17, 23, .92);
+  border: 1.5px solid var(--st);
+  color: #e6edf3;
+  font: 600 12px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .45);
+}
+.wp-op-segno-n, .wp-op-mapbar-passo b {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 9px;
+  background: var(--st);
+  color: #0b1220;
+  font-size: 11px; font-weight: 800;
+}
+.wp-op-segno-ora { color: var(--st); }
+.wp-op-segno-tit { max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+body.light-theme .wp-op-segno { background: rgba(255, 255, 255, .95); color: #1a1a1a; }
+
+#wp-op-mapbar {
+  position: fixed;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  z-index: 2900;
+  width: min(760px, calc(100vw - 24px));
+  box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(13, 17, 23, .94);
+  border: 1px solid rgba(129, 140, 248, .45);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .5);
+  color: #e6edf3;
+  font-size: 13px;
+}
+.wp-op-mapbar-testa { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wp-op-mapbar-label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #818cf8; }
+.wp-op-mapbar-titolo { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-op-mapbar-azioni { display: flex; gap: 6px; flex-shrink: 0; }
+.wp-op-mapbar-btn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, .18);
+  background: transparent;
+  color: inherit;
+  border-radius: 7px;
+  padding: 5px 10px;
+  font: inherit; font-weight: 600;
+  cursor: pointer;
+}
+.wp-op-mapbar-btn:hover { border-color: #818cf8; }
+.wp-op-mapbar-btn:focus-visible { outline: 2px solid #818cf8; outline-offset: 2px; }
+.wp-op-mapbar-x { padding: 4px 10px; font-size: 16px; line-height: 1; }
+.wp-op-mapbar-passi { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.wp-op-mapbar-passo {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--st);
+  background: color-mix(in srgb, var(--st) 14%, transparent);
+  color: inherit;
+  border-radius: 99px;
+  padding: 3px 10px 3px 3px;
+  font: inherit; font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.wp-op-mapbar-nota { margin: 0; font-size: 11.5px; color: #8b949e; }
+body.light-theme #wp-op-mapbar { background: rgba(250, 250, 252, .97); border-color: rgba(79, 70, 229, .35); color: #1a1a1a; }
+body.light-theme .wp-op-mapbar-label { color: #4f46e5; }
+body.light-theme .wp-op-mapbar-btn { border-color: rgba(0, 0, 0, .15); }
+body.light-theme .wp-op-mapbar-nota { color: #4a5560; }
+@media (max-width: 768px) {
+  #wp-op-mapbar { bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+}
