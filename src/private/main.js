@@ -67,6 +67,10 @@ let comeAltri = null;         // id dell'account che si sta guardando
 let tavolo = null;
 let quadro = null;            // la mia nazione (nazione.js)
 let operazioni = null;        // la lavagna delle operazioni (operazioni.js)
+// La colonna del profilo: null = automatico (chiusa su Operazioni), poi la
+// scelta a mano. animaChiusura: la prossima chiusura si vede scorrere.
+let profiloChiuso = null;
+let animaChiusura = true;
 let pannelloAdmin = null;
 
 // Quante richieste aspettano una decisione, per scriverlo sulla sezione
@@ -274,6 +278,29 @@ function disegna() {
     }
 
   }
+
+  // ── Il profilo si chiude ───────────────────────────────────────────
+  // Richiesta dell'utente: sulla lavagna delle operazioni la colonna del
+  // profilo ruba larghezza al grafico. Si chiude da sola (con
+  // un'animazione) quando si apre Operazioni, e una linguetta la riapre;
+  // la scelta a mano vale per il resto della visita.
+  const chiuso = colonnaSx.childNodes.length > 0 && (profiloChiuso ?? schedaAttiva === 'operazioni');
+  if (colonnaSx.childNodes.length) {
+    const leva = el('button', 'wp-pv-leva', chiuso ? '›' : '‹');
+    leva.type = 'button';
+    leva.title = chiuso ? nzT('profileShow') : nzT('profileHide');
+    leva.setAttribute('aria-label', leva.title);
+    leva.setAttribute('aria-expanded', String(!chiuso));
+    leva.addEventListener('click', () => { profiloChiuso = !chiuso; animaChiusura = false; render(); });
+    colonnaSx.prepend(leva);
+  }
+  if (chiuso) {
+    // La prima volta si disegna aperta e si chiude al fotogramma dopo, così
+    // la transizione della griglia ha un punto da cui partire.
+    if (animaChiusura) requestAnimationFrame(() => wrap.classList.add('profilo-chiuso'));
+    else wrap.classList.add('profilo-chiuso');
+  }
+  animaChiusura = !chiuso;
 
   wrap.appendChild(colonnaSx);
   wrap.appendChild(colonnaDx);

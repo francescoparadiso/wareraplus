@@ -123,6 +123,18 @@ body.light-theme #wp-private-root .wp-pv-op-st-annullata { --st: #94a3b8; }
 .wp-pv-op-dettaglio-testa .wp-pv-op-x { margin-left: auto; }
 
 /* La colonna delle battaglie aperte. */
+/* La priorità di guerra sulla linea del tempo. */
+.wp-pv-op-prio-linea { stroke: #f87171; stroke-width: 1.5; stroke-dasharray: 2 3; }
+.wp-pv-op-prio-linea.nostra { stroke: #34d399; }
+.wp-pv-op-prio-barra {
+  position: absolute; z-index: 3; height: 13px; box-sizing: border-box;
+  padding: 0 6px; border-radius: 0 6px 6px 0; overflow: hidden; white-space: nowrap;
+  font-size: .64rem; font-weight: 700; line-height: 13px; color: #fff;
+  background: rgba(220, 38, 38, .75); pointer-events: auto;
+}
+.wp-pv-op-prio-barra.nostra { background: rgba(5, 150, 105, .8); }
+.wp-pv-op-conto { font-variant-numeric: tabular-nums; }
+
 /* L'ora dopo la conquista in cui la regione non è attaccabile. */
 .wp-pv-op-buffer {
   position: absolute; box-sizing: border-box;
@@ -157,6 +169,14 @@ body.light-theme #wp-private-root .wp-pv-op-st-annullata { --st: #94a3b8; }
   background: var(--pv-accent); color: #fff;
 }
 .wp-pv-op-legenda-fascia { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: .68rem; font-weight: 600; color: var(--pv-ink-soft); position: static; }
+/* L'auto-builder, nel pannello a destra. */
+.wp-pv-op-auto { display: flex; flex-direction: column; gap: .5rem; }
+.wp-pv-op-auto-modi { display: flex; flex-wrap: wrap; gap: .3rem; }
+.wp-pv-op-auto-modi .attivo { border-color: var(--pv-accent); color: var(--pv-ink); background: var(--pv-accent-soft); }
+.wp-pv-op-auto-nazioni { width: 100%; }
+.wp-pv-op-auto-voce { align-items: flex-start; padding: .3rem .4rem; border: 1px solid var(--pv-rule); border-radius: 7px; }
+.wp-pv-op-auto-voce input { margin-top: .15rem; }
+.wp-pv-op-auto-piede { display: flex; flex-direction: column; gap: .35rem; align-items: stretch; }
 .wp-pv-op-corpo.senza-lato { grid-template-columns: minmax(0, 1fr); }
 .wp-pv-op-battaglie { display: flex; flex-direction: column; gap: .4rem; }
 .wp-pv-op-batt-testa { display: flex; align-items: center; justify-content: space-between; }
@@ -405,6 +425,20 @@ body.light-theme .wp-op-segno { background: rgba(255, 255, 255, .95); color: #1a
   cursor: pointer;
 }
 .wp-op-mapbar-nota { margin: 0; font-size: 11.5px; color: #8b949e; }
+.wp-op-mapbar-btn.attivo { background: #818cf8; border-color: #818cf8; color: #fff; }
+/* Il riquadro per aggiungere un passo cliccando una regione. */
+.wp-op-popup .maplibregl-popup-content { background: rgba(13, 17, 23, .97); color: #e6edf3; border-radius: 10px; padding: 10px 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); }
+.wp-op-popup .maplibregl-popup-tip { border-top-color: rgba(13, 17, 23, .97); border-bottom-color: rgba(13, 17, 23, .97); }
+.wp-op-popup .maplibregl-popup-close-button { color: #8b949e; font-size: 16px; }
+.wp-op-popup-modulo { display: flex; flex-direction: column; gap: 6px; font: 13px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.wp-op-popup-modulo select, .wp-op-popup-modulo input {
+  font: inherit; color: inherit; background: transparent; color-scheme: dark;
+  border: 1px solid rgba(255, 255, 255, .18); border-radius: 6px; padding: 4px 6px;
+}
+.wp-op-popup-modulo select option { background: #141d20; }
+.wp-op-popup-esito { margin: 0; font-size: 11.5px; color: #f87171; }
+body.light-theme .wp-op-popup .maplibregl-popup-content { background: #fff; color: #1a1a1a; }
+body.light-theme .wp-op-popup-modulo select, body.light-theme .wp-op-popup-modulo input { color-scheme: light; border-color: rgba(0, 0, 0, .15); }
 body.light-theme #wp-op-mapbar { background: rgba(250, 250, 252, .97); border-color: rgba(79, 70, 229, .35); color: #1a1a1a; }
 body.light-theme .wp-op-mapbar-label { color: #4f46e5; }
 body.light-theme .wp-op-mapbar-btn { border-color: rgba(0, 0, 0, .15); }

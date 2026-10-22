@@ -34,6 +34,8 @@ import { arc, alongArc } from '../diplomacy/flowGeometry.js';
 import { regionName, regionAnchor } from '../diplomacy/travelDistance.js';
 import { showToast } from '../diplomacy/utils.js';
 import { closePrivateView, openPrivateView } from '../app/privateOverlay.js';
+// WarEra+: spegnere i marker delle battaglie mentre il piano è sulla mappa.
+import { toggleBattleMarkers } from '../diplomacy/battleMarkers.js';
 import { opT } from './i18nOperazioni.js';
 import { COLORI_STATO, oraBreve } from './operazioniComuni.js';
 
@@ -54,6 +56,11 @@ const DA_VENIRE = new Set(['da_fare', 'attesa']);
 
 let _marker = [];
 let _barra = null;
+let _corrente = null;              // { op, numero, stati, aggiungiDaMappa }
+let _battaglieDaRiaccendere = false;
+let _modoAggiunta = false;
+let _popup = null;
+let _staccaClic = null;
 
 /** Dove sta una regione sulla mappa: il punto della geometria (vedi
  *  regionAnchor), poi quello del gioco come ripiego. */
@@ -244,6 +251,20 @@ function barra(map, op, { numero, stati }) {
   chiudi.setAttribute('aria-label', opT('mapClose'));
   chiudi.title = opT('mapClose');
   chiudi.addEventListener('click', () => nascondiOperazione());
+  if (_corrente?.aggiungiDaMappa) {
+    const piu = el('button', `wp-op-mapbar-btn${_modoAggiunta ? ' attivo' : ''}`, opT('mapAddMode'));
+    piu.type = 'button';
+    piu.setAttribute('aria-pressed', String(_modoAggiunta));
+    piu.title = opT('mapAddHint');
+    piu.addEventListener('click', () => {
+      _modoAggiunta = !_modoAggiunta;
+      map.getCanvas().style.cursor = _modoAggiunta ? 'crosshair' : '';
+      if (!_modoAggiunta) { _popup?.remove(); _popup = null; }
+      piu.classList.toggle('attivo', _modoAggiunta);
+      piu.setAttribute('aria-pressed', String(_modoAggiunta));
+    });
+    azioni.appendChild(piu);
+  }
   azioni.appendChild(torna);
   azioni.appendChild(chiudi);
   testa.appendChild(azioni);
@@ -271,8 +292,11 @@ function barra(map, op, { numero, stati }) {
 }
 
 /** Porta un'operazione sulla mappa. `numero` e `stati` arrivano dalla
- *  lavagna, così la mappa dice esattamente quello che diceva la scheda. */
-export function mostraOperazione(op, { numero, stati }) {
+ *  lavagna, così la mappa dice esattamente quello che diceva la scheda.
+ *  `aggiungiDaMappa(regione, tipo, quando)` — dalla lavagna anche quella —
+ *  salva un passo nuovo e risponde con l'operazione aggiornata: è il
+ *  "+ Aggiungi dalla mappa" della barra. */
+export function mostraOperazione(op, { numero, stati, aggiungiDaMappa = null }) {
   const map = state.map;
   if (!map?.getLayer('regions-fill')) { showToast(opT('mapNotReady'), 'warning'); return; }
   // La time machine nasconde la mappa principale: il piano finirebbe
@@ -280,13 +304,30 @@ export function mostraOperazione(op, { numero, stati }) {
   if (state.timeMachineActive) { showToast(opT('mapTimeMachine'), 'warning'); return; }
 
   nascondiOperazione();
+  _corrente = { op, numero, stati, aggiungiDaMappa };
+  // Le battaglie in corso si spengono: i loro riquadri coprono il piano.
+  // Si riaccendono alla chiusura, ma solo se erano accese.
+  const casella = document.getElementById('checkActiveBattles');
+  _battaglieDaRiaccendere = Boolean(casella?.checked);
+  if (_battaglieDaRiaccendere) toggleBattleMarkers(false);
+  disegna(map);
+  ascoltaClic(map);
+  closePrivateView();
+  inquadra(map, op);
+}
+
+/** Layer, cartellini e barra dell'operazione corrente. */
+function disegna(map) {
+  for (const m of _marker) m.remove();
+  _marker = [];
+  _barra?.remove();
+  togliLayer(map);
+  const { op, numero, stati } = _corrente;
   const { feats, regioni } = costruisci(op, { stati });
   aggiungiLayer(map, regioni);
   map.getSource(SRC)?.setData({ type: 'FeatureCollection', features: feats });
   aggiungiCartellini(map, op, { numero, stati });
   _barra = barra(map, op, { numero, stati });
-  closePrivateView();
-  inquadra(map, op);
 }
 
 export function nascondiOperazione() {
@@ -294,5 +335,85 @@ export function nascondiOperazione() {
   _marker = [];
   _barra?.remove();
   _barra = null;
-  if (state.map) togliLayer(state.map);
+  _popup?.remove();
+  _popup = null;
+  _modoAggiunta = false;
+  if (state.map) {
+    togliLayer(state.map);
+    state.map.getCanvas().style.cursor = '';
+  }
+  if (_staccaClic) { _staccaClic(); _staccaClic = null; }
+  if (_battaglieDaRiaccendere) { toggleBattleMarkers(true); _battaglieDaRiaccendere = false; }
+  _corrente = null;
+}
+
+// ── Aggiungere passi dalla mappa ───────────────────────────────────
+// Con "+ Aggiungi dalla mappa" acceso, un clic su una regione apre un
+// riquadro lì: tipo, ora, Aggiungi. Il clic si prende PRIMA della mappa
+// (fase di cattura sul suo contenitore) e lì si ferma, così non apre anche
+// il pannello della nazione. Un trascinamento non conta come clic.
+
+function ascoltaClic(map) {
+  const box = map.getContainer();
+  let giu = null;
+  const premi = (e) => { giu = { x: e.clientX, y: e.clientY }; };
+  const clic = (e) => {
+    if (!_modoAggiunta || !_corrente?.aggiungiDaMappa) return;
+    if (e.target.closest?.('.maplibregl-popup, .wp-op-segno')) return;
+    if (giu && Math.hypot(e.clientX - giu.x, e.clientY - giu.y) > 5) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const r = box.getBoundingClientRect();
+    const punto = [e.clientX - r.left, e.clientY - r.top];
+    const regione = map.queryRenderedFeatures(punto, { layers: ['regions-fill'] })[0]?.properties?.regionId;
+    if (regione) apriRiquadro(map, regione, map.unproject(punto));
+  };
+  box.addEventListener('mousedown', premi, true);
+  box.addEventListener('click', clic, true);
+  _staccaClic = () => {
+    box.removeEventListener('mousedown', premi, true);
+    box.removeEventListener('click', clic, true);
+  };
+}
+
+function prossimoQuarto() {
+  const q = 15 * 60_000;
+  return Math.ceil((Date.now() + 30 * 60_000) / q) * q;
+}
+
+function perCampo(ms) {
+  const d = new Date(ms);
+  const z = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`;
+}
+
+function apriRiquadro(map, regione, lngLat) {
+  _popup?.remove();
+  const f = el('form', 'wp-op-popup-modulo');
+  f.appendChild(el('strong', null, regionName(regione)));
+  const tipo = el('select');
+  for (const k of ['attacco', 'difesa', 'rivolta', 'pillole', 'altro']) {
+    tipo.appendChild(Object.assign(el('option', null, opT(`kind_${k}`)), { value: k }));
+  }
+  const quando = el('input');
+  quando.type = 'datetime-local';
+  quando.value = perCampo(prossimoQuarto());
+  const esito = el('p', 'wp-op-popup-esito');
+  const ok = el('button', 'wp-op-mapbar-btn', opT('quickAdd'));
+  ok.type = 'submit';
+  f.append(tipo, quando, ok, esito);
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    ok.disabled = true;
+    esito.textContent = '';
+    const ms = quando.value ? new Date(quando.value).getTime() : null;
+    const nuovo = await _corrente?.aggiungiDaMappa(regione, tipo.value, Number.isFinite(ms) ? ms : null);
+    if (!nuovo) { esito.textContent = opT('errServer'); ok.disabled = false; return; }
+    _corrente = { ..._corrente, ...nuovo };
+    _popup?.remove();
+    _popup = null;
+    disegna(map);
+  });
+  _popup = new maplibregl.Popup({ closeOnClick: false, className: 'wp-op-popup', maxWidth: '240px' })
+    .setLngLat(lngLat).setDOMContent(f).addTo(map);
 }

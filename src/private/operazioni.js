@@ -99,6 +99,40 @@ function testoBattaglia(b) {
   return t('battleLine2', { n: f.round, a: f.a, d: f.d, pa: f.pa, pd: f.pd, round: oraBreve(f.fineRound), fine });
 }
 
+// ── Conti alla rovescia vivi ──────────────────────────────────────
+// La priorità di guerra scade a un istante preciso: il numero deve
+// scendere da solo, non restare quello del momento del disegno. Ogni conto
+// è uno <span data-scade> e un solo intervallo li aggiorna tutti ogni
+// secondo, senza ridisegnare la pagina. Quando uno arriva a zero la
+// lavagna si ridisegna una volta: la priorità scaduta sparisce da sola.
+
+function conto(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+  const z = (n) => String(n).padStart(2, '0');
+  return h ? `${h}h ${z(m)}m ${z(x)}s` : `${m}m ${z(x)}s`;
+}
+
+function contoVivo(fine) {
+  const s = el('span', 'wp-pv-op-conto', conto(fine - Date.now()));
+  s.dataset.scade = String(fine);
+  return s;
+}
+
+let _ticker = null;
+function avviaConti(allaScadenza) {
+  if (_ticker) return;
+  _ticker = setInterval(() => {
+    let scaduto = false;
+    for (const e of document.querySelectorAll('.wp-pv-op-conto[data-scade]')) {
+      const resta = Number(e.dataset.scade) - Date.now();
+      e.textContent = conto(resta);
+      if (resta <= 0 && !e.dataset.finito) { e.dataset.finito = '1'; scaduto = true; }
+    }
+    if (scaduto) allaScadenza();
+  }, 1000);
+}
+
 /** "12 h 36 min", "45 min". */
 function durata(ms) {
   const min = Math.max(0, Math.round(ms / 60000));
@@ -272,11 +306,13 @@ export function creaOperazioni(ctx) {
   let moduloPasso = null;       // { nodo, id: number|null }
   let rapido = null;            // aggiunta rapida aperta sul grafico: { nodo, x, y }
   let menuStato = null;         // id del passo col menu dello stato aperto
+  let autoBuilder = null;       // { modo: nazione|alleanza|scelte, scelte: Set, tolte: Set }
   let battaglieVisibili = (() => { try { return localStorage.getItem(CHIAVE_BATTAGLIE) !== '0'; } catch { return true; } })();
   let cercaBatt = null;         // campo di ricerca delle battaglie (sopravvive ai ridisegni)
   let riempiBatt = null;        // ridisegna solo l'elenco filtrato
 
   const opzioni = () => ({ paese: ctx.paese?.() || null, archiviate });
+  avviaConti(() => ctx.ridisegna());
   // Sotto la lente il server rifiuta ogni scrittura: i bottoni del governo
   // non si mostrano nemmeno, anche se la persona guardata governa.
   const pianifica = () => Boolean(dati?.puoPianificare) && !ctx.lente();
@@ -474,16 +510,34 @@ export function creaOperazioni(ctx) {
     card.appendChild(testa);
     // La bozza non ha ancora niente da mostrare sulla mappa, modificare o
     // archiviare: solo il grafico.
-    if (!op.id) return cardCorpo(card, op, { numero, stati, perId });
-    const conRegione = op.passi.some((p) => p.regione);
+    if (!op.id) {
+      // L'auto-builder sì: è il modo più veloce di riempire un piano vuoto.
+      if (pianifica()) {
+        azioni.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', opT('autoBuild'), () => {
+          autoBuilder = { modo: 'nazione', scelte: new Set(), tolte: new Set() };
+          ctx.ridisegna();
+        }));
+      }
+      return cardCorpo(card, op, { numero, stati, perId });
+    }
+    // Sempre attivo: chi pianifica può anche partire dalla mappa, cliccando
+    // le regioni (aggiungiDaMappa), senza nessun passo ancora.
     const mappa = bottone('wp-pv-btn-primary wp-pv-btn-small', opT('showOnMap'), () => {
       trackEvent('private-operation-map');
-      mostraOperazione(op, { numero, stati });
+      mostraOperazione(op, {
+        numero, stati,
+        aggiungiDaMappa: pianifica() && op.stato !== 'archiviata' ? (r, tipo, quando) => aggiungiDaMappa(op, r, tipo, quando) : null,
+      });
     });
-    if (!conRegione) { mappa.disabled = true; mappa.title = opT('mapNoRegions'); }
+    if (!op.passi.some((p) => p.regione) && !pianifica()) mappa.title = opT('mapNoRegions');
     azioni.appendChild(mappa);
     if (pianifica() && op.stato !== 'archiviata') {
       azioni.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', opT('addStep'), () => apriModuloPasso(op, null)));
+      azioni.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', opT('autoBuild'), () => {
+        autoBuilder = { modo: 'nazione', scelte: new Set(), tolte: new Set() };
+        passoAperto = null; moduloPasso = null;
+        ctx.ridisegna();
+      }));
     }
     if (pianifica()) {
       azioni.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', opT('editOp'), () => {
@@ -525,7 +579,8 @@ export function creaOperazioni(ctx) {
     const aperto = passoAperto != null ? perId.get(passoAperto) : null;
     if (moduloPasso) lato.appendChild(moduloPasso.nodo);
     else if (aperto) lato.appendChild(dettaglioPasso(op, aperto, { numero, stati }));
-    if (modificabile && battaglieVisibili) lato.appendChild(colonnaBattaglie(op));
+    if (modificabile && autoBuilder) lato.appendChild(pannelloAuto(op));
+    else if (modificabile && battaglieVisibili) lato.appendChild(colonnaBattaglie(op));
     // Pannello vuoto (battaglie chiuse, nessun passo aperto): il grafico
     // prende tutta la larghezza.
     if (lato.childNodes.length) corpo.appendChild(lato);
@@ -564,12 +619,157 @@ export function creaOperazioni(ctx) {
     return true;
   }
 
+  /** Un passo nuovo dalla mappa: la regione cliccata, il tipo e l'ora
+   *  scelti nel riquadro. La partenza di un attacco (una nostra confinante)
+   *  o di una difesa (una loro confinante) si mette da sé se è una sola.
+   *  Risponde con l'operazione aggiornata, numeri e stati, o null. */
+  async function aggiungiDaMappa(op, regione, tipo, quando) {
+    const noi = dati.countryId;
+    let daRegione = null;
+    if (CON_PARTENZA.has(tipo)) {
+      const vicine = regionNeighbors(regione).filter((v) => {
+        const c = state.regionData?.[v]?.country;
+        return tipo === 'attacco' ? c === noi : c && c !== noi;
+      });
+      if (vicine.length === 1) daRegione = vicine[0];
+    }
+    if (!(await aggiungi(op, { tipo, regione, daRegione, quando }))) return null;
+    const nuovo = (dati.operazioni || []).find((o) => o.id === (op.id || sceltaId));
+    if (!nuovo) return null;
+    const perId = new Map(nuovo.passi.map((p) => [p.id, p]));
+    return { op: nuovo, numero: numeriPassi(nuovo.passi), stati: new Map(nuovo.passi.map((p) => [p.id, statoVisto(p, perId)])) };
+  }
+
+  // ── Auto-builder ─────────────────────────────────────────────────
+  // Tutte le battaglie aperte di una scelta in un colpo: la nostra nazione,
+  // la nostra alleanza (allianceId di state.nationMap, già in memoria) o
+  // nazioni a scelta. Prima un elenco da spuntare, poi "Aggiungi": niente
+  // entra nel piano senza che lo si sia visto. Il tetto di 40 passi per
+  // operazione (server) lo dice prima, non dopo un errore a metà.
+
+  const MAX_PASSI_OPERAZIONE = 40;
+
+  function paesiAuto() {
+    const noi = dati.countryId;
+    if (autoBuilder.modo === 'nazione') return new Set([noi]);
+    if (autoBuilder.modo === 'alleanza') {
+      const all = state.nationMap?.get(noi)?.allianceId;
+      if (!all) return null;
+      return new Set([...state.nationMap.values()].filter((n) => n.allianceId === all).map((n) => n._id));
+    }
+    return autoBuilder.scelte;
+  }
+
+  function pannelloAuto(op) {
+    const box = el('div', 'wp-pv-op-auto');
+    const testa = el('div', 'wp-pv-op-batt-testa');
+    testa.appendChild(el('span', 'wp-pv-label', opT('autoTitle')));
+    const chiudi = bottone('wp-pv-op-x', '×', () => { autoBuilder = null; ctx.ridisegna(); });
+    chiudi.setAttribute('aria-label', opT('close'));
+    testa.appendChild(chiudi);
+    box.appendChild(testa);
+
+    const modi = el('div', 'wp-pv-op-auto-modi');
+    for (const [k, etichetta] of [['nazione', 'autoNation'], ['alleanza', 'autoAlliance'], ['scelte', 'autoChosen']]) {
+      const b = bottone(`wp-pv-btn-quiet wp-pv-btn-small${autoBuilder.modo === k ? ' attivo' : ''}`, opT(etichetta), () => {
+        autoBuilder.modo = k; autoBuilder.tolte = new Set(); ctx.ridisegna();
+      });
+      b.setAttribute('aria-pressed', String(autoBuilder.modo === k));
+      modi.appendChild(b);
+    }
+    box.appendChild(modi);
+
+    const lista = el('div', 'wp-pv-op-batt-lista');
+    const piede = el('div', 'wp-pv-op-auto-piede');
+    const gia = new Set(op.passi.map((p) => p.battaglia).filter(Boolean));
+    const posto = Math.max(0, MAX_PASSI_OPERAZIONE - op.passi.length);
+
+    // Ridisegna solo l'elenco: il menu delle nazioni a scelta non perde la
+    // selezione né lo scorrimento.
+    const riempi = () => {
+      lista.textContent = ''; piede.textContent = '';
+      const paesi = paesiAuto();
+      if (!paesi) { lista.appendChild(el('p', 'wp-pv-note', opT('autoNoAlliance'))); return; }
+      const elenco = [...viveId.values()]
+        .filter((b) => (paesi.has(b.attacker?.country) || paesi.has(b.defender?.country)) && !gia.has(b._id));
+      if (!elenco.length) { lista.appendChild(el('p', 'wp-pv-note', opT('autoNone'))); return; }
+      for (const b of elenco) {
+        const r = el('label', 'wp-pv-check wp-pv-op-auto-voce');
+        const cb = el('input');
+        cb.type = 'checkbox';
+        cb.checked = !autoBuilder.tolte.has(b._id);
+        cb.addEventListener('change', () => { if (cb.checked) autoBuilder.tolte.delete(b._id); else autoBuilder.tolte.add(b._id); conta(); });
+        r.appendChild(cb);
+        const testo = el('span', 'wp-pv-op-batt-testo');
+        testo.appendChild(el('span', 'wp-pv-op-batt-nome', etichettaBattaglia(b)));
+        testo.appendChild(el('span', 'wp-pv-op-batt-sub', `${opT(`kind_${corpoDaBattaglia(b, paesi).tipo}`)} · ${testoBattaglia(b)}`));
+        r.appendChild(testo);
+        lista.appendChild(r);
+      }
+      const nota = el('p', 'wp-pv-note');
+      const ok = el('button', 'wp-pv-btn wp-pv-btn-primary wp-pv-btn-small');
+      ok.type = 'button';
+      const scelte = () => elenco.filter((b) => !autoBuilder.tolte.has(b._id));
+      const conta = () => {
+        const n = Math.min(scelte().length, posto);
+        ok.textContent = t('autoAdd', { n });
+        ok.disabled = n === 0 || occupato;
+        nota.textContent = scelte().length > posto ? t('autoLimit', { n: posto }) : '';
+      };
+      ok.addEventListener('click', () => aggiungiTante(op, scelte().slice(0, posto), paesi));
+      piede.append(nota, ok);
+      conta();
+    };
+
+    if (autoBuilder.modo === 'scelte') {
+      const sel = el('select', 'wp-pv-select wp-pv-op-auto-nazioni');
+      sel.multiple = true;
+      sel.size = 7;
+      const nazioni = [...(state.nationMap?.entries() || [])]
+        .map(([id, n]) => [id, n?.name || id]).sort((a, b) => a[1].localeCompare(b[1]));
+      for (const [id, nome] of nazioni) {
+        const o = Object.assign(el('option', null, nome), { value: id });
+        o.selected = autoBuilder.scelte.has(id);
+        sel.appendChild(o);
+      }
+      sel.addEventListener('change', () => {
+        autoBuilder.scelte = new Set([...sel.selectedOptions].map((o) => o.value));
+        riempi();
+      });
+      box.appendChild(sel);
+      box.appendChild(el('p', 'wp-pv-note', opT('autoChosenHint')));
+    }
+    box.appendChild(lista);
+    box.appendChild(piede);
+    riempi();
+    return box;
+  }
+
+  /** Molti passi in una scrittura sola: crea l'operazione se è la bozza,
+   *  poi una battaglia dopo l'altra (il server vuole un passo per volta). */
+  async function aggiungiTante(op, battaglie, paesi) {
+    if (!battaglie.length) return;
+    const r = await scrivi(async () => {
+      const id = await idOperazione(op);
+      let ultima = null;
+      for (const b of battaglie) ultima = await aggiungiPasso(id, corpoDaBattaglia(b, paesi), opzioni());
+      return ultima;
+    });
+    if (!r) return;
+    autoBuilder = null;
+    trackEvent('private-operation-autobuild');
+    ctx.ridisegna();
+  }
+
   // ── Battaglie aperte, da aggiungere con un clic ──────────────────
 
-  function corpoDaBattaglia(b) {
-    const noi = dati.countryId;
-    const nostra = b.attacker?.country === noi || b.defender?.country === noi;
-    const tipo = !nostra ? 'altro' : b.type === 'resistance' ? 'rivolta' : b.attacker?.country === noi ? 'attacco' : 'difesa';
+  /** Il passo che rappresenta una battaglia, visto da `paesi` (la nostra
+   *  nazione di solito; l'alleanza o le nazioni scelte nell'auto-builder):
+   *  attacco se attacca uno di loro, difesa se difende, rivolta se è una
+   *  rivolta, altro se non c'entrano. */
+  function corpoDaBattaglia(b, paesi = new Set([dati.countryId])) {
+    const att = paesi.has(b.attacker?.country), dif = paesi.has(b.defender?.country);
+    const tipo = !att && !dif ? 'altro' : b.type === 'resistance' ? 'rivolta' : att ? 'attacco' : 'difesa';
     return {
       tipo,
       regione: b.defender?.region || null,
@@ -746,13 +946,26 @@ export function creaOperazioni(ctx) {
     return `${chi} · ${t('prioEnds', { dura: durata(g.prioritaFino - Date.now()), ora: oraBreve(g.prioritaFino) })}`;
   }
 
+  /** La stessa frase, ma col conto alla rovescia vivo al posto della durata
+   *  (vedi contoVivo): è quella che si mostra, testoPriorita resta per i
+   *  tooltip. */
+  function nodoPriorita(g) {
+    if (!prioritaAttiva(g)) return document.createTextNode(testoPriorita(g));
+    const chi = g.priorita === dati.countryId ? opT('prioOurs') : t('prioTheirs', { nome: nomeNazione(g.priorita) || '?' });
+    const [prima, dopo] = t('prioEnds', { ora: oraBreve(g.prioritaFino) }).split('{dura}');
+    const s = el('span', null, `${chi} · ${prima}`);
+    s.appendChild(contoVivo(g.prioritaFino));
+    s.appendChild(document.createTextNode(dopo || ''));
+    return s;
+  }
+
   /** Il gettone sulla scheda: solo se c'è una priorità che corre adesso. */
   function chipPriorita(p) {
     const g = guerraDelPasso(p);
     if (!prioritaAttiva(g)) return null;
     const nostra = g.priorita === dati.countryId;
-    const c = el('span', `wp-pv-op-prio-chip${nostra ? ' nostra' : ''}`,
-      `${nostra ? opT('prioChipOurs') : opT('prioChipTheirs')} ${durata(g.prioritaFino - Date.now())}`);
+    const c = el('span', `wp-pv-op-prio-chip${nostra ? ' nostra' : ''}`, `${nostra ? opT('prioChipOurs') : opT('prioChipTheirs')} `);
+    c.appendChild(contoVivo(g.prioritaFino));
     c.title = testoPriorita(g);
     return c;
   }
@@ -767,7 +980,7 @@ export function creaOperazioni(ctx) {
       const attiva = prioritaAttiva(g);
       const r = el('div', `wp-pv-op-guerra${attiva ? (g.priorita === dati.countryId ? ' nostra' : ' loro') : ''}`);
       r.appendChild(el('strong', null, nomeNazione(g.nemico) || '?'));
-      r.appendChild(el('span', null, testoPriorita(g)));
+      r.appendChild(nodoPriorita(g));
       box.appendChild(r);
     }
     return box;
@@ -813,6 +1026,8 @@ export function creaOperazioni(ctx) {
     const xSenza = ETICHETTA_W + 10;
     const xAsse0 = ETICHETTA_W + (senzaOra ? SENZA_ORARIO_W : 0) + 14;
     const tutti = estesi.flatMap((e) => [e.da, e.fineUltima && e.fineUltima + BUFFER_CONQUISTA, e.fineMalus]).filter(Boolean);
+    // Anche le priorità di guerra in corso: la loro scadenza va dentro.
+    for (const g of dati?.guerre || []) if (prioritaAttiva(g)) tutti.push(g.prioritaFino);
     const t0 = Math.floor(Math.min(ora, ...tutti) / ORA) * ORA - 2 * ORA;
     const t1 = Math.ceil(Math.max(ora, ...tutti) / ORA) * ORA + 3 * ORA;
     const ore = (t1 - t0) / ORA;
@@ -970,6 +1185,23 @@ export function creaOperazioni(ctx) {
     const adesso = el('span', 'wp-pv-op-adesso-testo', opT('now'));
     adesso.style.left = `${adessoX + 4}px`;
     tela.appendChild(adesso);
+
+    // Le priorità di guerra che corrono adesso: una barra sottile appena
+    // sotto l'asse, da adesso alla scadenza, col conto alla rovescia vivo, e
+    // una linea verticale dove scade. Verde se è nostra, rossa se loro.
+    (dati.guerre || []).filter(prioritaAttiva).forEach((g, i) => {
+      const nostra = g.priorita === dati.countryId;
+      const x2 = L.xDi(g.prioritaFino);
+      s.appendChild(svg('line', { x1: x2, y1: ASSE_H, x2, y2: L.h, class: `wp-pv-op-prio-linea${nostra ? ' nostra' : ''}` }));
+      const barra = el('div', `wp-pv-op-prio-barra${nostra ? ' nostra' : ''}`);
+      barra.style.left = `${adessoX}px`;
+      barra.style.top = `${ASSE_H + 1 + i * 15}px`;
+      barra.style.width = `${Math.max(2, x2 - adessoX)}px`;
+      barra.appendChild(document.createTextNode(`${nostra ? opT('prioChipOurs') : opT('prioChipTheirs')} · ${nomeNazione(g.nemico) || '?'} · `));
+      barra.appendChild(contoVivo(g.prioritaFino));
+      barra.title = testoPriorita(g);
+      tela.appendChild(barra);
+    });
     if (L.xSenza != null) {
       const e = el('span', 'wp-pv-op-tacca wp-pv-op-tacca-senza', opT('noTime'));
       e.style.left = `${L.xSenza}px`;
@@ -1321,6 +1553,7 @@ export function creaOperazioni(ctx) {
     const fatto = (k, v) => {
       if (!v) return;
       righe.appendChild(el('dt', null, k));
+      if (v instanceof Node) { const dd = el('dd'); dd.appendChild(v); righe.appendChild(dd); return; }
       righe.appendChild(el('dd', null, v));
     };
     fatto(opT('fKind'), opT(`kind_${p.tipo}`));
@@ -1348,7 +1581,7 @@ export function creaOperazioni(ctx) {
       }
     }
     const g = guerraDelPasso(p);
-    if (g) fatto(opT('fPrio'), testoPriorita(g));
+    if (g) fatto(opT('fPrio'), nodoPriorita(g));
     if (p.regione && vive.has(p.regione)) fatto(opT('fBattle'), opT('liveBattleHint'));
     if (p.aggiornatoDa) fatto(opT('fUpdated'), `${p.aggiornatoDa} · ${oraBreve(p.aggiornatoIl)}`);
     box.appendChild(righe);
