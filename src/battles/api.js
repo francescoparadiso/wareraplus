@@ -197,6 +197,10 @@ function _fromLive(b) {
     },
     contracts: null,
     contractCount: null,
+    // Per la stima di fine round/battaglia (src/shared/battleTiming.js):
+    // si calcola al disegno, perché il tempo che manca cambia ogni minuto.
+    timing: { roundsToWin: b.roundsToWin, createdAt: b.createdAt, currentRound: cur,
+      attacker: { wonRoundsCount: b.attacker?.wonRoundsCount }, defender: { wonRoundsCount: b.defender?.wonRoundsCount } },
     partial: true,
     live: true,
   };

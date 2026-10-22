@@ -8,6 +8,18 @@ import { workerGet } from '../shared/trpcProxy.js'; // WarEra+: VPS prima del Wo
 import { trpcBatch, escapeHtml, getNation } from './utils.js';
 import { highlightBattleRegion, clearBattleRegionHighlight } from './map.js';
 import { trackEvent } from '../shared/analytics.js';
+// WarEra+: quando finisce il round e la battaglia, stesso calcolo della
+// sezione Battaglie e delle Operazioni (src/shared/battleTiming.js).
+import { righeStima } from '../shared/battleTiming.js';
+
+/** WarEra+: le righe "fine round / fine battaglia" del tooltip. Additivo:
+ *  se il calcolo fallisce, il tooltip resta com'era. */
+function tempiBattaglia(battle) {
+  try {
+    const r = righeStima(battle);
+    return `<div style="grid-column:1 / -1; opacity:.85;" title="${escapeHtml(r.nota)}">⏱ ${r.round ? `${escapeHtml(r.round)}<br>` : ''}${escapeHtml(r.battaglia)}</div>`;
+  } catch { return ''; }
+}
 
 let markers = new Map(); // battleId -> { marker, el } — SOLO le battaglie attualmente nel viewport (vedi _syncMarkersToViewport)
 let markersEnabled = true;
@@ -790,6 +802,7 @@ function buildBattleTooltipContent(battle, regionName, liveData, totalAttackerDm
           </div>
           <div style="grid-column:1 / -1;">💥 Combined total: <strong style="color:${textColor};">${fmt(battleTotal)}</strong></div>
           ${roundsToWin ? `<div style="grid-column:1 / -1;">🏆 Rounds won: <strong style="color:${defColor};">${defWon}</strong> – <strong style="color:${atkColor};">${atkWon}</strong> <span style="opacity:.75;">(first to ${roundsToWin})</span></div>` : ''}
+          ${tempiBattaglia(battle)}
         </div>
 
         <!-- WarEra+ (richiesta community): quanto è costata la battaglia.

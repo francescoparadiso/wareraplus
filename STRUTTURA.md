@@ -913,6 +913,11 @@ wareraPlus/
     │   ├── blocLabelsToggle.js ← toggle nomi alleanze
     │   └── authorPill.js       ← pill autore accanto al bottone Ko-fi
     ├── shared/
+    │   ├── battleTiming.js      ← NUOVO (2026-10-22) — quando finisce il round (per lato) e
+    │   │                          la battaglia: 300 punti a round, un tick ogni 120 s, punti
+    │   │                          per tick secondo il TOTALE del round (non il numero del
+    │   │                          tick). Dati da currentRound.live di /battles, zero fetch.
+    │   │                          Usato da Operazioni, sezione Battaglie e tooltip dei marker.
     │   ├── particlesBackground.js ← motore dello sfondo a particelle, condiviso da tutte
     │   │                            le sezioni (Political oro, Eco verde, MU rosso,
     │   │                            News blu, Alleanze viola)

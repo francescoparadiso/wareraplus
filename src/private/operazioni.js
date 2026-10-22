@@ -42,6 +42,7 @@ import {
   aggiungiPasso, modificaPasso, eliminaPasso, battaglieInCorso, ApiError,
 } from './api.js';
 import { nomeNazione, etichettaBattaglia } from './battles.js';
+import { stimaBattaglia } from '../shared/battleTiming.js';
 import { state } from '../diplomacy/state.js';
 import { regionName, regionNeighbors } from '../diplomacy/travelDistance.js';
 import { mostraOperazione } from './mappaOperazione.js';
@@ -79,68 +80,9 @@ const CHIAVE_SCELTA = 'wp_pv_op_scelta';
 const CHIAVE_BATTAGLIE = 'wp_pv_op_battaglie';
 
 // ── Battaglie aperte ────────────────────────────────────────────────
-// Un round NON finisce a tempo: lo vince chi arriva a 300 punti
-// (gameConfig.battle.pointsToWinRound). I punti arrivano a TICK regolari
-// (~2 minuti) a chi sta facendo più danno in quel momento, e un tick vale
-// di più più il round va avanti (battle.tickPoints: 1 punto dal 1° tick,
-// 2 dal 100°, 3 dal 200°…). Le "6 ore" sono il caso in cui un lato prende
-// tutti i tick. `/battles` porta già `currentRound.live` (tick contati,
-// prossimo tick) e i punti dei due lati: zero chiamate in più.
-//
-// La fine del round è quindi "al più presto": se chi è avanti prende tutti
-// i tick che restano. La battaglia vince chi arriva a `roundsToWin`: la
-// forchetta va da "chi è avanti vince tutti i round che mancano" a "si va
-// fino all'ultimo round", ogni round nuovo alla sua durata minima.
-const PUNTI_ROUND = 300;
-const PUNTI_TICK = [[500, 6], [400, 5], [300, 4], [200, 3], [100, 2], [1, 1]];
-const TICK_DI_RIPIEGO_MS = 2 * 60_000;
-const ROUND_DI_RIPIEGO_MS = 6 * ORA;
-
-// ⚠️ La soglia è sul TOTALE dei punti già assegnati nel round (i due lati
-// sommati), non sul numero del tick: lo dice il gioco stesso ("100+ totale
-// = 2 terreno per tick"), verificato sulla scheda di una battaglia.
-const puntiDelTick = (totale) => PUNTI_TICK.find(([da]) => totale >= da)?.[1] || 1;
-
-/** Quanti tick servono a un lato con `mio` punti, se prende tutti i tick,
- *  quando l'altro ne ha `altro`. */
-function tickMancanti(mio, altro) {
-  let p = mio, k = 0;
-  while (p < PUNTI_ROUND && k < 5000) { p += puntiDelTick(p + altro); k++; }
-  return k;
-}
-
-function fineBattaglia(b) {
-  const R = b.roundsToWin || 2;
-  const a = b.attacker?.wonRoundsCount || 0, d = b.defender?.wonRoundsCount || 0;
-  const cr = b.currentRound || {};
-  const inizio = Date.parse(cr.createdAt || b.createdAt);
-  const tick = cr.live?.ticksCount;
-  const prossimo = Date.parse(cr.live?.nextTickAt || '');
-  const pa = cr.attacker?.points || 0, pd = cr.defender?.points || 0;
-  let fineRound, roundMinimo, finePerLato = null;
-  if (Number.isFinite(tick) && Number.isFinite(prossimo)) {
-    const passo = (prossimo - inizio) / (tick + 1);
-    const intervallo = passo >= 30_000 && passo <= 10 * 60_000 ? passo : TICK_DI_RIPIEGO_MS;
-    // Ognuno dei due lati, se prendesse tutti i tick da qui: come il gioco
-    // mostra "~2h36m" e "~2h44m" ai due lati del timer.
-    finePerLato = {
-      attacker: prossimo + (tickMancanti(pa, pd) - 1) * intervallo,
-      defender: prossimo + (tickMancanti(pd, pa) - 1) * intervallo,
-    };
-    fineRound = Math.min(finePerLato.attacker, finePerLato.defender);
-    roundMinimo = tickMancanti(0, 0) * intervallo;
-  } else {
-    fineRound = inizio + ROUND_DI_RIPIEGO_MS;
-    roundMinimo = ROUND_DI_RIPIEGO_MS;
-  }
-  const minimi = Math.max(1, R - Math.max(a, d));
-  const massimi = Math.max(1, (R - a) + (R - d) - 1);
-  return {
-    round: cr.number || a + d + 1, a, d, pa, pd, fineRound, finePerLato,
-    prima: fineRound + (minimi - 1) * roundMinimo,
-    ultima: fineRound + (massimi - 1) * roundMinimo,
-  };
-}
+// Fine del round e della battaglia: il calcolo è condiviso con la sezione
+// Battaglie e i marker della mappa (src/shared/battleTiming.js).
+const fineBattaglia = stimaBattaglia;
 
 function testoBattaglia(b) {
   const f = fineBattaglia(b);
@@ -1050,17 +992,21 @@ export function creaOperazioni(ctx) {
       if (!q) continue;
       // La pillola: una fascia verde per l'effetto e una rossa per il
       // malus, sotto la scheda, lunghe quanto durano davvero.
+      // Più alte della scheda e con la durata scritta in fondo: la scheda
+      // sopra è trasparente, e il verde deve leggersi anche quando le 8 ore
+      // sono larghe quanto lei.
       if (q.pillola) {
-        for (const [cls, x, larg, tit] of [
-          ['wp-pv-op-pill-effetto', q.x, q.pillola.effetto, opT('pillBuff')],
-          ['wp-pv-op-pill-malus', q.x + q.pillola.effetto, q.pillola.malus, opT('pillMalus')],
+        for (const [cls, x, larg, tit, testo] of [
+          ['wp-pv-op-pill-effetto', q.x, q.pillola.effetto, opT('pillBuff'), '8 h'],
+          ['wp-pv-op-pill-malus', q.x + q.pillola.effetto, q.pillola.malus, opT('pillMalus'), '15 h 30'],
         ]) {
           const f = el('div', cls);
           f.style.left = `${x}px`;
-          f.style.top = `${q.y}px`;
+          f.style.top = `${q.y - 6}px`;
           f.style.width = `${larg}px`;
-          f.style.height = `${CARTA_H}px`;
+          f.style.height = `${CARTA_H + 12}px`;
           f.title = tit;
+          f.appendChild(el('span', 'wp-pv-op-pill-durata', testo));
           tela.appendChild(f);
         }
       }
@@ -1127,6 +1073,24 @@ export function creaOperazioni(ctx) {
       tiro = { x: e.clientX, sl: scorre.scrollLeft, mosso: false };
       scorre.setPointerCapture(e.pointerId);
     });
+    // Passando il mouse: una linea verticale con l'orario sotto il cursore.
+    const guida = el('div', 'wp-pv-op-guida');
+    const guidaOra = el('span', 'wp-pv-op-guida-ora');
+    guida.appendChild(guidaOra);
+    guida.hidden = true;
+    tela.appendChild(guida);
+    scorre.addEventListener('pointermove', (e) => {
+      const x = e.clientX - tela.getBoundingClientRect().left;
+      if (x < L.xAsse0 - 10) { guida.hidden = true; }
+      else {
+        guida.hidden = false;
+        guida.style.left = `${x}px`;
+        const ms = L.tDi(x);
+        const d = new Date(ms);
+        guidaOra.textContent = `${d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' })} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+      }
+    });
+    scorre.addEventListener('pointerleave', () => { guida.hidden = true; });
     scorre.addEventListener('pointermove', (e) => {
       if (!tiro) return;
       const dx = e.clientX - tiro.x;
@@ -1164,7 +1128,7 @@ export function creaOperazioni(ctx) {
 
 
   function cartaPasso(p, q, { n, stato }, { op, L, modificabile, iniziaFreccia }) {
-    const c = el('button', `wp-pv-op-carta wp-pv-op-st-${stato}${passoAperto === p.id ? ' scelta' : ''}${modificabile ? ' muovibile' : ''}`);
+    const c = el('button', `wp-pv-op-carta wp-pv-op-st-${stato}${passoAperto === p.id ? ' scelta' : ''}${modificabile ? ' muovibile' : ''}${q.pillola ? ' pillola' : ''}`);
     c.type = 'button';
     c.dataset.id = String(p.id);
     c.style.left = `${q.x}px`;
