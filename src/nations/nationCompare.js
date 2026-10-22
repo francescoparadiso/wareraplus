@@ -127,7 +127,7 @@ function montaCurve(host, a, b, nomeLato) {
    Una metrica che metrics.js aggiunge un giorno e che qui non è elencata
    finisce nel primo: meglio una riga in più che una misura sparita. */
 const GROUPS = [
-  { key: 'war', title: 'vsGroupWar', icon: '⚔', metrics: ['weekly', 'total', 'perCit', 'bounty', 'allies', 'wars'] },
+  { key: 'war', title: 'vsGroupWar', icon: '⚔', metrics: ['weekly', 'total', 'perCit', 'dmgCore', 'bounty', 'allies', 'wars'] },
   { key: 'eco', title: 'vsGroupEco', icon: '💰', metrics: ['pop', 'wealth', 'dev', 'coreDev', 'prod', 'taxes', 'unrest'] },
 ];
 
@@ -166,6 +166,10 @@ export function renderNationCompare(host, ctx) {
 
   const agg = (list, m) => {
     if (!list.length) return 0;
+    if (m.ratio) {
+      const den = list.reduce((s, n) => s + metricValue(n, m.ratio[1]), 0);
+      return den > 0 ? list.reduce((s, n) => s + metricValue(n, m.ratio[0]), 0) / den : 0;
+    }
     const sum = list.reduce((s, n) => s + metricValue(n, m.key), 0);
     return AVERAGED.has(m.key) ? sum / list.length : sum;
   };

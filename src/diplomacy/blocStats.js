@@ -123,6 +123,7 @@ const BUILDER_SORTS = [
   { key: 'pop',     label: 'Population',        get: b => b.totalPop },
   { key: 'money',   label: 'Wealth',            get: b => b.totalMoney },
   { key: 'dpc',     label: 'Wk damage/citizen', get: b => b.dpc },
+  { key: 'dpd',     label: 'Dmg / Core Dev',    get: b => b.dpd },
   { key: 'wars',    label: 'Wars',              get: b => b.totalWars },
   { key: 'regdiff', label: 'Regions +/-',       get: b => b.totalRegDiff },
 ];
@@ -379,6 +380,8 @@ function buildMember(cid) {
     // Sviluppo "core": base del bonus danno d'alleanza, diverso da `dev`
     // (rankings.countryDevelopment) che e' lo sviluppo corrente.
     core: n?.coreDevelopment || 0,
+    // WarEra+ — danno settimanale per punto di sviluppo core (0 se manca).
+    dpd: n?.coreDevelopment > 0 ? (n?.rankings?.weeklyCountryDamages?.value || 0) / n.coreDevelopment : 0,
     wars:  n?.warsWith?.length || 0,
     // WarEra+ — `allies` e `swornEnemies` della nazione NON sono dati di
     // oggi. `allies` e' un fossile: le coppie delle alleanze bilaterali
@@ -434,6 +437,8 @@ function buildBlocStat(displayName, internalId, idSet, color, isMerged = false, 
     // Derivate: sviluppo medio e danno settimanale per cittadino dell'alleanza.
     avgDev: countryCount ? totalDev / countryCount : 0,
     dpc: totalPop ? totalDmg / totalPop : 0,
+    // Rapporto sui TOTALI (danno / devcore dell'alleanza), non media dei rapporti.
+    dpd: totalCore ? totalDmg / totalCore : 0,
   };
 }
 
@@ -834,7 +839,7 @@ function injectStyles() {
     @media(max-width:640px){.bs-charts{grid-template-columns:minmax(0,1fr)}.bs-sum-mini{grid-template-columns:minmax(0,1fr)}.bs-chart-card{min-width:0}.bsw{padding-left:12px;padding-right:12px}}
 
     /* Tabella riassuntiva alleanze (tutte le alleanze su una riga sola) */
-    .bs-tbl-wrap{overflow:auto;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(13,17,23,.6);margin-bottom:20px}
+    .bs-tbl-wrap{overflow:auto;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(13,17,23,.6);margin-bottom:20px;max-height:max(320px,calc(100dvh - 250px))}
     /* Quando la tabella è l'ULTIMA cosa della pagina (tab Alliance Overview)
        i margini di coda diventano vuoto sotto la barra di scorrimento
        orizzontale, a fine pagina: il riquadro deve chiudere la schermata,
@@ -1209,6 +1214,7 @@ function showBlocPopup(blocId) {
       <div class="bs-popup-item">${bT('Avg Dmg/Nation')} <span>${fmt(bloc.countryCount ? bloc.totalDmg / bloc.countryCount : 0)}</span></div>
       <div class="bs-popup-item">${bT('Avg Pop/Nation')} <span>${fmt(bloc.countryCount ? bloc.totalPop / bloc.countryCount : 0)}</span></div>
       <div class="bs-popup-item" title="${bloc.isUnaligned || !bloc.bonus ? '' : curveTooltip()}">${bT('Damage Bonus')} <span style="color:${isPenalty(bloc.bonus?.bonus) ? '#f85149' : '#3fb950'}">${bloc.isUnaligned || !bloc.bonus ? '—' : formatBonus(bloc.bonus.bonus)}</span></div>
+      <div class="bs-popup-item" title="${bT('Weekly damage per point of core development')}">${bT('Dmg / Core Dev')} <span style="color:#58a6ff">${bloc.totalCore ? fmt(bloc.dpd) : '—'}</span></div>
       <div class="bs-popup-item">${bT('Core Dev Share')} <span>${bloc.isUnaligned || !bloc.bonus ? '—' : bloc.bonus.share.toFixed(2) + '%'}</span></div>
     </div>`, closed)}
     ${secHtml('mobilization', bT('Mobilization'), '', closed, 'bloc-popup-ps')}
@@ -1469,6 +1475,7 @@ const BUILDER_COLS = [
   { key: 'totdmg',  label: 'Tot Dmg' },
   { key: 'pop',     label: 'Pop' },
   { key: 'money',   label: 'Wealth' },
+  { key: 'dpd',     label: 'Dmg/Core' },
   { key: 'wars',    label: 'Wars' },
   { key: 'members', label: 'Nations — drag them between rows', left: true, nosort: true },
   { key: 'actions', label: '', nosort: true },
@@ -1501,6 +1508,7 @@ function builderTableHtml() {
       <td>${fmt(b.totalAbsoluteDmg)}</td>
       <td>${fmt(b.totalPop)}</td>
       <td class="money">${fmt(b.totalMoney)}</td>
+      <td title="${bT('Weekly damage per point of core development')}">${b.totalCore ? fmt(b.dpd) : '—'}</td>
       <td>${b.totalWars}</td>
       <td class="left bs-btbl-members">${pills}</td>
       <td class="bs-btbl-actions">${builderActionsHtml(b)}</td>
@@ -2059,6 +2067,7 @@ function blocCard(bloc, isUnaligned) {
     </div>
     ${!isUnaligned ? `<div class="bs-stats-row">
       <div class="bs-chip">🔥 ${bT('Wk')} ${fmt(bloc.totalDmg)}</div>
+      ${bloc.totalCore ? `<div class="bs-chip" title="${bT('Weekly damage per point of core development')}">🎯 ${fmt(bloc.dpd)}</div>` : ''}
       <div class="bs-chip">💥 ${bT('Tot')} ${fmt(bloc.totalAbsoluteDmg)}</div>
       <div class="bs-chip">👥 ${fmt(bloc.totalPop)}</div>
       <div class="bs-chip">💰 ${fmt(bloc.totalMoney)}</div>
@@ -2137,7 +2146,7 @@ function aggFaction(ids) {
   // (per cittadino, build, territorio): tutto gia' dentro buildBlocStat,
   // nessun dato nuovo. `members` serve alla build e al danno di oggi.
   const vuota = { name: '', countryCount: 0, totalPop: 0, totalDmg: 0, totalAbsoluteDmg: 0, totalMoney: 0, totalWars: 0, totalAllies: 0,
-    totalBounty: 0, totalDev: 0, totalRegDiff: 0, totalSworn: 0, members: [] };
+    totalBounty: 0, totalDev: 0, totalRegDiff: 0, totalSworn: 0, totalCore: 0, members: [] };
   if (!ids.length) return vuota;
   return allStats.filter(b => ids.includes(b.id)).reduce((a, b) => ({
     name: a.name ? `${a.name} + ${b.name}` : b.name,
@@ -2147,6 +2156,7 @@ function aggFaction(ids) {
     totalAllies: a.totalAllies + b.totalAllies,
     totalBounty: a.totalBounty + b.totalBounty, totalDev: a.totalDev + b.totalDev,
     totalRegDiff: a.totalRegDiff + b.totalRegDiff, totalSworn: a.totalSworn + b.totalSworn,
+    totalCore: a.totalCore + b.totalCore,
     members: a.members.concat(b.members),
   }), vuota);
 }
@@ -2255,6 +2265,7 @@ function cmpStats(f1, f2) {
         : psByCountry ? '' : `<p class="wp-vs-empty">${bT('Loading builds…')}</p>` },
     { title: bT('Per citizen'), icon: '👤', rows: [
       R(perCit(f1, 'totalDmg'), perCit(f2, 'totalDmg'), 'Weekly Dmg / Citizen'),
+      (f1.totalCore && f2.totalCore) ? R(f1.totalDmg / f1.totalCore, f2.totalDmg / f2.totalCore, 'Dmg / Core Dev') : null,
       R(perCit(f1, 'totalMoney'), perCit(f2, 'totalMoney'), 'Wealth / Citizen'),
       R(media(f1, 'totalDev'), media(f2, 'totalDev'), 'Avg Development'),
     ] },

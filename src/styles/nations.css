@@ -70,9 +70,13 @@
 .wp-nat-count { font-size: 12px; color: var(--wp-ov-text-dim, #8b949e); }
 
 /* ── Panoramica: tabella delle nazioni ─────────────────────── */
-.wp-nat-table-wrap { overflow-x: auto; }
+/* WarEra+ — la tabella scorre dentro il suo riquadro, in verticale e in
+   orizzontale: così la barra laterale sta sempre in vista in fondo al
+   riquadro (prima era in fondo all'elenco intero) e l'intestazione sticky
+   resta ferma davvero, perché ora ha uno scroll container che si muove. */
+.wp-nat-table-wrap { overflow: auto; max-height: max(320px, calc(100dvh - 250px)); }
 .wp-nat-table {
-  --wp-nat-cols: minmax(170px, 1.4fr) repeat(14, minmax(72px, .75fr));
+  --wp-nat-cols: minmax(170px, 1.4fr) repeat(15, minmax(72px, .75fr));
   min-width: 1180px;
 }
 .wp-nat-thead, .wp-nat-row {
@@ -701,7 +705,7 @@ body.light-theme .wp-nat-lab-bar > span { background: #9c6b1f; }
    a parità di specificità vince la regola che viene dopo, e scritto più
    in alto questo blocco perdeva contro le regole base. */
 @media (max-width: 560px) {
-  .wp-nat-table { --wp-nat-cols: minmax(118px, 1.2fr) repeat(14, minmax(68px, .75fr)); }
+  .wp-nat-table { --wp-nat-cols: minmax(118px, 1.2fr) repeat(15, minmax(68px, .75fr)); }
   .wp-nat-ctable { --wp-nat-ccols: minmax(118px, 1.3fr) 48px 40px 56px 86px repeat(5, minmax(70px, .8fr)); }
   .wp-nat-th, .wp-nat-cth { min-height: 32px; }
   .wp-nat-tab { min-height: 36px; }
