@@ -649,6 +649,21 @@ export function creaOperazioni(ctx) {
 
   const MAX_PASSI_OPERAZIONE = 40;
 
+  /** Le nazioni della nostra alleanza, noi compresi (o solo noi). */
+  function paesiAlleanza() {
+    const noi = dati.countryId;
+    const all = state.nationMap?.get(noi)?.allianceId;
+    if (!all) return new Set([noi]);
+    return new Set([...state.nationMap.values()].filter((n) => n.allianceId === all).map((n) => n._id));
+  }
+
+  /** Verde se nella battaglia c'è la nostra alleanza, rossa se no. */
+  function classeBattaglia(b) {
+    if (!b) return '';
+    const a = paesiAlleanza();
+    return a.has(b.attacker?.country) || a.has(b.defender?.country) ? ' batt-alleata' : ' batt-nemica';
+  }
+
   function paesiAuto() {
     const noi = dati.countryId;
     if (autoBuilder.modo === 'nazione') return new Set([noi]);
@@ -694,7 +709,7 @@ export function creaOperazioni(ctx) {
         .filter((b) => (paesi.has(b.attacker?.country) || paesi.has(b.defender?.country)) && !gia.has(b._id));
       if (!elenco.length) { lista.appendChild(el('p', 'wp-pv-note', opT('autoNone'))); return; }
       for (const b of elenco) {
-        const r = el('label', 'wp-pv-check wp-pv-op-auto-voce');
+        const r = el('label', `wp-pv-check wp-pv-op-auto-voce${classeBattaglia(b)}`);
         const cb = el('input');
         cb.type = 'checkbox';
         cb.checked = !autoBuilder.tolte.has(b._id);
@@ -736,6 +751,19 @@ export function creaOperazioni(ctx) {
         autoBuilder.scelte = new Set([...sel.selectedOptions].map((o) => o.value));
         riempi();
       });
+      const cerca = el('input', 'wp-pv-input wp-pv-op-batt-cerca');
+      cerca.type = 'search';
+      cerca.autocomplete = 'off';
+      cerca.placeholder = opT('autoSearchNation');
+      cerca.value = autoBuilder.cerca || '';
+      const filtra = () => {
+        const q = cerca.value.trim().toLowerCase();
+        autoBuilder.cerca = cerca.value;
+        for (const o of sel.options) o.hidden = Boolean(q) && !o.selected && !o.textContent.toLowerCase().includes(q);
+      };
+      cerca.addEventListener('input', filtra);
+      filtra();
+      box.appendChild(cerca);
       box.appendChild(sel);
       box.appendChild(el('p', 'wp-pv-note', opT('autoChosenHint')));
     }
@@ -826,7 +854,7 @@ export function creaOperazioni(ctx) {
     if (!tutte.length) { lista.appendChild(el('p', 'wp-pv-note', opT('battlesNoMatch'))); return; }
     const box = lista;
     for (const b of tutte) {
-      const r = el('div', `wp-pv-op-batt${nostra(b) ? ' nostra' : ''}`);
+      const r = el('div', `wp-pv-op-batt${nostra(b) ? ' nostra' : ''}${classeBattaglia(b)}`);
       const testo = el('div', 'wp-pv-op-batt-testo');
       testo.appendChild(el('span', 'wp-pv-op-batt-nome', etichettaBattaglia(b)));
       testo.appendChild(el('span', 'wp-pv-op-batt-sub', testoBattaglia(b)));
@@ -1413,7 +1441,7 @@ export function creaOperazioni(ctx) {
 
 
   function cartaPasso(p, q, { n, stato }, { op, L, modificabile, iniziaFreccia }) {
-    const c = el('button', `wp-pv-op-carta wp-pv-op-st-${stato}${passoAperto === p.id ? ' scelta' : ''}${modificabile ? ' muovibile' : ''}${q.pillola ? ' pillola' : ''}`);
+    const c = el('button', `wp-pv-op-carta wp-pv-op-st-${stato}${passoAperto === p.id ? ' scelta' : ''}${modificabile ? ' muovibile' : ''}${q.pillola ? ' pillola' : ''}${classeBattaglia(p.battaglia ? viveId.get(p.battaglia) : null)}`);
     c.type = 'button';
     c.dataset.id = String(p.id);
     c.style.left = `${q.x}px`;

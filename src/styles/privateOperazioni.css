@@ -169,6 +169,14 @@ body.light-theme #wp-private-root .wp-pv-op-st-annullata { --st: #94a3b8; }
   background: var(--pv-accent); color: #fff;
 }
 .wp-pv-op-legenda-fascia { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: .68rem; font-weight: 600; color: var(--pv-ink-soft); position: static; }
+/* Le battaglie: verdi se c'è la nostra alleanza, rosse se no — sulle
+   schede del grafico e negli elenchi a destra. Lo stato resta nella
+   pillola. */
+.wp-pv-op-carta.batt-alleata { background: color-mix(in srgb, #34d399 16%, var(--pv-op-fondo)); border-color: #34d399; }
+.wp-pv-op-carta.batt-nemica { background: color-mix(in srgb, #f87171 16%, var(--pv-op-fondo)); border-color: #f87171; }
+.wp-pv-op-batt.batt-alleata, .wp-pv-op-auto-voce.batt-alleata { border-color: rgba(52, 211, 153, .6); background: rgba(52, 211, 153, .08); }
+.wp-pv-op-batt.batt-nemica, .wp-pv-op-auto-voce.batt-nemica { border-color: rgba(248, 113, 113, .6); background: rgba(248, 113, 113, .08); }
+
 /* L'auto-builder, nel pannello a destra. */
 .wp-pv-op-auto { display: flex; flex-direction: column; gap: .5rem; }
 .wp-pv-op-auto-modi { display: flex; flex-wrap: wrap; gap: .3rem; }
