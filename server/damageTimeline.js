@@ -85,7 +85,11 @@ let writeCache = null;
 const TIMELINE_FILE = 'damage-timeline';
 
 const HOUR_MS = 3600 * 1000;
-const RETENTION_MS = 16 * 24 * HOUR_MS;  // 16 giorni: i 14 chiesti dalla curva + margine
+// 32 giorni (prima 16): dal 2026-10-22 il grafico orario di Statistiche
+// nazioni ha anche la finestra "30g". Costo: il doppio dei secchi, ~2×
+// il file (qualche MB) — niente a che vedere con dayHistory, che è il
+// vincolo vero della RAM.
+const RETENTION_MS = 32 * 24 * HOUR_MS;
 const DEDUP_MS = 26 * HOUR_MS;        // oltre, di una pillola non arriva più notizia
 
 // ── PILLATI A UN ISTANTE (2026-10-15) ──

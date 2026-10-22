@@ -1023,11 +1023,17 @@ function radarSvg(a, b) {
     return `<text class="wp-vs-rlabel${war ? '' : ' wp-vs-rlabel-eco'}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="middle">${escapeHtml(plyT(`sk_${k}`))}<title>${escapeHtml(`${plyT(`sk_${k}`)}: ${lv(a, k)} – ${lv(b, k)}`)}</title></text>`;
   }).join('');
   const dots = (p, cls) => keys.map((k, i) => { const [x, y] = pt(i, lv(p, k) / max); return `<circle class="${cls}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3"/>`; }).join('');
+  // WarEra+ (2026-10-22): esplorabile — uno spicchio invisibile per abilità,
+  // dal centro al bordo: passandoci sopra, i due livelli a confronto.
+  const sectors = keys.map((k, i) => {
+    const pts = [[C, C], pt(i - 0.5, 1.12), pt(i, 1.12), pt(i + 0.5, 1.12)].map(p => p.map(n => n.toFixed(1)).join(',')).join(' ');
+    return `<polygon class="wp-tip-hit" points="${pts}"${tipAttr(plyT(`sk_${k}`), `${a.username}\t${lv(a, k)}`, `${b.username}\t${lv(b, k)}`)}/>`;
+  }).join('');
   return `<svg class="wp-vs-radar" viewBox="-70 -24 ${S + 140} ${S + 48}" role="img" aria-label="${escapeHtml(plyT('cmpSkills'))}">
     ${grid}${spokes}
     <polygon class="wp-vs-rpoly-b" points="${poly(b)}"/>
     <polygon class="wp-vs-rpoly-a" points="${poly(a)}"/>
-    ${dots(b, 'wp-vs-rdot-b')}${dots(a, 'wp-vs-rdot-a')}
+    ${dots(b, 'wp-vs-rdot-b')}${dots(a, 'wp-vs-rdot-a')}${sectors}
     ${labels}
   </svg>`;
 }

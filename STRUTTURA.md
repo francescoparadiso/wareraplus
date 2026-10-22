@@ -929,6 +929,9 @@ wareraPlus/
     │   │                          impulsi, battiti, ping, navi e particelle; restano
     │   │                          frecce e colori. Tutti i moduli animati chiedono
     │   │                          animationsOn(). Il replay battaglia NO (è a mano).
+    │   ├── chartTip.js         ← NUOVO — tooltip comune dei grafici: ogni elemento con
+    │   │                          data-tip (tipAttr) lo mostra al passaggio o al tocco, e i
+    │   │                          <title> nativi degli SVG diventano tooltip istantanei
     │   ├── scrollHint.js       ← NUOVO — "Scorri di lato per tutte le colonne": l'avviso
     │   │                          sopra le tabelle dati che su telefono SCORRONO invece
     │   │                          di nascondere colonne (Rendite, Prezzi, Produzione,

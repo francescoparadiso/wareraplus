@@ -20,6 +20,7 @@
 
 import { escapeHtml } from './config.js';
 import { getLang } from './i18n.js';
+import { tipAttr } from '../shared/chartTip.js';
 
 const W = 640;
 
@@ -88,7 +89,27 @@ export function lineChartSvg({ series, height = 200, step = false, until = null,
     return `<path d="${d}" fill="none" style="stroke:${s.color}" stroke-width="2" ${s.dashed ? 'stroke-dasharray="5 4"' : ''} stroke-linejoin="round"/>${dots}`;
   }).join('');
 
-  return `<svg class="wp-pol-ch" viewBox="0 0 ${W} ${height}" role="img">${grid}${lines}${ticks}</svg>`;
+  // WarEra+ (2026-10-22): esplorabile. Prima solo i pallini avevano un
+  // <title>, e un pallino da 2,6 px non si centra. Ora una colonna per ogni
+  // istante della serie, con il valore di TUTTE le linee lì: per una linea
+  // a gradini (step) vale l'ultimo valore fino a quell'istante.
+  const tAll = [...new Set(series.flatMap(s => s.points.filter(p => p[1] != null).map(p => p[0])))].sort((a, b) => a - b);
+  const sorted = series.map(s => s.points.filter(p => p[1] != null).slice().sort((a, b) => a[0] - b[0]));
+  const valueAt = (si, t) => {
+    const p = sorted[si];
+    if (!step) return p.find(q => q[0] === t)?.[1] ?? null;
+    let v = null;
+    for (const q of p) { if (q[0] <= t) v = q[1]; else break; }
+    return v;
+  };
+  const hits = tAll.map((t, i) => {
+    const a = i ? (X(tAll[i - 1]) + X(t)) / 2 : pad.l;
+    const b = i < tAll.length - 1 ? (X(t) + X(tAll[i + 1])) / 2 : W - pad.r;
+    const rows = series.map((s, si) => { const v = valueAt(si, t); return v == null ? null : `${s.name}\t${_num(v)}`; });
+    return `<rect class="wp-tip-hit" x="${a.toFixed(1)}" y="${pad.t}" width="${Math.max(1, b - a).toFixed(1)}" height="${ih}"${tipAttr(_date(t, true), rows)}/>`;
+  }).join('');
+
+  return `<svg class="wp-pol-ch" viewBox="0 0 ${W} ${height}" role="img">${grid}${lines}${ticks}${hits}</svg>`;
 }
 
 /**

@@ -103,6 +103,33 @@ export async function fetchDamageTimeline(countryId, { hours = 48, days = 14 } =
   return p;
 }
 
+/* ── Danno giorno per giorno oltre le due settimane ──────────────
+   WarEra+ (2026-10-22): la curva giornaliera di Statistiche nazioni va
+   oltre i 14-32 giorni di /damage-timeline con /damage-history: lo scatto
+   delle 02:00 italiane del danno TOTALE di ogni nazione, conservato senza
+   potatura (giorno per giorno dal 19 giugno al 17 settembre e dal 13
+   ottobre, una lettura a settimana in mezzo). Il danno di un giorno è la
+   differenza fra due scatti. Una nazione per richiesta, poche decine di KB. */
+const _histories = new Map();   // countryId → Promise<days[] | null>
+
+export function fetchDamageHistory(countryId) {
+  if (!countryId) return Promise.resolve(null);
+  const hit = _histories.get(countryId);
+  if (hit && Date.now() - hit.at < TIMELINE_TTL_MS) return hit.p;
+  const p = (async () => {
+    try {
+      const json = await cacheJson(`/damage-history?country=${encodeURIComponent(countryId)}`);
+      return json && Array.isArray(json.days) ? json.days : null;
+    } catch (err) {
+      console.warn('WarEra+ nations: /damage-history non disponibile:', err.message);
+      return null;
+    }
+  })();
+  _histories.set(countryId, { at: Date.now(), p });
+  p.then(v => { if (!v && _histories.get(countryId)?.p === p) _histories.delete(countryId); });
+  return p;
+}
+
 /* ── Lavoro e tasse (archivio chiuso) ────────────────────────── */
 
 const _labour = new Map();   // countryId → risposta | null

@@ -19,6 +19,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { escapeHtml } from '../mu/ui.js';
+import { tipAttr } from '../shared/chartTip.js';
 
 const W = 320, H = 88, PAD_T = 6, PAD_B = 14, PAD_X = 2;
 
@@ -101,6 +102,23 @@ export function priceChartSvg(serie, { fmt = (v) => String(v) } = {}) {
   const ultimaChiusura = serie[serie.length - 1][4];
   const etichetteX = [giorni[0], giorni[giorni.length - 1]];
 
+  // WarEra+ (2026-10-22): esplorabile. Una colonna invisibile per giorno,
+  // larga fino a metà strada dai vicini: chiusura, massimo e minimo.
+  // Simboli invece di parole: la stessa funzione serve due sezioni con due
+  // dizionari diversi, e ● ▲ ▼ si leggono in tutte e nove le lingue.
+  const lingua = document.documentElement.lang || undefined;
+  const colonne = serie.map((r, i) => {
+    const gx = x(r[0]);
+    const a = i ? (x(serie[i - 1][0]) + gx) / 2 : PAD_X;
+    const b = i < serie.length - 1 ? (gx + x(serie[i + 1][0])) / 2 : W - PAD_X;
+    const giorno = new Date(`${r[0]}T12:00:00Z`).toLocaleDateString(lingua, { day: 'numeric', month: 'short', year: 'numeric' });
+    return `<rect class="wp-tip-hit" x="${a.toFixed(1)}" y="0" width="${Math.max(1, b - a).toFixed(1)}" height="${H}"${tipAttr(
+      giorno,
+      Number.isFinite(r[4]) ? `●\t${fmt(r[4])}` : null,
+      Number.isFinite(r[2]) ? `▲\t${fmt(r[2])}` : null,
+      Number.isFinite(r[3]) ? `▼\t${fmt(r[3])}` : null)}/>`;
+  }).join('');
+
   return `
     <svg class="wp-mkt-chart" viewBox="0 0 ${W} ${H}" role="img"
          aria-label="${escapeHtml(`${fmt(min)} – ${fmt(max)}`)}">
@@ -111,5 +129,6 @@ export function priceChartSvg(serie, { fmt = (v) => String(v) } = {}) {
       <text x="${PAD_X}" y="${(H - PAD_B + 2).toFixed(0)}" class="wp-mkt-clab">${escapeHtml(fmt(min))}</text>
       <text x="${PAD_X}" y="${H - 2}" class="wp-mkt-clab wp-mkt-cday">${escapeHtml(etichetteX[0])}</text>
       <text x="${W - PAD_X}" y="${H - 2}" class="wp-mkt-clab wp-mkt-cday" text-anchor="end">${escapeHtml(etichetteX[1])}</text>
+      ${colonne}
     </svg>`;
 }

@@ -67,6 +67,8 @@ import { initWallpaperEarly, startWallpaperMode } from './app/wallpaperMode.js';
 if (IS_WALLPAPER) initWallpaperEarly();
 // WarEra+: interruttore unico delle animazioni (Impostazioni)
 import { initMotion } from './shared/motion.js';
+// WarEra+: un tooltip solo per tutti i grafici (data-tip / <title> promossi).
+import { initChartTips } from './shared/chartTip.js';
 // WarEra+: numeri che contano e grafici che si disegnano (un osservatore solo)
 import { initReveal } from './shared/reveal.js';
 import { applyTranslations, initLangButton } from './shared/i18n.js';
@@ -213,6 +215,7 @@ async function handleIncomingDeepLink() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initMotion();
+  initChartTips();
   initReveal();
   initPoliticalOverlay();
   initEconomyOverlay();

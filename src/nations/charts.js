@@ -11,6 +11,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { escapeHtml, fmtCompact } from '../mu/ui.js';
+import { tipAttr } from '../shared/chartTip.js';
 
 export const CHART_COLORS = [
   '#58a6ff', '#3fb950', '#f0883e', '#a371f7', '#e5484d', '#39d0d8', '#e3b341', '#f778ba',
@@ -72,7 +73,7 @@ export function barsHtml({ title, rows, fmt = fmtCompact, color = CHART_COLORS[0
   const max = Math.max(...rows.map(r => r.value), 0);
   if (!max) return '';
   const body = rows.map(r => `
-    <li class="wp-nat-bar-row">
+    <li class="wp-nat-bar-row"${tipAttr(r.label, fmt(r.value))}>
       <span class="wp-nat-bar-label">${r.icon || ''}${escapeHtml(r.label)}</span>
       <span class="wp-nat-bar-track"><span class="wp-nat-bar-fill" style="width:${((r.value / max) * 100).toFixed(1)}%;background:${r.color || color}"></span></span>
       <span class="wp-nat-bar-val">${escapeHtml(fmt(r.value))}</span>

@@ -3160,8 +3160,9 @@ app.get('/migration-flows', (req, res) => {
 // quella data una serie vuota NON vuol dire "nessun danno", e il client la
 // taglia li' invece di riempirla di zeri.
 app.get('/damage-timeline', (req, res) => {
-  const hours = Math.min(Math.max(Number(req.query.hours) || 48, 1), 24 * 16);
-  const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 16);
+  // Tetti allineati a RETENTION_MS di damageTimeline.js (32 giorni).
+  const hours = Math.min(Math.max(Number(req.query.hours) || 48, 1), 24 * 32);
+  const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 32);
   // `countryIds=a,b,c`: un gruppo sommato (Statistiche alleanze). Tetto a
   // 200 id, piu' di tutte le nazioni del gioco: oltre e' una richiesta rotta.
   const countryIds = req.query.countryIds
