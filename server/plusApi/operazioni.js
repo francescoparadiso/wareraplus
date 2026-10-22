@@ -38,6 +38,8 @@
 
 const express = require('express');
 const { contestoNazione, formaGoverno } = require('./nazione');
+const { paesiMappa, battaglieVive, archivioBattaglie, memo } = require('./fonti');
+const { trpcGet } = require('./wareraApi');
 const {
   listaOperazioni, contaOperazioniAttive, getOperazione, creaOperazione, aggiornaOperazione, eliminaOperazione,
   passiDi, frecceDi, contaPassi, getPasso, creaPasso, aggiornaPasso, eliminaPasso, impostaPrecedenti,
@@ -59,6 +61,71 @@ const MAX_PASSI = 40;
 // campo data, non un piano: meglio dirlo subito che disegnarlo fuori scala.
 const ORARIO_PASSATO_MS = 30 * 24 * 3600_000;
 const ORARIO_FUTURO_MS = 90 * 24 * 3600_000;
+
+// ---------------------------------------------------------------------------
+// Le guerre e la loro priorità
+// ---------------------------------------------------------------------------
+// Dopo una conquista una delle due nazioni ha la PRIORITÀ nella guerra per
+// 24 ore. Il dato sta in `war.getById` (`priority`, `priorityEndAt`), che è
+// pubblica. `war.getActiveWarBetweenCountries` lo direbbe senza bisogno
+// dell'id, ma risponde 403 a qualunque chiave API (verificato il
+// 2026-10-22): vuole la sessione di un giocatore.
+//
+// L'id della guerra si trova nelle battaglie: quelle vive portano `war`;
+// per una coppia senza battaglia aperta — il caso tipico, la priorità
+// nasce quando una battaglia FINISCE — si prende l'ultima battaglia fra le
+// due dall'archivio e la si rilegge con `battle.getById`. L'id di una
+// guerra non cambia finché la guerra dura: si ricorda (_idGuerra).
+// ⚠️ `priorityEndAt` resta pieno anche a priorità scaduta: si confronta
+// sempre con adesso, lato client.
+
+const _idGuerra = new Map(); // "a|b" (ordinati) → warId
+
+const coppia = (a, b) => [a, b].sort().join('|');
+
+async function idGuerra(noi, loro) {
+  const k = coppia(noi, loro);
+  if (_idGuerra.has(k)) return _idGuerra.get(k);
+  const tra = (ac, dc) => coppia(ac || '', dc || '') === k;
+  const viva = (await battaglieVive()).find((b) => b.type === 'war' && b.war && tra(b.attacker?.country, b.defender?.country));
+  let id = viva?.war || null;
+  if (!id) {
+    const ultima = (await archivioBattaglie())
+      .filter((r) => r.t === 'war' && tra(r.ac, r.dc))
+      .sort((x, y) => (y.e || 0) - (x.e || 0))[0];
+    if (ultima) id = (await trpcGet('battle.getById', { battleId: ultima.i }))?.war || null;
+  }
+  if (id) _idGuerra.set(k, id);
+  return id;
+}
+
+// Tre minuti: la priorità cambia solo a una conquista, e la lavagna la
+// rilegge a ogni apertura.
+const leggiGuerra = memo(3 * 60_000, (warId) => trpcGet('war.getById', { warId }));
+
+async function guerreDi(countryId) {
+  const noi = (await paesiMappa()).get(countryId);
+  const nemici = [...new Set(noi?.warsWith || [])];
+  const righe = await Promise.all(nemici.map(async (nemico) => {
+    try {
+      const warId = await idGuerra(countryId, nemico);
+      if (!warId) return { nemico, warId: null };
+      const w = await leggiGuerra(warId);
+      if (w && w.isActive === false) _idGuerra.delete(coppia(countryId, nemico));
+      return {
+        nemico,
+        warId,
+        attaccante: w?.attacker?.country || null,
+        priorita: w?.priority || null,
+        prioritaFino: w?.priorityEndAt ? Date.parse(w.priorityEndAt) : null,
+      };
+    } catch (err) {
+      console.warn('[operazioni] guerra con', nemico, 'non letta:', err.message);
+      return { nemico, warId: null };
+    }
+  }));
+  return righe;
+}
 
 // ---------------------------------------------------------------------------
 // Validazione
@@ -111,6 +178,7 @@ function campiPasso(body, { nuovo }) {
   if (ha('incaricato')) c.assignee = testo(body.incaricato, 60);
   if (ha('stato')) c.status = scelta(body.stato, STATI_PASSO, 'stato_non_valido');
   if (ha('nota')) c.note = testo(body.nota, 500);
+  if (ha('battaglia')) c.battle_id = idRegione(body.battaglia);
   if (nuovo) {
     c.priority = c.priority || 'media';
     c.status = c.status || 'da_fare';
@@ -179,6 +247,7 @@ function formaPasso(p, dopo) {
     incaricato: p.assignee,
     stato: p.status,
     nota: p.note,
+    battaglia: p.battle_id || null,
     dopo: dopo || [],
     aggiornatoDa: nomeAccount(p.updated_by),
     aggiornatoIl: p.updated_at,
@@ -276,7 +345,11 @@ function buildOperazioniRouter({ requireAuth, risolviIdentita, bloccaScrittureSo
   };
 
   router.get('/', gestisci(async (req, res, ctx) => {
-    res.json(risposta(ctx, req));
+    // Le guerre solo in lettura: le scritture rimandano l'elenco e il
+    // client tiene le guerre che aveva. Se il gioco non risponde la lavagna
+    // si apre lo stesso, senza timer.
+    const guerre = await guerreDi(ctx.countryId).catch(() => null);
+    res.json({ ...risposta(ctx, req), guerre });
   }));
 
   router.post('/', gestisci(async (req, res, ctx) => {

@@ -41,6 +41,7 @@ import {
   leggiOperazioni, creaOperazione, modificaOperazione, eliminaOperazione,
   aggiungiPasso, modificaPasso, eliminaPasso, battaglieInCorso, ApiError,
 } from './api.js';
+import { nomeNazione, etichettaBattaglia } from './battles.js';
 import { state } from '../diplomacy/state.js';
 import { regionName, regionNeighbors } from '../diplomacy/travelDistance.js';
 import { mostraOperazione } from './mappaOperazione.js';
@@ -67,6 +68,39 @@ const SENZA_ORARIO_W = CARTA_W + 30;
 const ORA = 3600_000;
 
 const CHIAVE_SCELTA = 'wp_pv_op_scelta';
+
+// ── Battaglie aperte ────────────────────────────────────────────────
+// Ogni round dura 6 ore dal suo inizio (`currentRound.createdAt`), e
+// vince chi arriva a `roundsToWin`. La fine si sa solo come forchetta:
+// la prima se chi è avanti vince tutti i round che mancano, l'ultima se
+// si va fino all'ultimo round possibile.
+const ROUND_MS = 6 * ORA;
+
+function fineBattaglia(b) {
+  const R = b.roundsToWin || 2;
+  const a = b.attacker?.wonRoundsCount || 0, d = b.defender?.wonRoundsCount || 0;
+  const inizio = Date.parse(b.currentRound?.createdAt || b.createdAt);
+  const fineRound = inizio + ROUND_MS;
+  const minimi = Math.max(1, R - Math.max(a, d));
+  const massimi = Math.max(1, (R - a) + (R - d) - 1);
+  return {
+    round: b.currentRound?.number || a + d + 1, a, d,
+    prima: fineRound + (minimi - 1) * ROUND_MS,
+    ultima: fineRound + (massimi - 1) * ROUND_MS,
+  };
+}
+
+function testoBattaglia(b) {
+  const f = fineBattaglia(b);
+  const fine = f.prima === f.ultima ? oraBreve(f.prima) : `${oraBreve(f.prima)}–${oraBreve(f.ultima)}`;
+  return t('battleLine', { n: f.round, a: f.a, d: f.d, fine });
+}
+
+/** "12 h 36 min", "45 min". */
+function durata(ms) {
+  const min = Math.max(0, Math.round(ms / 60000));
+  return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min`;
+}
 
 // ── Piccoli aiuti di DOM ───────────────────────────────────────────
 
@@ -176,6 +210,7 @@ export function creaOperazioni(ctx) {
   let occupato = false;
   let messaggio = null;         // errore dell'ultima azione
   let vive = new Map();         // regionId → battaglia in corso
+  let viveId = new Map();       // battleId → battaglia in corso (passi agganciati)
   let larghezzaVista = 0;       // del riquadro del flowchart, misurata (vedi flowchart)
   // I due moduli: nodi che restano fra un ridisegno e l'altro.
   let moduloOp = null;          // { nodo, modifica: bool }
@@ -197,9 +232,11 @@ export function creaOperazioni(ctx) {
       dati = ops;
       negato = null;
       vive = new Map();
+      viveId = new Map();
       for (const b of battaglie || []) {
         const r = b?.defender?.region;
         if (r && !vive.has(r)) vive.set(r, b);
+        if (b?._id) viveId.set(b._id, b);
       }
     } catch (err) {
       if (err instanceof ApiError && err.codice === 'accesso_nazione_negato') {
@@ -277,6 +314,7 @@ export function creaOperazioni(ctx) {
       return wrap;
     }
 
+    if (dati.guerre?.length) testa.appendChild(riquadroGuerre());
     testa.appendChild(barraOperazioni());
     if (moduloOp && !moduloOp.modifica) testa.appendChild(moduloOp.nodo);
     if (messaggio) testa.appendChild(el('p', 'wp-pv-error', messaggio));
@@ -412,6 +450,61 @@ export function creaOperazioni(ctx) {
     if (moduloPasso) card.appendChild(moduloPasso.nodo);
     else if (aperto) card.appendChild(dettaglioPasso(op, aperto, { numero, stati }));
     return card;
+  }
+
+  // ── Guerre e priorità ────────────────────────────────────────────
+  // La priorità di 24 ore dopo una conquista (war.getById, letta dal
+  // server). `prioritaFino` resta pieno anche a priorità scaduta: vale solo
+  // se è nel futuro.
+
+  const guerraCon = (nemico) => (dati?.guerre || []).find((g) => g.nemico === nemico) || null;
+  const prioritaAttiva = (g) => Boolean(g?.priorita && g.prioritaFino && g.prioritaFino > Date.now());
+
+  /** La nazione contro cui è un passo: l'altro lato della battaglia
+   *  agganciata, altrimenti chi possiede la regione (attacco) o quella di
+   *  partenza (difesa). */
+  function guerraDelPasso(p) {
+    const noi = dati?.countryId;
+    const b = p.battaglia ? viveId.get(p.battaglia) : null;
+    let nemico = null;
+    if (b) nemico = b.attacker?.country === noi ? b.defender?.country : b.attacker?.country;
+    else if (p.tipo === 'attacco') nemico = state.regionData?.[p.regione]?.country;
+    else if (p.tipo === 'difesa') nemico = state.regionData?.[p.daRegione]?.country;
+    return nemico && nemico !== noi ? guerraCon(nemico) : null;
+  }
+
+  function testoPriorita(g) {
+    if (!g.warId) return opT('prioUnknown');
+    if (!prioritaAttiva(g)) return opT('prioNone');
+    const chi = g.priorita === dati.countryId ? opT('prioOurs') : t('prioTheirs', { nome: nomeNazione(g.priorita) || '?' });
+    return `${chi} · ${t('prioEnds', { dura: durata(g.prioritaFino - Date.now()), ora: oraBreve(g.prioritaFino) })}`;
+  }
+
+  /** Il gettone sulla scheda: solo se c'è una priorità che corre adesso. */
+  function chipPriorita(p) {
+    const g = guerraDelPasso(p);
+    if (!prioritaAttiva(g)) return null;
+    const nostra = g.priorita === dati.countryId;
+    const c = el('span', `wp-pv-op-prio-chip${nostra ? ' nostra' : ''}`,
+      `${nostra ? opT('prioChipOurs') : opT('prioChipTheirs')} ${durata(g.prioritaFino - Date.now())}`);
+    c.title = testoPriorita(g);
+    return c;
+  }
+
+  /** In cima alla pagina: tutte le guerre, con chi ha la priorità e per
+   *  quanto. Prima quelle con una priorità che corre. */
+  function riquadroGuerre() {
+    const box = el('div', 'wp-pv-op-guerre');
+    box.appendChild(el('span', 'wp-pv-label', opT('warsTitle')));
+    const righe = [...dati.guerre].sort((a, b) => Number(prioritaAttiva(b)) - Number(prioritaAttiva(a)));
+    for (const g of righe) {
+      const attiva = prioritaAttiva(g);
+      const r = el('div', `wp-pv-op-guerra${attiva ? (g.priorita === dati.countryId ? ' nostra' : ' loro') : ''}`);
+      r.appendChild(el('strong', null, nomeNazione(g.nemico) || '?'));
+      r.appendChild(el('span', null, testoPriorita(g)));
+      box.appendChild(r);
+    }
+    return box;
   }
 
   // ── Il flowchart ─────────────────────────────────────────────────
@@ -601,12 +694,19 @@ export function creaOperazioni(ctx) {
     const titolo = p.titolo || (p.regione ? regionName(p.regione) : opT(`kind_${p.tipo}`));
     c.appendChild(el('span', 'wp-pv-op-carta-tit', titolo));
 
-    const sotto = [oraBreve(p.quando), p.incaricato].filter(Boolean).join(' · ');
+    // Un passo agganciato a una battaglia aperta dice round e fine prevista
+    // al posto dell'orario: l'orario di una battaglia è quello del gioco.
+    const b = p.battaglia ? viveId.get(p.battaglia) : null;
+    const sotto = b ? testoBattaglia(b)
+      : p.battaglia ? opT('battleClosed')
+        : [oraBreve(p.quando), p.incaricato].filter(Boolean).join(' · ');
     if (sotto) c.appendChild(el('span', 'wp-pv-op-carta-sub', sotto));
 
     const piede = el('span', 'wp-pv-op-carta-piede');
     piede.appendChild(el('span', 'wp-pv-op-pill', opT(`st_${stato}`)));
-    if (p.regione && vive.has(p.regione)) {
+    const prio = chipPriorita(p);
+    if (prio) piede.appendChild(prio);
+    else if (!b && p.regione && vive.has(p.regione)) {
       const v = el('span', 'wp-pv-op-viva', opT('liveBattle'));
       v.title = opT('liveBattleHint');
       piede.appendChild(v);
@@ -660,6 +760,12 @@ export function creaOperazioni(ctx) {
     const prima = p.dopo.map((id) => `${numero.get(id)}`).filter(Boolean);
     fatto(opT('fAfter'), prima.length ? prima.map((x) => `#${x}`).join(', ') : null);
     fatto(opT('fNote'), p.nota);
+    if (p.battaglia) {
+      const b = viveId.get(p.battaglia);
+      fatto(opT('fBattleLink'), b ? `${etichettaBattaglia(b)} — ${testoBattaglia(b)}` : opT('battleClosed'));
+    }
+    const g = guerraDelPasso(p);
+    if (g) fatto(opT('fPrio'), testoPriorita(g));
     if (p.regione && vive.has(p.regione)) fatto(opT('fBattle'), opT('liveBattleHint'));
     if (p.aggiornatoDa) fatto(opT('fUpdated'), `${p.aggiornatoDa} · ${oraBreve(p.aggiornatoIl)}`);
     box.appendChild(righe);
@@ -768,10 +874,36 @@ export function creaOperazioni(ctx) {
     }
     stato.value = p?.stato || 'da_fare';
 
+    // Una battaglia già aperta nel gioco, fra quelle in cui c'è la nostra
+    // nazione. Sceglierla compila tipo, regioni e orario da sola: sono
+    // fatti del gioco, non vanno riscritti a mano.
+    const noi = dati.countryId;
+    const battaglia = el('select', 'wp-pv-select');
+    battaglia.appendChild(Object.assign(el('option', null, opT('battleNone')), { value: '' }));
+    const nostre = [...viveId.values()].filter((b) => b.attacker?.country === noi || b.defender?.country === noi);
+    if (p?.battaglia && !viveId.has(p.battaglia)) {
+      battaglia.appendChild(Object.assign(el('option', null, opT('battleClosed')), { value: p.battaglia }));
+    }
+    for (const b of nostre) {
+      battaglia.appendChild(Object.assign(el('option', null, `${etichettaBattaglia(b)} · ${testoBattaglia(b)}`), { value: b._id }));
+    }
+    battaglia.value = p?.battaglia || '';
+    battaglia.addEventListener('change', () => {
+      const b = viveId.get(battaglia.value);
+      if (!b) return;
+      tipo.value = b.type === 'resistance' ? 'rivolta' : b.attacker?.country === noi ? 'attacco' : 'difesa';
+      tipo.dispatchEvent(new Event('change'));
+      regione.value = b.defender?.region ? etichettaRegione(b.defender.region) : '';
+      daRegione.value = tipo.value === 'attacco' && b.attacker?.region ? etichettaRegione(b.attacker.region) : '';
+      aggiornaVicine();
+      quando.value = perCampoOrario(Date.parse(b.createdAt));
+    });
+
     const nota = el('textarea', 'wp-pv-input wp-pv-op-nota');
     nota.maxLength = 500; nota.rows = 2; nota.placeholder = opT('notePh'); nota.value = p?.nota || '';
 
     const griglia = el('div', 'wp-pv-op-griglia-campi');
+    if (nostre.length || p?.battaglia) griglia.appendChild(campo(opT('fBattleLink'), battaglia, 'wp-pv-op-campo-largo'));
     griglia.appendChild(campo(opT('fKind'), tipo));
     griglia.appendChild(campo(opT('fTitle'), titolo));
     griglia.appendChild(campo(opT('fRegion'), regione));
@@ -855,6 +987,7 @@ export function creaOperazioni(ctx) {
         incaricato: incaricato.value,
         stato: stato.value,
         nota: nota.value,
+        battaglia: battaglia.value || null,
         dopo: spunte.filter((cb) => cb.checked).map((cb) => Number(cb.value)),
       };
       const r = await scrivi(() => (p ? modificaPasso(op.id, p.id, corpo, opzioni()) : aggiungiPasso(op.id, corpo, opzioni())));

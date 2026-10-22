@@ -459,6 +459,14 @@ function migrate() {
     db.exec('DROP INDEX IF EXISTS idx_wealth_mu_day');
     console.log('[plusApi] migrazione: wealth_snapshot.day rinominata in .slot');
   }
+  // 2026-10-22 - un passo puo' essere una battaglia GIA' aperta nel gioco:
+  // la lavagna ne mostra round e fine prevista. Colonna e non tabella: un
+  // passo e' al piu' una battaglia.
+  if (!colonne('op_step').includes('battle_id')) {
+    db.exec('ALTER TABLE op_step ADD COLUMN battle_id TEXT');
+    console.log('[plusApi] migrazione: aggiunta op_step.battle_id');
+  }
+
   // Qui e non in SCHEMA, per il motivo scritto accanto alla tabella.
   db.exec('CREATE INDEX IF NOT EXISTS idx_wealth_mu_slot ON wealth_snapshot (mu_id, slot)');
   // WarEra+ - scattiRicchezza() cerca per (war_user_id, slot), e la chiave
@@ -1173,7 +1181,7 @@ function getPasso(id) {
   return getDb().prepare('SELECT * FROM op_step WHERE id = ?').get(id) || null;
 }
 
-const CAMPI_PASSO = ['kind', 'title', 'region_id', 'from_region_id', 'at', 'priority', 'assignee', 'status', 'note'];
+const CAMPI_PASSO = ['kind', 'title', 'region_id', 'from_region_id', 'at', 'priority', 'assignee', 'status', 'note', 'battle_id'];
 
 function creaPasso(operationId, campi, createdBy) {
   const ora = Date.now();

@@ -153,6 +153,25 @@ body.light-theme #wp-private-root .wp-pv-op-num { color: #fff; }
 }
 body.light-theme #wp-private-root .wp-pv-op-viva { color: #b42318; }
 
+/* Priorità di guerra (24 h dopo una conquista): verde se nostra, rossa
+   se loro. In cima alla pagina e come gettone sulle schede. */
+.wp-pv-op-guerre { display: flex; flex-direction: column; gap: .3rem; padding: .6rem .8rem; border: 1px solid var(--pv-rule); border-radius: 8px; }
+.wp-pv-op-guerra { display: flex; flex-wrap: wrap; gap: .25rem .75rem; font-size: .86rem; color: var(--pv-ink-soft); }
+.wp-pv-op-guerra strong { color: var(--pv-ink); min-width: 8rem; }
+.wp-pv-op-guerra.nostra span { color: #34d399; font-weight: 600; }
+.wp-pv-op-guerra.loro span { color: #f87171; font-weight: 600; }
+.wp-pv-op-prio-chip {
+  display: inline-block; padding: 1px 6px; border-radius: 99px;
+  background: rgba(248, 113, 113, .18); color: #f87171;
+  font-size: .68rem; font-weight: 600; white-space: nowrap;
+}
+.wp-pv-op-prio-chip.nostra { background: rgba(52, 211, 153, .18); color: #34d399; }
+body.light-theme #wp-private-root .wp-pv-op-guerra.nostra span,
+body.light-theme #wp-private-root .wp-pv-op-prio-chip.nostra { color: #059669; }
+body.light-theme #wp-private-root .wp-pv-op-guerra.loro span,
+body.light-theme #wp-private-root .wp-pv-op-prio-chip { color: #b42318; }
+.wp-pv-op-campo-largo { grid-column: 1 / -1; }
+
 .wp-pv-op-legenda { display: flex; flex-wrap: wrap; gap: .4rem .6rem; align-items: center; }
 .wp-pv-op-legenda-nota { font-size: .75rem; color: var(--pv-ink-soft); }
 
