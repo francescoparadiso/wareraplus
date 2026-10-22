@@ -123,6 +123,12 @@ body.light-theme #wp-private-root .wp-pv-op-st-annullata { --st: #94a3b8; }
 .wp-pv-op-dettaglio-testa .wp-pv-op-x { margin-left: auto; }
 
 /* La colonna delle battaglie aperte. */
+/* La pillola: effetto (verde, 8 h) e malus (rosso, 15 h 30) sotto la
+   scheda, lunghi quanto durano. */
+.wp-pv-op-pill-effetto, .wp-pv-op-pill-malus { position: absolute; box-sizing: border-box; border-radius: 8px; pointer-events: auto; }
+.wp-pv-op-pill-effetto { background: rgba(52, 211, 153, .22); border: 1px solid rgba(52, 211, 153, .55); }
+.wp-pv-op-pill-malus { background: rgba(248, 113, 113, .16); border: 1px dashed rgba(248, 113, 113, .55); border-left: 0; border-radius: 0 8px 8px 0; }
+.wp-pv-op-legenda-fascia { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: .68rem; font-weight: 600; color: var(--pv-ink-soft); position: static; }
 .wp-pv-op-corpo.senza-lato { grid-template-columns: minmax(0, 1fr); }
 .wp-pv-op-battaglie { display: flex; flex-direction: column; gap: .4rem; }
 .wp-pv-op-batt-testa { display: flex; align-items: center; justify-content: space-between; }

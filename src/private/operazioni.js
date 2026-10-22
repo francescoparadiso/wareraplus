@@ -54,7 +54,10 @@ const PRIORITA = ['alta', 'media', 'bassa'];
 const CORSIE = [
   ['rivolte', ['rivolta']],
   ['fronte', ['attacco', 'difesa']],
-  ['supporto', ['pillole', 'contratto', 'altro']],
+  ['supporto', ['contratto', 'altro']],
+  // In fondo, sotto a tutto: le pillole sono una barra lunga un giorno
+  // (vedi PILLOLA_*) e in mezzo alle altre corsie le coprirebbe.
+  ['pillole', ['pillole']],
 ];
 
 // Misure del flowchart, in pixel.
@@ -67,34 +70,82 @@ const ASSE_H = 28;
 const SENZA_ORARIO_W = CARTA_W + 30;
 const ORA = 3600_000;
 
+// La pillola: 8 ore di effetto, poi 15 ore e mezza di malus
+// (gameConfig.items.cocain, le stesse durate di server/damageTimeline.js).
+const PILLOLA_EFFETTO = 8 * 3600_000;
+const PILLOLA_MALUS = 15.5 * 3600_000;
+
 const CHIAVE_SCELTA = 'wp_pv_op_scelta';
 const CHIAVE_BATTAGLIE = 'wp_pv_op_battaglie';
 
 // ── Battaglie aperte ────────────────────────────────────────────────
-// Ogni round dura 6 ore dal suo inizio (`currentRound.createdAt`), e
-// vince chi arriva a `roundsToWin`. La fine si sa solo come forchetta:
-// la prima se chi è avanti vince tutti i round che mancano, l'ultima se
-// si va fino all'ultimo round possibile.
-const ROUND_MS = 6 * ORA;
+// Un round NON finisce a tempo: lo vince chi arriva a 300 punti
+// (gameConfig.battle.pointsToWinRound). I punti arrivano a TICK regolari
+// (~2 minuti) a chi sta facendo più danno in quel momento, e un tick vale
+// di più più il round va avanti (battle.tickPoints: 1 punto dal 1° tick,
+// 2 dal 100°, 3 dal 200°…). Le "6 ore" sono il caso in cui un lato prende
+// tutti i tick. `/battles` porta già `currentRound.live` (tick contati,
+// prossimo tick) e i punti dei due lati: zero chiamate in più.
+//
+// La fine del round è quindi "al più presto": se chi è avanti prende tutti
+// i tick che restano. La battaglia vince chi arriva a `roundsToWin`: la
+// forchetta va da "chi è avanti vince tutti i round che mancano" a "si va
+// fino all'ultimo round", ogni round nuovo alla sua durata minima.
+const PUNTI_ROUND = 300;
+const PUNTI_TICK = [[500, 6], [400, 5], [300, 4], [200, 3], [100, 2], [1, 1]];
+const TICK_DI_RIPIEGO_MS = 2 * 60_000;
+const ROUND_DI_RIPIEGO_MS = 6 * ORA;
+
+// ⚠️ La soglia è sul TOTALE dei punti già assegnati nel round (i due lati
+// sommati), non sul numero del tick: lo dice il gioco stesso ("100+ totale
+// = 2 terreno per tick"), verificato sulla scheda di una battaglia.
+const puntiDelTick = (totale) => PUNTI_TICK.find(([da]) => totale >= da)?.[1] || 1;
+
+/** Quanti tick servono a un lato con `mio` punti, se prende tutti i tick,
+ *  quando l'altro ne ha `altro`. */
+function tickMancanti(mio, altro) {
+  let p = mio, k = 0;
+  while (p < PUNTI_ROUND && k < 5000) { p += puntiDelTick(p + altro); k++; }
+  return k;
+}
 
 function fineBattaglia(b) {
   const R = b.roundsToWin || 2;
   const a = b.attacker?.wonRoundsCount || 0, d = b.defender?.wonRoundsCount || 0;
-  const inizio = Date.parse(b.currentRound?.createdAt || b.createdAt);
-  const fineRound = inizio + ROUND_MS;
+  const cr = b.currentRound || {};
+  const inizio = Date.parse(cr.createdAt || b.createdAt);
+  const tick = cr.live?.ticksCount;
+  const prossimo = Date.parse(cr.live?.nextTickAt || '');
+  const pa = cr.attacker?.points || 0, pd = cr.defender?.points || 0;
+  let fineRound, roundMinimo, finePerLato = null;
+  if (Number.isFinite(tick) && Number.isFinite(prossimo)) {
+    const passo = (prossimo - inizio) / (tick + 1);
+    const intervallo = passo >= 30_000 && passo <= 10 * 60_000 ? passo : TICK_DI_RIPIEGO_MS;
+    // Ognuno dei due lati, se prendesse tutti i tick da qui: come il gioco
+    // mostra "~2h36m" e "~2h44m" ai due lati del timer.
+    finePerLato = {
+      attacker: prossimo + (tickMancanti(pa, pd) - 1) * intervallo,
+      defender: prossimo + (tickMancanti(pd, pa) - 1) * intervallo,
+    };
+    fineRound = Math.min(finePerLato.attacker, finePerLato.defender);
+    roundMinimo = tickMancanti(0, 0) * intervallo;
+  } else {
+    fineRound = inizio + ROUND_DI_RIPIEGO_MS;
+    roundMinimo = ROUND_DI_RIPIEGO_MS;
+  }
   const minimi = Math.max(1, R - Math.max(a, d));
   const massimi = Math.max(1, (R - a) + (R - d) - 1);
   return {
-    round: b.currentRound?.number || a + d + 1, a, d,
-    prima: fineRound + (minimi - 1) * ROUND_MS,
-    ultima: fineRound + (massimi - 1) * ROUND_MS,
+    round: cr.number || a + d + 1, a, d, pa, pd, fineRound, finePerLato,
+    prima: fineRound + (minimi - 1) * roundMinimo,
+    ultima: fineRound + (massimi - 1) * roundMinimo,
   };
 }
 
 function testoBattaglia(b) {
   const f = fineBattaglia(b);
   const fine = f.prima === f.ultima ? oraBreve(f.prima) : `${oraBreve(f.prima)}–${oraBreve(f.ultima)}`;
-  return t('battleLine', { n: f.round, a: f.a, d: f.d, fine });
+  return t('battleLine2', { n: f.round, a: f.a, d: f.d, pa: f.pa, pd: f.pd, round: oraBreve(f.fineRound), fine });
 }
 
 /** "12 h 36 min", "45 min". */
@@ -183,6 +234,49 @@ function idDaEtichetta(testo) {
   const trovati = [..._perEtichetta.entries()].filter(([e]) => e.toLowerCase().startsWith(`${basso} (`) || e.toLowerCase() === basso);
   return trovati.length === 1 ? trovati[0][1] : undefined;
 }
+
+// ── Regioni secondo la nazione ────────────────────────────────────
+// Prima si sceglie CHI (la nazione che attacca, che si rivolta, che
+// difende), poi l'elenco delle regioni è solo quello che ha senso:
+//   attacco → le regioni straniere che toccano le sue;
+//   rivolta → le sue regioni d'origine oggi in mano ad altri;
+//   difesa  → le sue regioni di confine.
+// Gli altri tipi tengono l'elenco intero (null).
+
+function regioniCandidate(tipo, paese) {
+  const tutte = state.regionData || {};
+  if (!paese) return null;
+  const sue = Object.keys(tutte).filter((id) => tutte[id]?.country === paese);
+  const straniera = (v) => tutte[v] && tutte[v].country !== paese;
+  if (tipo === 'attacco') {
+    const s = new Set();
+    for (const id of sue) for (const v of regionNeighbors(id)) if (straniera(v)) s.add(v);
+    return [...s];
+  }
+  if (tipo === 'rivolta') return Object.keys(tutte).filter((id) => tutte[id]?.initialCountry === paese && tutte[id]?.country !== paese);
+  if (tipo === 'difesa') return sue.filter((id) => regionNeighbors(id).some(straniera));
+  return null;
+}
+
+/** Da quali regioni della nazione si può attaccare `bersaglio`. */
+function partenzeVerso(paese, bersaglio) {
+  return regionNeighbors(bersaglio).filter((v) => state.regionData?.[v]?.country === paese);
+}
+
+const etichetteDi = (ids) => ids.map(etichettaRegione).filter((e) => e && e !== '—').sort((a, b) => a.localeCompare(b));
+
+/** Il menu delle nazioni, la nostra in cima. */
+function selettoreNazione(noi, valore) {
+  const s = el('select', 'wp-pv-select');
+  const nazioni = [...(state.nationMap?.entries() || [])]
+    .map(([id, n]) => [id, n?.name || id])
+    .sort((a, b) => (Number(b[0] === noi) - Number(a[0] === noi)) || a[1].localeCompare(b[1]));
+  for (const [id, nome] of nazioni) s.appendChild(Object.assign(el('option', null, nome), { value: id }));
+  s.value = valore || noi || '';
+  return s;
+}
+
+const CON_NAZIONE = new Set(['attacco', 'rivolta', 'difesa']);
 
 function riempiDatalist(dl, etichette) {
   dl.textContent = '';
@@ -601,13 +695,25 @@ export function creaOperazioni(ctx) {
     const sel = el('select', 'wp-pv-select wp-pv-select-piccola');
     for (const k of TIPI) sel.appendChild(Object.assign(el('option', null, opT(`kind_${k}`)), { value: k }));
     sel.value = tipo;
+    // Come nel modulo completo: prima la nazione, poi solo le regioni che
+    // per quel tipo hanno senso.
+    const naz = selettoreNazione(dati.countryId, null);
+    naz.classList.add('wp-pv-select-piccola');
+    naz.setAttribute('aria-label', opT('fNation'));
     const dl = el('datalist');
     dl.id = 'wp-pv-op-regioni-rapido';
-    riempiDatalist(dl, _etichette);
     const reg = el('input', 'wp-pv-input');
     reg.setAttribute('list', dl.id);
     reg.placeholder = opT('regionPh');
     reg.autocomplete = 'off';
+    const aggiorna = () => {
+      naz.hidden = !CON_NAZIONE.has(sel.value);
+      const cand = CON_NAZIONE.has(sel.value) ? regioniCandidate(sel.value, naz.value) : null;
+      riempiDatalist(dl, cand ? etichetteDi(cand) : _etichette);
+    };
+    sel.addEventListener('change', aggiorna);
+    naz.addEventListener('change', aggiorna);
+    aggiorna();
     const testa = el('div', 'wp-pv-op-rapido-testa');
     testa.appendChild(el('strong', null, quando ? oraBreve(quando) : opT('noTime')));
     const chiudi = bottone('wp-pv-op-x', '×', () => { rapido = null; ctx.ridisegna(); });
@@ -624,18 +730,18 @@ export function creaOperazioni(ctx) {
       rapido = null;
       apriModuloPasso(op, null, { tipo: sel.value, quando, regione: id || null });
     }));
-    f.append(testa, sel, reg, dl, avviso, azioni);
+    f.append(testa, sel, naz, reg, dl, avviso, azioni);
     f.addEventListener('keydown', (e) => { if (e.key === 'Escape') { rapido = null; ctx.ridisegna(); } });
     f.addEventListener('submit', async (e) => {
       e.preventDefault();
       const id = idDaEtichetta(reg.value);
       if (id === undefined) { avviso.textContent = opT('regionUnknown'); avviso.hidden = false; return; }
-      // Un attacco parte da una regione nostra confinante: se ce n'è una
-      // sola la si mette da sé, altrimenti si sceglie nei dettagli.
+      // Un attacco parte da una regione della nazione scelta che confina:
+      // se ce n'è una sola la si mette da sé, altrimenti nei dettagli.
       let da = null;
       if (sel.value === 'attacco' && id) {
-        const nostre = regionNeighbors(id).filter((r) => state.regionData?.[r]?.country === dati.countryId);
-        if (nostre.length === 1) da = nostre[0];
+        const partenze = partenzeVerso(naz.value, id);
+        if (partenze.length === 1) da = partenze[0];
       }
       const fatto = await aggiungi(op, { tipo: sel.value, regione: id, daRegione: da, quando });
       if (!fatto) { avviso.textContent = messaggio || opT('errServer'); avviso.hidden = false; messaggio = null; }
@@ -716,19 +822,23 @@ export function creaOperazioni(ctx) {
   // Un clic su un punto vuoto, per chi pianifica, apre il modulo di un
   // passo già con quell'ora e la corsia scelta.
 
-  const TIPO_DI_CORSIA = { rivolte: 'rivolta', fronte: 'attacco', supporto: 'altro' };
+  const TIPO_DI_CORSIA = { rivolte: 'rivolta', fronte: 'attacco', supporto: 'altro', pillole: 'pillole' };
 
   function disposizione(passi) {
     const ora = Date.now();
     const estesi = passi.map((p) => {
       const b = p.battaglia ? viveId.get(p.battaglia) : null;
       if (b) { const f = fineBattaglia(b); return { p, da: Date.parse(b.createdAt), finePrima: f.prima, fineUltima: f.ultima }; }
+      // Una pillola dura: effetto e poi malus, a partire da quando la si prende.
+      if (p.tipo === 'pillole' && p.quando) {
+        return { p, da: p.quando, finePrima: null, fineUltima: null, fineMalus: p.quando + PILLOLA_EFFETTO + PILLOLA_MALUS };
+      }
       return { p, da: p.quando || null, finePrima: null, fineUltima: null };
     });
     const senzaOra = estesi.filter((e) => !e.da).length;
     const xSenza = ETICHETTA_W + 10;
     const xAsse0 = ETICHETTA_W + (senzaOra ? SENZA_ORARIO_W : 0) + 14;
-    const tutti = estesi.flatMap((e) => [e.da, e.fineUltima]).filter(Boolean);
+    const tutti = estesi.flatMap((e) => [e.da, e.fineUltima, e.fineMalus]).filter(Boolean);
     const t0 = Math.floor(Math.min(ora, ...tutti) / ORA) * ORA - 2 * ORA;
     const t1 = Math.ceil(Math.max(ora, ...tutti) / ORA) * ORA + 3 * ORA;
     const ore = (t1 - t0) / ORA;
@@ -746,7 +856,8 @@ export function creaOperazioni(ctx) {
           const x = e.da ? xDi(e.da) : xSenza;
           const w = e.finePrima ? Math.max(CARTA_W, ((e.finePrima - e.da) / ORA) * pxOra) : CARTA_W;
           const coda = e.fineUltima ? Math.max(0, ((e.fineUltima - e.finePrima) / ORA) * pxOra) : 0;
-          return { p: e.p, x, w, coda };
+          const pillola = e.fineMalus ? { effetto: (PILLOLA_EFFETTO / ORA) * pxOra, malus: (PILLOLA_MALUS / ORA) * pxOra } : null;
+          return { p: e.p, x, w, coda, pillola };
         })
         .sort((a, b) => (a.x - b.x) || (a.p.id - b.p.id));
       // Due schede che si toccherebbero scendono su righe diverse della
@@ -755,8 +866,8 @@ export function creaOperazioni(ctx) {
       for (const c of qui) {
         let r = righe.findIndex((fine) => fine + 8 <= c.x);
         if (r < 0) { r = righe.length; righe.push(0); }
-        righe[r] = c.x + c.w + c.coda;
-        pos.set(c.p.id, { x: c.x, y: y + CORSIA_PAD + r * (CARTA_H + GAP_Y), w: c.w, coda: c.coda });
+        righe[r] = c.x + Math.max(c.w + c.coda, c.pillola ? c.pillola.effetto + c.pillola.malus : 0);
+        pos.set(c.p.id, { x: c.x, y: y + CORSIA_PAD + r * (CARTA_H + GAP_Y), w: c.w, coda: c.coda, pillola: c.pillola });
       }
       // Anche la corsia vuota si disegna: è dove si clicca per aggiungere.
       const h = CORSIA_PAD * 2 + Math.max(1, righe.length) * (CARTA_H + GAP_Y) - GAP_Y;
@@ -764,7 +875,7 @@ export function creaOperazioni(ctx) {
       y += h;
     }
     let w = xDi(t1) + 12;
-    for (const q of pos.values()) w = Math.max(w, q.x + q.w + q.coda + 16);
+    for (const q of pos.values()) w = Math.max(w, q.x + q.w + q.coda + 16, q.pillola ? q.x + q.pillola.effetto + q.pillola.malus + 16 : 0);
 
     // Le tacche dell'asse: ogni ora quando c'è spazio, poi ogni 3, 6, 12.
     const tacche = [];
@@ -937,6 +1048,22 @@ export function creaOperazioni(ctx) {
     for (const p of op.passi) {
       const q = L.pos.get(p.id);
       if (!q) continue;
+      // La pillola: una fascia verde per l'effetto e una rossa per il
+      // malus, sotto la scheda, lunghe quanto durano davvero.
+      if (q.pillola) {
+        for (const [cls, x, larg, tit] of [
+          ['wp-pv-op-pill-effetto', q.x, q.pillola.effetto, opT('pillBuff')],
+          ['wp-pv-op-pill-malus', q.x + q.pillola.effetto, q.pillola.malus, opT('pillMalus')],
+        ]) {
+          const f = el('div', cls);
+          f.style.left = `${x}px`;
+          f.style.top = `${q.y}px`;
+          f.style.width = `${larg}px`;
+          f.style.height = `${CARTA_H}px`;
+          f.title = tit;
+          tela.appendChild(f);
+        }
+      }
       if (q.coda > 0) {
         const coda = el('div', 'wp-pv-op-coda');
         coda.style.left = `${q.x + q.w}px`;
@@ -954,7 +1081,12 @@ export function creaOperazioni(ctx) {
     if (pm) {
       const m = el('div', 'wp-pv-op-menu');
       m.style.left = `${qm.x}px`;
-      m.style.top = `${qm.y + CARTA_H + 4}px`;
+      // Sotto la scheda se c'è spazio, altrimenti sopra: il riquadro del
+      // grafico taglia quello che esce dal fondo, e sulle schede dell'ultima
+      // riga il menu spariva.
+      const ALTEZZA_MENU = 150;
+      const sotto = qm.y + CARTA_H + 4;
+      m.style.top = `${sotto + ALTEZZA_MENU > L.h ? Math.max(4, qm.y - ALTEZZA_MENU - 4) : sotto}px`;
       m.setAttribute('role', 'menu');
       for (const st of STATI) {
         const b = el('button', `wp-pv-op-menu-voce wp-pv-op-st-${st}${st === pm.stato ? ' attuale' : ''}`);
@@ -1147,6 +1279,8 @@ export function creaOperazioni(ctx) {
       v.appendChild(el('span', 'wp-pv-op-pill', opT(`st_${s}`)));
       l.appendChild(v);
     }
+    l.appendChild(el('span', 'wp-pv-op-legenda-fascia wp-pv-op-pill-effetto', opT('pillBuffShort')));
+    l.appendChild(el('span', 'wp-pv-op-legenda-fascia wp-pv-op-pill-malus', opT('pillMalusShort')));
     l.appendChild(el('span', 'wp-pv-op-legenda-nota', opT('legendArrows')));
     return l;
   }
@@ -1183,6 +1317,10 @@ export function creaOperazioni(ctx) {
     if (p.battaglia) {
       const b = viveId.get(p.battaglia);
       fatto(opT('fBattleLink'), b ? `${etichettaBattaglia(b)} — ${testoBattaglia(b)}` : opT('battleClosed'));
+      if (b) {
+        const fb = fineBattaglia(b);
+        fatto(opT('fRound'), t('roundEnds', { n: fb.round, pa: fb.pa, pd: fb.pd, dura: durata(fb.fineRound - Date.now()), ora: oraBreve(fb.fineRound) }));
+      }
     }
     const g = guerraDelPasso(p);
     if (g) fatto(opT('fPrio'), testoPriorita(g));
@@ -1244,11 +1382,16 @@ export function creaOperazioni(ctx) {
     const titolo = el('input', 'wp-pv-input');
     titolo.maxLength = 80; titolo.placeholder = opT('stepTitlePh'); titolo.value = p?.titolo || '';
 
-    // Regione: tutte. Da dove: le confinanti della regione scelta, che è
-    // da dove si può attaccare davvero.
+    // Prima la nazione, poi le regioni che per quel tipo hanno senso (vedi
+    // regioniCandidate); "da dove" sono le sue regioni che toccano il
+    // bersaglio, e se ce n'è una sola si mette da sé.
+    const noiPaese = dati.countryId;
+    const nazionePre = p?.tipo === 'attacco' && p.daRegione ? state.regionData?.[p.daRegione]?.country
+      : p?.tipo === 'rivolta' && p.regione ? state.regionData?.[p.regione]?.initialCountry
+        : p?.tipo === 'difesa' && p.regione ? state.regionData?.[p.regione]?.country : null;
+    const nazione = selettoreNazione(noiPaese, nazionePre);
     const dlTutte = el('datalist');
     dlTutte.id = 'wp-pv-op-regioni';
-    riempiDatalist(dlTutte, _etichette);
     const dlVicine = el('datalist');
     dlVicine.id = 'wp-pv-op-vicine';
 
@@ -1267,11 +1410,20 @@ export function creaOperazioni(ctx) {
 
     const aggiornaVicine = () => {
       const id = idDaEtichetta(regione.value);
-      const vicine = id ? regionNeighbors(id).map(etichettaRegione).filter(Boolean).sort((a, b) => a.localeCompare(b)) : _etichette;
-      riempiDatalist(dlVicine, vicine);
+      if (!id) { riempiDatalist(dlVicine, []); return; }
+      const partenze = tipo.value === 'attacco' ? partenzeVerso(nazione.value, id) : [];
+      riempiDatalist(dlVicine, etichetteDi(partenze.length ? partenze : regionNeighbors(id)));
+      if (partenze.length === 1 && !idDaEtichetta(daRegione.value)) daRegione.value = etichettaRegione(partenze[0]);
+    };
+    const aggiornaRegioni = () => {
+      const cand = CON_NAZIONE.has(tipo.value) ? regioniCandidate(tipo.value, nazione.value) : null;
+      riempiDatalist(dlTutte, cand ? etichetteDi(cand) : _etichette);
+      aggiornaVicine();
     };
     regione.addEventListener('change', aggiornaVicine);
-    aggiornaVicine();
+    nazione.addEventListener('change', () => { daRegione.value = ''; aggiornaRegioni(); });
+    tipo.addEventListener('change', aggiornaRegioni);
+    aggiornaRegioni();
 
     const quando = el('input', 'wp-pv-input');
     quando.type = 'datetime-local';
@@ -1320,6 +1472,8 @@ export function creaOperazioni(ctx) {
       const b = viveId.get(battaglia.value);
       if (!b) return;
       tipo.value = !sono(b) ? 'altro' : b.type === 'resistance' ? 'rivolta' : b.attacker?.country === noi ? 'attacco' : 'difesa';
+      const chi = tipo.value === 'difesa' ? b.defender?.country : b.attacker?.country;
+      if (chi && CON_NAZIONE.has(tipo.value)) nazione.value = chi;
       tipo.dispatchEvent(new Event('change'));
       regione.value = b.defender?.region ? etichettaRegione(b.defender.region) : '';
       daRegione.value = tipo.value === 'attacco' && b.attacker?.region ? etichettaRegione(b.attacker.region) : '';
@@ -1333,8 +1487,10 @@ export function creaOperazioni(ctx) {
     const griglia = el('div', 'wp-pv-op-griglia-campi');
     if (nostre.length || p?.battaglia) griglia.appendChild(campo(opT('fBattleLink'), battaglia, 'wp-pv-op-campo-largo'));
     griglia.appendChild(campo(opT('fKind'), tipo));
-    griglia.appendChild(campo(opT('fTitle'), titolo));
+    const campoNazione = campo(opT('fNation'), nazione);
+    griglia.appendChild(campoNazione);
     griglia.appendChild(campo(opT('fRegion'), regione));
+    griglia.appendChild(campo(opT('fTitle'), titolo));
     const campoDa = campo(opT('fFrom'), daRegione, 'wp-pv-op-campo-da');
     griglia.appendChild(campoDa);
     griglia.appendChild(campo(opT('fWhen'), quando));
@@ -1344,7 +1500,7 @@ export function creaOperazioni(ctx) {
     f.appendChild(griglia);
     f.appendChild(dlTutte);
     f.appendChild(dlVicine);
-    const mostraDa = () => { campoDa.hidden = tipo.value !== 'attacco'; };
+    const mostraDa = () => { campoDa.hidden = tipo.value !== 'attacco'; campoNazione.hidden = !CON_NAZIONE.has(tipo.value); };
     tipo.addEventListener('change', mostraDa);
     mostraDa();
 
