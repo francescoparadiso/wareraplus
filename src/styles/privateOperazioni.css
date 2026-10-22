@@ -74,6 +74,21 @@ body.light-theme #wp-private-root .wp-pv-op-st-annullata { --st: #94a3b8; }
   background: var(--pv-surface);
 }
 .wp-pv-op-tela { position: relative; }
+.wp-pv-op-guscio { display: flex; flex-direction: column; gap: .5rem; min-width: 0; }
+.wp-pv-op-strumenti { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.wp-pv-op-suggerimento { margin-left: .4rem; font-size: .75rem; color: var(--pv-ink-soft); }
+/* Trascinabile: l'overflow nativo resta (tastiera, rotella orizzontale). */
+.wp-pv-op-flow { cursor: grab; touch-action: pan-y; }
+.wp-pv-op-flow.trascina { cursor: grabbing; user-select: none; }
+.wp-pv-op-carta { cursor: pointer; }
+/* La coda di una battaglia: da quando potrebbe finire al più presto a
+   quando al più tardi, a righe diagonali sul colore della barra. */
+.wp-pv-op-coda {
+  position: absolute; box-sizing: border-box;
+  border: 1px dashed var(--pv-ink-soft); border-left: 0; border-radius: 0 8px 8px 0;
+  background: repeating-linear-gradient(135deg, transparent 0 6px, var(--pv-rule) 6px 8px);
+  pointer-events: none;
+}
 .wp-pv-op-corsia { position: absolute; left: 0; right: 0; border-top: 1px solid var(--pv-rule); }
 .wp-pv-op-corsia.dispari { background: var(--pv-surface-2); }
 .wp-pv-op-corsia-nome {

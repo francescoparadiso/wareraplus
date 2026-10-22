@@ -211,6 +211,9 @@ export function creaOperazioni(ctx) {
   let messaggio = null;         // errore dell'ultima azione
   let vive = new Map();         // regionId → battaglia in corso
   let viveId = new Map();       // battleId → battaglia in corso (passi agganciati)
+  let pxOraUtente = null;       // zoom scelto (null = automatico)
+  let posizioneX = null;        // scorrimento orizzontale, tenuto fra i ridisegni
+  let centraSu = null;          // istante da portare al centro dopo uno zoom
   let larghezzaVista = 0;       // del riquadro del flowchart, misurata (vedi flowchart)
   // I due moduli: nodi che restano fra un ridisegno e l'altro.
   let moduloOp = null;          // { nodo, modifica: bool }
@@ -513,71 +516,105 @@ export function creaOperazioni(ctx) {
   }
 
   // ── Il flowchart ─────────────────────────────────────────────────
+  // Una linea del tempo che si esplora: si trascina per spostarsi, si
+  // ingrandisce con + e −, "Adesso" riporta al presente. Il periodo mostrato
+  // è sempre quello dei passi più un margine, con l'ora attuale dentro.
+  // Un passo agganciato a una battaglia aperta è una BARRA: piena fino alla
+  // fine più vicina (chi è avanti vince tutti i round che mancano), poi una
+  // coda a righe fino alla più lontana (si va fino all'ultimo round).
+  // Un clic su un punto vuoto, per chi pianifica, apre il modulo di un
+  // passo già con quell'ora e la corsia scelta.
+
+  const TIPO_DI_CORSIA = { rivolte: 'rivolta', fronte: 'attacco', supporto: 'altro' };
 
   function disposizione(passi) {
-    const conOra = passi.filter((p) => p.quando);
-    const senzaOra = passi.length - conOra.length;
+    const ora = Date.now();
+    const estesi = passi.map((p) => {
+      const b = p.battaglia ? viveId.get(p.battaglia) : null;
+      if (b) { const f = fineBattaglia(b); return { p, da: Date.parse(b.createdAt), finePrima: f.prima, fineUltima: f.ultima }; }
+      return { p, da: p.quando || null, finePrima: null, fineUltima: null };
+    });
+    const senzaOra = estesi.filter((e) => !e.da).length;
     const xSenza = ETICHETTA_W + 10;
     const xAsse0 = ETICHETTA_W + (senzaOra ? SENZA_ORARIO_W : 0) + 14;
-    let t0 = null, t1 = null, pxOra = 0;
-    if (conOra.length) {
-      const min = Math.min(...conOra.map((p) => p.quando));
-      const max = Math.max(...conOra.map((p) => p.quando));
-      t0 = Math.floor(min / ORA) * ORA;
-      t1 = Math.max(Math.ceil(max / ORA) * ORA + ORA, t0 + 2 * ORA);
-      const ore = (t1 - t0) / ORA;
-      // Le ore riempiono lo spazio che c'è, ma non sotto un minimo: più è
-      // lunga l'operazione, più si stringono — un piano di una sera si
-      // legge ora per ora, uno di tre giorni scorre.
-      const minimo = ore <= 6 ? 90 : ore <= 12 ? 60 : ore <= 24 ? 40 : ore <= 72 ? 20 : 10;
-      const adatto = larghezzaVista ? (larghezzaVista - xAsse0 - CARTA_W - 16) / ore : 0;
-      pxOra = Math.min(220, Math.max(minimo, adatto));
-    }
+    const tutti = estesi.flatMap((e) => [e.da, e.fineUltima]).filter(Boolean);
+    const t0 = Math.floor(Math.min(ora, ...tutti) / ORA) * ORA - 2 * ORA;
+    const t1 = Math.ceil(Math.max(ora, ...tutti) / ORA) * ORA + 3 * ORA;
+    const ore = (t1 - t0) / ORA;
+    const adatto = larghezzaVista ? (larghezzaVista - xAsse0 - CARTA_W - 16) / ore : 0;
+    const pxOra = pxOraUtente ?? Math.min(120, Math.max(40, adatto));
     const xDi = (ms) => xAsse0 + ((ms - t0) / ORA) * pxOra;
+    const tDi = (x) => t0 + ((x - xAsse0) / pxOra) * ORA;
 
     const pos = new Map();
     const corsie = [];
     let y = ASSE_H + 6;
     for (const [k, tipi] of CORSIE) {
-      const qui = passi.filter((p) => tipi.includes(p.tipo))
-        .map((p) => ({ p, x: p.quando ? xDi(p.quando) : xSenza }))
+      const qui = estesi.filter((e) => tipi.includes(e.p.tipo))
+        .map((e) => {
+          const x = e.da ? xDi(e.da) : xSenza;
+          const w = e.finePrima ? Math.max(CARTA_W, ((e.finePrima - e.da) / ORA) * pxOra) : CARTA_W;
+          const coda = e.fineUltima ? Math.max(0, ((e.fineUltima - e.finePrima) / ORA) * pxOra) : 0;
+          return { p: e.p, x, w, coda };
+        })
         .sort((a, b) => (a.x - b.x) || (a.p.id - b.p.id));
-      if (!qui.length) continue;
       // Due schede che si toccherebbero scendono su righe diverse della
       // stessa corsia: la prima riga libera da quell'ora in poi.
       const righe = [];
       for (const c of qui) {
         let r = righe.findIndex((fine) => fine + 8 <= c.x);
         if (r < 0) { r = righe.length; righe.push(0); }
-        righe[r] = c.x + CARTA_W;
-        pos.set(c.p.id, { x: c.x, y: y + CORSIA_PAD + r * (CARTA_H + GAP_Y) });
+        righe[r] = c.x + c.w + c.coda;
+        pos.set(c.p.id, { x: c.x, y: y + CORSIA_PAD + r * (CARTA_H + GAP_Y), w: c.w, coda: c.coda });
       }
-      const h = CORSIA_PAD * 2 + righe.length * (CARTA_H + GAP_Y) - GAP_Y;
+      // Anche la corsia vuota si disegna: è dove si clicca per aggiungere.
+      const h = CORSIA_PAD * 2 + Math.max(1, righe.length) * (CARTA_H + GAP_Y) - GAP_Y;
       corsie.push({ k, y, h });
       y += h;
     }
-    let w = ETICHETTA_W + 40;
-    for (const { x } of pos.values()) w = Math.max(w, x + CARTA_W + 16);
-    if (t1 != null) w = Math.max(w, xDi(t1) + 12);
+    let w = xDi(t1) + 12;
+    for (const q of pos.values()) w = Math.max(w, q.x + q.w + q.coda + 16);
 
     // Le tacche dell'asse: ogni ora quando c'è spazio, poi ogni 3, 6, 12.
     const tacche = [];
-    if (t0 != null) {
-      const passo = pxOra >= 60 ? 1 : pxOra >= 28 ? 3 : pxOra >= 14 ? 6 : 12;
-      for (let ms = t0; ms <= t1; ms += ORA) {
-        const h = new Date(ms).getHours();
-        if (h % passo === 0 || ms === t0) tacche.push(ms);
-      }
+    const passo = pxOra >= 60 ? 1 : pxOra >= 28 ? 3 : pxOra >= 14 ? 6 : 12;
+    for (let ms = t0; ms <= t1; ms += ORA) {
+      if (new Date(ms).getHours() % passo === 0 || ms === t0) tacche.push(ms);
     }
-    return { pos, corsie, w, h: y + 6, t0, t1, xDi, tacche, xSenza: senzaOra ? xSenza : null };
+    return { pos, corsie, w, h: y + 6, t0, t1, xDi, tDi, xAsse0, pxOra, tacche, xSenza: senzaOra ? xSenza : null };
   }
 
   function flowchart(op, { numero, stati }) {
     const L = disposizione(op.passi);
+    const guscio = el('div', 'wp-pv-op-guscio');
     const scorre = el('div', 'wp-pv-op-flow');
     const tela = el('div', 'wp-pv-op-tela');
     tela.style.width = `${L.w}px`;
     tela.style.height = `${L.h}px`;
+
+    // Barra degli strumenti: sposta, ingrandisci, torna a adesso.
+    const barra = el('div', 'wp-pv-op-strumenti');
+    const strumento = (testo, titolo, fn) => {
+      const b = bottone('wp-pv-btn-quiet wp-pv-btn-small', testo, fn);
+      b.title = titolo; b.setAttribute('aria-label', titolo);
+      barra.appendChild(b);
+    };
+    const sposta = (ore) => { scorre.scrollBy({ left: ore * L.pxOra, behavior: 'smooth' }); };
+    // Lo zoom tiene fermo il punto al centro del riquadro.
+    const zoom = (k) => {
+      centraSu = L.tDi(scorre.scrollLeft + scorre.clientWidth / 2);
+      pxOraUtente = Math.min(260, Math.max(6, L.pxOra * k));
+      ctx.ridisegna();
+    };
+    strumento('◀ 6h', opT('panBack'), () => sposta(-6));
+    strumento('−', opT('zoomOut'), () => zoom(1 / 1.5));
+    strumento('+', opT('zoomIn'), () => zoom(1.5));
+    strumento(opT('nowBtn'), opT('nowBtnHint'), () => {
+      scorre.scrollTo({ left: L.xDi(Date.now()) - scorre.clientWidth / 4, behavior: 'smooth' });
+    });
+    strumento('6h ▶', opT('panFwd'), () => sposta(6));
+    barra.appendChild(el('span', 'wp-pv-op-suggerimento', pianifica() ? opT('chartHintPlan') : opT('chartHint')));
+    guscio.appendChild(barra);
 
     for (const [i, c] of L.corsie.entries()) {
       const fascia = el('div', `wp-pv-op-corsia${i % 2 ? ' dispari' : ''}`);
@@ -597,30 +634,25 @@ export function creaOperazioni(ctx) {
     s.appendChild(defs);
 
     // Griglia oraria e asse.
-    if (L.t0 != null) {
-      let giornoPrima = null;
-      for (const ms of L.tacche) {
-        const x = L.xDi(ms);
-        s.appendChild(svg('line', { x1: x, y1: ASSE_H - 4, x2: x, y2: L.h, class: 'wp-pv-op-griglia' }));
-        const d = new Date(ms);
-        const giorno = d.toDateString();
-        const testo = giorno !== giornoPrima
-          ? `${d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' })} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
-          : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-        giornoPrima = giorno;
-        const etichetta = el('span', 'wp-pv-op-tacca', testo);
-        etichetta.style.left = `${x}px`;
-        tela.appendChild(etichetta);
-      }
-      const ora = Date.now();
-      if (ora >= L.t0 && ora <= L.t1) {
-        const x = L.xDi(ora);
-        s.appendChild(svg('line', { x1: x, y1: ASSE_H - 8, x2: x, y2: L.h, class: 'wp-pv-op-adesso' }));
-        const adesso = el('span', 'wp-pv-op-adesso-testo', opT('now'));
-        adesso.style.left = `${x + 4}px`;
-        tela.appendChild(adesso);
-      }
+    let giornoPrima = null;
+    for (const ms of L.tacche) {
+      const x = L.xDi(ms);
+      s.appendChild(svg('line', { x1: x, y1: ASSE_H - 4, x2: x, y2: L.h, class: 'wp-pv-op-griglia' }));
+      const d = new Date(ms);
+      const giorno = d.toDateString();
+      const testo = giorno !== giornoPrima
+        ? `${d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' })} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
+        : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      giornoPrima = giorno;
+      const etichetta = el('span', 'wp-pv-op-tacca', testo);
+      etichetta.style.left = `${x}px`;
+      tela.appendChild(etichetta);
     }
+    const adessoX = L.xDi(Date.now());
+    s.appendChild(svg('line', { x1: adessoX, y1: ASSE_H - 8, x2: adessoX, y2: L.h, class: 'wp-pv-op-adesso' }));
+    const adesso = el('span', 'wp-pv-op-adesso-testo', opT('now'));
+    adesso.style.left = `${adessoX + 4}px`;
+    tela.appendChild(adesso);
     if (L.xSenza != null) {
       const e = el('span', 'wp-pv-op-tacca wp-pv-op-tacca-senza', opT('noTime'));
       e.style.left = `${L.xSenza}px`;
@@ -628,10 +660,9 @@ export function creaOperazioni(ctx) {
     }
 
     // Le frecce: dal bordo destro del passo prima al bordo sinistro di
-    // quello dopo. Se i due si sovrappongono nel tempo (pillole alle 21:25,
-    // attacco alle 21:30) la freccia orizzontale tornerebbe indietro: lì va
-    // in verticale, da una corsia all'altra. Tratteggiate finché il passo
-    // prima non è fatto.
+    // quello dopo. Se i due si sovrappongono nel tempo la freccia
+    // orizzontale tornerebbe indietro: lì va in verticale, da una corsia
+    // all'altra. Tratteggiate finché il passo prima non è fatto.
     const perId = new Map(op.passi.map((p) => [p.id, p]));
     for (const p of op.passi) {
       const b = L.pos.get(p.id);
@@ -639,15 +670,15 @@ export function creaOperazioni(ctx) {
         const a = L.pos.get(da);
         if (!a || !b) continue;
         let d;
-        if (b.x - 2 >= a.x + CARTA_W + 16) {
-          const x1 = a.x + CARTA_W, y1 = a.y + CARTA_H / 2;
+        if (b.x - 2 >= a.x + a.w + 16) {
+          const x1 = a.x + a.w, y1 = a.y + CARTA_H / 2;
           const x2 = b.x - 2, y2 = b.y + CARTA_H / 2;
           const dx = Math.max(36, (x2 - x1) / 2);
           d = `M${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
         } else {
           const sotto = b.y > a.y;
-          const x1 = a.x + CARTA_W / 2, y1 = sotto ? a.y + CARTA_H : a.y;
-          const x2 = b.x + CARTA_W / 2, y2 = sotto ? b.y - 2 : b.y + CARTA_H + 2;
+          const x1 = a.x + a.w / 2, y1 = sotto ? a.y + CARTA_H : a.y;
+          const x2 = b.x + b.w / 2, y2 = sotto ? b.y - 2 : b.y + CARTA_H + 2;
           const dy = Math.max(18, Math.abs(y2 - y1) / 2) * (sotto ? 1 : -1);
           d = `M${x1} ${y1} C ${x1} ${y1 + dy}, ${x2} ${y2 - dy}, ${x2} ${y2}`;
         }
@@ -664,26 +695,72 @@ export function creaOperazioni(ctx) {
     for (const p of op.passi) {
       const q = L.pos.get(p.id);
       if (!q) continue;
+      if (q.coda > 0) {
+        const coda = el('div', 'wp-pv-op-coda');
+        coda.style.left = `${q.x + q.w}px`;
+        coda.style.top = `${q.y}px`;
+        coda.style.width = `${q.coda}px`;
+        coda.style.height = `${CARTA_H}px`;
+        coda.title = opT('battleRange');
+        tela.appendChild(coda);
+      }
       tela.appendChild(cartaPasso(p, q, { n: numero.get(p.id), stato: stati.get(p.id) }));
     }
     scorre.appendChild(tela);
-    // La scala oraria dipende dalla larghezza del riquadro, che si sa solo
-    // a riquadro in pagina: si misura dopo, e si ridisegna se è cambiata
-    // davvero (la soglia assorbe la comparsa di una barra di scorrimento,
-    // che altrimenti farebbe rimbalzare il disegno fra due larghezze).
+    guscio.appendChild(scorre);
+
+    // Trascinare per spostarsi; un clic senza spostamento, su un punto
+    // vuoto, aggiunge un passo lì (solo a chi pianifica).
+    let tiro = null;
+    scorre.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.target.closest('.wp-pv-op-carta')) return;
+      tiro = { x: e.clientX, sl: scorre.scrollLeft, mosso: false };
+      scorre.setPointerCapture(e.pointerId);
+    });
+    scorre.addEventListener('pointermove', (e) => {
+      if (!tiro) return;
+      const dx = e.clientX - tiro.x;
+      if (Math.abs(dx) > 4) { tiro.mosso = true; scorre.classList.add('trascina'); }
+      if (tiro.mosso) scorre.scrollLeft = tiro.sl - dx;
+    });
+    const fineTiro = (e, clic) => {
+      const t = tiro; tiro = null;
+      scorre.classList.remove('trascina');
+      if (!clic || !t || t.mosso || !pianifica() || op.stato === 'archiviata') return;
+      const r = tela.getBoundingClientRect();
+      const x = e.clientX - r.left, yy = e.clientY - r.top;
+      const corsia = L.corsie.find((c) => yy >= c.y && yy < c.y + c.h);
+      if (!corsia) return;
+      // Nella colonna "senza orario" il passo nasce senza orario.
+      const quando = x >= L.xAsse0 - 10 ? Math.round(L.tDi(x) / 900_000) * 900_000 : null;
+      apriModuloPasso(op, null, { tipo: TIPO_DI_CORSIA[corsia.k], quando });
+    };
+    scorre.addEventListener('pointerup', (e) => fineTiro(e, true));
+    scorre.addEventListener('pointercancel', (e) => fineTiro(e, false));
+    scorre.addEventListener('scroll', () => { posizioneX = scorre.scrollLeft; });
+
+    // Dopo il disegno: la larghezza del riquadro si sa solo a riquadro in
+    // pagina (si misura e, se è cambiata davvero, si ridisegna), e la
+    // posizione si ripristina — a un ridisegno qualunque la linea del tempo
+    // non deve tornare all'inizio. La prima volta si parte da "adesso".
     requestAnimationFrame(() => {
       const w = scorre.clientWidth;
-      if (w && Math.abs(w - larghezzaVista) > 40) { larghezzaVista = w; ctx.ridisegna(); }
+      if (w && Math.abs(w - larghezzaVista) > 40) { larghezzaVista = w; ctx.ridisegna(); return; }
+      if (centraSu != null) { scorre.scrollLeft = L.xDi(centraSu) - w / 2; centraSu = null; }
+      else if (posizioneX != null) scorre.scrollLeft = posizioneX;
+      else scorre.scrollLeft = Math.max(0, L.xDi(Date.now()) - w / 4);
+      posizioneX = scorre.scrollLeft;
     });
-    return scorre;
+    return guscio;
   }
+
 
   function cartaPasso(p, q, { n, stato }) {
     const c = el('button', `wp-pv-op-carta wp-pv-op-st-${stato}${passoAperto === p.id ? ' scelta' : ''}`);
     c.type = 'button';
     c.style.left = `${q.x}px`;
     c.style.top = `${q.y}px`;
-    c.style.width = `${CARTA_W}px`;
+    c.style.width = `${q.w || CARTA_W}px`;
     c.style.height = `${CARTA_H}px`;
 
     const riga1 = el('span', 'wp-pv-op-carta-testa');
@@ -858,7 +935,7 @@ export function creaOperazioni(ctx) {
 
     const quando = el('input', 'wp-pv-input');
     quando.type = 'datetime-local';
-    quando.value = perCampoOrario(p?.quando);
+    quando.value = perCampoOrario(p ? p.quando : preimpostati.quando);
 
     const priorita = el('select', 'wp-pv-select');
     for (const k of PRIORITA) {
