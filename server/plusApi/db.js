@@ -467,6 +467,13 @@ function migrate() {
     console.log('[plusApi] migrazione: aggiunta op_step.battle_id');
   }
 
+  // 2026-10-22 - il colore scelto a mano per un passo sulla lavagna (vuoto
+  // = automatico: blu le nostre battaglie, verde l'alleanza, rosso i nemici).
+  if (!colonne('op_step').includes('color')) {
+    db.exec('ALTER TABLE op_step ADD COLUMN color TEXT');
+    console.log('[plusApi] migrazione: aggiunta op_step.color');
+  }
+
   // Qui e non in SCHEMA, per il motivo scritto accanto alla tabella.
   db.exec('CREATE INDEX IF NOT EXISTS idx_wealth_mu_slot ON wealth_snapshot (mu_id, slot)');
   // WarEra+ - scattiRicchezza() cerca per (war_user_id, slot), e la chiave
@@ -1181,7 +1188,7 @@ function getPasso(id) {
   return getDb().prepare('SELECT * FROM op_step WHERE id = ?').get(id) || null;
 }
 
-const CAMPI_PASSO = ['kind', 'title', 'region_id', 'from_region_id', 'at', 'priority', 'assignee', 'status', 'note', 'battle_id'];
+const CAMPI_PASSO = ['kind', 'title', 'region_id', 'from_region_id', 'at', 'priority', 'assignee', 'status', 'note', 'battle_id', 'color'];
 
 function creaPasso(operationId, campi, createdBy) {
   const ora = Date.now();

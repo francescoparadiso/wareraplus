@@ -182,6 +182,13 @@ function campiPasso(body, { nuovo }) {
   if (ha('stato')) c.status = scelta(body.stato, STATI_PASSO, 'stato_non_valido');
   if (ha('nota')) c.note = testo(body.nota, 500);
   if (ha('battaglia')) c.battle_id = idRegione(body.battaglia);
+  // Il colore della scheda: un esadecimale #rrggbb, o vuoto per tornare
+  // all'automatico. Solo quella forma: finisce dentro uno stile.
+  if (ha('colore')) {
+    const col = String(body.colore || '').trim();
+    if (col && !/^#[0-9a-f]{6}$/i.test(col)) throw new Rifiuto('colore_non_valido');
+    c.color = col || null;
+  }
   if (nuovo) {
     c.priority = c.priority || 'media';
     c.status = c.status || 'da_fare';
@@ -251,6 +258,7 @@ function formaPasso(p, dopo) {
     stato: p.status,
     nota: p.note,
     battaglia: p.battle_id || null,
+    colore: p.color || null,
     dopo: dopo || [],
     aggiornatoDa: nomeAccount(p.updated_by),
     aggiornatoIl: p.updated_at,

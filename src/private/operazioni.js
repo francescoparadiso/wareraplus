@@ -657,9 +657,12 @@ export function creaOperazioni(ctx) {
     return new Set([...state.nationMap.values()].filter((n) => n.allianceId === all).map((n) => n._id));
   }
 
-  /** Verde se nella battaglia c'è la nostra alleanza, rossa se no. */
+  /** Blu se nella battaglia c'è la nostra nazione, verde se c'è la nostra
+   *  alleanza, rossa se no. */
   function classeBattaglia(b) {
     if (!b) return '';
+    const noi = dati.countryId;
+    if (b.attacker?.country === noi || b.defender?.country === noi) return ' batt-nostra';
     const a = paesiAlleanza();
     return a.has(b.attacker?.country) || a.has(b.defender?.country) ? ' batt-alleata' : ' batt-nemica';
   }
@@ -949,6 +952,47 @@ export function creaOperazioni(ctx) {
   const guerraCon = (nemico) => (dati?.guerre || []).find((g) => g.nemico === nemico) || null;
   const prioritaAttiva = (g) => Boolean(g?.priorita && g.prioritaFino && g.prioritaFino > Date.now());
 
+  // ⚠️ Regola di gioco: fra due stati si combatte UNA battaglia per volta,
+  // e chi attacca mentre ha la priorità la "spende": la prossima dipende da
+  // come finisce quella battaglia, non più dal timer (che war.getById
+  // lascia pieno). Con una battaglia aperta fra noi e loro la priorità è
+  // quindi "in gioco" e il conto alla rovescia non vale.
+
+  /** La battaglia di guerra aperta fra noi e `nemico`, se c'è. */
+  function battagliaCon(nemico) {
+    const noi = dati?.countryId;
+    if (!nemico || !noi) return null;
+    for (const b of viveId.values()) {
+      if (b.type && b.type !== 'war') continue;
+      const a = b.attacker?.country, d = b.defender?.country;
+      if ((a === noi && d === nemico) || (a === nemico && d === noi)) return b;
+    }
+    return null;
+  }
+  const inGioco = (g) => Boolean(g && battagliaCon(g.nemico));
+
+  /** Un attacco o una difesa pianificati che cadono mentre c'è già una
+   *  battaglia verso lo stesso stato (aperta, o un altro passo pianificato
+   *  prima che quella possa essere finita): una sola per volta. Si guarda la
+   *  fine più VICINA dell'altra, cioè il conflitto sicuro. Risponde con
+   *  cosa si sovrappone, o null. */
+  function conflittoBattaglia(p, op) {
+    if (p.battaglia || !p.quando || !CON_PARTENZA.has(p.tipo)) return null;
+    const g = guerraDelPasso(p);
+    if (!g) return null;
+    const mia = [p.quando, stimaPianificata(p.quando).prima];
+    const tocca = (da, a) => da < mia[1] && a > mia[0];
+    const bg = battagliaCon(g.nemico);
+    if (bg && tocca(Date.parse(bg.createdAt), stimaBattaglia(bg).prima)) return etichettaBattaglia(bg);
+    const numero = numeriPassi(op.passi);
+    for (const q of op.passi) {
+      if (q.id === p.id || q.battaglia || !q.quando || !CON_PARTENZA.has(q.tipo)) continue;
+      if (guerraDelPasso(q)?.nemico !== g.nemico) continue;
+      if (tocca(q.quando, stimaPianificata(q.quando).prima)) return `#${numero.get(q.id)} ${q.titolo || regionName(q.regione)}`;
+    }
+    return null;
+  }
+
   /** La nazione contro cui è un passo: l'altro lato della battaglia
    *  agganciata, altrimenti chi possiede la regione (attacco) o quella di
    *  partenza (difesa). */
@@ -968,6 +1012,11 @@ export function creaOperazioni(ctx) {
   }
 
   function testoPriorita(g) {
+    const bg = battagliaCon(g.nemico);
+    if (bg) {
+      const s = stimaBattaglia(bg);
+      return t('prioAtStake', { regione: regionName(bg.defender?.region), da: oraBreve(s.prima), a: oraBreve(s.ultima) });
+    }
     if (!g.warId) return opT('prioUnknown');
     if (!prioritaAttiva(g)) return opT('prioNone');
     const chi = g.priorita === dati.countryId ? opT('prioOurs') : t('prioTheirs', { nome: nomeNazione(g.priorita) || '?' });
@@ -978,7 +1027,7 @@ export function creaOperazioni(ctx) {
    *  (vedi contoVivo): è quella che si mostra, testoPriorita resta per i
    *  tooltip. */
   function nodoPriorita(g) {
-    if (!prioritaAttiva(g)) return document.createTextNode(testoPriorita(g));
+    if (inGioco(g) || !prioritaAttiva(g)) return document.createTextNode(testoPriorita(g));
     const chi = g.priorita === dati.countryId ? opT('prioOurs') : t('prioTheirs', { nome: nomeNazione(g.priorita) || '?' });
     const [prima, dopo] = t('prioEnds', { ora: oraBreve(g.prioritaFino) }).split('{dura}');
     const s = el('span', null, `${chi} · ${prima}`);
@@ -990,6 +1039,11 @@ export function creaOperazioni(ctx) {
   /** Il gettone sulla scheda: solo se c'è una priorità che corre adesso. */
   function chipPriorita(p) {
     const g = guerraDelPasso(p);
+    if (inGioco(g)) {
+      const c = el('span', 'wp-pv-op-prio-chip gioco', opT('prioChipStake'));
+      c.title = testoPriorita(g);
+      return c;
+    }
     if (!prioritaAttiva(g)) return null;
     const nostra = g.priorita === dati.countryId;
     const c = el('span', `wp-pv-op-prio-chip${nostra ? ' nostra' : ''}`, `${nostra ? opT('prioChipOurs') : opT('prioChipTheirs')} `);
@@ -1003,10 +1057,11 @@ export function creaOperazioni(ctx) {
   function riquadroGuerre() {
     const box = el('div', 'wp-pv-op-guerre');
     box.appendChild(el('span', 'wp-pv-label', opT('warsTitle')));
-    const righe = [...dati.guerre].sort((a, b) => Number(prioritaAttiva(b)) - Number(prioritaAttiva(a)));
+    const conta = (g) => Number(inGioco(g) || prioritaAttiva(g));
+    const righe = [...dati.guerre].sort((a, b) => conta(b) - conta(a));
     for (const g of righe) {
       const attiva = prioritaAttiva(g);
-      const r = el('div', `wp-pv-op-guerra${attiva ? (g.priorita === dati.countryId ? ' nostra' : ' loro') : ''}`);
+      const r = el('div', `wp-pv-op-guerra${inGioco(g) ? ' gioco' : attiva ? (g.priorita === dati.countryId ? ' nostra' : ' loro') : ''}`);
       r.appendChild(el('strong', null, nomeNazione(g.nemico) || '?'));
       r.appendChild(nodoPriorita(g));
       box.appendChild(r);
@@ -1217,7 +1272,18 @@ export function creaOperazioni(ctx) {
     // Le priorità di guerra che corrono adesso: una barra sottile appena
     // sotto l'asse, da adesso alla scadenza, col conto alla rovescia vivo, e
     // una linea verticale dove scade. Verde se è nostra, rossa se loro.
-    (dati.guerre || []).filter(prioritaAttiva).forEach((g, i) => {
+    (dati.guerre || []).filter((g) => prioritaAttiva(g) || inGioco(g)).forEach((g, i) => {
+      const bg = battagliaCon(g.nemico);
+      if (bg) {
+        const x2 = L.xDi(stimaBattaglia(bg).prima);
+        const barra = el('div', 'wp-pv-op-prio-barra gioco', `${opT('prioChipStake')} · ${nomeNazione(g.nemico) || '?'}`);
+        barra.style.left = `${adessoX}px`;
+        barra.style.top = `${ASSE_H + 1 + i * 15}px`;
+        barra.style.width = `${Math.max(2, x2 - adessoX)}px`;
+        barra.title = testoPriorita(g);
+        tela.appendChild(barra);
+        return;
+      }
       const nostra = g.priorita === dati.countryId;
       const x2 = L.xDi(g.prioritaFino);
       s.appendChild(svg('line', { x1: x2, y1: ASSE_H, x2, y2: L.h, class: `wp-pv-op-prio-linea${nostra ? ' nostra' : ''}` }));
@@ -1448,6 +1514,10 @@ export function creaOperazioni(ctx) {
     c.style.top = `${q.y}px`;
     c.style.width = `${q.w || CARTA_W}px`;
     c.style.height = `${CARTA_H}px`;
+    if (p.colore) {
+      c.classList.add('colore-mano');
+      c.style.setProperty('--mano', p.colore);
+    }
 
     const riga1 = el('span', 'wp-pv-op-carta-testa');
     riga1.appendChild(el('span', 'wp-pv-op-num', String(n)));
@@ -1474,6 +1544,12 @@ export function creaOperazioni(ctx) {
 
     const piede = el('span', 'wp-pv-op-carta-piede');
     piede.appendChild(el('span', 'wp-pv-op-pill', opT(`st_${stato}`)));
+    const conflitto = conflittoBattaglia(p, op);
+    if (conflitto) {
+      const w = el('span', 'wp-pv-op-prio-chip gioco', `⚠ ${opT('oneBattle')}`);
+      w.title = t('oneBattleHint', { con: conflitto });
+      piede.appendChild(w);
+    }
     const prio = chipPriorita(p);
     if (prio) piede.appendChild(prio);
     else if (!b && p.regione && vive.has(p.regione)) {
@@ -1610,6 +1686,8 @@ export function creaOperazioni(ctx) {
     }
     const g = guerraDelPasso(p);
     if (g) fatto(opT('fPrio'), nodoPriorita(g));
+    const conflitto = conflittoBattaglia(p, op);
+    if (conflitto) fatto(opT('fConflict'), t('oneBattleHint', { con: conflitto }));
     if (p.regione && vive.has(p.regione)) fatto(opT('fBattle'), opT('liveBattleHint'));
     if (p.aggiornatoDa) fatto(opT('fUpdated'), `${p.aggiornatoDa} · ${oraBreve(p.aggiornatoIl)}`);
     box.appendChild(righe);
@@ -1774,6 +1852,23 @@ export function creaOperazioni(ctx) {
       quando.value = perCampoOrario(Date.parse(b.createdAt));
     });
 
+    // Il colore della scheda: automatico (blu, verde, rosso o lo stato) o
+    // scelto a mano. Un <input type=color> non sa dire "nessuno": c'è una
+    // casella accanto.
+    const colore = el('input', 'wp-pv-op-colore');
+    colore.type = 'color';
+    colore.value = p?.colore || '#60a5fa';
+    const auto = el('input');
+    auto.type = 'checkbox';
+    auto.checked = !p?.colore;
+    colore.disabled = auto.checked;
+    auto.addEventListener('change', () => { colore.disabled = auto.checked; });
+    colore.addEventListener('input', () => { auto.checked = false; });
+    const scatolaColore = el('div', 'wp-pv-op-colore-riga');
+    const etAuto = el('label', 'wp-pv-check');
+    etAuto.append(auto, el('span', null, opT('colorAuto')));
+    scatolaColore.append(colore, etAuto);
+
     const nota = el('textarea', 'wp-pv-input wp-pv-op-nota');
     nota.maxLength = 500; nota.rows = 2; nota.placeholder = opT('notePh'); nota.value = p?.nota || '';
 
@@ -1790,6 +1885,7 @@ export function creaOperazioni(ctx) {
     griglia.appendChild(campo(opT('fPriority'), priorita));
     griglia.appendChild(campo(opT('fAssignee'), incaricato));
     griglia.appendChild(campo(opT('fStatus'), stato));
+    griglia.appendChild(campo(opT('fColor'), scatolaColore));
     f.appendChild(griglia);
     f.appendChild(dlTutte);
     f.appendChild(dlVicine);
@@ -1865,6 +1961,7 @@ export function creaOperazioni(ctx) {
         stato: stato.value,
         nota: nota.value,
         battaglia: battaglia.value || null,
+        colore: auto.checked ? '' : colore.value,
         dopo: spunte.filter((cb) => cb.checked).map((cb) => Number(cb.value)),
       };
       // Un passo nuovo passa da aggiungi(), che crea anche l'operazione se

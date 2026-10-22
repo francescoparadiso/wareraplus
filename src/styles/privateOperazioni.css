@@ -133,6 +133,11 @@ body.light-theme #wp-private-root .wp-pv-op-st-annullata { --st: #94a3b8; }
   background: rgba(220, 38, 38, .75); pointer-events: auto;
 }
 .wp-pv-op-prio-barra.nostra { background: rgba(5, 150, 105, .8); }
+/* Priorità "in gioco": c'è già una battaglia fra i due stati, il timer non
+   conta più. Ambra, come "in attesa". */
+.wp-pv-op-prio-barra.gioco { background: rgba(217, 119, 6, .85); }
+.wp-pv-op-prio-chip.gioco { background: rgba(245, 158, 11, .18); color: #f59e0b; }
+.wp-pv-op-guerra.gioco span { color: #f59e0b; font-weight: 600; }
 .wp-pv-op-conto { font-variant-numeric: tabular-nums; }
 
 /* L'ora dopo la conquista in cui la regione non è attaccabile. */
@@ -172,8 +177,15 @@ body.light-theme #wp-private-root .wp-pv-op-st-annullata { --st: #94a3b8; }
 /* Le battaglie: verdi se c'è la nostra alleanza, rosse se no — sulle
    schede del grafico e negli elenchi a destra. Lo stato resta nella
    pillola. */
+.wp-pv-op-carta.batt-nostra { background: color-mix(in srgb, #60a5fa 18%, var(--pv-op-fondo)); border-color: #60a5fa; }
 .wp-pv-op-carta.batt-alleata { background: color-mix(in srgb, #34d399 16%, var(--pv-op-fondo)); border-color: #34d399; }
 .wp-pv-op-carta.batt-nemica { background: color-mix(in srgb, #f87171 16%, var(--pv-op-fondo)); border-color: #f87171; }
+.wp-pv-op-batt.batt-nostra, .wp-pv-op-auto-voce.batt-nostra { border-color: rgba(96, 165, 250, .65); background: rgba(96, 165, 250, .1); }
+/* Il colore scelto a mano vince su tutto il resto. */
+.wp-pv-op-carta.colore-mano { background: color-mix(in srgb, var(--mano) 20%, var(--pv-op-fondo)); border-color: var(--mano); }
+.wp-pv-op-colore-riga { display: flex; align-items: center; gap: .6rem; }
+.wp-pv-op-colore { width: 2.6rem; height: 2rem; padding: 0; border: 1px solid var(--pv-rule); border-radius: 6px; background: transparent; cursor: pointer; }
+.wp-pv-op-colore:disabled { opacity: .4; cursor: default; }
 .wp-pv-op-batt.batt-alleata, .wp-pv-op-auto-voce.batt-alleata { border-color: rgba(52, 211, 153, .6); background: rgba(52, 211, 153, .08); }
 .wp-pv-op-batt.batt-nemica, .wp-pv-op-auto-voce.batt-nemica { border-color: rgba(248, 113, 113, .6); background: rgba(248, 113, 113, .08); }
 
