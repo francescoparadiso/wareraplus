@@ -13,8 +13,8 @@
    modulo arricchisce SOLO la foto profilo reale.
 
    WarEra+ round N+1: generalizzato lato server/cacheClient insieme al
-   credito ArgusIA nell'Ottimizzatore (src/eco/main.js) — stessa funzione
-   fetchCreditProfileViaCache('author'|'argus'|...), un solo poll condiviso
+   credito ArgusIA che c'era nell'Ottimizzatore (tolto con la v0.27) — stessa funzione
+   fetchCreditProfileViaCache('author'|...), un solo poll condiviso
    sul server per tutti i "crediti" statici del tool. Se anche il fallback
    fallisce (server giù, rate limit) resta silenziosamente l'iniziale "F":
    degrado grazioso, il link funziona comunque.

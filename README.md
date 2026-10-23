@@ -60,8 +60,10 @@ da nessun path attivo.
 **WarEra Eco Optimizer di ArgusIA** — terzo tool, di terzi: bot Discord
 portato a moduli ES in `src/eco/` come "Ottimizzatore industriale", stessa
 logica (Competenze / Posizione / Lavoratori) più una sezione Assunzioni nuova
-e una veste grafica al posto degli embed Discord. **L'attribuzione ad ArgusIA
-in cima alla vista non va rimossa.**
+e una veste grafica al posto degli embed Discord. Con la v0.27 del gioco è
+stato riscritto da capo (schede Aziende e Competenze, vedi
+`AGGIORNAMENTO-v0.27.md`) e la card di attribuzione ad ArgusIA in cima è stata
+tolta: della logica originale non resta più niente.
 
 ### Modifiche al codice Diplomacy esistente
 

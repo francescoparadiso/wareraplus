@@ -846,8 +846,7 @@ body.light-theme .wp-political-overlay {
 }
 .wp-political-overlay .wp-mu-more:hover,
 .wp-political-overlay .wp-mu-back:hover,
-.wp-political-overlay .wp-mu-member:hover,
-.wp-political-overlay .wp-eco-credit:hover {
+.wp-political-overlay .wp-mu-member:hover {
   border-color: var(--wp-ov-accent);
 }
 
@@ -1763,7 +1762,7 @@ body.light-theme .wp-mmb-credits { border-top-color: #e0d8c8; }
    (4+22+4+1+1bordo=32px) invece di sommarsi sopra. Sfondo rosso (richiesto
    dall'utente), testo su due parti — label "Creato da" (i18n condiviso
    con .wp-author-credit, vedi sotto) più tenue, nome in evidenza — sulla
-   falsariga della card di ArgusIA nell'ottimizzatore (src/eco/main.js). */
+   falsariga della card di ArgusIA che c'era nell'ottimizzatore (tolta con la v0.27). */
 .wp-author-pill {
   display: flex;
   align-items: center;

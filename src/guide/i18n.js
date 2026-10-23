@@ -74,9 +74,8 @@ export const GUIDE_DICT = {
       eco: {
         t: "Industrial Optimizer",
         b: [
-          "Works out where it pays off to work and produce, from your skills, your position and market prices.",
-          "Sections for Skills, Position, Workers and Hiring.",
-          "Tool designed by ArgusIA and brought inside WarEra+.",
+          "What your employees really earn you, company by company: worth and cost of each point, daily margin and warning signs (losses, idle days, full storage).",
+          "Suggests how to spread your economy skills: Companies, Energy, Production and Management.",
         ],
       },
       news: {
@@ -163,9 +162,8 @@ export const GUIDE_DICT = {
       eco: {
         t: "Ottimizzatore industriale",
         b: [
-          "Calcola dove conviene lavorare e produrre, a partire da competenze, posizione e prezzi di mercato.",
-          "Sezioni Competenze, Posizione, Lavoratori e Assunzioni.",
-          "Tool ideato da ArgusIA e portato dentro WarEra+.",
+          "Quanto ti rendono davvero i dipendenti, azienda per azienda: valore e costo di ogni punto, margine al giorno e segnali d'allarme (perdite, giorni fermi, magazzino pieno).",
+          "Suggerisce come distribuire le abilità economiche: Companies, Energy, Production e Management.",
         ],
       },
       news: {
@@ -252,9 +250,8 @@ export const GUIDE_DICT = {
       eco: {
         t: "Optimizador industrial",
         b: [
-          "Calcula dónde conviene trabajar y producir, según tus habilidades, tu posición y los precios de mercado.",
-          "Secciones de Habilidades, Posición, Trabajadores y Contratación.",
-          "Herramienta ideada por ArgusIA y traída dentro de WarEra+.",
+          "Lo que tus empleados te rinden de verdad, empresa por empresa: valor y coste de cada punto, margen diario y señales de alerta (pérdidas, días parados, almacén lleno).",
+          "Sugiere cómo repartir tus habilidades económicas: Companies, Energy, Production y Management.",
         ],
       },
       news: {
@@ -341,9 +338,8 @@ export const GUIDE_DICT = {
       eco: {
         t: "Industrie-Optimierer",
         b: [
-          "Berechnet, wo sich Arbeiten und Produzieren lohnt — aus Fähigkeiten, Standort und Marktpreisen.",
-          "Bereiche Fähigkeiten, Standort, Arbeiter und Einstellungen.",
-          "Werkzeug von ArgusIA, hierher nach WarEra+ geholt.",
+          "Was deine Angestellten dir wirklich bringen, Firma für Firma: Wert und Kosten jedes Punkts, Tagesmarge und Warnzeichen (Verluste, Stillstandstage, volles Lager).",
+          "Schlägt vor, wie du deine Wirtschafts-Skills verteilst: Companies, Energy, Production und Management.",
         ],
       },
       news: {
@@ -430,9 +426,8 @@ export const GUIDE_DICT = {
       eco: {
         t: "Optimiseur industriel",
         b: [
-          "Calcule où il vaut mieux travailler et produire, selon vos compétences, votre position et les prix du marché.",
-          "Sections Compétences, Position, Travailleurs et Recrutement.",
-          "Outil imaginé par ArgusIA et intégré à WarEra+.",
+          "Ce que tes employés te rapportent vraiment, entreprise par entreprise : valeur et coût de chaque point, marge par jour et signaux d'alerte (pertes, jours à l'arrêt, stock plein).",
+          "Suggère comment répartir tes compétences économiques : Companies, Energy, Production et Management.",
         ],
       },
       news: {
@@ -519,9 +514,8 @@ export const GUIDE_DICT = {
       eco: {
         t: "Industriële optimizer",
         b: [
-          "Berekent waar werken en produceren loont, op basis van vaardigheden, positie en marktprijzen.",
-          "Secties Vaardigheden, Positie, Werkers en Aannemen.",
-          "Tool bedacht door ArgusIA en naar WarEra+ gehaald.",
+          "Wat je werknemers je echt opleveren, bedrijf per bedrijf: waarde en kosten van elk punt, marge per dag en waarschuwingen (verlies, stilstanddagen, volle opslag).",
+          "Stelt voor hoe je je economische skills verdeelt: Companies, Energy, Production en Management.",
         ],
       },
       news: {
@@ -608,9 +602,8 @@ export const GUIDE_DICT = {
       eco: {
         t: "Industrioptimerare",
         b: [
-          "Räknar ut var det lönar sig att arbeta och producera, utifrån färdigheter, position och marknadspriser.",
-          "Avsnitten Färdigheter, Position, Arbetare och Rekrytering.",
-          "Verktyg skapat av ArgusIA och inflyttat i WarEra+.",
+          "Vad dina anställda verkligen ger dig, företag för företag: värde och kostnad per poäng, marginal per dag och varningssignaler (förlust, stillastående dagar, fullt lager).",
+          "Föreslår hur du fördelar dina ekonomiska färdigheter: Companies, Energy, Production och Management.",
         ],
       },
       news: {
@@ -697,9 +690,8 @@ export const GUIDE_DICT = {
       eco: {
         t: "Otimizador industrial",
         b: [
-          "Calcula onde compensa trabalhar e produzir, a partir das competências, da posição e dos preços de mercado.",
-          "Secções Competências, Posição, Trabalhadores e Contratação.",
-          "Ferramenta idealizada pela ArgusIA e trazida para dentro do WarEra+.",
+          "O que os teus empregados te rendem de verdade, empresa a empresa: valor e custo de cada ponto, margem diária e sinais de alerta (prejuízo, dias parados, armazém cheio).",
+          "Sugere como distribuir as habilidades económicas: Companies, Energy, Production e Management.",
         ],
       },
       news: {
@@ -786,9 +778,8 @@ export const GUIDE_DICT = {
       eco: {
         t: "محسّن الصناعة",
         b: [
-          "يحسب أين يُجدي العمل والإنتاج، انطلاقاً من المهارات والموقع وأسعار السوق.",
-          "أقسام المهارات والموقع والعمال والتوظيف.",
-          "أداة من ابتكار ArgusIA أُدمجت داخل WarEra+.",
+          "ما يدرّه عليك موظفوك فعلًا، شركة بشركة: قيمة كل نقطة وتكلفتها، الهامش اليومي وإشارات التحذير (خسائر، أيام توقف، مخزن ممتلئ).",
+          "يقترح كيف توزّع مهاراتك الاقتصادية: Companies وEnergy وProduction وManagement.",
         ],
       },
       news: {

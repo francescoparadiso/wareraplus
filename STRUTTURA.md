@@ -561,8 +561,8 @@ wareraPlus/
     │   │                          fra due giorni è il saldo NETTO, non "spese".
     │   └── i18nPlus.js           ← dizionario (9 lingue) delle due schede nuove
     ├── eco/                      ← NUOVO — Ottimizzatore industriale (port del bot Discord
-    │   │                            "WarEra Eco Optimizer" di ArgusIA — attribuzione
-    │   │                            obbligatoria in cima alla vista). Dal 2026-09-19
+    │   │                            "WarEra Eco Optimizer" di ArgusIA; la sua card in
+    │   │                            cima è stata tolta con la v0.27). Dal 2026-09-19
     │   │                            è la TERZA SCHEDA di src/economy/, non più una
     │   │                            voce di menù sua: il codice qui dentro non è
     │   │                            cambiato, cambia solo chi chiama initEcoView().

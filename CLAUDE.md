@@ -29,8 +29,10 @@ ed è poi cresciuto ben oltre quei due:
   (vedi `AGGIORNAMENTO-v0.27.md`). Dal 2026-09-19 è
   una **scheda** della sezione Economia (`src/economy/`), insieme alle
   Rendite di produzione e alla scheda Prezzi.
-  ⚠️ **L'attribuzione ad ArgusIA (card in cima alla vista) non va rimossa**,
-  nemmeno ora che è "solo" una scheda di una sezione più grande.
+  La card di attribuzione ad ArgusIA in cima alla vista è stata **tolta il
+  2026-10-23**, su richiesta del proprietario del progetto, insieme alla
+  riscrittura per la v0.27: della logica del bot non resta più niente.
+  L'origine resta scritta nelle testate di `src/eco/` e nella storia di git.
 
 Tutto il resto è **nuovo di WarEra+**: pannello nazione, Unità Militari,
 Statistiche nazioni, Rendite di produzione, News + ticker, Time machine,

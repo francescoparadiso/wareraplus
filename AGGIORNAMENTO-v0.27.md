@@ -198,7 +198,8 @@ Tutto pubblico, quasi tutto già dentro le due chiamate del boot (costo zero):
      (o ricavarlo da `overseasLinks`).
 3. **Ottimizzatore da ripensare**, non da rattoppare: Competenze, Posizione e
    Assunzioni perdono senso così come sono; ciò che si vede da fuori sono le
-   statistiche di lavoro. ⚠️ La card di attribuzione ad ArgusIA resta.
+   statistiche di lavoro. La card di attribuzione ad ArgusIA è stata tolta:
+   della logica del bot non resta più niente.
    **Fatto in parte (branch `v0.27`, 2026-10-23):** schede **Aziende**
    (`src/eco/companies.js`: valore e costo del punto, margine dei dipendenti
    sugli ultimi 7 giorni interi, segnali perdita / giorni fermi / tendenza /

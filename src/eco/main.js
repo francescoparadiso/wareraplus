@@ -12,7 +12,7 @@
    quindi due schede costruite sul dato MISURATO di work.getStatsByCompany:
 
      · Aziende (companies.js) — margine dei dipendenti, motore, segnali;
-     · Competenze (skills.js) — l'idea di ArgusIA sulle abilità nuove.
+     · Competenze (skills.js) — l'ottimizzatore delle abilità, rifatto sulle nuove.
 
    Posizione (tasse e fronte, non più bonus) e Manager arriveranno dopo:
    vedi AGGIORNAMENTO-v0.27.md, §5. Il vecchio codice di Posizione,
@@ -21,8 +21,13 @@
    Questo file è l'orchestratore + il rendering (equivalente di bot.py +
    embeds.py). La logica pura sta nei moduli fratelli.
 
-   CREDITI: tool ideato da ArgusIA — card in cima col link al profilo. Non
-   rimuovere l'attribuzione.
+   CREDITI: fino alla v0.27 in cima c'era la card di ArgusIA, autore del
+   bot da cui è nato. Tolta il 2026-10-23 su richiesta del proprietario
+   del progetto: della sua logica non resta più niente (Lavoratori,
+   Posizione e Assunzioni non esistono più, le Competenze sono rifatte
+   sulle abilità e sui dati nuovi), e una firma su un lavoro che non è
+   più il suo non gli rendeva un servizio. L'origine resta scritta qui e
+   nella storia di git.
 
    i18n: dizionario locale a placeholder `{x}`, tradotto con tf(). Copre le
    stesse 9 lingue della barra menu (EN/IT/ES/DE/FR/NL/SV/PT/AR); i nomi
@@ -33,7 +38,6 @@
 import '../styles/eco.css';
 import { getLang } from '../shared/i18n.js';
 import { trackEvent } from '../shared/analytics.js';
-import { fetchCreditProfileViaCache } from '../diplomacy/cacheClient.js';
 
 import { loadGameData, EcoProxyUnavailableError, ecoCall, isDevApi, setDevApiKey, hasDevApiKey } from './api.js';
 import { makeGameData } from './gameData.js';
@@ -42,19 +46,12 @@ import { loadOwnedCompanies } from './account.js';
 import { computeCompanies } from './companies.js';
 import { computeSkills, ECO_SKILLS } from './skills.js';
 
-const AUTHOR = {
-  userId: '69cc14d4efc3f3f4291e93a9',
-  username: 'ArgusIA',
-  profileUrl: 'https://app.warera.io/user/69cc14d4efc3f3f4291e93a9',
-};
-
 const SKILL_LABEL = { companies: 'Companies', energy: 'Energy', production: 'Production', management: 'Management' };
 
 // ══ i18n ═══════════════════════════════════════════════════════════
 const DICT = {
   en: {
     title: 'Industrial Optimizer', subtitle: 'What your employees really earn you, company by company, and the economy skills that make the most of it.',
-    creditBy: 'Tool designed by', viewProfile: 'View profile', level: 'Level',
     inputPh: 'WarEra username or ID…', analyze: 'Analyze', analyzing: 'Analyzing…', remember: 'Remember this player',
     goldDay: 'gold/day', perPt: '/pt',
     secCompanies: 'Companies', secSkills: 'Skills',
@@ -94,7 +91,6 @@ const DICT = {
   },
   it: {
     title: 'Ottimizzatore industriale', subtitle: 'Quanto ti rendono davvero i dipendenti, azienda per azienda, e le abilità economiche che ne tirano fuori di più.',
-    creditBy: 'Tool ideato da', viewProfile: 'Vedi profilo', level: 'Livello',
     inputPh: 'Username o ID WarEra…', analyze: 'Analizza', analyzing: 'Analisi…', remember: 'Ricorda questo giocatore',
     goldDay: 'oro/giorno', perPt: '/pt',
     secCompanies: 'Aziende', secSkills: 'Competenze',
@@ -134,7 +130,6 @@ const DICT = {
   },
   es: {
     title: 'Optimizador industrial', subtitle: 'Lo que tus empleados te rinden de verdad, empresa por empresa, y las habilidades económicas que más le sacan.',
-    creditBy: 'Herramienta ideada por', viewProfile: 'Ver perfil', level: 'Nivel',
     inputPh: 'Usuario o ID de WarEra…', analyze: 'Analizar', analyzing: 'Analizando…', remember: 'Recordar este jugador',
     goldDay: 'oro/día', perPt: '/pt',
     secCompanies: 'Empresas', secSkills: 'Habilidades',
@@ -171,7 +166,6 @@ const DICT = {
   },
   de: {
     title: 'Industrie-Optimierer', subtitle: 'Was deine Angestellten dir wirklich bringen, Firma für Firma, und die Wirtschafts-Skills, die am meisten daraus machen.',
-    creditBy: 'Tool erdacht von', viewProfile: 'Profil ansehen', level: 'Level',
     inputPh: 'WarEra-Name oder ID…', analyze: 'Analysieren', analyzing: 'Analysiere…', remember: 'Diesen Spieler merken',
     goldDay: 'Gold/Tag', perPt: '/Pkt',
     secCompanies: 'Firmen', secSkills: 'Skills',
@@ -208,7 +202,6 @@ const DICT = {
   },
   fr: {
     title: 'Optimiseur industriel', subtitle: 'Ce que tes employés te rapportent vraiment, entreprise par entreprise, et les compétences économiques qui en tirent le plus.',
-    creditBy: 'Outil imaginé par', viewProfile: 'Voir le profil', level: 'Niveau',
     inputPh: 'Pseudo ou ID WarEra…', analyze: 'Analyser', analyzing: 'Analyse…', remember: 'Se souvenir de ce joueur',
     goldDay: 'or/jour', perPt: '/pt',
     secCompanies: 'Entreprises', secSkills: 'Compétences',
@@ -245,7 +238,6 @@ const DICT = {
   },
   nl: {
     title: 'Industriële optimizer', subtitle: 'Wat je werknemers je echt opleveren, bedrijf per bedrijf, en de economische skills die er het meeste uit halen.',
-    creditBy: 'Tool bedacht door', viewProfile: 'Profiel bekijken', level: 'Level',
     inputPh: 'WarEra-naam of ID…', analyze: 'Analyseren', analyzing: 'Analyseren…', remember: 'Deze speler onthouden',
     goldDay: 'goud/dag', perPt: '/pt',
     secCompanies: 'Bedrijven', secSkills: 'Skills',
@@ -282,7 +274,6 @@ const DICT = {
   },
   sv: {
     title: 'Industrioptimerare', subtitle: 'Vad dina anställda verkligen ger dig, företag för företag, och de ekonomiska färdigheter som får ut mest av det.',
-    creditBy: 'Verktyg skapat av', viewProfile: 'Visa profil', level: 'Nivå',
     inputPh: 'WarEra-namn eller ID…', analyze: 'Analysera', analyzing: 'Analyserar…', remember: 'Kom ihåg denna spelare',
     goldDay: 'guld/dag', perPt: '/p',
     secCompanies: 'Företag', secSkills: 'Färdigheter',
@@ -319,7 +310,6 @@ const DICT = {
   },
   pt: {
     title: 'Otimizador industrial', subtitle: 'O que os teus empregados te rendem de verdade, empresa a empresa, e as habilidades económicas que mais tiram partido disso.',
-    creditBy: 'Ferramenta idealizada por', viewProfile: 'Ver perfil', level: 'Nível',
     inputPh: 'Utilizador ou ID WarEra…', analyze: 'Analisar', analyzing: 'A analisar…', remember: 'Lembrar este jogador',
     goldDay: 'ouro/dia', perPt: '/pt',
     secCompanies: 'Empresas', secSkills: 'Habilidades',
@@ -356,7 +346,6 @@ const DICT = {
   },
   ar: {
     title: 'محسِّن صناعي', subtitle: 'ما يدرّه عليك موظفوك فعلًا، شركة بشركة، والمهارات الاقتصادية التي تستفيد منه أكثر.',
-    creditBy: 'أداة من ابتكار', viewProfile: 'عرض الملف', level: 'المستوى',
     inputPh: 'اسم أو معرّف WarEra…', analyze: 'حلّل', analyzing: 'جارٍ التحليل…', remember: 'تذكّر هذا اللاعب',
     goldDay: 'ذهب/يوم', perPt: '/نقطة',
     secCompanies: 'الشركات', secSkills: 'المهارات',
@@ -443,7 +432,6 @@ export function initEcoView(container) {
   if (built && rootEl?.isConnected && builtLang === getLang()) return;
   container.innerHTML = '';
   rootEl = h('div', 'wp-eco');
-  rootEl.appendChild(buildCreditCard());
 
   const head = h('div', 'wp-eco-head');
   head.appendChild(h('h1', 'wp-eco-title', esc(tf('title'))));
@@ -481,55 +469,6 @@ export function initEcoView(container) {
   container.appendChild(rootEl);
   built = true;
   builtLang = getLang();
-}
-
-function buildCreditCard() {
-  const card = h('a', 'wp-eco-credit');
-  card.href = AUTHOR.profileUrl; card.target = '_blank'; card.rel = 'noopener noreferrer';
-  card.innerHTML = `
-    <div class="wp-eco-credit-avatar" aria-hidden="true">${esc(AUTHOR.username.slice(0, 1).toUpperCase())}</div>
-    <div class="wp-eco-credit-body">
-      <div class="wp-eco-credit-by">${esc(tf('creditBy'))}</div>
-      <div class="wp-eco-credit-name">${esc(AUTHOR.username)}</div>
-      <div class="wp-eco-credit-meta" data-eco-credit-meta></div>
-    </div>
-    <div class="wp-eco-credit-cta">${esc(tf('viewProfile'))} ↗</div>`;
-  enrichCreditCard(card.querySelector('[data-eco-credit-meta]'));
-  return card;
-}
-async function enrichCreditCard(metaEl) {
-  if (!metaEl) return;
-  try {
-    // WarEra+: passa dal server di cache Oracle (fetchCreditProfileViaCache
-    // 'argus', vedi cacheClient.js e server/warera-cache-server.js:
-    // pollCreditProfiles) invece di chiamare il Worker direttamente da
-    // OGNI browser che apre l'Ottimizzatore — stesso identico dato
-    // statico, prima richiesto uno per utente. Ricade comunque sulla
-    // chiamata diretta se la cache non risponde, nessuna regressione.
-    const data = await fetchCreditProfileViaCache('argus');
-    if (!data) return;
-    // Foto profilo reale di ArgusIA (prima c'era solo l'iniziale "A").
-    if (data.avatarUrl) {
-      const avatarEl = metaEl.closest('.wp-eco-credit')?.querySelector('.wp-eco-credit-avatar');
-      if (avatarEl) {
-        const img = document.createElement('img');
-        img.src = data.avatarUrl;
-        img.alt = '';
-        img.onerror = () => { avatarEl.classList.remove('has-img'); img.remove(); };
-        avatarEl.textContent = '';
-        avatarEl.classList.add('has-img');
-        avatarEl.appendChild(img);
-      }
-    }
-    const parts = [];
-    if (data.leveling?.level != null) parts.push(`${tf('level')} ${data.leveling.level}`);
-    try {
-      const { state } = await import('../diplomacy/state.js');
-      const nation = state.nationMap?.get(data.country);
-      if (nation?.name) parts.push(esc(nation.name));
-    } catch (_) {}
-    metaEl.textContent = parts.join(' · ');
-  } catch (_) {}
 }
 
 // ══════════════════════════════════════════════════════════════

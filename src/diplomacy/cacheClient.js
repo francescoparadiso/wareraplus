@@ -816,7 +816,6 @@ export function fetchWarIntensityViaCache() {
 // risponde) — la fonte di verità resta CREDIT_PROFILES sul server.
 const CREDIT_PROFILE_USER_IDS = {
   author: '69d2ed249f38d300d59a2af1', // frappa10 — pill principale (authorPill.js)
-  argus:  '69cc14d4efc3f3f4291e93a9', // ArgusIA — credito Ottimizzatore (eco/main.js)
 };
 
 async function _fallbackCreditProfile(userId) {
@@ -826,7 +825,7 @@ async function _fallbackCreditProfile(userId) {
 }
 
 /** user.getUserLite per un "credito" statico del tool — `key` è una delle
- *  chiavi in CREDIT_PROFILE_USER_IDS ('author', 'argus', ...). Ritorna
+ *  chiavi in CREDIT_PROFILE_USER_IDS ('author', ...). Ritorna
  *  l'oggetto utente grezzo (già "srotolato", niente involucro
  *  {result:{data:...}}), stessa forma che i chiamanti si aspettavano dalla
  *  chiamata diretta che sostituisce. */

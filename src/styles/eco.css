@@ -30,42 +30,6 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-/* ── Card crediti autore ── */
-.wp-eco-credit {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 16px;
-  margin-bottom: 22px;
-  background: linear-gradient(135deg, #161b22 0%, #1a2130 100%);
-  border: 1px solid #30363d;
-  border-radius: 12px;
-  text-decoration: none;
-  color: inherit;
-  transition: border-color .15s, transform .15s;
-}
-.wp-eco-credit:hover { border-color: #3fb950; transform: translateY(-1px); }
-.wp-eco-credit-avatar {
-  width: 46px; height: 46px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #238636, #2ea043);
-  color: #fff; font-weight: 800; font-size: 20px;
-  font-family: 'JetBrains Mono', monospace;
-  overflow: hidden;
-}
-.wp-eco-credit-avatar.has-img { background: none; }
-.wp-eco-credit-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.wp-eco-credit-body { flex: 1; min-width: 0; line-height: 1.35; }
-.wp-eco-credit-by { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #8b949e; }
-.wp-eco-credit-name { font-size: 17px; font-weight: 700; color: #e6edf3; }
-.wp-eco-credit-meta { font-size: 12px; color: #8b949e; }
-.wp-eco-credit-cta {
-  flex-shrink: 0; font-size: 12px; font-weight: 600; color: #3fb950;
-  border: 1px solid #2ea04355; border-radius: 8px; padding: 6px 10px;
-  white-space: nowrap;
-}
-
 /* ── Header ── */
 .wp-eco-head { margin-bottom: 18px; }
 .wp-eco-title { font-size: 24px; font-weight: 800; margin: 0 0 4px; letter-spacing: -.01em; }
@@ -233,8 +197,7 @@ body.light-theme .wp-eco-spark-none { fill: #d0d7de; }
 body.light-theme .wp-eco { color: #1a1a1a; }
 body.light-theme .wp-eco-title,
 body.light-theme .wp-eco-sec-title,
-body.light-theme .wp-eco-skill-name,
-body.light-theme .wp-eco-credit-name { color: #10131a; }
+body.light-theme .wp-eco-skill-name { color: #10131a; }
 body.light-theme .wp-eco-section { background: #f6f8fa; border-color: #d0d7de; }
 body.light-theme .wp-eco-input,
 body.light-theme .wp-eco-wage,
@@ -254,7 +217,6 @@ body.light-theme .wp-eco-total-col.best .wp-eco-total-val { color: #1a7f37; }
   .wp-eco-colist { grid-template-columns: 1fr; }
   .wp-eco-inputrow { flex-direction: column; }
   .wp-eco-run { padding: 12px; }
-  .wp-eco-credit-cta { display: none; }
   .wp-eco-totals { flex-direction: column; }
   .wp-eco-total-arrow { justify-content: center; transform: rotate(90deg); }
 }

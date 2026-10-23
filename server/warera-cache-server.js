@@ -253,12 +253,11 @@ function privilegedFetch(url) {
 }
 // WarEra+: "crediti" statici del tool (userId fisso, sempre lo stesso) —
 // prima ognuno faceva la sua chiamata separata al Worker da OGNI browser
-// (src/app/authorPill.js, src/eco/main.js:enrichCreditCard). Generalizzato
+// (src/app/authorPill.js, e fino alla v0.27 la card di ArgusIA nell'Ottimizzatore). Generalizzato
 // qui in un'unica mappa: aggiungere un futuro terzo credito significa solo
 // aggiungere una riga sotto, nessun'altra modifica al server.
 const CREDIT_PROFILES = {
   author: '69d2ed249f38d300d59a2af1', // frappa10 — pill principale (Ko-fi)
-  argus:  '69cc14d4efc3f3f4291e93a9', // ArgusIA — credito Ottimizzatore industriale
 };
 
 app.use(cors({
