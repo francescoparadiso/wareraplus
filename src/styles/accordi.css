@@ -109,6 +109,19 @@ body.light-theme .wp-ac-btn-primary { color: #fff; }
 .wp-ac-btn-small { padding: .32rem .7rem; font-size: .82rem; }
 .wp-ac-btn-danger:hover:not(:disabled) { border-color: var(--ac-danger); color: var(--ac-danger); }
 
+/* ── Numeri ─────────────────────────────────────────────────── */
+.wp-ac-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .6rem; }
+.wp-ac-stats:empty { display: none; }
+.wp-ac-stat {
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-rule);
+  border-radius: 10px;
+  padding: .75rem .9rem;
+  display: flex; flex-direction: column; gap: .15rem;
+}
+.wp-ac-stat-num { font-size: 1.6rem; font-weight: 700; line-height: 1.1; color: var(--ac-accent); font-variant-numeric: tabular-nums; }
+.wp-ac-stat-lbl { font-size: .78rem; color: var(--ac-ink-soft); }
+
 /* ── Barra: filtri, ricerca, nuovo ───────────────────────────── */
 .wp-ac-barra { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
 .wp-ac-filtri {

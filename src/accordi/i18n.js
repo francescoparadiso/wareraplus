@@ -11,6 +11,8 @@ import { getLang } from '../shared/i18n.js';
 
 const DICT = {
   it: {
+    statTotal: 'Accordi in archivio', statActive: 'In vigore',
+    statNations: 'Nazioni coinvolte', statNationsActive: 'Nazioni con un accordo in vigore',
     title: 'Accordi',
     lead: "L'archivio dei patti di non belligeranza fra nazioni e alleanze. Quelli in vigore compaiono sulla mappa come NAP. Leggerli è aperto a tutti; li scrive il governo di una delle nazioni coinvolte.",
     filterAll: 'Tutti', filterActive: 'In vigore', filterFuture: 'Futuri', filterExpired: 'Scaduti',
@@ -92,6 +94,8 @@ const DICT = {
     err_errore_server: 'Errore del server. Riprova fra poco.',
   },
   en: {
+    statTotal: 'Agreements on record', statActive: 'In force',
+    statNations: 'Nations involved', statNationsActive: 'Nations with an agreement in force',
     title: 'Agreements',
     lead: 'The archive of non-aggression pacts between nations and alliances. Those in force show on the map as NAPs. Anyone can read them; the government of one of the nations involved writes them.',
     filterAll: 'All', filterActive: 'In force', filterFuture: 'Upcoming', filterExpired: 'Expired',
@@ -173,6 +177,8 @@ const DICT = {
     err_errore_server: 'Server error. Try again shortly.',
   },
   es: {
+    statTotal: 'Acuerdos en el archivo', statActive: 'Vigentes',
+    statNations: 'Naciones implicadas', statNationsActive: 'Naciones con un acuerdo vigente',
     title: 'Acuerdos',
     lead: 'El archivo de los pactos de no agresión entre naciones y alianzas. Los vigentes aparecen en el mapa como NAP. Cualquiera puede leerlos; los escribe el gobierno de una de las naciones implicadas.',
     filterAll: 'Todos', filterActive: 'Vigentes', filterFuture: 'Próximos', filterExpired: 'Vencidos',
@@ -254,6 +260,8 @@ const DICT = {
     err_errore_server: 'Error del servidor. Inténtalo de nuevo en breve.',
   },
   de: {
+    statTotal: 'Abkommen im Archiv', statActive: 'Gültig',
+    statNations: 'Beteiligte Nationen', statNationsActive: 'Nationen mit gültigem Abkommen',
     title: 'Abkommen',
     lead: 'Das Archiv der Nichtangriffspakte zwischen Nationen und Bündnissen. Gültige Pakte erscheinen auf der Karte als NAP. Lesen kann sie jeder; schreiben darf sie die Regierung einer beteiligten Nation.',
     filterAll: 'Alle', filterActive: 'Gültig', filterFuture: 'Künftig', filterExpired: 'Abgelaufen',
@@ -335,6 +343,8 @@ const DICT = {
     err_errore_server: 'Serverfehler. Bitte gleich nochmal versuchen.',
   },
   fr: {
+    statTotal: "Accords dans l'archive", statActive: 'En vigueur',
+    statNations: 'Nations concernées', statNationsActive: 'Nations avec un accord en vigueur',
     title: 'Accords',
     lead: "L'archive des pactes de non-agression entre nations et alliances. Ceux en vigueur apparaissent sur la carte comme NAP. Tout le monde peut les lire ; c'est le gouvernement d'une des nations concernées qui les écrit.",
     filterAll: 'Tous', filterActive: 'En vigueur', filterFuture: 'À venir', filterExpired: 'Expirés',
@@ -416,6 +426,8 @@ const DICT = {
     err_errore_server: 'Erreur du serveur. Réessaie dans un instant.',
   },
   nl: {
+    statTotal: 'Akkoorden in het archief', statActive: 'Geldig',
+    statNations: 'Betrokken naties', statNationsActive: 'Naties met een geldig akkoord',
     title: 'Akkoorden',
     lead: 'Het archief van niet-aanvalsverdragen tussen naties en allianties. Geldende verdragen staan op de kaart als NAP. Iedereen kan ze lezen; de regering van een van de betrokken naties schrijft ze.',
     filterAll: 'Alle', filterActive: 'Geldig', filterFuture: 'Komend', filterExpired: 'Verlopen',
@@ -497,6 +509,8 @@ const DICT = {
     err_errore_server: 'Serverfout. Probeer het zo opnieuw.',
   },
   sv: {
+    statTotal: 'Avtal i arkivet', statActive: 'Gällande',
+    statNations: 'Berörda nationer', statNationsActive: 'Nationer med ett gällande avtal',
     title: 'Avtal',
     lead: 'Arkivet över icke-angreppspakter mellan nationer och allianser. De som gäller visas på kartan som NAP. Alla kan läsa dem; regeringen i en av de berörda nationerna skriver dem.',
     filterAll: 'Alla', filterActive: 'Gällande', filterFuture: 'Kommande', filterExpired: 'Utgångna',
@@ -578,6 +592,8 @@ const DICT = {
     err_errore_server: 'Serverfel. Försök igen strax.',
   },
   pt: {
+    statTotal: 'Acordos no arquivo', statActive: 'Em vigor',
+    statNations: 'Nações envolvidas', statNationsActive: 'Nações com um acordo em vigor',
     title: 'Acordos',
     lead: 'O arquivo dos pactos de não agressão entre nações e alianças. Os que estão em vigor aparecem no mapa como NAP. Qualquer pessoa pode lê-los; quem os escreve é o governo de uma das nações envolvidas.',
     filterAll: 'Todos', filterActive: 'Em vigor', filterFuture: 'Futuros', filterExpired: 'Expirados',
@@ -659,6 +675,8 @@ const DICT = {
     err_errore_server: 'Erro do servidor. Tenta de novo daqui a pouco.',
   },
   ar: {
+    statTotal: 'الاتفاقيات في الأرشيف', statActive: 'سارية',
+    statNations: 'الدول المعنية', statNationsActive: 'دول لديها اتفاقية سارية',
     title: 'الاتفاقيات',
     lead: 'أرشيف معاهدات عدم الاعتداء بين الدول والتحالفات. تظهر السارية منها على الخريطة كمعاهدات عدم اعتداء. قراءتها متاحة للجميع؛ وتكتبها حكومة إحدى الدول المعنية.',
     filterAll: 'الكل', filterActive: 'سارية', filterFuture: 'قادمة', filterExpired: 'منتهية',

@@ -49,7 +49,7 @@ const testiAperti = new Set();
 const controlli = new Map(); // id → { stato: 'carica'|'ok'|'errore', dati }
 
 // Elementi stabili della pagina: si riempiono, non si ricreano.
-let elAuth, elModulo, elLista, elBarra;
+let elAuth, elModulo, elLista, elBarra, elStats;
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -142,10 +142,11 @@ function costruisciScheletro() {
   wrap.appendChild(testata);
 
   elAuth = el('section', 'wp-ac-auth');
+  elStats = el('section', 'wp-ac-stats');
   elBarra = el('div', 'wp-ac-barra');
   elModulo = el('section', 'wp-ac-modulo-slot');
   elLista = el('section', 'wp-ac-lista');
-  wrap.append(elAuth, elBarra, elModulo, elLista);
+  wrap.append(elStats, elAuth, elBarra, elModulo, elLista);
   rootEl.appendChild(wrap);
   // Il modulo aperto si perde col ridisegno della lingua: si riapre vuoto
   // dello stesso accordo invece di lasciare uno slot fantasma.
@@ -271,7 +272,41 @@ function corrisponde(a) {
   return nomi.some(n => String(n).toLowerCase().includes(q));
 }
 
+// ---------------------------------------------------------------------------
+// Numeri
+// ---------------------------------------------------------------------------
+
+/** Le nazioni distinte di un gruppo di accordi. Un'alleanza conta coi
+ *  membri di ADESSO, come sulla mappa: una nazione che ha due patti, o che
+ *  sta in un patto da sola e in un altro con la sua alleanza, conta una. */
+function nazioniDistinte(lista) {
+  const s = new Set();
+  for (const a of lista) for (const p of [a.parteA, a.parteB]) for (const id of nazioniParte(p)) s.add(id);
+  return s.size;
+}
+
+function disegnaStats() {
+  if (!elStats) return;
+  elStats.textContent = '';
+  if (!caricato || errore) return;
+  const ora = Date.now();
+  const inVigore = accordi.filter(a => statoDi(a, ora) === 'attivo');
+  const tessere = [
+    [accordi.length, 'statTotal'],
+    [inVigore.length, 'statActive'],
+    [nazioniDistinte(accordi), 'statNations'],
+    [nazioniDistinte(inVigore), 'statNationsActive'],
+  ];
+  for (const [n, k] of tessere) {
+    const t = el('div', 'wp-ac-stat');
+    t.appendChild(el('span', 'wp-ac-stat-num', n.toLocaleString()));
+    t.appendChild(el('span', 'wp-ac-stat-lbl', acT(k)));
+    elStats.appendChild(t);
+  }
+}
+
 function disegnaLista() {
+  disegnaStats();
   if (!elLista) return;
   elLista.textContent = '';
   if (errore) {
