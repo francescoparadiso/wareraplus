@@ -216,6 +216,27 @@ migrazione. Cancellare scrive il patto intero nell'`audit`. `/health` →
 `db.accordi`. Il CORS resta l'allowlist: la lettura "pubblica" è per il
 tool, non per siti terzi.
 
+## Le votazioni (`votazioni.js`)
+
+Le votazioni del congresso e i referendum (vista "Votazioni" di Political).
+Corpo elettorale `congresso`, `istituzioni` (congresso + governo) o
+`referendum`; scrutinio `palese` o `segreto`; esito `pubblico` o riservato
+alle `istituzioni`. Le regole (chi crea, chi vede, il segreto, i tempi dello
+scrutinio) stanno nella testata del file.
+
+- `GET /votazioni?nazione=ID` — archivio della nazione + `poteri` di chi
+  guarda (login facoltativo)
+- `GET /votazioni/:id` — dettaglio, con il corpo elettorale fotografato
+- `GET /votazioni/:id/scrutinio` — la sequenza sigillata, da `scrutinioAlle`
+- `POST /votazioni` · `POST /votazioni/:id/voto` · `POST /votazioni/:id/ritira`
+
+Cinque tabelle nuove dalla `CREATE TABLE IF NOT EXISTS`, nessuna migrazione.
+Un giro ogni 20 s apre le programmate (fotografa il congresso dal gioco) e
+sigilla le scadute: `/health` → `votazioni` (`errore` che resta = il gioco
+non risponde all'apertura, e la votazione resta "in apertura" senza
+accettare voti). ⚠️ `votazione_scheda` si svuota al sigillo apposta: le
+schede segrete da lì esistono solo rimescolate dentro `votazione.result`.
+
 ## Aggiornare
 
 ```bash
@@ -230,7 +251,7 @@ Poi il preflight, e solo se stampa `PREFLIGHT-OK`:
 
 ```bash
 ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 \
-  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && node --check wealth.js && node --check fonti.js && node --check confini.js && node --check nemici.js && node --check nazione.js && node --check istantanee.js && node --check operazioni.js && node --check accordi.js && echo PREFLIGHT-OK"
+  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && node --check wealth.js && node --check fonti.js && node --check confini.js && node --check nemici.js && node --check nazione.js && node --check istantanee.js && node --check operazioni.js && node --check accordi.js && node --check votazioni.js && echo PREFLIGHT-OK"
 ```
 
 ```bash

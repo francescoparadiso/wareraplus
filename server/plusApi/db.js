@@ -410,6 +410,76 @@ CREATE TABLE IF NOT EXISTS accordo (
 );
 CREATE INDEX IF NOT EXISTS idx_accordo_periodo ON accordo(starts_at, ends_at);
 
+-- Le votazioni del congresso (e dei referendum). Vedi votazioni.js, e in
+-- particolare il blocco sul SEGRETO prima di toccare le ultime tre tabelle.
+CREATE TABLE IF NOT EXISTS votazione (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  country_id     TEXT    NOT NULL,
+  title          TEXT    NOT NULL,
+  body           TEXT,
+  electorate     TEXT    NOT NULL,                 -- congresso | istituzioni | referendum
+  ballot         TEXT    NOT NULL,                 -- palese | segreto
+  visibility     TEXT    NOT NULL,                 -- istituzioni | pubblico
+  majority       TEXT    NOT NULL,                 -- semplice | assoluta | due_terzi
+  quorum_pct     INTEGER,                          -- NULL = nessun quorum
+  opens_at       INTEGER NOT NULL,                 -- ms UTC
+  closes_at      INTEGER NOT NULL,
+  eligible_count INTEGER,                          -- aventi diritto, fissati all'APERTURA
+  eligible_estimated INTEGER NOT NULL DEFAULT 0,   -- 1 = stima dal censimento (referendum)
+  result         TEXT,                             -- JSON sigillato alla chiusura
+  sealed_at      INTEGER,
+  withdrawn_at   INTEGER,
+  withdrawn_by   INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_by     INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_war_user TEXT,
+  created_name   TEXT,
+  created_at     INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_votazione_paese ON votazione(country_id, closes_at);
+
+-- Il corpo elettorale fotografato all'apertura (congresso e istituzioni;
+-- il referendum non ha righe qui: si controlla al momento del voto).
+CREATE TABLE IF NOT EXISTS votazione_elettore (
+  vote_id     INTEGER NOT NULL REFERENCES votazione(id) ON DELETE CASCADE,
+  war_user_id TEXT    NOT NULL,
+  name        TEXT,
+  avatar      TEXT,
+  role        TEXT,                                -- congress | president | vicePresident | minOf…
+  party_id    TEXT,
+  party_name  TEXT,
+  PRIMARY KEY (vote_id, war_user_id)
+) WITHOUT ROWID;
+
+-- CHI ha votato, e nient'altro: né cosa né quando. WITHOUT ROWID apposta,
+-- le righe stanno in ordine di id del giocatore e non di arrivo.
+CREATE TABLE IF NOT EXISTS votazione_partecipazione (
+  vote_id     INTEGER NOT NULL REFERENCES votazione(id) ON DELETE CASCADE,
+  war_user_id TEXT    NOT NULL,
+  PRIMARY KEY (vote_id, war_user_id)
+) WITHOUT ROWID;
+
+-- Il voto PALESE: chi e cosa, insieme, perché è palese.
+CREATE TABLE IF NOT EXISTS votazione_voto (
+  vote_id     INTEGER NOT NULL REFERENCES votazione(id) ON DELETE CASCADE,
+  war_user_id TEXT    NOT NULL,
+  name        TEXT,
+  choice      TEXT    NOT NULL,                    -- si | no | astenuto | nulla
+  note        TEXT,
+  voted_at    INTEGER NOT NULL,
+  PRIMARY KEY (vote_id, war_user_id)
+) WITHOUT ROWID;
+
+-- La scheda SEGRETA: cosa, senza chi né quando. La chiave è casuale, così
+-- l'ordine delle righe non è quello d'arrivo. Si cancella al sigillo: da lì
+-- le schede vivono solo, rimescolate, dentro votazione.result.
+CREATE TABLE IF NOT EXISTS votazione_scheda (
+  vote_id     INTEGER NOT NULL REFERENCES votazione(id) ON DELETE CASCADE,
+  id          TEXT    NOT NULL,
+  choice      TEXT    NOT NULL,
+  note        TEXT,
+  PRIMARY KEY (vote_id, id)
+) WITHOUT ROWID;
+
 -- ⚠️ L'indice su (mu_id, slot) NON sta qui ma in migrate(). SCHEMA gira
 -- PRIMA delle migrazioni: su un database che ha ancora la colonna day
 -- la CREATE TABLE viene saltata (IF NOT EXISTS) ma la CREATE INDEX no, e
@@ -1296,6 +1366,158 @@ function eliminaAccordo(id) {
   return getDb().prepare('DELETE FROM accordo WHERE id = ?').run(id).changes || 0;
 }
 
+// ---------------------------------------------------------------------------
+// VOTAZIONI
+// ---------------------------------------------------------------------------
+// Solo lettura e scrittura: chi può cosa, e cosa si vede, lo decide
+// votazioni.js. ⚠️ Nessuna funzione qui unisce partecipazione e scheda:
+// è il segreto, e deve restare impossibile anche per sbaglio.
+
+const CAMPI_VOTAZIONE = ['country_id', 'title', 'body', 'electorate', 'ballot', 'visibility', 'majority',
+  'quorum_pct', 'opens_at', 'closes_at', 'created_by', 'created_war_user', 'created_name'];
+
+function listaVotazioni(countryId, { limit = 300 } = {}) {
+  return getDb().prepare('SELECT * FROM votazione WHERE country_id = ? ORDER BY opens_at DESC, id DESC LIMIT ?')
+    .all(countryId, limit);
+}
+
+function getVotazione(id) {
+  return getDb().prepare('SELECT * FROM votazione WHERE id = ?').get(id) || null;
+}
+
+/** Le votazioni non ritirate ancora da APRIRE (senza aventi diritto) o da
+ *  SIGILLARE: il giro di votazioni.js passa solo su queste. */
+function votazioniDaLavorare(ora) {
+  return getDb().prepare(`
+    SELECT * FROM votazione WHERE withdrawn_at IS NULL AND (
+      (eligible_count IS NULL AND opens_at <= ?) OR (sealed_at IS NULL AND closes_at <= ?))`).all(ora, ora);
+}
+
+function contaVotazioniAttive(countryId, ora) {
+  return getDb().prepare(`SELECT COUNT(*) AS n FROM votazione
+    WHERE country_id = ? AND withdrawn_at IS NULL AND closes_at > ?`).get(countryId, ora)?.n || 0;
+}
+
+function creaVotazione(campi) {
+  const valori = CAMPI_VOTAZIONE.map((k) => (campi[k] === undefined ? null : campi[k]));
+  const info = getDb().prepare(`
+    INSERT INTO votazione (${CAMPI_VOTAZIONE.join(', ')}, created_at)
+    VALUES (${segnaposti(CAMPI_VOTAZIONE.length)}, ?)`).run(...valori, Date.now());
+  return getVotazione(info.lastInsertRowid);
+}
+
+function ritiraVotazione(id, by) {
+  getDb().prepare('UPDATE votazione SET withdrawn_at = ?, withdrawn_by = ? WHERE id = ? AND withdrawn_at IS NULL')
+    .run(Date.now(), by || null, id);
+  return getVotazione(id);
+}
+
+/** Il corpo elettorale e il numero degli aventi diritto, insieme: una
+ *  votazione con il numero ma senza le righe direbbe "non sei elettore" a
+ *  tutti. `INSERT OR REPLACE` perché un'apertura ripetuta dopo un errore a
+ *  metà deve essere innocua. */
+function fissaElettori(voteId, elettori, numero, stimato) {
+  const d = getDb();
+  const ins = d.prepare(`INSERT OR REPLACE INTO votazione_elettore
+    (vote_id, war_user_id, name, avatar, role, party_id, party_name) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+  d.exec('BEGIN');
+  try {
+    for (const e of elettori) {
+      ins.run(voteId, e.warUserId, e.nome || null, e.avatar || null, e.ruolo || null, e.partito || null, e.partitoNome || null);
+    }
+    d.prepare('UPDATE votazione SET eligible_count = ?, eligible_estimated = ? WHERE id = ? AND eligible_count IS NULL')
+      .run(numero, stimato ? 1 : 0, voteId);
+    d.exec('COMMIT');
+  } catch (err) {
+    d.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+function elettoriDi(voteId) {
+  return getDb().prepare('SELECT * FROM votazione_elettore WHERE vote_id = ?').all(voteId);
+}
+
+function eElettore(voteId, warUserId) {
+  return Boolean(getDb().prepare('SELECT 1 FROM votazione_elettore WHERE vote_id = ? AND war_user_id = ?')
+    .get(voteId, warUserId));
+}
+
+function haVotato(voteId, warUserId) {
+  return Boolean(getDb().prepare('SELECT 1 FROM votazione_partecipazione WHERE vote_id = ? AND war_user_id = ?')
+    .get(voteId, warUserId));
+}
+
+function contaPartecipanti(voteId) {
+  return getDb().prepare('SELECT COUNT(*) AS n FROM votazione_partecipazione WHERE vote_id = ?').get(voteId)?.n || 0;
+}
+
+function partecipantiDi(voteId) {
+  return getDb().prepare('SELECT war_user_id FROM votazione_partecipazione WHERE vote_id = ?').all(voteId)
+    .map((r) => r.war_user_id);
+}
+
+/** Il voto palese di una persona: solo per mostrarle cosa ha votato. */
+function votoPalese(voteId, warUserId) {
+  return getDb().prepare('SELECT choice, note FROM votazione_voto WHERE vote_id = ? AND war_user_id = ?')
+    .get(voteId, warUserId) || null;
+}
+
+/**
+ * Un voto, in una transazione sola: la partecipazione e (palese) il voto
+ * con il nome, oppure (segreto) una scheda senza nome. La chiave primaria
+ * della partecipazione è ciò che impedisce il doppio voto, anche con due
+ * richieste nello stesso istante. Restituisce false se aveva già votato.
+ */
+function registraVoto(voteId, { warUserId, nome, scelta, nota, segreto }) {
+  const d = getDb();
+  d.exec('BEGIN');
+  try {
+    const p = d.prepare('INSERT OR IGNORE INTO votazione_partecipazione (vote_id, war_user_id) VALUES (?, ?)')
+      .run(voteId, warUserId);
+    if (!p.changes) { d.exec('ROLLBACK'); return false; }
+    if (segreto) {
+      d.prepare('INSERT INTO votazione_scheda (vote_id, id, choice, note) VALUES (?, ?, ?, ?)')
+        .run(voteId, crypto.randomBytes(16).toString('hex'), scelta, nota || null);
+    } else {
+      d.prepare(`INSERT INTO votazione_voto (vote_id, war_user_id, name, choice, note, voted_at)
+        VALUES (?, ?, ?, ?, ?, ?)`).run(voteId, warUserId, nome || null, scelta, nota || null, Date.now());
+    }
+    d.exec('COMMIT');
+    return true;
+  } catch (err) {
+    d.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+/** Le schede (segrete) o i voti (palesi) di una votazione, per il sigillo. */
+function schedeDi(voteId) {
+  return getDb().prepare('SELECT choice, note FROM votazione_scheda WHERE vote_id = ?').all(voteId);
+}
+
+function votiPalesiDi(voteId) {
+  return getDb().prepare('SELECT war_user_id, name, choice, note FROM votazione_voto WHERE vote_id = ?').all(voteId);
+}
+
+/** Il sigillo: esito scritto e (segreto) schede cancellate, insieme. Da qui
+ *  la votazione non cambia più. `sealed_at IS NULL` nel WHERE: due giri
+ *  sovrapposti non sigillano due volte con due rimescolamenti diversi. */
+function sigillaVotazione(voteId, risultato) {
+  const d = getDb();
+  d.exec('BEGIN');
+  try {
+    const u = d.prepare('UPDATE votazione SET result = ?, sealed_at = ? WHERE id = ? AND sealed_at IS NULL')
+      .run(JSON.stringify(risultato), Date.now(), voteId);
+    if (u.changes) d.prepare('DELETE FROM votazione_scheda WHERE vote_id = ?').run(voteId);
+    d.exec('COMMIT');
+    return Boolean(u.changes);
+  } catch (err) {
+    d.exec('ROLLBACK');
+    throw err;
+  }
+}
+
 function dbStatus() {
   const one = (sql) => {
     try { return getDb().prepare(sql).get()?.n ?? 0; } catch { return null; }
@@ -1331,6 +1553,7 @@ function dbStatus() {
     operazioni: one('SELECT COUNT(*) AS n FROM operation'),
     passiOperazioni: one('SELECT COUNT(*) AS n FROM op_step'),
     accordi: one('SELECT COUNT(*) AS n FROM accordo'),
+    votazioni: one('SELECT COUNT(*) AS n FROM votazione'),
   };
 }
 
@@ -1354,6 +1577,9 @@ module.exports = {
   listaOperazioni, contaOperazioniAttive, getOperazione, creaOperazione, aggiornaOperazione, eliminaOperazione,
   passiDi, frecceDi, contaPassi, getPasso, creaPasso, aggiornaPasso, eliminaPasso, impostaPrecedenti,
   listaAccordi, contaAccordi, getAccordo, creaAccordo, aggiornaAccordo, eliminaAccordo,
+  listaVotazioni, getVotazione, votazioniDaLavorare, contaVotazioniAttive, creaVotazione, ritiraVotazione,
+  fissaElettori, elettoriDi, eElettore, haVotato, contaPartecipanti, partecipantiDi, votoPalese,
+  registraVoto, schedeDi, votiPalesiDi, sigillaVotazione,
   salvaIstantanea, istantaneaVicina, istantaneaPiuVecchia, potaIstantanee,
   audit, dbStatus,
 };
