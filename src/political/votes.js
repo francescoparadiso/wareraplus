@@ -49,6 +49,7 @@ import { mountUrn } from './votesUrn.js';
 const montaScrutinio = (v, el, opz) => (v.scrutinio === 'palese' ? mountHemicycle : mountUrn)(el, { scrutinio: _scrutinio.dati, now, ...opz });
 import {
   leggiVotazioni, leggiVotazione, leggiScrutinio, creaVotazione, vota, ritiraVotazione, impostaCanale,
+  chiudiVotazione, eliminaVotazione,
   fetchMe, entraConDiscord, ApiError,
 } from './votesApi.js';
 import { state } from '../diplomacy/state.js';
@@ -189,7 +190,7 @@ function _firma() {
   return [_openId, Boolean(_account), _account?.verificato, _list?.poteri?.puoCreare,
     // Lo scrutinio arrivato (o no) cambia la scheda: emiciclo o attesa.
     _scrutinio?.id === _openId && Boolean(_scrutinio?.dati),
-    ...voci.map((v) => `${v.id}:${fase(v)}:${v.stato}:${Boolean(v.esito)}:${v.esitoRiservato}:${v.mio?.haVotato}:${v.mio?.elettore}:${v.fineScrutinio}`)].join('|');
+    ...voci.map((v) => `${v.id}:${fase(v)}:${v.stato}:${Boolean(v.esito)}:${v.esitoRiservato}:${v.mio?.haVotato}:${v.mio?.elettore}:${v.fineScrutinio}:${v.mio?.puoChiudere}`)].join('|');
 }
 
 function _aggiornaAffluenze() {
@@ -497,7 +498,11 @@ function _renderDetail() {
     </div>
     <div data-wp-vt="ballot"></div>
     <div data-wp-vt="result"></div>
-    <div data-wp-vt="electorate"></div>`);
+    <div data-wp-vt="electorate"></div>
+    ${v.mio?.puoEliminare ? `<div class="wp-vt-admin">
+      <span class="wp-pol-dim">${escapeHtml(vT('admin_zone'))}</span>
+      <button class="wp-vt-btn wp-vt-btn-danger" data-act="delete">🗑 ${escapeHtml(vT('delete_vote'))}</button>
+    </div>` : ''}`);
   _renderBallot(v, f);
   _renderResult(v, f);
   _renderElectorate(v);
@@ -546,8 +551,13 @@ function _renderBallot(v, f) {
     return;
   }
 
-  // Aperta.
-  if (mio?.haVotato) { el.innerHTML = box(mioVoto()); return; }
+  // Aperta. "Hanno votato tutti": lo decide il server (mio.puoChiudere),
+  // e il bottone va in fondo a qualunque cabina, anche a chi non vota.
+  const chiudi = mio?.puoChiudere ? `<div class="wp-vt-close-now">
+      <span>✓ ${escapeHtml(vT('all_voted'))}</span>
+      <button class="wp-vt-btn wp-vt-btn-main" data-act="close-now">${escapeHtml(vT('close_now'))}</button>
+    </div>` : '';
+  if (mio?.haVotato) { el.innerHTML = box(mioVoto() + chiudi); return; }
   if (!_account) {
     el.innerHTML = box(`<div class="wp-vt-ballot-msg">${escapeHtml(vT('login_to_vote'))}</div>
       <button class="wp-vt-btn wp-vt-btn-discord" data-act="login">${escapeHtml(vT('sign_in'))}</button>`);
@@ -555,11 +565,11 @@ function _renderBallot(v, f) {
   }
   if (!_account.verificato) {
     el.innerHTML = box(`<div class="wp-vt-ballot-msg">${escapeHtml(vT('link_to_vote'))}</div>
-      <button class="wp-vt-btn wp-vt-btn-quiet" data-act="link-char">${escapeHtml(vT('link_char'))}</button>`);
+      <button class="wp-vt-btn wp-vt-btn-quiet" data-act="link-char">${escapeHtml(vT('link_char'))}</button>${chiudi}`);
     return;
   }
   if (mio?.elettore === false) {
-    el.innerHTML = box(`<div class="wp-vt-ballot-msg">${escapeHtml(vT(`not_elector_${v.corpo}`, { nation: nomeNazione(v.nazione) }))}</div>`);
+    el.innerHTML = box(`<div class="wp-vt-ballot-msg">${escapeHtml(vT(`not_elector_${v.corpo}`, { nation: nomeNazione(v.nazione) }))}</div>${chiudi}`);
     return;
   }
   el.innerHTML = box(`<div class="wp-vt-ballot-q">${escapeHtml(vT('ballot_question'))}</div>
@@ -627,6 +637,40 @@ async function _ritira() {
   try {
     await ritiraVotazione(v.id);
     trackEvent('political-vote-withdraw');
+    await _load();
+  } catch (e) {
+    alert(vErr(e?.codice));
+  } finally {
+    _invio = false;
+  }
+}
+
+/** Chiusura anticipata: il server ricontrolla che abbiano votato tutti. */
+async function _chiudiOra() {
+  const v = _detail?.votazione;
+  if (!v || _invio || !confirm(vT('close_now_confirm'))) return;
+  _invio = true;
+  try {
+    await chiudiVotazione(v.id);
+    trackEvent('political-vote-close-now');
+    await _load();
+  } catch (e) {
+    alert(vErr(e?.codice));
+  } finally {
+    _invio = false;
+  }
+}
+
+/** Cancellazione definitiva (solo amministratore): si torna all'elenco. */
+async function _elimina() {
+  const v = _detail?.votazione;
+  if (!v || _invio || !confirm(vT('delete_confirm', { title: v.titolo }))) return;
+  _invio = true;
+  try {
+    await eliminaVotazione(v.id);
+    trackEvent('political-vote-delete');
+    _openId = null; _detail = null; _scrutinio = null;
+    _syncUrl();
     await _load();
   } catch (e) {
     alert(vErr(e?.codice));
@@ -972,6 +1016,8 @@ function _wire(view) {
     else if (act === 'choose') { _scegli(t); }
     else if (act === 'cast') { _vota(t); }
     else if (act === 'withdraw') { _ritira(); }
+    else if (act === 'close-now') { _chiudiOra(); }
+    else if (act === 'delete') { _elimina(); }
   });
   view.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter' && ev.key !== ' ') return;

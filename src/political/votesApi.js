@@ -46,6 +46,10 @@ export const creaVotazione = (dati) => chiama('/votazioni', { method: 'POST', bo
 export const vota = (id, scelta, nota) => chiama(`/votazioni/${encodeURIComponent(id)}/voto`, { method: 'POST', body: { scelta, nota } });
 /** Il canale Discord degli avvisi della nazione; url vuoto = toglierlo. */
 export const impostaCanale = (nazione, url) => chiama('/votazioni/canale', { method: 'POST', body: { nazione, url } });
+/** "Hanno votato tutti": urne chiuse adesso, scrutinio fra pochi secondi. */
+export const chiudiVotazione = (id) => chiama(`/votazioni/${encodeURIComponent(id)}/chiudi`, { method: 'POST', body: {} });
+/** Cancella per sempre (solo amministratore). */
+export const eliminaVotazione = (id) => chiama(`/votazioni/${encodeURIComponent(id)}/elimina`, { method: 'POST', body: {} });
 export const ritiraVotazione = (id) => chiama(`/votazioni/${encodeURIComponent(id)}/ritira`, { method: 'POST', body: {} });
 
 /** Il ritorno da Discord atterra sull'area riservata (privateOverlay.js):

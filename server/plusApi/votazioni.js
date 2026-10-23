@@ -77,6 +77,7 @@ const { trpcGet, trpcBatchSame } = require('./wareraApi');
 const { avvisa, urlWebhookValido } = require('./notify');
 const {
   accountFromToken, audit, getWebhook, setWebhook, deleteWebhook, votazioniDaAvvisare, segnaAvviso,
+  chiudiOra, eliminaVotazione,
   listaVotazioni, getVotazione, votazioniDaLavorare, contaVotazioniAttive, creaVotazione, ritiraVotazione,
   fissaElettori, elettoriDi, eElettore, haVotato, contaPartecipanti, partecipantiDi, votoPalese,
   registraVoto, schedeDi, votiPalesiDi, sigillaVotazione,
@@ -105,6 +106,9 @@ const MAX_ATTIVE_PER_NAZIONE = 20;
 // del clic, che arriva qui già nel passato di qualche secondo.
 const SUBITO_MS = 60_000;
 const ATTESA_SCRUTINIO_MS = 60_000;
+// Chiusura anticipata: dieci secondi bastano a chi ha la pagina aperta (la
+// vista rilegge allo scatto di fase) e chi la riapre dopo entra a metà.
+const CHIUSURA_ANTICIPATA_MS = 10_000;
 const GIRO_MS = 20_000;
 
 class Rifiuto extends Error {
@@ -151,7 +155,9 @@ function stato(v, ora = Date.now()) {
 
 function tempiScrutinio(v) {
   const r = leggiRisultato(v);
-  const scrutinioAlle = v.closes_at + ATTESA_SCRUTINIO_MS;
+  // `count_at` c'è solo per le votazioni chiuse prima del tempo ("hanno
+  // votato tutti"): lì lo scrutinio parte dopo CHIUSURA_ANTICIPATA_MS.
+  const scrutinioAlle = v.count_at || v.closes_at + ATTESA_SCRUTINIO_MS;
   const durataMs = r ? r.durataMs : null;
   return { scrutinioAlle, durataMs, fineScrutinio: durataMs != null ? scrutinioAlle + durataMs : null };
 }
@@ -213,6 +219,17 @@ function vedeTesto(v, g) {
   if (v.visibility === 'pubblico') return true;
   if (istituzioni(g, v.country_id) || fotografato(v, g)) return true;
   return v.electorate === 'referendum' && g.countryId === v.country_id;
+}
+
+/** "Hanno votato tutti: mostra lo scrutinio adesso" — richiesta dell'utente
+ *  (2026-10-23). Solo chi ha aperto la votazione e l'amministratore, solo a
+ *  urne aperte, e solo quando la partecipazione è COMPLETA: chiudere prima
+ *  toglierebbe il voto a chi non l'ha ancora dato. Mai nel referendum, i cui
+ *  aventi diritto sono una stima: "tutti" lì non si può sapere. */
+function puoChiudere(v, g, st = stato(v)) {
+  if (st !== 'aperta' || v.electorate === 'referendum' || v.eligible_count == null) return false;
+  const autore = Boolean(g.warUserId) && g.warUserId === v.created_war_user;
+  return (g.amministra || autore) && contaPartecipanti(v.id) >= v.eligible_count;
 }
 
 function vedeEsito(v, g) {
@@ -556,6 +573,9 @@ function forma(v, g, ora = Date.now()) {
       voto: voto ? { scelta: voto.choice, nota: voto.note || null } : null,
       puoRitirare: st === 'programmata' && (g.amministra || governa(g, v.country_id)
         || (g.warUserId && g.warUserId === v.created_war_user)),
+      puoChiudere: puoChiudere(v, g, st),
+      // Cancellare per sempre è dell'amministratore e basta.
+      puoEliminare: g.amministra,
     };
   }
 
@@ -791,6 +811,38 @@ function buildVotazioniRouter({ requireAuth, risolviIdentita, bloccaScrittureSot
     const dopo = ritiraVotazione(v.id, req.account.id);
     audit(req.account.id, 'votazione.ritira', `votazione:${v.id}`, { titolo: v.title, testo: v.body, stato: stato(v) });
     res.json({ votazione: forma(dopo, g), ora: Date.now() });
+  }));
+
+  /** Chiude le urne adesso, se hanno votato tutti: sigillo subito, scrutinio
+   *  fra CHIUSURA_ANTICIPATA_MS per tutti. */
+  router.post('/:id/chiudi', ...autenticato, gestisci(async (req, res) => {
+    const v = await carica(req);
+    const g = await chiGuarda(req);
+    if (stato(v) !== 'aperta') throw new Rifiuto('votazione_non_aperta', 409);
+    if (!g.amministra && !(g.warUserId && g.warUserId === v.created_war_user)) throw new Rifiuto('non_autorizzato', 403);
+    if (!puoChiudere(v, g)) throw new Rifiuto('non_tutti_hanno_votato', 409);
+    const ora = Date.now();
+    chiudiOra(v.id, ora, ora + CHIUSURA_ANTICIPATA_MS);
+    const chiusa = await aggiornata(getVotazione(v.id));
+    audit(req.account.id, 'votazione.chiudi', `votazione:${v.id}`, { partecipanti: contaPartecipanti(v.id) });
+    res.json({ votazione: forma(chiusa, g), ora: Date.now() });
+  }));
+
+  /** Cancella una votazione per sempre, con voti e risultato. Solo
+   *  l'amministratore. Nell'audit resta cosa era (titolo, testo, conteggi
+   *  totali): è l'unica copia che rimane, come per gli accordi. Mai chi ha
+   *  votato cosa. */
+  router.post('/:id/elimina', ...autenticato, gestisci(async (req, res) => {
+    const v = getVotazione(idVotazione(req.params.id));
+    if (!v) throw new Rifiuto('votazione_sconosciuta', 404);
+    if (!(await chiGuarda(req)).amministra) throw new Rifiuto('solo_admin', 403);
+    const r = leggiRisultato(v);
+    eliminaVotazione(v.id);
+    audit(req.account.id, 'votazione.elimina', `votazione:${v.id}`, {
+      nazione: v.country_id, titolo: v.title, testo: v.body, corpo: v.electorate, scrutinio: v.ballot,
+      apre: v.opens_at, chiude: v.closes_at, esito: r ? { esito: r.esito, conteggi: r.conteggi, aventiDiritto: r.aventiDiritto } : null,
+    });
+    res.json({ eliminata: v.id, ora: Date.now() });
   }));
 
   return router;

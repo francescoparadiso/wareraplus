@@ -229,6 +229,12 @@ scrutinio) stanno nella testata del file.
 - `GET /votazioni/:id` — dettaglio, con il corpo elettorale fotografato
 - `GET /votazioni/:id/scrutinio` — la sequenza sigillata, da `scrutinioAlle`
 - `POST /votazioni` · `POST /votazioni/:id/voto` · `POST /votazioni/:id/ritira`
+- `POST /votazioni/:id/chiudi` — "hanno votato tutti": urne chiuse adesso,
+  scrutinio fra 10 s (`count_at`). Solo l'autore o l'amministratore, solo a
+  partecipazione completa, mai nel referendum
+- `POST /votazioni/:id/elimina` — cancella per sempre (solo amministratore,
+  a cascata su elettori, voti e schede); nell'audit resta cosa era, mai chi
+  ha votato cosa
 - `POST /votazioni/canale` — il webhook Discord degli avvisi della nazione
   (scope `votazioni`, lo imposta il governo; url vuoto = toglierlo)
 

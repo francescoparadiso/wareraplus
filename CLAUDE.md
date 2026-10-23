@@ -541,7 +541,10 @@ Lo scrutinio si guarda in diretta: emiciclo per il palese
 (`votesHemicycle.js`, 20–45 s), urna per il segreto (`votesUrn.js`: in
 congresso 3 s per OGNI scheda, sempre allo stesso passo; accelera solo nel
 referendum, fino a 2 minuti). Il governo può impostare un canale Discord (avvisi di apertura,
-inizio scrutinio, esito). Per provare le animazioni c'è
+inizio scrutinio, esito). Quando hanno votato TUTTI, chi ha aperto la
+votazione (o l'amministratore) può mostrare lo scrutinio subito: urne chiuse
+e scrutinio fra 10 s (`count_at`, mai nel referendum). Solo l'amministratore
+può eliminare una votazione, per sempre. Per provare le animazioni c'è
 `server/plusApi/votazioniFinte.js` (solo dev, vedi il README). Tre cose da
 sapere:
 

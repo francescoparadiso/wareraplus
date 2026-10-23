@@ -605,6 +605,14 @@ function migrate() {
       console.log(`[plusApi] migrazione: aggiunta votazione.${c}`);
     }
   }
+
+  // 2026-10-23 — chiusura anticipata ("hanno votato tutti"): l'ora in cui
+  // parte lo scrutinio, al posto della chiusura + 1 minuto. NULL per tutte
+  // le altre.
+  if (!colonne('votazione').includes('count_at')) {
+    db.exec('ALTER TABLE votazione ADD COLUMN count_at INTEGER');
+    console.log('[plusApi] migrazione: aggiunta votazione.count_at');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1518,6 +1526,20 @@ function segnaAvviso(voteId, colonna) {
   return getDb().prepare(`UPDATE votazione SET ${colonna} = 1 WHERE id = ? AND ${colonna} = 0`).run(voteId).changes > 0;
 }
 
+/** Chiusura anticipata: urne chiuse adesso, scrutinio a `countAt`. Solo su
+ *  una votazione ancora aperta (non sigillata, non ritirata). */
+function chiudiOra(voteId, closesAt, countAt) {
+  return getDb().prepare(`UPDATE votazione SET closes_at = ?, count_at = ?
+    WHERE id = ? AND sealed_at IS NULL AND withdrawn_at IS NULL AND closes_at > ?`)
+    .run(closesAt, countAt, voteId, closesAt).changes > 0;
+}
+
+/** Cancella una votazione e, a cascata, elettori, partecipazioni, voti e
+ *  schede. Chi può farlo lo decide votazioni.js (solo l'amministratore). */
+function eliminaVotazione(voteId) {
+  return getDb().prepare('DELETE FROM votazione WHERE id = ?').run(voteId).changes || 0;
+}
+
 /** Le schede (segrete) o i voti (palesi) di una votazione, per il sigillo. */
 function schedeDi(voteId) {
   return getDb().prepare('SELECT choice, note FROM votazione_scheda WHERE vote_id = ?').all(voteId);
@@ -1607,6 +1629,7 @@ module.exports = {
   listaVotazioni, getVotazione, votazioniDaLavorare, contaVotazioniAttive, creaVotazione, ritiraVotazione,
   fissaElettori, elettoriDi, eElettore, haVotato, contaPartecipanti, partecipantiDi, votoPalese,
   registraVoto, schedeDi, votiPalesiDi, sigillaVotazione, votazioniDaAvvisare, segnaAvviso,
+  chiudiOra, eliminaVotazione,
   salvaIstantanea, istantaneaVicina, istantaneaPiuVecchia, potaIstantanee,
   audit, dbStatus,
 };
