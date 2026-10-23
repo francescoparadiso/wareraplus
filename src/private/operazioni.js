@@ -121,6 +121,7 @@ function contoVivo(fine) {
 }
 
 let _ticker = null;
+let _aggiornatore = null;   // l'aggiornamento ogni 2 minuti (creaOperazioni)
 function avviaConti(allaScadenza) {
   if (_ticker) return;
   _ticker = setInterval(() => {
@@ -315,6 +316,41 @@ export function creaOperazioni(ctx) {
 
   const opzioni = () => ({ paese: ctx.paese?.() || null, archiviate });
   avviaConti(() => ctx.ridisegna());
+
+  // ── Aggiornamento da solo ──────────────────────────────────────────
+  // Ogni 2 minuti — un tick del gioco — si rileggono battaglie e piano:
+  // punti e tick cambiano la fine stimata di round e battaglie, e un altro
+  // ministro può aver spostato un passo. In silenzio (niente "carico…"), e
+  // mai mentre si trascina, si scrive o la lavagna non è a schermo: un
+  // ridisegno sotto le mani interromperebbe il gesto.
+  const OGNI_MS = 120_000;
+  let inMovimento = false;
+  const aSchermo = () => !document.hidden && Boolean(document.querySelector('#wp-private-overlay.open .wp-pv-op-flow'));
+  async function aggiornaInSilenzio() {
+    if (!dati || caricamento || occupato || inMovimento || !aSchermo()) return;
+    try {
+      const [ops, battaglie] = await Promise.all([
+        leggiOperazioni({ asAccount: ctx.lente(), ...opzioni() }),
+        battaglieInCorso().catch(() => null),
+      ]);
+      if (inMovimento || occupato) return;
+      dati = ops;
+      if (battaglie) {
+        vive = new Map();
+        viveId = new Map();
+        for (const b of battaglie) {
+          const r = b?.defender?.region;
+          if (r && !vive.has(r)) vive.set(r, b);
+          if (b?._id) viveId.set(b._id, b);
+        }
+      }
+      ctx.ridisegna();
+    } catch { /* al prossimo giro */ }
+  }
+  // Uno solo: la lavagna si ricrea (lente dell'amministratore, uscita), e
+  // ogni copia vecchia ne lascerebbe uno vivo.
+  clearInterval(_aggiornatore);
+  _aggiornatore = setInterval(aggiornaInSilenzio, OGNI_MS);
   // Sotto la lente il server rifiuta ogni scrittura: i bottoni del governo
   // non si mostrano nemmeno, anche se la persona guardata governa.
   const pianifica = () => Boolean(dati?.puoPianificare) && !ctx.lente();
@@ -1556,11 +1592,12 @@ export function creaOperazioni(ctx) {
     scorre.addEventListener('pointermove', (e) => {
       if (!tiro) return;
       const dx = e.clientX - tiro.x;
-      if (Math.abs(dx) > 4) { tiro.mosso = true; scorre.classList.add('trascina'); }
+      if (Math.abs(dx) > 4) { tiro.mosso = true; inMovimento = true; scorre.classList.add('trascina'); }
       if (tiro.mosso) scorre.scrollLeft = tiro.sl - dx;
     });
     const fineTiro = (e, clic) => {
       const t = tiro; tiro = null;
+      inMovimento = false;
       scorre.classList.remove('trascina');
       if (!clic || !t || t.mosso || !modificabile) return;
       const r = tela.getBoundingClientRect();
@@ -1671,11 +1708,13 @@ export function creaOperazioni(ctx) {
         const dx = fisso ? 0 : e.clientX - volo.x, dy = e.clientY - volo.y;
         if (!volo.mosso && Math.hypot(dx, dy) < 6) return;
         volo.mosso = true;
+        inMovimento = true;
         c.classList.add('in-volo');
         c.style.transform = `translate(${dx}px, ${dy}px)`;
       });
       c.addEventListener('pointerup', (e) => {
         const v = volo; volo = null;
+        inMovimento = false;
         if (!v?.mosso) return;
         appenaMossa = true;
         c.classList.remove('in-volo');
