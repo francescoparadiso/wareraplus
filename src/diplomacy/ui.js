@@ -85,7 +85,14 @@ function _autoToggleLegend() {
   // nazione selezionata (sempre in modalità 'diplomacy') non cambiava la
   // viewKey, quindi non ri-attivava mai il toggle automatico dopo la prima
   // apertura/chiusura manuale dell'utente.
-  const isDefaultView = state.coloringMode === 'diplomacy' && !state.selectedCountryId;
+  // WarEra+ (feedback utente, portatile): con una nazione selezionata si
+  // apriva tutto insieme — pannello laterale, tooltip e questa legenda a
+  // tre righe in cima alla mappa. Su uno schermo basso la legenda delle
+  // relazioni resta chiusa e si apre con la ℹ; su un monitor alto (dove
+  // l'apertura automatica era stata chiesta) resta com'era.
+  const shortScreen = window.innerHeight <= 900;
+  const isDefaultView = state.coloringMode === 'diplomacy'
+    && (!state.selectedCountryId || shortScreen);
   const viewKey = `${state.coloringMode}|${!!state.battleHeatmapData}|${!!state.selectedCountryId}`;
 
   if (viewKey === _lastLegendViewKey) return; // stessa vista di prima, non toccare lo stato utente

@@ -439,8 +439,8 @@ function buildPanelHtml(nation) {
       <button class="wp-political-action-btn" id="wp-open-senate-btn">
         <span class="wp-political-action-icon">🏛️</span>${t('senate_btn')}
       </button>
-      <button class="wp-political-action-btn" id="wp-open-parties-btn">
-        <span class="wp-political-action-icon">👥</span>${t('parties_btn')}
+      <button class="wp-political-action-btn" id="wp-open-stats-btn">
+        <span class="wp-political-action-icon">📊</span>${t('nation_stats_btn')}
       </button>
     </div>
 
@@ -546,10 +546,11 @@ function render(nationId) {
   wirePinStar();
   wireOverviewBack();
 
-  // WarEra+: le tre scorciatoie in cima al pannello aprono Political View
-  // direttamente sulla vista giusta (vedi initPoliticalView in
-  // src/political/main.js). "Elezioni" è la vista di default (nessuna
-  // opzione), Senato e Partiti passano la loro opzione dedicata.
+  // WarEra+: le scorciatoie in cima al pannello. Elezioni e Senato aprono
+  // Political View direttamente sulla vista giusta (vedi initPoliticalView
+  // in src/political/main.js); la terza, che era "Partiti", dal 2026-10-23
+  // apre la scheda della nazione in Statistiche nazioni (richiesta
+  // dell'utente: i partiti si raggiungono comunque da Elezioni).
   const electionsBtn = document.getElementById('wp-open-elections-btn');
   if (electionsBtn) {
     electionsBtn.addEventListener('click', () => {
@@ -564,10 +565,11 @@ function render(nationId) {
     });
   }
 
-  const partiesBtn = document.getElementById('wp-open-parties-btn');
-  if (partiesBtn) {
-    partiesBtn.addEventListener('click', () => {
-      openPoliticalView(nationId, nation.name, { openParty: true });
+  const statsBtn = document.getElementById('wp-open-stats-btn');
+  if (statsBtn) {
+    statsBtn.addEventListener('click', () => {
+      trackEvent('nation-panel-stats', { id: nationId });
+      import('../app/nationsOverlay.js').then(m => m.openNationsView(nationId)).catch(() => {});
     });
   }
 

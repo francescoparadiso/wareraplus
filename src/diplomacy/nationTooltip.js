@@ -539,6 +539,19 @@ export function initNationTooltip(map) {
     const nid = _extractId(e);
     if (!nid) return;
 
+    // WarEra+ (feedback utente: "su portatile se clicco una nazione apre
+    // tutta questa roba"): su desktop lo stesso click apre già il pannello
+    // laterale (countryPanel.js, stesse guardie e stessa soglia mobile),
+    // che dice le stesse cose del tooltip e anche di più. Fissare ANCHE il
+    // tooltip era un doppione piantato in mezzo alla mappa: si chiude e
+    // basta. Su mobile resta com'era — lì il tooltip è l'unica cosa che si
+    // apre, col bottone "Full Details".
+    const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window;
+    if (!isMobile) {
+      hide();
+      return;
+    }
+
     if (currentId === nid && isPinned) {
       hide();
       hoverSuppressed = true;
