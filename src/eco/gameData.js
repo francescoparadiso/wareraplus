@@ -8,8 +8,9 @@
                      × (1 + bonus%/100)
 
    `bonus%` è SEMPRE il totale già calcolato server-side
-   (company.getProductionBonus / getRecommendedRegionIdsByItemCode) — mai
-   ricalcolato qui lato client (niente country/ethics/deposit locali).
+   (company.getProductionBonus) — mai ricalcolato qui lato client (niente
+   country/ethics/deposit locali). Dalla v0.27 vale 0 per tutti (giacimenti
+   spenti, specializzazione tolta), ma si continua a leggerlo da lì.
    ══════════════════════════════════════════════════════════════ */
 
 export function makeGameData({ gameConfig, prices }) {

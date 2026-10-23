@@ -22,9 +22,11 @@ ed è poi cresciuto ben oltre quei due:
   `public/political/` come riferimento/rollback fisico, **non più raggiunto da
   alcun path attivo** dell'app (niente più iframe).
 - **WarEra Eco Optimizer di ArgusIA** (esistente, di terzi) — bot Discord
-  portato a moduli ES in `src/eco/` come "Ottimizzatore industriale". Stessa
-  logica (Competenze / Posizione / Lavoratori), più una sezione Assunzioni
-  nuova e una veste grafica al posto degli embed Discord. Dal 2026-09-19 è
+  portato a moduli ES in `src/eco/` come "Ottimizzatore industriale". Nato
+  con la stessa logica (Competenze / Posizione / Lavoratori, più Assunzioni);
+  dalla v0.27 del gioco, che toglie il mercato del lavoro, sono rimaste
+  Aziende e Competenze, ricostruite sulle statistiche di lavoro misurate
+  (vedi `AGGIORNAMENTO-v0.27.md`). Dal 2026-09-19 è
   una **scheda** della sezione Economia (`src/economy/`), insieme alle
   Rendite di produzione e alla scheda Prezzi.
   ⚠️ **L'attribuzione ad ArgusIA (card in cima alla vista) non va rimossa**,

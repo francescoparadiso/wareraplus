@@ -566,10 +566,20 @@ wareraPlus/
     │   │                            è la TERZA SCHEDA di src/economy/, non più una
     │   │                            voce di menù sua: il codice qui dentro non è
     │   │                            cambiato, cambia solo chi chiama initEcoView().
+    │   │                            ⚠️ Riscritto per la v0.27 (dipendenti NPC, niente
+    │   │                            mercato del lavoro): via Posizione, Lavoratori,
+    │   │                            Assunzioni e paga da lavoro (storia git), restano
+    │   │                            Aziende + Competenze sul dato MISURATO di
+    │   │                            work.getStatsByCompany. Vedi AGGIORNAMENTO-v0.27.md.
     │   ├── main.js              ← orchestratore + rendering (era bot.py + embeds.py)
-    │   ├── api.js               ← ecoCall via ECO_PROXY_BASE (Worker), dati di gioco
-    │   ├── gameData.js, resolve.js, account.js, wage.js
-    │   └── skills.js, positioning.js, workers.js, hiring.js  ← logica pura (hiring = nuova)
+    │   ├── api.js               ← ecoCall via ECO_PROXY_BASE (proxy), dati di gioco;
+    │   │                          interruttore `?api=dev` (solo build non-live) che
+    │   │                          punta su apidev.warera.io con una chiave in memoria
+    │   ├── gameData.js, resolve.js
+    │   ├── account.js           ← aziende + work.getStatsByCompany + tassa della nazione
+    │   ├── companies.js         ← scheda Aziende: margine dei dipendenti, segnali (pura)
+    │   └── skills.js            ← scheda Competenze: Companies/Energy/Production/
+    │                              Management sul budget delle abilità eco (pura)
     ├── market/                   ← NUOVO — Rendite di produzione: la classifica di
     │   │                            mercato... e dal 2026-09-19 la SECONDA SCHEDA di
     │   │                            src/economy/, non più una voce di menù sua (il

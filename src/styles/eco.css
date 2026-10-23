@@ -199,6 +199,36 @@
 
 .wp-eco-footnote { margin-top: 12px; font-size: 11.5px; color: #6e7681; line-height: 1.5; }
 
+/* ── v0.27: schede Aziende e Competenze ──
+   Le card delle aziende portano ora margine dei dipendenti, la barretta
+   dei 31 giorni e i segnali: stanno meglio su una colonna sotto i 900px. */
+.wp-eco-devbanner {
+  margin-bottom: 10px; padding: 9px 12px; border-radius: 9px; font-size: 12.5px;
+  background: #1c1a10; border: 1px solid #d2992255; color: #e3c07a;
+}
+.wp-eco-devkey { width: 100%; margin-bottom: 10px; font-size: 13px; padding: 9px 12px; }
+.wp-eco-cocard-where { font-size: 11.5px; margin-top: 1px; }
+.wp-eco-cocard-gold.pos { color: #56d364; }
+.wp-eco-cocard-gold.neg { color: #f85149; }
+.wp-eco-cocard-emp { font-size: 12.5px; color: #adbac7; margin: 7px 0 6px; line-height: 1.45; }
+.wp-eco-spark { display: block; max-width: 100%; height: 26px; margin: 2px 0 8px; }
+.wp-eco-spark-bar { fill: #2ea043; }
+.wp-eco-spark-none { fill: #30363d; }
+.wp-eco-spark-stop { fill: #f85149; }
+.wp-eco-sigs { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.wp-eco-sig { font-size: 12px; line-height: 1.45; color: #adbac7; }
+.wp-eco-sig.bad { color: #ff9b9b; }
+.wp-eco-sig.warn { color: #e3b341; }
+.wp-eco-sig.good { color: #56d364; }
+.wp-eco-sig.dim { color: #6e7681; }
+.wp-eco-warnline { color: #e3b341; }
+@media (max-width: 900px) {
+  .wp-eco-colist-v27 { grid-template-columns: 1fr; }
+}
+body.light-theme .wp-eco-cocard-emp,
+body.light-theme .wp-eco-sig:not(.bad):not(.warn):not(.good) { color: #424a53; }
+body.light-theme .wp-eco-spark-none { fill: #d0d7de; }
+
 /* ── Tema chiaro (body.light-theme) ── */
 body.light-theme .wp-eco { color: #1a1a1a; }
 body.light-theme .wp-eco-title,

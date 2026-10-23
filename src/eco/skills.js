@@ -1,185 +1,134 @@
 /* ══════════════════════════════════════════════════════════════
-   WarEra+ — Ottimizzatore industriale: ottimizzatore Competenze
+   WarEra+ — Ottimizzatore industriale: ottimizzatore Competenze (v0.27)
    ------------------------------------------------------------------
-   Port di `warera/skills.py`. Entro il budget di punti competenza trova la
-   combinazione Companies/Energy/Entrepreneurship/Production (0–10 ciascuna)
-   che massimizza il guadagno in oro/giorno, tenendo Management come pavimento
-   fisso (non cercato) sufficiente ai lavoratori attuali.
+   Nato come port di `warera/skills.py` di ArgusIA: entro un budget di
+   punti abilità, la combinazione che rende più moneta al giorno. L'idea è
+   la stessa; le abilità e il loro valore li ha cambiati la v0.27:
 
-   Differenza IMPLEMENTATIVA (non di comportamento) rispetto al bot Python:
-   il bot richiamava `worker.getWorkers` una volta per azienda e di nuovo per
-   ogni azienda "conveniente da spostare" (round-trip ridondante noto,
-   BOT_KNOWLEDGE.md §13). Qui i roster e i profili dei lavoratori si
-   pre-caricano in batch UNA sola volta e il calcolo del reddito-lavoratori
-   diventa una funzione pura sui dati già in memoria — stessi numeri, meno
-   chiamate.
+   · via Imprenditoria (punti rimborsati) e la paga da un lavoro altrui —
+     per un altro giocatore si lavora solo da manager, che è un'altra
+     scheda;
+   · Energia 100 + 10/liv.: il lavoro in proprio costa 10 energia, quindi
+       azioni/giorno = rigenerazione oraria (10% del massimo) × 24 / 10
+                     = 0,24 × Energia                  (come prima);
+   · Produzione 30 + 3/liv. = punti per azione di lavoro in proprio;
+   · Gestione non limita più le assunzioni: +2% di produzione dei
+     dipendenti per punto (1 → 11 punti, quindi +2% → +22%);
+   · Aziende resta il tetto di aziende attive.
 
-   NB sul SEARCH vs CURRENT (§6): il search valuta ogni azienda alla sua
-   miglior regione disponibile SOLO se quel trasloco ripaga entro GREEN_DAYS;
-   `cur_total`/"Lavora: X" restano invece letterali all'oggi (solo aziende
-   ATTIVE, posizione attuale) — non condividono logica di proposito.
+   ── COME SI VALUTA OGNI ABILITÀ ─────────────────────────────────────
+   Tutto parte dalle aziende MISURATE (companies.js), non da una stima:
+
+     dipendenti(azienda, Gestione G) = punti_base × (1 + 0,02·G) × v − salari
+       con punti_base = punti misurati / (1 + 0,02·G_attuale)
+     motore(azienda)                 = punti del motore × v
+     passivo(Aziende A, G)           = somma delle A aziende migliori
+     lavoro in proprio(E, P)         = 0,24 × E × P × v_migliore
+       (v_migliore = il punto che vale di più fra le aziende attive; se
+        nessuna rende, il lavoro in proprio vale 0)
+
+   e si cerca su Aziende × Energia × Produzione × Gestione (0–10 l'una).
+   Il salario non cambia con la Gestione: si paga a ora, non a punto
+   (vedi la testata di companies.js).
+
+   ── IL BUDGET ───────────────────────────────────────────────────────
+   Il bot originale assumeva un respec completo di TUTTI i punti. Qui no:
+   il budget sono i punti già messi in queste quattro abilità più quelli
+   non spesi. Le abilità da combattimento non si toccano, e Leadership
+   nemmeno — migliora addestramento ed eventi dei dipendenti, che non
+   hanno un prezzo, e darle un valore inventato sarebbe peggio che
+   lasciarla fuori dal conto. La vista lo dice.
+
+   ⚠️ Fuori dal conto anche: l'energia che va in assunzioni e
+   addestramento (10 a volta), un manager assunto (si somma alla Gestione
+   del proprietario fino a +44%), e se la maggiorazione della Gestione sia
+   davvero moltiplicativa sulle altre (felicità, attrezzo, anzianità sul
+   prodotto): le note non lo dicono.
    ══════════════════════════════════════════════════════════════ */
 
-import { ecoBatchByKey } from './api.js';
-import { GREEN_DAYS } from './positioning.js';
+export const ECO_SKILLS = ['companies', 'energy', 'production', 'management'];
+const MGMT_PCT_PER_POINT = 2;
 
-export async function computeSkills(gd, me, ownedCompanies, jobRate) {
-  const costCum = gd.levelTable('companies', 'totalCost');
-  const companiesTable = gd.levelTable('companies', 'value');
-  const energyTable = gd.levelTable('energy', 'value');
-  const entrepTable = gd.levelTable('entrepreneurship', 'value');
-  const prodTable = gd.levelTable('production', 'value');
-  const managementTable = gd.levelTable('management', 'value');
+export function computeSkills(gd, me, companiesResult) {
+  const gc = gd.gameConfig;
+  const cost = Object.fromEntries(ECO_SKILLS.map(s => [s, gd.levelTable(s, 'totalCost')]));
+  const value = Object.fromEntries(ECO_SKILLS.map(s => [s, gd.levelTable(s, 'value')]));
+  const cur = Object.fromEntries(ECO_SKILLS.map(s => [s, me.skills?.[s]?.level ?? 0]));
 
-  // ── Pre-fetch batch dei roster + profili lavoratori (una volta sola) ──
-  const withWorkers = ownedCompanies.filter(oc => oc.workerCount > 0);
-  const rosters = withWorkers.length
-    ? await ecoBatchByKey('worker.getWorkers', Object.fromEntries(withWorkers.map(oc => [oc.id, { companyId: oc.id }])))
-    : {};
-  const workersByCompany = {};
-  const workerIds = new Set();
-  for (const oc of withWorkers) {
-    const list = rosters[oc.id]?.workers || [];
-    workersByCompany[oc.id] = list;
-    for (const w of list) workerIds.add(w.user);
-  }
-  const workerUserById = workerIds.size
-    ? await ecoBatchByKey('user.getUserLite', Object.fromEntries([...workerIds].map(id => [id, { userId: id }])))
-    : {};
+  const energyPerAction = Number(gc.user?.energyCostPerAction) || 10;
+  // Rigenerazione oraria = 10% del massimo (verificato: Energia 100 →
+  // hourlyBarRegen 10). Azioni al giorno per punto di Energia.
+  const actionsPerEnergy = (0.10 * 24) / energyPerAction;
 
-  // Reddito netto/giorno dai lavoratori di una azienda, a un dato bonus%.
-  function workerNetPerDay(oc, bonusOverride) {
-    const workers = workersByCompany[oc.id] || [];
-    if (!workers.length) return 0;
-    const bonus = bonusOverride == null ? oc.bonus.total : bonusOverride;
-    let total = 0;
-    for (const w of workers) {
-      const wu = workerUserById[w.user];
-      if (!wu) continue;
-      const wRawProd = 0.24 * wu.skills.energy.total * wu.skills.production.total;
-      const wNetPerPoint = gd.getNetPerPoint(oc.itemCode, bonus + w.fidelity) - w.wage;
-      total += wRawProd * wNetPerPoint;
-    }
-    return total;
-  }
+  const mgmtFactor = lvl => 1 + (MGMT_PCT_PER_POINT / 100) * value.management[lvl];
+  const curMgmtFactor = mgmtFactor(cur.management);
 
-  // ── Regioni consigliate per il search reposition-aware ──
-  const allItems = [...new Set(ownedCompanies.map(oc => oc.itemCode))].sort();
-  const recsByItem = allItems.length
-    ? await ecoBatchByKey('company.getRecommendedRegionIdsByItemCode', Object.fromEntries(allItems.map(item => [item, { itemCode: item }])))
-    : {};
-  const moveCostGold = 5 * gd.prices.concrete;
+  // Solo le aziende attive con un conto: quelle disabilitate tornano in
+  // gioco se il tetto Aziende sale, quindi entrano anche loro nel search.
+  const rows = companiesResult.rows;
+  const employeeDay = (r, lvl) => {
+    const base = r.employees.pointsDay / curMgmtFactor;
+    return base * mgmtFactor(lvl) * r.value - r.employees.wageDay;
+  };
+  const passiveAt = (lvl) => rows.map(r => r.engineDay + employeeDay(r, lvl)).sort((a, b) => b - a);
+  const passiveByMgmt = Array.from({ length: 11 }, (_, m) => passiveAt(m));
 
-  const companyRows = [];
-  const searchValues = [];
-  const searchRates = [];
-  let totalWorkersAll = 0;
-
-  for (const oc of ownedCompanies) {
-    totalWorkersAll += oc.workerCount;
-    const netPerPoint = gd.getNetPerPoint(oc.itemCode, oc.bonus.total);
-    const engineRevenue = oc.dailyProd * netPerPoint;
-    const workerNet = workerNetPerDay(oc);
-    const potentialNetPerDay = engineRevenue + workerNet;
-    companyRows.push({
-      name: oc.name, item: oc.itemCode, active: !oc.disabled,
-      bonusPercent: oc.bonus.total, workers: oc.workerCount,
-      maxWorkers: oc.maxWorkers, engineLevel: oc.engineLevel,
-      engineRevenue,
-      workerNetPerDay: workerNet, potentialNetPerDay, netPerPoint,
-    });
-
-    const candidates = recsByItem[oc.itemCode] || [];
-    const best = candidates[0] || null;
-    let worthMoving = false;
-    let bestEngineRevenue = 0, bestNetPerPoint = 0;
-    if (best) {
-      bestNetPerPoint = gd.getNetPerPoint(oc.itemCode, best.bonus);
-      bestEngineRevenue = oc.dailyProd * bestNetPerPoint;
-      const repositionGain = bestEngineRevenue - engineRevenue;
-      const payback = repositionGain > 0.0001 ? (moveCostGold / repositionGain) : null;
-      worthMoving = payback !== null && payback <= GREEN_DAYS;
-    }
-    if (worthMoving) {
-      const bestWorkerNet = workerNetPerDay(oc, best.bonus);
-      searchValues.push(bestEngineRevenue + bestWorkerNet);
-      searchRates.push(bestNetPerPoint);
-    } else {
-      searchValues.push(potentialNetPerDay);
-      searchRates.push(netPerPoint);
-    }
-  }
-
-  companyRows.sort((a, b) => b.potentialNetPerDay - a.potentialNetPerDay);
-  const companyRevenueSorted = [...searchValues].sort((a, b) => b - a);
-  const ownRateBestRecommended = searchRates.length ? Math.max(...searchRates) : 0;
-
-  // "Lavora: X" (oggi): solo un'azienda ATTIVA, alla sua posizione attuale.
-  let bestOwnCompany = null;
-  let ownRateBest = 0;
-  const activeRows = companyRows.filter(r => r.active);
-  if (activeRows.length) {
-    bestOwnCompany = activeRows.reduce((a, b) => (b.netPerPoint > a.netPerPoint ? b : a));
-    ownRateBest = bestOwnCompany.netPerPoint;
-  }
-
-  function passiveIncome(lc) {
-    const cap = Math.min(companyRevenueSorted.length, Math.floor(companiesTable[lc]));
+  const topSum = (sorted, k) => {
     let s = 0;
-    for (let i = 0; i < cap; i++) s += companyRevenueSorted[i];
+    for (let i = 0; i < Math.min(k, sorted.length); i++) s += sorted[i];
     return s;
-  }
+  };
 
-  const budget = me.leveling.totalSkillPoints;
+  const bestSelf = rows
+    .filter(r => !r.company.disabled && r.value > 0)
+    .reduce((a, b) => (!a || b.value > a.value ? b : a), null);
+  const selfValue = bestSelf ? bestSelf.value : 0;
+  const selfDay = (le, lp) => actionsPerEnergy * value.energy[le] * value.production[lp] * selfValue;
 
-  let requiredMgmtLevel = 0;
-  for (let m = 0; m <= 10; m++) {
-    if (managementTable[m] >= totalWorkersAll) { requiredMgmtLevel = m; break; }
-  }
-  const managementCost = costCum[requiredMgmtLevel];
-  const searchBudget = budget - managementCost;
+  const spent = ECO_SKILLS.reduce((s, k) => s + cost[k][cur[k]], 0);
+  const free = Number(me.leveling?.availableSkillPoints) || 0;
+  const budget = spent + free;
 
   let best = null;
   for (let lc = 0; lc <= 10; lc++) {
-    const cCompanies = costCum[lc];
-    if (cCompanies > searchBudget) continue;
-    const passive = passiveIncome(lc);
-    for (let le = 0; le <= 10; le++) {
-      const cEnergy = costCum[le];
-      if (cCompanies + cEnergy > searchBudget) continue;
-      for (let lt = 0; lt <= 10; lt++) {
-        const cEntrep = costCum[lt];
-        if (cCompanies + cEnergy + cEntrep > searchBudget) continue;
+    const cC = cost.companies[lc];
+    if (cC > budget) break;
+    const cap = Math.floor(value.companies[lc]);
+    for (let lm = 0; lm <= 10; lm++) {
+      const cM = cost.management[lm];
+      if (cC + cM > budget) break;
+      const passive = topSum(passiveByMgmt[lm], cap);
+      for (let le = 0; le <= 10; le++) {
+        const cE = cost.energy[le];
+        if (cC + cM + cE > budget) break;
         for (let lp = 0; lp <= 10; lp++) {
-          const cProd = costCum[lp];
-          const totalCost = cCompanies + cEnergy + cEntrep + cProd;
-          if (totalCost > searchBudget) continue;
-          const jobIncome = energyTable[le] * 0.24 * prodTable[lp] * jobRate;
-          const ownIncome = entrepTable[lt] * 0.24 * prodTable[lp] * ownRateBestRecommended;
-          const total = passive + jobIncome + ownIncome;
-          if (best === null || total > best.total) {
-            best = { lc, le, lt, lp, cost: totalCost, passive, jobIncome, ownIncome, total };
+          const total = cC + cM + cE + cost.production[lp];
+          if (total > budget) break;
+          const self = selfDay(le, lp);
+          const sum = passive + self;
+          if (!best || sum > best.total + 1e-9 || (Math.abs(sum - best.total) <= 1e-9 && total < best.cost)) {
+            best = { levels: { companies: lc, energy: le, production: lp, management: lm }, cost: total, passive, self, total: sum };
           }
         }
       }
     }
   }
 
-  const curLc = me.skills.companies.level;
-  const curLe = me.skills.energy.level;
-  const curLt = me.skills.entrepreneurship.level;
-  const curLp = me.skills.production.level;
-  // NON passiveIncome(curLc): "current" deve riflettere il vero stato
-  // disabledAt, non un re-toggle ottimale assunto.
-  const curPassive = companyRows.filter(r => r.active).reduce((s, r) => s + r.potentialNetPerDay, 0);
-  const curJob = energyTable[curLe] * 0.24 * prodTable[curLp] * jobRate;
-  const curOwn = entrepTable[curLt] * 0.24 * prodTable[curLp] * ownRateBest;
-  const curTotal = curPassive + curJob + curOwn;
+  // "Ora": le aziende attive come sono, non le migliori A — il tetto vero
+  // è lo stato `disabledAt`, non un riordino che il giocatore non ha fatto.
+  const curPassive = rows
+    .filter(r => !r.company.disabled)
+    .reduce((s, r) => s + r.engineDay + employeeDay(r, cur.management), 0);
+  const curSelf = selfDay(cur.energy, cur.production);
 
   return {
-    companyRows, budget, searchBudget,
-    totalWorkersAll, requiredMgmtLevel, managementCost,
-    curLc, curLe, curLt, curLp, curTotal,
-    best, bestOwnCompany,
+    budget, spent, free,
+    current: { levels: cur, passive: curPassive, self: curSelf, total: curPassive + curSelf },
+    best,
+    bestSelf,
+    selfActionsDay: lvl => actionsPerEnergy * value.energy[lvl],
+    capAt: lvl => value.companies[lvl],
+    leadershipLevel: me.skills?.leadership?.level ?? 0,
+    mgmtPct: lvl => (MGMT_PCT_PER_POINT * value.management[lvl]),
   };
 }

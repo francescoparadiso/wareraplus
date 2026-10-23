@@ -199,6 +199,26 @@ Tutto pubblico, quasi tutto già dentro le due chiamate del boot (costo zero):
 3. **Ottimizzatore da ripensare**, non da rattoppare: Competenze, Posizione e
    Assunzioni perdono senso così come sono; ciò che si vede da fuori sono le
    statistiche di lavoro. ⚠️ La card di attribuzione ad ArgusIA resta.
+   **Fatto in parte (branch `v0.27`, 2026-10-23):** schede **Aziende**
+   (`src/eco/companies.js`: valore e costo del punto, margine dei dipendenti
+   sugli ultimi 7 giorni interi, segnali perdita / giorni fermi / tendenza /
+   magazzino pieno, barretta dei 31 giorni) e **Competenze**
+   (`src/eco/skills.js`: Companies / Energy / Production / Management sul
+   budget dei punti già in queste abilità; Leadership e combattimento non si
+   toccano). Tolti Posizione, Lavoratori, Assunzioni e paga da lavoro.
+   Restano da fare **Posizione** (tasse, battaglie, tipo di governo) e
+   **Manager**. Per provarlo prima del rilascio: `?api=dev` su localhost o sul
+   deploy dev, e la chiave di apidev nel campo che compare (resta in memoria).
+
+   Cosa si è misurato scrivendolo, su un giocatore di apidev con 6 aziende:
+   - il **salario è fisso a ora**, non a punto: col dipendente che migliora,
+     il costo per punto scende (acciaio: 0,099 → 0,040 in due settimane);
+   - un giorno con **meno ore lavorate** fa calare insieme punti e salari
+     (21 ottobre, −40% su tutte le aziende), quindi la tendenza si misura in
+     punti per moneta, non in punti;
+   - con i prezzi di apidev il **calcare è in perdita** (0,050 di salario per
+     un punto che vale 0,011): esattamente il caso che la scheda deve
+     mostrare.
 4. **Novità**: tipo di governo, Rendita giornaliera, entrate nel pannello.
 5. **Il giorno del rilascio**: risondare le stesse procedure sul live (la
    ricognizione si rifà in pochi minuti confrontando `gameConfig`,
