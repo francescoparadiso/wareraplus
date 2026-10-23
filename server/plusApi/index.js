@@ -51,6 +51,8 @@ const { initWatcher, statoWatcher } = require('./watcher');
 const { buildNazioneRouter } = require('./nazione');
 // La lavagna delle operazioni della nazione. Vedi operazioni.js.
 const { buildOperazioniRouter } = require('./operazioni');
+// L'archivio dei patti di non belligeranza. Vedi accordi.js.
+const { buildAccordiRouter } = require('./accordi');
 const { initConfini, statoConfini } = require('./confini');
 // Le fotografie orarie per le frecce "rispetto a 24 ore fa" della scheda.
 const { initIstantanee, statoIstantanee } = require('./istantanee');
@@ -177,6 +179,12 @@ app.use('/nazione', buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScr
 // I piani della nazione: li vede chi vede la nazione, li scrive il governo
 // (gli stati dei passi, chiunque li veda). Vedi operazioni.js.
 app.use('/operazioni', buildOperazioniRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione }));
+
+// Gli accordi (patti di non belligeranza): archivio PUBBLICO in lettura,
+// lo scrive il governo di una delle nazioni coinvolte. Niente filtro
+// nazione: un patto ha due parti, e la controparte deve poterlo scrivere
+// quanto noi. Vedi accordi.js.
+app.use('/accordi', buildAccordiRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente }));
 
 app.use('/auth', buildAuthRouter({
   env: WP_ENV,

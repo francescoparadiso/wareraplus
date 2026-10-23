@@ -148,6 +148,12 @@ body.light-theme #wp-private-root .wp-pv-op-st-annullata { --st: #94a3b8; }
   background: repeating-linear-gradient(45deg, rgba(245, 158, 11, .14) 0 6px, transparent 6px 12px);
   font-size: .66rem; font-weight: 700; color: #f59e0b;
 }
+/* Il +1 h dopo la fine più vicina sta sopra la coda a righe: bordo pieno
+   e fondo coprente, o si confonderebbe con lei. */
+.wp-pv-op-buffer.sopra {
+  border: 1px solid #f59e0b; border-radius: 6px;
+  background: color-mix(in srgb, #f59e0b 22%, var(--pv-op-fondo));
+}
 /* La pillola: effetto (verde, 8 h) e malus (rosso, 15 h 30) sotto la
    scheda, lunghi quanto durano. */
 /* Sfondo a tutta altezza: tenue dentro, bordo verticale netto, così si

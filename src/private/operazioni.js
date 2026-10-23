@@ -85,6 +85,7 @@ const PILLOLA_MALUS = 15.5 * 3600_000;
 
 const CHIAVE_SCELTA = 'wp_pv_op_scelta';
 const CHIAVE_BATTAGLIE = 'wp_pv_op_battaglie';
+const CHIAVE_LINEE_PRIO = 'wp_pv_op_linee_prio';
 
 // ── Battaglie aperte ────────────────────────────────────────────────
 // Fine del round e della battaglia: il calcolo è condiviso con la sezione
@@ -120,6 +121,7 @@ function contoVivo(fine) {
 }
 
 let _ticker = null;
+let _aggiornatore = null;   // l'aggiornamento ogni 2 minuti (creaOperazioni)
 function avviaConti(allaScadenza) {
   if (_ticker) return;
   _ticker = setInterval(() => {
@@ -308,11 +310,47 @@ export function creaOperazioni(ctx) {
   let menuStato = null;         // id del passo col menu dello stato aperto
   let autoBuilder = null;       // { modo: nazione|alleanza|scelte, scelte: Set, tolte: Set }
   let battaglieVisibili = (() => { try { return localStorage.getItem(CHIAVE_BATTAGLIE) !== '0'; } catch { return true; } })();
+  let lineePrio = (() => { try { return localStorage.getItem(CHIAVE_LINEE_PRIO) !== '0'; } catch { return true; } })();
   let cercaBatt = null;         // campo di ricerca delle battaglie (sopravvive ai ridisegni)
   let riempiBatt = null;        // ridisegna solo l'elenco filtrato
 
   const opzioni = () => ({ paese: ctx.paese?.() || null, archiviate });
   avviaConti(() => ctx.ridisegna());
+
+  // ── Aggiornamento da solo ──────────────────────────────────────────
+  // Ogni 2 minuti — un tick del gioco — si rileggono battaglie e piano:
+  // punti e tick cambiano la fine stimata di round e battaglie, e un altro
+  // ministro può aver spostato un passo. In silenzio (niente "carico…"), e
+  // mai mentre si trascina, si scrive o la lavagna non è a schermo: un
+  // ridisegno sotto le mani interromperebbe il gesto.
+  const OGNI_MS = 120_000;
+  let inMovimento = false;
+  const aSchermo = () => !document.hidden && Boolean(document.querySelector('#wp-private-overlay.open .wp-pv-op-flow'));
+  async function aggiornaInSilenzio() {
+    if (!dati || caricamento || occupato || inMovimento || !aSchermo()) return;
+    try {
+      const [ops, battaglie] = await Promise.all([
+        leggiOperazioni({ asAccount: ctx.lente(), ...opzioni() }),
+        battaglieInCorso().catch(() => null),
+      ]);
+      if (inMovimento || occupato) return;
+      dati = ops;
+      if (battaglie) {
+        vive = new Map();
+        viveId = new Map();
+        for (const b of battaglie) {
+          const r = b?.defender?.region;
+          if (r && !vive.has(r)) vive.set(r, b);
+          if (b?._id) viveId.set(b._id, b);
+        }
+      }
+      ctx.ridisegna();
+    } catch { /* al prossimo giro */ }
+  }
+  // Uno solo: la lavagna si ricrea (lente dell'amministratore, uscita), e
+  // ogni copia vecchia ne lascerebbe uno vivo.
+  clearInterval(_aggiornatore);
+  _aggiornatore = setInterval(aggiornaInSilenzio, OGNI_MS);
   // Sotto la lente il server rifiuta ogni scrittura: i bottoni del governo
   // non si mostrano nemmeno, anche se la persona guardata governa.
   const pianifica = () => Boolean(dati?.puoPianificare) && !ctx.lente();
@@ -1261,6 +1299,18 @@ export function creaOperazioni(ctx) {
       scorre.scrollTo({ left: L.xDi(Date.now()) - scorre.clientWidth / 4, behavior: 'smooth' });
     });
     strumento('6h ▶', opT('panFwd'), () => sposta(6));
+    // Le linee tratteggiate dove scadono le priorità: si possono spegnere
+    // (preferenza del browser); le barre sotto l'asse restano.
+    if ((dati.guerre || []).some(prioritaAttiva)) {
+      const lp = bottone(`wp-pv-btn-quiet wp-pv-btn-small wp-pv-op-batt-interruttore${lineePrio ? ' attivo' : ''}`, opT('prioLines'), () => {
+        lineePrio = !lineePrio;
+        try { localStorage.setItem(CHIAVE_LINEE_PRIO, lineePrio ? '1' : '0'); } catch { /* resta per questa apertura */ }
+        ctx.ridisegna();
+      });
+      lp.setAttribute('aria-pressed', String(lineePrio));
+      lp.title = opT('prioLinesHint');
+      barra.appendChild(lp);
+    }
     // Riapre (o chiude) il pannello delle battaglie a destra.
     if (modificabile) {
       const b = bottone(`wp-pv-btn-quiet wp-pv-btn-small wp-pv-op-batt-interruttore${battaglieVisibili ? ' attivo' : ''}`,
@@ -1349,7 +1399,7 @@ export function creaOperazioni(ctx) {
       }
       const nostra = g.priorita === dati.countryId;
       const x2 = L.xDi(g.prioritaFino);
-      s.appendChild(svg('line', { x1: x2, y1: ASSE_H, x2, y2: L.h, class: `wp-pv-op-prio-linea${nostra ? ' nostra' : ''}` }));
+      if (lineePrio) s.appendChild(svg('line', { x1: x2, y1: ASSE_H, x2, y2: L.h, class: `wp-pv-op-prio-linea${nostra ? ' nostra' : ''}` }));
       const barra = el('div', `wp-pv-op-prio-barra${nostra ? ' nostra' : ''}`);
       barra.style.left = `${adessoX}px`;
       barra.style.top = `${ASSE_H + 1 + i * 15}px`;
@@ -1450,16 +1500,22 @@ export function creaOperazioni(ctx) {
       }
       // L'ora dopo la conquista: la regione non è attaccabile. Si disegna
       // dopo la fine più lontana, col testo che dice la finestra intera.
+      // Due volte: dopo la fine più vicina (la battaglia chiusa in due round,
+      // sopra la coda a righe) e dopo la più lontana. La regione resta
+      // inattaccabile un'ora qualunque delle due sia quella vera.
       if (q.buffer > 0) {
         const fp = fineDiPasso(p);
-        const buf = el('div', 'wp-pv-op-buffer');
-        buf.style.left = `${q.x + q.w + q.coda}px`;
-        buf.style.top = `${q.y}px`;
-        buf.style.width = `${q.buffer}px`;
-        buf.style.height = `${CARTA_H}px`;
-        buf.appendChild(el('span', null, '+1 h'));
-        if (fp) buf.title = t('bufferHint', { da: oraBreve(fp.prima + BUFFER_CONQUISTA), a: oraBreve(fp.ultima + BUFFER_CONQUISTA) });
-        tela.appendChild(buf);
+        const fini = q.coda > 0 ? [q.x + q.w, q.x + q.w + q.coda] : [q.x + q.w];
+        for (const [i, x] of fini.entries()) {
+          const buf = el('div', `wp-pv-op-buffer${i === 0 && fini.length > 1 ? ' sopra' : ''}`);
+          buf.style.left = `${x}px`;
+          buf.style.top = `${q.y}px`;
+          buf.style.width = `${q.buffer}px`;
+          buf.style.height = `${CARTA_H}px`;
+          buf.appendChild(el('span', null, '+1 h'));
+          if (fp) buf.title = t('bufferHint', { da: oraBreve(fp.prima + BUFFER_CONQUISTA), a: oraBreve(fp.ultima + BUFFER_CONQUISTA) });
+          tela.appendChild(buf);
+        }
       }
       tela.appendChild(cartaPasso(p, q, { n: numero.get(p.id), stato: stati.get(p.id) }, { op, L, modificabile, iniziaFreccia }));
     }
@@ -1536,11 +1592,12 @@ export function creaOperazioni(ctx) {
     scorre.addEventListener('pointermove', (e) => {
       if (!tiro) return;
       const dx = e.clientX - tiro.x;
-      if (Math.abs(dx) > 4) { tiro.mosso = true; scorre.classList.add('trascina'); }
+      if (Math.abs(dx) > 4) { tiro.mosso = true; inMovimento = true; scorre.classList.add('trascina'); }
       if (tiro.mosso) scorre.scrollLeft = tiro.sl - dx;
     });
     const fineTiro = (e, clic) => {
       const t = tiro; tiro = null;
+      inMovimento = false;
       scorre.classList.remove('trascina');
       if (!clic || !t || t.mosso || !modificabile) return;
       const r = tela.getBoundingClientRect();
@@ -1651,11 +1708,13 @@ export function creaOperazioni(ctx) {
         const dx = fisso ? 0 : e.clientX - volo.x, dy = e.clientY - volo.y;
         if (!volo.mosso && Math.hypot(dx, dy) < 6) return;
         volo.mosso = true;
+        inMovimento = true;
         c.classList.add('in-volo');
         c.style.transform = `translate(${dx}px, ${dy}px)`;
       });
       c.addEventListener('pointerup', (e) => {
         const v = volo; volo = null;
+        inMovimento = false;
         if (!v?.mosso) return;
         appenaMossa = true;
         c.classList.remove('in-volo');

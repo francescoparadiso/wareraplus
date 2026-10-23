@@ -124,7 +124,16 @@ export function initPrivateOverlay() {
   // Si aspetta pero' che la mappa sia pronta, per non montare un overlay
   // sopra la schermata di caricamento.
   const appenaEntrato = catturaRitornoDaDiscord();
-  if (appenaEntrato || authError) {
+  // WarEra+ Accordi: chi è partito da "Entra con Discord" nella sezione
+  // Accordi torna lì, non qui (src/accordi/api.js: entraConDiscord). Un
+  // errore di login si mostra comunque qui, dove c'è chi sa spiegarlo.
+  let ritorno = null;
+  try { ritorno = sessionStorage.getItem('wp_after_login'); sessionStorage.removeItem('wp_after_login'); } catch { /* si atterra qui */ }
+  if (appenaEntrato && !authError && ritorno === 'accordi') {
+    window.addEventListener('wareraplus:diplomacy-ready', () => {
+      import('./accordiOverlay.js').then(m => m.openAccordiView()).catch(() => openPrivateView());
+    }, { once: true });
+  } else if (appenaEntrato || authError) {
     window.addEventListener('wareraplus:diplomacy-ready', () => { openPrivateView(); }, { once: true });
   }
 

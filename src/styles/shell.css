@@ -730,6 +730,8 @@ body.light-theme .wp-panel-name {
 .wp-battles-overlay { --wp-ov-accent: #db6d28; } /* Battaglie: arancio bruciato */
 .wp-players-overlay { --wp-ov-accent: #ec4899; } /* Giocatori: rosa */
 body.light-theme .wp-players-overlay { --wp-ov-accent: #be185d; }
+.wp-accordi-overlay { --wp-ov-accent: #00d4ff; } /* Accordi: il ciano dei NAP sulla mappa */
+body.light-theme .wp-accordi-overlay { --wp-ov-accent: #0077a3; }
 /* L'oro chiaro sparisce sul fondo chiaro: sul tema chiaro l'accento della
    sezione diventa la sua versione scura (la stessa dichiarata come
    rgbLight in OVERLAY_TINTS, src/app/overlayChrome.js). */

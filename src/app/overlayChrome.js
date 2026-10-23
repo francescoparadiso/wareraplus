@@ -60,6 +60,10 @@ export const OVERLAY_TINTS = {
   // rosa → viola (Giocatori: le persone, tinta che nessun'altra sezione usa)
   players:  { rgbDark: '236,72,153',  rgbDark2: '168,85,247',
               rgbLight: '190,24,93',  rgbLight2: '126,34,206' },
+  // ciano NAP → acciaio (Accordi: la stessa tinta dei NAP sulla mappa,
+  // perché è quello che la sezione ci mette)
+  accordi:  { rgbDark: '0,212,255',   rgbDark2: '125,148,173',
+              rgbLight: '0,119,163',  rgbLight2: '71,94,122' },
 };
 
 const _stoppers = new WeakMap();

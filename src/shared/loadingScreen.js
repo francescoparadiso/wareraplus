@@ -54,6 +54,7 @@ const ACCENTS = {
   battles: '#db6d28',
   private: '#818cf8',
   players: '#ec4899',
+  accordi: '#00d4ff',
 };
 const DEFAULT_ACCENT = '#58a6ff';
 

@@ -203,7 +203,11 @@ wareraPlus/
     │   │                          ECO_PROXY_BASE, COLORS, THEMES, LAYER_IDS
     │   ├── map.js                ← MapLibre: layer, sorgenti, rendering
     │   ├── ui.js, diplomacy.js, labels.js, patterns.js
-    │   ├── alliances.js, naps.js, sphereOfInfluence.js, blocs.js (dead, vedi sotto)
+    │   ├── alliances.js, naps.js (solo NAP manuali), sphereOfInfluence.js, blocs.js (dead, vedi sotto)
+    │   ├── accordiNaps.js       ← NUOVO — gli Accordi in vigore come NAP sulla mappa: si
+    │   │                          aggiungono a externalNapsSet/List (source 'accordi'),
+    │   │                          alleanze espanse nei membri di adesso, riletti ogni 10'.
+    │   │                          Dal 2026-10-23 UNICA fonte: il CSV dei NAP non si carica più.
     │   ├── battleMarkers.js, battleHeatmap.js, battleFront.js, battleFront/
     │   │                        (battleMarkers: WarEra+ il marcatore LAMPEGGIA nel
     │   │                        colore del lato che passa avanti nel round in corso —
@@ -612,6 +616,20 @@ wareraPlus/
     │   │                          gameConfig.worker, come eco/workers.js). Cambiare
     │   │                          paga o giorni non costa una richiesta.
     │   └── i18n.js               ← dizionario locale (9 lingue)
+    ├── accordi/                  ← NUOVO (2026-10-23) — Accordi: archivio dei patti di non
+    │   │                            belligeranza (nazione–nazione, nazione–alleanza,
+    │   │                            alleanza–alleanza), con testo, inizio/fine, unità fuori
+    │   │                            dal patto e tetto ai danni per battaglia. Leggere è
+    │   │                            pubblico; scrive il governo di una nazione coinvolta
+    │   │                            (login Discord + personaggio collegato, SENZA filtro
+    │   │                            P.A.S.T.A.). Dati da /accordi su warera-plus-api
+    │   │                            (server/plusApi/accordi.js). Stili in accordi.css.
+    │   ├── main.js               ← elenco con filtri, modulo (costruito una volta, non
+    │   │                          ridisegnato mentre si scrive), controllo battaglie
+    │   │                          (/accordi/:id/controllo: attacchi diretti e tetto)
+    │   ├── api.js                ← lettura pubblica, scrittura col token di private/api.js;
+    │   │                          "Entra con Discord" torna qui (wp_after_login)
+    │   └── i18n.js               ← dizionario locale (9 lingue)
     ├── battles/                  ← NUOVO — Battaglie: una voce, due schede.
     │   │                            "Archivio battaglie" (in corso + concluse, con danno,
     │   │                            taglia pagata e contratti mercenari) e "Spese di
@@ -779,6 +797,7 @@ wareraPlus/
     │   │                         non esistono più.
     │   ├── battlesOverlay.js   ← apre Battaglie (archivio + spese di guerra) e alla
     │   │                         chiusura ferma il giro delle battaglie in corso
+    │   ├── accordiOverlay.js   ← apre Accordi (src/accordi/*), voce in Approfondimenti
     │   ├── visitorCounter.js   ← NUOVO — pill "N visite · ● M" in #wp-bottom-credits,
     │   │                         accanto a Ko-fi e all'autore. Due numeri diversi: le
     │   │                         VISITE (cumulative) da /visits sul server di cache,

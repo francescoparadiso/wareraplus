@@ -192,8 +192,8 @@ export const LAYER_IDS = {
   LYR_ANTARCTICA_COAST: 'antarctica-coast',
 };
 
-export const EXTERNAL_NAPS_URL =
-  'https://raw.githubusercontent.com/francescoparadiso/warera-tactical-diplomacy-os/refs/heads/main/warera_naps.csv';
+// WarEra+ (2026-10-23): EXTERNAL_NAPS_URL (warera_naps.csv) rimossa: i NAP
+// arrivano solo dalla sezione Accordi, vedi src/diplomacy/accordiNaps.js.
 
 export const EXTERNAL_SPHERE_URL =
   'https://raw.githubusercontent.com/francescoparadiso/warera-tactical-diplomacy-os/refs/heads/main/SphereOfInfluence.csv';

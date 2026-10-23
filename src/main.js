@@ -43,6 +43,7 @@ import { initMuOverlay, openMuView } from './app/muOverlay.js';
 import { initNationsOverlay, openNationsView } from './app/nationsOverlay.js';
 import { initPlayersOverlay, openPlayersView } from './app/playersOverlay.js';
 import { initBattlesOverlay, openBattlesView } from './app/battlesOverlay.js';
+import { initAccordiOverlay, openAccordiView } from './app/accordiOverlay.js';
 import { initGuideOverlay, openGuideView } from './app/guideOverlay.js';
 import { initPrivateOverlay, openPrivateView } from './app/privateOverlay.js';
 import { takeReloadIntent } from './shared/lazyModule.js';
@@ -195,6 +196,7 @@ async function handleIncomingDeepLink() {
     nations: () => openNationsView(params.get('nation') || undefined),
     players: () => openPlayersView(params.get('player') || undefined, params.get('vs') || undefined),
     battles: () => openBattlesView(params.get('battle') || undefined),
+    accordi: () => openAccordiView(),
     guide: () => openGuideView(),
     private: () => openPrivateView(),
     alliances: () => document.getElementById('bloc-stats-btn')?.click(),
@@ -224,6 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initNationsOverlay();
   initPlayersOverlay();
   initBattlesOverlay();
+  initAccordiOverlay();
   initGuideOverlay();
   initPrivateOverlay();
   applyTranslations();
@@ -298,6 +301,7 @@ function restoreAfterChunkReload() {
     // un deploy si ritrovava sulla mappa, come se il tool fosse ripartito
     // da zero. 'mu-wealth' riapre la vista unita', che e' dove sta.
     battles: () => openBattlesView(),
+    accordi: () => openAccordiView(),
     guide: () => openGuideView(),
     private: () => openPrivateView(),
     'mu-wealth': () => openMuView(),

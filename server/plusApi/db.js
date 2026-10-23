@@ -384,6 +384,32 @@ CREATE TABLE IF NOT EXISTS op_link (
 );
 CREATE INDEX IF NOT EXISTS idx_op_link_to ON op_link(to_step);
 
+-- Gli accordi fra nazioni e alleanze (per ora i patti di non
+-- belligeranza): archivio PUBBLICO, e la mappa li disegna come NAP finché
+-- sono in vigore. Una parte è una nazione o un'alleanza, mai un elenco: i
+-- membri di un'alleanza si rileggono dal gioco ogni volta, così chi entra
+-- nell'alleanza entra anche nel patto. Vedi accordi.js.
+CREATE TABLE IF NOT EXISTS accordo (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind          TEXT    NOT NULL DEFAULT 'nap',
+  a_type        TEXT    NOT NULL,                  -- country | alliance
+  a_id          TEXT    NOT NULL,
+  b_type        TEXT    NOT NULL,
+  b_id          TEXT    NOT NULL,
+  title         TEXT,
+  body          TEXT,                              -- il testo del patto
+  starts_at     INTEGER NOT NULL,                  -- ms UTC
+  ends_at       INTEGER,                           -- NULL = senza scadenza
+  excluded_mus  TEXT,                              -- JSON [{id, nome}]: unità fuori dal patto
+  limit_damage  INTEGER,                           -- danno massimo per battaglia, NULL = nessun tetto
+  limit_side    TEXT,                              -- a | b | entrambi: chi ha il tetto
+  created_by    INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  updated_by    INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_accordo_periodo ON accordo(starts_at, ends_at);
+
 -- ⚠️ L'indice su (mu_id, slot) NON sta qui ma in migrate(). SCHEMA gira
 -- PRIMA delle migrazioni: su un database che ha ancora la colonna day
 -- la CREATE TABLE viene saltata (IF NOT EXISTS) ma la CREATE INDEX no, e
@@ -1228,6 +1254,48 @@ function impostaPrecedenti(stepId, fromIds) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// ACCORDI
+// ---------------------------------------------------------------------------
+// Solo lettura e scrittura: chi può cosa lo decide accordi.js.
+
+const CAMPI_ACCORDO = ['kind', 'a_type', 'a_id', 'b_type', 'b_id', 'title', 'body', 'starts_at', 'ends_at',
+  'excluded_mus', 'limit_damage', 'limit_side'];
+
+function listaAccordi({ limit = 500 } = {}) {
+  return getDb().prepare('SELECT * FROM accordo ORDER BY starts_at DESC, id DESC LIMIT ?').all(limit);
+}
+
+function contaAccordi() {
+  return getDb().prepare('SELECT COUNT(*) AS n FROM accordo').get()?.n || 0;
+}
+
+function getAccordo(id) {
+  return getDb().prepare('SELECT * FROM accordo WHERE id = ?').get(id) || null;
+}
+
+function creaAccordo(campi, createdBy) {
+  const ora = Date.now();
+  const valori = CAMPI_ACCORDO.map((k) => (campi[k] === undefined ? null : campi[k]));
+  const info = getDb().prepare(`
+    INSERT INTO accordo (${CAMPI_ACCORDO.join(', ')}, created_by, updated_by, created_at, updated_at)
+    VALUES (${segnaposti(CAMPI_ACCORDO.length)}, ?, ?, ?, ?)`)
+    .run(...valori, createdBy || null, createdBy || null, ora, ora);
+  return getAccordo(info.lastInsertRowid);
+}
+
+function aggiornaAccordo(id, campi, updatedBy) {
+  const chiavi = Object.keys(campi || {}).filter((k) => CAMPI_ACCORDO.includes(k));
+  const set = chiavi.map((k) => `${k} = ?`).join(', ');
+  getDb().prepare(`UPDATE accordo SET ${set ? `${set}, ` : ''}updated_by = ?, updated_at = ? WHERE id = ?`)
+    .run(...chiavi.map((k) => (campi[k] === undefined ? null : campi[k])), updatedBy || null, Date.now(), id);
+  return getAccordo(id);
+}
+
+function eliminaAccordo(id) {
+  return getDb().prepare('DELETE FROM accordo WHERE id = ?').run(id).changes || 0;
+}
+
 function dbStatus() {
   const one = (sql) => {
     try { return getDb().prepare(sql).get()?.n ?? 0; } catch { return null; }
@@ -1262,6 +1330,7 @@ function dbStatus() {
     fotografieNazioni: one('SELECT COUNT(*) AS n FROM nation_snapshot'),
     operazioni: one('SELECT COUNT(*) AS n FROM operation'),
     passiOperazioni: one('SELECT COUNT(*) AS n FROM op_step'),
+    accordi: one('SELECT COUNT(*) AS n FROM accordo'),
   };
 }
 
@@ -1284,6 +1353,7 @@ module.exports = {
   accessiNazione, haAccessoNazione, aggiungiAccessoNazione, togliAccessoNazione,
   listaOperazioni, contaOperazioniAttive, getOperazione, creaOperazione, aggiornaOperazione, eliminaOperazione,
   passiDi, frecceDi, contaPassi, getPasso, creaPasso, aggiornaPasso, eliminaPasso, impostaPrecedenti,
+  listaAccordi, contaAccordi, getAccordo, creaAccordo, aggiornaAccordo, eliminaAccordo,
   salvaIstantanea, istantaneaVicina, istantaneaPiuVecchia, potaIstantanee,
   audit, dbStatus,
 };
