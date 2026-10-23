@@ -197,6 +197,25 @@ Ogni scrittura risponde con l'elenco intero aggiornato. Tre tabelle nuove
 al primo riavvio: nessuna migrazione. Le frecce che chiuderebbero un cerchio
 si rifiutano (`ciclo`). `/health` → `db.operazioni`, `db.passiOperazioni`.
 
+## Gli accordi (`accordi.js`)
+
+L'archivio dei patti di non belligeranza (sezione "Accordi" del client).
+Una parte è una nazione o un'alleanza; i membri di un'alleanza si rileggono
+dal gioco ogni volta. **Leggere è pubblico, senza login**; scrive il governo
+(`gestisceNazione`) di una delle nazioni coinvolte, senza filtro P.A.S.T.A.
+
+- `GET /accordi` — tutti (pubblico)
+- `GET /accordi/:id/controllo` — battaglie del periodo: attacchi diretti e
+  danno di una parte contro l'altra rispetto al tetto (pubblico, 3' di memo;
+  le classifiche delle battaglie concluse si leggono una volta sola)
+- `GET /accordi/me` — cosa può fare chi guarda
+- `POST /accordi` · `POST /accordi/:id` · `POST /accordi/:id/remove`
+
+Una tabella nuova (`accordo`) dalla `CREATE TABLE IF NOT EXISTS`: nessuna
+migrazione. Cancellare scrive il patto intero nell'`audit`. `/health` →
+`db.accordi`. Il CORS resta l'allowlist: la lettura "pubblica" è per il
+tool, non per siti terzi.
+
 ## Aggiornare
 
 ```bash
@@ -211,7 +230,7 @@ Poi il preflight, e solo se stampa `PREFLIGHT-OK`:
 
 ```bash
 ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 \
-  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && node --check wealth.js && node --check fonti.js && node --check confini.js && node --check nemici.js && node --check nazione.js && node --check istantanee.js && node --check operazioni.js && echo PREFLIGHT-OK"
+  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && node --check wealth.js && node --check fonti.js && node --check confini.js && node --check nemici.js && node --check nazione.js && node --check istantanee.js && node --check operazioni.js && node --check accordi.js && echo PREFLIGHT-OK"
 ```
 
 ```bash

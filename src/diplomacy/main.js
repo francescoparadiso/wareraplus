@@ -229,6 +229,10 @@ async function refreshData(boot = _startBootFetches()) {
     // (updateExternalNapsUI/renderMap) quando i dati arrivano. updateExternalNapsUI()
     // qui sotto fa il primo render (lista vuota) finché il fetch non completa.
     loadExternalNaps();
+    // WarEra+: i NAP della sezione Accordi (warera-plus-api), in
+    // background come il CSV: la mappa non li aspetta e si ridisegna da
+    // sola quando arrivano. Vedi accordiNaps.js.
+    import('./accordiNaps.js').then(m => m.loadAccordiNaps()).catch(() => {});
     updateExternalNapsUI();
     syncUIToState();
     loadSphereOfInfluence();

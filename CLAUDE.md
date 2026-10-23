@@ -512,6 +512,25 @@ chiunque le veda. ⚠️ Sulla mappa il punto di una regione è `regionAnchor`
 (geometria della mappa), NON `state.regionData[id].position`: per alcune
 regioni quella è la città di un'altra (Romagna & Tuscany = Milano).
 
+Gli **Accordi** (`src/accordi/*` + `src/diplomacy/accordiNaps.js` +
+`server/plusApi/accordi.js`, dal 2026-10-23) sono l'archivio dei patti di
+non belligeranza, e quelli in vigore diventano NAP sulla mappa. Dipendono dal
+redeploy di **warera-plus-api**: finché non lo fai `/accordi` risponde 404,
+la sezione dice che il server non risponde e la mappa resta coi NAP del CSV.
+Tre cose da sapere:
+
+- a differenza del resto dell'area riservata, **leggerli è pubblico** e
+  **scriverli non passa dal filtro P.A.S.T.A.**: basta essere nel governo di
+  una delle nazioni coinvolte (o dei membri di un'alleanza coinvolta), perché
+  un patto ha due parti e la controparte deve poterlo scrivere;
+- live e dev hanno **database separati**: un patto scritto sul dev non
+  compare sulla mappa del live;
+- il **controllo** del tetto ai danni somma il danno per NAZIONALITÀ
+  (`battleRanking` per country) sullo schieramento opposto all'altra parte;
+  le unità escluse si tolgono con la classifica per unità, quindi è una stima
+  (dichiarata). Copre i 90 giorni dell'archivio battaglie, 120 battaglie per
+  controllo al massimo.
+
 Il **danno ora per ora** e la **curva a 14 giorni** nella scheda nazione
 (`src/nations/damageCurves.js` + `server/damageTimeline.js`) dipendono da
 `/damage-timeline`: finché non rideployi la sezione non compare affatto —

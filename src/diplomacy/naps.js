@@ -55,9 +55,15 @@ export async function loadExternalNaps() {
       }
     }
 
+    // WarEra+: l'insieme è appena stato svuotato e riempito dal CSV; i
+    // patti della sezione Accordi ci stavano dentro e vanno rimessi
+    // (vedi accordiNaps.js). Il conteggio del toast resta quello del CSV.
+    const csvCount = state.externalNapsList.length;
+    try { (await import('./accordiNaps.js')).riapplicaAccordiNaps(); } catch { /* gli accordi sono un di più */ }
+
     updateExternalNapsUI();
     renderMap();
-    showToast(`${state.externalNapsList.length} external NAPs loaded`, 'success');
+    showToast(`${csvCount} external NAPs loaded`, 'success');
   } catch (err) {
     console.error('Errore NAP esterni:', err);
     showToast('External NAPs unavailable.', 'warning');

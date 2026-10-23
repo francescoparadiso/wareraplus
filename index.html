@@ -495,6 +495,18 @@
     <div id="wp-battles-root" style="display:none;"></div>
   </div>
 
+  <!-- Accordi (src/accordi/*): archivio dei patti di non belligeranza,
+       che la mappa disegna come NAP finché sono in vigore. Stessa
+       struttura overlay delle altre viste di Approfondimenti. -->
+  <div id="wp-accordi-overlay" class="wp-political-overlay wp-accordi-overlay" aria-hidden="true">
+    <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
+    <div class="wp-political-topbar">
+      <button id="wp-accordi-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
+      <span class="wp-political-title">Agreements</span>
+    </div>
+    <div id="wp-accordi-root" style="display:none;"></div>
+  </div>
+
   <!-- Guida "Come si usa" (src/guide/*): la sezione più leggera
        dell'app — solo testo statico, nessuna fetch. Stessa struttura
        overlay delle altre viste di Approfondimenti. -->
