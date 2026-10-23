@@ -181,6 +181,12 @@ ne aggiungi o ne sposti uno. In breve:
   sfondo di Wallpaper Engine, `public/political/` il Political originale
   (non più usato).
 
+⚠️ **Aggiornamento di gioco v0.27** (dipendenti al posto del mercato del
+lavoro, tipi di governo, 742 regioni): cosa cambia nelle API e cosa si rompe
+nel tool, misurato su apidev prima del rilascio, sta in
+**`AGGIORNAMENTO-v0.27.md`**. Leggilo prima di toccare Ottimizzatore,
+Rendite, censimento aziende o la vista Bonus produzione.
+
 ⚠️ **Attenzione ai nomi duplicati tra le due varianti di Political**:
 `config.js`, `main.js`, `ui.js`, `i18n.js`, `api.js`, `loading.js`,
 `ticker.js`, `parliament.js`, `senate.js`, `congress.js`, `presidential.js`,
