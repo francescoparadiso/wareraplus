@@ -189,6 +189,16 @@ body.light-theme #wp-private-root .wp-pv-op-st-annullata { --st: #94a3b8; }
 .wp-pv-op-batt.batt-alleata, .wp-pv-op-auto-voce.batt-alleata { border-color: rgba(52, 211, 153, .6); background: rgba(52, 211, 153, .08); }
 .wp-pv-op-batt.batt-nemica, .wp-pv-op-auto-voce.batt-nemica { border-color: rgba(248, 113, 113, .6); background: rgba(248, 113, 113, .08); }
 
+/* La fascia "battaglie aperte come da piano", sopra il grafico. */
+.wp-pv-op-aggancio {
+  display: flex; flex-direction: column; gap: .4rem;
+  padding: .65rem .85rem; border: 1px solid rgba(96, 165, 250, .55); border-radius: 8px;
+  background: rgba(96, 165, 250, .08);
+}
+.wp-pv-op-aggancio-testa { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+.wp-pv-op-aggancio-riga { display: flex; align-items: center; justify-content: space-between; gap: .75rem; font-size: .85rem; }
+.wp-pv-op-aggancio .wp-pv-note { margin: 0; }
+
 /* L'auto-builder, nel pannello a destra. */
 .wp-pv-op-auto { display: flex; flex-direction: column; gap: .5rem; }
 .wp-pv-op-auto-modi { display: flex; flex-wrap: wrap; gap: .3rem; }

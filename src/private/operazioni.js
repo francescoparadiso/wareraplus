@@ -569,6 +569,10 @@ export function creaOperazioni(ctx) {
     }
     if (!op.id) card.appendChild(el('p', 'wp-pv-note', opT('draftHint')));
     else if (!op.passi.length) card.appendChild(el('p', 'wp-pv-note', opT('noStepsPlanner2')));
+    if (modificabile && op.id) {
+      const fascia = fasciaAggancio(op);
+      if (fascia) card.appendChild(fascia);
+    }
     const corpo = el('div', 'wp-pv-op-corpo');
     const principale = el('div', 'wp-pv-op-principale');
     principale.appendChild(flowchart(op, { numero, stati }));
@@ -638,6 +642,65 @@ export function creaOperazioni(ctx) {
     if (!nuovo) return null;
     const perId = new Map(nuovo.passi.map((p) => [p.id, p]));
     return { op: nuovo, numero: numeriPassi(nuovo.passi), stati: new Map(nuovo.passi.map((p) => [p.id, statoVisto(p, perId)])) };
+  }
+
+  // ── Battaglie che si aprono come da piano ────────────────────────
+  // Un passo con una regione, non agganciato o agganciato a una battaglia
+  // ormai finita, e sulla sua regione si apre una battaglia nuova: è la
+  // battaglia del piano. Non si aggancia da sola — la regione potrebbe
+  // essere un caso — ma una fascia sopra il grafico lo propone, e un clic
+  // conferma. Un passo ancora "da fare" passa anche "in corso".
+
+  function proposteAggancio(op) {
+    const usate = new Set(op.passi.map((p) => p.battaglia).filter((id) => id && viveId.has(id)));
+    const out = [];
+    for (const p of op.passi) {
+      if (!p.regione || (p.battaglia && viveId.has(p.battaglia))) continue;
+      if (['fatta', 'fallita', 'annullata'].includes(p.stato)) continue;
+      const b = vive.get(p.regione);
+      if (!b || usate.has(b._id) || b._id === p.battaglia) continue;
+      usate.add(b._id);
+      out.push({ p, b });
+    }
+    return out;
+  }
+
+  function fasciaAggancio(op) {
+    const proposte = proposteAggancio(op);
+    if (!proposte.length) return null;
+    const numero = numeriPassi(op.passi);
+    const box = el('div', 'wp-pv-op-aggancio');
+    const testa = el('div', 'wp-pv-op-aggancio-testa');
+    testa.appendChild(el('strong', null, t('linkTitle', { n: proposte.length })));
+    if (proposte.length > 1) {
+      const tutte = bottone('wp-pv-btn-primary wp-pv-btn-small', opT('linkAll'), () => aggancia(op, proposte));
+      tutte.disabled = occupato;
+      testa.appendChild(tutte);
+    }
+    box.appendChild(testa);
+    for (const pr of proposte) {
+      const r = el('div', 'wp-pv-op-aggancio-riga');
+      r.appendChild(el('span', null, `#${numero.get(pr.p.id)} ${pr.p.titolo || regionName(pr.p.regione)} → ${etichettaBattaglia(pr.b)} · ${testoBattaglia(pr.b)}`));
+      const uno = bottone('wp-pv-btn-quiet wp-pv-btn-small', opT('linkOne'), () => aggancia(op, [pr]));
+      uno.disabled = occupato;
+      r.appendChild(uno);
+      box.appendChild(r);
+    }
+    box.appendChild(el('p', 'wp-pv-note', opT('linkHint')));
+    return box;
+  }
+
+  async function aggancia(op, proposte) {
+    const r = await scrivi(async () => {
+      let ultima = null;
+      for (const { p, b } of proposte) {
+        const corpo = { battaglia: b._id };
+        if (p.stato === 'da_fare') corpo.stato = 'in_corso';
+        ultima = await modificaPasso(op.id, p.id, corpo, opzioni());
+      }
+      return ultima;
+    });
+    if (r) trackEvent('private-operation-link');
   }
 
   // ── Auto-builder ─────────────────────────────────────────────────
