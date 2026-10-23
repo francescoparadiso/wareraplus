@@ -516,8 +516,9 @@ Gli **Accordi** (`src/accordi/*` + `src/diplomacy/accordiNaps.js` +
 `server/plusApi/accordi.js`, dal 2026-10-23) sono l'archivio dei patti di
 non belligeranza, e quelli in vigore diventano NAP sulla mappa. Dipendono dal
 redeploy di **warera-plus-api**: finché non lo fai `/accordi` risponde 404,
-la sezione dice che il server non risponde e la mappa resta coi NAP del CSV.
-Tre cose da sapere:
+la sezione dice che il server non risponde e la mappa resta **senza NAP
+esterni**: dal 2026-10-23 il CSV `warera_naps.csv` non si carica più, gli
+Accordi sono l'unica fonte (richiesta dell'utente). Tre cose da sapere:
 
 - a differenza del resto dell'area riservata, **leggerli è pubblico** e
   **scriverli non passa dal filtro P.A.S.T.A.**: basta essere nel governo di

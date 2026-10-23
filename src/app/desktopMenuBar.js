@@ -615,7 +615,7 @@ const SWITCHES = [
   { id: 'wp-checkBlocLabels', i18n: 'switch_show_bloc_names', fallback: 'Show Alliance Names' },
   { id: 'checkActiveBattles', i18n: 'switch_active_battles', fallback: 'Active Battles' },
   { id: 'wp-checkAnimations', i18n: 'switch_animations', fallback: 'Animations' },   // WarEra+ shared/motion.js
-  { id: 'checkExcludeExternalNaps', i18n: 'switch_exclude_external_naps', fallback: 'Exclude External NAPs' },
+  { id: 'checkExcludeExternalNaps', i18n: 'switch_exclude_external_naps', fallback: 'Exclude Agreement NAPs' },
 ];
 function buildSettingsDropdown() {
   const { root, panel } = makeDropdown('settings', 'settings');

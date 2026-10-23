@@ -1008,7 +1008,7 @@ export function updateNapListUI() {
 export function updateExternalNapsUI() {
   const container = document.getElementById('externalNapList');
   if (!state.externalNapsList.length) {
-    container.innerHTML = '<div class="empty-state">No external NAPs loaded</div>';
+    container.innerHTML = `<div class="empty-state">${t('no_external_naps')}</div>`;
     return;
   }
   const grouped = new Map();

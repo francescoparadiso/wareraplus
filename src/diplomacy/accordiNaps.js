@@ -3,22 +3,22 @@
    ------------------------------------------------------------------
    I patti di non belligeranza scritti nella sezione Accordi
    (src/accordi/*, archivio su warera-plus-api) diventano NAP sulla
-   mappa finché sono in vigore: stessa tinta, stessi confini, stessa
-   legenda dei NAP esterni del CSV.
+   mappa finché sono in vigore. Dal 2026-10-23 sono l'UNICA fonte dei NAP
+   "esterni": il CSV warera_naps.csv non si carica più.
 
    Si appoggiano a `state.externalNapsSet` / `externalNapsList` invece di
    aprire un terzo insieme: le quattro letture che decidono il colore
    (getRelationKey, buildOriginalColorExpression, borderStyle, contatori
    della legenda) guardano già quelli, e un insieme in più sarebbe un
-   quinto posto da ricordarsi di toccare. Le voci aggiunte da qui portano
-   `source: 'accordi'` e si tolgono da sole al giro dopo.
+   quinto posto da ricordarsi di toccare. Le voci portano
+   `source: 'accordi'` e si rifanno da capo a ogni giro.
 
    Un patto fra alleanze vale per i membri di ADESSO: si espande in
    coppie di nazioni a ogni applicazione, dalle alleanze già in memoria
    (state.alliancesList), senza una fetch in più.
 
-   Il server può non rispondere: la mappa resta coi NAP del CSV, in
-   silenzio — gli accordi sono un di più, mai un punto di rottura.
+   Il server può non rispondere: la mappa resta con gli accordi dell'ultima
+   lettura riuscita (alla prima, senza NAP esterni), in silenzio.
    ══════════════════════════════════════════════════════════════ */
 
 import { state } from './state.js';
@@ -27,8 +27,9 @@ import { WARERA_PLUS_API_BASE } from './config.js';
 const RILETTURA_MS = 10 * 60_000;
 
 let _accordi = [];
-// Le chiavi che QUESTO modulo ha messo nell'insieme: solo quelle si
-// tolgono, quelle del CSV restano.
+// Le chiavi che QUESTO modulo ha messo nell'insieme. Oggi è l'unica
+// fonte, ma i NAP manuali stanno altrove (customNaps) e chi aggiungesse un
+// domani una seconda fonte qui non deve vedersele cancellare.
 let _aggiunte = new Set();
 let _timer = null;
 
@@ -84,13 +85,6 @@ async function ridisegna() {
   }
 }
 
-/** Il CSV dei NAP esterni ha appena svuotato e riempito l'insieme
- *  (naps.js): le nostre chiavi non ci sono più, si rimettono. */
-export function riapplicaAccordiNaps() {
-  _aggiunte = new Set();
-  applica();
-}
-
 /** La sezione Accordi ha appena salvato: l'elenco nuovo arriva già con
  *  la risposta, niente seconda lettura. */
 export function impostaAccordiSullaMappa(accordi) {
@@ -106,8 +100,8 @@ export async function loadAccordiNaps() {
     const body = await res.json();
     impostaAccordiSullaMappa(body?.accordi || []);
   } catch (err) {
-    // Server giù o rotta non ancora deployata (404): la mappa resta coi
-    // NAP del CSV. Si riprova al giro dopo.
+    // Server giù o rotta non ancora deployata (404): resta l'ultima
+    // lettura buona. Si riprova al giro dopo.
     console.warn('[accordi] elenco non disponibile:', err.message);
   }
   // Un patto scade o comincia anche senza che nessuno lo tocchi: il giro

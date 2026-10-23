@@ -203,11 +203,11 @@ wareraPlus/
     │   │                          ECO_PROXY_BASE, COLORS, THEMES, LAYER_IDS
     │   ├── map.js                ← MapLibre: layer, sorgenti, rendering
     │   ├── ui.js, diplomacy.js, labels.js, patterns.js
-    │   ├── alliances.js, naps.js, sphereOfInfluence.js, blocs.js (dead, vedi sotto)
+    │   ├── alliances.js, naps.js (solo NAP manuali), sphereOfInfluence.js, blocs.js (dead, vedi sotto)
     │   ├── accordiNaps.js       ← NUOVO — gli Accordi in vigore come NAP sulla mappa: si
     │   │                          aggiungono a externalNapsSet/List (source 'accordi'),
     │   │                          alleanze espanse nei membri di adesso, riletti ogni 10'.
-    │   │                          naps.js li rimette dopo aver ricaricato il CSV.
+    │   │                          Dal 2026-10-23 UNICA fonte: il CSV dei NAP non si carica più.
     │   ├── battleMarkers.js, battleHeatmap.js, battleFront.js, battleFront/
     │   │                        (battleMarkers: WarEra+ il marcatore LAMPEGGIA nel
     │   │                        colore del lato che passa avanti nel round in corso —
