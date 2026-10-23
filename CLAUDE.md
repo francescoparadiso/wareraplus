@@ -538,8 +538,9 @@ congresso + governo o tutti i cittadini (referendum), a scrutinio palese o
 segreto. Dipendono dal redeploy di **warera-plus-api**: finché non lo fai
 `/votazioni` risponde 404 e la vista dice che il server non le ha ancora.
 Lo scrutinio si guarda in diretta: emiciclo per il palese
-(`votesHemicycle.js`, 20–45 s), urna per il segreto (`votesUrn.js`, fino a
-90 s). Il governo può impostare un canale Discord (avvisi di apertura,
+(`votesHemicycle.js`, 20–45 s), urna per il segreto (`votesUrn.js`: in
+congresso 3 s per OGNI scheda, sempre allo stesso passo; accelera solo nel
+referendum, fino a 2 minuti). Il governo può impostare un canale Discord (avvisi di apertura,
 inizio scrutinio, esito). Per provare le animazioni c'è
 `server/plusApi/votazioniFinte.js` (solo dev, vedi il README). Tre cose da
 sapere:

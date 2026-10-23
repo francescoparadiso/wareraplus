@@ -12,13 +12,16 @@
    disegna lo stato a `ora del server − scrutinioAlle`. La scaletta è
    la STESSA formula di durataScrutinio in server/plusApi/votazioni.js:
 
-       3 s d'apertura + 1,5 s a scheda le prime 10 + 0,6 s le prossime 30
-       + 15 s di spoglio rapido per tutte le altre + 3 s di chiusura
+       congresso e istituzioni: 3 s d'apertura + 3 s a scheda, TUTTE
+         uguali + 3 s di chiusura (accelerare qui era troppo veloce per
+         leggerle: richiesta dell'utente);
+       referendum: 3 s d'apertura + 3 s a scheda le prime 10 + 1 s le
+         prossime 30 + 20 s di spoglio rapido per tutte le altre + 3 s
 
    (i 6 s del server sono apertura + chiusura). Se il server ha tagliato
-   ai 90 s, la scaletta si comprime in proporzione (`scala`): finisce
-   comunque quando il server dice che l'esito è pubblico. ⚠️ Cambiare
-   una delle due formule senza l'altra sfasa l'animazione dall'esito.
+   al suo tetto, la scaletta si comprime in proporzione (`scala`):
+   finisce comunque quando il server dice che l'esito è pubblico.
+   ⚠️ Cambiare una delle due formule senza l'altra sfasa l'animazione.
 
    L'ordine delle schede è quello del sigillo, rimescolato dal server:
    uguale per tutti, e senza legame con chi ha votato quando.
@@ -34,14 +37,19 @@ import { vT } from './votesI18n.js';
 import { animationsOn } from '../shared/motion.js';
 
 const SCELTE = ['si', 'no', 'astenuto', 'nulla'];
-const INTRO = 3000, OUTRO = 3000, LENTA = 1500, MEDIA = 600, RAPIDO = 15000;
+const INTRO = 3000, OUTRO = 3000, LENTA = 3000, MEDIA = 1000, RAPIDO = 20000;
 const PRIME_LENTE = 10, FINO_A_MEDIE = 40;
 
-/** Quando si legge ogni scheda (ms "grezzi", prima della scala). */
-function scaletta(n) {
+/** Quando si legge ogni scheda (ms "grezzi", prima della scala). Fuori
+ *  dal referendum tutte allo stesso passo, lento. */
+function scaletta(n, referendum) {
   const inizio = new Array(n);
   const durata = new Array(n);
   let t = INTRO;
+  if (!referendum) {
+    for (let k = 0; k < n; k++) { inizio[k] = t; durata[k] = LENTA; t += LENTA; }
+    return { inizio, durata, fineSchede: t, totale: t + OUTRO, rapidoDa: Infinity };
+  }
   for (let k = 0; k < Math.min(n, FINO_A_MEDIE); k++) {
     const d = k < PRIME_LENTE ? LENTA : MEDIA;
     inizio[k] = t; durata[k] = d; t += d;
@@ -50,7 +58,7 @@ function scaletta(n) {
     const d = RAPIDO / (n - FINO_A_MEDIE);
     for (let k = FINO_A_MEDIE; k < n; k++) { inizio[k] = t; durata[k] = d; t += d; }
   }
-  return { inizio, durata, fineSchede: t, totale: t + OUTRO };
+  return { inizio, durata, fineSchede: t, totale: t + OUTRO, rapidoDa: FINO_A_MEDIE };
 }
 
 const lerp = (a, b, x) => a + (b - a) * Math.max(0, Math.min(1, x));
@@ -64,7 +72,10 @@ export function mountUrn(el, { scrutinio: s, now, modo = 'diretta', tabellone = 
   const seq = s.sequenza || [];
   const n = seq.length;
   const e = s.esito;
-  const sc = scaletta(n);
+  // `corpo` arriva con lo scrutinio; per uno sigillato prima che ci fosse,
+  // un referendum si riconosce dall'assenza del corpo elettorale.
+  const referendum = s.corpo ? s.corpo === 'referendum' : !s.elettori;
+  const sc = scaletta(n, referendum);
   const scala = sc.totale > 0 ? (s.durataMs || sc.totale) / sc.totale : 1;
   const soglia = e?.soglia || 1;
   const lettaA = (k) => sc.inizio[k] + sc.durata[k] * 0.85; // quando cade sul mucchio
@@ -181,7 +192,7 @@ export function mountUrn(el, { scrutinio: s, now, modo = 'diretta', tabellone = 
     q('reached').hidden = !(e?.esito === 'approvata' && conta.si >= soglia);
 
     // La scheda in mano: esce, si gira, si legge, vola sul mucchio.
-    const rapido = inMano >= FINO_A_MEDIE;
+    const rapido = inMano >= sc.rapidoDa;
     q('fast').hidden = !rapido;
     if (inMano >= 0 && !rapido) {
       const x = (r - sc.inizio[inMano]) / sc.durata[inMano];

@@ -434,8 +434,10 @@ wareraPlus/
     │   │                          conclusa tutto acceso, con "Rivedi" (solo locale).
     │   ├── votesUrn.js          ← NUOVO — l'urna dello scrutinio SEGRETO: una scheda alla
     │   │                          volta esce, si gira (con la nota se nulla) e vola sul
-    │   │                          suo mucchio; barra del sì verso la soglia, spoglio
-    │   │                          rapido oltre le 40 schede, poi tabellone e timbro.
+    │   │                          suo mucchio; barra del sì verso la soglia, poi
+    │   │                          tabellone e timbro. In congresso 3 s per ogni scheda,
+    │   │                          sempre uguali; solo il referendum accelera (spoglio
+    │   │                          rapido oltre le 40).
     │   │                          Stesso principio dell'emiciclo (ora del server). ⚠️ la
     │   │                          scaletta è la formula di durataScrutinio del server:
     │   │                          cambiarne una sola sfasa l'animazione dall'esito.

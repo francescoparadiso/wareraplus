@@ -120,14 +120,25 @@ class Rifiuto extends Error {
  *  numero. Palese: l'emiciclo che si accende LENTAMENTE (richiesta
  *  dell'utente), da 20 s per un congresso piccolo a 45 s, più il tempo del
  *  tabellone in coda (vedi votesHemicycle.js: le ultime quote).
- *  Segreto: ~1,5 s a scheda le prime dieci, poi più veloce, e oltre le
- *  quaranta lo spoglio rapido — mai oltre i novanta secondi. */
-function durataScrutinio(ballot, n) {
+ *  Segreto: in congresso (e congresso + governo) ogni scheda ha lo STESSO
+ *  tempo, 3 s, dalla prima all'ultima — accelerare lì era troppo veloce
+ *  per leggerle (richiesta dell'utente, 2026-10-23). Si accelera SOLO nel
+ *  referendum, dove le schede sono centinaia: 3 s le prime dieci, 1 s le
+ *  prossime trenta, 20 s di spoglio rapido per tutte le altre. In entrambi
+ *  i casi +6 s (apertura e chiusura dell'urna). ⚠️ La stessa scaletta sta
+ *  in src/political/votesUrn.js: cambiarne una sola sfasa l'animazione. */
+const URNA_SCHEDA_MS = 3_000;
+// Dieci minuti: un congresso di 200 seggi a 3 s a scheda. Oltre, la
+// scaletta del client si comprime in proporzione (sempre a passo costante).
+const URNA_MAX_CONGRESSO_MS = 600_000;
+const URNA_MAX_REFERENDUM_MS = 120_000;
+function durataScrutinio(ballot, n, electorate) {
   if (ballot === 'palese') return Math.round(Math.min(45_000, Math.max(20_000, 15_000 + 150 * n)));
-  const lente = Math.min(n, 10) * 1_500;
-  const medie = Math.max(0, Math.min(n, 40) - 10) * 600;
-  const rapido = n > 40 ? 15_000 : 0;
-  return Math.min(90_000, 6_000 + lente + medie + rapido);
+  if (electorate !== 'referendum') return Math.min(URNA_MAX_CONGRESSO_MS, 6_000 + URNA_SCHEDA_MS * n);
+  const lente = Math.min(n, 10) * URNA_SCHEDA_MS;
+  const medie = Math.max(0, Math.min(n, 40) - 10) * 1_000;
+  const rapido = n > 40 ? 20_000 : 0;
+  return Math.min(URNA_MAX_REFERENDUM_MS, 6_000 + lente + medie + rapido);
 }
 
 function stato(v, ora = Date.now()) {
@@ -397,7 +408,7 @@ function sigilla(v) {
     voti = rimescola(righe).map((r) => ({ id: r.war_user_id, nome: r.name, s: r.choice, ...(r.note ? { n: r.note } : {}) }));
   }
   const n = conta.si + conta.no + conta.astenuto + conta.nulla;
-  const risultato = { ...calcolaEsito(v, conta), durataMs: durataScrutinio(v.ballot, n), sequenza, voti };
+  const risultato = { ...calcolaEsito(v, conta), durataMs: durataScrutinio(v.ballot, n, v.electorate), sequenza, voti };
   return sigillaVotazione(v.id, risultato);
 }
 
@@ -690,6 +701,8 @@ function buildVotazioniRouter({ requireAuth, risolviIdentita, bloccaScrittureSot
       scrutinio: {
         id: v.id,
         tipo: v.ballot,
+        // L'urna accelera solo nel referendum: il client deve saperlo.
+        corpo: v.electorate,
         scrutinioAlle: tempi.scrutinioAlle,
         durataMs: r.durataMs,
         esito: esitoSintetico(r),
