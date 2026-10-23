@@ -15,6 +15,7 @@ import { loadModule } from '../shared/lazyModule.js';
 import { withModuleLoading } from '../shared/loadingScreen.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
 import { pushBack, dropBack } from './backNav.js';
+import { state } from '../diplomacy/state.js';
 
 let overlayEl, backBtn, rootEl;
 
@@ -132,6 +133,16 @@ export function initPrivateOverlay() {
   if (appenaEntrato && !authError && ritorno === 'accordi') {
     window.addEventListener('wareraplus:diplomacy-ready', () => {
       import('./accordiOverlay.js').then(m => m.openAccordiView()).catch(() => openPrivateView());
+    }, { once: true });
+  } else if (appenaEntrato && !authError && ritorno?.startsWith('votazioni:')) {
+    // Le Votazioni di Political (src/political/votesApi.js): si torna sulla
+    // nazione e sulla votazione da cui si era premuto "Entra con Discord".
+    const [, paese, voto] = ritorno.split(':');
+    window.addEventListener('wareraplus:diplomacy-ready', () => {
+      import('./politicalOverlay.js')
+        .then(m => m.openPoliticalView(paese || undefined, (paese && state.nationMap?.get(paese)?.name) || '',
+          { openVotes: true, voteId: voto || null }))
+        .catch(() => openPrivateView());
     }, { once: true });
   } else if (appenaEntrato || authError) {
     window.addEventListener('wareraplus:diplomacy-ready', () => { openPrivateView(); }, { once: true });

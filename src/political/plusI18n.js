@@ -16,7 +16,7 @@ import { getLang } from './i18n.js';
 
 const DICT = {
   en: {
-    nav_history: 'History', nav_world: 'World', nav_nation: 'Nation stats',
+    nav_history: 'History', nav_votes: 'Votes', nav_world: 'World', nav_nation: 'Nation stats',
     party_composition: 'Who is in the party',
     ps_war: 'War', ps_eco: 'Economy', ps_mixed: 'Mixed', ps_undecided: 'Undecided',
     open_mu: 'Open the military unit', military_unit: 'Military unit', no_mu: 'No unit',
@@ -70,7 +70,7 @@ const DICT = {
     sim_interval_title: 'Likely range (80%)',
   },
   it: {
-    nav_history: 'Storia', nav_world: 'Mondo', nav_nation: 'Statistiche nazione',
+    nav_history: 'Storia', nav_votes: 'Votazioni', nav_world: 'Mondo', nav_nation: 'Statistiche nazione',
     party_composition: 'Chi c\'è nel partito',
     ps_war: 'Guerra', ps_eco: 'Economia', ps_mixed: 'Misto', ps_undecided: 'Indeciso',
     open_mu: 'Apri l\'unità militare', military_unit: 'Unità militare', no_mu: 'Nessuna unità',
@@ -124,7 +124,7 @@ const DICT = {
     sim_interval_title: 'Intervallo probabile (80%)',
   },
   es: {
-    nav_history: 'Historia', nav_world: 'Mundo', nav_nation: 'Estadísticas',
+    nav_history: 'Historia', nav_votes: 'Votaciones', nav_world: 'Mundo', nav_nation: 'Estadísticas',
     party_composition: 'Quién está en el partido',
     ps_war: 'Guerra', ps_eco: 'Economía', ps_mixed: 'Mixto', ps_undecided: 'Indeciso',
     open_mu: 'Abrir la unidad militar', military_unit: 'Unidad militar', no_mu: 'Sin unidad',
@@ -178,7 +178,7 @@ const DICT = {
     sim_interval_title: 'Rango probable (80%)',
   },
   de: {
-    nav_history: 'Geschichte', nav_world: 'Welt', nav_nation: 'Nationsstatistik',
+    nav_history: 'Geschichte', nav_votes: 'Abstimmungen', nav_world: 'Welt', nav_nation: 'Nationsstatistik',
     party_composition: 'Wer in der Partei ist',
     ps_war: 'Krieg', ps_eco: 'Wirtschaft', ps_mixed: 'Gemischt', ps_undecided: 'Unentschieden',
     open_mu: 'Militäreinheit öffnen', military_unit: 'Militäreinheit', no_mu: 'Keine Einheit',
@@ -232,7 +232,7 @@ const DICT = {
     sim_interval_title: 'Wahrscheinliche Spanne (80%)',
   },
   fr: {
-    nav_history: 'Histoire', nav_world: 'Monde', nav_nation: 'Stats de la nation',
+    nav_history: 'Histoire', nav_votes: 'Votes', nav_world: 'Monde', nav_nation: 'Stats de la nation',
     party_composition: 'Qui est dans le parti',
     ps_war: 'Guerre', ps_eco: 'Économie', ps_mixed: 'Mixte', ps_undecided: 'Indécis',
     open_mu: 'Ouvrir l\'unité militaire', military_unit: 'Unité militaire', no_mu: 'Aucune unité',
@@ -286,7 +286,7 @@ const DICT = {
     sim_interval_title: 'Fourchette probable (80 %)',
   },
   nl: {
-    nav_history: 'Geschiedenis', nav_world: 'Wereld', nav_nation: 'Natiestatistieken',
+    nav_history: 'Geschiedenis', nav_votes: 'Stemmingen', nav_world: 'Wereld', nav_nation: 'Natiestatistieken',
     party_composition: 'Wie er in de partij zit',
     ps_war: 'Oorlog', ps_eco: 'Economie', ps_mixed: 'Gemengd', ps_undecided: 'Onbeslist',
     open_mu: 'Militaire eenheid openen', military_unit: 'Militaire eenheid', no_mu: 'Geen eenheid',
@@ -340,7 +340,7 @@ const DICT = {
     sim_interval_title: 'Waarschijnlijke marge (80%)',
   },
   sv: {
-    nav_history: 'Historik', nav_world: 'Världen', nav_nation: 'Nationsstatistik',
+    nav_history: 'Historik', nav_votes: 'Omröstningar', nav_world: 'Världen', nav_nation: 'Nationsstatistik',
     party_composition: 'Vilka som är med i partiet',
     ps_war: 'Krig', ps_eco: 'Ekonomi', ps_mixed: 'Blandad', ps_undecided: 'Obestämd',
     open_mu: 'Öppna militärenheten', military_unit: 'Militärenhet', no_mu: 'Ingen enhet',
@@ -394,7 +394,7 @@ const DICT = {
     sim_interval_title: 'Sannolikt spann (80 %)',
   },
   pt: {
-    nav_history: 'História', nav_world: 'Mundo', nav_nation: 'Estatísticas',
+    nav_history: 'História', nav_votes: 'Votações', nav_world: 'Mundo', nav_nation: 'Estatísticas',
     party_composition: 'Quem está no partido',
     ps_war: 'Guerra', ps_eco: 'Economia', ps_mixed: 'Misto', ps_undecided: 'Indeciso',
     open_mu: 'Abrir a unidade militar', military_unit: 'Unidade militar', no_mu: 'Sem unidade',
@@ -448,7 +448,7 @@ const DICT = {
     sim_interval_title: 'Intervalo provável (80%)',
   },
   ar: {
-    nav_history: 'التاريخ', nav_world: 'العالم', nav_nation: 'إحصاءات الدولة',
+    nav_history: 'التاريخ', nav_votes: 'التصويتات', nav_world: 'العالم', nav_nation: 'إحصاءات الدولة',
     party_composition: 'من في الحزب',
     ps_war: 'حرب', ps_eco: 'اقتصاد', ps_mixed: 'مختلط', ps_undecided: 'غير محدد',
     open_mu: 'افتح الوحدة العسكرية', military_unit: 'الوحدة العسكرية', no_mu: 'بلا وحدة',

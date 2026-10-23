@@ -74,8 +74,9 @@ const { calcolaEffettivi } = require('./roles');
 const { bearer } = require('./auth');
 const { paesiMappa, conteggiCittadini, elezioniDi, nomiUtenti } = require('./fonti');
 const { trpcGet, trpcBatchSame } = require('./wareraApi');
+const { avvisa, urlWebhookValido } = require('./notify');
 const {
-  accountFromToken, audit,
+  accountFromToken, audit, getWebhook, setWebhook, deleteWebhook, votazioniDaAvvisare, segnaAvviso,
   listaVotazioni, getVotazione, votazioniDaLavorare, contaVotazioniAttive, creaVotazione, ritiraVotazione,
   fissaElettori, elettoriDi, eElettore, haVotato, contaPartecipanti, partecipantiDi, votoPalese,
   registraVoto, schedeDi, votiPalesiDi, sigillaVotazione,
@@ -116,11 +117,13 @@ class Rifiuto extends Error {
 
 /** Quanto dura lo scrutinio. Lo decide il server perché è lui che dice
  *  quando l'esito si può mostrare; il client adatta il passo a questo
- *  numero. Palese: l'emiciclo che si accende, più lento coi pochi seggi.
+ *  numero. Palese: l'emiciclo che si accende LENTAMENTE (richiesta
+ *  dell'utente), da 20 s per un congresso piccolo a 45 s, più il tempo del
+ *  tabellone in coda (vedi votesHemicycle.js: le ultime quote).
  *  Segreto: ~1,5 s a scheda le prime dieci, poi più veloce, e oltre le
  *  quaranta lo spoglio rapido — mai oltre i novanta secondi. */
 function durataScrutinio(ballot, n) {
-  if (ballot === 'palese') return Math.round(Math.min(20_000, Math.max(10_000, 8_000 + 20 * n)));
+  if (ballot === 'palese') return Math.round(Math.min(45_000, Math.max(20_000, 15_000 + 150 * n)));
   const lente = Math.min(n, 10) * 1_500;
   const medie = Math.max(0, Math.min(n, 40) - 10) * 600;
   const rapido = n > 40 ? 15_000 : 0;
@@ -399,6 +402,59 @@ function sigilla(v) {
 }
 
 // ---------------------------------------------------------------------------
+// Avvisi su Discord
+// ---------------------------------------------------------------------------
+// Un canale per nazione (scope `votazioni`), lo imposta il governo. Tre
+// avvisi per votazione: apertura, INIZIO dello scrutinio (per guardarlo in
+// diretta) ed esito — quest'ultimo a scrutinio FINITO, come nella vista:
+// un esito su Discord prima della fine rovinerebbe la diretta a tutti.
+// In inglese come gli altri avvisi (vedi notify.js). Mai il testo della
+// proposta, e con esito riservato nemmeno i numeri: il canale può avere
+// dentro chiunque, e non solo governo e congresso.
+
+const BASE_CLIENT = process.env.WP_ENV === 'live' ? 'https://wareraplus.vercel.app' : 'https://wareraplus-dev.vercel.app';
+const CORPI_EN = { congresso: 'congress', istituzioni: 'congress and government', referendum: 'referendum (all citizens)' };
+const ESITI_EN = { approvata: '✅ **Approved**', respinta: '❌ **Rejected**', quorum_mancato: '⚠️ **No quorum**' };
+
+const linkVotazione = (v) => `${BASE_CLIENT}/?section=political&country=${v.country_id}&tab=votes&vote=${v.id}`;
+const quandoDiscord = (ms) => `<t:${Math.floor(ms / 1000)}:R>`;
+
+function testoAvviso(tipo, v) {
+  const titolo = String(v.title || '').replace(/[*_`~|]/g, '');
+  if (tipo === 'apertura') {
+    return `🗳️ **New vote** — ${titolo}\nWho votes: ${CORPI_EN[v.electorate]} · ${v.ballot} ballot · closes ${quandoDiscord(v.closes_at)}\n${linkVotazione(v)}`;
+  }
+  if (tipo === 'scrutinio') {
+    return `📢 **The count is starting** — ${titolo}\nWatch it live: ${linkVotazione(v)}`;
+  }
+  const r = leggiRisultato(v);
+  if (v.visibility !== 'pubblico' || !r) {
+    return `🔒 **Vote closed** — ${titolo}\nThe result is reserved to government and congress: ${linkVotazione(v)}`;
+  }
+  const c = r.conteggi;
+  const aff = r.aventiDiritto ? ` · turnout ${Math.round((r.presenti / r.aventiDiritto) * 100)}%` : '';
+  return `${ESITI_EN[r.esito] || r.esito} — ${titolo}\nIn favour ${c.si} · Against ${c.no} · Abstained ${c.astenuto} · Spoiled ${c.nulla}${aff}\n${linkVotazione(v)}`;
+}
+
+function mandaAvvisi(ora) {
+  for (const v of votazioniDaAvvisare()) {
+    const tempi = tempiScrutinio(v);
+    const passi = [
+      // L'apertura solo se è ancora aperta: una fotografia arrivata tardi
+      // non annuncia una votazione già chiusa.
+      ['notified_open', true, 'apertura', ora < v.closes_at],
+      ['notified_count', Boolean(v.sealed_at) && ora >= tempi.scrutinioAlle, 'scrutinio', tempi.fineScrutinio == null || ora < tempi.fineScrutinio],
+      ['notified_result', tempi.fineScrutinio != null && ora >= tempi.fineScrutinio, 'esito', true],
+    ];
+    for (const [colonna, dovuto, tipo, utile] of passi) {
+      if (!dovuto || v[colonna]) continue;
+      if (!segnaAvviso(v.id, colonna)) continue;
+      if (utile) avvisa('votazioni', v.country_id, testoAvviso(tipo, v));
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Il giro
 // ---------------------------------------------------------------------------
 
@@ -423,6 +479,7 @@ async function lavora() {
       console.warn(`[votazioni] votazione ${v.id} non lavorata:`, err.message);
     }
   }
+  try { mandaAvvisi(Date.now()); } catch (err) { _giro.errore = `avvisi: ${err.message}`; }
   _giro.ultimo = Date.now();
 }
 
@@ -577,10 +634,34 @@ function buildVotazioniRouter({ requireAuth, risolviIdentita, bloccaScrittureSot
         loggato: g.loggato,
         verificato: g.verificato,
         puoCreare: g.amministra || (g.verificato && istituzioni(g, countryId)),
+        // Il canale Discord lo imposta il governo (non il congresso), come
+        // gli altri canali dell'area riservata.
+        governa: governa(g, countryId),
+        canale: governa(g, countryId) ? Boolean(getWebhook('votazioni', countryId)) : null,
         erroreGioco: g.erroreGioco || null,
       },
       ora,
     });
+  }));
+
+  /** Il canale Discord delle votazioni della nazione: URL vuoto = toglierlo.
+   *  Prima di /:id, o "canale" finirebbe letto come id di una votazione. */
+  router.post('/canale', ...autenticato, gestisci(async (req, res) => {
+    const countryId = String(req.body?.nazione || '').trim();
+    if (!ID_GIOCO.test(countryId)) throw new Rifiuto('nazione_non_valida');
+    const g = await chiGuarda(req);
+    if (!governa(g, countryId)) throw new Rifiuto('non_governi_questa_nazione', 403);
+    const url = String(req.body?.url || '').trim();
+    if (!url) {
+      deleteWebhook('votazioni', countryId);
+      audit(req.account.id, 'webhook.remove', `votazioni:${countryId}`, null);
+      return res.json({ configurato: false });
+    }
+    if (!urlWebhookValido(url)) throw new Rifiuto('url_non_valido');
+    setWebhook({ scopeType: 'votazioni', scopeId: countryId, url, createdBy: req.account.id });
+    // Mai l'URL nell'audit: dentro c'è il token del webhook.
+    audit(req.account.id, 'webhook.set', `votazioni:${countryId}`, null);
+    res.json({ configurato: true });
   }));
 
   router.get('/:id', facoltativa, gestisci(async (req, res) => {
@@ -705,5 +786,7 @@ function buildVotazioniRouter({ requireAuth, risolviIdentita, bloccaScrittureSot
 module.exports = {
   buildVotazioniRouter, initVotazioni, statoVotazioni,
   // Per le prove: le regole senza rete né database.
-  _calcolaEsito: calcolaEsito, _durataScrutinio: durataScrutinio,
+  _calcolaEsito: calcolaEsito, _durataScrutinio: durataScrutinio, _lavora: lavora,
+  // Per votazioniFinte.js: la stessa fotografia del corpo elettorale.
+  _apri: apri,
 };

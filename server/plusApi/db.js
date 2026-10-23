@@ -595,6 +595,16 @@ function migrate() {
     db.exec('ALTER TABLE border_state ADD COLUMN attivo_il INTEGER');
     console.log('[plusApi] migrazione: border_state rifatta da capo sulla fonte upgrade.* (+ attivo_il)');
   }
+
+  // 2026-10-23 — gli avvisi Discord delle votazioni: quali dei tre (apertura,
+  // inizio dello scrutinio, esito) sono già partiti. Uno per colonna, così
+  // un riavvio a metà non ne rimanda nessuno due volte.
+  for (const c of ['notified_open', 'notified_count', 'notified_result']) {
+    if (!colonne('votazione').includes(c)) {
+      db.exec(`ALTER TABLE votazione ADD COLUMN ${c} INTEGER NOT NULL DEFAULT 0`);
+      console.log(`[plusApi] migrazione: aggiunta votazione.${c}`);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1491,6 +1501,23 @@ function registraVoto(voteId, { warUserId, nome, scelta, nota, segreto }) {
   }
 }
 
+/** Le votazioni aperte (fotografate) con almeno un avviso Discord ancora da
+ *  mandare. Ogni avviso si segna anche quando la nazione non ha un canale:
+ *  altrimenti questa lista crescerebbe per sempre. */
+function votazioniDaAvvisare() {
+  return getDb().prepare(`SELECT * FROM votazione WHERE withdrawn_at IS NULL AND eligible_count IS NOT NULL
+    AND (notified_open = 0 OR notified_count = 0 OR notified_result = 0)`).all();
+}
+
+const AVVISI = new Set(['notified_open', 'notified_count', 'notified_result']);
+
+/** Segna un avviso come mandato. Restituisce false se lo era già: due giri
+ *  sovrapposti non lo mandano due volte. */
+function segnaAvviso(voteId, colonna) {
+  if (!AVVISI.has(colonna)) throw new Error('avviso sconosciuto');
+  return getDb().prepare(`UPDATE votazione SET ${colonna} = 1 WHERE id = ? AND ${colonna} = 0`).run(voteId).changes > 0;
+}
+
 /** Le schede (segrete) o i voti (palesi) di una votazione, per il sigillo. */
 function schedeDi(voteId) {
   return getDb().prepare('SELECT choice, note FROM votazione_scheda WHERE vote_id = ?').all(voteId);
@@ -1579,7 +1606,7 @@ module.exports = {
   listaAccordi, contaAccordi, getAccordo, creaAccordo, aggiornaAccordo, eliminaAccordo,
   listaVotazioni, getVotazione, votazioniDaLavorare, contaVotazioniAttive, creaVotazione, ritiraVotazione,
   fissaElettori, elettoriDi, eElettore, haVotato, contaPartecipanti, partecipantiDi, votoPalese,
-  registraVoto, schedeDi, votiPalesiDi, sigillaVotazione,
+  registraVoto, schedeDi, votiPalesiDi, sigillaVotazione, votazioniDaAvvisare, segnaAvviso,
   salvaIstantanea, istantaneaVicina, istantaneaPiuVecchia, potaIstantanee,
   audit, dbStatus,
 };

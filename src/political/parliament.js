@@ -34,7 +34,9 @@ const _prevSeats = new WeakMap();
 
 let _lastRenderData = null;   // salva { parties, container, legendContainer, tooltip }
 
-function computeLayout(nSeats, innerR, outerR) {
+// WarEra+: esportate per l'emiciclo dello scrutinio palese (votesHemicycle.js),
+// che deve avere la stessa geometria di questo, non una copia.
+export function computeLayout(nSeats, innerR, outerR) {
   if (nSeats <= 0) return null;
   for (let nRows = 2; nRows <= 12; nRows++) {
     const rowSpan = outerR - innerR;
@@ -89,7 +91,7 @@ function _distributePro(total, caps) {
   return result;
 }
 
-function generatePoints(layout) {
+export function generatePoints(layout) {
   const { radii, rowSeats } = layout;
   const pts = [];
   radii.forEach((radius, row) => {

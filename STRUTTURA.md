@@ -412,6 +412,36 @@ wareraPlus/
     │   │                          dalla volatilità storica della nazione (mediana delle
     │   │                          ultime 5 coppie di congressi). Retrotest su 25
     │   │                          nazioni: copertura 88,8%, larghezza media 4 seggi
+    │   ├── votes.js             ← NUOVO (2026-10-23) — vista "Votazioni": elenco della
+    │   │                          nazione (in corso, programmate, archivio con filtri),
+    │   │                          modulo per crearne una (governo e congresso), scheda
+    │   │                          con la cabina a quattro voti e, a scrutinio finito,
+    │   │                          tabellone e dettaglio per partito / schede nulle. Le
+    │   │                          fasi si contano sull'ORA DEL SERVER (scarto misurato a
+    │   │                          ogni risposta); il giro ogni 20 s ridisegna solo se una
+    │   │                          fase cambia, altrimenti aggiorna l'affluenza al suo
+    │   │                          posto (la nota di una scheda nulla non si perde).
+    │   │                          Dati da /votazioni su warera-plus-api
+    │   │                          (server/plusApi/votazioni.js). Link ?tab=votes&vote=id.
+    │   │                          Stili in src/styles/politicalVotes.css.
+    │   ├── votesHemicycle.js    ← NUOVO — l'emiciclo dello scrutinio PALESE: i seggi
+    │   │                          (geometria di parliament.js, per partito) si
+    │   │                          accendono verdi/rossi in diretta, poi tabellone e
+    │   │                          timbro. Nessun "play": ogni fotogramma disegna lo
+    │   │                          stato a `ora del server − scrutinioAlle`, quindi
+    │   │                          tutti vedono lo stesso seggio nello stesso istante.
+    │   │                          Referendum: ≤400 pallini proporzionali. A votazione
+    │   │                          conclusa tutto acceso, con "Rivedi" (solo locale).
+    │   ├── votesUrn.js          ← NUOVO — l'urna dello scrutinio SEGRETO: una scheda alla
+    │   │                          volta esce, si gira (con la nota se nulla) e vola sul
+    │   │                          suo mucchio; barra del sì verso la soglia, spoglio
+    │   │                          rapido oltre le 40 schede, poi tabellone e timbro.
+    │   │                          Stesso principio dell'emiciclo (ora del server). ⚠️ la
+    │   │                          scaletta è la formula di durataScrutinio del server:
+    │   │                          cambiarne una sola sfasa l'animazione dall'esito.
+    │   ├── votesApi.js, votesI18n.js ← client dell'API (token dell'area riservata,
+    │   │                          ritorno da Discord `votazioni:<paese>:<id>`) e
+    │   │                          dizionario a 9 lingue
     │   └── plusApi.js, plusCharts.js, plusViews.js, plusI18n.js (9 lingue)
     ├── mu/                       ← NUOVO — Esplora Unità Militari
     │   ├── main.js              ← initMuView(container) + openMuDetail(muId)

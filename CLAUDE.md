@@ -532,10 +532,17 @@ Accordi sono l'unica fonte (richiesta dell'utente). Tre cose da sapere:
   (dichiarata). Copre i 90 giorni dell'archivio battaglie, 120 battaglie per
   controllo al massimo.
 
-Le **Votazioni** (`server/plusApi/votazioni.js`, dal 2026-10-23; il client
-in `src/political/` è la Fase 2, non ancora scritta) fanno votare congresso,
+Le **Votazioni** (`server/plusApi/votazioni.js` + `src/political/votes.js`,
+bottone "Votazioni" di Political, dal 2026-10-23) fanno votare congresso,
 congresso + governo o tutti i cittadini (referendum), a scrutinio palese o
-segreto. Dipendono dal redeploy di **warera-plus-api**. Tre cose da sapere:
+segreto. Dipendono dal redeploy di **warera-plus-api**: finché non lo fai
+`/votazioni` risponde 404 e la vista dice che il server non le ha ancora.
+Lo scrutinio si guarda in diretta: emiciclo per il palese
+(`votesHemicycle.js`, 20–45 s), urna per il segreto (`votesUrn.js`, fino a
+90 s). Il governo può impostare un canale Discord (avvisi di apertura,
+inizio scrutinio, esito). Per provare le animazioni c'è
+`server/plusApi/votazioniFinte.js` (solo dev, vedi il README). Tre cose da
+sapere:
 
 - il congresso si **fotografa all'apertura** (`votazione_elettore`): chi
   viene eletto a votazione aperta non vota, chi decade sì. Il referendum
