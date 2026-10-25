@@ -78,6 +78,11 @@ wareraPlus/
 │   │                              livello e nazione di adesso da mu-user-countries,
 │   │                              zero chiamate; conta SPOSTAMENTI, non persone, se
 │   │                              no il saldo di chi fa andata e ritorno sbaglia).
+│   ├── tournament.js           ← NUOVO (2026-10-25) — /tournament e /tournament/team:
+│   │                             forza delle squadre sugli ULTIMI 7 GIORNI (fotografie
+│   │                             della classifica in cache/weekly-snaps/ ogni 6 ore),
+│   │                             danno per round delle partite finite, registro delle
+│   │                             previsioni scritte prima di ogni partita.
 │   ├── priceHistory.js         ← NUOVO — storico dei prezzi: un campione all'ora di
 │   │                              itemTrading.getPrices (PUBBLICA, tutte le risorse
 │   │                              in una richiesta) ridotto a una candela al giorno
@@ -752,12 +757,19 @@ wareraPlus/
     │   │                          sulle partite finite del torneo (≥30, sennò 0,95/0,85
     │   │                          misurati il 2026-10-25: favorito 250/329), propagate
     │   │                          lungo il tabellone (arrivo, incontro, titolo); partita
-    │   │                          in corso condizionata sul punteggio.
+    │   │                          in corso condizionata sul punteggio. Con la FORMA (danno
+    │   │                          per round nelle partite finite, dal server) diventa
+    │   │                          logit P = k1·ln(a/b) + k2·ln(forma_a/forma_b) — stesso
+    │   │                          calcolo di server/tournament.js. sideTeam + forced = la
+    │   │                          simulazione "e se…?".
     │   ├── main.js               ← disegno: tabellone con linee SVG dopo il layout,
     │   │                          scheda squadra (percorso, avversari dal più duro con
     │   │                          fascia di difficoltà), classifica di forza, ricerca,
     │   │                          "La mia unità" da we_my_player. Link ?section=
     │   │                          tournament&tab=country&team=<tournamentTeamId>.
+    │   │                          Composizione della squadra (/tournament/team, nomi da
+    │   │                          players/api.js fetchNames), registro delle previsioni,
+    │   │                          simulazione: vincitori scelti a mano, solo in memoria.
     │   └── i18n.js               ← dizionario locale (9 lingue)
     ├── guide/                    ← NUOVO — Guida "Come si usa": SOLO testo statico
     │   ├── main.js                  (zero fetch, zero stato) + i18n.js a 9 lingue.

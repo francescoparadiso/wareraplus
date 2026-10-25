@@ -228,7 +228,7 @@ const {
 // loro iscritti) gia' calcolata, per non far scaricare a ogni browser la
 // classifica settimanale intera. Vedi il blocco in testa a server/tournament.js.
 const {
-  initTournament, pollTournament, readTournament, statoTournament,
+  initTournament, pollTournament, snapshotWeekly, readTournament, readTournamentTeam, statoTournament,
 } = require('./tournament');
 
 const app = express();
@@ -437,8 +437,10 @@ initPriceHistory({
 // La giornata storica: solo cache, nessuna chiamata.
 initDayHistory({ readCache, writeCache });
 
-// Tornei: richieste pubbliche, gli basta trpcBatch. Tutto in memoria.
-initTournament({ trpcBatch: (...args) => trpcBatch(...args), readCacheShared });
+// Tornei: richieste pubbliche. In cache le fotografie della classifica
+// settimanale (weekly-snaps/), il danno delle partite finite e il registro
+// delle previsioni (vedi server/tournament.js).
+initTournament({ trpcBatch: (...args) => trpcBatch(...args), readCacheShared, readCache, writeCache, cacheDir: CACHE_DIR });
 
 // I trasferimenti: solo cache. La fotografia gliela passa pollCitizens.
 initCitizenMoves({ readCache, writeCache });
@@ -2546,6 +2548,10 @@ cron.schedule('27 * * * *', pollPrices);
 // minuto pieno). Tabellone e squadre dell'ultimo torneo di ogni tipo; la
 // classifica settimanale solo ogni 10 minuti (vedi server/tournament.js).
 cron.schedule('20 */3 * * * *', pollTournament);
+// Fotografia della classifica settimanale ogni 6 ore, alle :55 UTC: quella
+// delle 23:55 della domenica e' la lettura finale prima del reset del
+// lunedi', e regge la settimana mobile di tutta la settimana dopo.
+cron.schedule('0 55 5,11,17,23 * * *', snapshotWeekly, { timezone: 'UTC' });
 
 // WarEra+ andamento battaglie: ogni minuto, al secondo :40. Il tick dura
 // 2 minuti esatti, quindi un tick su due cade fra due giri e nessuno si
@@ -3215,6 +3221,17 @@ app.get('/battle-timeline', (req, res) => {
 // Tornei (server/tournament.js): tabellone + forza di ogni squadra gia'
 // sommata. `type` mu|country, `id` un torneo preciso (default l'ultimo del
 // tipo), `me` l'id di un personaggio per sapere la sua squadra.
+// Iscritti di una squadra col danno degli ultimi 7 giorni e quello fatto
+// nel torneo. 404 se il torneo non e' in memoria: il client ricade sui
+// dati che ha.
+app.get('/tournament/team', (req, res) => {
+  const id = /^[a-f0-9]{24}$/.test(String(req.query.id || '')) ? String(req.query.id) : null;
+  const team = /^[a-f0-9]{24}$/.test(String(req.query.team || '')) ? String(req.query.team) : null;
+  const data = id && team ? readTournamentTeam({ id, team }) : null;
+  if (!data) return res.status(404).json({ error: 'squadra non in memoria' });
+  res.json(data);
+});
+
 app.get('/tournament', async (req, res) => {
   const type = req.query.type === 'country' ? 'country' : 'mu';
   const id = /^[a-f0-9]{24}$/.test(String(req.query.id || '')) ? String(req.query.id) : null;

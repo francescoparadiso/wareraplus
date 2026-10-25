@@ -353,6 +353,49 @@ button.wp-trn-slot:hover { background: color-mix(in srgb, var(--wp-trn-acc) 9%, 
 }
 .wp-trn-more:hover { color: var(--wp-trn-acc); border-color: var(--wp-trn-acc); }
 
+/* ── Previsione registrata su una partita finita ───────────── */
+.wp-trn-mpred { font-size: 9.5px; font-weight: 700; letter-spacing: .03em; text-transform: none; }
+.wp-trn-mpred.ok { color: var(--wp-trn-d5); }
+.wp-trn-mpred.ko { color: var(--wp-trn-d1); }
+.wp-trn-match.st-done .wp-trn-mhead { color: var(--wp-trn-dim); }
+
+/* ── Simulazione "e se…?" ───────────────────────────────────── */
+.wp-trn-simbtn { margin-left: auto; }
+.wp-trn-notice.sim {
+  background: color-mix(in srgb, var(--wp-trn-acc) 10%, transparent);
+  border-color: color-mix(in srgb, var(--wp-trn-acc) 40%, transparent);
+  color: var(--wp-ov-text, #e6edf3);
+}
+.wp-trn-notice.sim .wp-trn-more { margin: 0 0 0 8px; }
+.wp-trn-match.sim { border-style: dashed; border-color: var(--wp-trn-acc); }
+.wp-trn-slot.forced .wp-trn-sname { font-style: italic; }
+.wp-trn-slot.simable { cursor: crosshair; }
+.wp-trn-slot.simable:hover { background: color-mix(in srgb, var(--wp-trn-acc) 22%, transparent); }
+
+/* ── Composizione della squadra ─────────────────────────────── */
+.wp-trn-roster { display: flex; flex-direction: column; gap: 1px; }
+.wp-trn-rrow {
+  display: grid; grid-template-columns: minmax(0, 1fr) 70px 70px; gap: 8px; align-items: center;
+  padding: 4px 6px; border-radius: 6px; font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.wp-trn-rrow > span { text-align: right; color: var(--wp-trn-dim); }
+.wp-trn-rrow > span:last-child { color: var(--wp-ov-text, #e6edf3); font-weight: 600; }
+.wp-trn-rrow.head { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.wp-trn-rrow.head > span { color: var(--wp-trn-dim) !important; font-weight: 700; }
+.wp-trn-rrow.absent { opacity: .55; }
+.wp-trn-rrow:not(.head):hover { background: color-mix(in srgb, var(--wp-trn-acc) 8%, transparent); }
+.wp-trn-rname { display: flex; align-items: center; gap: 7px; min-width: 0; color: inherit; text-decoration: none; }
+.wp-trn-rname span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-trn-rname:hover span { color: var(--wp-trn-acc); }
+
+/* ── Registro delle previsioni ──────────────────────────────── */
+.wp-trn-predline { margin: 0 0 8px; font-size: 12.5px; }
+.wp-trn-predb { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; font-size: 11px; color: var(--wp-trn-dim); }
+.wp-trn-predb > div { display: grid; grid-template-columns: minmax(0, 1fr) 90px; gap: 8px; align-items: center; }
+.wp-trn-predbar { position: relative; height: 10px; border-radius: 3px; background: color-mix(in srgb, var(--wp-trn-dim) 18%, transparent); }
+.wp-trn-predbar i { position: absolute; left: 0; top: 0; height: 4px; border-radius: 2px; background: var(--wp-trn-dim); }
+.wp-trn-predbar b { position: absolute; left: 0; bottom: 0; height: 4px; border-radius: 2px; background: var(--wp-trn-acc); }
+
 /* ── Telefono ───────────────────────────────────────────────── */
 @media (max-width: 640px) {
   .wp-trn { padding: 16px 12px 90px; --wp-trn-col: 168px; --wp-trn-gap: 22px; }

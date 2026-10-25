@@ -102,7 +102,14 @@ export function buildModel(t, rawTeams, src) {
     registeredCount: t.registeredCount ?? (type === 'mu' ? t.registered?.mus : t.registered?.countries)?.length ?? 0,
     autoQualified: new Set(t.autoQualify1stRound || []),
     weeklyOk,
+    // 'rolling' | 'estimate' | 'week' dal server (settimana mobile, vedi
+    // server/tournament.js); null = percorso diretto, settimana in corso.
+    weeklyMode: src.weeklyMode || null,
     myTeam: src.myTeam || null,      // dal server, quando gli iscritti non arrivano al client
+    // Partite finite: battleId → [danno attaccante, danno difensore, round].
+    // Solo dal server: senza, il modello non ha la forma nel torneo.
+    battles: src.battles || {},
+    predictions: src.predictions || null,
     teams,
     rounds,
     levels,
@@ -110,6 +117,11 @@ export function buildModel(t, rawTeams, src) {
     qual,
   };
   rankTeams(model);
+  model.form = formUpTo(model, Infinity);
+  for (const t of model.teams.values()) {
+    const f = model.form.get(t.id);
+    t.form = f ? f.d / f.r : null;
+  }
   calibrate(model);
   return model;
 }
@@ -178,6 +190,10 @@ function buildTeam(raw, type, { weekly, weeklyOk, muDir, nations }) {
     color: raw.colorScheme || null,
     roster: rosterCount,
     participants: roster,
+    // Iscritti che hanno colpito nel torneo: dal server, o contati qui sul
+    // danno per giocatore (`damageByEntity`, che resta per la composizione).
+    tourFighters: pre ? (raw.tourFighters ?? null) : roster.filter(u => (raw.damageByEntity?.[u] || 0) > 0).length,
+    damageByEntity: pre ? null : (raw.damageByEntity || {}),
     fighters,
     potential,
     average: fighters ? potential / fighters : 0,
@@ -367,6 +383,25 @@ export function teamPath(model, teamId) {
    nel torneo contro 335 M di settimanale per la seconda unità più forte),
    ma è il motivo per cui la taratura è un po' ottimista.
 
+   FORMA NEL TORNEO (dal 2026-10-25, richiesta dell'utente). Il danno per
+   round fatto nelle partite già giocate del torneo, misurato sulle 100
+   partite di turno 2 con le due squadre reduci dal turno 1: da solo
+   prevede quanto il settimanale (72 favoriti vincenti contro 75), ma i due
+   INSIEME abbassano la log-loss da 0,508 a 0,433 — correlano solo 0,66,
+   perché il torneo ha il tetto all'equipaggiamento e dice chi si presenta
+   davvero. Quando le due squadre hanno la forma il modello diventa
+
+       logit P = k1 · ln(a/b) + k2 · ln(forma_a/forma_b)
+
+   tarato sulle partite in cui la forma c'era PRIMA di giocarle (≥ 30),
+   altrimenti resta quello a un termine. Per ln(a/b) solo, a^k/(a^k+b^k)
+   è la stessa cosa: sigmoide di k · ln(a/b). La forma arriva solo dal
+   server (danno di ogni partita finita): senza, il modello è quello di
+   prima e la vista non la nomina.
+
+   ⚠️ Lo stesso calcolo sta in server/tournament.js, che lo usa per il
+   registro delle previsioni: se cambi uno, cambia l'altro.
+
    Una partita in corso tiene conto del punteggio: la probabilità della
    battaglia si scompone in quella di un round (q, tale che vincere `toWin`
    round prima dell'altro faccia P), e si riparte dal punteggio vero.
@@ -381,50 +416,83 @@ export const DEFAULT_K = { potential: 0.95, average: 0.85 };
 const MIN_GAMES = 30;
 const FLOOR = 1e3;   // una squadra a zero non deve dare 0% o 100% secchi
 
-function finishedGames(model) {
-  const out = [];
+const sig = z => 1 / (1 + Math.exp(-z));
+const lr = (a, b, floor) => Math.log(Math.max(a || 0, floor) / Math.max(b || 0, floor));
+
+/** Forma = danno per round sulle partite finite PRIMA del turno `upTo`. */
+function formUpTo(model, upTo) {
+  const out = new Map();
   for (const r of model.rounds) {
+    if (r.n >= upTo) continue;
     for (const m of r.matches) {
-      if (!m.wonBy || !m.a || !m.d) continue;
-      const a = model.teams.get(m.a), d = model.teams.get(m.d);
-      if (a && d) out.push({ a, d, aWon: m.wonBy === 'attacker' });
+      const b = m.wonBy && m.battle && model.battles[m.battle];
+      if (!b) continue;
+      for (const [team, d] of [[m.a, b[0]], [m.d, b[1]]]) {
+        const f = out.get(team) || { d: 0, r: 0 };
+        f.d += d; f.r += b[2];
+        out.set(team, f);
+      }
     }
   }
   return out;
 }
 
+function fitLogistic(rows, nVar) {
+  let b = new Array(nVar).fill(0);
+  for (let it = 0; it < 4000; it++) {
+    const g = new Array(nVar).fill(0);
+    for (const r of rows) {
+      const p = sig(r.x.reduce((s, v, j) => s + b[j] * v, 0));
+      for (let j = 0; j < nVar; j++) g[j] += ((r.y ? 1 : 0) - p) * r.x[j];
+    }
+    b = b.map((v, j) => v + 0.1 * g[j] / rows.length);
+  }
+  return b;
+}
+
 function calibrate(model) {
-  const games = finishedGames(model);
-  model.k = {};
+  const single = [], combo = [];
+  for (const r of model.rounds) {
+    const form = formUpTo(model, r.n);
+    for (const m of r.matches) {
+      if (!m.wonBy || !m.a || !m.d) continue;
+      const a = model.teams.get(m.a), d = model.teams.get(m.d);
+      if (!a || !d) continue;
+      single.push({ a, d, y: m.wonBy === 'attacker', fa: form.get(m.a), fd: form.get(m.d) });
+    }
+  }
+  model.k = {}; model.k1 = {}; model.k2 = {};
   model.calib = {};
   for (const metric of METRICS) {
-    const hits = games.filter(g => (g.a[metric] > g.d[metric]) === g.aWon).length;
-    let k = DEFAULT_K[metric];
-    const own = games.length >= MIN_GAMES;
-    if (own) {
-      let best = -Infinity;
-      for (let c = 0.2; c <= 3.001; c += 0.05) {
-        let ll = 0;
-        for (const g of games) {
-          const p = pBeat(g.a[metric], g.d[metric], c);
-          ll += Math.log(Math.min(Math.max(g.aWon ? p : 1 - p, 1e-6), 1 - 1e-6));
-        }
-        if (ll > best) { best = ll; k = Math.round(c * 100) / 100; }
-      }
-    }
-    model.k[metric] = k;
-    model.calib[metric] = { n: games.length, hits, own };
+    const rows = single.map(g => ({ x: [lr(g.a[metric], g.d[metric], FLOOR)], y: g.y }));
+    const withForm = single.filter(g => g.fa && g.fd)
+      .map(g => ({ x: [lr(g.a[metric], g.d[metric], FLOOR), lr(g.fa.d / g.fa.r, g.fd.d / g.fd.r, 1)], y: g.y }));
+    const own = rows.length >= MIN_GAMES;
+    model.k[metric] = own ? Math.round(fitLogistic(rows, 1)[0] * 100) / 100 : DEFAULT_K[metric];
+    const both = withForm.length >= MIN_GAMES ? fitLogistic(withForm, 2) : null;
+    model.k1[metric] = both ? both[0] : null;
+    model.k2[metric] = both ? both[1] : null;
+    model.calib[metric] = {
+      n: single.length,
+      hits: single.filter(g => (g.a[metric] > g.d[metric]) === g.y).length,
+      own,
+      nForm: withForm.length,
+    };
   }
 }
 
-function pBeat(a, b, k) {
-  return 1 / (1 + Math.pow(Math.max(b || 0, FLOOR) / Math.max(a || 0, FLOOR), k));
+/** Probabilità che la squadra `a` batta `b` (oggetti squadra del modello). */
+function pPair(model, a, b, metric) {
+  const x1 = lr(a?.[metric], b?.[metric], FLOOR);
+  const k2 = model.k2?.[metric];
+  if (k2 != null && a?.form && b?.form) return sig(model.k1[metric] * x1 + k2 * lr(a.form, b.form, 1));
+  return sig((model.k?.[metric] ?? DEFAULT_K[metric]) * x1);
 }
 
 /** Probabilità che `a` batta `b` in una partita secca. */
 export function winProb(model, a, b, metric) {
   if (!a || !b) return null;
-  return pBeat(a[metric], b[metric], model.k?.[metric] ?? DEFAULT_K[metric]);
+  return pPair(model, a, b, metric);
 }
 
 /** Fascia di difficoltà dalla probabilità di vincere: sempre la stessa
@@ -461,21 +529,38 @@ function seriesFromScore(p, toWin, a, d) {
 }
 
 /**
+ * Chi occupa un posto, anche in simulazione: la squadra decisa dal gioco,
+ * l'unica possibile, o il vincitore SCELTO A MANO della partita prima
+ * (`forced`: Map "turno:indice" → squadra, vedi la simulazione in main.js).
+ * Ritorna { id, forced } o null se il posto è ancora aperto.
+ */
+export function sideTeam(model, round, m, side, forced) {
+  const id = m[side] || (m[`p${side}`].length === 1 ? m[`p${side}`][0] : null);
+  if (id) return { id, forced: false };
+  const pred = m.pred?.[side === 'a' ? 'attacker' : 'defender'];
+  const f = pred != null ? forced?.get(`${round.n - 1}:${pred}`) : null;
+  return f ? { id: f, forced: true } : null;
+}
+
+/**
  * Probabilità lungo tutto il tabellone per la misura scelta.
  * `scores` = Map battleId → { a, d, toWin } delle partite in corso.
+ * `forced` = risultati scelti a mano nella simulazione "e se…?": quelle
+ * partite hanno un vincitore certo, e tutto quello che sta a valle si
+ * ricalcola di conseguenza.
  * Ritorna:
  *   slot(round, match, side) → Map squadra → P di trovarsi in quel posto
  *   champion → Map squadra → P di vincere il torneo
  *   match(round, match) → P che vinca l'attaccante (null se già finita)
  */
-export function bracketOdds(model, metric, scores = new Map()) {
+export function bracketOdds(model, metric, scores = new Map(), forced = new Map()) {
   const k = model.k?.[metric] ?? DEFAULT_K[metric];
   const byN = new Map(model.rounds.map(r => [r.n, { r, byIdx: new Map(r.matches.map(m => [m.idx, m])) }]));
   const slots = new Map();
   const wins = new Map();
 
   const pair = (m, ta, td) => {
-    const base = pBeat(model.teams.get(ta)?.[metric], model.teams.get(td)?.[metric], k);
+    const base = pPair(model, model.teams.get(ta), model.teams.get(td), metric);
     const s = m.battle && m.a === ta && m.d === td ? scores.get(m.battle) : null;
     return s ? seriesFromScore(base, s.toWin || 2, s.a || 0, s.d || 0) : base;
   };
@@ -502,6 +587,7 @@ export function bracketOdds(model, metric, scores = new Map()) {
     if (wins.has(key)) return wins.get(key);
     let out;
     if (m.wonBy && m.a && m.d) out = new Map([[m.wonBy === 'attacker' ? m.a : m.d, 1]]);
+    else if (forced.has(key)) out = new Map([[forced.get(key), 1]]);
     else {
       out = new Map();
       const A = slot(round, m, 'a'), D = slot(round, m, 'd');
@@ -527,9 +613,12 @@ export function bracketOdds(model, metric, scores = new Map()) {
     champion,
     match(round, m) {
       if (m.wonBy) return null;
-      const a = m.a || (m.pa.length === 1 ? m.pa[0] : null);
-      const d = m.d || (m.pd.length === 1 ? m.pd[0] : null);
-      return a && d ? pair(m, a, d) : null;
+      const a = sideTeam(model, round, m, 'a', forced)?.id;
+      const d = sideTeam(model, round, m, 'd', forced)?.id;
+      if (!a || !d) return null;
+      const f = forced.get(`${round.n}:${m.idx}`);
+      if (f) return f === a ? 1 : 0;
+      return pair(m, a, d);
     },
     pair,
   };

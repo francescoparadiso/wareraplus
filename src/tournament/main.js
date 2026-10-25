@@ -39,8 +39,9 @@
 import '../styles/tournament.css';
 import { state } from '../diplomacy/state.js';
 import { trnT } from './i18n.js';
-import { fetchTournamentBundle, fetchTournamentList, fetchTournament, fetchTeams, fetchWeeklyByUser, fetchLiveScores } from './api.js';
-import { buildModel, teamLabel, roundKind, matchState, subtree, bracketViews, viewForTeam, teamPath, difficultyOf, winProb, bracketOdds, METRICS } from './model.js';
+import { fetchTournamentBundle, fetchTournamentList, fetchTournament, fetchTeams, fetchWeeklyByUser, fetchLiveScores, fetchTeamRoster } from './api.js';
+import { buildModel, teamLabel, roundKind, matchState, subtree, bracketViews, viewForTeam, teamPath, difficultyOf, winProb, bracketOdds, sideTeam, METRICS } from './model.js';
+import { fetchNames } from '../players/api.js';
 import { escapeHtml, flagImg, avatarImg, countryName, fmtCompact, fmtFull, fmtDate } from '../mu/ui.js';
 import { fetchMuDirectory } from '../mu/api.js';
 import { getAllCountries } from '../shared/countries.js';
@@ -69,6 +70,12 @@ let _expanded = new Set();        // turni con l'elenco avversari aperto per int
 let _powerAll = false;
 let _scores = new Map();
 let _odds = null;                 // bracketOdds() per misura e punteggi correnti
+// Simulazione "e se…?": vincitori scelti a mano, "turno:indice" → squadra.
+// Solo in memoria, per torneo: cambiarlo o ricaricare la sezione la azzera.
+let _sim = false;
+let _forced = new Map();
+// Composizione della squadra aperta: teamId → { loading, rows, names, … }.
+const _rosters = new Map();
 let _timer = null;
 let _langHandler = null;
 let _resizeHandler = null;
@@ -133,6 +140,7 @@ async function load({ refresh = false } = {}) {
       _tid[_type] = bundle.tournament._id;
       _model = buildModel(bundle.tournament, bundle.teams, {
         weeklyOk: !!bundle.weeklyOk, myTeam: bundle.myTeam,
+        weeklyMode: bundle.weeklyMode, battles: bundle.battles, predictions: bundle.predictions,
         muDir: _muDir || new Map(), nations: _nations || new Map(),
       });
       afterModel(refresh);
@@ -253,7 +261,7 @@ function paint({ keepScroll = false } = {}) {
   // Probabilità ricalcolate a ogni disegno: dipendono dalla misura scelta
   // e dai punteggi delle partite in corso. Pochi millisecondi anche sul
   // torneo MU (vedi bracketOdds in model.js).
-  _odds = _model?.levels.length ? bracketOdds(_model, _metric, _scores) : null;
+  _odds = _model?.levels.length ? bracketOdds(_model, _metric, _scores, _forced) : null;
 
   _container.innerHTML = `
     <div class="wp-trn">
@@ -288,7 +296,12 @@ function bodyHtml() {
   if (_loading) return `<div class="wp-trn-loading">${trnT('loading')}</div>`;
 
   const notices = [];
+  // Quale "settimana": gli ultimi 7 giorni dal server (settimana mobile),
+  // con la scorsa stimata finché l'archivio non ce l'ha intera, o la sola
+  // settimana in corso (percorso diretto, o server senza fotografie).
   if (!_model.weeklyOk) notices.push(`<p class="wp-trn-notice warn">${trnT('weeklyMissing')}</p>`);
+  else if (_model.weeklyMode === 'rolling') notices.push(`<p class="wp-trn-notice">${trnT('noteRolling')}</p>`);
+  else if (_model.weeklyMode === 'estimate') notices.push(`<p class="wp-trn-notice">${trnT('noteEstimate')}</p>`);
   else notices.push(`<p class="wp-trn-notice">${trnT('weeklyNote')}</p>`);
   // Torneo concluso: la classifica settimanale è quella di OGGI, non di
   // quando si è giocato. Il danno nel torneo invece è quello vero.
@@ -384,8 +397,10 @@ function bracketHtml() {
     <div class="wp-trn-sechead">
       <h2 class="wp-trn-h2">${trnT('bracket')}</h2>
       ${chips}
+      ${_model.status !== 'ended' ? `<button type="button" class="wp-trn-btn wp-trn-simbtn${_sim ? ' active' : ''}" data-act="sim" title="${escapeHtml(trnT('simTip'))}">${trnT(_sim ? 'simOff' : 'simOn')}</button>` : ''}
     </div>
     ${hint}
+    ${_sim ? `<p class="wp-trn-notice sim">${trnT('simBanner', { n: _forced.size })}${_forced.size ? ` <button type="button" class="wp-trn-more" data-act="sim-reset">${trnT('simReset')}</button>` : ''}</p>` : ''}
     <div class="wp-trn-bracket-scroll">
       <div class="wp-trn-bracket${cols.length <= 3 ? ' wide' : ''}" style="--wp-trn-rows:${cols[0]?.length || 1}">
         <svg class="wp-trn-lines" aria-hidden="true"></svg>
@@ -406,19 +421,37 @@ function matchHtml(m, round, c, j, path, oppSet) {
   const hot = path.has(`${round.n}:${m.idx}`);
   const link = m.battle ? `<a class="wp-trn-blink" href="${GAME_BATTLE_URL}${escapeHtml(m.battle)}" target="_blank" rel="noopener" title="${escapeHtml(trnT('openBattle'))}">↗</a>` : '';
   const live = st === 'live' ? `<span class="wp-trn-mlive"><span class="wp-trn-livedot"></span>${trnT('live')}</span>` : '';
+  // Partita finita con una previsione registrata PRIMA (server/tournament.js):
+  // cosa diceva il modello, e se ci ha preso.
+  let pred = '';
+  const rec = st === 'done' ? _model.predictions?.byKey?.[`${round.n}:${m.idx}`] : null;
+  if (rec && !rec[2]) {
+    const p = rec[_metric === 'potential' ? 0 : 1];
+    const fav = Math.max(p, 1 - p);
+    const ok = (p >= 0.5) === (m.wonBy === 'attacker');
+    pred = `<span class="wp-trn-mpred ${ok ? 'ok' : 'ko'}" title="${escapeHtml(trnT(ok ? 'predOk' : 'predKo'))}">${ok ? '✓' : '✗'} ${trnT('predShort', { p: pct(fav) })}</span>`;
+  }
+  const simKey = `${round.n}:${m.idx}`;
+  const sim = _forced.has(simKey) ? ' sim' : '';
   return `
-    <div class="wp-trn-match st-${st}${hot ? ' hot' : ''}" data-c="${c}" data-j="${j}" data-battle="${escapeHtml(m.battle || '')}">
-      ${live || link ? `<div class="wp-trn-mhead">${live}${link}</div>` : ''}
+    <div class="wp-trn-match st-${st}${hot ? ' hot' : ''}${sim}" data-c="${c}" data-j="${j}" data-battle="${escapeHtml(m.battle || '')}">
+      ${live || link || pred ? `<div class="wp-trn-mhead">${live}${pred}${link}</div>` : ''}
       ${slotHtml(m, 'a', round, oppSet)}
       ${slotHtml(m, 'd', round, oppSet)}
     </div>`;
 }
 
 function slotHtml(m, side, round, oppSet) {
-  const id = m[side] || (m[`p${side}`].length === 1 ? m[`p${side}`][0] : null);
+  const resolved = sideTeam(_model, round, m, side, _forced);
+  const id = resolved?.id || null;
   const poss = m[`p${side}`];
   const sideKey = side === 'a' ? 'attacker' : 'defender';
-  const result = m.wonBy ? (m.wonBy === sideKey ? ' won' : ' lost') : '';
+  const simWin = _forced.get(`${round.n}:${m.idx}`);
+  const result = m.wonBy ? (m.wonBy === sideKey ? ' won' : ' lost') : (simWin ? (simWin === id ? ' won' : ' lost') : '');
+  // In simulazione si può scegliere il vincitore di una partita non ancora
+  // finita che ha le due squadre (vere o scelte a mano prima).
+  const other = sideTeam(_model, round, m, side === 'a' ? 'd' : 'a', _forced);
+  const simAttr = _sim && !m.wonBy && id && other ? ` data-sim="${round.n}:${m.idx}"` : '';
   const sc = m.battle && !m.wonBy ? _scores.get(m.battle) : null;
   const mine = sc ? (side === 'a' ? sc.a : sc.d) : null;
   const theirs = sc ? (side === 'a' ? sc.d : sc.a) : null;
@@ -436,9 +469,9 @@ function slotHtml(m, side, round, oppSet) {
 
   if (id) {
     const t = team(id);
-    const cls = `${result}${id === _teamId ? ' me' : ''}${oppSet.has(id) ? ' opp' : ''}`;
+    const cls = `${result}${id === _teamId ? ' me' : ''}${oppSet.has(id) ? ' opp' : ''}${resolved.forced ? ' forced' : ''}${simAttr ? ' simable' : ''}`;
     return `
-      <button type="button" class="wp-trn-slot${cls}" data-team="${escapeHtml(id)}" title="${escapeHtml(label(t))}">
+      <button type="button" class="wp-trn-slot${cls}" data-team="${escapeHtml(id)}"${simAttr} title="${escapeHtml(simAttr ? trnT('simPick', { name: label(t) }) : label(t))}">
         ${teamBadge(t)}${origin}
         <span class="wp-trn-sname">${escapeHtml(label(t))}</span>
         ${pSide != null
@@ -528,7 +561,8 @@ function calibText() {
   const c = _model.calib?.[_metric];
   const m = trnT(_metric === 'potential' ? 'mPotential' : 'mAverage').toLowerCase();
   if (c?.own) {
-    return trnT('calibOwn', { m, n: c.n, h: c.hits, p: pct(c.n ? c.hits / c.n : 0), k: String(_model.k[_metric]).replace('.', ',') });
+    const form = _model.k2?.[_metric] != null ? ` ${trnT('calibForm', { n: c.nForm })}` : '';
+    return trnT('calibOwn', { m, n: c.n, h: c.hits, p: pct(c.n ? c.hits / c.n : 0), k: String(_model.k[_metric]).replace('.', ',') }) + form;
   }
   return trnT('calibDefault', { m, n: c?.n ?? 0 });
 }
@@ -587,6 +621,8 @@ function teamCardHtml(t) {
         ${stat(trnT('statAverage'), fmtCompact(t.average), rankA, _metric === 'average')}
         ${stat(trnT('statRoster'), fmtFull(t.roster), trnT('fightersOf', { n: t.fighters, m: t.roster }))}
         ${stat(trnT('statTour'), fmtCompact(t.tourDamage))}
+        ${t.tourFighters != null ? stat(trnT('statPresent'), `${t.tourFighters}/${t.roster}`, trnT('presentOf', { n: t.tourFighters, m: t.roster })) : ''}
+        ${t.form != null ? stat(trnT('statForm'), fmtCompact(t.form), trnT('formNote')) : ''}
         ${extra}
         ${titleStat(t)}
       </div>
@@ -595,7 +631,63 @@ function teamCardHtml(t) {
         ${_model.qual && _model.autoQualified.has(t.id) ? `<li class="wp-trn-step done"><span class="wp-trn-stepr">${escapeHtml(roundName(_model.qual))}</span><span class="wp-trn-stept">${trnT('directQual')}</span></li>` : ''}
         ${path.map(s => stepHtml(t, s)).join('')}
       </ol>
+      <h3 class="wp-trn-h3">${trnT('compTitle')}</h3>
+      ${rosterHtml(t)}
     </div>`;
+}
+
+/* ── Composizione della squadra ─────────────────────────────────
+   Chi c'è dentro: ogni iscritto col danno degli ultimi 7 giorni e quello
+   fatto nel torneo, dal più presente. Dice chi trascina la squadra e chi
+   è iscritto ma non si fa vedere. Dal server (/tournament/team), o — nel
+   percorso diretto — dagli iscritti e da `damageByEntity` già in mano.
+   I nomi: fetchNames di Giocatori (/users-lite, poi getUserLite). */
+const ROSTER_PREVIEW = 12;
+
+function rosterHtml(t) {
+  const r = _rosters.get(`${_model.id}:${t.id}`);
+  if (!r) { loadRoster(t); return `<p class="wp-trn-hint">${trnT('compLoading')}</p>`; }
+  if (r.loading) return `<p class="wp-trn-hint">${trnT('compLoading')}</p>`;
+  if (!r.rows.length) return `<p class="wp-trn-hint">${trnT('compNone')}</p>`;
+  const shown = r.open ? r.rows : r.rows.slice(0, ROSTER_PREVIEW);
+  const hidden = r.total - shown.length;
+  return `
+    <div class="wp-trn-roster">
+      <div class="wp-trn-rrow head"><span></span><span>${trnT('compWeek')}</span><span>${trnT('compTour')}</span></div>
+      ${shown.map(x => {
+        const n = r.names.get(x.u);
+        return `<div class="wp-trn-rrow${x.t > 0 ? '' : ' absent'}">
+          <a class="wp-trn-rname" href="https://app.warera.io/user/${escapeHtml(x.u)}" data-player="${escapeHtml(x.u)}">${avatarImg(n?.avatarUrl, n?.username || '?', 'wp-trn-av wp-trn-av-sm')}<span>${escapeHtml(n?.username || '…')}</span></a>
+          <span>${x.w > 0 ? escapeHtml(fmtCompact(x.w)) : '—'}</span>
+          <span>${x.t > 0 ? escapeHtml(fmtCompact(x.t)) : '—'}</span>
+        </div>`;
+      }).join('')}
+      ${r.rows.length > ROSTER_PREVIEW ? `<button type="button" class="wp-trn-more" data-act="roster-all">${r.open ? trnT('showLess') : trnT('showAll', { n: r.rows.length })}</button>` : ''}
+      ${hidden > 0 && (r.open || r.rows.length <= ROSTER_PREVIEW) ? `<p class="wp-trn-hint">${trnT('compMore', { n: hidden })}</p>` : ''}
+    </div>`;
+}
+
+async function loadRoster(t) {
+  const key = `${_model.id}:${t.id}`;
+  if (_rosters.has(key)) return;
+  const entry = { loading: true, rows: [], names: new Map(), total: 0, open: false };
+  _rosters.set(key, entry);
+  let data = null;
+  if (t.damageByEntity) {
+    // Percorso diretto: tutto già in mano.
+    const rows = t.participants.map(u => ({ u, w: _weekly?.get(u) || 0, t: t.damageByEntity[u] || 0 }))
+      .sort((a, b) => (b.t - a.t) || (b.w - a.w));
+    data = { total: rows.length, rows: rows.slice(0, 60) };
+  } else {
+    data = await fetchTeamRoster(_model.id, t.id);
+  }
+  if (data) {
+    entry.rows = data.rows;
+    entry.total = data.total;
+    entry.names = await fetchNames(data.rows.map(r => r.u)).catch(() => new Map());
+  }
+  entry.loading = false;
+  if (_container && _teamId === t.id) paint({ keepScroll: true });
 }
 
 /** Probabilità di vincere il torneo, con la posizione fra le squadre. */
@@ -702,6 +794,7 @@ function powerHtml() {
   return `
     <div class="wp-trn-card">
       <p class="wp-trn-hint">${trnT('pickHint')}</p>
+      ${predReportHtml()}
       <h3 class="wp-trn-h3">${trnT(_model.status === 'ended' ? 'powerAll' : 'powerAlive')}</h3>
       <div class="wp-trn-opps">
         ${shown.map((t, i) => `
@@ -715,6 +808,23 @@ function powerHtml() {
           </button>`).join('')}
         ${pool.length > POWER_PREVIEW ? `<button type="button" class="wp-trn-more" data-act="power-all">${_powerAll ? trnT('showLess') : trnT('showAll', { n: pool.length })}</button>` : ''}
       </div>
+    </div>`;
+}
+
+/** Come stanno andando le previsioni registrate PRIMA delle partite
+ *  (server/tournament.js). Solo dal server: il client da solo non può
+ *  sapere cosa avrebbe detto ieri. */
+function predReportHtml() {
+  const pr = _model.predictions;
+  if (!pr?.since) return '';
+  const r = pr.report?.[_metric];
+  const head = `<h3 class="wp-trn-h3">${trnT('predTitle')}</h3>`;
+  if (!r?.n) return `${head}<p class="wp-trn-hint">${trnT('predEmpty', { d: escapeHtml(fmtDate(new Date(pr.since).toISOString())) })}</p>`;
+  return `${head}
+    <p class="wp-trn-predline">${trnT('predLine', { n: r.n, h: r.hits, p: pct(r.hits / r.n) })}</p>
+    <div class="wp-trn-predb">
+      ${r.buckets.map(b => `<div><span>${trnT('predBucket', { p: pct(b.p), w: pct(b.won), n: b.n })}</span>
+        <span class="wp-trn-predbar"><i style="width:${b.p * 100}%"></i><b style="width:${b.won * 100}%"></b></span></div>`).join('')}
     </div>`;
 }
 
@@ -762,16 +872,40 @@ function clearTeam() {
   paint({ keepScroll: true });
 }
 
+/** Simulazione: `key` ("turno:indice") lo vince `teamId`. Ricliccare la
+ *  stessa squadra annulla la scelta. Cambiare il vincitore di una partita
+ *  fa cadere le scelte a valle che non reggono più (la squadra scelta più
+ *  avanti non può più esserci). */
+function forceWinner(key, teamId) {
+  if (_forced.get(key) === teamId) _forced.delete(key);
+  else _forced.set(key, teamId);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [k, t] of _forced) {
+      const [n, idx] = k.split(':').map(Number);
+      const round = _model.rounds.find(r => r.n === n);
+      const m = round?.matches.find(x => x.idx === idx);
+      const a = m && sideTeam(_model, round, m, 'a', _forced)?.id;
+      const d = m && sideTeam(_model, round, m, 'd', _forced)?.id;
+      if (!m || m.wonBy || (t !== a && t !== d)) { _forced.delete(k); changed = true; }
+    }
+  }
+  paint({ keepScroll: true });
+}
+
 function wire() {
   const c = _container;
   c.querySelectorAll('.wp-trn-tab').forEach(btn => btn.addEventListener('click', () => {
     if (btn.dataset.type === _type) return;
     _type = btn.dataset.type;
     _teamId = null; _model = null; _query = ''; _viewId = null; _powerAll = false;
+    _forced = new Map(); _sim = false;
     load();
   }));
   c.querySelector('.wp-trn-select')?.addEventListener('change', (e) => {
     _tid[_type] = e.target.value;
+    _forced = new Map(); _sim = false;
     _teamId = null; _viewId = null; _powerAll = false;
     load();
   });
@@ -790,10 +924,31 @@ function wire() {
   }));
   c.querySelector('[data-act="power-all"]')?.addEventListener('click', () => { _powerAll = !_powerAll; paint({ keepScroll: true }); });
   c.querySelector('[data-act="clear"]')?.addEventListener('click', clearTeam);
+  c.querySelector('[data-act="roster-all"]')?.addEventListener('click', () => {
+    const r = _rosters.get(`${_model.id}:${_teamId}`);
+    if (r) { r.open = !r.open; paint({ keepScroll: true }); }
+  });
+  c.querySelectorAll('[data-player]').forEach(a => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    import('../app/playersOverlay.js').then(m => m.openPlayersView(a.dataset.player)).catch(() => window.open(a.href, '_blank', 'noopener'));
+  }));
   c.querySelector('[data-act="retry"]')?.addEventListener('click', () => load());
 
   // Un solo ascoltatore per tutti i [data-team] (caselle, elenchi, link).
+  c.querySelector('[data-act="sim"]')?.addEventListener('click', () => {
+    _sim = !_sim;
+    trackEvent('tournament-sim', { on: _sim });
+    paint({ keepScroll: true });
+  });
+  c.querySelector('[data-act="sim-reset"]')?.addEventListener('click', () => { _forced = new Map(); paint({ keepScroll: true }); });
+
   c.querySelector('.wp-trn-body')?.addEventListener('click', (e) => {
+    const sim = e.target.closest('[data-sim]');
+    if (sim && _sim) {
+      e.preventDefault();
+      forceWinner(sim.dataset.sim, sim.dataset.team);
+      return;
+    }
     const el = e.target.closest('[data-team]');
     if (!el || el.closest('.wp-trn-results')) return;
     e.preventDefault();

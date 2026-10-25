@@ -47,6 +47,21 @@ import { WARERA_CACHE_BASE } from '../diplomacy/config.js';
 const BUNDLE_TIMEOUT_MS = 8000;
 let _bundleDownUntil = 0;
 
+/** Iscritti di una squadra col danno degli ultimi 7 giorni (`w`) e quello
+ *  fatto nel torneo (`t`), dal server. null se non risponde: chi chiama
+ *  ricade sui dati che ha (percorso diretto) o non mostra la sezione. */
+export async function fetchTeamRoster(tournamentId, teamId) {
+  if (!WARERA_CACHE_BASE) return null;
+  try {
+    const res = await fetch(`${WARERA_CACHE_BASE}/tournament/team?id=${tournamentId}&team=${teamId}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    return Array.isArray(json?.rows) ? json : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchTournamentBundle({ type, id, me }) {
   if (!WARERA_CACHE_BASE || Date.now() < _bundleDownUntil) return null;
   const q = new URLSearchParams({ type });
