@@ -1,0 +1,353 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Tornei (src/tournament/*) — stile
+   ------------------------------------------------------------------
+   Namespace `wp-trn-*`. Superfici e bordi dai token --wp-ov-* di
+   shell.css, accento della sezione da --wp-ov-accent (lime). Caricato
+   via import() da src/tournament/main.js, non pesa sul boot.
+
+   Il tabellone: colonne affiancate, ogni colonna divisa in tante celle
+   uguali quante sono le sue partite (flex: 1), così ogni partita cade
+   esattamente a metà fra le due da cui arriva senza calcolare posizioni.
+   Le linee le disegna main.js in un SVG sopra, DOPO il layout.
+
+   Fasce di difficoltà: dal rosso (molto più forte) al verde (molto più
+   debole), sempre le stesse in pillole e barre.
+   ══════════════════════════════════════════════════════════════ */
+
+#wp-tournament-root {
+  flex: 1;
+  width: 100%;
+  overflow-y: auto;
+  background: transparent;
+  color: var(--wp-ov-text, #e6edf3);
+}
+
+.wp-trn {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 22px 18px 90px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --wp-trn-acc: var(--wp-ov-accent, #a3e635);
+  --wp-trn-surface: var(--wp-ov-surface, #161b22);
+  --wp-trn-border: var(--wp-ov-border, #30363d);
+  --wp-trn-dim: var(--wp-ov-text-dim, #8b949e);
+  --wp-trn-opp: #f0883e;
+  --wp-trn-d1: #f85149;   /* molto più forte */
+  --wp-trn-d2: #f0883e;
+  --wp-trn-d3: #d29922;
+  --wp-trn-d4: #57ab5a;
+  --wp-trn-d5: #3fb950;   /* molto più debole */
+  --wp-trn-col: 200px;
+  --wp-trn-gap: 30px;
+}
+body.light-theme .wp-trn {
+  --wp-trn-opp: #bc4c00;
+  --wp-trn-d1: #cf222e;
+  --wp-trn-d2: #bc4c00;
+  --wp-trn-d3: #9a6700;
+  --wp-trn-d4: #2c7a3a;
+  --wp-trn-d5: #1a7f37;
+}
+
+.wp-trn-head { margin-bottom: 10px; }
+.wp-trn-title { margin: 0; font-size: clamp(22px, 3.4vw, 30px); font-weight: 800; letter-spacing: .01em; }
+.wp-trn-sub { margin: 4px 0 0; font-size: 12.5px; color: var(--wp-trn-dim); }
+.wp-trn-loading, .wp-trn-empty { color: var(--wp-trn-dim); font-size: 13px; padding: 26px 0; }
+
+/* ── Schede ─────────────────────────────────────────────────── */
+.wp-trn-tabs { display: flex; gap: 6px; margin: 14px 0 14px; border-bottom: 1px solid var(--wp-trn-border); }
+.wp-trn-tab {
+  appearance: none; border: none; background: transparent; color: var(--wp-trn-dim);
+  font: inherit; font-size: 13.5px; font-weight: 600; padding: 9px 14px; cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s, border-color .15s;
+}
+.wp-trn-tab:hover { color: var(--wp-ov-text, #e6edf3); }
+.wp-trn-tab.active { color: var(--wp-trn-acc); border-bottom-color: var(--wp-trn-acc); }
+
+/* ── Testata del torneo ─────────────────────────────────────── */
+.wp-trn-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
+.wp-trn-select {
+  padding: 7px 10px; border-radius: 8px; border: 1px solid var(--wp-trn-border);
+  background: var(--wp-trn-surface); color: inherit; font: inherit; font-size: 12.5px; max-width: 100%;
+}
+.wp-trn-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px;
+  border: 1px solid var(--wp-trn-border); font: inherit; font-size: 11.5px; font-weight: 600;
+  color: var(--wp-trn-dim); background: transparent;
+}
+.wp-trn-chip.st-active { color: var(--wp-trn-acc); border-color: color-mix(in srgb, var(--wp-trn-acc) 50%, transparent); }
+.wp-trn-chip-win { cursor: pointer; color: var(--wp-ov-text, #e6edf3); }
+.wp-trn-chip-win:hover { border-color: var(--wp-trn-acc); }
+.wp-trn-livedot {
+  width: 7px; height: 7px; border-radius: 50%; background: #f85149; flex-shrink: 0;
+  box-shadow: 0 0 0 0 rgba(248, 81, 73, .6); animation: wp-trn-pulse 1.8s infinite;
+}
+@keyframes wp-trn-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(248, 81, 73, .55); }
+  70% { box-shadow: 0 0 0 6px rgba(248, 81, 73, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(248, 81, 73, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .wp-trn-livedot { animation: none; } }
+
+.wp-trn-notice {
+  margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; font-size: 11.5px; line-height: 1.45;
+  background: rgba(139, 148, 158, .09); border: 1px solid var(--wp-trn-border); color: var(--wp-trn-dim);
+}
+.wp-trn-notice.warn { background: rgba(227, 179, 65, .1); border-color: rgba(227, 179, 65, .32); color: #e3b341; }
+body.light-theme .wp-trn-notice.warn { color: #8a6410; }
+
+/* ── Barra strumenti ────────────────────────────────────────── */
+.wp-trn-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 0 0 14px; }
+.wp-trn-search-wrap { position: relative; flex: 1 1 240px; max-width: 360px; min-width: 0; }
+.wp-trn-search {
+  width: 100%; box-sizing: border-box; padding: 8px 12px; border-radius: 8px;
+  border: 1px solid var(--wp-trn-border); background: var(--wp-trn-surface); color: inherit; font: inherit; font-size: 13px;
+}
+.wp-trn-search:focus { outline: none; border-color: var(--wp-trn-acc); }
+.wp-trn-results {
+  position: absolute; z-index: 5; top: calc(100% + 4px); left: 0; right: 0; padding: 4px;
+  background: var(--wp-trn-surface); border: 1px solid var(--wp-trn-border); border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+}
+.wp-trn-res {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: none; border-radius: 6px;
+  background: transparent; color: inherit; font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+}
+.wp-trn-res span:not([class]) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-trn-res em { font-style: normal; color: var(--wp-trn-dim); font-variant-numeric: tabular-nums; }
+.wp-trn-res:hover { background: color-mix(in srgb, var(--wp-trn-acc) 12%, transparent); }
+.wp-trn-res.none { color: var(--wp-trn-dim); cursor: default; }
+
+.wp-trn-btn {
+  appearance: none; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--wp-trn-border);
+  background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.wp-trn-btn:hover, .wp-trn-btn.active { border-color: var(--wp-trn-acc); color: var(--wp-trn-acc); }
+
+.wp-trn-seg { display: inline-flex; align-items: center; gap: 4px; }
+.wp-trn-lbl { font-size: 11.5px; color: var(--wp-trn-dim); font-weight: 600; margin-right: 4px; }
+.wp-trn-segbtn {
+  appearance: none; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--wp-trn-border);
+  background: transparent; color: var(--wp-trn-dim); font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer;
+}
+.wp-trn-segbtn:hover { color: var(--wp-ov-text, #e6edf3); }
+.wp-trn-segbtn.active {
+  color: var(--wp-trn-acc); border-color: var(--wp-trn-acc);
+  background: color-mix(in srgb, var(--wp-trn-acc) 12%, transparent);
+}
+
+/* ── Griglia: tabellone + scheda ────────────────────────────── */
+.wp-trn-grid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 18px; align-items: start; }
+@media (max-width: 1099px) { .wp-trn-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.wp-trn-sechead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 10px; }
+.wp-trn-h2 { margin: 0; font-size: 15px; font-weight: 700; }
+.wp-trn-h3 { margin: 16px 0 8px; font-size: 13px; font-weight: 700; color: var(--wp-trn-dim); text-transform: uppercase; letter-spacing: .04em; }
+.wp-trn-views { display: flex; flex-wrap: wrap; gap: 5px; }
+.wp-trn-vchip {
+  appearance: none; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--wp-trn-border);
+  background: transparent; color: var(--wp-trn-dim); font: inherit; font-size: 11px; font-weight: 600; cursor: pointer;
+}
+.wp-trn-vchip:hover { color: var(--wp-ov-text, #e6edf3); }
+.wp-trn-vchip.active { color: var(--wp-trn-acc); border-color: var(--wp-trn-acc); background: color-mix(in srgb, var(--wp-trn-acc) 12%, transparent); }
+.wp-trn-vchip.mine:not(.active) { border-style: dashed; border-color: var(--wp-trn-acc); }
+
+/* ── Tabellone ──────────────────────────────────────────────── */
+.wp-trn-bracket-scroll {
+  overflow-x: auto; padding-bottom: 6px;
+  scrollbar-color: color-mix(in srgb, var(--wp-trn-acc) 45%, transparent) transparent;
+  scrollbar-width: thin;
+}
+.wp-trn-bracket-scroll::-webkit-scrollbar { height: 8px; }
+.wp-trn-bracket-scroll::-webkit-scrollbar-track { background: transparent; }
+.wp-trn-bracket-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--wp-trn-acc) 45%, transparent); border-radius: 8px; }
+.wp-trn-bracket-scroll::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--wp-trn-acc) 75%, transparent); }
+
+.wp-trn-bracket { position: relative; display: flex; gap: var(--wp-trn-gap); width: max-content; }
+/* Poche colonne (torneo delle nazioni): c'è spazio, e le coalizioni hanno
+   bandiere e nomi lunghi. */
+.wp-trn-bracket.wide { --wp-trn-col: 250px; }
+.wp-trn-lines { position: absolute; top: 0; left: 0; pointer-events: none; overflow: visible; }
+.wp-trn-lines path { fill: none; stroke: var(--wp-trn-border); stroke-width: 1.5; }
+.wp-trn-lines path.hot { stroke: var(--wp-trn-acc); stroke-width: 2.5; }
+
+.wp-trn-col { width: var(--wp-trn-col); display: flex; flex-direction: column; }
+.wp-trn-colhead {
+  font-size: 11px; font-weight: 700; color: var(--wp-trn-dim); text-transform: uppercase; letter-spacing: .05em;
+  padding: 0 2px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wp-trn-cells {
+  display: flex; flex-direction: column; flex: 1;
+  /* altezza = righe del primo turno × altezza di una partita */
+  min-height: calc(var(--wp-trn-rows) * 74px);
+}
+.wp-trn-cell { flex: 1; display: flex; align-items: center; padding: 4px 0; }
+
+.wp-trn-match {
+  width: 100%; position: relative; border-radius: 9px; overflow: hidden;
+  border: 1px solid var(--wp-trn-border); background: var(--wp-trn-surface);
+}
+.wp-trn-match.st-live { border-color: rgba(248, 81, 73, .55); }
+.wp-trn-match.hot { border-color: var(--wp-trn-acc); box-shadow: 0 0 0 1px var(--wp-trn-acc); }
+.wp-trn-mhead {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 2px 6px 0 7px; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #f85149;
+  min-height: 14px;
+}
+.wp-trn-mlive { display: inline-flex; align-items: center; gap: 5px; }
+.wp-trn-mlive .wp-trn-livedot { width: 6px; height: 6px; }
+.wp-trn-blink { margin-left: auto; color: var(--wp-trn-dim); text-decoration: none; font-size: 11px; line-height: 1; }
+.wp-trn-blink:hover { color: var(--wp-trn-acc); }
+
+.wp-trn-slot {
+  display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box; min-height: 27px;
+  padding: 4px 7px; border: none; background: transparent; color: inherit; font: inherit; font-size: 12px;
+  text-align: left; cursor: pointer; position: relative;
+}
+.wp-trn-slot + .wp-trn-slot { border-top: 1px solid var(--wp-trn-border); }
+button.wp-trn-slot:hover { background: color-mix(in srgb, var(--wp-trn-acc) 9%, transparent); }
+.wp-trn-sname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-trn-sval, .wp-trn-sc { font-size: 10.5px; color: var(--wp-trn-dim); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.wp-trn-sc { min-width: 12px; text-align: right; font-weight: 700; font-size: 12px; }
+.wp-trn-sc.lead { color: var(--wp-ov-text, #e6edf3); }
+.wp-trn-slot.won .wp-trn-sname { font-weight: 700; }
+.wp-trn-slot.lost { opacity: .5; }
+.wp-trn-slot.lost .wp-trn-sname { text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); }
+.wp-trn-slot.me { background: color-mix(in srgb, var(--wp-trn-acc) 20%, transparent); opacity: 1; }
+.wp-trn-slot.me::before, .wp-trn-slot.opp::before, .wp-trn-slot.me-poss::before, .wp-trn-slot.opp-poss::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+}
+.wp-trn-slot.me::before, .wp-trn-slot.me-poss::before { background: var(--wp-trn-acc); }
+.wp-trn-slot.opp::before, .wp-trn-slot.opp-poss::before { background: var(--wp-trn-opp); }
+.wp-trn-slot.opp:not(.me) { background: color-mix(in srgb, var(--wp-trn-opp) 10%, transparent); }
+.wp-trn-slot.poss { cursor: default; flex-wrap: wrap; gap: 2px 6px; font-size: 11px; }
+.wp-trn-pn { color: var(--wp-trn-dim); font-weight: 600; }
+.wp-trn-fav {
+  appearance: none; border: none; background: transparent; padding: 0; color: inherit; font: inherit; font-size: 11px;
+  cursor: pointer; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wp-trn-fav:hover { color: var(--wp-trn-acc); }
+.wp-trn-slot.empty { cursor: default; color: var(--wp-trn-dim); font-style: italic; }
+.wp-trn-q {
+  font-size: 8.5px; font-weight: 800; padding: 0 3px; border-radius: 3px; flex-shrink: 0;
+  color: var(--wp-trn-dim); border: 1px solid var(--wp-trn-border);
+}
+
+/* Avatar / bandiere */
+.wp-trn-av {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  overflow: hidden; border-radius: 5px; background: color-mix(in srgb, var(--wp-trn-acc) 18%, var(--wp-trn-surface));
+}
+.wp-trn-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.wp-trn-av .wp-mu-avatar-ph { font-size: 10px; font-weight: 800; color: var(--wp-ov-text, #e6edf3); }
+.wp-trn-av-sm { width: 18px; height: 18px; }
+.wp-trn-av-lg { width: 46px; height: 46px; border-radius: 10px; }
+.wp-trn-av-lg .wp-mu-avatar-ph { font-size: 20px; }
+.wp-trn-flags { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.wp-trn-flag { width: 18px; height: 13px; border-radius: 2px; object-fit: cover; flex-shrink: 0; display: inline-block; }
+.wp-trn-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.wp-trn-cardhead .wp-trn-flags { flex-wrap: wrap; max-width: 92px; }
+.wp-trn-cardhead .wp-trn-dot { width: 12px; height: 12px; }
+
+/* ── Scheda squadra / classifica ────────────────────────────── */
+.wp-trn-side { position: sticky; top: 12px; }
+/* Su una colonna sola la scheda va PRIMA del tabellone: un settore è alto
+   più di mille pixel, e la risposta (chi può incontrare) finirebbe in
+   fondo. Un clic nel tabellone la riporta in vista (selectTeam). */
+@media (max-width: 1099px) { .wp-trn-side { position: static; order: -1; } }
+.wp-trn-card {
+  border: 1px solid var(--wp-trn-border); background: var(--wp-trn-surface); border-radius: 12px; padding: 14px;
+}
+.wp-trn-hint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--wp-trn-dim); }
+.wp-trn-hint + .wp-trn-h3 { margin-top: 12px; }
+.wp-trn-cardhead { display: flex; align-items: center; gap: 12px; }
+.wp-trn-cardtitle { flex: 1; min-width: 0; }
+.wp-trn-cardname { font-size: 17px; font-weight: 800; overflow-wrap: anywhere; }
+.wp-trn-cardsub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 4px; font-size: 11.5px; color: var(--wp-trn-dim); }
+.wp-trn-home { display: inline-flex; align-items: center; gap: 5px; }
+.wp-trn-x {
+  appearance: none; border: 1px solid var(--wp-trn-border); background: transparent; color: var(--wp-trn-dim);
+  width: 28px; height: 28px; border-radius: 8px; cursor: pointer; font-size: 13px; flex-shrink: 0;
+}
+.wp-trn-x:hover { color: var(--wp-trn-acc); border-color: var(--wp-trn-acc); }
+.wp-trn-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; border: 1px solid currentColor; }
+.wp-trn-pill.in { color: var(--wp-trn-acc); }
+.wp-trn-pill.out { color: var(--wp-trn-dim); }
+.wp-trn-pill.win { color: #e3b341; }
+.wp-trn-natlist { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 10px 0 0; font-size: 11.5px; color: var(--wp-trn-dim); }
+.wp-trn-nat { display: inline-flex; align-items: center; gap: 5px; }
+
+.wp-trn-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.wp-trn-stat { border: 1px solid var(--wp-trn-border); border-radius: 9px; padding: 8px 10px; min-width: 0; }
+.wp-trn-stat.active { border-color: var(--wp-trn-acc); }
+.wp-trn-statl { font-size: 10.5px; color: var(--wp-trn-dim); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.wp-trn-statv { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.wp-trn-statn { font-size: 10.5px; color: var(--wp-trn-dim); margin-top: 2px; line-height: 1.35; }
+.wp-trn-rank { color: var(--wp-trn-acc); font-weight: 700; }
+
+.wp-trn-path { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wp-trn-step {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 8px 10px; border-radius: 9px;
+  border: 1px solid var(--wp-trn-border); font-size: 12.5px;
+}
+.wp-trn-step.done.won { border-left: 3px solid var(--wp-trn-d5); }
+.wp-trn-step.done.lost { border-left: 3px solid var(--wp-trn-d1); }
+.wp-trn-step.live { border-color: rgba(248, 81, 73, .55); }
+.wp-trn-step.next { border-color: var(--wp-trn-acc); }
+.wp-trn-stepr { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--wp-trn-dim); min-width: 92px; }
+.wp-trn-stept { flex: 1; min-width: 0; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.wp-trn-stept em { color: var(--wp-trn-dim); font-style: normal; }
+.wp-trn-stepsc { font-weight: 800; font-variant-numeric: tabular-nums; }
+.wp-trn-step .wp-trn-opps { flex-basis: 100%; }
+.wp-trn-tlink {
+  appearance: none; border: none; background: transparent; padding: 0; color: inherit; font: inherit; font-weight: 700;
+  cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 2px;
+}
+.wp-trn-tlink:hover { color: var(--wp-trn-acc); }
+
+.wp-trn-diff {
+  display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 700; white-space: nowrap;
+  border: 1px solid currentColor; background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.wp-trn-diff.d-muchHarder { color: var(--wp-trn-d1); }
+.wp-trn-diff.d-harder { color: var(--wp-trn-d2); }
+.wp-trn-diff.d-even { color: var(--wp-trn-d3); }
+.wp-trn-diff.d-easier { color: var(--wp-trn-d4); }
+.wp-trn-diff.d-muchEasier { color: var(--wp-trn-d5); }
+
+.wp-trn-opps { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+/* Riga avversario: numero, stemma, nome, valore, fascia; la barra sotto,
+   a tutta riga dal nome in poi — accanto al nome lo schiacciava a 50px
+   nella scheda da 400. */
+.wp-trn-opp {
+  display: grid; grid-template-columns: 20px auto minmax(0, 1fr) 48px auto; align-items: center; gap: 3px 7px;
+  width: 100%; padding: 5px 6px; border: none; border-radius: 7px; background: transparent; color: inherit;
+  font: inherit; font-size: 12px; text-align: left; cursor: pointer;
+}
+.wp-trn-opp .wp-trn-oppbar { grid-row: 2; grid-column: 3 / -1; height: 4px; }
+.wp-trn-card > .wp-trn-opps .wp-trn-opp { grid-template-columns: 20px auto minmax(0, 1fr) 80px 48px; }
+.wp-trn-card > .wp-trn-opps .wp-trn-opp .wp-trn-oppbar { grid-row: auto; grid-column: auto; height: 6px; }
+.wp-trn-opp:hover { background: color-mix(in srgb, var(--wp-trn-acc) 10%, transparent); }
+.wp-trn-opp.win .wp-trn-oppn { font-weight: 800; }
+.wp-trn-oppi { color: var(--wp-trn-dim); font-size: 10.5px; text-align: right; font-variant-numeric: tabular-nums; }
+.wp-trn-oppn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-trn-oppbar { position: relative; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--wp-trn-dim) 22%, transparent); }
+.wp-trn-oppbar > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--wp-trn-acc); }
+.wp-trn-oppbar > i { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--wp-ov-text, #e6edf3); border-radius: 1px; }
+.wp-trn-oppv { font-size: 11px; color: var(--wp-trn-dim); text-align: right; font-variant-numeric: tabular-nums; }
+.wp-trn-more {
+  appearance: none; align-self: flex-start; margin-top: 4px; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--wp-trn-border); background: transparent; color: var(--wp-trn-dim); font: inherit; font-size: 11px; cursor: pointer;
+}
+.wp-trn-more:hover { color: var(--wp-trn-acc); border-color: var(--wp-trn-acc); }
+
+/* ── Telefono ───────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .wp-trn { padding: 16px 12px 90px; --wp-trn-col: 168px; --wp-trn-gap: 22px; }
+  .wp-trn-bracket.wide { --wp-trn-col: 200px; }
+  .wp-trn-search-wrap { max-width: none; flex-basis: 100%; }
+  .wp-trn-stepr { min-width: 0; flex-basis: 100%; }
+  .wp-trn-opp { grid-template-columns: 18px auto minmax(0, 1fr) 44px auto; }
+  .wp-trn-card > .wp-trn-opps .wp-trn-opp { grid-template-columns: 18px auto minmax(0, 1fr) 48px; }
+  .wp-trn-card > .wp-trn-opps .wp-trn-opp .wp-trn-oppbar { grid-row: 2; grid-column: 3 / -1; height: 4px; }
+}

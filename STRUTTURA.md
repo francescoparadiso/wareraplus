@@ -727,6 +727,30 @@ wareraPlus/
     │   │                  legenda a interruttori (localStorage wp_btl_tl_hidden):
     │   │                  nei soldi voce × lato, colore = lato, tratto = voce.
     │   ├── main.js, battleList.js, warExpenses.js, i18n.js (9 lingue)
+    ├── tournament/               ← NUOVO (2026-10-25) — Tornei: voce di Approfondimenti,
+    │   │                            schede Unità militari / Nazioni, ognuna dal torneo
+    │   │                            più recente del suo tipo (menù per i precedenti).
+    │   ├── api.js                ← tutto PUBBLICO su api6: tournament.getManyPaginated
+    │   │                          (tabellone incluso, il filtro `type` è ignorato),
+    │   │                          tournamentTeam.getByTournamentId (iscritti, danno nel
+    │   │                          torneo), battle.getById per i punteggi in corso. Il
+    │   │                          danno settimanale per giocatore è la classifica di
+    │   │                          Giocatori (players/api.js fetchLeaderboard): stessa
+    │   │                          cache di sessione, nessuna fetch nuova.
+    │   ├── model.js              ← tabellone a livelli (la qualificazione NON è una
+    │   │                          colonna), settori + fase finale oltre 5 livelli,
+    │   │                          percorso di una squadra e possibili avversari letti
+    │   │                          da possible*TeamIds (li aggiorna il gioco). Forza =
+    │   │                          danno settimanale dei soli ISCRITTI: potenziale
+    │   │                          (somma) o media per chi ha colpito. ⚠️ settimana in
+    │   │                          corso: riparte da zero, e su un torneo concluso non
+    │   │                          è quella in cui si è giocato (la vista lo dice).
+    │   ├── main.js               ← disegno: tabellone con linee SVG dopo il layout,
+    │   │                          scheda squadra (percorso, avversari dal più duro con
+    │   │                          fascia di difficoltà), classifica di forza, ricerca,
+    │   │                          "La mia unità" da we_my_player. Link ?section=
+    │   │                          tournament&tab=country&team=<tournamentTeamId>.
+    │   └── i18n.js               ← dizionario locale (9 lingue)
     ├── guide/                    ← NUOVO — Guida "Come si usa": SOLO testo statico
     │   ├── main.js                  (zero fetch, zero stato) + i18n.js a 9 lingue.
     │   └── i18n.js                  È la vista più leggera dell'app, deve restarlo.
@@ -820,6 +844,8 @@ wareraPlus/
     │   ├── battlesOverlay.js   ← apre Battaglie (archivio + spese di guerra) e alla
     │   │                         chiusura ferma il giro delle battaglie in corso
     │   ├── accordiOverlay.js   ← apre Accordi (src/accordi/*), voce in Approfondimenti
+    │   ├── tournamentOverlay.js ← apre Tornei e alla chiusura ferma il giro di
+    │   │                         aggiornamento del torneo in corso (3 minuti)
     │   ├── visitorCounter.js   ← NUOVO — pill "N visite · ● M" in #wp-bottom-credits,
     │   │                         accanto a Ko-fi e all'autore. Due numeri diversi: le
     │   │                         VISITE (cumulative) da /visits sul server di cache,

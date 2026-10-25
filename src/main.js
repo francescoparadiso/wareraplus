@@ -44,6 +44,7 @@ import { initNationsOverlay, openNationsView } from './app/nationsOverlay.js';
 import { initPlayersOverlay, openPlayersView } from './app/playersOverlay.js';
 import { initBattlesOverlay, openBattlesView } from './app/battlesOverlay.js';
 import { initAccordiOverlay, openAccordiView } from './app/accordiOverlay.js';
+import { initTournamentOverlay, openTournamentView } from './app/tournamentOverlay.js';
 import { initGuideOverlay, openGuideView } from './app/guideOverlay.js';
 import { initPrivateOverlay, openPrivateView } from './app/privateOverlay.js';
 import { takeReloadIntent } from './shared/lazyModule.js';
@@ -198,6 +199,7 @@ async function handleIncomingDeepLink() {
     players: () => openPlayersView(params.get('player') || undefined, params.get('vs') || undefined),
     battles: () => openBattlesView(params.get('battle') || undefined),
     accordi: () => openAccordiView(),
+    tournament: () => openTournamentView({ type: params.get('tab') || undefined, team: params.get('team') || undefined }),
     guide: () => openGuideView(),
     private: () => openPrivateView(),
     alliances: () => document.getElementById('bloc-stats-btn')?.click(),
@@ -228,6 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initPlayersOverlay();
   initBattlesOverlay();
   initAccordiOverlay();
+  initTournamentOverlay();
   initGuideOverlay();
   initPrivateOverlay();
   applyTranslations();
@@ -303,6 +306,7 @@ function restoreAfterChunkReload() {
     // da zero. 'mu-wealth' riapre la vista unita', che e' dove sta.
     battles: () => openBattlesView(),
     accordi: () => openAccordiView(),
+    tournament: () => openTournamentView(),
     guide: () => openGuideView(),
     private: () => openPrivateView(),
     'mu-wealth': () => openMuView(),

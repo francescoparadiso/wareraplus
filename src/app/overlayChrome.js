@@ -64,6 +64,9 @@ export const OVERLAY_TINTS = {
   // perché è quello che la sezione ci mette)
   accordi:  { rgbDark: '0,212,255',   rgbDark2: '125,148,173',
               rgbLight: '0,119,163',  rgbLight2: '71,94,122' },
+  // lime → oro (Tornei: la gara, tinta che nessun'altra sezione usa)
+  tournament: { rgbDark: '163,230,53', rgbDark2: '250,204,21',
+              rgbLight: '77,124,15',  rgbLight2: '161,98,7' },
 };
 
 const _stoppers = new WeakMap();
