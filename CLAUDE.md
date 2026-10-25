@@ -264,7 +264,7 @@ serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`
 `/ticker` + `/ticker/summary`,
 `/region-history/{at,range,events,contested,war-intensity}`, `/alliances`,
 `/battles`, `/elections`, `/parties`, `/users-lite`, `/credit-profiles`,
-`/mu-damage-history`,
+`/mu-damage-history`, `/tournament`,
 `/visits`, `/health`.
 
 Espone inoltre **`/trpc/*`**: un proxy passthrough verso `api2.warera.io`

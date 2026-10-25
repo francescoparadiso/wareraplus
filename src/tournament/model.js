@@ -48,8 +48,9 @@ export const METRICS = ['potential', 'average'];
  */
 export function buildModel(t, rawTeams, src) {
   const type = t.type === 'country' ? 'country' : 'mu';
+  const weeklyOk = src.weeklyOk ?? !!src.weekly;
   const teams = new Map();
-  for (const raw of rawTeams || []) teams.set(raw._id, buildTeam(raw, type, src));
+  for (const raw of rawTeams || []) teams.set(raw._id, buildTeam(raw, type, { ...src, weeklyOk }));
 
   const roundNums = Object.keys(t.rounds || {}).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
   const rounds = roundNums.map(n => {
@@ -98,9 +99,10 @@ export function buildModel(t, rawTeams, src) {
     roundsCount: t.roundsCount ?? rounds.length,
     maxRarity: t.maxRarity || null,
     winner: t.winnerTournamentTeam || null,
-    registeredCount: (type === 'mu' ? t.registered?.mus : t.registered?.countries)?.length ?? 0,
+    registeredCount: t.registeredCount ?? (type === 'mu' ? t.registered?.mus : t.registered?.countries)?.length ?? 0,
     autoQualified: new Set(t.autoQualify1stRound || []),
-    weeklyOk: !!src.weekly,
+    weeklyOk,
+    myTeam: src.myTeam || null,      // dal server, quando gli iscritti non arrivano al client
     teams,
     rounds,
     levels,
@@ -108,14 +110,22 @@ export function buildModel(t, rawTeams, src) {
     qual,
   };
   rankTeams(model);
+  calibrate(model);
   return model;
 }
 
-function buildTeam(raw, type, { weekly, muDir, nations }) {
-  const entityIds = type === 'mu' ? (raw.mus || []) : (raw.countries || []);
-  const roster = raw.participants || [];
+/** Una squadra. `raw` è o la squadra del gioco (con `participants`, e la
+ *  forza si somma qui) o la riga già calcolata da /tournament del server
+ *  (`potential`, `fighters`, `roster` numerico, nome e stemma dell'unità). */
+function buildTeam(raw, type, { weekly, weeklyOk, muDir, nations }) {
+  const entityIds = [...(type === 'mu' ? (raw.mus || []) : (raw.countries || []))];
+  const pre = typeof raw.potential === 'number';
+  const roster = pre ? [] : (raw.participants || []);
   let potential = 0, fighters = 0;
-  if (weekly) {
+  if (pre) {
+    potential = raw.potential;
+    fighters = raw.fighters || 0;
+  } else if (weekly) {
     for (const u of roster) {
       const v = weekly.get(u) || 0;
       potential += v;
@@ -127,7 +137,13 @@ function buildTeam(raw, type, { weekly, muDir, nations }) {
   // contorno, e ripiego se la classifica dei giocatori manca.
   let entityWeekly = 0, members = 0;
   let name = '', avatarUrl = null, homeCountry = null;
-  if (type === 'mu') {
+  if (type === 'mu' && pre && raw.name) {
+    name = raw.name;
+    avatarUrl = raw.avatarUrl || null;
+    homeCountry = raw.country || null;
+    entityWeekly = raw.muWeekly || 0;
+    members = raw.members || 0;
+  } else if (type === 'mu') {
     const mu = muDir.get(entityIds[0]);
     if (mu) {
       name = mu.name || '';
@@ -145,9 +161,10 @@ function buildTeam(raw, type, { weekly, muDir, nations }) {
     for (const c of entityIds) entityWeekly += nationWeekly(nations, c);
     if (entityIds.length === 1) name = countryName(entityIds[0]);
   }
-  if (!weekly) {
+  const rosterCount = pre ? (raw.roster || 0) : roster.length;
+  if (!weeklyOk) {
     potential = entityWeekly;
-    fighters = type === 'mu' ? members : roster.length;
+    fighters = type === 'mu' ? members : rosterCount;
   }
 
   return {
@@ -159,7 +176,7 @@ function buildTeam(raw, type, { weekly, muDir, nations }) {
     avatarUrl,
     homeCountry,
     color: raw.colorScheme || null,
-    roster: roster.length,
+    roster: rosterCount,
     participants: roster,
     fighters,
     potential,
@@ -328,19 +345,192 @@ export function teamPath(model, teamId) {
   return out;
 }
 
-/* ── Difficoltà ─────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════
+   Probabilità di vittoria
+   ------------------------------------------------------------------
+   Richiesta dell'utente: una percentuale di possibile vittoria sulle
+   varie unità. Il modello è il più semplice che regge ai dati:
 
-/** Rapporto avversario / squadra scelta → fascia. Le soglie sono larghe
- *  apposta: il danno di una settimana è una stima, e "alla pari" fra 0,85
- *  e 1,18 dice la cosa giusta più spesso di una cifra secca. */
-export function difficulty(opp, me, metric) {
-  const a = opp?.[metric] || 0;
-  const b = me?.[metric] || 0;
-  if (!b) return a ? 'muchHarder' : 'even';
-  const r = a / b;
-  if (r >= 1.6) return 'muchHarder';
-  if (r >= 1.18) return 'harder';
-  if (r > 0.85) return 'even';
-  if (r > 0.6) return 'easier';
+       P(A batte B) = a^k / (a^k + b^k)
+
+   con a, b la forza delle due squadre (potenziale o media). k si TARA
+   sulle partite già finite del torneo stesso, per massima verosimiglianza:
+   misurato sul torneo MU del 23 ottobre 2026 (329 partite di turno 1 e 2),
+   k = 0,95 sul potenziale, e il favorito ha vinto 250 volte su 329 (76%).
+   La taratura regge: dove il modello diceva 96% le vittorie vere erano il
+   96%, dove diceva 55% erano il 54%. Sulla media va peggio (73%, k 0,85).
+   Sotto le 30 partite giocate (i tornei delle nazioni ne hanno 7 in tutto)
+   k non si stima: si usa quello misurato lì, e la vista lo dice.
+
+   ⚠️ Il danno settimanale dei giocatori comprende i colpi del torneo
+   stesso: chi ha vinto ha giocato una partita in più. Pesa poco (7,6 M
+   nel torneo contro 335 M di settimanale per la seconda unità più forte),
+   ma è il motivo per cui la taratura è un po' ottimista.
+
+   Una partita in corso tiene conto del punteggio: la probabilità della
+   battaglia si scompone in quella di un round (q, tale che vincere `toWin`
+   round prima dell'altro faccia P), e si riparte dal punteggio vero.
+
+   Lungo il tabellone le probabilità si PROPAGANO: chi occupa un posto non
+   ancora deciso è la distribuzione dei vincitori della partita prima.
+   Le due metà di una partita vengono da rami disgiunti, quindi la
+   probabilità di incontrarsi è il prodotto delle due di arrivarci.
+   ══════════════════════════════════════════════════════════════ */
+
+export const DEFAULT_K = { potential: 0.95, average: 0.85 };
+const MIN_GAMES = 30;
+const FLOOR = 1e3;   // una squadra a zero non deve dare 0% o 100% secchi
+
+function finishedGames(model) {
+  const out = [];
+  for (const r of model.rounds) {
+    for (const m of r.matches) {
+      if (!m.wonBy || !m.a || !m.d) continue;
+      const a = model.teams.get(m.a), d = model.teams.get(m.d);
+      if (a && d) out.push({ a, d, aWon: m.wonBy === 'attacker' });
+    }
+  }
+  return out;
+}
+
+function calibrate(model) {
+  const games = finishedGames(model);
+  model.k = {};
+  model.calib = {};
+  for (const metric of METRICS) {
+    const hits = games.filter(g => (g.a[metric] > g.d[metric]) === g.aWon).length;
+    let k = DEFAULT_K[metric];
+    const own = games.length >= MIN_GAMES;
+    if (own) {
+      let best = -Infinity;
+      for (let c = 0.2; c <= 3.001; c += 0.05) {
+        let ll = 0;
+        for (const g of games) {
+          const p = pBeat(g.a[metric], g.d[metric], c);
+          ll += Math.log(Math.min(Math.max(g.aWon ? p : 1 - p, 1e-6), 1 - 1e-6));
+        }
+        if (ll > best) { best = ll; k = Math.round(c * 100) / 100; }
+      }
+    }
+    model.k[metric] = k;
+    model.calib[metric] = { n: games.length, hits, own };
+  }
+}
+
+function pBeat(a, b, k) {
+  return 1 / (1 + Math.pow(Math.max(b || 0, FLOOR) / Math.max(a || 0, FLOOR), k));
+}
+
+/** Probabilità che `a` batta `b` in una partita secca. */
+export function winProb(model, a, b, metric) {
+  if (!a || !b) return null;
+  return pBeat(a[metric], b[metric], model.k?.[metric] ?? DEFAULT_K[metric]);
+}
+
+/** Fascia di difficoltà dalla probabilità di vincere: sempre la stessa
+ *  scala in pillole, barre e bordi. */
+export function difficultyOf(p) {
+  if (p == null) return 'even';
+  if (p < 0.2) return 'muchHarder';
+  if (p < 0.4) return 'harder';
+  if (p < 0.6) return 'even';
+  if (p < 0.8) return 'easier';
   return 'muchEasier';
+}
+
+/** P di vincere la serie dato il punteggio: `p` è la probabilità della
+ *  battaglia intera da 0–0, `toWin` i round che servono. */
+function seriesFromScore(p, toWin, a, d) {
+  if (a >= toWin) return 1;
+  if (d >= toWin) return 0;
+  const from = (q, x, y, memo = new Map()) => {
+    if (x >= toWin) return 1;
+    if (y >= toWin) return 0;
+    const key = x * 100 + y;
+    if (memo.has(key)) return memo.get(key);
+    const v = q * from(q, x + 1, y, memo) + (1 - q) * from(q, x, y + 1, memo);
+    memo.set(key, v);
+    return v;
+  };
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (from(mid, 0, 0) < p) lo = mid; else hi = mid;
+  }
+  return from((lo + hi) / 2, a, d);
+}
+
+/**
+ * Probabilità lungo tutto il tabellone per la misura scelta.
+ * `scores` = Map battleId → { a, d, toWin } delle partite in corso.
+ * Ritorna:
+ *   slot(round, match, side) → Map squadra → P di trovarsi in quel posto
+ *   champion → Map squadra → P di vincere il torneo
+ *   match(round, match) → P che vinca l'attaccante (null se già finita)
+ */
+export function bracketOdds(model, metric, scores = new Map()) {
+  const k = model.k?.[metric] ?? DEFAULT_K[metric];
+  const byN = new Map(model.rounds.map(r => [r.n, { r, byIdx: new Map(r.matches.map(m => [m.idx, m])) }]));
+  const slots = new Map();
+  const wins = new Map();
+
+  const pair = (m, ta, td) => {
+    const base = pBeat(model.teams.get(ta)?.[metric], model.teams.get(td)?.[metric], k);
+    const s = m.battle && m.a === ta && m.d === td ? scores.get(m.battle) : null;
+    return s ? seriesFromScore(base, s.toWin || 2, s.a || 0, s.d || 0) : base;
+  };
+
+  function slot(round, m, side) {
+    const key = `${round.n}:${m.idx}:${side}`;
+    if (slots.has(key)) return slots.get(key);
+    let dist;
+    const id = m[side] || (m[`p${side}`].length === 1 ? m[`p${side}`][0] : null);
+    const pred = m.pred?.[side === 'a' ? 'attacker' : 'defender'];
+    const prev = byN.get(round.n - 1);
+    if (id) dist = new Map([[id, 1]]);
+    else if (pred != null && prev?.byIdx.has(pred)) dist = winners(prev.r, prev.byIdx.get(pred));
+    else {
+      const poss = m[`p${side}`];
+      dist = new Map(poss.map(t => [t, 1 / poss.length]));
+    }
+    slots.set(key, dist);
+    return dist;
+  }
+
+  function winners(round, m) {
+    const key = `${round.n}:${m.idx}`;
+    if (wins.has(key)) return wins.get(key);
+    let out;
+    if (m.wonBy && m.a && m.d) out = new Map([[m.wonBy === 'attacker' ? m.a : m.d, 1]]);
+    else {
+      out = new Map();
+      const A = slot(round, m, 'a'), D = slot(round, m, 'd');
+      for (const [ta, pa] of A) {
+        for (const [td, pd] of D) {
+          const p = pair(m, ta, td);
+          out.set(ta, (out.get(ta) || 0) + pa * pd * p);
+          out.set(td, (out.get(td) || 0) + pa * pd * (1 - p));
+        }
+      }
+    }
+    wins.set(key, out);
+    return out;
+  }
+
+  const last = model.rounds[model.rounds.length - 1];
+  const final = last?.matches[0];
+  const champion = final ? winners(last, final) : new Map();
+
+  return {
+    k,
+    slot,
+    champion,
+    match(round, m) {
+      if (m.wonBy) return null;
+      const a = m.a || (m.pa.length === 1 ? m.pa[0] : null);
+      const d = m.d || (m.pd.length === 1 ? m.pd[0] : null);
+      return a && d ? pair(m, a, d) : null;
+    },
+    pair,
+  };
 }

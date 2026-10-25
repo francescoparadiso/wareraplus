@@ -30,6 +30,45 @@
 
 import { trpcBatchManual } from '../shared/trpcClient.js';
 import { fetchLeaderboard } from '../players/api.js';
+import { WARERA_CACHE_BASE } from '../diplomacy/config.js';
+
+/* ── Via server di cache (/tournament) ──────────────────────────────
+   Dal 2026-10-25 la strada normale: il server (server/tournament.js)
+   tiene lui classifica settimanale e squadre, e manda tabellone + forza
+   di ogni squadra già sommata, con nome e stemma delle unità: ~30 KB gzip
+   invece dei ~700 KB del percorso diretto qui sotto, che resta come
+   ricaduta (regola del progetto: il server è un'ottimizzazione, mai un
+   punto di fallimento). `me` è l'id PUBBLICO del personaggio che l'utente
+   ha indicato in Giocatori: serve al server per dire qual è la sua squadra
+   senza spedire gli 8.000 iscritti.
+
+   Se il server non risponde si riprova dopo 2 minuti; se la rotta non
+   esiste (server non ancora rideployato) dopo 10. */
+const BUNDLE_TIMEOUT_MS = 8000;
+let _bundleDownUntil = 0;
+
+export async function fetchTournamentBundle({ type, id, me }) {
+  if (!WARERA_CACHE_BASE || Date.now() < _bundleDownUntil) return null;
+  const q = new URLSearchParams({ type });
+  if (id) q.set('id', id);
+  if (me) q.set('me', me);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), BUNDLE_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${WARERA_CACHE_BASE}/tournament?${q}`, { signal: controller.signal });
+    if (res.status === 404) { _bundleDownUntil = Date.now() + 10 * 60 * 1000; return null; }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    if (!Array.isArray(json?.list) || !Array.isArray(json?.teams)) throw new Error('forma inattesa');
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ tornei: /tournament non disponibile, carico direttamente:', err.message);
+    _bundleDownUntil = Date.now() + 2 * 60 * 1000;
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const LIST_LIMIT = 8;                  // ~4 tornei per tipo
 const LIST_TTL_MS = 10 * 60 * 1000;

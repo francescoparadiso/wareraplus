@@ -730,7 +730,10 @@ wareraPlus/
     ├── tournament/               ← NUOVO (2026-10-25) — Tornei: voce di Approfondimenti,
     │   │                            schede Unità militari / Nazioni, ognuna dal torneo
     │   │                            più recente del suo tipo (menù per i precedenti).
-    │   ├── api.js                ← tutto PUBBLICO su api6: tournament.getManyPaginated
+    │   ├── api.js                ← PRIMA /tournament del server di cache (server/
+    │   │                          tournament.js: forza delle squadre già sommata, nomi e
+    │   │                          stemmi, la squadra di `me`: ~50 KB gzip invece di ~700).
+    │   │                          Ricaduta, tutto PUBBLICO su api6: tournament.getManyPaginated
     │   │                          (tabellone incluso, il filtro `type` è ignorato),
     │   │                          tournamentTeam.getByTournamentId (iscritti, danno nel
     │   │                          torneo), battle.getById per i punteggi in corso. Il
@@ -745,6 +748,11 @@ wareraPlus/
     │   │                          (somma) o media per chi ha colpito. ⚠️ settimana in
     │   │                          corso: riparte da zero, e su un torneo concluso non
     │   │                          è quella in cui si è giocato (la vista lo dice).
+    │   │                          PROBABILITÀ: P(A batte B) = a^k/(a^k+b^k), k tarato
+    │   │                          sulle partite finite del torneo (≥30, sennò 0,95/0,85
+    │   │                          misurati il 2026-10-25: favorito 250/329), propagate
+    │   │                          lungo il tabellone (arrivo, incontro, titolo); partita
+    │   │                          in corso condizionata sul punteggio.
     │   ├── main.js               ← disegno: tabellone con linee SVG dopo il layout,
     │   │                          scheda squadra (percorso, avversari dal più duro con
     │   │                          fascia di difficoltà), classifica di forza, ricerca,

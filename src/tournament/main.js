@@ -39,8 +39,8 @@
 import '../styles/tournament.css';
 import { state } from '../diplomacy/state.js';
 import { trnT } from './i18n.js';
-import { fetchTournamentList, fetchTournament, fetchTeams, fetchWeeklyByUser, fetchLiveScores } from './api.js';
-import { buildModel, teamLabel, roundKind, matchState, subtree, bracketViews, viewForTeam, teamPath, difficulty, METRICS } from './model.js';
+import { fetchTournamentBundle, fetchTournamentList, fetchTournament, fetchTeams, fetchWeeklyByUser, fetchLiveScores } from './api.js';
+import { buildModel, teamLabel, roundKind, matchState, subtree, bracketViews, viewForTeam, teamPath, difficultyOf, winProb, bracketOdds, METRICS } from './model.js';
 import { escapeHtml, flagImg, avatarImg, countryName, fmtCompact, fmtFull, fmtDate } from '../mu/ui.js';
 import { fetchMuDirectory } from '../mu/api.js';
 import { getAllCountries } from '../shared/countries.js';
@@ -68,6 +68,7 @@ let _query = '';
 let _expanded = new Set();        // turni con l'elenco avversari aperto per intero
 let _powerAll = false;
 let _scores = new Map();
+let _odds = null;                 // bracketOdds() per misura e punteggi correnti
 let _timer = null;
 let _langHandler = null;
 let _resizeHandler = null;
@@ -121,10 +122,25 @@ function startTimer() {
 async function load({ refresh = false } = {}) {
   const seq = ++_loadSeq;
   if (!refresh) { _loading = true; _error = null; paint(); }
-  // Le sorgenti condivise (classifica settimanale, directory MU, nazioni)
-  // non dipendono dal torneo: partono subito, insieme alla lista.
-  const sources = ensureSources();
   try {
+    // Strada normale: il server di cache, forza già calcolata (~30 KB).
+    const bundle = await fetchTournamentBundle({ type: _type, id: _tid[_type], me: myPlayerId() });
+    if (bundle) {
+      if (!_nations) await ensureNations();
+      if (seq !== _loadSeq) return;
+      _list = bundle.list;
+      if (!bundle.tournament) { _model = null; return; }
+      _tid[_type] = bundle.tournament._id;
+      _model = buildModel(bundle.tournament, bundle.teams, {
+        weeklyOk: !!bundle.weeklyOk, myTeam: bundle.myTeam,
+        muDir: _muDir || new Map(), nations: _nations || new Map(),
+      });
+      afterModel(refresh);
+      return;
+    }
+    // Ricaduta: tutto dal browser, come prima del server. Le sorgenti
+    // condivise non dipendono dal torneo: partono insieme alla lista.
+    const sources = ensureSources();
     _list = await fetchTournamentList();
     const ofType = _list.filter(t => t.type === _type);
     if (!_tid[_type] || !ofType.some(t => t._id === _tid[_type])) _tid[_type] = ofType[0]?._id || null;
@@ -138,12 +154,7 @@ async function load({ refresh = false } = {}) {
     ]);
     if (seq !== _loadSeq) return;     // l'utente ha cambiato torneo nel frattempo
     _model = buildModel(t, teams, { weekly: _weekly, muDir: _muDir || new Map(), nations: _nations || new Map() });
-
-    if (_pending?.team && _model.teams.has(_pending.team)) _teamId = _pending.team;
-    _pending = null;
-    if (_teamId && !_model.teams.has(_teamId)) _teamId = null;
-    if (!_teamId && !refresh) _teamId = myTeamId();
-    if (!refresh || !_viewId) _viewId = _teamId ? viewForTeam(_model, bracketViews(_model), _teamId) : bracketViews(_model)[0]?.id;
+    afterModel(refresh);
   } catch (err) {
     console.warn('WarEra+ tornei:', err);
     if (!refresh) _error = err;
@@ -155,13 +166,25 @@ async function load({ refresh = false } = {}) {
   }
 }
 
+/** Squadra da aprire e vista del tabellone, dopo ogni (ri)caricamento. */
+function afterModel(refresh) {
+  if (_pending?.team && _model.teams.has(_pending.team)) _teamId = _pending.team;
+  _pending = null;
+  if (_teamId && !_model.teams.has(_teamId)) _teamId = null;
+  if (!_teamId && !refresh) _teamId = myTeamId();
+  if (!refresh || !_viewId) _viewId = _teamId ? viewForTeam(_model, bracketViews(_model), _teamId) : bracketViews(_model)[0]?.id;
+}
+
+/** Nazioni: già in memoria dalla mappa nel caso normale (zero rete). */
+function ensureNations() {
+  return getAllCountries().then(list => { _nations = new Map((list || []).map(n => [n._id, n])); })
+    .catch(() => { _nations = new Map(); });
+}
+
 async function ensureSources() {
   const jobs = [];
   if (_weekly === undefined) jobs.push(fetchWeeklyByUser().then(m => { _weekly = m; }));
-  if (!_nations) {
-    jobs.push(getAllCountries().then(list => { _nations = new Map((list || []).map(n => [n._id, n])); })
-      .catch(() => { _nations = new Map(); }));
-  }
+  if (!_nations) jobs.push(ensureNations());
   if (_type === 'mu' && !_muDir) {
     jobs.push(fetchMuDirectory().then(list => { _muDir = new Map(list.map(m => [m._id, m])); })
       .catch(err => { console.warn('WarEra+ tornei: directory MU non disponibile:', err.message); }));
@@ -179,6 +202,8 @@ function myPlayerId() {
 function myTeamId() {
   const me = myPlayerId();
   if (!me || !_model) return null;
+  // Dal server la squadra arriva già trovata (gli iscritti restano là).
+  if (_model.myTeam) return _model.teams.has(_model.myTeam) ? _model.myTeam : null;
   for (const t of _model.teams.values()) if (t.participants.includes(me)) return t.id;
   return null;
 }
@@ -225,6 +250,11 @@ function paint({ keepScroll = false } = {}) {
   const scrollTop = root.scrollTop;
   const brScroll = _container.querySelector('.wp-trn-bracket-scroll')?.scrollLeft || 0;
 
+  // Probabilità ricalcolate a ogni disegno: dipendono dalla misura scelta
+  // e dai punteggi delle partite in corso. Pochi millisecondi anche sul
+  // torneo MU (vedi bracketOdds in model.js).
+  _odds = _model?.levels.length ? bracketOdds(_model, _metric, _scores) : null;
+
   _container.innerHTML = `
     <div class="wp-trn">
       <header class="wp-trn-head">
@@ -263,6 +293,7 @@ function bodyHtml() {
   // Torneo concluso: la classifica settimanale è quella di OGGI, non di
   // quando si è giocato. Il danno nel torneo invece è quello vero.
   if (_model.status === 'ended') notices.push(`<p class="wp-trn-notice warn">${trnT('endedNote')}</p>`);
+  if (_odds) notices.push(`<p class="wp-trn-notice">${calibText()}</p>`);
 
   if (!_model.levels.length) {
     return `${metaHtml()}<p class="wp-trn-notice">${trnT('upcomingNote')} · ${trnT('registeredN', { n: _model.registeredCount })}</p>`;
@@ -327,6 +358,7 @@ function bracketHtml() {
   _viewId = view.id;
   const myView = _teamId ? viewForTeam(_model, views, _teamId) : null;
 
+  const hint = views.length > 1 ? sectorHint(views) : '';
   const chips = views.length > 1 ? `
     <div class="wp-trn-views">
       ${views.map(v => `<button type="button" class="wp-trn-vchip${v.id === view.id ? ' active' : ''}${v.id === myView ? ' mine' : ''}" data-view="${v.id}">${v.id === 'final' ? trnT('finalPhase') : trnT('sector', { n: v.sector })}</button>`).join('')}
@@ -353,6 +385,7 @@ function bracketHtml() {
       <h2 class="wp-trn-h2">${trnT('bracket')}</h2>
       ${chips}
     </div>
+    ${hint}
     <div class="wp-trn-bracket-scroll">
       <div class="wp-trn-bracket${cols.length <= 3 ? ' wide' : ''}" style="--wp-trn-rows:${cols[0]?.length || 1}">
         <svg class="wp-trn-lines" aria-hidden="true"></svg>
@@ -386,7 +419,14 @@ function slotHtml(m, side, round, oppSet) {
   const poss = m[`p${side}`];
   const sideKey = side === 'a' ? 'attacker' : 'defender';
   const result = m.wonBy ? (m.wonBy === sideKey ? ' won' : ' lost') : '';
-  const score = m.battle && !m.wonBy ? `<span class="wp-trn-sc" data-side="${side}"></span>` : '';
+  const sc = m.battle && !m.wonBy ? _scores.get(m.battle) : null;
+  const mine = sc ? (side === 'a' ? sc.a : sc.d) : null;
+  const theirs = sc ? (side === 'a' ? sc.d : sc.a) : null;
+  const score = sc ? `<span class="wp-trn-sc${mine > theirs ? ' lead' : ''}">${mine}</span>` : '';
+  // Partita non ancora finita con le due squadre note: la probabilità di
+  // vincerla (col punteggio, se è in corso) al posto della forza.
+  const pA = _odds?.match(round, m);
+  const pSide = pA == null ? null : (side === 'a' ? pA : 1 - pA);
 
   // Da dove arriva il posto al primo livello: qualificazione o d'ufficio.
   let origin = '';
@@ -401,18 +441,26 @@ function slotHtml(m, side, round, oppSet) {
       <button type="button" class="wp-trn-slot${cls}" data-team="${escapeHtml(id)}" title="${escapeHtml(label(t))}">
         ${teamBadge(t)}${origin}
         <span class="wp-trn-sname">${escapeHtml(label(t))}</span>
-        ${score || `<span class="wp-trn-sval">${escapeHtml(fmtCompact(metricVal(t)))}</span>`}
+        ${pSide != null
+          ? `<span class="wp-trn-sval pct d-${difficultyOf(pSide)}" title="${escapeHtml(trnT('pWinTip'))}">${pct(pSide)}</span>`
+          : `<span class="wp-trn-sval">${escapeHtml(fmtCompact(metricVal(t)))}</span>`}
+        ${score}
       </button>`;
   }
   if (!poss.length) return `<div class="wp-trn-slot empty"><span class="wp-trn-sname">${trnT('tbd')}</span></div>`;
 
-  const fav = poss.map(team).filter(Boolean).sort((x, y) => metricVal(y) - metricVal(x))[0];
+  // Favorita = la più probabile in quel posto, non solo la più forte: una
+  // squadra forte con un ramo durissimo può arrivarci meno di un'altra.
+  const dist = _odds?.slot(round, m, side);
+  const fav = poss.map(team).filter(Boolean)
+    .sort((x, y) => (dist ? (dist.get(y.id) || 0) - (dist.get(x.id) || 0) : metricVal(y) - metricVal(x)))[0];
+  const favP = fav && dist ? ` ${pct(dist.get(fav.id) || 0)}` : '';
   const meIn = poss.includes(_teamId);
   const anyOpp = poss.some(x => oppSet.has(x));
   return `
     <div class="wp-trn-slot poss${meIn ? ' me-poss' : ''}${anyOpp && !meIn ? ' opp-poss' : ''}">
       <span class="wp-trn-pn">${trnT('possibleN', { n: poss.length })}</span>
-      ${fav ? `<button type="button" class="wp-trn-fav" data-team="${escapeHtml(fav.id)}">${escapeHtml(trnT('favourite', { name: label(fav) }))}</button>` : ''}
+      ${fav ? `<button type="button" class="wp-trn-fav" data-team="${escapeHtml(fav.id)}">${escapeHtml(trnT('favourite', { name: label(fav) }) + favP)}</button>` : ''}
     </div>`;
 }
 
@@ -450,35 +498,52 @@ function drawConnectors() {
 }
 
 /** Punteggi delle partite in corso visibili (e di quella della squadra
- *  scelta): una richiesta a gruppi, poi si scrivono nelle caselle senza
- *  ridisegnare il resto. */
+ *  scelta). Entrano nelle probabilità (una partita sull'1–0 non è più
+ *  50/50), quindi se cambiano si ridisegna; la cache di api.js (2 minuti)
+ *  fa sì che il ridisegno non richieda di nuovo e il giro si fermi lì. */
 async function refreshScores() {
   if (!_container || !_model || _model.status !== 'active') return;
   const ids = new Set([..._container.querySelectorAll('.wp-trn-match.st-live')].map(el => el.dataset.battle).filter(Boolean));
   if (_teamId) for (const s of teamPath(_model, _teamId)) if (s.state === 'live' && s.match.battle) ids.add(s.match.battle);
   if (!ids.size) return;
   const got = await fetchLiveScores([...ids]);
-  got.forEach((v, k) => _scores.set(k, v));
-  if (!_container) return;
-  _container.querySelectorAll('.wp-trn-match.st-live').forEach(el => {
-    const s = _scores.get(el.dataset.battle);
-    if (!s) return;
-    el.querySelectorAll('.wp-trn-sc').forEach(sp => {
-      const mine = sp.dataset.side === 'a' ? s.a : s.d;
-      const theirs = sp.dataset.side === 'a' ? s.d : s.a;
-      sp.textContent = String(mine);
-      sp.classList.toggle('lead', mine > theirs);
-    });
-    const head = el.querySelector('.wp-trn-mlive');
-    if (head && s.toWin) head.title = trnT('bestOf', { n: s.toWin });
+  let changed = false;
+  got.forEach((v, k) => {
+    const old = _scores.get(k);
+    if (!old || old.a !== v.a || old.d !== v.d || old.toWin !== v.toWin) changed = true;
+    _scores.set(k, v);
   });
-  _container.querySelectorAll('[data-score-for]').forEach(el => {
-    const s = _scores.get(el.dataset.scoreFor);
-    if (!s) return;
-    const mine = el.dataset.side === 'a' ? s.a : s.d;
-    const theirs = el.dataset.side === 'a' ? s.d : s.a;
-    el.textContent = `${mine}–${theirs}${s.toWin ? ` · ${trnT('bestOf', { n: s.toWin })}` : ''}`;
-  });
+  if (changed && _container && !_container.querySelector('.wp-trn-search:focus')) paint({ keepScroll: true });
+}
+
+function pct(p) {
+  if (p == null) return '—';
+  if (p > 0 && p < 0.01) return '<1%';
+  if (p < 1 && p > 0.99) return '>99%';
+  return `${Math.round(p * 100)}%`;
+}
+
+/** Come sono tarate le percentuali, detto in chiaro sopra il tabellone. */
+function calibText() {
+  const c = _model.calib?.[_metric];
+  const m = trnT(_metric === 'potential' ? 'mPotential' : 'mAverage').toLowerCase();
+  if (c?.own) {
+    return trnT('calibOwn', { m, n: c.n, h: c.hits, p: pct(c.n ? c.hits / c.n : 0), k: String(_model.k[_metric]).replace('.', ',') });
+  }
+  return trnT('calibDefault', { m, n: c?.n ?? 0 });
+}
+
+/** Che cos'è un settore, sotto le linguette. */
+function sectorHint(views) {
+  const final = views.find(v => v.id === 'final');
+  const sector = views.find(v => v.sector);
+  if (!final || !sector) return '';
+  const first = _model.levels[0];
+  const root = _model.levels[sector.L];
+  return `<p class="wp-trn-shint">${trnT('sectorHint', {
+    n: first.matches.length, first: escapeHtml(roundName(first)),
+    s: views.length - 1, per: first.matches.length / (views.length - 1), root: escapeHtml(roundName(root)),
+  })}</p>`;
 }
 
 /* ── Scheda della squadra ──────────────────────────────────────── */
@@ -523,6 +588,7 @@ function teamCardHtml(t) {
         ${stat(trnT('statRoster'), fmtFull(t.roster), trnT('fightersOf', { n: t.fighters, m: t.roster }))}
         ${stat(trnT('statTour'), fmtCompact(t.tourDamage))}
         ${extra}
+        ${titleStat(t)}
       </div>
       <h3 class="wp-trn-h3">${trnT('path')}</h3>
       <ol class="wp-trn-path">
@@ -530,6 +596,15 @@ function teamCardHtml(t) {
         ${path.map(s => stepHtml(t, s)).join('')}
       </ol>
     </div>`;
+}
+
+/** Probabilità di vincere il torneo, con la posizione fra le squadre. */
+function titleStat(t) {
+  if (!_odds || _model.status === 'ended') return '';
+  const p = _odds.champion.get(t.id) || 0;
+  const rank = 1 + [..._odds.champion.values()].filter(v => v > p).length;
+  const note = p > 0 ? `<span class="wp-trn-rank">${trnT('rankOf', { n: rank, m: _odds.champion.size })}</span>` : '';
+  return stat(trnT('statTitle'), t.status === 'winner' ? '🏆' : pct(p), note);
 }
 
 function stat(lbl, val, note = '', active = false) {
@@ -551,44 +626,68 @@ function stepHtml(me, s) {
   const rn = `<span class="wp-trn-stepr">${escapeHtml(roundName(s.round))}</span>`;
   if (s.state === 'done' && s.result) {
     const txt = trnT(s.result === 'won' ? 'beat' : 'lostTo', { name: teamLink(s.opp) });
-    return `<li class="wp-trn-step done ${s.result}">${rn}<span class="wp-trn-stept">${txt}</span>${diffPill(team(s.opp), me)}</li>`;
+    return `<li class="wp-trn-step done ${s.result}">${rn}<span class="wp-trn-stept">${txt}</span>${probPill(me, team(s.opp))}</li>`;
   }
   if (s.state === 'live' && s.opp && s.certain) {
-    const score = s.match.battle ? `<span class="wp-trn-stepsc" data-score-for="${escapeHtml(s.match.battle)}" data-side="${s.side}"></span>` : '';
-    return `<li class="wp-trn-step live">${rn}<span class="wp-trn-stept"><span class="wp-trn-livedot"></span>${trnT('playing', { name: teamLink(s.opp) })} ${score}</span>${diffPill(team(s.opp), me)}</li>`;
+    const sc = s.match.battle ? _scores.get(s.match.battle) : null;
+    const score = sc
+      ? `<span class="wp-trn-stepsc">${s.side === 'a' ? sc.a : sc.d}–${s.side === 'a' ? sc.d : sc.a}${sc.toWin ? ` · ${trnT('bestOf', { n: sc.toWin })}` : ''}</span>`
+      : '';
+    return `<li class="wp-trn-step live">${rn}<span class="wp-trn-stept"><span class="wp-trn-livedot"></span>${trnT('playing', { name: teamLink(s.opp) })} ${score}</span>${probPill(me, team(s.opp), s)}</li>`;
   }
   if (s.opponents.length === 1 && s.certain) {
-    return `<li class="wp-trn-step next">${rn}<span class="wp-trn-stept">${trnT('willPlay', { name: teamLink(s.opponents[0]) })}</span>${diffPill(team(s.opponents[0]), me)}</li>`;
+    return `<li class="wp-trn-step next">${rn}<span class="wp-trn-stept">${trnT('willPlay', { name: teamLink(s.opponents[0]) })}</span>${probPill(me, team(s.opponents[0]))}</li>`;
   }
-  return `<li class="wp-trn-step future">${rn}<span class="wp-trn-stept">${trnT('nOpp', { n: s.opponents.length })}${s.certain ? '' : ` <em>(${trnT('ifWins')})</em>`}</span>${oppListHtml(me, s)}</li>`;
+  const reach = _odds ? (_odds.slot(s.round, s.match, s.side).get(me.id) || 0) : null;
+  const reachTxt = reach != null && !s.certain ? ` <em>· ${trnT('reachIn', { p: pct(reach) })}</em>` : '';
+  return `<li class="wp-trn-step future">${rn}<span class="wp-trn-stept">${trnT('nOpp', { n: s.opponents.length })}${reachTxt}</span>${oppListHtml(me, s)}</li>`;
 }
 
-function diffPill(opp, me) {
+/** Pillola della partita: probabilità di vincerla, colore della fascia di
+ *  difficoltà. Su una partita in corso col punteggio (vedi bracketOdds). */
+function probPill(me, opp, step = null) {
   if (!opp) return '';
-  const d = difficulty(opp, me, _metric);
-  return `<span class="wp-trn-diff d-${d}" title="${escapeHtml(trnT('vsYou'))}">${trnT(`d_${d}`)}</span>`;
+  let p = winProb(_model, me, opp, _metric);
+  if (step && _odds) {
+    const m = step.match;
+    const pA = _odds.match(step.round, m);
+    if (pA != null) p = step.side === 'a' ? pA : 1 - pA;
+  }
+  const d = difficultyOf(p);
+  return `<span class="wp-trn-diff d-${d}" title="${escapeHtml(`${trnT('pWinTip')} · ${trnT(`d_${d}`)}`)}">${pct(p)}</span>`;
 }
 
 /** Elenco dei possibili avversari di un turno, dal più forte. La barra è
  *  sulla misura scelta, in scala col più forte dell'elenco (o con la
- *  squadra stessa, se è lei la più forte); la tacca segna la squadra. */
+ *  squadra stessa, se è lei la più forte); la tacca segna la squadra. La
+ *  pillola è la probabilità di batterlo; sotto, quanto è probabile che
+ *  l'incontro avvenga davvero (le due squadre in quel posto insieme). */
 function oppListHtml(me, s) {
   const opps = s.opponents.map(team).filter(Boolean).sort((x, y) => metricVal(y) - metricVal(x));
   const max = Math.max(metricVal(me), ...opps.map(metricVal), 1);
   const open = _expanded.has(s.round.n);
   const shown = open ? opps : opps.slice(0, OPP_PREVIEW);
   const mark = (metricVal(me) / max) * 100;
+  const other = s.side === 'a' ? 'd' : 'a';
+  const meHere = _odds ? (_odds.slot(s.round, s.match, s.side).get(me.id) || 0) : null;
+  const oppHere = _odds ? _odds.slot(s.round, s.match, other) : null;
   return `
     <div class="wp-trn-opps">
-      ${shown.map((o, i) => `
+      ${shown.map((o, i) => {
+        const meet = meHere != null ? meHere * (oppHere.get(o.id) || 0) : null;
+        return `
         <button type="button" class="wp-trn-opp" data-team="${escapeHtml(o.id)}">
           <span class="wp-trn-oppi">${i + 1}</span>
           ${teamBadge(o)}
           <span class="wp-trn-oppn">${escapeHtml(label(o))}</span>
-          <span class="wp-trn-oppbar"><span style="width:${(metricVal(o) / max) * 100}%"></span><i style="left:${mark}%"></i></span>
+          <span class="wp-trn-opprow2">
+            <span class="wp-trn-oppbar"><span style="width:${(metricVal(o) / max) * 100}%"></span><i style="left:${mark}%"></i></span>
+            ${meet != null ? `<span class="wp-trn-meet" title="${escapeHtml(trnT('meetTip'))}">${trnT('meet', { p: pct(meet) })}</span>` : ''}
+          </span>
           <span class="wp-trn-oppv">${escapeHtml(fmtCompact(metricVal(o)))}</span>
-          ${diffPill(o, me)}
-        </button>`).join('')}
+          ${probPill(me, o)}
+        </button>`;
+      }).join('')}
       ${opps.length > OPP_PREVIEW ? `<button type="button" class="wp-trn-more" data-expand="${s.round.n}">${open ? trnT('showLess') : trnT('showAll', { n: opps.length })}</button>` : ''}
     </div>`;
 }
@@ -612,6 +711,7 @@ function powerHtml() {
             <span class="wp-trn-oppn">${t.status === 'winner' ? '🏆 ' : ''}${escapeHtml(label(t))}</span>
             <span class="wp-trn-oppbar"><span style="width:${(metricVal(t) / max) * 100}%"></span></span>
             <span class="wp-trn-oppv">${escapeHtml(fmtCompact(metricVal(t)))}</span>
+            <span class="wp-trn-oppv wp-trn-title" title="${escapeHtml(trnT('titleTip'))}">${t.status === 'winner' ? '🏆' : (_odds && _model.status !== 'ended' ? pct(_odds.champion.get(t.id) || 0) : '')}</span>
           </button>`).join('')}
         ${pool.length > POWER_PREVIEW ? `<button type="button" class="wp-trn-more" data-act="power-all">${_powerAll ? trnT('showLess') : trnT('showAll', { n: pool.length })}</button>` : ''}
       </div>
