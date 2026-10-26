@@ -536,6 +536,35 @@ Accordi sono l'unica fonte (richiesta dell'utente). Tre cose da sapere:
   (dichiarata). Copre i 90 giorni dell'archivio battaglie, 120 battaglie per
   controllo al massimo.
 
+Le **Votazioni** (`server/plusApi/votazioni.js` + `src/political/votes.js`,
+bottone "Votazioni" di Political, dal 2026-10-23) fanno votare congresso,
+congresso + governo o tutti i cittadini (referendum), a scrutinio palese o
+segreto. Dipendono dal redeploy di **warera-plus-api**: finché non lo fai
+`/votazioni` risponde 404 e la vista dice che il server non le ha ancora.
+Lo scrutinio si guarda in diretta: emiciclo per il palese
+(`votesHemicycle.js`, 20–45 s), urna per il segreto (`votesUrn.js`: in
+congresso 3 s per OGNI scheda, sempre allo stesso passo; accelera solo nel
+referendum, fino a 2 minuti). Il governo può impostare un canale Discord (avvisi di apertura,
+inizio scrutinio, esito). Quando hanno votato TUTTI, chi ha aperto la
+votazione (o l'amministratore) può mostrare lo scrutinio subito: urne chiuse
+e scrutinio fra 10 s (`count_at`, mai nel referendum). Solo l'amministratore
+può eliminare una votazione, per sempre. Per provare le animazioni c'è
+`server/plusApi/votazioniFinte.js` (solo dev, vedi il README). Tre cose da
+sapere:
+
+- il congresso si **fotografa all'apertura** (`votazione_elettore`): chi
+  viene eletto a votazione aperta non vota, chi decade sì. Il referendum
+  no: si controlla al voto (cittadino adesso, livello ≥ 10, personaggio nato
+  prima dell'apertura) e i suoi aventi diritto sono una STIMA del censimento
+  (`stimati`), quindi niente maggioranza assoluta per il referendum;
+- ⚠️ **il segreto** è fatto di due tabelle che non si toccano
+  (`votazione_partecipazione` chi, `votazione_scheda` cosa), nessuna con
+  l'ora, e un voto segreto NON va nell'`audit`. Non aggiungere una colonna
+  `voted_at` o un join "per comodità": è esattamente il segreto;
+- l'esito nelle liste compare solo a **scrutinio finito**
+  (`fineScrutinio`): lo scrutinio parte per tutti alla stessa ora
+  (`scrutinioAlle` = chiusura + 1 minuto) e dura quanto dice il server.
+
 Il **danno ora per ora** e la **curva a 14 giorni** nella scheda nazione
 (`src/nations/damageCurves.js` + `server/damageTimeline.js`) dipendono da
 `/damage-timeline`: finché non rideployi la sezione non compare affatto —

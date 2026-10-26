@@ -184,7 +184,8 @@ async function handleIncomingDeepLink() {
   const open = {
     political: () => openPoliticalView(countryId || undefined,
       (countryId && state.nationMap?.get(countryId)?.name) || '',
-      { openSenate: params.get('senate') === '1' }),
+      // WarEra+ Votazioni: ?tab=votes (&vote=id) riapre la vista e la votazione.
+      { openSenate: params.get('senate') === '1', openVotes: params.get('tab') === 'votes', voteId: params.get('vote') || null }),
     economy: async () => {
       const item = params.get('item');
       if (item) (await import('./economy/prices.js')).openPriceItem(item);

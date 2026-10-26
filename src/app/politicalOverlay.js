@@ -111,7 +111,7 @@ export async function openPoliticalView(countryId, countryName = '', options = {
     // Quale delle tre scorciatoie del pannello nazione ha aperto la vista
     // (elections = default, nessuna opzione) — così si vede dai dati quale
     // dei tre bottoni viene usato di più.
-    entry: options.openSenate ? 'senate' : (options.openParty ? 'party' : 'elections'),
+    entry: options.openSenate ? 'senate' : (options.openParty ? 'party' : (options.openVotes ? 'votes' : 'elections')),
   });
 }
 

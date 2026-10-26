@@ -39,6 +39,7 @@ import '../styles/politicalPlus.css';
 import { initPoliticalLinks } from './links.js';
 import { showHistoryView, isHistoryViewOpen } from './history.js';
 import { showWorldView, isWorldViewOpen } from './world.js';
+import { showVotesView, isVotesViewOpen } from './votes.js';
 import { applyPlusTranslations } from './plusI18n.js';
 import { hideWpPlusViews } from './plusViews.js';
 import { t } from './i18n.js';
@@ -193,6 +194,7 @@ async function _onCountryChange(newCountryId) {
 
   setCurrentCountryId(newCountryId);
   const _historyWasOpen = isHistoryViewOpen();
+  const _votesWereOpen = isVotesViewOpen();
 
   // BUG FIX: quando questa funzione è invocata programmaticamente da
   // initPoliticalView() (riapertura per una nazione diversa da quella già
@@ -245,6 +247,8 @@ async function _onCountryChange(newCountryId) {
   // nuova (loadElectionsHistory qui sopra ha riportato in primo piano le
   // elezioni, come fa da sempre).
   if (_historyWasOpen) showHistoryView(newCountryId);
+  // Lo stesso per le Votazioni: si resta lì, sulle votazioni della nazione nuova.
+  if (_votesWereOpen) showVotesView(newCountryId);
   _syncTitle(newCountryId);
 
   if (document.getElementById('party-view').style.display !== 'none') {
@@ -309,6 +313,11 @@ function _wireEventListeners() {
     _closeSenateIfOpen();
     showWorldView({ onPick: _pickCountryFromWorld });
     trackEvent('political-world-open');
+  });
+  document.getElementById('wpPolVotesBtn')?.addEventListener('click', () => {
+    _closeSenateIfOpen();
+    showVotesView(currentCountryId);
+    trackEvent('political-votes-open', { country: currentCountryId });
   });
   document.getElementById('wpPolNationBtn')?.addEventListener('click', () => {
     import('../app/nationsOverlay.js').then(m => m.openNationsView(currentCountryId)).catch(() => {});
@@ -379,6 +388,7 @@ function _wireEventListeners() {
     applyPlusTranslations();
     if (isHistoryViewOpen()) { showHistoryView(currentCountryId); return; }
     if (isWorldViewOpen()) { showWorldView({ onPick: _pickCountryFromWorld }); return; }
+    if (isVotesViewOpen()) { showVotesView(currentCountryId); return; }
     if (document.getElementById('senateOverlay')?.classList.contains('active')) {
       SenateView.render(lastElectedParties || []);
     }
@@ -482,6 +492,10 @@ export async function initPoliticalView(countryId, options = {}) {
   } else if (options.openWorld) {
     _closeSenateIfOpen();
     showWorldView({ onPick: _pickCountryFromWorld });
+  } else if (options.openVotes) {
+    // Dal link (?tab=votes&vote=…) e dal ritorno del login Discord.
+    _closeSenateIfOpen();
+    showVotesView(currentCountryId, { voteId: options.voteId || null });
   } else if (options.openSenate) {
     SenateView.open();
   } else if (options.openParty) {
