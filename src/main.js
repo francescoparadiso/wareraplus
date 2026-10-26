@@ -46,6 +46,7 @@ import { initBattlesOverlay, openBattlesView } from './app/battlesOverlay.js';
 import { initAccordiOverlay, openAccordiView } from './app/accordiOverlay.js';
 import { initTournamentOverlay, openTournamentView } from './app/tournamentOverlay.js';
 import { initGuideOverlay, openGuideView } from './app/guideOverlay.js';
+import { initToolsOverlay, openToolsView } from './app/toolsOverlay.js';
 import { initPrivateOverlay, openPrivateView } from './app/privateOverlay.js';
 import { takeReloadIntent } from './shared/lazyModule.js';
 // WarEra+: il tasto Indietro chiude la cosa aperta invece di uscire dal
@@ -201,6 +202,7 @@ async function handleIncomingDeepLink() {
     accordi: () => openAccordiView(),
     tournament: () => openTournamentView({ type: params.get('tab') || undefined, team: params.get('team') || undefined }),
     guide: () => openGuideView(),
+    tools: () => openToolsView(),
     private: () => openPrivateView(),
     alliances: () => document.getElementById('bloc-stats-btn')?.click(),
   }[section];
@@ -232,6 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initAccordiOverlay();
   initTournamentOverlay();
   initGuideOverlay();
+  initToolsOverlay();
   initPrivateOverlay();
   applyTranslations();
   initLangButton();
@@ -308,6 +311,7 @@ function restoreAfterChunkReload() {
     accordi: () => openAccordiView(),
     tournament: () => openTournamentView(),
     guide: () => openGuideView(),
+    tools: () => openToolsView(),
     private: () => openPrivateView(),
     'mu-wealth': () => openMuView(),
   }[intent];

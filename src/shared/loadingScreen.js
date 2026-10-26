@@ -56,6 +56,7 @@ const ACCENTS = {
   players: '#ec4899',
   accordi: '#00d4ff',
   tournament: '#a3e635',
+  tools: '#34d399',
 };
 const DEFAULT_ACCENT = '#58a6ff';
 

@@ -784,6 +784,14 @@ wareraPlus/
     ├── guide/                    ← NUOVO — Guida "Come si usa": SOLO testo statico
     │   ├── main.js                  (zero fetch, zero stato) + i18n.js a 9 lingue.
     │   └── i18n.js                  È la vista più leggera dell'app, deve restarlo.
+    ├── tools/                    ← NUOVO (2026-10-26) — Altri strumenti: link ai tool
+    │   │                            della community WarEra, DI TERZI (avviso in testa).
+    │   │                            Testo statico come la Guida, ultima voce di
+    │   │                            Approfondimenti, ?section=tools.
+    │   ├── list.js              ← l'elenco dei siti: UNICO posto, una voce per sito
+    │   │                          (nome, url, una riga per lingua). Niente loghi.
+    │   ├── main.js              ← le schede (link interi, nuova scheda, noopener)
+    │   └── i18n.js              ← titolo, intro, avviso, etichette in 9 lingue
     ├── private/                  ← NUOVO — Area riservata (login Discord + personaggio
     │   │                            verificato). Parla SOLO con warera-plus-api
     │   │                            (server/plusApi/, processo separato, vedi il suo README).
@@ -911,6 +919,7 @@ wareraPlus/
     │   │                         setPaused → mapIdle. Niente <select> visibili: crash.
     │   ├── newsOverlay.js      ← apre la vista News
     │   ├── guideOverlay.js     ← apre la Guida "Come si usa"
+    │   ├── toolsOverlay.js     ← apre Altri strumenti (src/tools/*)
     │   ├── newsTicker.js       ← ticker in cima alla mappa: battaglie, elezioni, nuove
     │   │                         guerre, sworn enemy, popolazione, tesoro. Le ultime
     │   │                         quattro arrivano già pronte dal server (/ticker), non
@@ -1000,7 +1009,7 @@ wareraPlus/
     │   │                         'mapview/focus' — e ?region= in Distanze) ?country=
     │   │                         ?alliance= ?sphere=
     │   │                         ?battle= ?section= (political, economy, news, mu,
-    │   │                         nations, battles, guide, private, alliances) ?tab=
+    │   │                         nations, battles, guide, tools, private, alliances) ?tab=
     │   │                         ?item= ?mu= ?nation= ?senate=. Si toccano SOLO le
     │   │                         chiavi di URL_KEYS (?tm= resta della time machine).
     │   │                         ⚠️ `view` NO: è dello sfondo (?wallpaper=1&view=).
@@ -1104,5 +1113,5 @@ wareraPlus/
         │                          radice: le fazioni li ridefiniscono (blu/verde) sul
         │                          loro contenitore. .wp-vs-scope ricolora i selettori.
         └── menubar.css, mobile-menubar.css, mu.css, nations.css, news.css,
-            eco.css, guide.css, market.css, battles.css
+            eco.css, guide.css, tools.css, market.css, battles.css
 ```

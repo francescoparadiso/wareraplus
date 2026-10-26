@@ -67,6 +67,10 @@ export const OVERLAY_TINTS = {
   // lime → oro (Tornei: la gara, tinta che nessun'altra sezione usa)
   tournament: { rgbDark: '163,230,53', rgbDark2: '250,204,21',
               rgbLight: '77,124,15',  rgbLight2: '161,98,7' },
+  // menta → azzurro cielo (Altri strumenti: porta fuori dall'app, tinta
+  // che nessun'altra sezione usa)
+  tools:    { rgbDark: '52,211,153',  rgbDark2: '56,189,248',
+              rgbLight: '4,120,87',   rgbLight2: '3,105,161' },
 };
 
 const _stoppers = new WeakMap();

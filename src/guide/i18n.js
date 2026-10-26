@@ -95,6 +95,14 @@ export const GUIDE_DICT = {
           "It draws on a separate lightweight map, so the main map is left exactly as it was.",
         ],
       },
+      tools: {
+        t: "Other tools",
+        b: [
+          "Links to other sites built by the WarEra community, one card each with a line on what it does.",
+          "They are third-party tools, not affiliated with WarEra+: they open in a new tab and have their own data and accounts.",
+          "Useful for what WarEra+ does not cover, such as company analysis, combat optimizers or a card game.",
+        ],
+      },
       settings: {
         t: "Settings and shortcuts",
         b: [
@@ -182,6 +190,14 @@ export const GUIDE_DICT = {
           "Lo slider in basso riavvolge la mappa e mostra chi possedeva ogni regione in quel momento.",
           "Solo il possesso delle regioni: popolazione e ricchezza storiche non sono mai state registrate, mostrarle sarebbe fuorviante.",
           "Disegna su una mappa separata e leggera, così la mappa principale resta com'era.",
+        ],
+      },
+      tools: {
+        t: "Altri strumenti",
+        b: [
+          "Collegamenti ad altri siti costruiti dalla community di WarEra, una scheda per ciascuno con una riga su cosa fa.",
+          "Sono strumenti di terzi, non affiliati a WarEra+: si aprono in una nuova scheda e hanno dati e account propri.",
+          "Utili per quello che WarEra+ non copre, come l'analisi delle aziende, gli ottimizzatori di combattimento o un gioco di carte.",
         ],
       },
       settings: {
@@ -273,6 +289,14 @@ export const GUIDE_DICT = {
           "Dibuja en un mapa aparte y ligero, así el mapa principal queda intacto.",
         ],
       },
+      tools: {
+        t: "Otras herramientas",
+        b: [
+          "Enlaces a otros sitios creados por la comunidad de WarEra, una tarjeta para cada uno con una línea sobre lo que hace.",
+          "Son herramientas de terceros, no afiliadas a WarEra+: se abren en una pestaña nueva y tienen sus propios datos y cuentas.",
+          "Útiles para lo que WarEra+ no cubre, como el análisis de empresas, los optimizadores de combate o un juego de cartas.",
+        ],
+      },
       settings: {
         t: "Ajustes y atajos",
         b: [
@@ -360,6 +384,14 @@ export const GUIDE_DICT = {
           "Der Regler unten spult die Karte zurück und zeigt, wem jede Region damals gehörte.",
           "Nur der Regionsbesitz: historische Bevölkerung oder Vermögen wurden nie gespeichert, sie zu zeigen wäre irreführend.",
           "Zeichnet auf einer eigenen, leichten Karte, die Hauptkarte bleibt unangetastet.",
+        ],
+      },
+      tools: {
+        t: "Weitere Tools",
+        b: [
+          "Links zu anderen Seiten aus der WarEra-Community, eine Karte pro Seite mit einer Zeile dazu, was sie macht.",
+          "Es sind Tools von Dritten, nicht mit WarEra+ verbunden: Sie öffnen sich in einem neuen Tab und haben eigene Daten und Konten.",
+          "Nützlich für das, was WarEra+ nicht abdeckt, etwa Unternehmensanalyse, Kampfoptimierer oder ein Kartenspiel.",
         ],
       },
       settings: {
@@ -451,6 +483,14 @@ export const GUIDE_DICT = {
           "Le rendu se fait sur une carte séparée et légère : la carte principale reste telle quelle.",
         ],
       },
+      tools: {
+        t: "Autres outils",
+        b: [
+          "Des liens vers d'autres sites créés par la communauté WarEra, une carte par site avec une ligne sur ce qu'il fait.",
+          "Ce sont des outils tiers, non affiliés à WarEra+ : ils s'ouvrent dans un nouvel onglet et ont leurs propres données et comptes.",
+          "Utiles pour ce que WarEra+ ne couvre pas, comme l'analyse des entreprises, les optimiseurs de combat ou un jeu de cartes.",
+        ],
+      },
       settings: {
         t: "Paramètres et raccourcis",
         b: [
@@ -538,6 +578,14 @@ export const GUIDE_DICT = {
           "De schuif onderaan spoelt de kaart terug en toont wie elke regio toen bezat.",
           "Alleen regiobezit: historische bevolking of rijkdom zijn nooit vastgelegd, ze tonen zou misleiden.",
           "Tekent op een aparte, lichte kaart, zodat de hoofdkaart onaangeroerd blijft.",
+        ],
+      },
+      tools: {
+        t: "Andere tools",
+        b: [
+          "Links naar andere sites van de WarEra-community, één kaart per site met een regel over wat hij doet.",
+          "Het zijn tools van derden, niet verbonden aan WarEra+: ze openen in een nieuw tabblad en hebben hun eigen gegevens en accounts.",
+          "Handig voor wat WarEra+ niet dekt, zoals bedrijfsanalyse, gevechtsoptimizers of een kaartspel.",
         ],
       },
       settings: {
@@ -629,6 +677,14 @@ export const GUIDE_DICT = {
           "Ritas på en separat, lätt karta, så huvudkartan lämnas orörd.",
         ],
       },
+      tools: {
+        t: "Andra verktyg",
+        b: [
+          "Länkar till andra sajter byggda av WarEra-communityn, ett kort per sajt med en rad om vad den gör.",
+          "Det är verktyg från tredje part, inte knutna till WarEra+: de öppnas i en ny flik och har egna data och konton.",
+          "Användbara för sådant som WarEra+ inte täcker, som företagsanalys, stridsoptimerare eller ett kortspel.",
+        ],
+      },
       settings: {
         t: "Inställningar och genvägar",
         b: [
@@ -718,6 +774,14 @@ export const GUIDE_DICT = {
           "Desenha num mapa separado e leve, deixando o mapa principal intacto.",
         ],
       },
+      tools: {
+        t: "Outras ferramentas",
+        b: [
+          "Ligações para outros sites criados pela comunidade de WarEra, um cartão para cada um com uma linha sobre o que faz.",
+          "São ferramentas de terceiros, sem afiliação ao WarEra+: abrem num novo separador e têm os seus próprios dados e contas.",
+          "Úteis para o que o WarEra+ não cobre, como a análise de empresas, otimizadores de combate ou um jogo de cartas.",
+        ],
+      },
       settings: {
         t: "Definições e atalhos",
         b: [
@@ -805,6 +869,14 @@ export const GUIDE_DICT = {
           "المؤشر في الأسفل يعيد الخريطة إلى الوراء ويبيّن من كان يملك كل إقليم حينها.",
           "ملكية الأقاليم فقط: السكان والثروة تاريخياً لم تُسجَّل قط، وعرضها سيكون مضللاً.",
           "يرسم على خريطة منفصلة وخفيفة، فتبقى الخريطة الرئيسية كما هي.",
+        ],
+      },
+      tools: {
+        t: "أدوات أخرى",
+        b: [
+          "روابط إلى مواقع أخرى أنشأها مجتمع WarEra، بطاقة لكل موقع مع سطر يشرح ما يفعله.",
+          "إنها أدوات تابعة لجهات خارجية وغير مرتبطة بـ WarEra+: تُفتح في علامة تبويب جديدة ولها بياناتها وحساباتها الخاصة.",
+          "مفيدة لما لا يغطيه WarEra+، مثل تحليل الشركات أو مُحسِّنات القتال أو لعبة بطاقات.",
         ],
       },
       settings: {
