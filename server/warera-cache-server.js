@@ -222,7 +222,7 @@ const {
 // giorno di notte, partendo dai cittadini attivi del censimento. Vedi il
 // blocco in testa a server/companyCensus.js.
 const {
-  initCompanyCensus, runCompanyCensus, companyCensusDovuto, readCompanyCensus, statoCompanyCensus,
+  initCompanyCensus, runCompanyCensus, companyCensusDovuto, readCompanyCensus, readCompanyAbroad, statoCompanyCensus,
 } = require('./companyCensus');
 // WarEra+ tornei: tabellone e forza delle squadre (danno settimanale dei
 // loro iscritti) gia' calcolata, per non far scaricare a ogni browser la
@@ -3258,6 +3258,15 @@ app.get('/company-census', (req, res) => {
   const countryId = /^[a-f0-9]{24}$/.test(String(req.query.countryId || '')) ? String(req.query.countryId) : null;
   const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
   res.json(readCompanyCensus({ item, countryId, days }));
+});
+
+// Le aziende dei cittadini di una nazione in regioni di altre nazioni,
+// dallo stesso giro notturno. La legge l'area riservata (plusApi
+// /nazione/aziende-estero), che ci aggiunge nomi e nazione ospite di adesso.
+app.get('/company-abroad', (req, res) => {
+  const countryId = String(req.query.countryId || '');
+  if (!/^[a-f0-9]{24}$/.test(countryId)) return res.status(400).json({ error: 'countryId' });
+  res.json(readCompanyAbroad(countryId));
 });
 
 // Lo storico ricchezza di un giocatore. L'archivio sta nel database di

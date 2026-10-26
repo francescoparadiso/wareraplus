@@ -106,11 +106,25 @@
    del giro prima, si scarta tutto e resta la fotografia di ieri: una
    pagina persa diventerebbe "metà delle aziende di ferro ha chiuso".
    Stessa guardia di citizenMoves.js.
+
+   ── LE AZIENDE ALL'ESTERO (2026-10-26) ────────────────────────────────
+   Richiesta dell'area riservata: quali cittadini di una nazione hanno
+   aziende in regioni di un'ALTRA nazione (tasse sui salari e produzione
+   vanno a chi ospita). Il giro le ha già in mano tutte — proprietario,
+   azienda, regione — quindi le si mette da parte nello stesso passaggio,
+   in un file a sé (`company-abroad`): zero richieste in più. "Estero" =
+   la regione non è della nazione di cui il proprietario è cittadino
+   secondo il censimento dei cittadini. È una fotografia della notte:
+   un'azienda spostata oggi si vede domani. plusApi ricalcola la nazione
+   ospite sulle regioni di adesso, quindi una nostra regione persa in
+   giornata cambia bandiera subito; una conquistata in giornata, invece,
+   aspetta il giro dopo.
    ═══════════════════════════════════════════════════════════════════════ */
 
 let deps = null;
 
 const FILE = 'company-census';
+const FILE_ESTERO = 'company-abroad';
 const TZ = 'Europe/Rome';
 
 const CHUNK_OWNERS = 50;
@@ -185,11 +199,12 @@ function _write(store) {
 }
 
 // ── I dati che servono e ci sono già ───────────────────────────────────
-function _proprietari() {
+/** id → nazione di cui è cittadino, dal censimento dei cittadini. */
+function _cittadinanze() {
   const c = deps.readCache(deps.citizensFile, null);
-  const ids = new Set();
-  for (const v of Object.values(c?.data || {})) for (const id of v.ids || []) ids.add(id);
-  return [...ids];
+  const out = new Map();
+  for (const [cid, v] of Object.entries(c?.data || {})) for (const id of v.ids || []) out.set(id, cid);
+  return out;
 }
 
 function _regioni() {
@@ -236,7 +251,8 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
   const oggi = giornoDi();
   if (!forza && store.day === oggi) return;   // già fatto oggi
 
-  const proprietari = _proprietari();
+  const cittadinanza = _cittadinanze();
+  const proprietari = [...cittadinanza.keys()];
   if (!proprietari.length) { console.log('[company-census] nessun cittadino in censimento, salto'); return; }
 
   _inCorso = true;
@@ -248,10 +264,14 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
       proprietari.map((userId) => ({ userId, perPage: PER_PAGE })), CHUNK_OWNERS);
     let risposte = 0;
     const idAziende = [];
-    elenchi.forEach((r) => {
+    const proprietarioDi = new Map();   // azienda → proprietario (per le aziende all'estero)
+    elenchi.forEach((r, i) => {
       if (!r?.items) return;
       risposte++;
-      for (const id of r.items) idAziende.push(id);
+      for (const id of r.items) {
+        idAziende.push(id);
+        proprietarioDi.set(id, proprietari[i]);
+      }
     });
     if (risposte < proprietari.length * MIN_RISPOSTE) {
       console.warn(`[company-census] solo ${risposte}/${proprietari.length} proprietari hanno risposto: giro scartato`);
@@ -365,6 +385,23 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
       store.measured[g] = oggi;
       giorniScritti++;
     }
+
+    // 6. Le aziende all'estero, per nazione del proprietario (vedi testata).
+    //    [userId, companyId, itemCode, regionId, nazioneOspite, valore,
+    //     disabilitata 0/1, con dipendenti 0/1]
+    const estero = {};
+    for (const c of aziende) {
+      const uid = proprietarioDi.get(c._id);
+      const suo = uid && cittadinanza.get(uid);
+      const ospite = nazioneDi(c.region);
+      if (!suo || !c.region || ospite === suo) continue;
+      const conDip = conteggioNoto ? (Number(c.workerCount) || 0) > 0 : prodottoIeri.has(c._id);
+      (estero[suo] || (estero[suo] = [])).push([uid, c._id, c.itemCode, c.region, ospite || null,
+        Math.round(Number(c.estimatedValue) || 0), c.disabledAt ? 1 : 0, conDip ? 1 : 0]);
+    }
+    const proprietariPer = {};
+    for (const cid of cittadinanza.values()) proprietariPer[cid] = (proprietariPer[cid] || 0) + 1;
+    deps.writeCache(FILE_ESTERO, { day: oggi, updatedAt: Date.now(), owners: proprietariPer, byCountry: estero }, { compact: true });
 
     store.latest = { items, countries };
     store.counts[oggi] = items;
@@ -518,6 +555,21 @@ function readCompanyCensus({ item = null, countryId = null, days = 30 } = {}) {
   return out;
 }
 
+/** Le aziende dei cittadini di `countryId` in regioni di altre nazioni.
+ *  Righe compatte, vedi il passo 6 del giro. */
+function readCompanyAbroad(countryId) {
+  const f = deps.readCache(FILE_ESTERO, null);
+  if (!f?.byCountry) return { available: false };
+  return {
+    available: true,
+    day: f.day,
+    updatedAt: f.updatedAt,
+    countryId,
+    owners: f.owners?.[countryId] ?? 0,   // cittadini attivi guardati
+    rows: f.byCountry[countryId] || [],
+  };
+}
+
 /** Per /health. */
 function statoCompanyCensus() {
   const store = _read();
@@ -538,5 +590,6 @@ module.exports = {
   runCompanyCensus,
   companyCensusDovuto,
   readCompanyCensus,
+  readCompanyAbroad,
   statoCompanyCensus,
 };

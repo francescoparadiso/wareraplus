@@ -338,6 +338,12 @@ export function leggiGiocatoriNemico(nemicoId, { asAccount = null, paese = null 
   return getJson(conLente(conPaese(`/nazione/nemici/${encodeURIComponent(nemicoId)}/giocatori`, paese), asAccount));
 }
 
+/** I nostri cittadini con aziende in regioni di altre nazioni (dal
+ *  censimento aziende notturno). Si chiede solo quando la scheda si apre. */
+export function leggiAziendeEstero({ asAccount = null, paese = null } = {}) {
+  return getJson(conLente(conPaese('/nazione/aziende-estero', paese), asAccount));
+}
+
 /** Chi altro vede la pagina della nazione (oltre al governo, per carica).
  *  Leggerlo e cambiarlo è del governo. */
 export function leggiAccessi({ asAccount = null, paese = null } = {}) {

@@ -1547,6 +1547,32 @@ i.wp-pv-nz-barra-contratti { background: var(--pv-accent); }
 .wp-pv-nz-tab-pill { display: flex; align-items: center; gap: .35rem; white-space: nowrap; }
 .wp-pv-nz-tab-piede { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 
+/* ── Aziende all'estero (cardAziendeEstero) ──────────────────── */
+.wp-pv-nz-estero { display: flex; flex-direction: column; gap: .6rem; }
+.wp-pv-nz-az-riga {
+  display: grid;
+  grid-template-columns: minmax(9rem, 1.1fr) 4.6rem minmax(0, 3fr) 5.2rem;
+  gap: .6rem; align-items: center;
+  padding: .32rem .45rem; border-radius: 6px; font-size: .83rem;
+}
+.wp-pv-nz-az-riga:nth-child(even) { background: var(--pv-surface); }
+.wp-pv-nz-az-riga .wp-pv-nz-gov-chi { overflow: hidden; white-space: nowrap; }
+.wp-pv-nz-az-dove { display: flex; flex-wrap: wrap; gap: .3rem; min-width: 0; }
+.wp-pv-nz-az {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .1rem .45rem; border-radius: 999px; font-size: .74rem;
+  background: var(--pv-surface-2); border: 1px solid var(--pv-rule); white-space: nowrap;
+}
+.wp-pv-nz-az .wp-pv-nz-flag { width: 1rem; height: auto; }
+.wp-pv-nz-az-item { color: var(--pv-ink-soft); font-size: .68rem; }
+.wp-pv-nz-az-guerra { border-color: var(--pv-danger); background: rgba(240, 119, 108, .12); }
+.wp-pv-nz-az-spenta { opacity: .55; text-decoration: line-through; }
+@media (max-width: 720px) {
+  .wp-pv-nz-az-riga { grid-template-columns: minmax(0, 1fr) 3.4rem 4.6rem; }
+  .wp-pv-nz-az-riga > .wp-pv-nz-az-dove { grid-column: 1 / -1; grid-row: 2; }
+  .wp-pv-nz-az-riga.wp-pv-nz-tab-testa > :nth-child(3) { display: none; }
+}
+
 /* ── Danno per livello (cardDannoLivelli) ────────────────────── */
 .wp-pv-nz-lvd { display: flex; flex-direction: column; overflow-x: auto; }
 .wp-pv-nz-lvd-riga {

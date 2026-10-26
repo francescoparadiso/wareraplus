@@ -505,6 +505,16 @@ amministrazione restano identici. Tre cose da sapere prima di crederla rotta:
   (stesso blocco), MAI dal campo `allies`, fossile del 10 giugno: l'Italia
   vi ha ancora la Francia, con cui è in guerra.
 
+Le **Aziende all'estero** (scheda Persone di "La mia nazione", dal
+2026-10-26: cittadini con aziende in regioni di altre nazioni) dipendono da
+DUE redeploy: cache-server (`/company-abroad`, scritto dal giro notturno di
+`companyCensus.js`) e warera-plus-api (`/nazione/aziende-estero`). Dopo i
+deploy la lista resta vuota con "si riempie stanotte" fino al giro delle
+03:20: non c'è un giro all'avvio, perché il censimento aziende è un'ora e
+mezza di richieste e non si lancia di giorno. Solo cittadini ATTIVI (soglia
+del censimento, 3 giorni); la nazione ospite la ricalcola plusApi sulle
+regioni di adesso.
+
 Le **Operazioni** dell'area riservata (`src/private/operazioni.js` +
 `mappaOperazione.js` + `server/plusApi/operazioni.js`, dal 2026-10-22) sono
 la lavagna dei piani: passi in sequenza con orari e frecce, e "Vedi sulla

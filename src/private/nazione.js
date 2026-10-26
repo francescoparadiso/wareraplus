@@ -36,9 +36,9 @@ import { nzT } from './i18nNazione.js';
 import { pvT, pvErr } from './i18n.js';
 import {
   leggiNazione, leggiNemici, impostaCanaleConfini, impostaCanaleAlleanza, ApiError,
-  leggiAccessi, cercaCittadini, aggiungiAccesso, togliAccesso, leggiGiocatoriNemico,
+  leggiAccessi, cercaCittadini, aggiungiAccesso, togliAccesso, leggiGiocatoriNemico, leggiAziendeEstero,
 } from './api.js';
-import { nomeNazione, urlBandiera, coloreNazione } from './battles.js';
+import { nomeNazione, urlBandiera, coloreNazione, nomeRegione } from './battles.js';
 import { state } from '../diplomacy/state.js';
 import { getLang, t as tShared } from '../shared/i18n.js';
 import { trackEvent } from '../shared/analytics.js';
@@ -442,6 +442,9 @@ export function creaQuadroNazione(ctx) {
   // sopravvivono ai ridisegni: vedi tabellaGiocatori).
   const tabelleAperte = new Set();
   const tabelle = new Map();
+  // Le aziende all'estero: un nodo che sopravvive ai ridisegni, come le
+  // tabelle dei giocatori (vedi cardAziendeEstero).
+  let nodoEstero = null;
   // Il 403 di chi non ha accesso, con dentro i nomi del governo.
   let negato = null;
   // Chi altro vede la pagina: lo legge solo il governo.
@@ -467,6 +470,7 @@ export function creaQuadroNazione(ctx) {
     // Le tabelle dei giocatori si rileggono con tutto il resto: una tabella
     // di un'ora fa accanto a un riepilogo di adesso direbbe due cose diverse.
     tabelle.clear();
+    nodoEstero = null;
     ctx.ridisegna();
     try {
       dati = await leggiNazione({ asAccount: ctx.lente(), paese: paeseScelto });
@@ -1351,6 +1355,7 @@ export function creaQuadroNazione(ctx) {
     g.metti(cardTop(), 6);
     g.metti(cardDannoLivelli(), 12);
     g.metti(cardUnita(), 6);
+    g.metti(cardAziendeEstero(), 12);
     return g;
   }
 
@@ -2311,6 +2316,124 @@ export function creaQuadroNazione(ctx) {
       lista.appendChild(r);
     });
     card.appendChild(lista);
+    return card;
+  }
+
+  /**
+   * AZIENDE ALL'ESTERO (2026-10-26) — i nostri cittadini con aziende in
+   * regioni di altre nazioni: lì vanno le tasse sui salari, e lì si
+   * produce. Una riga per giocatore, le sue aziende come gettoni con la
+   * bandiera di chi ospita (rossa se ci siamo in guerra). Il dato è la
+   * fotografia notturna del censimento aziende, quindi la scheda dice di
+   * quando è e su quanti cittadini attivi; la nazione ospite è di adesso
+   * (vedi quadroAziendeEstero in server/plusApi/nazione.js).
+   * Nodo persistente: la ricerca non perde il fuoco a ogni ridisegno.
+   */
+  function cardAziendeEstero() {
+    if (nodoEstero) return nodoEstero;
+    const PAGINA = 40;
+    const st = { dati: null, errore: null, q: '', ospite: '', mostra: PAGINA };
+    const card = scheda(nzT('abrTitle'), nzT('abrBody'));
+    const corpo = el('div', 'wp-pv-nz-estero');
+    card.appendChild(corpo);
+    const guerre = new Set(dati.paese.guerre || []);
+
+    const cerca = el('input', 'wp-pv-input');
+    cerca.type = 'search'; cerca.placeholder = nzT('searchPlayer'); cerca.autocomplete = 'off'; cerca.maxLength = 40;
+    let tick = null;
+    cerca.addEventListener('input', () => {
+      clearTimeout(tick);
+      tick = setTimeout(() => { st.q = cerca.value.trim().toLowerCase(); st.mostra = PAGINA; disegnaCorpo(); }, 150);
+    });
+    cerca.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+    const sceltaOspite = el('select', 'wp-pv-select wp-pv-select-piccola');
+    sceltaOspite.setAttribute('aria-label', nzT('abrHost'));
+    sceltaOspite.addEventListener('change', () => { st.ospite = sceltaOspite.value; st.mostra = PAGINA; disegnaCorpo(); });
+    const barra = el('div', 'wp-pv-nz-tab-barra');
+    barra.appendChild(cerca);
+    barra.appendChild(sceltaOspite);
+    const lista = el('div');
+
+    function gettoneAzienda(a) {
+      const g = el('span', `wp-pv-nz-az${guerre.has(a.ospite) ? ' wp-pv-nz-az-guerra' : ''}${a.disabilitata ? ' wp-pv-nz-az-spenta' : ''}`);
+      const f = a.ospite ? bandiera(a.ospite) : null; if (f) g.appendChild(f);
+      g.appendChild(el('span', null, a.nomeRegione || nomeRegione(a.regione) || '?'));
+      g.appendChild(el('span', 'wp-pv-nz-az-item', a.item));
+      g.title = [nomeNazione(a.ospite) || '?', a.item, `${nzT('abrValue')}: ${num(a.valore)}`,
+        a.disabilitata ? nzT('abrDisabled') : null, guerre.has(a.ospite) ? nzT('abrAtWar') : null].filter(Boolean).join(' · ');
+      return g;
+    }
+
+    function disegnaCorpo() {
+      corpo.textContent = '';
+      if (st.errore) { corpo.appendChild(el('p', 'wp-pv-error', st.errore)); return; }
+      if (!st.dati) { corpo.appendChild(el('p', 'wp-pv-note', '…')); return; }
+      if (!st.dati.disponibile) {
+        corpo.appendChild(el('p', 'wp-pv-note', st.dati.motivo === 'attesa' ? nzT('abrWaiting') : nzT('abrNoServer')));
+        return;
+      }
+      const tutti = st.dati.giocatori || [];
+      const aziende = tutti.flatMap((g) => g.aziende);
+      const ospiti = new Map();
+      for (const a of aziende) if (a.ospite) ospiti.set(a.ospite, (ospiti.get(a.ospite) || 0) + 1);
+      corpo.appendChild(tessere([
+        [nzT('abrPlayers'), num(tutti.length), st.dati.guardati ? t('abrOfActive', { n: num(st.dati.guardati) }) : null],
+        [nzT('abrCompanies'), num(aziende.length), t('abrAtWarN', { n: num(aziende.filter((a) => guerre.has(a.ospite)).length) })],
+        [nzT('abrHosts'), num(ospiti.size)],
+        [nzT('abrValue'), compatto(aziende.reduce((s, a) => s + a.valore, 0))],
+      ], 'wp-pv-nz-tessere-strette'));
+      if (!tutti.length) { corpo.appendChild(el('p', 'wp-pv-note', nzT('abrNone'))); return; }
+
+      // Le nazioni ospiti, le più frequenti prima: il filtro si rifà sui
+      // dati a ogni lettura, mantenendo la scelta se c'è ancora.
+      sceltaOspite.textContent = '';
+      const tutte = el('option', null, nzT('abrAllHosts')); tutte.value = '';
+      sceltaOspite.appendChild(tutte);
+      for (const [id, n] of [...ospiti].sort((a, b) => b[1] - a[1])) {
+        const o = el('option', null, `${nomeNazione(id) || id} (${n})`); o.value = id;
+        if (id === st.ospite) o.selected = true;
+        sceltaOspite.appendChild(o);
+      }
+      corpo.appendChild(barra);
+
+      let righe = tutti;
+      if (st.q) righe = righe.filter((g) => String(g.nome || '').toLowerCase().includes(st.q));
+      if (st.ospite) righe = righe.filter((g) => g.aziende.some((a) => a.ospite === st.ospite));
+
+      lista.textContent = '';
+      lista.className = 'wp-pv-nz-tab-lista';
+      const testa = el('div', 'wp-pv-nz-az-riga wp-pv-nz-tab-testa');
+      for (const [tx, numerica] of [[nzT('colPlayer')], [nzT('abrCompanies'), 1], [nzT('abrWhere')], [nzT('abrValue'), 1]]) {
+        testa.appendChild(el('span', numerica ? 'wp-pv-nz-tab-num' : null, tx));
+      }
+      lista.appendChild(testa);
+      for (const g of righe.slice(0, st.mostra)) {
+        const r = el('div', 'wp-pv-nz-az-riga');
+        r.appendChild(personaEl(g.avatar, g.nome || '?', g.livello != null ? `${nzT('lv')}${g.livello}` : null));
+        r.appendChild(el('span', 'wp-pv-nz-tab-num', num(g.aziende.length)));
+        const dove = el('span', 'wp-pv-nz-az-dove');
+        for (const a of g.aziende) if (!st.ospite || a.ospite === st.ospite) dove.appendChild(gettoneAzienda(a));
+        r.appendChild(dove);
+        r.appendChild(el('span', 'wp-pv-nz-tab-num', compatto(g.valore)));
+        lista.appendChild(r);
+      }
+      corpo.appendChild(lista);
+
+      const piede = el('div', 'wp-pv-nz-tab-piede');
+      piede.appendChild(el('span', 'wp-pv-note', nzT('shownOf')
+        .replace('{n}', num(Math.min(st.mostra, righe.length))).replace('{tot}', num(righe.length))));
+      if (righe.length > st.mostra) {
+        piede.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', nzT('showMore'), () => { st.mostra += PAGINA * 2; disegnaCorpo(); }));
+      }
+      corpo.appendChild(piede);
+      corpo.appendChild(el('p', 'wp-pv-suggerimento', t('abrFoot', { giorno: quando(st.dati.aggiornatoIl) })));
+    }
+
+    leggiAziendeEstero({ asAccount: ctx.lente(), paese: paeseScelto })
+      .then((d) => { st.dati = d; disegnaCorpo(); })
+      .catch((err) => { st.errore = messaggioErrore(err); disegnaCorpo(); });
+    disegnaCorpo();
+    nodoEstero = card;
     return card;
   }
 

@@ -64,7 +64,7 @@ const { trpcGet } = require('./wareraApi');
 const {
   regioniMappa, paesiMappa, paeseLive, governo, nomiUtenti,
   battaglieVive, baseDannoGiornaliero, bonifici, timeline,
-  cittadiniTutti, conteggiCittadini, eventiTicker, archivioBattaglie, speseGuerra, direttorioMu, elezioniDi,
+  cittadiniTutti, conteggiCittadini, aziendeEstero, eventiTicker, archivioBattaglie, speseGuerra, direttorioMu, elezioniDi,
 } = require('./fonti');
 const { quadroConfini, relazione } = require('./confini');
 const { quadroNemici, giocatoriNemico, idNemici } = require('./nemici');
@@ -611,6 +611,75 @@ async function quadroNazione(countryId) {
  *  proprio uno che fa poco danno (un diplomatico, un economista). */
 const tuttiICittadini = cittadiniTutti;
 
+// ---------------------------------------------------------------------------
+// Aziende all'estero (2026-10-26)
+// ---------------------------------------------------------------------------
+
+/**
+ * I cittadini con aziende in regioni di altre nazioni: lì vanno le tasse
+ * sui salari e lì si produce. La fotografia è del censimento aziende
+ * notturno del cache-server (vedi la testata di server/companyCensus.js);
+ * qui si aggiungono i nomi e la nazione ospite DI ADESSO, ricalcolata
+ * sulle regioni: una regione persa stamattina cambia bandiera subito, e
+ * un'azienda tornata in casa nostra esce dall'elenco.
+ *
+ * Senza rideploy del cache-server la rotta là risponde 404: qui diventa
+ * `disponibile: false` e la vista lo dice, nessun errore.
+ */
+async function quadroAziendeEstero(countryId) {
+  let base;
+  try { base = await aziendeEstero(countryId); }
+  catch { return { disponibile: false, motivo: 'server' }; }
+  if (!base?.available) return { disponibile: false, motivo: 'attesa' };
+
+  const [reg, cit] = await Promise.all([
+    regioniMappa().catch(() => ({})),
+    cittadiniTutti(countryId).catch(() => null),
+  ]);
+  const perId = new Map((cit?.data || []).map((c) => [c.id, c]));
+
+  const giocatori = new Map();
+  for (const [uid, companyId, item, regionId, ospiteAllora, valore, disabilitata, conDip] of base.rows || []) {
+    const ospite = reg[regionId]?.country || ospiteAllora || null;
+    if (ospite === countryId) continue;
+    let g = giocatori.get(uid);
+    if (!g) {
+      const c = perId.get(uid);
+      g = { id: uid, nome: c?.u || null, avatar: c?.a || null, livello: c?.lv ?? null, aziende: [] };
+      giocatori.set(uid, g);
+    }
+    g.aziende.push({
+      id: companyId, item, regione: regionId, nomeRegione: reg[regionId]?.name || null, ospite,
+      valore: valore || 0, disabilitata: Boolean(disabilitata), conDipendenti: Boolean(conDip),
+    });
+  }
+
+  // Chi il censimento dei cittadini non ha ancora per nome: lo si chiede.
+  const senzaNome = [...giocatori.values()].filter((g) => !g.nome).map((g) => g.id);
+  if (senzaNome.length) {
+    const nomi = await nomiUtenti(senzaNome);
+    for (const id of senzaNome) {
+      const g = giocatori.get(id);
+      g.nome = nomi[id]?.username || null;
+      g.avatar = g.avatar || nomi[id]?.avatarUrl || null;
+    }
+  }
+
+  const elenco = [...giocatori.values()];
+  for (const g of elenco) {
+    g.aziende.sort((a, b) => b.valore - a.valore);
+    g.valore = g.aziende.reduce((s, a) => s + a.valore, 0);
+  }
+  elenco.sort((a, b) => b.aziende.length - a.aziende.length || b.valore - a.valore);
+  return {
+    disponibile: true,
+    giorno: base.day,
+    aggiornatoIl: base.updatedAt,
+    guardati: base.owners ?? null,
+    giocatori: elenco,
+  };
+}
+
 async function formaAccessi(countryId) {
   const righe = accessiNazione(countryId);
   const nomi = await nomiUtenti(righe.map((r) => r.war_user_id));
@@ -750,6 +819,21 @@ function buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSotto
       res.json(await giocatoriNemico(req.params.id));
     } catch (err) {
       console.error('[nazione] giocatori nemici falliti:', err.message);
+      res.status(502).json({ error: 'gioco_non_raggiungibile' });
+    }
+  });
+
+  /** I nostri cittadini con aziende fuori dalle nostre regioni. Chi vede
+   *  la nazione vede anche questo: sono dati pubblici del gioco, messi
+   *  insieme. */
+  router.get('/aziende-estero', async (req, res) => {
+    try {
+      const ctx = await contesto(req);
+      if (!ctx.countryId) return res.status(404).json({ error: 'nazione_sconosciuta' });
+      if (!ctx.accesso) return negato(res, ctx.countryId);
+      res.json(await quadroAziendeEstero(ctx.countryId));
+    } catch (err) {
+      console.error('[nazione] aziende all\'estero fallite:', err.message);
       res.status(502).json({ error: 'gioco_non_raggiungibile' });
     }
   });

@@ -130,6 +130,11 @@ const timeline = memo(5 * 60_000, (chiave) => {
   return dalCache(`/damage-timeline?countryId=${encodeURIComponent(countryId)}&hours=${Number(ore) || 48}&days=14`);
 });
 
+/** Le aziende dei nostri cittadini in regioni straniere: il censimento
+ *  aziende le fotografa una volta a notte, mezz'ora qui basta e avanza. */
+const aziendeEstero = memo(30 * 60_000, (countryId) =>
+  dalCache(`/company-abroad?countryId=${encodeURIComponent(countryId)}`));
+
 const cittadini = memo(10 * 60_000, (countryId) =>
   dalCache(`/country-citizens?countryId=${encodeURIComponent(countryId)}&limit=400`));
 
@@ -184,5 +189,5 @@ module.exports = {
   CACHE_BASE, dalCache, memo,
   regioniMappa, paesiMappa, paeseLive, governo, configGioco,
   battaglieVive, baseDannoGiornaliero, bonifici, timeline, cittadini, nomiUtenti,
-  cittadiniTutti, conteggiCittadini, eventiTicker, archivioBattaglie, speseGuerra, direttorioMu, elezioniDi,
+  cittadiniTutti, conteggiCittadini, aziendeEstero, eventiTicker, archivioBattaglie, speseGuerra, direttorioMu, elezioniDi,
 };

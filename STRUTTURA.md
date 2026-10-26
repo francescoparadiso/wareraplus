@@ -155,6 +155,10 @@ wareraPlus/
 │   │                              ⚠️ Non conta la tassa sul lavoro in proprio né
 │   │                              quella di mercato, e la vista lo scrive.
 │   │                              Endpoint: /company-census.
+│   │                              Dal 2026-10-26 lo stesso giro mette da parte, per
+│   │                              nazione del proprietario, le aziende in regioni di
+│   │                              ALTRE nazioni (file company-abroad, zero richieste in
+│   │                              più). Endpoint: /company-abroad?countryId=.
 │   ├── import/                 ← NUOVO — import UNA TANTUM da un archivio esterno
 │   │   ├── bonifici.js            (il dump PostgreSQL di un altro tool della
 │   │   ├── ricchezza.js            comunità, passato dal suo autore). Servono solo
@@ -815,6 +819,8 @@ wareraPlus/
     │   │                          (canali Discord, accessi). Colori di stato a tre livelli
     │   │                          (alto/medio/ok, `--liv` in private.css). Grafici in SVG a
     │   │                          mano. Dati da /nazione e /nazione/nemici: nessuna chiamata nuova.
+    │   │                          In PERSONE, dal 2026-10-26, "Aziende all'estero" (cittadini con
+    │   │                          aziende in regioni di altre nazioni) da /nazione/aziende-estero.
     │   ├── i18nNazione.js       ← dizionario (9 lingue) di nazione.js e delle sezioni
     │   ├── operazioni.js        ← NUOVO (2026-10-22) — pagina "Operazioni", subito dopo la
     │   │                          nazione: la lavagna dei piani. Un flowchart su un asse
