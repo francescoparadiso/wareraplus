@@ -139,6 +139,7 @@ function compareCtx() {
     onSwap: () => { [cmp.a, cmp.b] = [cmp.b, cmp.a]; [cmp.qA, cmp.qB] = [cmp.qB, cmp.qA]; cmp.focus = null; render(); },
     onSearch: (side, q) => { cmp[side === 'a' ? 'qA' : 'qB'] = q; cmp.focus = side; render(); },
     onOpenMu: (muId) => { pendingMuId = muId; cmp.focus = null; render(); },
+    onTrack: (name, data) => trackEvent(name, data),
   };
 }
 

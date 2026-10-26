@@ -13,6 +13,9 @@
       cambia, chi del lato che passa avanti ha fatto il danno nei 10
       minuti prima, con "appena entrata" su chi è arrivato lì;
    3. gli INGRESSI — per ogni nazione, il primo tick in cui compare.
+   Più, in una sezione sua ma con lo stesso intervallo di zoom, i SOLDI
+   SPESI: totale, taglia e contratti cumulati, per lato — vedi
+   analyzeMoney più sotto e la testata di timelineChart.js.
 
    ⚠️ Niente fallback e niente ricostruzione: il gioco non conserva
    l'andamento di una battaglia (vedi la testata del modulo server), e un
@@ -30,6 +33,7 @@
 import { WARERA_CACHE_BASE } from '../diplomacy/config.js';
 import { escapeHtml } from '../diplomacy/utils.js';
 import { tlT } from './timelineI18n.js';
+import { chartBlockHtml, wireChart, resetChart } from './timelineChart.js';
 
 const GAP_MS = 3.5 * 60 * 1000;     // fra due campioni al minuto: oltre è un buco
 const WINDOW_MS = 10 * 60 * 1000;    // "chi ha spinto prima del sorpasso"
@@ -187,7 +191,125 @@ export function analyzeTimeline(tl) {
     flips.push({ t, round: r, side, top, sideWin, oppWin: sumWindow(other, from, to, null) });
   }
 
-  return { S, iv, flips, entries, preexisting: preSet.size };
+  return { S, iv, flips, entries, preexisting: preSet.size, gapMs: GAP_MS };
+}
+
+/* ── Soldi spesi nel tempo ────────────────────────────────────────
+   Richiesta dell'utente (2026-10-20): accanto al danno, «un grafico dei
+   soldi spesi, con 3 linee: totale, solo taglia, solo contratti».
+   Cumulati, cioè "speso finora"; poi (stesso giorno) in una sezione a
+   parte e divisi fra difesa e attacco, con la somma dei lati a scelta.
+
+   - TAGLIA: quanto è SCESO il salvadanaio di un lato fra due campioni
+     (campi 7-8 di `s`, dal deploy del 2026-10-20). Non è una stima: è il
+     salvadanaio stesso. Una salita è una ricarica e vale zero pagato. I
+     buchi di lettura non fanno perdere niente (la discesa attraverso il
+     buco è quella vera), solo la sua distribuzione nel tempo. Prima del
+     primo campione col salvadanaio la taglia NON si sa: le linee taglia e
+     totale partono da lì (`bountyFrom`) e la nota lo dice.
+   - CONTRATTI: il compenso pattuito di ogni contratto aggiudicato,
+     contato quando l'asta si chiude (`awardedAt`). Viene dalle aste, non
+     dal server, quindi c'è sempre — anche per le battaglie registrate
+     prima di quel deploy. ⚠️ È un impegno preso a quell'ora: l'unità lo
+     incassa a danno consegnato, più tardi.
+   Le due voci si sommano senza doppi conteggi: è la stessa regola del
+   totale in testa alla scheda (vedi src/diplomacy/battleSpending.js). */
+
+/* ⚠️ UN CALO DEL SALVADANAIO NON È SEMPRE TAGLIA PAGATA (misurato il
+   2026-10-20 sulla prima ora di registrazione): quando una nazione RIMETTE
+   la taglia (tariffa nuova, `bountyEffectiveAt` nuovo) il salvadanaio
+   vecchio sparisce in un minuto — 7.834 → 800 con 0,75M di danno, cioè
+   9,4 per 1k contro le 0,01–0,15 che si pagano davvero. Contarlo come
+   speso gonfiava la linea di migliaia in un punto solo.
+   Quindi un calo vale come pagato solo se è compatibile col danno fatto
+   da quel lato in quell'intervallo: sopra MAX_PER_K per 1k è una
+   sostituzione, e per quel minuto si stima il pagato con la tariffa
+   osservata nei minuti prima (mai più del calo). La regola regge anche sui
+   campioni già salvati, che non portano la tariffa. Resta un errore
+   piccolo: una sostituzione con un salvadanaio di poco più basso, che
+   sembra un pagamento. */
+const MAX_PER_K = 1;
+const _sideDmg = (prev, s, k, rounds) => {
+  // danno di un lato fra due campioni: il contatore è del round e riparte
+  // da zero al cambio, il pezzo mancante lo dà il risultato del round
+  if (s[1] === prev[1]) return Math.max(0, s[k] - prev[k]);
+  const fin = rounds?.[prev[1] - 1];
+  const finK = k === 3 ? fin?.attackerDamages : fin?.defenderDamages;
+  return (finK != null ? Math.max(0, finK - prev[k]) : 0) + s[k];
+};
+
+/** @returns {null | { pts:[t, taglia difesa, taglia attacco, contratti difesa, contratti attacco][],
+ *            bountyFrom:number|null, pre:{defender,attacker}, hasContracts:boolean,
+ *            total:number, resets:number }} */
+export function analyzeMoney(S, contracts, T0, T1, rounds = null, { bountyNow = null, createdAt = null } = {}) {
+  // ultima tariffa osservata per lato (soldi per 1k danni), per i minuti
+  // in cui il salvadanaio è stato sostituito
+  const lastRate = { 7: null, 8: null };
+  let resets = 0;
+  const paid = (prev, s, k) => {
+    const p = prev[k], c = s[k];
+    if (p == null || c == null || c >= p) return 0;
+    const drop = p - c;
+    const dmg = _sideDmg(prev, s, k === 7 ? 3 : 4, rounds);
+    const perK = dmg > 0 ? drop / dmg * 1000 : Infinity;
+    if (perK <= MAX_PER_K) { lastRate[k] = perK; return drop; }
+    resets++;
+    return lastRate[k] != null ? Math.min(drop, dmg * lastRate[k] / 1000) : 0;
+  };
+  const ctr = (contracts || [])
+    .filter(c => c && c.payout > 0)
+    .map(c => ({ t: Math.min(T1, Math.max(T0, c.awardedAt || c.createdAt || T0)), side: c.side, v: c.payout }))
+    .sort((a, b) => a.t - b.t);
+  const pool = S.filter(s => s.length > 8);
+  if (!ctr.length && !pool.length) return null;
+
+  // Tutti gli istanti in cui qualcosa cambia, in ordine: i campioni col
+  // salvadanaio e le aste chiuse. A ogni istante il cumulato delle 4 voci.
+  const pts = [];
+  let bD = 0, bA = 0, cD = 0, cA = 0;
+  let i = 0, j = 0, prev = null;
+  const push = (t) => {
+    const last = pts[pts.length - 1];
+    if (last && last[0] === t) { last[1] = bD; last[2] = bA; last[3] = cD; last[4] = cA; }
+    else pts.push([t, bD, bA, cD, cA]);
+  };
+  // i contratti chiusi prima del primo campione partono da T0
+  push(T0);
+  while (i < pool.length || j < ctr.length) {
+    if (j < ctr.length && (i >= pool.length || ctr[j].t <= pool[i][0])) {
+      const c = ctr[j++];
+      if (c.side === 'defender') cD += c.v; else cA += c.v;
+      push(c.t);
+    } else {
+      const s = pool[i++];
+      if (prev) { bA += paid(prev, s, 7); bD += paid(prev, s, 8); }
+      prev = s;
+      push(s[0]);
+    }
+  }
+  if (pts[pts.length - 1][0] < T1) push(T1);
+
+  // La taglia pagata PRIMA del primo campione col salvadanaio (battaglia
+  // già aperta al deploy, o al primo sguardo): il minuto per minuto non
+  // c'è, ma il totale sì — è quello della testata della scheda (stima
+  // dalle classifiche, battleSpending.js). La differenza fra quel totale
+  // e il registrato entra come PUNTO DI PARTENZA a bountyFrom, così la
+  // fine delle linee coincide con la scheda Nazioni. Segnalato
+  // dall'utente il giorno stesso: «i valori sulla timeline non tornano».
+  // Solo se la registrazione è partita a battaglia già aperta: se c'era
+  // dall'inizio, la differenza sarebbe solo l'errore della stima.
+  const bountyFrom = pool.length ? pool[0][0] : null;
+  const pre = { defender: 0, attacker: 0 };
+  if (bountyFrom != null && bountyNow && createdAt != null && bountyFrom > createdAt + 3 * 60 * 1000) {
+    pre.defender = Math.max(0, (bountyNow.defender ?? 0) - bD);
+    pre.attacker = Math.max(0, (bountyNow.attacker ?? 0) - bA);
+    for (const p of pts) if (p[0] >= bountyFrom) { p[1] += pre.defender; p[2] += pre.attacker; }
+  }
+
+  const last = pts[pts.length - 1];
+  const total = last[1] + last[2] + last[3] + last[4];
+  if (total <= 0) return null;
+  return { pts, bountyFrom, pre, hasContracts: ctr.length > 0, total, resets };
 }
 
 /* ── Formattazione ────────────────────────────────────────────── */
@@ -199,6 +321,12 @@ function fmtNum(n) {
   if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
   return String(Math.round(n));
 }
+function fmtMoney(n) {
+  if (n == null || !Number.isFinite(n)) return '—';
+  if (n >= 10000) return Math.round(n).toLocaleString();
+  if (n >= 10) return n.toFixed(0);
+  return n.toFixed(2);
+}
 function fmtTime(ms, withDay) {
   return new Date(ms).toLocaleString(undefined, withDay
     ? { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }
@@ -207,105 +335,42 @@ function fmtTime(ms, withDay) {
 
 /* ── Grafico ──────────────────────────────────────────────────── */
 
-const W = 760, PAD_L = 46, PAD_R = 10;
-const A_TOP = 8, A_H = 132;          // danno al minuto, specchiato
-const B_TOP = A_TOP + A_H + 16, B_H = 74; // punti del round
-const H = B_TOP + B_H + 20;
-const IW = W - PAD_L - PAD_R;
-
-// Geometria dell'ultimo grafico disegnato, per il tooltip (wireTimeline).
-let _chart = null;
-
-function chartSvg(an, tl) {
-  const { S, iv, flips } = an;
-  const t0 = S[0][0];
-  const t1 = Math.max(S[S.length - 1][0], t0 + 60000);
-  const x = (t) => PAD_L + (t - t0) / (t1 - t0) * IW;
-  const withDay = t1 - t0 > 20 * 3600 * 1000;
-  const maxRate = Math.max(1, ...iv.filter(v => !v.gap).flatMap(v => [v.a, v.d]));
-  const mid = A_TOP + A_H / 2;
-  const half = A_H / 2 - 2;
-  const maxPts = Math.max(300, ...S.map(s => Math.max(s[5], s[6])));
-  const yP = (p) => B_TOP + B_H - p / maxPts * B_H;
-
-  const bars = iv.filter(v => !v.gap).map(v => {
-    const x0 = x(v.t0), w = Math.max(0.8, x(v.t1) - x0 - 0.4);
-    const hd = v.d / maxRate * half, ha = v.a / maxRate * half;
-    return `<rect class="wp-btl-tl-def" x="${x0.toFixed(1)}" y="${(mid - hd).toFixed(1)}" width="${w.toFixed(1)}" height="${hd.toFixed(1)}"/>`
-      + `<rect class="wp-btl-tl-atk" x="${x0.toFixed(1)}" y="${mid.toFixed(1)}" width="${w.toFixed(1)}" height="${ha.toFixed(1)}"/>`;
-  }).join('');
-
-  // Punti: una spezzata per round e per lato, interrotta dai buchi.
-  const lines = { a: [], d: [] };
-  let segA = [], segD = [];
-  const flush = () => {
-    if (segA.length > 1) lines.a.push(segA.join(' '));
-    if (segD.length > 1) lines.d.push(segD.join(' '));
-    segA = []; segD = [];
-  };
-  S.forEach((s, i) => {
-    const p = S[i - 1];
-    if (p && (p[1] !== s[1] || s[0] - p[0] > GAP_MS)) flush();
-    segA.push(`${x(s[0]).toFixed(1)},${yP(s[5]).toFixed(1)}`);
-    segD.push(`${x(s[0]).toFixed(1)},${yP(s[6]).toFixed(1)}`);
-  });
-  flush();
-
-  const roundMarks = S.filter((s, i) => i > 0 && s[1] !== S[i - 1][1]).map(s => {
-    const xx = x(s[0]).toFixed(1);
-    return `<line class="wp-btl-tl-round" x1="${xx}" x2="${xx}" y1="${A_TOP}" y2="${B_TOP + B_H}"/>`
-      + `<text class="wp-btl-axislbl" x="${(+xx + 3).toFixed(1)}" y="${B_TOP + 9}">R${s[1]}</text>`;
-  }).join('');
-
-  const flipMarks = flips.map((f, i) => {
-    const xx = x(f.t).toFixed(1);
-    return `<line class="wp-btl-tl-flip" x1="${xx}" x2="${xx}" y1="${A_TOP}" y2="${B_TOP + B_H}"/>`
-      + `<circle class="wp-btl-tl-flipdot" cx="${xx}" cy="${A_TOP + 6}" r="6.5"/>`
-      + `<text class="wp-btl-tl-flipnum" x="${xx}" y="${A_TOP + 9}">${i + 1}</text>`;
-  }).join('');
-
-  // Asse del tempo: ~6 etichette.
-  const nLab = 6;
-  const xLabels = Array.from({ length: nLab + 1 }, (_, i) => t0 + (t1 - t0) * i / nLab).map((t, i) => {
-    const anchor = i === 0 ? 'start' : i === nLab ? 'end' : 'middle';
-    return `<text class="wp-btl-axislbl" x="${x(t).toFixed(1)}" y="${H - 5}" text-anchor="${anchor}">${escapeHtml(fmtTime(t, withDay))}</text>`;
-  }).join('');
-
-  _chart = { t0, t1, iv, S, withDay };
-
-  return `
-    <svg class="wp-btl-chart wp-btl-tl-svg" viewBox="0 0 ${W} ${H}" width="100%" role="img"
-      aria-label="${escapeHtml(tlT('title'))}">
-      <text class="wp-btl-axislbl" x="${PAD_L - 4}" y="${A_TOP + 9}" text-anchor="end">${fmtNum(maxRate)}</text>
-      <text class="wp-btl-axislbl" x="${PAD_L - 4}" y="${A_TOP + A_H - 2}" text-anchor="end">${fmtNum(maxRate)}</text>
-      <text class="wp-btl-axislbl" x="${PAD_L - 4}" y="${mid + 3}" text-anchor="end">0</text>
-      <line class="wp-btl-axis" x1="${PAD_L}" x2="${W - PAD_R}" y1="${mid}" y2="${mid}"/>
-      ${bars}
-      <text class="wp-btl-axislbl" x="${PAD_L - 4}" y="${B_TOP + 8}" text-anchor="end">${maxPts}</text>
-      <text class="wp-btl-axislbl" x="${PAD_L - 4}" y="${B_TOP + B_H}" text-anchor="end">0</text>
-      <line class="wp-btl-axis" x1="${PAD_L}" x2="${W - PAD_R}" y1="${B_TOP + B_H}" y2="${B_TOP + B_H}"/>
-      <line class="wp-btl-tl-goal" x1="${PAD_L}" x2="${W - PAD_R}" y1="${yP(300).toFixed(1)}" y2="${yP(300).toFixed(1)}"/>
-      ${lines.d.map(pts => `<polyline class="wp-btl-tl-pdef" points="${pts}"/>`).join('')}
-      ${lines.a.map(pts => `<polyline class="wp-btl-tl-patk" points="${pts}"/>`).join('')}
-      ${roundMarks}
-      ${flipMarks}
-      ${xLabels}
-      <line class="wp-btl-tl-cursor" x1="0" x2="0" y1="${A_TOP}" y2="${B_TOP + B_H}" visibility="hidden"/>
-      <rect class="wp-btl-tl-hit" x="${PAD_L}" y="${A_TOP}" width="${IW}" height="${B_TOP + B_H - A_TOP}" fill="transparent"/>
-    </svg>`;
-}
+// Zoom, spostamento, riquadro e "allarga" stanno in timelineChart.js: qui
+// resta solo dove il grafico si mette nella sezione.
 
 /* ── Sezione ──────────────────────────────────────────────────── */
 
-/**
- * @param tl        risposta di /battle-timeline, o null/undefined
- * @param helpers   { nationName(id), flagHtml(id) } — quelli della scheda
- */
-export function timelineSectionHtml(tl, { nationName, flagHtml }) {
-  if (!tl || !Array.isArray(tl.s) || tl.s.length < 2) return '';
+/* Le due schede ("Timeline battaglia" e "Timeline taglie", richiesta
+   dell'utente del 2026-10-20) partono dalla stessa analisi: si rifà per
+   ognuna (è qualche millisecondo) invece di tenerne una copia, così non
+   c'è niente da invalidare quando una battaglia viva si aggiorna. */
+function prepare(tl, { contracts = null, bountyNow = null } = {}) {
+  if (!tl || !Array.isArray(tl.s) || tl.s.length < 2) return null;
   const an = analyzeTimeline(tl);
+  const T0 = an.S[0][0];
+  an.money = analyzeMoney(an.S, contracts, T0, Math.max(an.S[an.S.length - 1][0], T0 + 60000), tl.rounds,
+    { bountyNow, createdAt: tl.createdAt ?? null });
+  return an;
+}
+
+/**
+ * Scheda "Timeline battaglia": danno, punti, sorpassi, ingressi.
+ * @param tl        risposta di /battle-timeline, o null/undefined
+ * @param helpers   { nationName(id), flagHtml(id) } — quelli della scheda;
+ *                  `contracts` (aggiudicati, da getBattleDetail) e `bountyNow`
+ *                  ({defender, attacker}, la taglia della testata) per i soldi
+ */
+export function timelineSectionHtml(tl, helpers) {
+  const an = prepare(tl, helpers);
+  if (!an) return '';
+  const { nationName, flagHtml } = helpers;
   const nat = (id) => `${flagHtml(id)}${escapeHtml(nationName(id) || '—')}`;
-  const sideLbl = (s) => s === 'attacker' ? tlT('attacker') : tlT('defender');
+  // il lato col nome della sua nazione (richiesta dell'utente); "Difesa" /
+  // "Attacco" solo se la nazione non c'è (resistenze, tornei)
+  const sideLbl = (s) => {
+    const id = s === 'attacker' ? tl.attacker : tl.defender;
+    return id && nationName(id) ? nat(id) : tlT(s);
+  };
   const withDay = _chartDaySpan(an);
 
   const coverage = tl.baseAt
@@ -315,10 +380,10 @@ export function timelineSectionHtml(tl, { nationName, flagHtml }) {
 
   const flipsHtml = an.flips.length ? `
     <ol class="wp-btl-tl-flips">
-      ${an.flips.map(f => {
+      ${an.flips.map((f, i) => {
         const leader = f.side === 'attacker' ? tl.attacker : tl.defender;
         return `
-        <li class="wp-btl-tl-fliprow wp-btl-tl-${f.side}">
+        <li class="wp-btl-tl-fliprow wp-btl-tl-${f.side}" data-flip="${i}">
           <div class="wp-btl-tl-fliphead">
             <span class="wp-btl-tl-when">${escapeHtml(fmtTime(f.t, withDay))}</span>
             <strong>${tlT('flipLine', { n: nat(leader), r: f.round })}</strong>
@@ -366,17 +431,7 @@ export function timelineSectionHtml(tl, { nationName, flagHtml }) {
   return `
     <h3 class="wp-btl-h3">${tlT('title')} <span class="wp-btl-sub">${tlT('sub')}</span></h3>
     <p class="wp-btl-foot wp-btl-foot-tight">${coverage}${tl.live ? ' ' + tlT('liveNote') : ''}</p>
-    <div class="wp-btl-chartwrap wp-btl-tl-wrap">
-      ${chartSvg(an, tl)}
-      <div class="wp-btl-tl-tip" hidden></div>
-    </div>
-    <div class="wp-btl-legend">
-      <span class="wp-btl-key"><i class="wp-btl-tl-swdef"></i>${tlT('defender')}</span>
-      <span class="wp-btl-key"><i class="wp-btl-tl-swatk"></i>${tlT('attacker')}</span>
-      <span class="wp-btl-key">▮ ${tlT('legendDmg')}</span>
-      <span class="wp-btl-key">╱ ${tlT('legendPts')}</span>
-      <span class="wp-btl-key"><i class="wp-btl-tl-swflip"></i>${tlT('legendFlip')}</span>
-    </div>
+    ${chartBlockHtml(an, tl, { nationName }, 'battle')}
     ${anyGap ? `<p class="wp-btl-foot wp-btl-foot-tight">${tlT('gapNote')}</p>` : ''}
 
     <h3 class="wp-btl-h3">${tlT('flipsTitle')}</h3>
@@ -388,42 +443,49 @@ export function timelineSectionHtml(tl, { nationName, flagHtml }) {
     <p class="wp-btl-foot wp-btl-foot-tight">${tlT('precisionNote')}${tl.truncated ? ' ' + tlT('truncatedNote') : ''}</p>`;
 }
 
+/**
+ * Scheda "Timeline taglie": soldi spesi nel tempo, per lato. '' se la
+ * battaglia non ha né taglia registrata né contratti.
+ */
+export function bountySectionHtml(tl, helpers) {
+  const an = prepare(tl, helpers);
+  if (!an?.money) return '';
+  const { nationName, flagHtml, contractsTruncated = false } = helpers;
+  const nat = (id) => `${flagHtml(id)}${escapeHtml(nationName(id) || '—')}`;
+  return `
+    <h3 class="wp-btl-h3">${tlT('moneyTitle')} <span class="wp-btl-sub">${tlT('moneySub')}</span></h3>
+    ${chartBlockHtml(an, tl, { nationName }, 'money')}
+    ${moneyNoteHtml(an.money, tl, contractsTruncated, nat)}`;
+}
+
+/** Cosa c'è e cosa no nel pannello dei soldi spesi. */
+function moneyNoteHtml(m, tl, contractsTruncated, nat) {
+  if (!m) return '';
+  const parts = [tlT('moneyNote')];
+  const late = m.bountyFrom != null && m.bountyFrom > (tl.createdAt || m.bountyFrom) + 3 * 60 * 1000;
+  if (m.bountyFrom == null) parts.push(tlT('moneyNoBounty'));
+  else if (late && (m.pre.defender > 0 || m.pre.attacker > 0)) {
+    const who = (side) => (tl[side] && nat(tl[side])) || tlT(side);
+    parts.push(tlT('moneyBountyPre', {
+      t: escapeHtml(fmtTime(m.bountyFrom, true)),
+      d: `${who('defender')} ${fmtMoney(m.pre.defender)}`,
+      a: `${who('attacker')} ${fmtMoney(m.pre.attacker)}`,
+    }));
+  } else if (late) {
+    parts.push(tlT('moneyBountyFrom', { t: escapeHtml(fmtTime(m.bountyFrom, true)) }));
+  }
+  if (m.resets) parts.push(tlT('moneyResets', { n: m.resets }));
+  if (contractsTruncated) parts.push(tlT('moneyCtrTruncated'));
+  return `<p class="wp-btl-foot wp-btl-foot-tight">${parts.join(' ')}</p>`;
+}
+
 function _chartDaySpan(an) {
   const S = an.S;
   return S.length > 1 && S[S.length - 1][0] - S[0][0] > 20 * 3600 * 1000;
 }
 
-/** Tooltip sul grafico: l'intervallo sotto il cursore. Da richiamare a
- *  ogni repaint (l'SVG è nuovo ogni volta, quindi niente doppioni). */
-export function wireTimeline(root) {
-  const svg = root.querySelector('.wp-btl-tl-svg');
-  const tip = root.querySelector('.wp-btl-tl-tip');
-  const cursor = svg?.querySelector('.wp-btl-tl-cursor');
-  if (!svg || !tip || !_chart) return;
-  const chart = _chart;
+/** Gesti del grafico (zoom, spostamento, riquadro): da richiamare a ogni
+ *  repaint, l'HTML è nuovo ogni volta. Lo zoom sopravvive ai repaint. */
+export function wireTimeline(root) { wireChart(root); }
 
-  const hide = () => { tip.hidden = true; cursor?.setAttribute('visibility', 'hidden'); };
-  svg.addEventListener('mouseleave', hide);
-  svg.addEventListener('mousemove', (e) => {
-    const rect = svg.getBoundingClientRect();
-    const vx = (e.clientX - rect.left) / rect.width * W;
-    const t = chart.t0 + (vx - PAD_L) / IW * (chart.t1 - chart.t0);
-    const v = chart.iv.find(it => t >= it.t0 && t <= it.t1);
-    if (!v || v.gap) return hide();
-    cursor?.setAttribute('x1', vx.toFixed(1));
-    cursor?.setAttribute('x2', vx.toFixed(1));
-    cursor?.setAttribute('visibility', 'visible');
-    tip.innerHTML = `
-      <div class="wp-btl-tl-tiphead">${escapeHtml(fmtTime(v.t1, chart.withDay))} · ${tlT('tipRound', { r: v.round })}</div>
-      <div><i class="wp-btl-tl-swdef"></i>${tlT('defender')}: <b>${fmtNum(v.d)}${tlT('perMin')}</b> · ${v.dp} ${tlT('points')}</div>
-      <div><i class="wp-btl-tl-swatk"></i>${tlT('attacker')}: <b>${fmtNum(v.a)}${tlT('perMin')}</b> · ${v.ap} ${tlT('points')}</div>`;
-    tip.hidden = false;
-    const wrap = tip.parentElement.getBoundingClientRect();
-    const px = e.clientX - wrap.left + tip.parentElement.scrollLeft;
-    const left = px + 14 + tip.offsetWidth > tip.parentElement.scrollWidth ? px - tip.offsetWidth - 14 : px + 14;
-    tip.style.left = `${Math.max(0, left)}px`;
-    tip.style.top = `${Math.max(0, e.clientY - wrap.top - 10)}px`;
-  });
-}
-
-export function resetTimeline() { _chart = null; }
+export function resetTimeline() { resetChart(); }

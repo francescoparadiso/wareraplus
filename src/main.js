@@ -43,7 +43,10 @@ import { initMuOverlay, openMuView } from './app/muOverlay.js';
 import { initNationsOverlay, openNationsView } from './app/nationsOverlay.js';
 import { initPlayersOverlay, openPlayersView } from './app/playersOverlay.js';
 import { initBattlesOverlay, openBattlesView } from './app/battlesOverlay.js';
+import { initAccordiOverlay, openAccordiView } from './app/accordiOverlay.js';
+import { initTournamentOverlay, openTournamentView } from './app/tournamentOverlay.js';
 import { initGuideOverlay, openGuideView } from './app/guideOverlay.js';
+import { initToolsOverlay, openToolsView } from './app/toolsOverlay.js';
 import { initPrivateOverlay, openPrivateView } from './app/privateOverlay.js';
 import { takeReloadIntent } from './shared/lazyModule.js';
 // WarEra+: il tasto Indietro chiude la cosa aperta invece di uscire dal
@@ -67,6 +70,8 @@ import { initWallpaperEarly, startWallpaperMode } from './app/wallpaperMode.js';
 if (IS_WALLPAPER) initWallpaperEarly();
 // WarEra+: interruttore unico delle animazioni (Impostazioni)
 import { initMotion } from './shared/motion.js';
+// WarEra+: un tooltip solo per tutti i grafici (data-tip / <title> promossi).
+import { initChartTips } from './shared/chartTip.js';
 // WarEra+: numeri che contano e grafici che si disegnano (un osservatore solo)
 import { initReveal } from './shared/reveal.js';
 import { applyTranslations, initLangButton } from './shared/i18n.js';
@@ -181,7 +186,8 @@ async function handleIncomingDeepLink() {
   const open = {
     political: () => openPoliticalView(countryId || undefined,
       (countryId && state.nationMap?.get(countryId)?.name) || '',
-      { openSenate: params.get('senate') === '1' }),
+      // WarEra+ Votazioni: ?tab=votes (&vote=id) riapre la vista e la votazione.
+      { openSenate: params.get('senate') === '1', openVotes: params.get('tab') === 'votes', voteId: params.get('vote') || null }),
     economy: async () => {
       const item = params.get('item');
       if (item) (await import('./economy/prices.js')).openPriceItem(item);
@@ -193,7 +199,10 @@ async function handleIncomingDeepLink() {
     nations: () => openNationsView(params.get('nation') || undefined),
     players: () => openPlayersView(params.get('player') || undefined, params.get('vs') || undefined),
     battles: () => openBattlesView(params.get('battle') || undefined),
+    accordi: () => openAccordiView(),
+    tournament: () => openTournamentView({ type: params.get('tab') || undefined, team: params.get('team') || undefined }),
     guide: () => openGuideView(),
+    tools: () => openToolsView(),
     private: () => openPrivateView(),
     alliances: () => document.getElementById('bloc-stats-btn')?.click(),
   }[section];
@@ -213,6 +222,7 @@ async function handleIncomingDeepLink() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initMotion();
+  initChartTips();
   initReveal();
   initPoliticalOverlay();
   initEconomyOverlay();
@@ -221,7 +231,10 @@ document.addEventListener('DOMContentLoaded', () => {
   initNationsOverlay();
   initPlayersOverlay();
   initBattlesOverlay();
+  initAccordiOverlay();
+  initTournamentOverlay();
   initGuideOverlay();
+  initToolsOverlay();
   initPrivateOverlay();
   applyTranslations();
   initLangButton();
@@ -295,7 +308,10 @@ function restoreAfterChunkReload() {
     // un deploy si ritrovava sulla mappa, come se il tool fosse ripartito
     // da zero. 'mu-wealth' riapre la vista unita', che e' dove sta.
     battles: () => openBattlesView(),
+    accordi: () => openAccordiView(),
+    tournament: () => openTournamentView(),
     guide: () => openGuideView(),
+    tools: () => openToolsView(),
     private: () => openPrivateView(),
     'mu-wealth': () => openMuView(),
   }[intent];

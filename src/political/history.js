@@ -22,6 +22,7 @@ import { pT } from './plusI18n.js';
 import { fetchPoliticalHistory } from './plusApi.js';
 import { lineChartSvg, stripSvg, fmtDate } from './plusCharts.js';
 import { hideOtherViews } from './plusViews.js';
+import { membersChartHtml, wireMembersChart, disposeMembersChart } from './membersChart.js';
 
 const DAY_MS = 864e5;
 const ROLE_KEYS = ['role_president', 'role_vice', 'role_defense', 'role_foreign', 'role_economy'];
@@ -39,6 +40,7 @@ export async function showHistoryView(countryId) {
   if (!view) return;
   view.style.display = '';
   const seq = ++_renderSeq;
+  disposeMembersChart();
   view.innerHTML = `<div class="panel wp-pol-loading">${escapeHtml(pT('loading_history'))}</div>`;
   const data = await fetchPoliticalHistory(countryId);
   if (seq !== _renderSeq || !view.isConnected) return;
@@ -47,6 +49,7 @@ export async function showHistoryView(countryId) {
     return;
   }
   view.innerHTML = historyHtml(data);
+  wireMembersChart(view);
 }
 
 /* ── helper ── */
@@ -104,7 +107,7 @@ function historyHtml(d) {
       ${presidentsPanel(d.presidents, names, users)}
       ${turnoutPanel(finished)}
     </div>
-    ${membersPanel(d.members, names)}
+    ${membersPanel(d.members, names, d.countryId)}
     <div class="wp-pol-grid2">
       ${switchesPanel(d.switches, names, users)}
       ${governmentsPanel(d.governments, users)}
@@ -164,29 +167,34 @@ function turnoutPanel(finished) {
     <div class="wp-pol-note">${escapeHtml(pT('turnout_note'))}</div>`);
 }
 
-function membersPanel(members, names) {
+function membersPanel(members, names, countryId) {
   const series = Object.entries(members?.series || {});
   const now = Date.now();
-  // I sei partiti più grandi ADESSO: oltre, le linee diventano un gomitolo.
-  const top = series
-    .map(([pid, pts]) => ({ pid, pts, n: pts.at(-1)?.[1] || 0 }))
-    .filter(s => s.n > 0 || s.pts.length > 1)
-    .sort((a, b) => b.n - a.n)
-    .slice(0, 6);
+  // TUTTI i partiti che hanno avuto almeno un iscritto: prima c'era un
+  // taglio ai sei più grandi di adesso, che buttava fuori proprio i
+  // partiti in declino. Il gomitolo ora si scioglie dalla legenda
+  // (vedi membersChart.js).
+  const all = series
+    .map(([pid, pts]) => ({ pid, pts, n: pts.at(-1)?.[1] || 0, max: Math.max(0, ...pts.map(p => p[1] || 0)) }))
+    .filter(s => s.max > 0)
+    .sort((a, b) => b.n - a.n || b.max - a.max);
   let body;
-  if (!top.length) body = `<p class="wp-pol-dim">${escapeHtml(pT('members_empty'))}</p>`;
+  if (!all.length) body = `<p class="wp-pol-dim">${escapeHtml(pT('members_empty'))}</p>`;
   else {
-    const chart = lineChartSvg({
-      series: top.map(s => ({ name: _partyName(s.pid, names), color: getPartyColor(s.pid), points: s.pts })),
-      step: true, until: now, from: members.coverageFrom || undefined, height: 220,
+    body = membersChartHtml({
+      key: countryId,
+      from: members.coverageFrom || null,
+      until: now,
+      series: all.map(s => {
+        const weekAgo = _valueAt(s.pts, now - 7 * DAY_MS);
+        const d7 = weekAgo != null ? s.n - weekAgo : null;
+        return {
+          pid: s.pid, pts: s.pts, name: _partyName(s.pid, names), color: getPartyColor(s.pid),
+          label: `${_partyPill(s.pid, names)}<strong>${s.n}</strong>
+            <span class="wp-pol-num ${d7 > 0 ? 'up' : d7 < 0 ? 'down' : ''}">${d7 == null ? '—' : (d7 > 0 ? '+' : '') + d7} <em>${escapeHtml(pT('in_7d'))}</em></span>`,
+        };
+      }),
     });
-    const rows = top.map(s => {
-      const weekAgo = _valueAt(s.pts, now - 7 * DAY_MS);
-      const d7 = weekAgo != null ? s.n - weekAgo : null;
-      return `<div class="wp-pol-mem-row">${_partyPill(s.pid, names)}<strong>${s.n}</strong>
-        <span class="wp-pol-num ${d7 > 0 ? 'up' : d7 < 0 ? 'down' : ''}">${d7 == null ? '—' : (d7 > 0 ? '+' : '') + d7} <em>${escapeHtml(pT('in_7d'))}</em></span></div>`;
-    }).join('');
-    body = `${chart}<div class="wp-pol-mem-list">${rows}</div>`;
   }
   return _panel('📈', pT('members_over_time'), `${_coverage(members?.coverageFrom)}${body}`, 'wp-pol-wide');
 }

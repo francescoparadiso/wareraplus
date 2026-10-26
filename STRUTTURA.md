@@ -22,6 +22,14 @@ wareraPlus/
 │   │                              (gioco vuoto), giro incrementale tutto il giorno.
 │   │                              Endpoint: /battle-archive, /war-expenses,
 │   │                              /battle-archive/status.
+│   ├── muBattleDamage.js       ← NUOVO — danni di OGNI unità giorno per giorno, sommati
+│   │                              battaglia per battaglia dalla classifica per unità
+│   │                              (battleRanking type 'mu'). Giro incrementale ogni 20
+│   │                              min sulle battaglie dell'archivio; recupero di TUTTE
+│   │                              le battaglie note (dal mag 2025) solo di notte, 75 al
+│   │                              minuto, ~una notte. ⚠️ il giorno è quello in cui la
+│   │                              battaglia FINISCE (UTC): settimane e cumulati sì,
+│   │                              barre giornaliere no. Endpoint: /mu-damage-history.
 │   ├── moneyTransfers.js    ← NUOVO — archivio dei finanziamenti fra nazioni
 │   │                              (bonifici da tesoro a tesoro), retention 90 gg.
 │   │                              ⚠️ NIENTE bootstrap e non è una dimenticanza:
@@ -70,6 +78,11 @@ wareraPlus/
 │   │                              livello e nazione di adesso da mu-user-countries,
 │   │                              zero chiamate; conta SPOSTAMENTI, non persone, se
 │   │                              no il saldo di chi fa andata e ritorno sbaglia).
+│   ├── tournament.js           ← NUOVO (2026-10-25) — /tournament e /tournament/team:
+│   │                             forza delle squadre sugli ULTIMI 7 GIORNI (fotografie
+│   │                             della classifica in cache/weekly-snaps/ ogni 6 ore),
+│   │                             danno per round delle partite finite, registro delle
+│   │                             previsioni scritte prima di ogni partita.
 │   ├── priceHistory.js         ← NUOVO — storico dei prezzi: un campione all'ora di
 │   │                              itemTrading.getPrices (PUBBLICA, tutte le risorse
 │   │                              in una richiesta) ridotto a una candela al giorno
@@ -124,6 +137,9 @@ wareraPlus/
 │   │                              colpi, roundsHistory = solo i finali). Battaglie vive
 │   │                              in memoria, chiuse in cache/battle-timeline/<id>.json.gz,
 │   │                              nessuna potatura (~250 MB/anno stimati).
+│   │                              Dal 2026-10-20 ogni campione porta anche il
+│   │                              salvadanaio della taglia dei due lati (gratis: è
+│   │                              già in getBattles) → la taglia pagata nel tempo.
 │   │                              Endpoint: /battle-timeline?battleId=.
 │   ├── companyCensus.js        ← NUOVO — per risorsa: aziende di proprietari
 │   │                              ATTIVI, quante con dipendenti, dipendenti,
@@ -146,10 +162,21 @@ wareraPlus/
 │   │   ├── diplomazia.js           bonifici fra tesori, ricchezza giornaliera dei
 │   │   ├── battaglie.js            giocatori, prezzi, diplomazia, battaglie aperte,
 │   │   ├── lavoro.js               salari e tasse.
+│   │   ├── muBattleSeed.js         (questo NON viene dal dump: estrae id e fine delle
+│   │   │                            15.240 battaglie del vecchio bootstrap da 255 MB,
+│   │   │                            il seme del recupero di muBattleDamage.js)
 │   │   └── README.md               Vedi il suo README per la procedura e per le due
 │   │                               retention allargate (senza, il primo giro di
 │   │                               manutenzione pota quello che l'import ha appena
 │   │                               scritto).
+│   ├── backup.sh               ← NUOVO — copia degli archivi che non si rifanno (cache/ +
+│   │                              i due plus.sqlite con VACUUM INTO) in ~/backup, 4 a
+│   │                              rotazione, cron domenica 04:00 UTC. Stesso disco.
+│   ├── backup-bucket.sh        ← NUOVO — porta la copia FUORI dal VPS: bucket Oracle
+│   │                              `warera-backup`, ogni giorno alle 04:30 UTC
+│   │                              (giornaliero/ 30 gg, settimanale/ 180 gg, li pota il
+│   │                              bucket). Il VPS entra come instance principal e può
+│   │                              solo aggiungere: niente delete, niente overwrite.
 │   └── README.md               ← deploy a mano (scp + pm2 restart), vedi ⚠️ in fondo
 ├── wallpaper/                  ← NUOVO — lo sfondo di Wallpaper Engine (Steam Workshop).
 │                                  NON contiene il tool: index.html porta la pagina sul
@@ -161,6 +188,10 @@ wareraPlus/
 │                                  con ?wallpaper=1 i <select> sono spenti (in linea in
 │                                  testa a index.html). Fuori da build e deploy Vercel.
 │                                  Prova, debug remoto e pubblicazione nel suo README.
+├── tools/
+│   └── checkOceanRoutes.mjs    ← NUOVO — `npm run check:routes`: prova le rotte
+│                                  marittime contro i poligoni di map.getMapData (esce 1
+│                                  se una passa sopra la terraferma). Fuori dal bundle.
 ├── public/
 │   ├── icons/
 │   └── political/              ← Political View ORIGINALE (script globali), NON PIÙ USATO
@@ -177,7 +208,11 @@ wareraPlus/
     │   │                          ECO_PROXY_BASE, COLORS, THEMES, LAYER_IDS
     │   ├── map.js                ← MapLibre: layer, sorgenti, rendering
     │   ├── ui.js, diplomacy.js, labels.js, patterns.js
-    │   ├── alliances.js, naps.js, sphereOfInfluence.js, blocs.js (dead, vedi sotto)
+    │   ├── alliances.js, naps.js (solo NAP manuali), sphereOfInfluence.js, blocs.js (dead, vedi sotto)
+    │   ├── accordiNaps.js       ← NUOVO — gli Accordi in vigore come NAP sulla mappa: si
+    │   │                          aggiungono a externalNapsSet/List (source 'accordi'),
+    │   │                          alleanze espanse nei membri di adesso, riletti ogni 10'.
+    │   │                          Dal 2026-10-23 UNICA fonte: il CSV dei NAP non si carica più.
     │   ├── battleMarkers.js, battleHeatmap.js, battleFront.js, battleFront/
     │   │                        (battleMarkers: WarEra+ il marcatore LAMPEGGIA nel
     │   │                        colore del lato che passa avanti nel round in corso —
@@ -297,6 +332,10 @@ wareraPlus/
     │   ├── borderStyle.js       ← NUOVO — bordi come nella mappa del gioco: interni nella
     │   │                          tinta della nazione, nazionali colorati per relazione
     │   ├── oceanRoutes.js       ← NUOVO — geometria condivisa delle rotte marittime
+    │   │                          (stretti e tappe IN MARE: `npm run check:routes`)
+    │   ├── shipOverlay.js       ← NUOVO — le navi delle rotte su un canvas sopra la
+    │   │                          mappa: moto fluido a velocità costante, zero repaint
+    │   │                          di MapLibre, condiviso dai due temi
     │   ├── oceanBackground.js   ← NUOVO — rotte animate, tema scuro
     │   ├── travelDistance.js    ← NUOVO — vista mappa "Distanze" (idea dal tool di
     │   │                          nioKi, ni0ki.github.io/warera-distance-map): clic su
@@ -368,10 +407,48 @@ wareraPlus/
     │   ├── history.js, world.js ← NUOVO — viste "Storia" (presidenti, affluenza,
     │   │                          iscritti, cambi di casacca, governi) e "Mondo"
     │   │                          (calendario elettorale + confronto fra nazioni)
+    │   ├── membersChart.js      ← NUOVO — "Iscritti nel tempo" della Storia, esplorabile:
+    │   │                          TUTTI i partiti (niente più taglio ai 6 più grandi di
+    │   │                          adesso, che nascondeva quelli in declino), legenda che
+    │   │                          spegne/isola, zoom, striscia, riquadro, Allarga.
+    │   │                          ⚠️ da allargato toglie il blur al .panel (fa da
+    │   │                          contenitore ai fixed)
     │   ├── simUncertainty.js    ← NUOVO — intervallo 80% dei seggi nel simulatore,
     │   │                          dalla volatilità storica della nazione (mediana delle
     │   │                          ultime 5 coppie di congressi). Retrotest su 25
     │   │                          nazioni: copertura 88,8%, larghezza media 4 seggi
+    │   ├── votes.js             ← NUOVO (2026-10-23) — vista "Votazioni": elenco della
+    │   │                          nazione (in corso, programmate, archivio con filtri),
+    │   │                          modulo per crearne una (governo e congresso), scheda
+    │   │                          con la cabina a quattro voti e, a scrutinio finito,
+    │   │                          tabellone e dettaglio per partito / schede nulle. Le
+    │   │                          fasi si contano sull'ORA DEL SERVER (scarto misurato a
+    │   │                          ogni risposta); il giro ogni 20 s ridisegna solo se una
+    │   │                          fase cambia, altrimenti aggiorna l'affluenza al suo
+    │   │                          posto (la nota di una scheda nulla non si perde).
+    │   │                          Dati da /votazioni su warera-plus-api
+    │   │                          (server/plusApi/votazioni.js). Link ?tab=votes&vote=id.
+    │   │                          Stili in src/styles/politicalVotes.css.
+    │   ├── votesHemicycle.js    ← NUOVO — l'emiciclo dello scrutinio PALESE: i seggi
+    │   │                          (geometria di parliament.js, per partito) si
+    │   │                          accendono verdi/rossi in diretta, poi tabellone e
+    │   │                          timbro. Nessun "play": ogni fotogramma disegna lo
+    │   │                          stato a `ora del server − scrutinioAlle`, quindi
+    │   │                          tutti vedono lo stesso seggio nello stesso istante.
+    │   │                          Referendum: ≤400 pallini proporzionali. A votazione
+    │   │                          conclusa tutto acceso, con "Rivedi" (solo locale).
+    │   ├── votesUrn.js          ← NUOVO — l'urna dello scrutinio SEGRETO: una scheda alla
+    │   │                          volta esce, si gira (con la nota se nulla) e vola sul
+    │   │                          suo mucchio; barra del sì verso la soglia, poi
+    │   │                          tabellone e timbro. In congresso 3 s per ogni scheda,
+    │   │                          sempre uguali; solo il referendum accelera (spoglio
+    │   │                          rapido oltre le 40).
+    │   │                          Stesso principio dell'emiciclo (ora del server). ⚠️ la
+    │   │                          scaletta è la formula di durataScrutinio del server:
+    │   │                          cambiarne una sola sfasa l'animazione dall'esito.
+    │   ├── votesApi.js, votesI18n.js ← client dell'API (token dell'area riservata,
+    │   │                          ritorno da Discord `votazioni:<paese>:<id>`) e
+    │   │                          dizionario a 9 lingue
     │   └── plusApi.js, plusCharts.js, plusViews.js, plusI18n.js (9 lingue)
     ├── mu/                       ← NUOVO — Esplora Unità Militari
     │   ├── main.js              ← initMuView(container) + openMuDetail(muId)
@@ -390,11 +467,12 @@ wareraPlus/
     │   │                          nazionalità (calcolata dal vivo sui membri) + membri
     │   ├── ranking.js           ← classifiche, ordinate dalla directory (zero fetch)
     │   ├── muCompare.js         ← NUOVO — linguetta "⚔ 1 vs 1": un'unità contro un'altra,
-    │   │                          stessa grafica e regole del 1 vs 2 nazioni (versusBarHtml
-    │   │                          e classi wp-nat-* di nations.css, importato dal modulo):
-    │   │                          sei classifiche, membri, danni e ricchezza per membro, e
-    │   │                          come giocano i membri (se il server di cache c'è). Zero
-    │   │                          fetch. Bottone "Confronta" nella scheda di un'unità.
+    │   │                          nello stile del versus comune (shared/versus.js): sei
+    │   │                          classifiche, membri, danni e ricchezza per membro, come
+    │   │                          giocano i membri, e "DANNI NEL TEMPO" — distacco cumulato
+    │   │                          e settimane, di serie da quando esistono entrambe, da
+    │   │                          /mu-damage-history (senza rotta il riquadro non c'è).
+    │   │                          Bottone "Confronta" nella scheda di un'unità.
     │   │                          Link: ?section=mu&tab=compare&mua=&mub=.
     │   ├── muWealth.js          ← NUOVO — linguetta "Bilancio", l'unica parte CHIUSA
     │   │                          della vista. DUE schermate: ELENCO delle unità con i
@@ -467,7 +545,7 @@ wareraPlus/
     │   │                          ≈ 7 richieste, "cerca più indietro" fino a 31. Il
     │   │                          riepilogo NON dice lo schieramento: la vista non indovina.
     │   │                          I 404 in console sono i batch dove non ha combattuto.
-    │   └── main.js, i18n.js (9 lingue); stile in styles/players.css (wp-ply-*)
+    │   └── main.js, i18n.js (9 lingue); stile in styles/players.css (wp-ply-*), il versus in styles/versus.css
     ├── economy/                  ← NUOVO — Economia: UNA voce di Approfondimenti,
     │   │                            TRE schede. Prima erano due voci separate
     │   │                            ("Ottimizzatore industriale" e "Rendite di
@@ -524,15 +602,25 @@ wareraPlus/
     │   │                          fra due giorni è il saldo NETTO, non "spese".
     │   └── i18nPlus.js           ← dizionario (9 lingue) delle due schede nuove
     ├── eco/                      ← NUOVO — Ottimizzatore industriale (port del bot Discord
-    │   │                            "WarEra Eco Optimizer" di ArgusIA — attribuzione
-    │   │                            obbligatoria in cima alla vista). Dal 2026-09-19
+    │   │                            "WarEra Eco Optimizer" di ArgusIA; la sua card in
+    │   │                            cima è stata tolta con la v0.27). Dal 2026-09-19
     │   │                            è la TERZA SCHEDA di src/economy/, non più una
     │   │                            voce di menù sua: il codice qui dentro non è
     │   │                            cambiato, cambia solo chi chiama initEcoView().
+    │   │                            ⚠️ Riscritto per la v0.27 (dipendenti NPC, niente
+    │   │                            mercato del lavoro): via Posizione, Lavoratori,
+    │   │                            Assunzioni e paga da lavoro (storia git), restano
+    │   │                            Aziende + Competenze sul dato MISURATO di
+    │   │                            work.getStatsByCompany. Vedi AGGIORNAMENTO-v0.27.md.
     │   ├── main.js              ← orchestratore + rendering (era bot.py + embeds.py)
-    │   ├── api.js               ← ecoCall via ECO_PROXY_BASE (Worker), dati di gioco
-    │   ├── gameData.js, resolve.js, account.js, wage.js
-    │   └── skills.js, positioning.js, workers.js, hiring.js  ← logica pura (hiring = nuova)
+    │   ├── api.js               ← ecoCall via ECO_PROXY_BASE (proxy), dati di gioco;
+    │   │                          interruttore `?api=dev` (solo build non-live) che
+    │   │                          punta su apidev.warera.io con una chiave in memoria
+    │   ├── gameData.js, resolve.js
+    │   ├── account.js           ← aziende + work.getStatsByCompany + tassa della nazione
+    │   ├── companies.js         ← scheda Aziende: margine dei dipendenti, segnali (pura)
+    │   └── skills.js            ← scheda Competenze: Companies/Energy/Production/
+    │                              Management sul budget delle abilità eco (pura)
     ├── market/                   ← NUOVO — Rendite di produzione: la classifica di
     │   │                            mercato... e dal 2026-09-19 la SECONDA SCHEDA di
     │   │                            src/economy/, non più una voce di menù sua (il
@@ -564,6 +652,20 @@ wareraPlus/
     │   │                          slider dei giorni (+1%/giorno fino a 10, letto da
     │   │                          gameConfig.worker, come eco/workers.js). Cambiare
     │   │                          paga o giorni non costa una richiesta.
+    │   └── i18n.js               ← dizionario locale (9 lingue)
+    ├── accordi/                  ← NUOVO (2026-10-23) — Accordi: archivio dei patti di non
+    │   │                            belligeranza (nazione–nazione, nazione–alleanza,
+    │   │                            alleanza–alleanza), con testo, inizio/fine, unità fuori
+    │   │                            dal patto e tetto ai danni per battaglia. Leggere è
+    │   │                            pubblico; scrive il governo di una nazione coinvolta
+    │   │                            (login Discord + personaggio collegato, SENZA filtro
+    │   │                            P.A.S.T.A.). Dati da /accordi su warera-plus-api
+    │   │                            (server/plusApi/accordi.js). Stili in accordi.css.
+    │   ├── main.js               ← elenco con filtri, modulo (costruito una volta, non
+    │   │                          ridisegnato mentre si scrive), controllo battaglie
+    │   │                          (/accordi/:id/controllo: attacchi diretti e tetto)
+    │   ├── api.js                ← lettura pubblica, scrittura col token di private/api.js;
+    │   │                          "Entra con Discord" torna qui (wp_after_login)
     │   └── i18n.js               ← dizionario locale (9 lingue)
     ├── battles/                  ← NUOVO — Battaglie: una voce, due schede.
     │   │                            "Archivio battaglie" (in corso + concluse, con danno,
@@ -618,10 +720,78 @@ wareraPlus/
     │   │                  ⚠️ una battaglia già aperta al primo sguardo ha la prima
     │   │                  lettura come FONDO (`baseAt`): chi c'era non è un
     │   │                  ingresso. Testi in timelineI18n.js (9 lingue).
+    │   │                  + SOLDI SPESI (analyzeMoney), scheda a sé "Timeline taglie": totale,
+    │   │                  taglia e contratti cumulati, per lato. Taglia =
+    │   │                  discesa del salvadanaio (solo battaglie registrate
+    │   │                  dopo il rideploy del 2026-10-20); ⚠️ un calo oltre
+    │   │                  1 per 1k di danno è una taglia RIMESSA, non pagata.
+    │   │                  Contratti = aste aggiudicate all'ora di chiusura
+    │   │                  (ci sono sempre). La taglia pagata prima della
+    │   │                  registrazione = taglia della testata − registrata:
+    │   │                  punto di partenza, così la fine coincide con la scheda.
+    │   ├── timelineChart.js ← NUOVO — il grafico di battleTimeline.js reso
+    │   │                  esplorabile: zoom (rotella, pizzico, trascinamento,
+    │   │                  scorciatoie per round), striscia di navigazione per
+    │   │                  spostarsi, riquadro al passaggio, "Allarga" a tutta
+    │   │                  finestra (alza l'overlay sopra le barre del menu) e
+    │   │                  sorpassi vicini raggruppati in una pillola "2–5".
+    │   │                  Disegna a pixel veri (ridisegna al resize) e accorpa
+    │   │                  le barre a 2px come MEDIA pesata sul tempo; lo zoom
+    │   │                  sopravvive ai repaint della scheda (battaglie vive).
+    │   │                  Due stage (danno | soldi) con lo STESSO intervallo, e
+    │   │                  legenda a interruttori (localStorage wp_btl_tl_hidden):
+    │   │                  nei soldi voce × lato, colore = lato, tratto = voce.
     │   ├── main.js, battleList.js, warExpenses.js, i18n.js (9 lingue)
+    ├── tournament/               ← NUOVO (2026-10-25) — Tornei: voce di Approfondimenti,
+    │   │                            schede Unità militari / Nazioni, ognuna dal torneo
+    │   │                            più recente del suo tipo (menù per i precedenti).
+    │   ├── api.js                ← PRIMA /tournament del server di cache (server/
+    │   │                          tournament.js: forza delle squadre già sommata, nomi e
+    │   │                          stemmi, la squadra di `me`: ~50 KB gzip invece di ~700).
+    │   │                          Ricaduta, tutto PUBBLICO su api6: tournament.getManyPaginated
+    │   │                          (tabellone incluso, il filtro `type` è ignorato),
+    │   │                          tournamentTeam.getByTournamentId (iscritti, danno nel
+    │   │                          torneo), battle.getById per i punteggi in corso. Il
+    │   │                          danno settimanale per giocatore è la classifica di
+    │   │                          Giocatori (players/api.js fetchLeaderboard): stessa
+    │   │                          cache di sessione, nessuna fetch nuova.
+    │   ├── model.js              ← tabellone a livelli (la qualificazione NON è una
+    │   │                          colonna), settori + fase finale oltre 5 livelli,
+    │   │                          percorso di una squadra e possibili avversari letti
+    │   │                          da possible*TeamIds (li aggiorna il gioco). Forza =
+    │   │                          danno settimanale dei soli ISCRITTI: potenziale
+    │   │                          (somma) o media per chi ha colpito. ⚠️ settimana in
+    │   │                          corso: riparte da zero, e su un torneo concluso non
+    │   │                          è quella in cui si è giocato (la vista lo dice).
+    │   │                          PROBABILITÀ: P(A batte B) = a^k/(a^k+b^k), k tarato
+    │   │                          sulle partite finite del torneo (≥30, sennò 0,95/0,85
+    │   │                          misurati il 2026-10-25: favorito 250/329), propagate
+    │   │                          lungo il tabellone (arrivo, incontro, titolo); partita
+    │   │                          in corso condizionata sul punteggio. Con la FORMA (danno
+    │   │                          per round nelle partite finite, dal server) diventa
+    │   │                          logit P = k1·ln(a/b) + k2·ln(forma_a/forma_b) — stesso
+    │   │                          calcolo di server/tournament.js. sideTeam + forced = la
+    │   │                          simulazione "e se…?".
+    │   ├── main.js               ← disegno: tabellone con linee SVG dopo il layout,
+    │   │                          scheda squadra (percorso, avversari dal più duro con
+    │   │                          fascia di difficoltà), classifica di forza, ricerca,
+    │   │                          "La mia unità" da we_my_player. Link ?section=
+    │   │                          tournament&tab=country&team=<tournamentTeamId>.
+    │   │                          Composizione della squadra (/tournament/team, nomi da
+    │   │                          players/api.js fetchNames), registro delle previsioni,
+    │   │                          simulazione: vincitori scelti a mano, solo in memoria.
+    │   └── i18n.js               ← dizionario locale (9 lingue)
     ├── guide/                    ← NUOVO — Guida "Come si usa": SOLO testo statico
     │   ├── main.js                  (zero fetch, zero stato) + i18n.js a 9 lingue.
     │   └── i18n.js                  È la vista più leggera dell'app, deve restarlo.
+    ├── tools/                    ← NUOVO (2026-10-26) — Altri strumenti: link ai tool
+    │   │                            della community WarEra, DI TERZI (avviso in testa).
+    │   │                            Testo statico come la Guida, ultima voce di
+    │   │                            Approfondimenti, ?section=tools.
+    │   ├── list.js              ← l'elenco dei siti: UNICO posto, una voce per sito
+    │   │                          (nome, url, una riga per lingua). Niente loghi.
+    │   ├── main.js              ← le schede (link interi, nuova scheda, noopener)
+    │   └── i18n.js              ← titolo, intro, avviso, etichette in 9 lingue
     ├── private/                  ← NUOVO — Area riservata (login Discord + personaggio
     │   │                            verificato). Parla SOLO con warera-plus-api
     │   │                            (server/plusApi/, processo separato, vedi il suo README).
@@ -646,6 +816,32 @@ wareraPlus/
     │   │                          (alto/medio/ok, `--liv` in private.css). Grafici in SVG a
     │   │                          mano. Dati da /nazione e /nazione/nemici: nessuna chiamata nuova.
     │   ├── i18nNazione.js       ← dizionario (9 lingue) di nazione.js e delle sezioni
+    │   ├── operazioni.js        ← NUOVO (2026-10-22) — pagina "Operazioni", subito dopo la
+    │   │                          nazione: la lavagna dei piani. Un flowchart su un asse
+    │   │                          orario — corsie rivolte / fronte / supporto, una scheda per
+    │   │                          passo all'ora prevista, frecce SVG "questo dopo quello"
+    │   │                          (tratteggiate finché il precedente non è fatto). "In attesa"
+    │   │                          si RICAVA dalle frecce, non si salva. Regioni scelte per nome
+    │   │                          (datalist), la partenza di un attacco fra le confinanti
+    │   │                          (regionNeighbors). Badge "battaglia aperta" da /battles.
+    │   │                          Si lavora SUL GRAFICO: clic su un punto vuoto = aggiunta
+    │   │                          rapida (cosa + dove, ora del punto); trascinare una scheda
+    │   │                          cambia orario/corsia; dalla maniglia destra si tira una
+    │   │                          freccia; clic su una freccia la toglie; clic sulla pillola
+    │   │                          = menu dello stato. Pannello a destra con dettaglio, modulo
+    │   │                          completo e battaglie aperte da aggiungere col "+". Senza
+    │   │                          operazioni c'è una bozza: il primo passo la crea. Dati
+    │   │                          da /operazioni (server/plusApi/operazioni.js). Stili in
+    │   │                          src/styles/privateOperazioni.css.
+    │   ├── mappaOperazione.js   ← "Vedi sulla mappa": chiude l'area e disegna l'operazione
+    │   │                          sulla mappa PRINCIPALE (archi regione→regione con punta,
+    │   │                          cerchi e cartellini numerati, barra in basso con i passi,
+    │   │                          "Torna alla lavagna"). Toglie tutto alla chiusura. ⚠️ il
+    │   │                          punto di una regione è regionAnchor (geometria della mappa),
+    │   │                          NON regionData.position: vedi travelDistance.js.
+    │   ├── operazioniComuni.js  ← numero, stato ricavato, orario e colori di un passo:
+    │   │                          condivisi da lavagna e mappa
+    │   ├── i18nOperazioni.js    ← dizionario (9 lingue) delle operazioni
     │   ├── board.js, battles.js ← contratti mercenari (tavolo, battaglie, lista permessi)
     │   └── admin.js, selettori.js, api.js, i18n.js
     ├── panel/                   ← NUOVO
@@ -685,6 +881,9 @@ wareraPlus/
     │   │                         non esistono più.
     │   ├── battlesOverlay.js   ← apre Battaglie (archivio + spese di guerra) e alla
     │   │                         chiusura ferma il giro delle battaglie in corso
+    │   ├── accordiOverlay.js   ← apre Accordi (src/accordi/*), voce in Approfondimenti
+    │   ├── tournamentOverlay.js ← apre Tornei e alla chiusura ferma il giro di
+    │   │                         aggiornamento del torneo in corso (3 minuti)
     │   ├── visitorCounter.js   ← NUOVO — pill "N visite · ● M" in #wp-bottom-credits,
     │   │                         accanto a Ko-fi e all'autore. Due numeri diversi: le
     │   │                         VISITE (cumulative) da /visits sul server di cache,
@@ -720,6 +919,7 @@ wareraPlus/
     │   │                         setPaused → mapIdle. Niente <select> visibili: crash.
     │   ├── newsOverlay.js      ← apre la vista News
     │   ├── guideOverlay.js     ← apre la Guida "Come si usa"
+    │   ├── toolsOverlay.js     ← apre Altri strumenti (src/tools/*)
     │   ├── newsTicker.js       ← ticker in cima alla mappa: battaglie, elezioni, nuove
     │   │                         guerre, sworn enemy, popolazione, tesoro. Le ultime
     │   │                         quattro arrivano già pronte dal server (/ticker), non
@@ -809,7 +1009,7 @@ wareraPlus/
     │   │                         'mapview/focus' — e ?region= in Distanze) ?country=
     │   │                         ?alliance= ?sphere=
     │   │                         ?battle= ?section= (political, economy, news, mu,
-    │   │                         nations, battles, guide, private, alliances) ?tab=
+    │   │                         nations, battles, guide, tools, private, alliances) ?tab=
     │   │                         ?item= ?mu= ?nation= ?senate=. Si toccano SOLO le
     │   │                         chiavi di URL_KEYS (?tm= resta della time machine).
     │   │                         ⚠️ `view` NO: è dello sfondo (?wallpaper=1&view=).
@@ -829,6 +1029,11 @@ wareraPlus/
     │   ├── blocLabelsToggle.js ← toggle nomi alleanze
     │   └── authorPill.js       ← pill autore accanto al bottone Ko-fi
     ├── shared/
+    │   ├── battleTiming.js      ← NUOVO (2026-10-22) — quando finisce il round (per lato) e
+    │   │                          la battaglia: 300 punti a round, un tick ogni 120 s, punti
+    │   │                          per tick secondo il TOTALE del round (non il numero del
+    │   │                          tick). Dati da currentRound.live di /battles, zero fetch.
+    │   │                          Usato da Operazioni, sezione Battaglie e tooltip dei marker.
     │   ├── particlesBackground.js ← motore dello sfondo a particelle, condiviso da tutte
     │   │                            le sezioni (Political oro, Eco verde, MU rosso,
     │   │                            News blu, Alleanze viola)
@@ -871,12 +1076,20 @@ wareraPlus/
     │   │                          impulsi, battiti, ping, navi e particelle; restano
     │   │                          frecce e colori. Tutti i moduli animati chiedono
     │   │                          animationsOn(). Il replay battaglia NO (è a mano).
+    │   ├── chartTip.js         ← NUOVO — tooltip comune dei grafici: ogni elemento con
+    │   │                          data-tip (tipAttr) lo mostra al passaggio o al tocco, e i
+    │   │                          <title> nativi degli SVG diventano tooltip istantanei
     │   ├── scrollHint.js       ← NUOVO — "Scorri di lato per tutte le colonne": l'avviso
     │   │                          sopra le tabelle dati che su telefono SCORRONO invece
     │   │                          di nascondere colonne (Rendite, Prezzi, Produzione,
     │   │                          Unità, Spese di guerra, Statistiche nazioni). Prima
     │   │                          colonna ferma, il resto scorre (2026-10-15: da
     │   │                          telefono non si vedeva più "Rendita/pp base").
+    │   ├── versus.js           ← NUOVO (2026-10-18) — i pezzi di TUTTI i confronti 1 vs 1
+    │   │                          (giocatori, unità, nazioni, fazioni di Statistiche
+    │   │                          alleanze): vsRow (tiro alla fune), vsGroup, vsFighter,
+    │   │                          vsHero, countUpScore. Nato dal versus dei giocatori;
+    │   │                          stile in styles/versus.css, importato da qui.
     │   ├── wallpaper.js        ← NUOVO — solo il flag IS_WALLPAPER (?wallpaper=1),
     │   │                          letto da main.js, analytics.js, countryPanel.js
     │   └── trpcClient.js       ← client tRPC unificato: trpcBatchManual (stile Diplomacy)
@@ -895,6 +1108,10 @@ wareraPlus/
         │                          ora è una scheda della stessa sezione) e i suoi
         │                          .wp-eco-item/.wp-eco-delta/.wp-eco-note
         │                          atterravano sulla tabella dei prezzi.
+        ├── versus.css          ← NUOVO — lo stile dei confronti 1 vs 1 (wp-vs-*), uscito
+        │                          da players.css. Colori dei lati in --vs-a/--vs-b sulla
+        │                          radice: le fazioni li ridefiniscono (blu/verde) sul
+        │                          loro contenitore. .wp-vs-scope ricolora i selettori.
         └── menubar.css, mobile-menubar.css, mu.css, nations.css, news.css,
-            eco.css, guide.css, market.css, battles.css
+            eco.css, guide.css, tools.css, market.css, battles.css
 ```

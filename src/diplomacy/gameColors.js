@@ -52,3 +52,29 @@ export function gameNationColor(nation) {
   const step = ACCENT_STEP[nation?.mapAccent] || ACCENT_STEP.normal;
   return GAME_PALETTE[nation?.scheme]?.[step] || null;
 }
+
+/* Il colore del NOME di una nazione ricavato da quello del suo territorio.
+   Nato nella time machine (vedi il BUG FIX in testa a _ensureTextColorMap
+   in app/timeMachine.js: il colore di riempimento è ~4 volte troppo scuro
+   per un testo), spostato qui il 2026-10-26 perché con la v0.27 le
+   etichette di map.getMapData non portano più `textColor` (né
+   `strokeColor`: solo `scheme`), e anche la mappa base ne ha bisogno. */
+const LABEL_TARGET_LUM = 190; // luminanza media misurata sui textColor della mappa base
+
+/** Schiarisce `hex` verso il bianco fino alla luminanza dei nomi della
+ *  mappa, tenendo la tinta. null se `hex` non è un colore #rrggbb. */
+export function lightenForLabel(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  if (lum >= LABEL_TARGET_LUM) return hex;
+  // Mix verso il bianco: mantiene la tinta (quindi la nazione resta
+  // riconoscibile) e alza solo la luminosità fino al bersaglio.
+  const k = (LABEL_TARGET_LUM - lum) / (255 - lum);
+  r = Math.round(r + (255 - r) * k);
+  g = Math.round(g + (255 - g) * k);
+  b = Math.round(b + (255 - b) * k);
+  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+}

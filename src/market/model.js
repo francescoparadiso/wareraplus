@@ -41,9 +41,42 @@
                   quanto arriva davvero in tasca al lavoratore;
    · `selfWork` — quando lavori nella tua azienda; fuori dallo scopo di
                   questa vista, che parla di aziende con dipendenti.
+
+   ── DALLA v0.27: DIPENDENTI ──────────────────────────────────────
+   Niente più mercato del lavoro: i dipendenti sono NPC e il salario lo
+   decidono loro (note v0.27). Un dipendente con Produzione P fa P/4
+   punti l'ora, aumentati da gestione, felicità, attrezzo, giorni sullo
+   stesso bene e regione core (qui tutti insieme in `bonusPct`), e chiede
+   ogni ora P/4 × valore del punto × aspettativa (70–130%; Avido +20%,
+   Modesto −15%). Quindi, per punto effettivamente prodotto:
+
+     costo/punto = valore_punto × aspettativa / (1 + bonus%)
+
+   e un dipendente rende finché costo/punto < rendita/punto, cioè finché
+   la sua aspettativa sta sotto
+
+     aspettativa di pareggio = rendita/punto × (1 + bonus%) / valore_punto
+
+   che non dipende da P: un dipendente bravo produce di più ma chiede di
+   più nella stessa proporzione. Spariscono la fedeltà (non esiste più), la
+   regione migliore e il suo bonus (giacimenti spenti, niente
+   specializzazione) e la colonna del lavoratore (un NPC non incassa
+   niente: il salario esce dal gioco). Decide il DATO (`isEmployeeEra`),
+   non la data.
    ══════════════════════════════════════════════════════════════ */
 
 import { state } from '../diplomacy/state.js';
+
+/** v0.27: Leadership c'è, i giacimenti sono spenti. Basta uno dei due. */
+export function isEmployeeEra(gameConfig) {
+  return !!gameConfig?.skills?.leadership || gameConfig?.region?.depositsEnabled === false;
+}
+
+/** Punti al giorno di un dipendente: Produzione ÷ 4 l'ora, 24 ore, più i
+ *  bonus. Le ore in cui non lo si paga non lavora: qui si assume di pagarle. */
+export function employeePointsPerDay(production, bonusPct = 0) {
+  return 6 * (Number(production) || 0) * (1 + (Number(bonusPct) || 0) / 100);
+}
 
 /** Fedelta': quanto vale un giorno e dove si ferma. Letta dal gioco, mai
  *  scritta a mano — se WarEra ribilancia, la vista si adegua da sola. */
@@ -97,9 +130,10 @@ export function buildRows(data, opts) {
   const { gameConfig, items, prices, book, regionsByItem, regionById } = data;
   const {
     execPrices = false, netMarketTax = false, wage = 0, workerPpDay = 0, days = 0,
+    employee = null,   // v0.27: { ppValue, production, expectation, bonusPct }
   } = opts || {};
   const fidCfg = fidelityConfig(gameConfig);
-  const fidelity = fidelityPercent(days, fidCfg);
+  const fidelity = employee ? 0 : fidelityPercent(days, fidCfg);
 
   const sellPriceOf = code => {
     if (!execPrices) return prices[code] ?? null;
@@ -162,12 +196,26 @@ export function buildRows(data, opts) {
        punto in più, fino al tetto. Si somma giorno per giorno — sono al
        massimo qualche decina di iterazioni per riga. */
     let ownerTotal = 0;
-    for (let d = 0; d < days; d++) {
+    for (let d = 0; !employee && d < days; d++) {
       ownerTotal += workerPpDay * (perPointAt(fidelityPercent(d, fidCfg)) - wage);
+    }
+
+    // v0.27 — il dipendente NPC (vedi "DALLA v0.27" in testa).
+    let empCost = null, breakExp = null, empOwnerPerDay = null;
+    if (employee) {
+      const mult = 1 + (Number(employee.bonusPct) || 0) / 100;
+      const pv = Number(employee.ppValue) || 0;
+      if (pv > 0) {
+        empCost = pv * (Number(employee.expectation) || 0) / 100 / mult;
+        breakExp = perPoint * mult / pv * 100;
+        empOwnerPerDay = employeePointsPerDay(employee.production, employee.bonusPct) * (perPoint - empCost);
+      }
     }
 
     const bookRow = book?.[code] || {};
     return {
+      empCost,
+      breakExp,
       code,
       type: item.type,                 // 'raw' | 'product'
       pp,
@@ -182,8 +230,8 @@ export function buildRows(data, opts) {
       bonus,
       perPoint,
       breakEven,
-      marginPerPoint,
-      ownerPerDay,
+      marginPerPoint: employee ? (empCost == null ? null : perPoint - empCost) : marginPerPoint,
+      ownerPerDay: employee ? empOwnerPerDay : ownerPerDay,
       ownerTotal,
       fidelity,
       workerNetPerDay,
@@ -215,13 +263,31 @@ export const COLUMNS = [
   { key: 'ownerTotal',  label: 'colTotal',     num: true },
 ];
 
+/* v0.27: via bonus, regione, tassa sul reddito (era quella del lavoratore),
+   lavoratore e totale in X giorni (fedeltà); arrivano il costo per punto
+   del dipendente e l'aspettativa di pareggio. Vedi "DALLA v0.27". */
+export const COLUMNS_V27 = [
+  { key: 'code',        label: 'colItem',      text: true },
+  { key: 'sell',        label: 'colSell',      num: true },
+  { key: 'rawCost',     label: 'colRaw',       num: true },
+  { key: 'pp',          label: 'colPp',        num: true },
+  { key: 'perPoint',    label: 'colYield',     num: true, primary: true },
+  { key: 'empCost',     label: 'colEmpCost',   num: true },
+  { key: 'breakExp',    label: 'colBreakExp',  num: true },
+  { key: 'ownerPerDay', label: 'colYouV27',    num: true },
+];
+
+export function columnsFor(gameConfig) {
+  return isEmployeeEra(gameConfig) ? COLUMNS_V27 : COLUMNS;
+}
+
 const VALUE_OF = {
   code: r => r.code,
   region: r => r.best?.regionName || '',
 };
 
-export function sortRows(rows, key, dir) {
-  const col = COLUMNS.find(c => c.key === key) || COLUMNS.find(c => c.primary);
+export function sortRows(rows, key, dir, columns = COLUMNS) {
+  const col = columns.find(c => c.key === key) || columns.find(c => c.primary);
   const get = VALUE_OF[col.key] || (r => r[col.key]);
   return rows.slice().sort((a, b) => {
     if (col.text) return dir * String(get(a)).localeCompare(String(get(b)), undefined, { sensitivity: 'base' });

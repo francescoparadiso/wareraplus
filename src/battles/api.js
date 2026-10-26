@@ -197,6 +197,10 @@ function _fromLive(b) {
     },
     contracts: null,
     contractCount: null,
+    // Per la stima di fine round/battaglia (src/shared/battleTiming.js):
+    // si calcola al disegno, perché il tempo che manca cambia ogni minuto.
+    timing: { roundsToWin: b.roundsToWin, createdAt: b.createdAt, currentRound: cur,
+      attacker: { wonRoundsCount: b.attacker?.wonRoundsCount }, defender: { wonRoundsCount: b.defender?.wonRoundsCount } },
     partial: true,
     live: true,
   };
@@ -409,6 +413,10 @@ export async function getBattleDetail(battleId, { live = false } = {}) {
         perK: Number(a.currentPerK) || 0,
         minDamage: Number(a.minimumDamage) || 0,
         createdAt: _ts(a.createdAt),
+        // Quando l'asta si è chiusa, cioè quando il compenso è stato
+        // pattuito: è il momento in cui il grafico dei soldi spesi
+        // (Andamento) conta il contratto.
+        awardedAt: _ts(a.expiresAt) || _ts(a.createdAt),
       })).sort((a, b) => b.payout - a.payout),
       contractsTruncated: Boolean(auctions?.truncated),
       rounds: _rounds(raw),

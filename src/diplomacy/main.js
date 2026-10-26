@@ -5,7 +5,7 @@ import { hashColor, showLoading, hideLoading, trpcBatch, MAX_BATCH } from './uti
 import { showToast, updateDynamicLegend } from './ui.js';
 import { initMap, renderMap, setupMapLayers, cercaNazione, resetDiplomazia, setMapSource, setColoringMode } from './map.js';
 //import { loadExternalBlocs } from './blocs.js';
-import { loadExternalNaps, aggiungiNap } from './naps.js';
+import { aggiungiNap } from './naps.js';
 import { loadSphereOfInfluence } from './sphereOfInfluence.js';
 import { syncUIToState, toggleNapSection, updateExternalNapsUI } from './ui.js';
 import { buildOriginalLabels, loadFlagImage } from './labels.js';
@@ -200,7 +200,10 @@ async function refreshData(boot = _startBootFetches()) {
     // dell'etichetta, poi l'hash — vedi gameColors.js per il perché.
     state.nationBaseColorMap.clear();
     state.labelsData.forEach(label => {
-      if (label.properties?.countryId) state.nationBaseColorMap.set(label.properties.countryId, label.properties.strokeColor);
+      // WarEra+ v0.27: le etichette non portano più `strokeColor`; senza
+      // questo controllo la chiave entrerebbe con `undefined` e l'hash qui
+      // sotto non la riempirebbe più (has() sarebbe già vero).
+      if (label.properties?.countryId && label.properties.strokeColor) state.nationBaseColorMap.set(label.properties.countryId, label.properties.strokeColor);
     });
     state.nazioniGlobal.forEach(n => {
       const game = gameNationColor(n);
@@ -220,15 +223,12 @@ async function refreshData(boot = _startBootFetches()) {
     allianceModule.processAlliancesData(alliances);
     // ----------------------------------------------------------------------------
 
-    // loadExternalNaps era importata ma mai chiamata: la lista NAP esterni
-    // restava vuota e il ramo isExternalNap in getColorForCountry era morto.
-    // WarEra+ perf: NON awaited. I due CSV stanno su raw.githubusercontent.com
-    // che può essere lento/429 (limite per-IP) e bloccava l'apertura dell'app
-    // per secondi (peggiorato dal retry a backoff). Ora partono in background:
-    // la mappa è subito interattiva e le due funzioni ridisegnano da sole
-    // (updateExternalNapsUI/renderMap) quando i dati arrivano. updateExternalNapsUI()
-    // qui sotto fa il primo render (lista vuota) finché il fetch non completa.
-    loadExternalNaps();
+    // WarEra+: i NAP vengono SOLO dalla sezione Accordi (warera-plus-api):
+    // il CSV su raw.githubusercontent.com non si carica più (2026-10-23).
+    // NON awaited: la mappa è subito interattiva e accordiNaps.js ridisegna
+    // da sola (updateExternalNapsUI/renderMap) quando l'elenco arriva;
+    // updateExternalNapsUI() qui sotto fa il primo render a lista vuota.
+    import('./accordiNaps.js').then(m => m.loadAccordiNaps()).catch(() => {});
     updateExternalNapsUI();
     syncUIToState();
     loadSphereOfInfluence();
@@ -353,6 +353,10 @@ document.getElementById('mode-production')?.addEventListener('click', async () =
   // essere già stata aperta dal pannello nazione per una nazione sola (vedi
   // countryEthics.js:_publish), e quella non basta a colorare il mondo.
   if (state.countryEthicsComplete) return;
+  // WarEra+ v0.27 — la vista è diventata la rendita giornaliera e le etiche
+  // non danno più nessun bonus: niente richieste per caricarle.
+  const { isRevenueEra } = await import('./productionHeatmap.js');
+  if (isRevenueEra()) return;
   try {
     const { ensureAllCountryEthics } = await import('./countryEthics.js');
     await ensureAllCountryEthics();

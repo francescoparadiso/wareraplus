@@ -29,6 +29,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { escapeHtml, fmtCompact, flagImg } from '../mu/ui.js';
+import { tipAttr } from '../shared/chartTip.js';
 import { natT } from './i18n.js';
 import { fetchLabour } from './api.js';
 import { state } from '../diplomacy/state.js';
@@ -146,9 +147,16 @@ function graficoHtml(days) {
     const hFuori = (fuori / max) * altezza;
     const hCasa = (casa / max) * altezza;
     const yTot = PAD_T + altezza - hTot;
+    // WarEra+ (2026-10-22): esplorabile — una colonna invisibile alta
+    // quanto il grafico, così anche il giorno più basso si punta.
     return `
       <rect x="${x.toFixed(1)}" y="${(PAD_T + altezza - hCasa).toFixed(1)}" width="${w.toFixed(1)}" height="${hCasa.toFixed(1)}" fill="${ORO}"/>
-      <rect x="${x.toFixed(1)}" y="${yTot.toFixed(1)}" width="${w.toFixed(1)}" height="${hFuori.toFixed(1)}" fill="${ESTERO}"/>`;
+      <rect x="${x.toFixed(1)}" y="${yTot.toFixed(1)}" width="${w.toFixed(1)}" height="${hFuori.toFixed(1)}" fill="${ESTERO}"/>
+      <rect class="wp-tip-hit" x="${x.toFixed(1)}" y="0" width="${larghezza.toFixed(1)}" height="${H - PAD_B}"${tipAttr(
+        fmtData(r[0]),
+        `${natT('labWages')}\t${oro(tot)}`,
+        `${natT('labHome')}\t${oro(casa)}`,
+        `${natT('labAway')}\t${oro(fuori)}`)}/>`;
   }).join('');
 
   const primo = days[0][0], ultimo = days[days.length - 1][0];

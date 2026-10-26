@@ -60,8 +60,10 @@ da nessun path attivo.
 **WarEra Eco Optimizer di ArgusIA** — terzo tool, di terzi: bot Discord
 portato a moduli ES in `src/eco/` come "Ottimizzatore industriale", stessa
 logica (Competenze / Posizione / Lavoratori) più una sezione Assunzioni nuova
-e una veste grafica al posto degli embed Discord. **L'attribuzione ad ArgusIA
-in cima alla vista non va rimossa.**
+e una veste grafica al posto degli embed Discord. Con la v0.27 del gioco è
+stato riscritto da capo (schede Aziende e Competenze, vedi
+`AGGIORNAMENTO-v0.27.md`) e la card di attribuzione ad ArgusIA in cima è stata
+tolta: della logica originale non resta più niente.
 
 ### Modifiche al codice Diplomacy esistente
 
@@ -162,7 +164,7 @@ applica queste strategie di cache:
 |---|---|---|
 | Chiamate tRPC WarEra (`api2/4/6.warera.io`) | Network-first, 10 min TTL | Dati di gioco freschi quando c'è rete, utilizzabili offline con l'ultima risposta nota altrimenti |
 | Bandiere/immagini (`app.warera.io`) | Cache-first, 30 giorni | Cambiano raramente |
-| CSV esterni (NAP, Sphere of Influence) | Stale-while-revalidate | Bilancia freschezza e velocità |
+| CSV esterni (Sphere of Influence; i NAP dal 2026-10-23 vengono dagli Accordi) | Stale-while-revalidate | Bilancia freschezza e velocità |
 | Google Fonts, MapLibre CDN | Cache-first | Asset statici versionati |
 | Bundle app (JS/CSS/HTML) | Precache completo | App utilizzabile offline dopo il primo caricamento |
 

@@ -22,13 +22,17 @@ ed è poi cresciuto ben oltre quei due:
   `public/political/` come riferimento/rollback fisico, **non più raggiunto da
   alcun path attivo** dell'app (niente più iframe).
 - **WarEra Eco Optimizer di ArgusIA** (esistente, di terzi) — bot Discord
-  portato a moduli ES in `src/eco/` come "Ottimizzatore industriale". Stessa
-  logica (Competenze / Posizione / Lavoratori), più una sezione Assunzioni
-  nuova e una veste grafica al posto degli embed Discord. Dal 2026-09-19 è
+  portato a moduli ES in `src/eco/` come "Ottimizzatore industriale". Nato
+  con la stessa logica (Competenze / Posizione / Lavoratori, più Assunzioni);
+  dalla v0.27 del gioco, che toglie il mercato del lavoro, sono rimaste
+  Aziende e Competenze, ricostruite sulle statistiche di lavoro misurate
+  (vedi `AGGIORNAMENTO-v0.27.md`). Dal 2026-09-19 è
   una **scheda** della sezione Economia (`src/economy/`), insieme alle
   Rendite di produzione e alla scheda Prezzi.
-  ⚠️ **L'attribuzione ad ArgusIA (card in cima alla vista) non va rimossa**,
-  nemmeno ora che è "solo" una scheda di una sezione più grande.
+  La card di attribuzione ad ArgusIA in cima alla vista è stata **tolta il
+  2026-10-23**, su richiesta del proprietario del progetto, insieme alla
+  riscrittura per la v0.27: della logica del bot non resta più niente.
+  L'origine resta scritta nelle testate di `src/eco/` e nella storia di git.
 
 Tutto il resto è **nuovo di WarEra+**: pannello nazione, Unità Militari,
 Statistiche nazioni, Rendite di produzione, News + ticker, Time machine,
@@ -181,6 +185,12 @@ ne aggiungi o ne sposti uno. In breve:
   sfondo di Wallpaper Engine, `public/political/` il Political originale
   (non più usato).
 
+⚠️ **Aggiornamento di gioco v0.27** (dipendenti al posto del mercato del
+lavoro, tipi di governo, 742 regioni): cosa cambia nelle API e cosa si rompe
+nel tool, misurato su apidev prima del rilascio, sta in
+**`AGGIORNAMENTO-v0.27.md`**. Leggilo prima di toccare Ottimizzatore,
+Rendite, censimento aziende o la vista Bonus produzione.
+
 ⚠️ **Attenzione ai nomi duplicati tra le due varianti di Political**:
 `config.js`, `main.js`, `ui.js`, `i18n.js`, `api.js`, `loading.js`,
 `ticker.js`, `parliament.js`, `senate.js`, `congress.js`, `presidential.js`,
@@ -258,6 +268,7 @@ serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`
 `/ticker` + `/ticker/summary`,
 `/region-history/{at,range,events,contested,war-intensity}`, `/alliances`,
 `/battles`, `/elections`, `/parties`, `/users-lite`, `/credit-profiles`,
+`/mu-damage-history`, `/tournament`,
 `/visits`, `/health`.
 
 Espone inoltre **`/trpc/*`**: un proxy passthrough verso `api2.warera.io`
@@ -417,6 +428,19 @@ Le **battaglie in corso** in cima all'archivio sono l'unica parte della
 sezione che NON dipende da un rideploy: arrivano da `/battles`, che il server
 serve già, e senza server ricadono sul Worker come i marker della mappa.
 
+I **danni nel tempo** del 1 vs 1 delle unità (`src/mu/muCompare.js` +
+`server/muBattleDamage.js`) dipendono da `/mu-damage-history`: senza
+rideploy la rotta risponde 404 e il riquadro "Danni nel tempo" non compare,
+mentre il resto del confronto è identico. Dopo il deploy il giro diurno
+conta solo le battaglie NUOVE; tutte le altre (archivio + il seme di
+`import/muBattleSeed.js`, dal maggio 2025) le recupera la notte, fra le
+02:00 e le 06:59, 75 al minuto: una notte. Fino ad allora il riquadro
+dichiara da che giorno parte (`coverageFrom`) e quante battaglie mancano.
+⚠️ Il giorno è quello in cui la battaglia FINISCE (UTC): verificato contro
+gli scatti, su un mese torna entro l'1%, ma giorno per giorno è rumoroso
+(una battaglia dura anche un giorno intero). Per questo settimane e
+cumulato, mai barre giornaliere. `/health` → `muBattleDamage`.
+
 Il **Bilancio unità** (`src/mu/muWealth.js` + `server/plusApi/wealth.js`)
 dipende dal redeploy di **warera-plus-api**, non del cache-server: finché
 non lo fai, `/wealth/unita` risponde 404 e la linguetta semplicemente non
@@ -480,6 +504,89 @@ amministrazione restano identici. Tre cose da sapere prima di crederla rotta:
 - **alleati** e relazione `alleato` ai confini vengono da `allianceId`
   (stesso blocco), MAI dal campo `allies`, fossile del 10 giugno: l'Italia
   vi ha ancora la Francia, con cui è in guerra.
+
+Le **Operazioni** dell'area riservata (`src/private/operazioni.js` +
+`mappaOperazione.js` + `server/plusApi/operazioni.js`, dal 2026-10-22) sono
+la lavagna dei piani: passi in sequenza con orari e frecce, e "Vedi sulla
+mappa". Dipendono dal redeploy di **warera-plus-api**: finché non lo fai
+`/operazioni` risponde 404 e la pagina dice che il server non le ha ancora
+(nessun guasto). Le vede chi vede "La mia nazione" — stessa funzione,
+`contestoNazione` — le scrive il governo, lo stato di un passo lo sposta
+chiunque le veda. ⚠️ Sulla mappa il punto di una regione è `regionAnchor`
+(geometria della mappa), NON `state.regionData[id].position`: per alcune
+regioni quella è la città di un'altra (Romagna & Tuscany = Milano).
+
+Gli **Accordi** (`src/accordi/*` + `src/diplomacy/accordiNaps.js` +
+`server/plusApi/accordi.js`, dal 2026-10-23) sono l'archivio dei patti di
+non belligeranza, e quelli in vigore diventano NAP sulla mappa. Dipendono dal
+redeploy di **warera-plus-api**: finché non lo fai `/accordi` risponde 404,
+la sezione dice che il server non risponde e la mappa resta **senza NAP
+esterni**: dal 2026-10-23 il CSV `warera_naps.csv` non si carica più, gli
+Accordi sono l'unica fonte (richiesta dell'utente). Tre cose da sapere:
+
+- a differenza del resto dell'area riservata, **leggerli è pubblico** e
+  **scriverli non passa dal filtro P.A.S.T.A.**: basta essere nel governo di
+  una delle nazioni coinvolte (o dei membri di un'alleanza coinvolta), perché
+  un patto ha due parti e la controparte deve poterlo scrivere;
+- live e dev hanno **database separati**: un patto scritto sul dev non
+  compare sulla mappa del live;
+- il **controllo** del tetto ai danni somma il danno per NAZIONALITÀ
+  (`battleRanking` per country) sullo schieramento opposto all'altra parte;
+  le unità escluse si tolgono con la classifica per unità, quindi è una stima
+  (dichiarata). Copre i 90 giorni dell'archivio battaglie, 120 battaglie per
+  controllo al massimo.
+
+Le **Votazioni** (`server/plusApi/votazioni.js` + `src/political/votes.js`,
+bottone "Votazioni" di Political, dal 2026-10-23) fanno votare congresso,
+congresso + governo o tutti i cittadini (referendum), a scrutinio palese o
+segreto. Dipendono dal redeploy di **warera-plus-api**: finché non lo fai
+`/votazioni` risponde 404 e la vista dice che il server non le ha ancora.
+Lo scrutinio si guarda in diretta: emiciclo per il palese
+(`votesHemicycle.js`, 20–45 s), urna per il segreto (`votesUrn.js`: in
+congresso 3 s per OGNI scheda, sempre allo stesso passo; accelera solo nel
+referendum, fino a 2 minuti). Il governo può impostare un canale Discord (avvisi di apertura,
+inizio scrutinio, esito). Quando hanno votato TUTTI, chi ha aperto la
+votazione (o l'amministratore) può mostrare lo scrutinio subito: urne chiuse
+e scrutinio fra 10 s (`count_at`, mai nel referendum). Solo l'amministratore
+può eliminare una votazione, per sempre. Per provare le animazioni c'è
+`server/plusApi/votazioniFinte.js` (solo dev, vedi il README). Tre cose da
+sapere:
+
+- il congresso si **fotografa all'apertura** (`votazione_elettore`): chi
+  viene eletto a votazione aperta non vota, chi decade sì. Il referendum
+  no: si controlla al voto (cittadino adesso, livello ≥ 10, personaggio nato
+  prima dell'apertura) e i suoi aventi diritto sono una STIMA del censimento
+  (`stimati`), quindi niente maggioranza assoluta per il referendum;
+- ⚠️ **il segreto** è fatto di due tabelle che non si toccano
+  (`votazione_partecipazione` chi, `votazione_scheda` cosa), nessuna con
+  l'ora, e un voto segreto NON va nell'`audit`. Non aggiungere una colonna
+  `voted_at` o un join "per comodità": è esattamente il segreto;
+- l'esito nelle liste compare solo a **scrutinio finito**
+  (`fineScrutinio`): lo scrutinio parte per tutti alla stessa ora
+  (`scrutinioAlle` = chiusura + 1 minuto) e dura quanto dice il server.
+
+I **Tornei** (`src/tournament/*` + `server/tournament.js`, dal 2026-10-25)
+prendono tabellone e forza delle squadre da `/tournament` (~50 KB invece dei
+~700 che il browser scaricava da solo); senza server fanno da sé, col solo
+danno della settimana in corso, e lo dichiarano. Tre cose che si riempiono col
+tempo, da sapere prima di crederle rotte:
+
+- la **settimana mobile** (forza = danno degli ultimi 7 giorni, non della
+  settimana in corso che riparte il lunedì alle 00:00 UTC) vive delle
+  fotografie della classifica in `cache/weekly-snaps/`, ogni 6 ore alle :55
+  UTC. La prima è del 25 ottobre: fino alla domenica successiva la parte della
+  settimana scorsa è STIMATA (`weeklyMode: 'estimate'`), poi è esatta;
+- la **forma nel torneo** (danno per round nelle partite già giocate) entra
+  nel modello solo con ≥ 30 partite in cui c'era prima di giocarle: misurata
+  sul turno 2 del 23 ottobre, log-loss fuori campione 0,458 contro ~0,51 del
+  solo settimanale. Lo stesso modello sta in `model.js` e nel server: se
+  cambi uno, cambia l'altro;
+- il **registro delle previsioni** (`cache/tournament-predictions`) scrive la
+  probabilità appena una partita ha le due squadre e non la tocca più: parte
+  dal 25 ottobre, e le partite già avviate al primo sguardo (`late`) non
+  contano. ⚠️ Non "riempirlo" ricalcolando le partite passate col modello di
+  oggi: sarebbe indovinare col senno di poi, esattamente quello che il
+  registro esiste per evitare.
 
 Il **danno ora per ora** e la **curva a 14 giorni** nella scheda nazione
 (`src/nations/damageCurves.js` + `server/damageTimeline.js`) dipendono da
@@ -623,8 +730,13 @@ Nella stessa direzione, due cose sullo stesso giorno:
   due sqlite (un `cp` con il WAL acceso prende un database a metà), tar
   della `cache/` senza `bootstrap-raw-battles.json` (244 MB che il bootstrap
   notturno rifà da solo), 4 copie a rotazione, cron domenica 04:00, 174 MB a
-  giro. ⚠️ è sullo **stesso disco**: il passo che conta è l'`rsync` che se
-  le porta via, documentato in `server/README.md`.
+  giro. ⚠️ è sullo **stesso disco**: dal 2026-10-20 il passo che se le porta
+  via è `server/backup-bucket.sh`, ogni giorno alle 04:30 UTC nel bucket
+  Oracle `warera-backup` (giornaliero/ 30 gg, settimanale/ 180 gg, li pota il
+  bucket da sé). Il VPS può solo AGGIUNGERE file al bucket — la policy non
+  gli dà delete né overwrite — quindi non provare a far pulire lo script:
+  fallirebbe, ed è voluto. Restano le copie a mano sul PC (`rsync`, vedi
+  `server/README.md`): il bucket sta sullo stesso account Oracle del VPS.
 
 L'unico archivio rimasto con una scadenza è `dayHistory.js` (400 giorni,
 cioè maggio 2027), e lì il vincolo è la **RAM** e non il disco: tiene

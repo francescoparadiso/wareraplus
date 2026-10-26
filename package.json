@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:routes": "node tools/checkOceanRoutes.mjs"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",

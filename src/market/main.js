@@ -33,8 +33,9 @@ import { scrollHintHtml } from '../shared/scrollHint.js';
 import { loadMarketData, PRICE_TTL_MS, loadPriceHistory, priceSeries, priceHistoryCoverage } from './api.js';
 import { priceChartSvg, variazione } from './priceChart.js';
 import {
-  buildRows, sortRows, COLUMNS, THIN_BOOK_QTY,
+  buildRows, sortRows, columnsFor, THIN_BOOK_QTY,
   workerPointsPerDay, enginePointsPerDay, fidelityConfig, fidelityPercent,
+  isEmployeeEra, employeePointsPerDay,
 } from './model.js';
 import { escapeHtml, flagImg, fmtCompact, fmtRelative } from '../mu/ui.js';
 import { trackEvent } from '../shared/analytics.js';
@@ -57,7 +58,11 @@ let timer = null;
    gioco): dà numeri concreti al primo colpo, e chi ne ha uno diverso
    cambia i due campi. La paga parte a zero, cioè "azienda che lavora da
    sola": la prima colonna utile resta la rendita. */
-const SIM_DEFAULTS = { wage: 0, energy: 130, production: 40, days: 1 };
+const SIM_DEFAULTS = { wage: 0, energy: 130, production: 40, days: 1, empProd: 3, expectation: 100, empBonus: 0 };
+/* v0.27 — il dipendente NPC di riferimento: Produzione 3 (all'assunzione
+   va da 1 a 4, uniforme), aspettativa 100% (va da 70 a 130), nessun bonus.
+   Vedi "DALLA v0.27" in model.js. */
+const isV27 = () => isEmployeeEra(data?.gameConfig);
 /* Lo slider vive dentro la fedeltà e basta: un giorno (il primo, bonus
    appena maturato) fino al decimo, dove il gioco mette il tetto. Oltre non
    cambierebbe più niente per punto — l'unica cosa che continuerebbe a
@@ -78,6 +83,9 @@ function loadSim() {
         // Il salvataggio può venire da una versione con un altro intervallo
         // (lo slider arrivava a 30): si riporta dentro, non si scarta.
         days: Math.min(Math.max(Number(raw.days) || MIN_DAYS, MIN_DAYS), MAX_DAYS),
+        empProd: Number(raw.empProd) || SIM_DEFAULTS.empProd,
+        expectation: Number(raw.expectation) || SIM_DEFAULTS.expectation,
+        empBonus: Number(raw.empBonus) || 0,
       };
       simSeeded = true;
     }
@@ -252,6 +260,14 @@ function render() {
 /** Ricalcola `rows` dalle impostazioni correnti e torna i punti/giorno del
  *  lavoratore di riferimento (serve a barra e legenda). */
 function computeRows() {
+  if (isV27()) {
+    rows = buildRows(data, {
+      execPrices: opts.execPrices,
+      netMarketTax: opts.netMarketTax,
+      employee: { ppValue: data.ppValue, production: sim.empProd, expectation: sim.expectation, bonusPct: sim.empBonus },
+    });
+    return employeePointsPerDay(sim.empProd, sim.empBonus);
+  }
   const ppDay = workerPointsPerDay(sim.energy, sim.production);
   if (!simSeeded) seedWage(buildRows(data, { execPrices: opts.execPrices, netMarketTax: opts.netMarketTax }));
   rows = buildRows(data, {
@@ -265,7 +281,15 @@ function computeRows() {
 }
 
 function bodyHtml(ppDay) {
-  const visible = sortRows(rows.filter(r => filter === 'all' || r.type === filter), sort.key, sort.dir);
+  const visible = sortRows(rows.filter(r => filter === 'all' || r.type === filter), sort.key, sort.dir, columnsFor(data.gameConfig));
+  if (isV27()) {
+    return `
+    ${data.ppValue ? '' : `<p class="wp-mkt-notice">${escapeHtml(mktT('noPpValue'))}</p>`}
+    ${tableHtml(visible)}
+    <p class="wp-mkt-legend">${escapeHtml(mktT('legendV27'))}</p>
+    <p class="wp-mkt-legend">${escapeHtml(mktT('simNoteV27', { n: Math.round(ppDay) }))}
+      ${escapeHtml(mktT('priceHint'))}</p>`;
+  }
   return `
     ${data.regionsError || !Object.keys(data.regionsByItem).length
       ? `<p class="wp-mkt-notice">${escapeHtml(mktT('regionsMissing'))}</p>` : ''}
@@ -301,6 +325,8 @@ function repaint() {
   }
   const ppEl = rootEl.querySelector('.wp-mkt-ppdayval');
   if (ppEl) ppEl.textContent = mktT('ppDay', { n: Math.round(ppDay) });
+  const wageEl = rootEl.querySelector('.wp-mkt-wagehour');
+  if (wageEl) wageEl.textContent = wageHourText();
 
   wireBody();
 }
@@ -310,6 +336,34 @@ function repaint() {
 function daysFillPct() {
   const span = MAX_DAYS - MIN_DAYS;
   return span > 0 ? ((sim.days - MIN_DAYS) / span) * 100 : 100;
+}
+
+/** v0.27: quanto chiede l'ora il dipendente di riferimento (Produzione ÷ 4
+ *  × valore del punto × aspettativa). Non dipende dal bonus. */
+function wageHourText() {
+  if (!data?.ppValue) return '';
+  return mktT('wageHourL', { v: gold(sim.empProd / 4 * data.ppValue * sim.expectation / 100) });
+}
+
+/** v0.27: il blocco del simulatore per il dipendente NPC, al posto di
+ *  paga, energia, produzione e fedeltà del lavoratore-giocatore. */
+function simV27Html(ppDay) {
+  return `
+      <div class="wp-mkt-sim">
+        <span class="wp-mkt-simlabel">${escapeHtml(mktT('simTitleV27'))}</span>
+        <label title="${escapeHtml(mktT('empProdHint'))}">${escapeHtml(mktT('empProd'))}
+          <input type="number" id="wp-mkt-empprod" step="0.1" min="0" value="${sim.empProd}">
+        </label>
+        <label title="${escapeHtml(mktT('expectationHint'))}">${escapeHtml(mktT('expectation'))}
+          <input type="number" id="wp-mkt-expect" step="1" min="0" value="${sim.expectation}">
+        </label>
+        <label title="${escapeHtml(mktT('empBonusHint'))}">${escapeHtml(mktT('empBonus'))}
+          <input type="number" id="wp-mkt-empbonus" step="1" min="0" value="${sim.empBonus}">
+        </label>
+        <span class="wp-mkt-ppday"><span class="wp-mkt-ppdayval">${escapeHtml(mktT('ppDay', { n: Math.round(ppDay) }))}</span>
+          <span class="wp-mkt-dim wp-mkt-wagehour">${escapeHtml(wageHourText())}</span>
+          ${data.ppValue ? `<span class="wp-mkt-dim">${escapeHtml(mktT('ppValueL', { v: gold(data.ppValue) }))}</span>` : ''}</span>
+      </div>`;
 }
 
 function toolbarHtml(ppDay) {
@@ -335,7 +389,7 @@ function toolbarHtml(ppDay) {
         <span>${escapeHtml(mktT('netMarketTax'))}</span>
       </label>
 
-      <div class="wp-mkt-sim">
+      ${isV27() ? simV27Html(ppDay) : `<div class="wp-mkt-sim">
         <span class="wp-mkt-simlabel">${escapeHtml(mktT('simTitle'))}</span>
         <label>${escapeHtml(mktT('wage'))}
           <input type="number" id="wp-mkt-wage" step="0.001" min="0" value="${sim.wage}" title="${escapeHtml(mktT('wageHint'))}">
@@ -356,7 +410,7 @@ function toolbarHtml(ppDay) {
           <span class="wp-mkt-daysval">${sim.days}
             <span class="wp-mkt-fid">${escapeHtml(mktT('fidelity', { n: fidPct }))}</span></span>
         </label>
-      </div>
+      </div>`}
 
       <div class="wp-mkt-refresh">
         <span class="wp-mkt-dim">${escapeHtml(mktT('updated'))} ${escapeHtml(age)}</span>
@@ -369,7 +423,7 @@ function toolbarHtml(ppDay) {
 function tableHtml(list) {
   if (!list.length) return `<div class="wp-mkt-empty">${escapeHtml(mktT('empty'))}</div>`;
 
-  const head = COLUMNS.map(c => `
+  const head = columnsFor(data.gameConfig).map(c => `
     <button type="button" class="wp-mkt-th${c.num ? ' wp-mkt-num' : ''}${sort.key === c.key ? ' active' : ''}"
             data-sort="${c.key}" data-dir="${sort.dir}"
             title="${escapeHtml(mktT(c.label, { n: sim.days }))}">${escapeHtml(mktT(c.label, { n: sim.days }))}</button>`).join('');
@@ -379,13 +433,38 @@ function tableHtml(list) {
   // L'avviso esiste solo su telefono (market.css): lì la tabella scorre
   // di lato, e uno scorrimento che niente annuncia non lo trova nessuno.
   return `${scrollHintHtml(560)}
-  <div class="wp-mkt-table-wrap"><div class="wp-mkt-table">
+  <div class="wp-mkt-table-wrap"><div class="wp-mkt-table${isV27() ? ' wp-mkt-v27' : ''}">
     <div class="wp-mkt-thead">${head}</div>
     ${body}
   </div></div>`;
 }
 
+/* v0.27: le otto colonne di COLUMNS_V27 (model.js). L'aspettativa di
+   pareggio si colora rispetto a quella scelta nel simulatore: sotto vuol
+   dire che il dipendente di riferimento su questo bene ti costa più di
+   quanto produce. */
+function rowV27Html(r) {
+  const thinSell = opts.execPrices && r.bid != null && r.bidQty < THIN_BOOK_QTY;
+  const over = r.marginPerPoint != null && r.marginPerPoint < 0;
+  const row = `
+    <div class="wp-mkt-row${expanded === r.code ? ' open' : ''}" role="button" tabindex="0" data-row="${r.code}">
+      <span class="wp-mkt-item">
+        <span class="wp-mkt-code">${escapeHtml(r.code)}</span>
+        <span class="wp-mkt-type wp-mkt-type-${r.type}">${escapeHtml(mktT(r.type === 'raw' ? 'raw' : 'product'))}</span>
+      </span>
+      <span class="wp-mkt-num">${escapeHtml(gold(r.sell))}${thinSell ? '<span class="wp-mkt-thin" title="' + escapeHtml(mktT('thin', { n: r.bidQty })) + '">△</span>' : ''}</span>
+      <span class="wp-mkt-num">${r.materials.length ? escapeHtml(gold(r.rawCost)) : '—'}</span>
+      <span class="wp-mkt-num">${r.pp}</span>
+      <span class="wp-mkt-num wp-mkt-yield">${escapeHtml(gold(r.perPoint))}</span>
+      <span class="wp-mkt-num">${r.empCost == null ? '—' : escapeHtml(gold(r.empCost))}</span>
+      <span class="wp-mkt-num wp-mkt-break${over ? ' over' : ''}"${over ? ` title="${escapeHtml(mktT('lossWarn'))}"` : ''}>${r.breakExp == null ? '—' : escapeHtml(pct(r.breakExp, 0))}</span>
+      <span class="wp-mkt-num ${r.ownerPerDay < 0 ? 'neg' : 'pos'}">${r.ownerPerDay == null ? '—' : escapeHtml(signedGold(r.ownerPerDay))}</span>
+    </div>`;
+  return row + (expanded === r.code ? detailHtml(r) : '');
+}
+
 function rowHtml(r) {
+  if (isV27()) return rowV27Html(r);
   const thinSell = opts.execPrices && r.bid != null && r.bidQty < THIN_BOOK_QTY;
   const over = sim.wage > 0 && r.marginPerPoint < 0;
   const best = r.best;
@@ -451,7 +530,14 @@ function detailHtml(r) {
   // blocco, su telefono paga di pareggio e guadagno del lavoratore non si
   // vedevano da nessuna parte. Etichette = intestazioni della tabella.
   const over = sim.wage > 0 && r.marginPerPoint < 0;
-  const conto = [
+  // v0.27: il conto del dipendente al posto di bonus, paga e fedeltà, e
+  // nessuna colonna di regioni (non c'è più una regione migliore).
+  const conto = isV27() ? [
+    ['colPp', escapeHtml(String(r.pp))],
+    ['colEmpCost', r.empCost == null ? '—' : escapeHtml(gold(r.empCost))],
+    ['colBreakExp', r.breakExp == null ? '—' : escapeHtml(pct(r.breakExp, 0))],
+    ['colYouV27', r.ownerPerDay == null ? '—' : `<span class="${r.ownerPerDay < 0 ? 'neg' : 'pos'}">${escapeHtml(signedGold(r.ownerPerDay))}</span>`],
+  ].map(([k, v]) => `<span>${escapeHtml(mktT(k))}: <b>${v}</b></span>`).join('') : [
     ['colPp', escapeHtml(String(r.pp))],
     ['colBase', escapeHtml(gold(r.basePerPoint))],
     ['colBonus', r.bonus == null ? '—' : '+' + escapeHtml(pct(r.bonus))],
@@ -475,10 +561,10 @@ function detailHtml(r) {
         <h4>${escapeHtml(mktT('materialsL'))}</h4>
         <div class="wp-mkt-dlist">${mats}</div>
       </div>
-      <div class="wp-mkt-dcol wp-mkt-dregions">
+      ${isV27() ? '' : `<div class="wp-mkt-dcol wp-mkt-dregions">
         <h4>${escapeHtml(mktT('best5'))} <span class="wp-mkt-dim">· ${escapeHtml(mktT('bonusParts'))}</span></h4>
         ${regions || `<span class="wp-mkt-dim">${escapeHtml(mktT('noRegion'))}</span>`}
-      </div>
+      </div>`}
       ${historyHtml(r)}
     </div>`;
 }
@@ -568,6 +654,9 @@ function wireToolbar() {
   bindNum('#wp-mkt-wage', 'wage');
   bindNum('#wp-mkt-energy', 'energy');
   bindNum('#wp-mkt-prod', 'production');
+  bindNum('#wp-mkt-empprod', 'empProd');
+  bindNum('#wp-mkt-expect', 'expectation');
+  bindNum('#wp-mkt-empbonus', 'empBonus');
 }
 
 /* Tabella: ricreata ad ogni repaint, quindi i suoi ascoltatori vanno
@@ -576,7 +665,7 @@ function wireBody() {
   rootEl.querySelectorAll('.wp-mkt-th[data-sort]').forEach(th => {
     th.addEventListener('click', () => {
       const k = th.dataset.sort;
-      const col = COLUMNS.find(c => c.key === k);
+      const col = columnsFor(data.gameConfig).find(c => c.key === k);
       if (sort.key === k) sort.dir *= -1;
       else sort = { key: k, dir: col?.text ? 1 : -1 };
       repaint();

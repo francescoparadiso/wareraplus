@@ -8,16 +8,29 @@ deployarlo da qui — il deploy resta manuale sul VPS.
 
 ## Deploy di un aggiornamento
 
+> **Danni per unità (`muBattleDamage.js`, 2026-10-18).** Oltre al modulo,
+> UNA volta sola il seme del recupero (nel repo sta in `import/`, sul VPS
+> accanto agli altri import, nella cartella del server):
+>
+> ```bash
+> scp -i ../Server/ssh-key-2026-08-18.key server/import/muBattleSeed.js ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
+> ssh -i ../Server/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && node --max-old-space-size=700 muBattleSeed.js"
+> ```
+>
+> Legge `bootstrap-raw-battles.json` (255 MB) in un processo suo e scrive
+> `cache/mu-backfill-seed.json`. Si può lanciare prima o dopo il riavvio: se
+> la coda del recupero esiste già, il modulo ci aggiunge il seme al giro dopo.
+
 Host attuale: `ubuntu@79.72.45.17` (`warera-oracle.duckdns.org`), chiave e
-appunti in `warEra/serverOracle/`. In pratica:
+appunti in `warera/Server/`. In pratica:
 
 Entrambi i comandi si lanciano **dal PC, dalla root del repo**
 (`warEra/wareraPlus/`) — non da dentro una sessione ssh sul VPS, dove la
 cartella `server/` non esiste. La chiave sta una cartella più in su, in
-`warEra/serverOracle/`, da cui il `../` nel percorso.
+`warera/Server/`, da cui il `../` nel percorso.
 
 ```bash
-scp -i ../serverOracle/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/languages.js server/battleArchive.js server/moneyTransfers.js server/damageTimeline.js server/priceHistory.js server/dayHistory.js server/labourHistory.js server/citizenMoves.js server/allianceHistory.js server/politicalHistory.js server/battleTimeline.js server/companyCensus.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
+scp -i ../Server/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/languages.js server/battleArchive.js server/moneyTransfers.js server/damageTimeline.js server/priceHistory.js server/dayHistory.js server/labourHistory.js server/citizenMoves.js server/allianceHistory.js server/politicalHistory.js server/battleTimeline.js server/companyCensus.js server/muBattleDamage.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
 ```
 
 Manda **tutti** i moduli, non il solo `warera-cache-server.js`: i loro
@@ -30,13 +43,13 @@ che si ferma alla sintassi: eseguire il server per provarlo aprirebbe la
 porta 3001 e i cron accanto al processo pm2 gia' vivo.
 
 ```bash
-ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && for f in warera-cache-server.js proxyIndex.js languages.js battleArchive.js moneyTransfers.js damageTimeline.js priceHistory.js dayHistory.js labourHistory.js citizenMoves.js allianceHistory.js politicalHistory.js battleTimeline.js companyCensus.js; do node --check \$f || exit 1; done && echo PREFLIGHT-OK"
+ssh -i ../Server/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && for f in warera-cache-server.js proxyIndex.js languages.js battleArchive.js moneyTransfers.js damageTimeline.js priceHistory.js dayHistory.js labourHistory.js citizenMoves.js allianceHistory.js politicalHistory.js battleTimeline.js companyCensus.js muBattleDamage.js; do node --check \$f || exit 1; done && echo PREFLIGHT-OK"
 ```
 
 Solo se stampa `PREFLIGHT-OK`:
 
 ```bash
-ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "pm2 restart warera-cache && sleep 20 && pm2 logs warera-cache --lines 40 --nostream"
+ssh -i ../Server/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "pm2 restart warera-cache && sleep 20 && pm2 logs warera-cache --lines 40 --nostream"
 ```
 
 ⚠️ **I file da copiare sono tredici, non uno.** `warera-cache-server.js`
@@ -647,10 +660,70 @@ crontab -e
 ### ⚠️ Il passo che conta davvero
 
 Una copia sullo stesso disco protegge da un bug di potatura o da un import
-sbagliato, **non dalla perdita della macchina**. Da qui, ogni tanto:
+sbagliato, **non dalla perdita della macchina**. Dal 2026-10-20 le copie
+escono dal VPS da sole, ogni giorno, con `backup-bucket.sh`.
+
+#### Nel bucket Oracle (automatico)
+
+Bucket `warera-backup` (namespace `axup2ubhcv9s`, eu-milan-1, privato).
+`backup-bucket.sh` fa una copia con `backup.sh` e la carica:
+
+| Cartella nel bucket | Quando | La tiene per |
+|---|---|---|
+| `giornaliero/<stamp>/` | ogni giorno 04:30 UTC | 30 giorni |
+| `settimanale/<stamp>/` | la domenica (riusa la copia delle 04:00) | 180 giorni |
+
+La pulizia la fanno tre **regole di ciclo di vita del bucket** (le due sopra
+più i caricamenti multipart interrotti dopo 7 giorni), non lo script. A
+regime ~13 GB sui 20 GB gratuiti — l'account è Free Tier, quindi oltre il
+limite si rifiuta, non si paga.
+
+Come entra il VPS, senza nessuna chiave sul disco:
+
+- **dynamic group** `warera-vps-backup` (dominio Default) = l'istanza
+  `warera-cache-server` per OCID;
+- **policy** `warera-backup` (root) — il VPS può solo `OBJECT_CREATE`,
+  `OBJECT_INSPECT`, `OBJECT_READ` su quel bucket. **Niente delete, niente
+  overwrite** (provato: entrambi rifiutati). Chi prendesse il VPS può
+  aggiungere file, non svuotare i backup. La terza riga della policy
+  (`Allow service objectstorage-eu-milan-1 to manage object-family in
+  tenancy`) è quella che fa funzionare le regole di ciclo di vita.
+
+Sul VPS, una volta sola:
 
 ```bash
-rsync -avz -e "ssh -i ../serverOracle/ssh-key-2026-08-18.key" ubuntu@79.72.45.17:/home/ubuntu/backup/ ./backup-vps/
+# rclone ≥ 1.61 (quello di apt è il 1.60, senza il backend Oracle): binario ufficiale
+V=v1.68.2; Z=rclone-$V-linux-amd64.zip; mkdir -p ~/bin && cd /tmp
+curl -fsSLO https://downloads.rclone.org/$V/$Z
+curl -fsSL https://downloads.rclone.org/$V/SHA256SUMS | grep " $Z\$" | sha256sum -c -
+python3 -c "import zipfile;zipfile.ZipFile('$Z').extract('rclone-$V-linux-amd64/rclone','.')"
+install -m 0755 rclone-$V-linux-amd64/rclone ~/bin/rclone
+
+# ~/.config/rclone/rclone.conf
+# [oci]
+# type = oracleobjectstorage
+# provider = instance_principal_auth
+# namespace = axup2ubhcv9s
+# compartment = <OCID del tenancy>
+# region = eu-milan-1
+# no_check_bucket = true
+
+# cron (accanto a quello di backup.sh)
+# 30 4 * * * /home/ubuntu/warera-cache-server/backup-bucket.sh >> /home/ubuntu/backup/backup-bucket.log 2>&1
+```
+
+Per controllare: `tail ~/backup/backup-bucket.log` (ogni giro finisce con
+`caricato e verificato`) oppure `~/bin/rclone lsl oci:warera-backup`.
+Per ripristinare: `~/bin/rclone copy oci:warera-backup/giornaliero/<stamp> ./ripristino/`.
+
+#### Sul PC (a mano)
+
+Il bucket sta sullo **stesso account Oracle** del VPS: un account sospeso
+li porta via insieme. Ogni tanto una copia fuori da Oracle, dalla cartella
+che contiene la chiave (il percorso cambia da PC a PC):
+
+```bash
+rsync -avz -e "ssh -i <cartella-chiave>/ssh-key-2026-08-18.key" ubuntu@79.72.45.17:/home/ubuntu/backup/ ./backup-vps/
 ```
 
 ### Non c'è più una scadenza (i "pavimenti")

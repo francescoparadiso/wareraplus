@@ -33,11 +33,12 @@
    funziona, e la regola del repo è che le etichette di una vista sola
    stanno in un dizionario di quella vista.
 
-   ── ⚠️ L'ATTRIBUZIONE AD ARGUSIA NON SI TOCCA ──────────────────────
-   L'Ottimizzatore è il lavoro di qualcun altro, portato qui con la sua
-   card di attribuzione in cima. Sta dentro `src/eco/main.js` e finisce
-   dentro la scheda insieme al resto: metterla in ombra perché "ora è
-   una scheda di una sezione più grande" non è una scelta grafica.
+   ── L'ATTRIBUZIONE AD ARGUSIA ──────────────────────────────────────
+   Fino alla v0.27 l'Ottimizzatore era il lavoro di qualcun altro, con la
+   sua card di attribuzione in cima. Con la riscrittura per la v0.27
+   (2026-10-23) della sua logica non è rimasto niente e la card è stata
+   tolta su richiesta del proprietario del progetto; vedi la testata di
+   `src/eco/main.js`.
 
    ── CARICAMENTO ────────────────────────────────────────────────────
    Una scheda mai aperta non carica niente: `import()` alla prima

@@ -20,6 +20,7 @@
 
 import { fmtCompact, fmtFull } from '../mu/ui.js';
 import { state } from '../diplomacy/state.js';
+import { isRevenueEra, revenueOf } from '../diplomacy/productionHeatmap.js';
 
 const num = v => (Number.isFinite(v) ? v : 0);
 
@@ -34,6 +35,11 @@ export const METRICS = [
   { key: 'wealth',  label: 'wealth',      get: n => num(n.rankings?.countryWealth?.value ?? n.money), fmt: fmtCompact, cls: 'money' },
   { key: 'dev',     label: 'development', get: n => num(n.currentDevelopment ?? n.rankings?.countryDevelopment?.value), fmt: v => v.toFixed(1) },
   { key: 'coreDev', label: 'coreDev',     get: n => num(n.coreDevelopment), fmt: v => v.toFixed(1) },
+  // WarEra+ — danno settimanale per punto di sviluppo core: quanto una
+  // nazione picchia rispetto al peso che ha sul bonus d'alleanza. Per i
+  // gruppi NON si somma né si media: `ratio` dice di rifare il rapporto sui
+  // totali (somma danni / somma devcore), vedi nationCompare.js.
+  { key: 'dmgCore', label: 'dmgPerCore',  get: n => (num(n.coreDevelopment) > 0 ? num(n.rankings?.weeklyCountryDamages?.value) / n.coreDevelopment : 0), fmt: fmtCompact, ratio: ['weekly', 'coreDev'] },
   { key: 'regions', label: 'regions',     get: n => num(n.rankings?.countryRegionDiff?.value), fmt: v => signed(v), signed: true },
   { key: 'wars',    label: 'wars',        get: n => (n.warsWith?.length || 0), fmt: v => String(v), cmp: 0 },
   // WarEra+ — `n.allies` è un FOSSILE: le coppie delle alleanze bilaterali
@@ -52,7 +58,13 @@ export const METRICS = [
   // due posti nella stessa risposta — `strategicResources.bonuses.
   // productionPercent` e la classifica `countryProductionBonus`. Si legge
   // il primo e si ricade sul secondo, che è lo stesso numero.
-  { key: 'prod',    label: 'production',  get: n => num(n.strategicResources?.bonuses?.productionPercent ?? n.rankings?.countryProductionBonus?.value), fmt: v => `+${v.toFixed(0)}%` },
+  // WarEra+ v0.27 — il bonus non esiste più: la stessa colonna (stessa
+  // chiave, così confronti e dettaglio non cambiano) diventa la rendita
+  // giornaliera del tesoro. Decide il dato, vedi productionHeatmap.js.
+  { key: 'prod',
+    get label() { return isRevenueEra() ? 'revenue' : 'production'; },
+    get: n => (n.income ? revenueOf(n)?.total || 0 : num(n.strategicResources?.bonuses?.productionPercent ?? n.rankings?.countryProductionBonus?.value)),
+    fmt: v => (isRevenueEra() ? fmtCompact(v) : `+${v.toFixed(0)}%`) },
 ];
 
 function unrestPct(n) {

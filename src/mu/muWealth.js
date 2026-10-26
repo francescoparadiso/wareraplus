@@ -268,15 +268,21 @@ function scintilla(serie, max) {
   const n = serie.length || 1;
   const larghezza = 100 / n;
   const barre = serie.map((v, i) => {
-    if (v == null) return '';
+    // WarEra+ (2026-10-22): esplorabile — il giorno (lo stesso delle
+    // colonne della tabella) e il saldo, su una colonna alta tutto il
+    // riquadro: le barrette sono di pochi pixel.
+    const iv = pano?.intervalli?.[i];
+    const hit = `<rect class="wp-tip-hit" x="${(i * larghezza).toFixed(2)}" y="0" width="${larghezza.toFixed(2)}" height="100"${
+      tipAttr(iv ? etichettaIntervallo(iv) : '', v == null ? muT('wNoHistory') : delta(v))}></rect>`;
+    if (v == null) return hit;
     const h = Math.max(2, (Math.abs(v) / max) * 48);
     const y = v < 0 ? 50 : 50 - h;
     return `<rect x="${(i * larghezza + larghezza * 0.15).toFixed(2)}" y="${y.toFixed(2)}"
       width="${(larghezza * 0.7).toFixed(2)}" height="${h.toFixed(2)}"
-      class="wp-mw-sc-${segno(v)}"></rect>`;
+      class="wp-mw-sc-${segno(v)}"></rect>${hit}`;
   }).join('');
   return `
-    <svg class="wp-mw-scintilla" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+    <svg class="wp-mw-scintilla" viewBox="0 0 100 100" preserveAspectRatio="none">
       <line x1="0" y1="50" x2="100" y2="50" class="wp-mw-sc-zero"></line>
       ${barre}
     </svg>`;

@@ -35,7 +35,8 @@
 import { trpcBatchManual, cacheKey, cacheGet, cacheSet } from '../shared/trpcClient.js';
 import { ECO_PROXY_BASE, WARERA_CACHE_BASE } from '../diplomacy/config.js';
 import { state } from '../diplomacy/state.js';
-import { loadGameData } from '../eco/api.js';
+import { loadGameData, loadPpMoneyValue } from '../eco/api.js';
+import { isEmployeeEra } from './model.js';
 
 const NS = 'mkt';
 
@@ -135,6 +136,25 @@ export async function loadMarketData({ force = false, pricesOnly = false } = {})
   if (force || !_mem.prices || (now - _mem.pricesTs) > PRICE_TTL_MS) {
     const { prices, book } = await fetchPricesAndBook(items);
     _mem.prices = prices; _mem.book = book; _mem.pricesTs = Date.now();
+  }
+
+  // WarEra+ v0.27 — senza giacimenti né specializzazione non c'è più una
+  // regione "migliore" (la procedura risponde sempre `[]`): niente 20
+  // chiamate sul proxy per sentirselo dire. Al loro posto il valore del
+  // punto produzione, base del salario dei dipendenti (model.js).
+  if (isEmployeeEra(gameConfig)) {
+    return {
+      gameConfig,
+      items,
+      prices: _mem.prices,
+      book: _mem.book,
+      regionsByItem: {},
+      regionById: state.regionData || {},
+      pricesTs: _mem.pricesTs,
+      regionsTs: 0,
+      regionsError: null,
+      ppValue: await loadPpMoneyValue(),
+    };
   }
 
   const regionsStale = !_mem.regions || (Date.now() - _mem.regionsTs) > REGION_TTL_MS;

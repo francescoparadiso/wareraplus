@@ -216,7 +216,7 @@
         </label>
 
         <label class="switch-container">
-          <span class="switch-label" data-i18n="switch_exclude_external_naps">🚫 Exclude External NAPs</span>
+          <span class="switch-label" data-i18n="switch_exclude_external_naps">🚫 Exclude Agreement NAPs</span>
           <div class="switch"><input type="checkbox" id="checkExcludeExternalNaps" /><span class="slider"></span></div>
         </label>
       </div>
@@ -259,12 +259,12 @@
       <!-- NAP esterni -->
       <div class="menu-section">
         <div class="collapsible-header" id="externalNapToggle">
-          <span data-i18n="external_naps_readonly">External NAPs (read-only)</span>
+          <span data-i18n="external_naps_readonly">NAPs from Agreements (read-only)</span>
           <span class="collapsible-arrow" id="external-nap-icon">▶</span>
         </div>
         <div class="collapsible-body" id="external-nap-section">
           <div class="nap-list" id="externalNapList">
-            <div class="empty-state" data-i18n="no_external_naps">No external NAPs loaded</div>
+            <div class="empty-state" data-i18n="no_external_naps">No agreement in force</div>
           </div>
         </div>
       </div>
@@ -495,6 +495,30 @@
     <div id="wp-battles-root" style="display:none;"></div>
   </div>
 
+  <!-- Accordi (src/accordi/*): archivio dei patti di non belligeranza,
+       che la mappa disegna come NAP finché sono in vigore. Stessa
+       struttura overlay delle altre viste di Approfondimenti. -->
+  <div id="wp-accordi-overlay" class="wp-political-overlay wp-accordi-overlay" aria-hidden="true">
+    <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
+    <div class="wp-political-topbar">
+      <button id="wp-accordi-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
+      <span class="wp-political-title">Agreements</span>
+    </div>
+    <div id="wp-accordi-root" style="display:none;"></div>
+  </div>
+
+  <!-- Tornei (src/tournament/*): tabellone dei tornei MU e nazioni, e per
+       una squadra i possibili avversari in ordine di difficoltà. Stessa
+       struttura overlay delle altre viste di Approfondimenti. -->
+  <div id="wp-tournament-overlay" class="wp-political-overlay wp-tournament-overlay" aria-hidden="true">
+    <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
+    <div class="wp-political-topbar">
+      <button id="wp-tournament-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
+      <span class="wp-political-title">Tournaments</span>
+    </div>
+    <div id="wp-tournament-root" style="display:none;"></div>
+  </div>
+
   <!-- Guida "Come si usa" (src/guide/*): la sezione più leggera
        dell'app — solo testo statico, nessuna fetch. Stessa struttura
        overlay delle altre viste di Approfondimenti. -->
@@ -514,6 +538,17 @@
       <span class="wp-political-title">How to use</span>
     </div>
     <div id="wp-guide-root" style="display:none;"></div>
+  </div>
+
+  <!-- Altri strumenti (src/tools/*): link ai tool della community WarEra,
+       di terzi. Testo statico come la Guida, stessa struttura overlay. -->
+  <div id="wp-tools-overlay" class="wp-political-overlay wp-tools-overlay" aria-hidden="true">
+    <canvas class="wp-overlay-bg" aria-hidden="true"></canvas>
+    <div class="wp-political-topbar">
+      <button id="wp-tools-back" class="wp-political-back" data-i18n="back_to_map">← Torna alla mappa</button>
+      <span class="wp-political-title">Other tools</span>
+    </div>
+    <div id="wp-tools-root" style="display:none;"></div>
   </div>
 
   <!-- Ko-fi + pill autore (desktop): wrapper condiviso che li centra

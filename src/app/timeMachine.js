@@ -49,6 +49,7 @@ import {
   setTimeMachineFocus,
 } from './timeMachineMap.js';
 import { COLORS } from '../diplomacy/config.js';
+import { lightenForLabel } from '../diplomacy/gameColors.js';
 import { BORDER_COLORS } from '../diplomacy/borderStyle.js';
 import { loadAllianceHistory, alliancesAt } from './timeMachineAlliances.js';
 import { trackEvent } from '../shared/analytics.js';
@@ -1092,24 +1093,9 @@ function _ensureLabelRegionMap() {
 // nazione ne ha almeno una), e per le poche nazioni che non compaiono in
 // nessuna label si schiarisce il colore base fino alla stessa luminanza
 // che la mappa base usa per il testo.
-const LABEL_TARGET_LUM = 190; // luminanza media misurata sui textColor della mappa base
+// La schiaritura sta in diplomacy/gameColors.js (lightenForLabel): dalla
+// v0.27 serve anche alla mappa base.
 let _textColorByCountry = null;
-
-function _lightenForText(hex) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
-  if (!m) return null;
-  const n = parseInt(m[1], 16);
-  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  if (lum >= LABEL_TARGET_LUM) return hex;
-  // Mix verso il bianco: mantiene la tinta (quindi la nazione resta
-  // riconoscibile) e alza solo la luminosità fino al bersaglio.
-  const k = (LABEL_TARGET_LUM - lum) / (255 - lum);
-  r = Math.round(r + (255 - r) * k);
-  g = Math.round(g + (255 - g) * k);
-  b = Math.round(b + (255 - b) * k);
-  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
-}
 
 function _ensureTextColorMap() {
   if (_textColorByCountry) return;
@@ -1136,7 +1122,7 @@ function _buildLabelEntries(regionsMap) {
       : fallbackCountryId; // punto non ricadeva in nessuna regione nota (raro): resta il dato live
     const nation = state.nationMap.get(historicalCountryId);
     const textColor = _textColorByCountry.get(historicalCountryId)
-      || _lightenForText(state.nationBaseColorMap.get(historicalCountryId))
+      || lightenForLabel(state.nationBaseColorMap.get(historicalCountryId))
       || label.properties.textColor;
     return {
       coordinates: label.coordinates,

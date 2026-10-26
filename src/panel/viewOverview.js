@@ -44,7 +44,7 @@ import { contestedRankedList, getContestedStats } from '../diplomacy/contestedHe
 import { warIntensityRankedList, getWarIntensityStats } from '../diplomacy/warIntensityHeatmap.js';
 import { buildPlaystyleScale, getBalanceColor, getPlaystyleStats } from '../diplomacy/playstyleHeatmap.js';
 import { getTrendColor, getTrendStats } from '../diplomacy/playstyleTrendHeatmap.js';
-import { activeDeposits, depositsByCountry, getProductionColor, getProductionStats, productionRankedList, RESOURCE_TYPES } from '../diplomacy/productionHeatmap.js';
+import { activeDeposits, depositsByCountry, getProductionColor, getProductionStats, isRevenueEra, productionRankedList, RESOURCE_TYPES, topRevenueRegions } from '../diplomacy/productionHeatmap.js';
 import { openElectionRows, getPoliticsStats, POLITICS_COLORS, turnoutColor } from '../diplomacy/politicsHeatmap.js';
 import { recentResults } from '../diplomacy/electionsLive.js';
 import { travelOverviewHtml } from '../diplomacy/travelDistance.js';
@@ -453,7 +453,69 @@ function playstyleTrendBodyHtml() {
  *  sola in cinque regioni, e sono due situazioni diverse (la seconda si
  *  perde tutta insieme se cade quella regione). Il conto per risorsa in
  *  fondo dice invece quanto è rara ciascuna nel mondo. */
+/* WarEra+ v0.27 — la vista "Produzione" racconta la rendita giornaliera
+   (vedi productionHeatmap.js, "DALLA v0.27"). Stessa classifica per
+   nazione, con sotto di cosa è fatta, e in fondo le regioni che rendono
+   di più: la vista del gioco è per regione. */
+function revenueHtml() {
+  const title = t('vo_revenue_title');
+  const about = t('vo_revenue_about');
+  const rows = productionRankedList(TOP_NATIONS);
+  if (!rows.length) return headerHtml(title) + aboutHtml(about) + emptyHtml(t('vo_no_data'));
+  const s = getProductionStats();
+  const top = rows[0].bonus || 1;
+  // Cifre corte: la rendita va dalle decine alle migliaia al giorno.
+  const k = (v) => (v >= 1e3 ? `${(v / 1e3).toFixed(1)}K` : v.toFixed(v >= 10 ? 0 : 1));
+  const tasse = s.parts.employeeTax + s.parts.managerTax;
+  const quota = (v) => (s.total > 0 ? `${Math.round(v / s.total * 100)}%` : '—');
+  const regioni = topRevenueRegions(TOP_REGIONS);
+
+  return headerHtml(title, s.withBonus)
+    + aboutHtml(about)
+    + statsHtml([
+      { label: t('vo_stat_world_revenue'), value: k(s.total) },
+      { label: t('vo_stat_best_revenue'), value: k(s.best) },
+      { label: t('vo_stat_revenue_dev'), value: quota(s.parts.development + s.parts.strategic) },
+      { label: t('vo_stat_revenue_tax'), value: quota(tasse) },
+    ])
+    + rows.map((r, i) => rowHtml({
+      rank: i + 1,
+      icon: flagImgHtml(r.id, r.nation, 'wp-vo-flag'),
+      name: r.nation.name || '—',
+      value: k(r.bonus),
+      // 🏗 sviluppo · 💎 risorse strategiche · 💼 tasse (dipendenti +
+      // manager): le tre leve, nell'ordine in cui si muovono più piano.
+      sub: [
+        `🏗 ${k(r.revenue.development)}`,
+        r.revenue.strategic ? `${r.types.map(x => x.icon).join('') || '💎'} ${k(r.revenue.strategic)}` : '',
+        (r.revenue.employeeTax + r.revenue.managerTax) ? `💼 ${k(r.revenue.employeeTax + r.revenue.managerTax)}` : '',
+        r.revenue.govType ? `🏛 ${k(r.revenue.govType)}` : '',
+      ].filter(Boolean).join('  '),
+      share: r.bonus / top,
+      color: getProductionColor(r.bonus),
+      dataset: ` data-nation-id="${r.id}"`,
+    })).join('')
+    + (regioni.length
+      ? `<div class="wp-panel-section-title">${escapeHtml(t('vo_revenue_regions'))}</div>`
+        + regioni.map((r, i) => {
+          const owner = r.region.country ? state.nationMap.get(r.region.country) : null;
+          return rowHtml({
+            rank: i + 1,
+            icon: owner ? flagImgHtml(owner._id, owner, 'wp-vo-flag') : '',
+            name: r.region.name || r.id,
+            value: k(r.total),
+            sub: owner?.name || '',
+            share: r.total / (regioni[0].total || 1),
+            color: getProductionColor(r.total * (s.best / (regioni[0].total || 1))),
+            dataset: owner ? ` data-nation-id="${owner._id}"` : '',
+          });
+        }).join('')
+      : '')
+    + `<div class="wp-vo-more">${escapeHtml(t('vo_revenue_note'))}</div>`;
+}
+
 function productionHtml() {
+  if (isRevenueEra()) return revenueHtml();
   const title = t('vo_production_title');
   const about = t('vo_production_about');
   const rows = productionRankedList(TOP_NATIONS);

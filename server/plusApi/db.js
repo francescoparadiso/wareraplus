@@ -336,6 +336,150 @@ CREATE TABLE IF NOT EXISTS nation_access (
   PRIMARY KEY (country_id, war_user_id)
 );
 
+-- Le operazioni della nazione: una catena di passi con un orario
+-- (rivolte, attacchi, pillole, contratti) e le frecce fra un passo e
+-- quello che deve venire dopo. Vedi operazioni.js.
+CREATE TABLE IF NOT EXISTS operation (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  country_id TEXT    NOT NULL,
+  title      TEXT    NOT NULL,
+  note       TEXT,
+  status     TEXT    NOT NULL DEFAULT 'attiva',   -- attiva | archiviata
+  created_by INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  updated_by INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_operation_country ON operation(country_id, status);
+
+-- "In attesa" NON è uno stato salvato: è un passo da fare con almeno un
+-- precedente non ancora fatto, e si ricava dalle frecce. Salvarlo vorrebbe
+-- dire ricordarsi di aggiornarlo ogni volta che un altro passo cambia.
+CREATE TABLE IF NOT EXISTS op_step (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  operation_id   INTEGER NOT NULL REFERENCES operation(id) ON DELETE CASCADE,
+  kind           TEXT    NOT NULL,                 -- attacco | difesa | rivolta | pillole | contratto | altro
+  title          TEXT,
+  region_id      TEXT,                             -- dove succede
+  from_region_id TEXT,                             -- da dove si attacca
+  at             INTEGER,                          -- orario previsto (ms UTC)
+  priority       TEXT    NOT NULL DEFAULT 'media', -- alta | media | bassa
+  assignee       TEXT,                             -- testo libero: un'unità, una persona
+  status         TEXT    NOT NULL DEFAULT 'da_fare', -- da_fare | in_corso | fatta | fallita | annullata
+  note           TEXT,
+  created_by     INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  updated_by     INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_at     INTEGER NOT NULL,
+  updated_at     INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_op_step_operation ON op_step(operation_id);
+
+-- Le frecce: from_step va fatto prima di to_step. Una tabella e non un
+-- elenco dentro il passo, così cancellare un passo porta via da sé le
+-- frecce che lo toccano (ON DELETE CASCADE) invece di lasciarne di orfane.
+CREATE TABLE IF NOT EXISTS op_link (
+  from_step INTEGER NOT NULL REFERENCES op_step(id) ON DELETE CASCADE,
+  to_step   INTEGER NOT NULL REFERENCES op_step(id) ON DELETE CASCADE,
+  PRIMARY KEY (from_step, to_step)
+);
+CREATE INDEX IF NOT EXISTS idx_op_link_to ON op_link(to_step);
+
+-- Gli accordi fra nazioni e alleanze (per ora i patti di non
+-- belligeranza): archivio PUBBLICO, e la mappa li disegna come NAP finché
+-- sono in vigore. Una parte è una nazione o un'alleanza, mai un elenco: i
+-- membri di un'alleanza si rileggono dal gioco ogni volta, così chi entra
+-- nell'alleanza entra anche nel patto. Vedi accordi.js.
+CREATE TABLE IF NOT EXISTS accordo (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind          TEXT    NOT NULL DEFAULT 'nap',
+  a_type        TEXT    NOT NULL,                  -- country | alliance
+  a_id          TEXT    NOT NULL,
+  b_type        TEXT    NOT NULL,
+  b_id          TEXT    NOT NULL,
+  title         TEXT,
+  body          TEXT,                              -- il testo del patto
+  starts_at     INTEGER NOT NULL,                  -- ms UTC
+  ends_at       INTEGER,                           -- NULL = senza scadenza
+  excluded_mus  TEXT,                              -- JSON [{id, nome}]: unità fuori dal patto
+  limit_damage  INTEGER,                           -- danno massimo per battaglia, NULL = nessun tetto
+  limit_side    TEXT,                              -- a | b | entrambi: chi ha il tetto
+  created_by    INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  updated_by    INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_accordo_periodo ON accordo(starts_at, ends_at);
+
+-- Le votazioni del congresso (e dei referendum). Vedi votazioni.js, e in
+-- particolare il blocco sul SEGRETO prima di toccare le ultime tre tabelle.
+CREATE TABLE IF NOT EXISTS votazione (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  country_id     TEXT    NOT NULL,
+  title          TEXT    NOT NULL,
+  body           TEXT,
+  electorate     TEXT    NOT NULL,                 -- congresso | istituzioni | referendum
+  ballot         TEXT    NOT NULL,                 -- palese | segreto
+  visibility     TEXT    NOT NULL,                 -- istituzioni | pubblico
+  majority       TEXT    NOT NULL,                 -- semplice | assoluta | due_terzi
+  quorum_pct     INTEGER,                          -- NULL = nessun quorum
+  opens_at       INTEGER NOT NULL,                 -- ms UTC
+  closes_at      INTEGER NOT NULL,
+  eligible_count INTEGER,                          -- aventi diritto, fissati all'APERTURA
+  eligible_estimated INTEGER NOT NULL DEFAULT 0,   -- 1 = stima dal censimento (referendum)
+  result         TEXT,                             -- JSON sigillato alla chiusura
+  sealed_at      INTEGER,
+  withdrawn_at   INTEGER,
+  withdrawn_by   INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_by     INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_war_user TEXT,
+  created_name   TEXT,
+  created_at     INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_votazione_paese ON votazione(country_id, closes_at);
+
+-- Il corpo elettorale fotografato all'apertura (congresso e istituzioni;
+-- il referendum non ha righe qui: si controlla al momento del voto).
+CREATE TABLE IF NOT EXISTS votazione_elettore (
+  vote_id     INTEGER NOT NULL REFERENCES votazione(id) ON DELETE CASCADE,
+  war_user_id TEXT    NOT NULL,
+  name        TEXT,
+  avatar      TEXT,
+  role        TEXT,                                -- congress | president | vicePresident | minOf…
+  party_id    TEXT,
+  party_name  TEXT,
+  PRIMARY KEY (vote_id, war_user_id)
+) WITHOUT ROWID;
+
+-- CHI ha votato, e nient'altro: né cosa né quando. WITHOUT ROWID apposta,
+-- le righe stanno in ordine di id del giocatore e non di arrivo.
+CREATE TABLE IF NOT EXISTS votazione_partecipazione (
+  vote_id     INTEGER NOT NULL REFERENCES votazione(id) ON DELETE CASCADE,
+  war_user_id TEXT    NOT NULL,
+  PRIMARY KEY (vote_id, war_user_id)
+) WITHOUT ROWID;
+
+-- Il voto PALESE: chi e cosa, insieme, perché è palese.
+CREATE TABLE IF NOT EXISTS votazione_voto (
+  vote_id     INTEGER NOT NULL REFERENCES votazione(id) ON DELETE CASCADE,
+  war_user_id TEXT    NOT NULL,
+  name        TEXT,
+  choice      TEXT    NOT NULL,                    -- si | no | astenuto | nulla
+  note        TEXT,
+  voted_at    INTEGER NOT NULL,
+  PRIMARY KEY (vote_id, war_user_id)
+) WITHOUT ROWID;
+
+-- La scheda SEGRETA: cosa, senza chi né quando. La chiave è casuale, così
+-- l'ordine delle righe non è quello d'arrivo. Si cancella al sigillo: da lì
+-- le schede vivono solo, rimescolate, dentro votazione.result.
+CREATE TABLE IF NOT EXISTS votazione_scheda (
+  vote_id     INTEGER NOT NULL REFERENCES votazione(id) ON DELETE CASCADE,
+  id          TEXT    NOT NULL,
+  choice      TEXT    NOT NULL,
+  note        TEXT,
+  PRIMARY KEY (vote_id, id)
+) WITHOUT ROWID;
+
 -- ⚠️ L'indice su (mu_id, slot) NON sta qui ma in migrate(). SCHEMA gira
 -- PRIMA delle migrazioni: su un database che ha ancora la colonna day
 -- la CREATE TABLE viene saltata (IF NOT EXISTS) ma la CREATE INDEX no, e
@@ -411,6 +555,31 @@ function migrate() {
     db.exec('DROP INDEX IF EXISTS idx_wealth_mu_day');
     console.log('[plusApi] migrazione: wealth_snapshot.day rinominata in .slot');
   }
+  // 2026-10-22 - un passo puo' essere una battaglia GIA' aperta nel gioco:
+  // la lavagna ne mostra round e fine prevista. Colonna e non tabella: un
+  // passo e' al piu' una battaglia.
+  if (!colonne('op_step').includes('battle_id')) {
+    db.exec('ALTER TABLE op_step ADD COLUMN battle_id TEXT');
+    console.log('[plusApi] migrazione: aggiunta op_step.battle_id');
+  }
+
+  // 2026-10-22 - il colore scelto a mano per un passo sulla lavagna (vuoto
+  // = automatico: blu le nostre battaglie, verde l'alleanza, rosso i nemici).
+  if (!colonne('op_step').includes('color')) {
+    db.exec('ALTER TABLE op_step ADD COLUMN color TEXT');
+    console.log('[plusApi] migrazione: aggiunta op_step.color');
+  }
+
+  // 2026-10-26 - le nazioni AGGIUNTE a ciascuna parte di un accordo (proxy,
+  // alleati fuori dall'alleanza): JSON [countryId…], vuoto = solo la parte.
+  const colAccordo = colonne('accordo');
+  for (const nome of ['a_extra', 'b_extra']) {
+    if (!colAccordo.includes(nome)) {
+      db.exec(`ALTER TABLE accordo ADD COLUMN ${nome} TEXT`);
+      console.log(`[plusApi] migrazione: aggiunta accordo.${nome}`);
+    }
+  }
+
   // Qui e non in SCHEMA, per il motivo scritto accanto alla tabella.
   db.exec('CREATE INDEX IF NOT EXISTS idx_wealth_mu_slot ON wealth_snapshot (mu_id, slot)');
   // WarEra+ - scattiRicchezza() cerca per (war_user_id, slot), e la chiave
@@ -435,6 +604,24 @@ function migrate() {
     db.exec('DELETE FROM border_state');
     db.exec('ALTER TABLE border_state ADD COLUMN attivo_il INTEGER');
     console.log('[plusApi] migrazione: border_state rifatta da capo sulla fonte upgrade.* (+ attivo_il)');
+  }
+
+  // 2026-10-23 — gli avvisi Discord delle votazioni: quali dei tre (apertura,
+  // inizio dello scrutinio, esito) sono già partiti. Uno per colonna, così
+  // un riavvio a metà non ne rimanda nessuno due volte.
+  for (const c of ['notified_open', 'notified_count', 'notified_result']) {
+    if (!colonne('votazione').includes(c)) {
+      db.exec(`ALTER TABLE votazione ADD COLUMN ${c} INTEGER NOT NULL DEFAULT 0`);
+      console.log(`[plusApi] migrazione: aggiunta votazione.${c}`);
+    }
+  }
+
+  // 2026-10-23 — chiusura anticipata ("hanno votato tutti"): l'ora in cui
+  // parte lo scrutinio, al posto della chiusura + 1 minuto. NULL per tutte
+  // le altre.
+  if (!colonne('votazione').includes('count_at')) {
+    db.exec('ALTER TABLE votazione ADD COLUMN count_at INTEGER');
+    console.log('[plusApi] migrazione: aggiunta votazione.count_at');
   }
 }
 
@@ -1057,6 +1244,339 @@ function togliAccessoNazione(countryId, warUserId) {
     .run(countryId, warUserId).changes || 0;
 }
 
+// ---------------------------------------------------------------------------
+// OPERAZIONI
+// ---------------------------------------------------------------------------
+// Solo lettura e scrittura: chi può cosa, e che forma esce, lo decide
+// operazioni.js.
+
+const segnaposti = (n) => new Array(n).fill('?').join(',');
+
+function listaOperazioni(countryId, { archiviate = false, limit = 100 } = {}) {
+  const sql = archiviate
+    ? 'SELECT * FROM operation WHERE country_id = ? ORDER BY updated_at DESC LIMIT ?'
+    : "SELECT * FROM operation WHERE country_id = ? AND status != 'archiviata' ORDER BY updated_at DESC LIMIT ?";
+  return getDb().prepare(sql).all(countryId, limit);
+}
+
+function contaOperazioniAttive(countryId) {
+  return getDb().prepare("SELECT COUNT(*) AS n FROM operation WHERE country_id = ? AND status != 'archiviata'")
+    .get(countryId)?.n || 0;
+}
+
+function getOperazione(id) {
+  return getDb().prepare('SELECT * FROM operation WHERE id = ?').get(id) || null;
+}
+
+function creaOperazione({ countryId, titolo, nota, createdBy }) {
+  const ora = Date.now();
+  const info = getDb().prepare(`
+    INSERT INTO operation (country_id, title, note, status, created_by, updated_by, created_at, updated_at)
+    VALUES (?, ?, ?, 'attiva', ?, ?, ?, ?)`)
+    .run(countryId, titolo, nota || null, createdBy || null, createdBy || null, ora, ora);
+  return getOperazione(info.lastInsertRowid);
+}
+
+/** Aggiorna i campi dati e segna chi e quando. Chiamata anche senza campi
+ *  quando cambia un PASSO: l'operazione toccata per ultima sale in cima. */
+function aggiornaOperazione(id, campi, updatedBy) {
+  const chiavi = Object.keys(campi || {});
+  const set = chiavi.map((k) => `${k} = ?`).join(', ');
+  getDb().prepare(`UPDATE operation SET ${set ? `${set}, ` : ''}updated_by = ?, updated_at = ? WHERE id = ?`)
+    .run(...chiavi.map((k) => campi[k]), updatedBy || null, Date.now(), id);
+  return getOperazione(id);
+}
+
+function eliminaOperazione(id) {
+  return getDb().prepare('DELETE FROM operation WHERE id = ?').run(id).changes || 0;
+}
+
+function passiDi(operationIds) {
+  if (!operationIds.length) return [];
+  return getDb().prepare(`SELECT * FROM op_step WHERE operation_id IN (${segnaposti(operationIds.length)})
+    ORDER BY at IS NULL, at, id`).all(...operationIds);
+}
+
+function frecceDi(operationIds) {
+  if (!operationIds.length) return [];
+  return getDb().prepare(`SELECT l.from_step, l.to_step FROM op_link l
+    JOIN op_step s ON s.id = l.to_step
+    WHERE s.operation_id IN (${segnaposti(operationIds.length)})`).all(...operationIds);
+}
+
+function contaPassi(operationId) {
+  return getDb().prepare('SELECT COUNT(*) AS n FROM op_step WHERE operation_id = ?').get(operationId)?.n || 0;
+}
+
+function getPasso(id) {
+  return getDb().prepare('SELECT * FROM op_step WHERE id = ?').get(id) || null;
+}
+
+const CAMPI_PASSO = ['kind', 'title', 'region_id', 'from_region_id', 'at', 'priority', 'assignee', 'status', 'note', 'battle_id', 'color'];
+
+function creaPasso(operationId, campi, createdBy) {
+  const ora = Date.now();
+  const valori = CAMPI_PASSO.map((k) => (campi[k] === undefined ? null : campi[k]));
+  const info = getDb().prepare(`
+    INSERT INTO op_step (operation_id, ${CAMPI_PASSO.join(', ')}, created_by, updated_by, created_at, updated_at)
+    VALUES (?, ${segnaposti(CAMPI_PASSO.length)}, ?, ?, ?, ?)`)
+    .run(operationId, ...valori, createdBy || null, createdBy || null, ora, ora);
+  return getPasso(info.lastInsertRowid);
+}
+
+function aggiornaPasso(id, campi, updatedBy) {
+  const chiavi = Object.keys(campi || {}).filter((k) => CAMPI_PASSO.includes(k));
+  const set = chiavi.map((k) => `${k} = ?`).join(', ');
+  getDb().prepare(`UPDATE op_step SET ${set ? `${set}, ` : ''}updated_by = ?, updated_at = ? WHERE id = ?`)
+    .run(...chiavi.map((k) => campi[k]), updatedBy || null, Date.now(), id);
+  return getPasso(id);
+}
+
+function eliminaPasso(id) {
+  return getDb().prepare('DELETE FROM op_step WHERE id = ?').run(id).changes || 0;
+}
+
+/** Sostituisce le frecce che ENTRANO in un passo. In una transazione: a
+ *  metà, il passo resterebbe senza i suoi precedenti. */
+function impostaPrecedenti(stepId, fromIds) {
+  const d = getDb();
+  d.exec('BEGIN');
+  try {
+    d.prepare('DELETE FROM op_link WHERE to_step = ?').run(stepId);
+    const ins = d.prepare('INSERT OR IGNORE INTO op_link (from_step, to_step) VALUES (?, ?)');
+    for (const f of fromIds) ins.run(f, stepId);
+    d.exec('COMMIT');
+  } catch (err) {
+    d.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ACCORDI
+// ---------------------------------------------------------------------------
+// Solo lettura e scrittura: chi può cosa lo decide accordi.js.
+
+const CAMPI_ACCORDO = ['kind', 'a_type', 'a_id', 'b_type', 'b_id', 'title', 'body', 'starts_at', 'ends_at',
+  'excluded_mus', 'limit_damage', 'limit_side', 'a_extra', 'b_extra'];
+
+function listaAccordi({ limit = 500 } = {}) {
+  return getDb().prepare('SELECT * FROM accordo ORDER BY starts_at DESC, id DESC LIMIT ?').all(limit);
+}
+
+function contaAccordi() {
+  return getDb().prepare('SELECT COUNT(*) AS n FROM accordo').get()?.n || 0;
+}
+
+function getAccordo(id) {
+  return getDb().prepare('SELECT * FROM accordo WHERE id = ?').get(id) || null;
+}
+
+function creaAccordo(campi, createdBy) {
+  const ora = Date.now();
+  const valori = CAMPI_ACCORDO.map((k) => (campi[k] === undefined ? null : campi[k]));
+  const info = getDb().prepare(`
+    INSERT INTO accordo (${CAMPI_ACCORDO.join(', ')}, created_by, updated_by, created_at, updated_at)
+    VALUES (${segnaposti(CAMPI_ACCORDO.length)}, ?, ?, ?, ?)`)
+    .run(...valori, createdBy || null, createdBy || null, ora, ora);
+  return getAccordo(info.lastInsertRowid);
+}
+
+function aggiornaAccordo(id, campi, updatedBy) {
+  const chiavi = Object.keys(campi || {}).filter((k) => CAMPI_ACCORDO.includes(k));
+  const set = chiavi.map((k) => `${k} = ?`).join(', ');
+  getDb().prepare(`UPDATE accordo SET ${set ? `${set}, ` : ''}updated_by = ?, updated_at = ? WHERE id = ?`)
+    .run(...chiavi.map((k) => (campi[k] === undefined ? null : campi[k])), updatedBy || null, Date.now(), id);
+  return getAccordo(id);
+}
+
+function eliminaAccordo(id) {
+  return getDb().prepare('DELETE FROM accordo WHERE id = ?').run(id).changes || 0;
+}
+
+// ---------------------------------------------------------------------------
+// VOTAZIONI
+// ---------------------------------------------------------------------------
+// Solo lettura e scrittura: chi può cosa, e cosa si vede, lo decide
+// votazioni.js. ⚠️ Nessuna funzione qui unisce partecipazione e scheda:
+// è il segreto, e deve restare impossibile anche per sbaglio.
+
+const CAMPI_VOTAZIONE = ['country_id', 'title', 'body', 'electorate', 'ballot', 'visibility', 'majority',
+  'quorum_pct', 'opens_at', 'closes_at', 'created_by', 'created_war_user', 'created_name'];
+
+function listaVotazioni(countryId, { limit = 300 } = {}) {
+  return getDb().prepare('SELECT * FROM votazione WHERE country_id = ? ORDER BY opens_at DESC, id DESC LIMIT ?')
+    .all(countryId, limit);
+}
+
+function getVotazione(id) {
+  return getDb().prepare('SELECT * FROM votazione WHERE id = ?').get(id) || null;
+}
+
+/** Le votazioni non ritirate ancora da APRIRE (senza aventi diritto) o da
+ *  SIGILLARE: il giro di votazioni.js passa solo su queste. */
+function votazioniDaLavorare(ora) {
+  return getDb().prepare(`
+    SELECT * FROM votazione WHERE withdrawn_at IS NULL AND (
+      (eligible_count IS NULL AND opens_at <= ?) OR (sealed_at IS NULL AND closes_at <= ?))`).all(ora, ora);
+}
+
+function contaVotazioniAttive(countryId, ora) {
+  return getDb().prepare(`SELECT COUNT(*) AS n FROM votazione
+    WHERE country_id = ? AND withdrawn_at IS NULL AND closes_at > ?`).get(countryId, ora)?.n || 0;
+}
+
+function creaVotazione(campi) {
+  const valori = CAMPI_VOTAZIONE.map((k) => (campi[k] === undefined ? null : campi[k]));
+  const info = getDb().prepare(`
+    INSERT INTO votazione (${CAMPI_VOTAZIONE.join(', ')}, created_at)
+    VALUES (${segnaposti(CAMPI_VOTAZIONE.length)}, ?)`).run(...valori, Date.now());
+  return getVotazione(info.lastInsertRowid);
+}
+
+function ritiraVotazione(id, by) {
+  getDb().prepare('UPDATE votazione SET withdrawn_at = ?, withdrawn_by = ? WHERE id = ? AND withdrawn_at IS NULL')
+    .run(Date.now(), by || null, id);
+  return getVotazione(id);
+}
+
+/** Il corpo elettorale e il numero degli aventi diritto, insieme: una
+ *  votazione con il numero ma senza le righe direbbe "non sei elettore" a
+ *  tutti. `INSERT OR REPLACE` perché un'apertura ripetuta dopo un errore a
+ *  metà deve essere innocua. */
+function fissaElettori(voteId, elettori, numero, stimato) {
+  const d = getDb();
+  const ins = d.prepare(`INSERT OR REPLACE INTO votazione_elettore
+    (vote_id, war_user_id, name, avatar, role, party_id, party_name) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+  d.exec('BEGIN');
+  try {
+    for (const e of elettori) {
+      ins.run(voteId, e.warUserId, e.nome || null, e.avatar || null, e.ruolo || null, e.partito || null, e.partitoNome || null);
+    }
+    d.prepare('UPDATE votazione SET eligible_count = ?, eligible_estimated = ? WHERE id = ? AND eligible_count IS NULL')
+      .run(numero, stimato ? 1 : 0, voteId);
+    d.exec('COMMIT');
+  } catch (err) {
+    d.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+function elettoriDi(voteId) {
+  return getDb().prepare('SELECT * FROM votazione_elettore WHERE vote_id = ?').all(voteId);
+}
+
+function eElettore(voteId, warUserId) {
+  return Boolean(getDb().prepare('SELECT 1 FROM votazione_elettore WHERE vote_id = ? AND war_user_id = ?')
+    .get(voteId, warUserId));
+}
+
+function haVotato(voteId, warUserId) {
+  return Boolean(getDb().prepare('SELECT 1 FROM votazione_partecipazione WHERE vote_id = ? AND war_user_id = ?')
+    .get(voteId, warUserId));
+}
+
+function contaPartecipanti(voteId) {
+  return getDb().prepare('SELECT COUNT(*) AS n FROM votazione_partecipazione WHERE vote_id = ?').get(voteId)?.n || 0;
+}
+
+function partecipantiDi(voteId) {
+  return getDb().prepare('SELECT war_user_id FROM votazione_partecipazione WHERE vote_id = ?').all(voteId)
+    .map((r) => r.war_user_id);
+}
+
+/** Il voto palese di una persona: solo per mostrarle cosa ha votato. */
+function votoPalese(voteId, warUserId) {
+  return getDb().prepare('SELECT choice, note FROM votazione_voto WHERE vote_id = ? AND war_user_id = ?')
+    .get(voteId, warUserId) || null;
+}
+
+/**
+ * Un voto, in una transazione sola: la partecipazione e (palese) il voto
+ * con il nome, oppure (segreto) una scheda senza nome. La chiave primaria
+ * della partecipazione è ciò che impedisce il doppio voto, anche con due
+ * richieste nello stesso istante. Restituisce false se aveva già votato.
+ */
+function registraVoto(voteId, { warUserId, nome, scelta, nota, segreto }) {
+  const d = getDb();
+  d.exec('BEGIN');
+  try {
+    const p = d.prepare('INSERT OR IGNORE INTO votazione_partecipazione (vote_id, war_user_id) VALUES (?, ?)')
+      .run(voteId, warUserId);
+    if (!p.changes) { d.exec('ROLLBACK'); return false; }
+    if (segreto) {
+      d.prepare('INSERT INTO votazione_scheda (vote_id, id, choice, note) VALUES (?, ?, ?, ?)')
+        .run(voteId, crypto.randomBytes(16).toString('hex'), scelta, nota || null);
+    } else {
+      d.prepare(`INSERT INTO votazione_voto (vote_id, war_user_id, name, choice, note, voted_at)
+        VALUES (?, ?, ?, ?, ?, ?)`).run(voteId, warUserId, nome || null, scelta, nota || null, Date.now());
+    }
+    d.exec('COMMIT');
+    return true;
+  } catch (err) {
+    d.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+/** Le votazioni aperte (fotografate) con almeno un avviso Discord ancora da
+ *  mandare. Ogni avviso si segna anche quando la nazione non ha un canale:
+ *  altrimenti questa lista crescerebbe per sempre. */
+function votazioniDaAvvisare() {
+  return getDb().prepare(`SELECT * FROM votazione WHERE withdrawn_at IS NULL AND eligible_count IS NOT NULL
+    AND (notified_open = 0 OR notified_count = 0 OR notified_result = 0)`).all();
+}
+
+const AVVISI = new Set(['notified_open', 'notified_count', 'notified_result']);
+
+/** Segna un avviso come mandato. Restituisce false se lo era già: due giri
+ *  sovrapposti non lo mandano due volte. */
+function segnaAvviso(voteId, colonna) {
+  if (!AVVISI.has(colonna)) throw new Error('avviso sconosciuto');
+  return getDb().prepare(`UPDATE votazione SET ${colonna} = 1 WHERE id = ? AND ${colonna} = 0`).run(voteId).changes > 0;
+}
+
+/** Chiusura anticipata: urne chiuse adesso, scrutinio a `countAt`. Solo su
+ *  una votazione ancora aperta (non sigillata, non ritirata). */
+function chiudiOra(voteId, closesAt, countAt) {
+  return getDb().prepare(`UPDATE votazione SET closes_at = ?, count_at = ?
+    WHERE id = ? AND sealed_at IS NULL AND withdrawn_at IS NULL AND closes_at > ?`)
+    .run(closesAt, countAt, voteId, closesAt).changes > 0;
+}
+
+/** Cancella una votazione e, a cascata, elettori, partecipazioni, voti e
+ *  schede. Chi può farlo lo decide votazioni.js (solo l'amministratore). */
+function eliminaVotazione(voteId) {
+  return getDb().prepare('DELETE FROM votazione WHERE id = ?').run(voteId).changes || 0;
+}
+
+/** Le schede (segrete) o i voti (palesi) di una votazione, per il sigillo. */
+function schedeDi(voteId) {
+  return getDb().prepare('SELECT choice, note FROM votazione_scheda WHERE vote_id = ?').all(voteId);
+}
+
+function votiPalesiDi(voteId) {
+  return getDb().prepare('SELECT war_user_id, name, choice, note FROM votazione_voto WHERE vote_id = ?').all(voteId);
+}
+
+/** Il sigillo: esito scritto e (segreto) schede cancellate, insieme. Da qui
+ *  la votazione non cambia più. `sealed_at IS NULL` nel WHERE: due giri
+ *  sovrapposti non sigillano due volte con due rimescolamenti diversi. */
+function sigillaVotazione(voteId, risultato) {
+  const d = getDb();
+  d.exec('BEGIN');
+  try {
+    const u = d.prepare('UPDATE votazione SET result = ?, sealed_at = ? WHERE id = ? AND sealed_at IS NULL')
+      .run(JSON.stringify(risultato), Date.now(), voteId);
+    if (u.changes) d.prepare('DELETE FROM votazione_scheda WHERE vote_id = ?').run(voteId);
+    d.exec('COMMIT');
+    return Boolean(u.changes);
+  } catch (err) {
+    d.exec('ROLLBACK');
+    throw err;
+  }
+}
+
 function dbStatus() {
   const one = (sql) => {
     try { return getDb().prepare(sql).get()?.n ?? 0; } catch { return null; }
@@ -1089,6 +1609,10 @@ function dbStatus() {
     eventiConfini: one('SELECT COUNT(*) AS n FROM border_event'),
     accessiNazione: one('SELECT COUNT(*) AS n FROM nation_access'),
     fotografieNazioni: one('SELECT COUNT(*) AS n FROM nation_snapshot'),
+    operazioni: one('SELECT COUNT(*) AS n FROM operation'),
+    passiOperazioni: one('SELECT COUNT(*) AS n FROM op_step'),
+    accordi: one('SELECT COUNT(*) AS n FROM accordo'),
+    votazioni: one('SELECT COUNT(*) AS n FROM votazione'),
   };
 }
 
@@ -1109,6 +1633,13 @@ module.exports = {
   leggiStatoConfini, salvaStatoConfini, registraEventiConfini, eventiConfini,
   potaEventiConfini, inizioSorveglianzaConfini,
   accessiNazione, haAccessoNazione, aggiungiAccessoNazione, togliAccessoNazione,
+  listaOperazioni, contaOperazioniAttive, getOperazione, creaOperazione, aggiornaOperazione, eliminaOperazione,
+  passiDi, frecceDi, contaPassi, getPasso, creaPasso, aggiornaPasso, eliminaPasso, impostaPrecedenti,
+  listaAccordi, contaAccordi, getAccordo, creaAccordo, aggiornaAccordo, eliminaAccordo,
+  listaVotazioni, getVotazione, votazioniDaLavorare, contaVotazioniAttive, creaVotazione, ritiraVotazione,
+  fissaElettori, elettoriDi, eElettore, haVotato, contaPartecipanti, partecipantiDi, votoPalese,
+  registraVoto, schedeDi, votiPalesiDi, sigillaVotazione, votazioniDaAvvisare, segnaAvviso,
+  chiudiOra, eliminaVotazione,
   salvaIstantanea, istantaneaVicina, istantaneaPiuVecchia, potaIstantanee,
   audit, dbStatus,
 };

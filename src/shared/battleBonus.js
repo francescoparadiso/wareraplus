@@ -68,6 +68,35 @@ const DEFAULT_RULES = Object.freeze({
   hq: [0, 5, 10, 15, 20],
 });
 
+/* ── Tipo di governo (v0.27, dal 2026-10-26) ────────────────────
+   Alcuni tipi cambiano i bonus di battaglia. ⚠️ La config del gioco NON
+   li contiene (vedi AGGIORNAMENTO-v0.27.md): i numeri sono quelli delle
+   note del rilascio, scritti qui. Senza `govType` (prima della v0.27, o
+   nazione Provvisoria) non cambia niente.
+     · bonus patriottico: Stato nazionalista 30, Federazione 15,
+       Plutocrazia 10 (gli altri il valore della config, 20);
+     · Federazione: +5% a chi combatte per un alleato (stessa alleanza);
+     · Fronte patriottico: +5% al bunker (⚠️ stimato: qui solo dove un
+       bunker acceso c'è);
+     · Stato mercenario: danno degli ordini ×2, normale finché la sua
+       capitale è occupata.
+   Il bonus sul nemico giurato (Stato nazionalista 5% → 15%) arriva già
+   dal dato della diplomazia, e non si tocca. */
+const GOV_PATRIOTIC = Object.freeze({ nationalistState: 30, federation: 15, plutocracy: 10 });
+const FEDERATION_ALLY_BONUS = 5;
+const HOMELAND_BUNKER_BONUS = 5;
+const MERCENARY_ORDER_FACTOR = 2;
+
+const govOf = (countryId) => (countryId && state.nationMap?.get(countryId)?.govType) || null;
+
+/** La capitale originaria di una nazione è in mano a qualcun altro? */
+function capitalOccupied(countryId) {
+  for (const r of Object.values(state.regionData || {})) {
+    if (r?.isCapital && r.initialCountry === countryId) return r.country !== countryId;
+  }
+  return false;
+}
+
 const PRIORITY_FACTOR = { high: 1.5, medium: 1, low: 0.5 };
 export const PRIORITIES = ['high', 'medium', 'low'];
 
@@ -244,6 +273,8 @@ export function sideContext(battle, side, rules, orders) {
   if (side === 'defender') {
     buildingLevel = Number(defRegion?.activeUpgradeLevels?.bunker) || 0;
     building = rules.bunker[buildingLevel] || 0;
+    // v0.27: Fronte patriottico, +5% al bunker (vedi "Tipo di governo").
+    if (buildingLevel > 0 && govOf(countryId) === 'homelandFront') building += HOMELAND_BUNKER_BONUS;
     buildingKnown = !!defRegion;
   } else {
     buildingLevel = Number(atkRegion?.activeUpgradeLevels?.base) || 0;
@@ -302,12 +333,16 @@ export function bonusFor(fighterCountryId, ctx, who = null) {
   const pactWithSide = !own && !!fighterCountryId && !!sideDip?.defensivePacts?.includes(fighterCountryId);
   const shareBuilding = own || ally || pactWithSide;
 
+  // v0.27: il tipo di governo di chi combatte (vedi "Tipo di governo").
+  const gov = govOf(fighterCountryId);
+  const orderFactor = (gov === 'mercenaryState' && !capitalOccupied(fighterCountryId)) ? MERCENARY_ORDER_FACTOR : 1;
+
   const parts = {
-    home: own ? r.patriotic : 0,
+    home: own ? (GOV_PATRIOTIC[gov] ?? r.patriotic) : 0,
     enemy: (fighterDip?.swornEnemy && fighterDip.swornEnemy === ctx.enemyId) ? (fighterDip.swornBonus || 0) : 0,
     pact: (ctx.pactSide && !own) ? (sideDip?.pactBonus?.[fighterCountryId] || 0) : 0,
-    ally: ally ? ctx.allianceBonus(fighterAlliance) : 0,
-    order: ctx.countryOrders.get(fighterCountryId) || 0,
+    ally: ally ? ctx.allianceBonus(fighterAlliance) + (gov === 'federation' ? FEDERATION_ALLY_BONUS : 0) : 0,
+    order: (ctx.countryOrders.get(fighterCountryId) || 0) * orderFactor,
     muOrder: who ? (ctx.muOrders.get(who.muId) || 0) : (ctx.muOrderRange || 0),
     muHq: who ? (r.hq[who.hqLevel || 0] || 0) : [0, Math.max(...r.hq)],
     building: own ? ctx.building : (shareBuilding ? halfUp(ctx.building) : 0),

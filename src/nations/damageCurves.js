@@ -10,8 +10,22 @@
         coincidono la nazione si coordina; se la linea delle pillole è
         piatta mentre le barre hanno una punta, quella punta è successa
         senza preparazione (o è arrivata da fuori: mercenari, alleati).
-     2. Come si muove il totale sui 14 giorni, dove le ore si perdono e si
-        vede solo la tendenza.
+     2. Come si muove il totale giorno per giorno, dove le ore si perdono
+        e si vede solo la tendenza.
+
+   ── MEDIA E STORICO LUNGO (richiesta dell'utente, 2026-10-22) ────
+   «Una media del selezionato, e poter tornare più indietro di 2
+   settimane». In entrambi i grafici una linea tratteggiata con la media
+   della finestra scelta, detta anche in cifre sotto. La curva giornaliera
+   ha ora le sue finestre (14/30/90 giorni, tutto): prima dei giorni di
+   /damage-timeline usa lo scatto notturno del totale (/damage-history,
+   vedi api.js: fetchDamageHistory), che arriva fino a giugno. Dove fra
+   due scatti passano più giorni (backup settimanali, dump di giugno) il
+   danno è una MEDIA su quei giorni: si disegna come un tratto piatto e
+   tratteggiato, e il tooltip lo dice — un punto per giorno sarebbe un
+   dato inventato. Il grafico orario ha anche "30g": il server ora tiene
+   32 giorni di ore (prima 16), quindi si riempie da solo nei giorni dopo
+   il rideploy, e finché non è pieno lo dichiara.
 
    ── COSA SIGNIFICA "PILLATO" ─────────────────────────────────────
    La pillola è l'item `cocain`: +60% attacco per 8 ore, poi 15,5 ore di
@@ -53,7 +67,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { natT } from './i18n.js';
-import { fetchDamageTimeline } from './api.js';
+import { fetchDamageTimeline, fetchDamageHistory } from './api.js';
 import { trackEvent } from '../shared/analytics.js';
 import { escapeHtml, fmtCompact } from '../mu/ui.js';
 import { finePoints, pillCompare, pillSegments } from '../shared/pillInstants.js';
@@ -65,10 +79,25 @@ const HOUR_MS = 3600 * 1000;
 // 7 e 14 giorni dal 2026-10-15, quando il server ha cominciato a tenere
 // l'ora di ogni pillola per due settimane (TAKES_KEEP_MS in
 // server/damageTimeline.js). Il danno orario c'era già per 16 giorni.
-const RANGES = [24, 48, 72, 7 * 24, 14 * 24];
+// 30 giorni dal 2026-10-22: il server tiene 32 giorni di ore; oltre le due
+// settimane i pillati sono quelli orari (le hh:30), la curva fine no.
+const RANGES = [24, 48, 72, 7 * 24, 14 * 24, 30 * 24];
 /** "24h", "7g": l'etichetta di una finestra, nei bottoni e in "{h} fa". */
 const rangeLabel = (h) => (h % 24 === 0 && h > 72 ? `${h / 24}${natT('curveDayShort')}` : `${h}${natT('curveHourShort')}`);
 const RANGE_KEY = 'we_nat_curve_hours';
+// Finestre della curva giornaliera, in giorni; 0 = tutto l'archivio.
+const DAILY_RANGES = [14, 30, 90, 0];
+const DAILY_KEY = 'we_nat_curve_days';
+const DAY_MS = 24 * HOUR_MS;
+let _days = (() => {
+  try {
+    // ⚠️ Number(null) è 0, cioè "tutto": senza una scelta salvata si parte da 14.
+    const raw = localStorage.getItem(DAILY_KEY);
+    const v = raw == null ? NaN : Number(raw);
+    return DAILY_RANGES.includes(v) ? v : 14;
+  } catch { return 14; }
+})();
+let _history = null;   // /damage-history della nazione aperta (giorni)
 
 let _host = null;
 let _nation = null;
@@ -92,14 +121,16 @@ export async function renderDamageCurves(host, nation) {
   _nation = nation;
   host.innerHTML = `<div class="wp-nat-curve-loading">${escapeHtml(natT('curveLoading'))}</div>`;
 
-  const [own, world] = await Promise.all([
+  const [own, world, history] = await Promise.all([
     // Un'ora in più della finestra più larga: il confronto orario dei
     // pillati (pillStatsHtml) prende l'ultima ora chiusa e la stessa ora
     // 72 ore prima, che con 72 ore esatte resterebbe fuori di una.
-    fetchDamageTimeline(nation._id, { hours: Math.max(...RANGES) + 1 }),
-    fetchDamageTimeline(null, { hours: Math.max(...RANGES) + 1 }),
+    fetchDamageTimeline(nation._id, { hours: Math.max(...RANGES) + 1, days: 32 }),
+    fetchDamageTimeline(null, { hours: Math.max(...RANGES) + 1, days: 32 }),
+    fetchDamageHistory(nation._id),
   ]);
   if (_nation?._id !== nation._id) return;      // nazione cambiata nel frattempo
+  _history = history;
 
   if (!own || !own.known || !own.series.length) { host.innerHTML = ''; return; }
   paint(own, world);
@@ -124,10 +155,24 @@ function paint(own, world) {
       ${peakHtml(own, world)}
     </div>
     <div class="wp-nat-curve-card">
-      <h4 class="wp-nat-chart-title">${escapeHtml(natT('curveDaily'))}</h4>
+      <div class="wp-nat-curve-head">
+        <h4 class="wp-nat-chart-title">${escapeHtml(natT('curveDaily'))}</h4>
+        <div class="wp-nat-curve-range" id="wp-nat-curve-drange" role="group">
+          ${DAILY_RANGES.map(d => `<button type="button" data-d="${d}" class="${d === _days ? 'active' : ''}">${escapeHtml(d ? `${d}${natT('curveDayShort')}` : natT('curveAll'))}</button>`).join('')}
+        </div>
+      </div>
       <div class="wp-nat-curve-slot" id="wp-nat-curve-daily"></div>
       <div class="wp-nat-lv-tip" hidden></div>
     </div>`;
+
+  _host.querySelector('#wp-nat-curve-drange')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-d]');
+    if (!btn) return;
+    _days = Number(btn.dataset.d);
+    trackEvent('nations-damage-days', { days: _days });
+    try { localStorage.setItem(DAILY_KEY, String(_days)); } catch { /* storage negato */ }
+    paint(own, world);
+  });
 
   _host.querySelector('#wp-nat-curve-range')?.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-h]');
@@ -145,7 +190,8 @@ function paint(own, world) {
 /* ── Fasce dichiarative ────────────────────────────────────────── */
 
 /** Da quando in qua l'archivio guarda. Si mostra solo finché è un limite
- *  vero: passati i 14 giorni la curva è piena e la fascia sparisce. */
+ *  vero: passati i 14 giorni la curva è piena e la fascia sparisce (oltre,
+ *  lo dice la nota sotto il grafico orario: curveHourlyFrom). */
 function coverageHtml(tl) {
   const from = tl.coverageFrom;
   if (!from) return '';
@@ -393,8 +439,37 @@ function drawHourly(tl) {
       width="${Math.max(1, x1 - x0).toFixed(1)}" height="${plotH}" data-i="${i}" fill="transparent"/>`;
   }).join('');
 
+  // ── Media della finestra (2026-10-22) ──
+  // Danno: un RITMO pesato sulla durata dei punti (totale ÷ ore misurate),
+  // non la media dei ritmi, che darebbe a mezz'ora lo stesso peso di
+  // un'ora. Pillati: la media degli istanti disegnati.
+  const measured = rows.filter(r => r.d != null);
+  const hoursMeasured = measured.reduce((s, r) => s + (r.min || 60) / 60, 0);
+  const avgRate = hoursMeasured ? measured.reduce((s, r) => s + r.d, 0) / hoursMeasured : null;
+  const pillVals = (fine.some(p => p.v != null) ? fine.map(p => p.v) : rows.map(r => r.p)).filter(v => v != null);
+  const avgPill = pillVals.length ? pillVals.reduce((a, b) => a + b, 0) / pillVals.length : null;
+  const avgLine = (yy, color, txt, below) => `<line x1="${PAD.left}" x2="${W - PAD.right}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}"
+      stroke="${color}" stroke-width="1.2" stroke-dasharray="5 4" stroke-opacity=".85"/>
+    <text class="wp-nat-curve-avglab" x="${W - PAD.right - 4}" y="${(below ? yy + 11 : yy - 4).toFixed(1)}" text-anchor="end" fill="${color}">${escapeHtml(txt)}</text>`;
+  const avgs = (avgRate != null ? avgLine(yD(avgRate), DMG_COLOR, `${natT('curveAvgLabel')} ${fmtCompact(avgRate)}`, false) : '')
+    + (avgPill != null ? avgLine(yP(avgPill), PILL_COLOR, `${natT('curveAvgLabel')} ${Math.round(avgPill)}`, true) : '');
+  const avgNote = avgRate != null || avgPill != null
+    ? `<p class="wp-nat-curve-note wp-nat-curve-avgnote">${escapeHtml(natT('curveAvgHourly')
+      .replace('{dmg}', avgRate != null ? fmtCompact(avgRate) : '—')
+      .replace('{p}', avgPill != null ? String(Math.round(avgPill)) : '—'))}</p>`
+    : '';
+  // La finestra chiesta è più lunga di quanto il server conserva (32
+  // giorni, prima 16): si dice da quando c'è il danno, invece di lasciar
+  // credere che prima non si sparasse.
+  const firstMeasured = measured[0]?.t;
+  const fromNote = firstMeasured && firstMeasured - t0 > 6 * HOUR_MS
+    ? `<p class="wp-nat-curve-note">${escapeHtml(natT('curveHourlyFrom').replace('{date}',
+      new Date(firstMeasured).toLocaleDateString(document.documentElement.lang || undefined, { day: 'numeric', month: 'short' })))}</p>`
+    : '';
+
   slot.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="wp-nat-curve-svg" role="img"
-      aria-label="${escapeHtml(natT('curveHourly'))}">${grid}${area}${dLine}${resetDots}${line}${labels}${hits}</svg>`
+      aria-label="${escapeHtml(natT('curveHourly'))}">${grid}${area}${dLine}${resetDots}${line}${avgs}${labels}${hits}</svg>`
+    + avgNote + fromNote
     + (hasDamage ? '' : `<p class="wp-nat-curve-pending">${escapeHtml(natT('curveDamagePending'))}</p>`);
 
   bindTip(slot, allRows, (r) => hourlyTip(r, fine.filter(p => p.v != null && p.t >= r.t && p.t < (r.to || r.t + HOUR_MS))));
@@ -445,24 +520,54 @@ function hourlyTip(r, fine = []) {
           <ul class="wp-nat-lv-tip-list">${dmg}${pill}${reset}</ul>`;
 }
 
-/* ── Curva a 14 giorni ─────────────────────────────────────────── */
+/* ── Curva giorno per giorno ──────────────────────────────────── */
+
+const dayStart = (day) => Date.parse(`${day}T00:00:00Z`);
+
+/** I giorni da disegnare, in ordine: quelli di /damage-timeline (ore
+ *  sommate, coi pillati) e, PRIMA di loro, quelli dello scatto notturno
+ *  (/damage-history): totale del giorno dopo meno totale del giorno. Fra
+ *  due scatti distanti più giorni il valore è la media per giorno, con
+ *  `n` = quanti giorni copre. */
+function dailyItems(tl) {
+  const recent = (tl.daily || []).filter(r => r.d != null)
+    .map(r => ({ t0: dayStart(r.day), t1: dayStart(r.day) + DAY_MS, v: r.d, n: 1, r }));
+  const firstRecent = recent.length ? recent[0].t0 : Infinity;
+  const snaps = (_history || []).filter(h => Number.isFinite(h.total)).sort((a, b) => dayStart(a.day) - dayStart(b.day));
+  const old = [];
+  for (let i = 1; i < snaps.length; i++) {
+    const t0 = dayStart(snaps[i - 1].day), t1 = dayStart(snaps[i].day);
+    if (t0 >= firstRecent) break;
+    const n = Math.round((t1 - t0) / DAY_MS);
+    const diff = snaps[i].total - snaps[i - 1].total;
+    if (n < 1 || !(diff >= 0)) continue;
+    old.push({ t0, t1: Math.min(t1, firstRecent), v: diff / n, n });
+  }
+  return [...old, ...recent];
+}
 
 function drawDaily(tl) {
   const slot = _host?.querySelector('#wp-nat-curve-daily');
   if (!slot) return;
 
-  const rows = (tl.daily || []).filter(r => r.d != null);
-  if (rows.length < 2) { slot.innerHTML = `<p class="wp-nat-empty">${escapeHtml(natT('curveDailyEmpty'))}</p>`; return; }
+  const today0 = dayStart(new Date().toISOString().slice(0, 10));
+  const from = _days ? today0 - (_days - 1) * DAY_MS : -Infinity;
+  const items = dailyItems(tl).filter(it => it.t1 > from);
+  if (items.length < 2) { slot.innerHTML = `<p class="wp-nat-empty">${escapeHtml(natT('curveDailyEmpty'))}</p>`; return; }
 
   const W = Math.max(slot.clientWidth || 0, 320);
-  const H = 180;
+  const H = 190;
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
-  const maxD = Math.max(...rows.map(r => r.d), 1);
-  const step = rows.length > 1 ? plotW / (rows.length - 1) : plotW;
+  const maxD = Math.max(...items.map(it => it.v), 1);
 
-  const x = (i) => PAD.left + i * step;
+  // Asse sul TEMPO, non sull'indice: un tratto di una settimana (media)
+  // deve occupare sette giorni di larghezza, non uno.
+  const tStart = Math.max(items[0].t0, from);
+  const tEnd = items[items.length - 1].t1;
+  const x = (t) => PAD.left + ((t - tStart) / Math.max(1, tEnd - tStart)) * plotW;
   const y = (v) => PAD.top + plotH - (v / maxD) * plotH;
+  const startOf = (it) => Math.max(it.t0, tStart);
 
   const ticks = 4;
   let grid = '';
@@ -472,33 +577,86 @@ function drawDaily(tl) {
       <text class="wp-nat-curve-axis" x="${PAD.left - 6}" y="${(yy + 3.5).toFixed(1)}" text-anchor="end">${escapeHtml(fmtCompact(maxD * (1 - k / ticks)))}</text>`;
   }
 
-  const pts = rows.map((r, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(r.d).toFixed(1)}`).join(' ');
-  const area = `${pts} L${x(rows.length - 1).toFixed(1)},${(PAD.top + plotH).toFixed(1)} L${x(0).toFixed(1)},${(PAD.top + plotH).toFixed(1)} Z`;
+  // Un giorno è un punto al suo centro; un tratto di più giorni (media) è
+  // piatto da un capo all'altro. Fra due punti la linea è piena, se uno
+  // dei due è una media è tratteggiata.
+  const pts = [];
+  items.forEach(it => {
+    if (it.n > 1) { pts.push({ t: startOf(it), v: it.v, avg: true }, { t: it.t1, v: it.v, avg: true }); }
+    else pts.push({ t: (startOf(it) + it.t1) / 2, v: it.v });
+  });
+  let solid = '', dashed = '';
+  for (let k = 1; k < pts.length; k++) {
+    const seg = `M${x(pts[k - 1].t).toFixed(1)},${y(pts[k - 1].v).toFixed(1)} L${x(pts[k].t).toFixed(1)},${y(pts[k].v).toFixed(1)} `;
+    if (pts[k - 1].avg || pts[k].avg) dashed += seg; else solid += seg;
+  }
+  const base = (PAD.top + plotH).toFixed(1);
+  const area = `M${x(pts[0].t).toFixed(1)},${base} ${pts.map(p => `L${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ')} L${x(pts[pts.length - 1].t).toFixed(1)},${base} Z`;
 
   // I giorni PARZIALI (il primo dell'archivio, quello in corso) hanno un
   // pallino vuoto: il loro totale è più basso solo perché conta meno ore,
-  // e un pallino pieno lo farebbe leggere come un calo.
-  const dots = rows.map((r, i) => `<circle class="wp-nat-curve-dot" cx="${x(i).toFixed(1)}" cy="${y(r.d).toFixed(1)}" r="3.2"
-     fill="${r.partial ? 'var(--wp-ov-surface, #161b22)' : DMG_COLOR}" stroke="${DMG_COLOR}" stroke-width="1.6"/>`).join('');
+  // e un pallino pieno lo farebbe leggere come un calo. Con molti giorni
+  // i pallini si tolgono: diventerebbero una seconda linea.
+  const many = items.length > 45;
+  const dots = many ? '' : items.filter(it => it.n === 1).map(it => `<circle class="wp-nat-curve-dot" cx="${x((startOf(it) + it.t1) / 2).toFixed(1)}" cy="${y(it.v).toFixed(1)}" r="3.2"
+     fill="${it.r?.partial ? 'var(--wp-ov-surface, #161b22)' : DMG_COLOR}" stroke="${DMG_COLOR}" stroke-width="1.6"/>`).join('');
 
-  const labels = rows.map((r, i) => {
-    if (rows.length > 8 && i % 2) return '';
-    const dt = new Date(`${r.day}T00:00:00Z`);
-    const txt = dt.toLocaleDateString(document.documentElement.lang || undefined, { day: 'numeric', month: 'numeric' });
-    return `<text class="wp-nat-curve-axis" x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${escapeHtml(txt)}</text>`;
-  }).join('');
+  // Media del periodo: giorni pieni pesati per quanti giorni coprono (un
+  // tratto settimanale vale sette giorni); i parziali restano fuori.
+  let sum = 0, cnt = 0;
+  for (const it of items) {
+    if (it.r?.partial) continue;
+    const span = (it.t1 - startOf(it)) / DAY_MS;
+    sum += it.v * span; cnt += span;
+  }
+  const avg = cnt ? sum / cnt : null;
+  const avgSvg = avg == null ? '' : `<line x1="${PAD.left}" x2="${W - PAD.right}" y1="${y(avg).toFixed(1)}" y2="${y(avg).toFixed(1)}"
+      stroke="${DMG_COLOR}" stroke-width="1.2" stroke-dasharray="5 4" stroke-opacity=".85"/>
+    <text class="wp-nat-curve-avglab" x="${W - PAD.right - 4}" y="${(y(avg) - 4).toFixed(1)}" text-anchor="end" fill="${DMG_COLOR}">${escapeHtml(`${natT('curveAvgLabel')} ${fmtCompact(avg)}`)}</text>`;
 
-  const hits = rows.map((r, i) => `<rect class="wp-nat-lv-hit" x="${(x(i) - step / 2).toFixed(1)}" y="${PAD.top}"
-    width="${step.toFixed(1)}" height="${plotH}" data-i="${i}" fill="transparent"/>`).join('');
+  // Etichette: circa una ogni 80 px, sulla mezzanotte di un giorno.
+  const lang = document.documentElement.lang || undefined;
+  const nLab = Math.max(2, Math.floor(plotW / 80));
+  const stepDays = Math.max(1, Math.round((tEnd - tStart) / DAY_MS / nLab));
+  let labels = '';
+  for (let t = dayStart(new Date(tStart).toISOString().slice(0, 10)); t <= tEnd; t += stepDays * DAY_MS) {
+    if (t < tStart) continue;
+    const txt = new Date(t).toLocaleDateString(lang, { day: 'numeric', month: 'numeric', timeZone: 'UTC' });
+    labels += `<text class="wp-nat-curve-axis" x="${x(t).toFixed(1)}" y="${H - 6}" text-anchor="middle">${escapeHtml(txt)}</text>`;
+  }
+
+  const hits = items.map((it, i) => `<rect class="wp-nat-lv-hit" x="${x(startOf(it)).toFixed(1)}" y="${PAD.top}"
+    width="${Math.max(1, x(it.t1) - x(startOf(it))).toFixed(1)}" height="${plotH}" data-i="${i}" fill="transparent"/>`).join('');
 
   slot.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="wp-nat-curve-svg" role="img"
       aria-label="${escapeHtml(natT('curveDaily'))}">
       ${grid}
       <path d="${area}" fill="${DMG_COLOR}" fill-opacity=".13"/>
-      <path d="${pts}" fill="none" stroke="${DMG_COLOR}" stroke-width="2" stroke-linejoin="round"/>
-      ${dots}${labels}${hits}</svg>`;
+      <path d="${solid}" fill="none" stroke="${DMG_COLOR}" stroke-width="2" stroke-linejoin="round"/>
+      <path d="${dashed}" fill="none" stroke="${DMG_COLOR}" stroke-width="2" stroke-dasharray="4 3" stroke-opacity=".8"/>
+      ${avgSvg}${dots}${labels}${hits}</svg>`
+    + (avg == null ? '' : `<p class="wp-nat-curve-note wp-nat-curve-avgnote">${escapeHtml(natT('curveAvgDaily').replace('{dmg}', fmtCompact(avg)))}</p>`);
 
-  bindTip(slot, rows, dailyTip);
+  bindTip(slot, items, dailyItemTip);
+}
+
+/** Tooltip di un punto della curva giornaliera: un giorno di
+ *  /damage-timeline (coi pillati), un giorno dello scatto notturno, o un
+ *  tratto di più giorni con la sua media. */
+function dailyItemTip(it) {
+  if (it.r) return dailyTip(it.r);
+  const lang = document.documentElement.lang || undefined;
+  const fmtDay = (t) => new Date(t).toLocaleDateString(lang, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const head = it.n > 1 ? `${fmtDay(it.t0)} – ${fmtDay(it.t1 - DAY_MS)}` : fmtDay(it.t0);
+  const note = it.n > 1
+    ? `<li class="wp-nat-curve-tip-warn">${escapeHtml(natT('curveAvgDays').replace(/\{n\}/g, String(it.n)))}</li>`
+    : '';
+  return `<div class="wp-nat-lv-tip-head">${escapeHtml(head)}</div>
+    <ul class="wp-nat-lv-tip-list">
+      <li><span class="wp-nat-dot" style="background:${DMG_COLOR}"></span>
+        <span class="wp-nat-lv-tip-name">${escapeHtml(natT('curveDamage'))}</span><strong>${escapeHtml(fmtCompact(it.v))}</strong></li>
+      ${note}
+    </ul>`;
 }
 
 function dailyTip(r) {

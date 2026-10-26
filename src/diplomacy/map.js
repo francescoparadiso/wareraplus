@@ -91,7 +91,8 @@ export function initMap() {
     // sorgente cambia, MapLibre ri-esegue il "symbol placement" e per
     // tutta la durata del fade tiene `_placementDirty` attivo, cioè
     // continua a ridisegnare a frame pieno. Con i pallini-nave decorativi
-    // che fanno setData ogni 1,5s (oceanRoutes.js:makeRunner) la mappa non
+    // che facevano setData ogni 1,5s (vecchio oceanRoutes.js:makeRunner;
+    // dal 2026-10-20 stanno su un canvas a parte, shipOverlay.js) la mappa non
     // tornava MAI idle: 30 secondi di immobilità totale producevano ~470
     // repaint WebGL, concentrati in burst da ~110 frame in un secondo.
     // Con fadeDuration:0 gli stessi 30 secondi ne producono 22 (-95%).
@@ -686,7 +687,9 @@ export function renderMap() {
     fillExpr = '#2a2d33';
   } else if (state.mapSource === 'actual') {
     const styleMap = {};
-    state.labelsData.forEach(l => { if (l.properties?.countryId) styleMap[l.properties.countryId] = l.properties.strokeColor; });
+    // WarEra+ v0.27: `strokeColor` non c'è più nelle etichette — un undefined
+    // dentro l'espressione di MapLibre invaliderebbe il colore della mappa.
+    state.labelsData.forEach(l => { if (l.properties?.countryId && l.properties.strokeColor) styleMap[l.properties.countryId] = l.properties.strokeColor; });
     // WarEra+: i colori di gioco (scheme+accento, vedi gameColors.js) hanno la
     // precedenza sulla tinta dell'etichetta e coprono anche i paesi senza etichetta.
     state.nazioniGlobal.forEach(n => { const c = gameNationColor(n); if (c) styleMap[n._id] = c; });

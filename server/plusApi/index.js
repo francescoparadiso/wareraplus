@@ -49,6 +49,12 @@ const { buildWealthRouter, buildWealthPublicRouter, initWealth, statoRicchezza }
 const { initWatcher, statoWatcher } = require('./watcher');
 // La mia nazione: quadro, confini sorvegliati, nemici. Vedi nazione.js.
 const { buildNazioneRouter } = require('./nazione');
+// La lavagna delle operazioni della nazione. Vedi operazioni.js.
+const { buildOperazioniRouter } = require('./operazioni');
+// L'archivio dei patti di non belligeranza. Vedi accordi.js.
+const { buildAccordiRouter } = require('./accordi');
+// Le votazioni del congresso e i referendum. Vedi votazioni.js.
+const { buildVotazioniRouter, initVotazioni, statoVotazioni } = require('./votazioni');
 const { initConfini, statoConfini } = require('./confini');
 // Le fotografie orarie per le frecce "rispetto a 24 ore fa" della scheda.
 const { initIstantanee, statoIstantanee } = require('./istantanee');
@@ -172,6 +178,21 @@ app.use('/pubblico/ricchezza', buildWealthPublicRouter());
 // dipende dall'avere una carica.
 app.use('/nazione', buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione }));
 
+// I piani della nazione: li vede chi vede la nazione, li scrive il governo
+// (gli stati dei passi, chiunque li veda). Vedi operazioni.js.
+app.use('/operazioni', buildOperazioniRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione }));
+
+// Gli accordi (patti di non belligeranza): archivio PUBBLICO in lettura,
+// lo scrive il governo di una delle nazioni coinvolte. Niente filtro
+// nazione: un patto ha due parti, e la controparte deve poterlo scrivere
+// quanto noi. Vedi accordi.js.
+app.use('/accordi', buildAccordiRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente }));
+
+// Le votazioni: l'archivio di una nazione si legge senza login (il testo e
+// l'esito secondo la visibilità scelta), vota chi è nel corpo elettorale.
+// Niente filtro nazione: è Political, aperto a ogni nazione. Vedi votazioni.js.
+app.use('/votazioni', buildVotazioniRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente }));
+
 app.use('/auth', buildAuthRouter({
   env: WP_ENV,
   publicBase: PUBLIC_BASE,
@@ -211,6 +232,9 @@ app.get('/health', (req, res) => res.json({
   // storia. `regioni` molto sotto `attese` = api6 che non risponde.
   confini: statoConfini(),
   istantanee: statoIstantanee(),
+  // Il giro che apre (fotografa il congresso) e sigilla le votazioni.
+  // `errore` che resta = il gioco non risponde all'apertura di una votazione.
+  votazioni: statoVotazioni(),
   // A quali nazioni e' aperta l'area riservata adesso: i membri
   // dell'alleanza (piu' gli extra di WP_NAZIONI_AMMESSE). `lettaIl` null a
   // lungo = la rilettura non riesce e vale ancora la lista di partenza.
@@ -250,6 +274,8 @@ initWealth();
 initNazioni();
 initConfini();
 initIstantanee();
+// Apre e sigilla le votazioni allo scadere, anche se nessuno le guarda.
+initVotazioni();
 
 const promossi = syncAdminsFromEnv(ADMIN_DISCORD_IDS);
 if (promossi) console.log(`[plusApi] ${promossi} account promossi ad admin da ADMIN_DISCORD_IDS`);

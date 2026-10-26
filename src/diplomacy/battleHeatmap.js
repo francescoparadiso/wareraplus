@@ -414,7 +414,9 @@ export async function setBattleHeatmap(battleId) {
     // state.regionCache (popolato da battleMarkers.js per ogni battaglia
     // attiva — nessuna chiamata di rete aggiuntiva qui, best-effort).
     const regionId = details?.defender?.region || details?.attacker?.region;
-    const regionName = (regionId && state.regionCache?.get(regionId)?.name) || 'Unknown';
+    // WarEra+: aperta dall'archivio una battaglia CHIUSA non è in
+    // regionCache (solo le attive): il nome c'è comunque in state.regionData.
+    const regionName = (regionId && (state.regionCache?.get(regionId)?.name || state.regionData?.[regionId]?.name)) || 'Unknown';
 
     // AGGIORNA I DATI
     state.battleBonusMap = null; // WarEra+: la mappa dei bonus è della battaglia di prima

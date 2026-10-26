@@ -110,8 +110,15 @@ async function leggiCostruzioni(regionIds) {
     try {
       const res = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
       // 207 = qualche costruzione inesistente in mezzo alle altre: normale.
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      risposte = await res.json();
+      // ⚠️ E se in un gruppo NON ne esiste NESSUNA il gioco risponde 404 al
+      // batch intero, ma col corpo normale: un NOT_FOUND per voce (misurato
+      // il 2026-10-23). Trattarlo come un guasto lasciava quelle regioni
+      // mai lette — e una base costruita poi in una regione mai letta non
+      // aveva una lettura di prima con cui confrontarsi, quindi nessun
+      // avviso. Si legge il corpo; è un guasto solo se non è un batch.
+      const corpo = await res.json().catch(() => null);
+      if (!res.ok && !(res.status === 404 && Array.isArray(corpo))) throw new Error(`HTTP ${res.status}`);
+      risposte = corpo;
     } catch (err) {
       console.warn('[confini] lettura costruzioni fallita:', err.message);
       continue;
@@ -434,7 +441,8 @@ async function quadroConfini(countryId) {
       battaglia: r.activeBattle || null,
       giacimento: r.deposit?.type ? { tipo: r.deposit.type, bonus: r.deposit.bonusPercent ?? null, fine: Date.parse(r.deposit.endsAt || '') || null } : null,
       risorsa: r.strategicResource || null,
-      costa: Boolean(r.hasCoast),
+      // v0.27: `hasCoast` non c'è più nella regione → null (non noto), non false.
+      costa: r.hasCoast === undefined ? null : Boolean(r.hasCoast),
       difese: difese(id, r, cfg),
     };
   }).sort((a, b) => (b.capitale - a.capitale) || String(a.nome).localeCompare(String(b.nome)));

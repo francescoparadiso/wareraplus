@@ -5,12 +5,10 @@
    BOT_KNOWLEDGE.md nel repo originale). Il bot parlava direttamente con
    api2.warera.io usando una `X-API-Key` server-side. Qui la key NON può
    stare nel browser (vedi config.js: ECO_PROXY_BASE), quindi ogni chiamata
-   passa dal Worker Cloudflare (WORKER_API_BASE), che aggiunge lui l'header
-   `X-API-Key` server-side (secret Cloudflare). Gli endpoint token-gated
-   (worker.getWorkers, transaction.getPaginatedTransactions,
-   company.getRecommendedRegionIdsByItemCode) funzionano solo se il worker
-   inietta davvero la key — vedi la nota su X-API-Key vs Authorization in
-   config.js.
+   passa dal proxy (VPS, poi Worker Cloudflare), che aggiunge lui l'header
+   `X-API-Key` server-side. Dalla v0.27 l'unico endpoint token-gated che
+   serve qui è `work.getStatsByCompany` (produzione e salari giorno per
+   giorno): tutto il resto è pubblico.
 
    Riuso di `trpcBatchManual` (src/shared/trpcClient.js): stessa politica di
    batching GET + retry-su-429 già usata da Diplomacy, puntata sulla base
@@ -22,10 +20,84 @@
    superjson `.json`), e `trpcBatchManual` gestisce già entrambi i casi.
    ══════════════════════════════════════════════════════════════ */
 
-import { ECO_PROXY_BASE } from '../diplomacy/config.js';
+import { API_BASE_URL, ECO_PROXY_BASE } from '../diplomacy/config.js';
+import { IS_DEV_BUILD } from '../shared/deployEnv.js';
 import { trpcBatchManual, cacheKey, cacheGet, cacheSet } from '../shared/trpcClient.js';
 
-const NS = 'eco';
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Interruttore verso il server di prova del gioco
+   ------------------------------------------------------------------
+   Prima di un aggiornamento WarEra mette la versione nuova su
+   apidev.warera.io: un mondo separato (id diversi dal live), con le
+   procedure nuove già accese. Per scrivere l'Ottimizzatore della v0.27
+   PRIMA del rilascio serviva poterlo puntare lì, e solo lì.
+
+   Si accende con `?api=dev` nell'URL e resta acceso per la scheda
+   (sessionStorage; `?api=live` lo spegne). SOLO su build non-live: in
+   produzione il parametro è ignorato, quindi un link condiviso per
+   sbaglio non porta nessun giocatore sul mondo di prova.
+
+   La chiave di apidev NON è quella del VPS (vale solo sul server di
+   prova): la incolla chi sviluppa in un campo che compare solo in questa
+   modalità, e resta in MEMORIA — mai localStorage, mai nell'URL. Stessa
+   regola della chiave utente di shared/trpcProxy.js. Le chiamate vanno
+   dritte ad apidev (CORS `*` con `x-api-key`, verificato il 2026-10-23):
+   niente VPS né Worker, che parlano col mondo live.
+
+   Solo l'Ottimizzatore lo segue (e Rendite, che chiede a loadGameData la
+   config): mappa e resto del tool restano sul live, perché mescolare due
+   mondi con id diversi non avrebbe senso.
+   ══════════════════════════════════════════════════════════════ */
+const DEV_API_BASE = 'https://apidev.warera.io';
+const TARGET_KEY = 'we_eco_api';
+const DEV_MAX_BATCH = 50;
+
+function _readTarget() {
+  if (!IS_DEV_BUILD) return 'live';
+  try {
+    const p = new URLSearchParams(location.search).get('api');
+    if (p === 'dev' || p === 'live') sessionStorage.setItem(TARGET_KEY, p);
+    return sessionStorage.getItem(TARGET_KEY) === 'dev' ? 'dev' : 'live';
+  } catch (_) { return 'live'; }
+}
+const _target = _readTarget();
+let _devKey = '';
+
+/** true se l'Ottimizzatore sta parlando con apidev (solo build di prova). */
+export function isDevApi() { return _target === 'dev'; }
+export function setDevApiKey(key) { _devKey = String(key || '').trim(); }
+export function hasDevApiKey() { return Boolean(_devKey); }
+
+async function _devBatch(calls) {
+  if (calls.length > DEV_MAX_BATCH) {
+    const out = [];
+    for (let i = 0; i < calls.length; i += DEV_MAX_BATCH) out.push(...(await _devBatch(calls.slice(i, i + DEV_MAX_BATCH))));
+    return out;
+  }
+  const names = calls.map(([p]) => p).join(',');
+  const input = Object.fromEntries(calls.map(([, params], i) => [i, params || {}]));
+  const url = `${DEV_API_BASE}/trpc/${names}?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(url, _devKey ? { headers: { 'X-API-Key': _devKey } } : undefined);
+      if (res.status === 429) { await new Promise(r => setTimeout(r, 1200 * 2 ** (attempt - 1))); continue; }
+      const json = await res.json();
+      return json.map(item => {
+        if (!item || item.error) {
+          if (item?.error) console.warn('[eco/apidev] item error:', item.error.message);
+          return null;
+        }
+        return item.result?.data ?? null;
+      });
+    } catch (err) {
+      console.error('[eco/apidev] batch error:', err);
+      return calls.map(() => null);
+    }
+  }
+  return calls.map(() => null);
+}
+
+const NS = _target === 'dev' ? 'ecodev' : 'eco';
 // gameConfig/prezzi cambiano pochissimo e non sono per-utente: 10 min come
 // il bot originale (game_data.py: CACHE_TTL_SECONDS = 600).
 const GLOBAL_TTL_MS = 10 * 60 * 1000;
@@ -45,6 +117,7 @@ export class EcoProxyUnavailableError extends Error {
  */
 export async function ecoBatch(calls) {
   if (!calls || !calls.length) return [];
+  if (_target === 'dev') return _devBatch(calls);
   return trpcBatchManual(calls, { useWorker: true, workerBaseUrl: ECO_PROXY_BASE });
 }
 
@@ -68,6 +141,27 @@ export async function ecoBatchByKey(proc, inputsByKey) {
 
 /* ── Dati globali (gameConfig + prezzi), cache localStorage 10 min ── */
 let _mem = null; // cache di processo entro la stessa sessione/run
+
+/* WarEra+ v0.27 — quanto vale in monete UN punto produzione, secondo il
+   gioco (scambi di materie prime degli ultimi 7 giorni). È la base del
+   salario dei dipendenti: paga oraria = Produzione ÷ 4 × questo valore ×
+   aspettativa del dipendente (70–130%). Pubblica, ma vuole l'input VUOTO
+   (con `{}` risponde 400), quindi niente batch: una GET a parte. Prima
+   della v0.27 la procedura non esiste (404) → null, e chi la usa lo sa. */
+let _pp = { v: null, ts: 0 };
+export async function loadPpMoneyValue() {
+  if (_pp.ts && (Date.now() - _pp.ts) < GLOBAL_TTL_MS) return _pp.v;
+  const base = _target === 'dev' ? DEV_API_BASE : API_BASE_URL;
+  try {
+    const res = await fetch(`${base}/trpc/gameStat.getPpMoneyValue`);
+    const json = res.ok ? await res.json() : null;
+    const v = Number(json?.result?.data);
+    _pp = { v: Number.isFinite(v) && v > 0 ? v : null, ts: Date.now() };
+  } catch (_) {
+    _pp = { v: null, ts: Date.now() };
+  }
+  return _pp.v;
+}
 
 export async function loadGameData() {
   if (_mem && (Date.now() - _mem.ts) < GLOBAL_TTL_MS) return _mem;

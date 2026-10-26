@@ -40,7 +40,9 @@ import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 import { renderDeroghe, creaPannelloAdmin } from './admin.js';
 import { creaTavolo } from './board.js';
 import { creaQuadroNazione } from './nazione.js';
+import { creaOperazioni } from './operazioni.js';
 import { nzT } from './i18nNazione.js';
+import { opT } from './i18nOperazioni.js';
 
 let rootEl = null;
 let account = null;
@@ -64,6 +66,11 @@ let ruoli = null;
 let comeAltri = null;         // id dell'account che si sta guardando
 let tavolo = null;
 let quadro = null;            // la mia nazione (nazione.js)
+let operazioni = null;        // la lavagna delle operazioni (operazioni.js)
+// La colonna del profilo: null = automatico (chiusa su Operazioni), poi la
+// scelta a mano. animaChiusura: la prossima chiusura si vede scorrere.
+let profiloChiuso = null;
+let animaChiusura = true;
 let pannelloAdmin = null;
 
 // Quante richieste aspettano una decisione, per scriverlo sulla sezione
@@ -85,7 +92,7 @@ export async function initPrivateView(container, { authError = null, comeAccount
     // Si arriva qui dall'amministrazione con un'altra persona da guardare:
     // tavolo e nazione in memoria sono di chi si guardava prima.
     comeAltri = comeAccount;
-    tavolo = null; quadro = null; azzeraAttesa();
+    tavolo = null; quadro = null; operazioni = null; azzeraAttesa();
   }
   render();
   await refresh();
@@ -95,6 +102,9 @@ export async function initPrivateView(container, { authError = null, comeAccount
   // tesoro di un'ora prima. Si rilegge ad ogni apertura — "aggiornate" è
   // metà della promessa di questa scheda.
   if (quadro) quadro.ricarica();
+  // Stessa regola per la lavagna: chi torna dalla mappa deve trovare gli
+  // stati che nel frattempo gli altri hanno spostato.
+  if (operazioni) operazioni.ricarica();
 
   window.addEventListener('wareraplus:langchange', render);
 }
@@ -224,7 +234,7 @@ function disegna() {
     // non ha poteri" e' esattamente l'informazione che si sta cercando.
     colonnaSx.appendChild(cardLente());
     colonnaSx.appendChild(cardProfilo());
-    colonnaDx.appendChild(areaSchede(['nazione', 'contratti']));
+    colonnaDx.appendChild(areaSchede(['nazione', 'operazioni', 'contratti']));
   }
   else {
     colonnaSx.appendChild(cardProfilo());
@@ -252,11 +262,14 @@ function disegna() {
       // secondi come sezioni apribili sotto la nazione — richiesta
       // esplicita di separarli del tutto.
       //
+      // Le operazioni (la lavagna dei piani) stanno subito dopo la nazione
+      // e le vede chi vede quella: areaSchede le toglie davanti a un no.
+      //
       // Il tavolo compare solo a chi ha almeno un potere: a un cittadino
       // senza cariche sarebbe una scatola vuota con dentro una spiegazione
       // di qualcosa che non lo riguarda. L'amministrazione solo a chi lo è.
       const cap = ruoli?.capacita;
-      const chiavi = ['nazione'];
+      const chiavi = ['nazione', 'operazioni'];
       if (cap && (cap.chiedePer?.length || cap.approvaPer?.length || cap.gestisceNazione?.length || cap.admin)) {
         chiavi.push('contratti');
       }
@@ -265,6 +278,29 @@ function disegna() {
     }
 
   }
+
+  // ── Il profilo si chiude ───────────────────────────────────────────
+  // Richiesta dell'utente: sulla lavagna delle operazioni la colonna del
+  // profilo ruba larghezza al grafico. Si chiude da sola (con
+  // un'animazione) quando si apre Operazioni, e una linguetta la riapre;
+  // la scelta a mano vale per il resto della visita.
+  const chiuso = colonnaSx.childNodes.length > 0 && (profiloChiuso ?? schedaAttiva === 'operazioni');
+  if (colonnaSx.childNodes.length) {
+    const leva = el('button', 'wp-pv-leva', chiuso ? '›' : '‹');
+    leva.type = 'button';
+    leva.title = chiuso ? nzT('profileShow') : nzT('profileHide');
+    leva.setAttribute('aria-label', leva.title);
+    leva.setAttribute('aria-expanded', String(!chiuso));
+    leva.addEventListener('click', () => { profiloChiuso = !chiuso; animaChiusura = false; render(); });
+    colonnaSx.prepend(leva);
+  }
+  if (chiuso) {
+    // La prima volta si disegna aperta e si chiude al fotogramma dopo, così
+    // la transizione della griglia ha un punto da cui partire.
+    if (animaChiusura) requestAnimationFrame(() => wrap.classList.add('profilo-chiuso'));
+    else wrap.classList.add('profilo-chiuso');
+  }
+  animaChiusura = !chiuso;
 
   wrap.appendChild(colonnaSx);
   wrap.appendChild(colonnaDx);
@@ -414,7 +450,7 @@ function cardProfilo() {
     }
     azioni.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('signOut'), async () => {
       await logout(); account = null; claim = null; passo = 'ricerca'; candidati = [];
-      tavolo = null; quadro = null; pannelloAdmin = null; azzeraAttesa(); render();
+      tavolo = null; quadro = null; operazioni = null; pannelloAdmin = null; azzeraAttesa(); render();
     }));
     card.appendChild(azioni);
   }
@@ -637,7 +673,7 @@ async function guardaCome(accountId) {
   // proprie richieste attribuite a un'altra persona. Lo stesso vale per
   // il quadro della nazione: sotto la lente è la SUA nazione.
   tavolo = null;
-  quadro = null;
+  quadro = null; operazioni = null;
   azzeraAttesa();
   render();
 }
@@ -649,7 +685,7 @@ function cardLente() {
   if (chi) card.appendChild(el('strong', 'wp-pv-name', chi.warUsername || chi.discordUsername));
   card.appendChild(el('p', 'wp-pv-note', pvT('readOnlyNote')));
   card.appendChild(bottone('wp-pv-btn-quiet wp-pv-btn-small', pvT('backToMe'), async () => {
-    comeAltri = null; await caricaRuoli(); tavolo = null; quadro = null; azzeraAttesa(); render();
+    comeAltri = null; await caricaRuoli(); tavolo = null; quadro = null; operazioni = null; azzeraAttesa(); render();
   }));
   return card;
 }
@@ -675,6 +711,16 @@ function creaOTavolo() {
 function creaOQuadro() {
   if (!quadro) quadro = creaQuadroNazione({ ridisegna: render, lente: () => comeAltri });
   return quadro;
+}
+
+/** Stessa regola: costruita una volta, tiene l'operazione scelta e i
+ *  moduli aperti fra un ridisegno e l'altro. La nazione è quella del
+ *  quadro: l'amministratore che ne guarda un'altra vede i piani di quella. */
+function creaOOperazioni() {
+  if (!operazioni) {
+    operazioni = creaOperazioni({ ridisegna: render, lente: () => comeAltri, paese: () => quadro?.paese() || null });
+  }
+  return operazioni;
 }
 
 function creaOAdmin() {
@@ -712,11 +758,17 @@ function azzeraAttesa() { attesaContratti = null; attesaChiesta = false; }
  */
 function areaSchede(chiavi) {
   const frag = document.createDocumentFragment();
-  if (!chiavi.includes(schedaAttiva)) schedaAttiva = chiavi[0];
   const q = creaOQuadro();
   q.precarica();
+  // Le operazioni le vede chi vede la nazione (stessa regola sul server):
+  // finché il quadro non ha risposto la pagina resta, e sparisce solo
+  // davanti a un no. Toglierla in attesa farebbe ripartire dalla nazione
+  // chi l'aveva lasciata aperta.
+  if (q.accesso() === false) chiavi = chiavi.filter((k) => k !== 'operazioni');
+  if (!chiavi.includes(schedaAttiva)) schedaAttiva = chiavi[0];
   if (chiavi.length > 1) frag.appendChild(barraSchede(chiavi));
-  if (schedaAttiva === 'contratti') frag.appendChild(creaOTavolo().render());
+  if (schedaAttiva === 'operazioni') frag.appendChild(creaOOperazioni().render());
+  else if (schedaAttiva === 'contratti') frag.appendChild(creaOTavolo().render());
   else if (schedaAttiva === 'admin') frag.appendChild(creaOAdmin().render());
   else frag.appendChild(q.render());
   return frag;
@@ -727,6 +779,7 @@ function barraSchede(chiavi) {
   nav.setAttribute('role', 'tablist');
   const voci = {
     nazione: [nzT('natTitle'), null],
+    operazioni: [opT('tab'), opT('tabHint')],
     contratti: [nzT('secContracts'), nzT('secContractsHint')],
     admin: [nzT('secAdmin'), nzT('secAdminHint')],
   };
@@ -750,6 +803,14 @@ function barraSchede(chiavi) {
     if (k === 'nazione') {
       const n = quadro?.nuovi() || 0;
       if (n) b.appendChild(el('span', 'wp-pv-scheda-n wp-pv-scheda-n-allarme', String(n)));
+    }
+    if (k === 'operazioni') {
+      const n = operazioni?.inCorso() || 0;
+      if (n) {
+        const c = el('span', 'wp-pv-scheda-n', String(n));
+        c.title = opT('tabRunning');
+        b.appendChild(c);
+      }
     }
     b.addEventListener('click', () => {
       schedaAttiva = k;

@@ -38,7 +38,7 @@ import { btlT } from './i18n.js';
 import { trackEvent, trackThrottled } from '../shared/analytics.js';
 import { getBattleDetail, getBattleMuBreakdown, getRoundRanking } from './api.js';
 import { fetchMoneyTransfers, transfersFor, windowIsShort } from './moneyTransfers.js';
-import { fetchBattleTimeline, timelineSectionHtml, wireTimeline, resetTimeline } from './battleTimeline.js';
+import { fetchBattleTimeline, timelineSectionHtml, bountySectionHtml, wireTimeline, resetTimeline } from './battleTimeline.js';
 import {
   loadBonusRules, fetchBattleOrders, loadMe, myPlayerId, sideContext, sideNationRows, personalBonus,
   orderPct, PRIORITIES,
@@ -54,6 +54,12 @@ let _detail = null;
 let _mu = null;
 let _muState = 'closed';   // 'closed' | 'loading' | 'open' | 'error'
 let _expanded = { attacker: false, defender: false };
+// Ordinamento delle tabelle per lato (richiesta dell'utente, 2026-10-20:
+// «cliccando in alto sulle voci te le riordina»). Uno solo per entrambi i
+// lati, così le due colonne restano confrontabili riga per riga; resta
+// passando da una battaglia all'altra, come una preferenza.
+// dir: -1 decrescente, 1 crescente.
+let _dsort = { key: 'damage', dir: -1 };
 // Directory unità militari: serve solo a dare un NOME agli id delle
 // classifiche MU. Vive qui e non nello stato della vista perché è una
 // cache di sessione — scaricata al massimo una volta, condivisa con la
@@ -181,9 +187,29 @@ function sideTable(rows, sideKey, battle, opts) {
   const cell = entityCell || ((id) => `${entityFlag(id)}${escapeHtml(entityName(id) || '—')}`);
   const totDmg = rows.reduce((s, r) => s + r.damage, 0);
   const totMoney = rows.reduce((s, r) => s + r.money, 0);
-  const shown = expanded ? rows : rows.slice(0, TOP);
   // Solo per le nazioni (vedi payPerK): contratti incassati + prezzo per 1k.
   const withContracts = pay && pay.totContracts > 0;
+  // L'ordine scelto, se questa tabella ha quella colonna; se no il danno
+  // (le unità militari non hanno contratti né prezzo per 1k).
+  const has = { name: true, damage: true, money: true, ctr: withContracts, perk: Boolean(pay) };
+  const sort = has[_dsort.key] ? _dsort : { key: 'damage', dir: -1 };
+  const nameOf = (id) => (entityName ? entityName(id) : muName(id)) || '';
+  const val = {
+    damage: (r) => r.damage,
+    money: (r) => r.money || 0,
+    ctr: (r) => pay?.byCountry.get(r.id) || 0,
+    perk: (r) => perK(r.money, r.damage) ?? -1,
+  }[sort.key];
+  const sorted = sort.key === 'name'
+    ? rows.slice().sort((a, b) => sort.dir * nameOf(a.id).localeCompare(nameOf(b.id)))
+    : rows.slice().sort((a, b) => sort.dir * (val(a) - val(b)) || b.damage - a.damage);
+  const shown = expanded ? sorted : sorted.slice(0, TOP);
+  const th = (key, text, cls = '', title = '') => {
+    const on = sort.key === key;
+    return `<th class="${cls} wp-btl-sortable${on ? ' active' : ''}" data-dsort="${key}" tabindex="0"${
+      title ? ` title="${title}"` : ''} aria-sort="${on ? (sort.dir < 0 ? 'descending' : 'ascending') : 'none'}">${text}${
+      on ? `<span class="wp-btl-caret">${sort.dir < 0 ? '▾' : '▴'}</span>` : ''}</th>`;
+  };
   // Incassato ÷ danno: la classifica "money" contiene GIÀ la paga dei
   // contratti (vedi il ⚠️ in src/diplomacy/battleSpending.js). Sommarci i
   // contratti li contava due volte — l'Italia risultava a 0,107 per 1k.
@@ -194,12 +220,12 @@ function sideTable(rows, sideKey, battle, opts) {
       ${sideHeadHtml(battle, sideKey, label, color, countryId)}
       <table class="wp-btl-table wp-btl-side-table${pay ? ' wp-btl-has-pay' : ''}">
         <thead><tr>
-          <th>${entityHeader}</th>
-          <th class="wp-btl-num">${btlT('colDamage')}</th>
+          ${th('name', entityHeader)}
+          ${th('damage', btlT('colDamage'), 'wp-btl-num')}
           <th class="wp-btl-num wp-btl-pct">%</th>
-          <th class="wp-btl-num" title="${btlT('earnedHint')}">${btlT('colEarned')}</th>
-          ${withContracts ? `<th class="wp-btl-num wp-btl-col-ctr" title="${btlT('ctrEarnedHint')}">${btlT('colCtrEarned')}</th>` : ''}
-          ${pay ? `<th class="wp-btl-num" title="${btlT('paidPerKHint')}">${btlT('colPaidPerK')}</th>` : ''}
+          ${th('money', btlT('colEarned'), 'wp-btl-num', btlT('earnedHint'))}
+          ${withContracts ? th('ctr', btlT('colCtrEarned'), 'wp-btl-num wp-btl-col-ctr', btlT('ctrEarnedHint')) : ''}
+          ${pay ? th('perk', btlT('colPaidPerK'), 'wp-btl-num', btlT('paidPerKHint')) : ''}
         </tr></thead>
         <tbody>
           ${shown.map(r => `
@@ -631,6 +657,9 @@ export function renderBattleDetail(battle) {
       ${flagHtml(battle.attacker.countryId)}${escapeHtml(nationName(battle.attacker.countryId) || '—')}
       <span class="wp-btl-type">${typeLabel(battle.type)}</span>
     </h2>
+    ${_tl?.k?.length >= 3 && _tl?.s?.length
+      ? `<button type="button" class="wp-btl-replay" data-btl-replay>▶ ${btlT('replayOnMap')}</button>`
+      : ''}
     <div class="wp-btl-cards">
       <div class="wp-btl-card"><span>${btlT('colRegion')}</span><strong class="wp-btl-card-sm">${escapeHtml(regionName(battle.regionId) || '—')}</strong></div>
       <div class="wp-btl-card"><span>${battle.live ? btlT('colWhenMixed') : btlT('colWhen')}</span><strong class="wp-btl-card-sm">${battle.live
@@ -659,11 +688,21 @@ export function renderBattleDetail(battle) {
   const payAtk = payPerK('attacker');
   const anyCtr = payDef.totContracts > 0 || payAtk.totContracts > 0;
 
-  const timeline = timelineSectionHtml(_tl, { nationName: nm, flagHtml });
-  // La scheda Andamento esiste solo se il server ha registrato la
-  // battaglia: chi la teneva aperta e passa a una che non ce l'ha torna
-  // alle nazioni invece di guardare una scheda vuota.
+  // Due schede dalla stessa registrazione: "Timeline battaglia" (danno) e
+  // "Timeline taglie" (soldi spesi). La taglia della testata serve alla
+  // seconda per la parte pagata prima che il server la registrasse.
+  const tlHelpers = {
+    nationName: nm, flagHtml,
+    contracts: _detail?.contracts, contractsTruncated: Boolean(_detail?.contractsTruncated),
+    bountyNow: _spend ? { defender: _spend.bounty.defender?.total, attacker: _spend.bounty.attacker?.total } : null,
+  };
+  const timeline = timelineSectionHtml(_tl, tlHelpers);
+  const bountyTl = timeline ? bountySectionHtml(_tl, tlHelpers) : '';
+  // Le schede esistono solo se il server ha registrato la battaglia: chi
+  // le teneva aperte e passa a una che non ce l'ha torna alle nazioni
+  // invece di guardare una scheda vuota.
   if (_dtab === 'timeline' && !timeline) _dtab = 'nations';
+  if (_dtab === 'bountyTl' && !bountyTl) _dtab = 'nations';
   if (_dtab === 'bonus' && !battle.live) _dtab = 'nations';
   const nFunders = _money && wFrom
     ? transfersFor(_money, battle.defender.countryId, wFrom, wTo).length
@@ -680,6 +719,7 @@ export function renderBattleDetail(battle) {
     { id: 'alliances', label: btlT('tabAlliances') },
     { id: 'mu', label: btlT('tabMu') },
     timeline && { id: 'timeline', label: btlT('tabTimeline') },
+    bountyTl && { id: 'bountyTl', label: btlT('tabBountyTl') },
     { id: 'funders', label: btlT('tabFunders'), n: nFunders },
     { id: 'contracts', label: btlT('tabContracts'), n: _detail.contracts.length },
   ].filter(Boolean);
@@ -697,6 +737,7 @@ export function renderBattleDetail(battle) {
   else if (_dtab === 'bonus') body = bonusHtml(battle);
   else if (_dtab === 'mu') body = _round ? (rWait(roundSides('mu')) || muRoundHtml(battle, roundSides('mu'))) : muSectionHtml(battle);
   else if (_dtab === 'timeline') body = timeline;
+  else if (_dtab === 'bountyTl') body = bountyTl;
   else if (_dtab === 'funders') body = fundersHtml(battle);
   else if (_dtab === 'contracts') body = contractsHtml(_detail.contracts, _detail.contractsTruncated);
   // Un round: le stesse tabelle, senza le colonne che sono della battaglia
@@ -931,6 +972,20 @@ export function wireBattleDetail(root, battle, { onBack, repaint }) {
     });
   });
 
+  // Intestazioni ordinabili: un clic sceglie la colonna (numeri dal più
+  // grande, nomi dalla A), un secondo clic sulla stessa inverte.
+  root.querySelectorAll('th[data-dsort]').forEach(th => {
+    const pick = () => {
+      const key = th.dataset.dsort;
+      _dsort = _dsort.key === key ? { key, dir: -_dsort.dir } : { key, dir: key === 'name' ? 1 : -1 };
+      repaint();
+    };
+    th.addEventListener('click', pick);
+    th.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); }
+    });
+  });
+
   _wired = { battle, repaint };
   // Un solo listener delegato: le righe si ridisegnano ad ogni repaint,
   // e riagganciare un handler per bottone ad ogni giro è il modo classico
@@ -941,6 +996,17 @@ export function wireBattleDetail(root, battle, { onBack, repaint }) {
   if (!root.dataset.btlDetailWired) {
     root.dataset.btlDetailWired = '1';
     root.addEventListener('click', (e) => {
+      // Replay sulla mappa (battleReplay.js): si chiude la sezione e la
+      // battaglia si riproduce dove è stata combattuta.
+      const rp = e.target.closest?.('[data-btl-replay]');
+      if (rp) {
+        const id = _wired.battle?.id;
+        if (!id) return;
+        trackEvent('battle-replay-from-archive');
+        import('../app/battlesOverlay.js').then(m => m.closeBattlesView());
+        import('../diplomacy/battleReplay.js').then(m => m.replayOnMap(id));
+        return;
+      }
       const tab = e.target.closest?.('.wp-btl-dtab');
       if (tab) {
         _dtab = tab.dataset.dtab;

@@ -60,6 +60,17 @@ export const OVERLAY_TINTS = {
   // rosa → viola (Giocatori: le persone, tinta che nessun'altra sezione usa)
   players:  { rgbDark: '236,72,153',  rgbDark2: '168,85,247',
               rgbLight: '190,24,93',  rgbLight2: '126,34,206' },
+  // ciano NAP → acciaio (Accordi: la stessa tinta dei NAP sulla mappa,
+  // perché è quello che la sezione ci mette)
+  accordi:  { rgbDark: '0,212,255',   rgbDark2: '125,148,173',
+              rgbLight: '0,119,163',  rgbLight2: '71,94,122' },
+  // lime → oro (Tornei: la gara, tinta che nessun'altra sezione usa)
+  tournament: { rgbDark: '163,230,53', rgbDark2: '250,204,21',
+              rgbLight: '77,124,15',  rgbLight2: '161,98,7' },
+  // menta → azzurro cielo (Altri strumenti: porta fuori dall'app, tinta
+  // che nessun'altra sezione usa)
+  tools:    { rgbDark: '52,211,153',  rgbDark2: '56,189,248',
+              rgbLight: '4,120,87',   rgbLight2: '3,105,161' },
 };
 
 const _stoppers = new WeakMap();

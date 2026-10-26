@@ -1,0 +1,403 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Political: le Votazioni (src/political/votes.js)
+   ------------------------------------------------------------------
+   Tutto sotto #wp-political-root come political.css e
+   politicalPlus.css, prefisso `wp-vt-`. Solo le variabili del tema di
+   Political (--s1…, --gold…, --text…): il tema chiaro arriva da sé.
+
+   I quattro voti hanno un colore ciascuno, lo stesso in cabina, nel
+   tabellone, nella barra e nei cartellini (--vc):
+     favorevole verde · contrario rosso · astenuto giallo · nulla grigio
+   ══════════════════════════════════════════════════════════════ */
+
+#wp-political-root .wp-vt { display: flex; flex-direction: column; gap: 14px; }
+#wp-political-root .wp-vt-c-si { --vc: var(--green); }
+#wp-political-root .wp-vt-c-no { --vc: var(--red); }
+#wp-political-root .wp-vt-c-astenuto { --vc: #e3b341; }
+#wp-political-root .wp-vt-c-nulla { --vc: #8b949e; }
+#wp-political-root .wp-vt-c-assente { --vc: var(--s3); }
+
+/* ── Testata ── */
+#wp-political-root .wp-vt-head-main {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+#wp-political-root .wp-vt-title {
+  font-family: 'Playfair Display', serif; font-size: 1.35rem; color: var(--gold2);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+#wp-political-root .wp-vt-sub { font-size: .78rem; color: var(--text2); margin-top: 4px; }
+#wp-political-root .wp-vt-head-auth { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .78rem; }
+#wp-political-root .wp-vt-head .wp-pol-cov { margin: 12px 0 0; }
+#wp-political-root .wp-vt-flag { width: 24px; height: 16px; object-fit: cover; border-radius: 2px; }
+
+/* ── Bottoni ── */
+#wp-political-root .wp-vt-btn {
+  font-family: inherit; font-size: .8rem; font-weight: 600; cursor: pointer;
+  padding: 7px 14px; border-radius: var(--r2); border: 1px solid var(--bd2);
+  background: var(--s2); color: var(--text); transition: border-color .15s, opacity .15s;
+}
+#wp-political-root .wp-vt-btn:hover { border-color: var(--gold); }
+#wp-political-root .wp-vt-btn:disabled { opacity: .45; cursor: default; }
+#wp-political-root .wp-vt-btn-main {
+  background: linear-gradient(135deg, var(--gold), var(--gold2)); color: #07090d; border-color: transparent;
+}
+#wp-political-root .wp-vt-btn-discord { background: #5865f2; color: #fff; border-color: transparent; }
+#wp-political-root .wp-vt-btn-quiet { background: transparent; }
+#wp-political-root .wp-vt-btn-danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 45%, transparent); }
+
+/* ── Elenco ── */
+#wp-political-root .wp-vt-group .panel-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#wp-political-root .wp-vt-filters { margin-left: auto; display: flex; gap: 8px; }
+#wp-political-root .wp-vt-filters select,
+#wp-political-root .wp-vt-form select,
+#wp-political-root .wp-vt-form input,
+#wp-political-root .wp-vt-form textarea,
+#wp-political-root .wp-vt-ballot textarea {
+  background: var(--s2); border: 1px solid var(--bd2); border-radius: var(--r2);
+  color: var(--text); font-family: inherit; font-size: .82rem; padding: 6px 10px; outline: none;
+}
+#wp-political-root .wp-vt-form input:focus,
+#wp-political-root .wp-vt-form textarea:focus,
+#wp-political-root .wp-vt-ballot textarea:focus { border-color: var(--gold); }
+#wp-political-root .wp-vt-none { font-size: .8rem; padding: 6px 0; }
+#wp-political-root .wp-vt-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 12px;
+}
+#wp-political-root .wp-vt-card {
+  background: var(--s2); border: 1px solid var(--bd2); border-radius: var(--r);
+  padding: 14px; cursor: pointer; display: flex; flex-direction: column; gap: 8px;
+  transition: border-color .15s, transform .15s;
+}
+#wp-political-root .wp-vt-card:hover,
+#wp-political-root .wp-vt-card:focus-visible { border-color: var(--gold); transform: translateY(-1px); outline: none; }
+#wp-political-root .wp-vt-card-aperta { border-left: 3px solid var(--green); }
+#wp-political-root .wp-vt-card-urne_chiuse,
+#wp-political-root .wp-vt-card-scrutinio { border-left: 3px solid var(--gold); }
+#wp-political-root .wp-vt-card-ritirata { opacity: .6; }
+#wp-political-root .wp-vt-card h3 { font-size: .98rem; font-weight: 600; color: var(--text); line-height: 1.3; }
+#wp-political-root .wp-vt-card-top { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+#wp-political-root .wp-vt-card-when,
+#wp-political-root .wp-vt-when { font-size: .76rem; color: var(--text2); }
+#wp-political-root .wp-vt-cd { font-variant-numeric: tabular-nums; color: var(--gold2); font-weight: 600; }
+#wp-political-root .wp-vt-tag-segreto { color: var(--gold2); border-color: rgba(197, 150, 74, .45); }
+
+#wp-political-root .wp-vt-fase,
+#wp-political-root .wp-vt-esito,
+#wp-political-root .wp-vt-chip {
+  display: inline-block; font-size: .64rem; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 20px; border: 1px solid var(--bd3); color: var(--text2); white-space: nowrap;
+}
+#wp-political-root .wp-vt-fase-aperta { color: var(--green); border-color: color-mix(in srgb, var(--green) 50%, transparent); }
+#wp-political-root .wp-vt-fase-urne_chiuse,
+#wp-political-root .wp-vt-fase-scrutinio { color: var(--gold2); border-color: rgba(197, 150, 74, .5); }
+#wp-political-root .wp-vt-fase-programmata,
+#wp-political-root .wp-vt-fase-in_apertura { color: #58a6ff; border-color: rgba(88, 166, 255, .45); }
+#wp-political-root .wp-vt-esito-approvata { color: #07090d; background: var(--green); border-color: transparent; }
+#wp-political-root .wp-vt-esito-respinta { color: #fff; background: var(--red); border-color: transparent; }
+#wp-political-root .wp-vt-esito-quorum_mancato { color: #07090d; background: #e3b341; border-color: transparent; }
+#wp-political-root .wp-vt-chip-ok { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
+#wp-political-root .wp-vt-chip-call { color: var(--gold2); border-color: rgba(197, 150, 74, .5); }
+
+#wp-political-root .wp-vt-turnout { display: flex; flex-direction: column; gap: 4px; font-size: .74rem; color: var(--text2); }
+#wp-political-root .wp-vt-turnout-bar { height: 5px; border-radius: 3px; background: var(--s3); overflow: hidden; }
+#wp-political-root .wp-vt-turnout-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), var(--gold2)); }
+
+/* ── Scheda ── */
+#wp-political-root .wp-vt-back {
+  align-self: flex-start; background: none; border: none; color: var(--gold2); cursor: pointer;
+  font-family: inherit; font-size: .82rem; padding: 2px 0;
+}
+#wp-political-root .wp-vt-detail { display: flex; flex-direction: column; gap: 10px; }
+#wp-political-root .wp-vt-detail-title { font-family: 'Playfair Display', serif; font-size: 1.5rem; color: var(--text); line-height: 1.25; }
+#wp-political-root .wp-vt-by { font-size: .76rem; color: var(--text2); }
+#wp-political-root .wp-vt-by a,
+#wp-political-root .wp-vt-names a,
+#wp-political-root .wp-vt-party a,
+#wp-political-root .wp-vt-notes a { color: var(--gold2); text-decoration: none; }
+#wp-political-root .wp-vt-meta {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 16px;
+  padding: 10px 0; border-top: 1px solid var(--bd); border-bottom: 1px solid var(--bd);
+}
+#wp-political-root .wp-vt-meta dt { font-size: .64rem; text-transform: uppercase; letter-spacing: .6px; color: var(--text3); }
+#wp-political-root .wp-vt-meta dd { font-size: .8rem; color: var(--text); margin-top: 2px; }
+#wp-political-root .wp-vt-text {
+  white-space: pre-wrap; font-size: .88rem; line-height: 1.6; color: var(--text);
+  background: var(--s2); border: 1px solid var(--bd2); border-radius: var(--r2); padding: 14px 16px;
+  max-height: 420px; overflow-y: auto;
+}
+
+/* ── La cabina ── */
+#wp-political-root .wp-vt-ballot { display: flex; flex-direction: column; gap: 12px; }
+#wp-political-root .wp-vt-ballot-wait { border-color: rgba(197, 150, 74, .35); }
+#wp-political-root .wp-vt-ballot-msg { font-size: .88rem; color: var(--text); }
+#wp-political-root .wp-vt-ballot-q { font-family: 'Playfair Display', serif; font-size: 1.1rem; color: var(--gold2); }
+#wp-political-root .wp-vt-choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+#wp-political-root .wp-vt-choice {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px 8px; border-radius: var(--r); cursor: pointer; font-family: inherit;
+  font-size: .84rem; font-weight: 600; color: var(--text);
+  background: var(--s2); border: 2px solid var(--bd2); transition: border-color .15s, background .15s, transform .1s;
+}
+#wp-political-root .wp-vt-choice:hover { border-color: var(--vc); }
+#wp-political-root .wp-vt-choice.on {
+  border-color: var(--vc); background: color-mix(in srgb, var(--vc) 16%, var(--s2)); transform: scale(1.02);
+}
+#wp-political-root .wp-vt-choice-ico {
+  width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; color: var(--vc); border: 2px solid var(--vc);
+}
+#wp-political-root .wp-vt-choice.on .wp-vt-choice-ico { background: var(--vc); color: #07090d; }
+#wp-political-root .wp-vt-nota-wrap { display: flex; flex-direction: column; gap: 6px; font-size: .78rem; color: var(--text2); }
+#wp-political-root .wp-vt-nota-wrap[hidden] { display: none; }
+#wp-political-root .wp-vt-ballot textarea { width: 100%; resize: vertical; }
+#wp-political-root .wp-vt-confirm-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: .76rem; }
+#wp-political-root .wp-vt-err {
+  font-size: .8rem; color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 35%, transparent); border-radius: var(--r2); padding: 6px 10px;
+}
+#wp-political-root .wp-vt-err[hidden] { display: none; }
+#wp-political-root .wp-vt-voted { font-size: .9rem; color: var(--green); font-weight: 600; }
+#wp-political-root .wp-vt-choice-chip {
+  display: inline-block; font-size: .7rem; font-weight: 700; padding: 1px 8px; border-radius: 20px;
+  color: var(--vc); border: 1px solid color-mix(in srgb, var(--vc) 55%, transparent);
+  background: color-mix(in srgb, var(--vc) 12%, transparent); white-space: nowrap;
+}
+#wp-political-root .wp-vt-c-assente.wp-vt-choice-chip { color: var(--text3); border-color: var(--bd2); background: none; }
+#wp-political-root .wp-vt-nota { font-weight: 400; font-style: italic; color: var(--text2); margin-top: 6px; }
+
+/* ── Chiusura anticipata e zona amministratore ── */
+#wp-political-root .wp-vt-close-now {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 10px 12px; border-radius: var(--r2); font-size: .84rem; color: var(--green);
+  background: color-mix(in srgb, var(--green) 9%, transparent); border: 1px solid color-mix(in srgb, var(--green) 35%, transparent);
+}
+#wp-political-root .wp-vt-admin {
+  display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap;
+  padding: 10px 0 0; border-top: 1px dashed var(--bd3); font-size: .74rem;
+}
+
+/* ── L'esito ── */
+#wp-political-root .wp-vt-result { display: flex; flex-direction: column; gap: 14px; }
+#wp-political-root .wp-vt-stamp {
+  align-self: center; font-family: 'Playfair Display', serif; font-weight: 700;
+  font-size: 1.9rem; letter-spacing: 3px; padding: 6px 22px; border-radius: 8px;
+  border: 3px solid currentColor; transform: rotate(-2deg);
+}
+#wp-political-root .wp-vt-stamp-approvata { color: var(--green); }
+#wp-political-root .wp-vt-stamp-respinta { color: var(--red); }
+#wp-political-root .wp-vt-stamp-quorum_mancato { color: #e3b341; font-size: 1.4rem; }
+#wp-political-root .wp-vt-board {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+  background: var(--bd2); border: 1px solid var(--bd2); border-radius: var(--r2); overflow: hidden;
+}
+#wp-political-root .wp-vt-board-cell { background: var(--s2); padding: 10px 8px; text-align: center; }
+#wp-political-root .wp-vt-board-v {
+  font-family: 'Playfair Display', serif; font-size: 1.5rem; font-weight: 700; color: var(--vc, var(--gold2));
+  font-variant-numeric: tabular-nums;
+}
+#wp-political-root .wp-vt-board-l { font-size: .64rem; text-transform: uppercase; letter-spacing: .5px; color: var(--text3); margin-top: 2px; }
+#wp-political-root .wp-vt-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; gap: 2px; background: var(--s3); }
+#wp-political-root .wp-vt-bar i { display: block; background: var(--vc); min-width: 3px; }
+#wp-political-root .wp-vt-bar-legend { font-size: .72rem; }
+#wp-political-root .wp-vt-quorum { font-size: .8rem; font-weight: 600; }
+#wp-political-root .wp-vt-quorum.ok { color: var(--green); }
+#wp-political-root .wp-vt-quorum.ko { color: #e3b341; }
+#wp-political-root .wp-vt-h3 { font-size: .82rem; text-transform: uppercase; letter-spacing: .6px; color: var(--text2); margin: 6px 0 8px; }
+#wp-political-root .wp-vt-parties,
+#wp-political-root .wp-vt-seats { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-top: 8px; }
+#wp-political-root .wp-vt-party {
+  background: var(--s2); border: 1px solid var(--bd2); border-left: 3px solid var(--pc); border-radius: var(--r2); padding: 10px 12px;
+}
+#wp-political-root .wp-vt-party-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: .8rem; margin-bottom: 6px; }
+#wp-political-root .wp-vt-party-head i { width: 9px; height: 9px; border-radius: 50%; background: var(--pc); display: inline-block; }
+#wp-political-root .wp-vt-party-head .wp-pol-dim { font-size: .7rem; }
+#wp-political-root .wp-vt-party ul { list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: .8rem; }
+#wp-political-root .wp-vt-party li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+#wp-political-root .wp-vt-names { font-size: .8rem; line-height: 1.7; color: var(--text); }
+#wp-political-root .wp-vt-notes { list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: .84rem; font-style: italic; color: var(--text); }
+
+/* ── L'emiciclo dello scrutinio palese (votesHemicycle.js) ──
+   Seggio spento: fondo scuro e bordo del partito. Acceso: il colore del
+   voto, con un "pop" solo per chi si accende in quell'istante. Con le
+   animazioni spente (body.wp-no-motion) restano i colori, non i salti. */
+#wp-political-root .wp-vt-hemi { display: flex; flex-direction: column; gap: 10px; }
+#wp-political-root .wp-vt-hemi-status {
+  font-family: 'Playfair Display', serif; font-size: 1.05rem; color: var(--gold2); text-align: center;
+}
+#wp-political-root .wp-vt-hemi-stage { position: relative; max-width: 640px; width: 100%; margin: 0 auto; }
+#wp-political-root .wp-vt-hemi-stage svg { display: block; width: 100%; height: auto; overflow: visible; }
+#wp-political-root .wp-vt-seat {
+  fill: var(--s3); stroke: var(--pc, var(--bd3)); stroke-width: 1.6;
+  transform-box: fill-box; transform-origin: center;
+  transition: fill .45s ease, opacity .6s ease;
+}
+#wp-political-root .wp-vt-seat.lit { stroke: rgba(0, 0, 0, .25); }
+#wp-political-root .wp-vt-seat-si { fill: var(--green); }
+#wp-political-root .wp-vt-seat-no { fill: var(--red); }
+#wp-political-root .wp-vt-seat-astenuto { fill: #e3b341; }
+#wp-political-root .wp-vt-seat-nulla { fill: #8b949e; }
+#wp-political-root .wp-vt-seat.pop { animation: wp-vt-pop .6s ease-out; }
+#wp-political-root .wp-vt-hemi-done .wp-vt-seat:not(.lit) { opacity: .3; }
+@keyframes wp-vt-pop {
+  0% { transform: scale(.4); }
+  55% { transform: scale(1.55); filter: brightness(1.5); }
+  100% { transform: scale(1); }
+}
+#wp-political-root .wp-vt-hemi-center {
+  position: absolute; left: 50%; bottom: 2%; transform: translateX(-50%);
+  text-align: center; pointer-events: none; width: 40%;
+}
+#wp-political-root .wp-vt-hemi-big {
+  font-family: 'Playfair Display', serif; font-weight: 700; font-size: clamp(1.4rem, 5vw, 2.4rem);
+  display: flex; justify-content: center; gap: 10px; font-variant-numeric: tabular-nums; line-height: 1;
+}
+#wp-political-root .wp-vt-hemi-big .wp-vt-c-si { color: var(--green); }
+#wp-political-root .wp-vt-hemi-big .wp-vt-c-no { color: var(--red); }
+#wp-political-root .wp-vt-hemi-big i { color: var(--text3); font-style: normal; }
+#wp-political-root .wp-vt-hemi-small { font-size: .72rem; color: var(--text2); margin-top: 4px; }
+#wp-political-root .wp-vt-hemi-legend {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; font-size: .76rem; color: var(--text2);
+}
+#wp-political-root .wp-vt-hemi-legend span { display: inline-flex; align-items: center; gap: 5px; }
+#wp-political-root .wp-vt-hemi-legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--vc); display: inline-block; }
+#wp-political-root .wp-vt-hemi-legend .wp-vt-c-assente i { background: var(--s3); border: 1px solid var(--bd3); }
+#wp-political-root .wp-vt-hemi-legend b { color: var(--text); font-variant-numeric: tabular-nums; }
+#wp-political-root .wp-vt-hemi-legend em { color: var(--text3); }
+/* Tabellone e proclamazione non occupano spazio finché non arrivano. */
+#wp-political-root .wp-vt-hemi-board { opacity: 0; max-height: 0; transition: opacity .4s, max-height .5s; }
+#wp-political-root .wp-vt-hemi-board.on { opacity: 1; max-height: 260px; }
+#wp-political-root .wp-vt-hemi-proclaim:not(.on) { max-height: 0; overflow: hidden; }
+#wp-political-root .wp-vt-hemi-board .wp-vt-board-cell { opacity: 0; transform: translateY(6px); transition: opacity .35s, transform .35s; }
+#wp-political-root .wp-vt-hemi-board .wp-vt-board-cell.on { opacity: 1; transform: none; }
+#wp-political-root .wp-vt-hemi-stamp {
+  position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%) rotate(-6deg) scale(2.2);
+  opacity: 0; pointer-events: none; background: color-mix(in srgb, var(--s1) 82%, transparent);
+  transition: opacity .25s, transform .35s cubic-bezier(.2, 1.6, .4, 1);
+}
+#wp-political-root .wp-vt-hemi-stamp.on { opacity: 1; transform: translate(-50%, -50%) rotate(-6deg) scale(1); }
+#wp-political-root .wp-vt-hemi-proclaim {
+  text-align: center; font-family: 'Playfair Display', serif; font-size: 1.15rem; color: var(--text);
+  opacity: 0; transition: opacity .5s;
+}
+#wp-political-root .wp-vt-hemi-proclaim.on { opacity: 1; }
+#wp-political-root .wp-vt-hemi-replay { align-self: center; }
+#wp-political-root .wp-vt-ballot-live { border-color: rgba(197, 150, 74, .45); }
+body.wp-no-motion #wp-political-root .wp-vt-seat.pop { animation: none; }
+body.wp-no-motion #wp-political-root .wp-vt-hemi-stamp,
+body.wp-no-motion #wp-political-root .wp-vt-hemi-board .wp-vt-board-cell { transition: none; }
+
+/* ── L'urna dello scrutinio segreto (votesUrn.js) ──
+   Tre colonne: l'urna, il tavolo dove la scheda si gira, i quattro
+   mucchi. La posizione della scheda la scrive votesUrn.js a ogni
+   fotogramma (transform): qui ci sono solo le facce e i colori. */
+#wp-political-root .wp-vt-urn { display: flex; flex-direction: column; gap: 12px; }
+#wp-political-root .wp-vt-urn-stage {
+  position: relative; display: grid; grid-template-columns: 120px 1fr minmax(240px, 1.1fr);
+  align-items: end; gap: 18px; min-height: 230px; padding: 10px 0;
+}
+#wp-political-root .wp-vt-urn-box {
+  position: relative; height: 150px; border-radius: 10px 10px 16px 16px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 22%, var(--s2)), var(--s2));
+  border: 2px solid var(--gold); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  box-shadow: inset 0 -12px 24px rgba(0, 0, 0, .25);
+}
+#wp-political-root .wp-vt-urn-box span { font-family: 'Playfair Display', serif; font-weight: 700; letter-spacing: 3px; color: var(--gold2); font-size: .9rem; }
+#wp-political-root .wp-vt-urn-slot { position: absolute; top: 14px; width: 60%; height: 6px; border-radius: 3px; background: #07090d; }
+#wp-political-root .wp-vt-urn-left { font-size: .66rem; color: var(--text2); text-align: center; padding: 0 6px; }
+#wp-political-root .wp-vt-urn-box.shake { animation: wp-vt-shake .35s ease-in-out; }
+@keyframes wp-vt-shake { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
+#wp-political-root .wp-vt-urn-desk {
+  position: relative; height: 200px; display: flex; align-items: center; justify-content: center;
+}
+#wp-political-root .wp-vt-urn-fly {
+  position: relative; z-index: 2; width: min(240px, 100%); height: 150px; perspective: 900px; will-change: transform, opacity;
+}
+#wp-political-root .wp-vt-urn-card { position: absolute; inset: 0; transform-style: preserve-3d; }
+#wp-political-root .wp-vt-urn-face {
+  position: absolute; inset: 0; border-radius: 8px; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px; text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+}
+#wp-political-root .wp-vt-urn-back {
+  transform: rotateY(180deg); color: var(--gold2);
+  background: repeating-linear-gradient(45deg, var(--s3) 0 8px, var(--s2) 8px 16px); border: 2px solid var(--gold);
+}
+#wp-political-root .wp-vt-urn-back b { font-family: 'Playfair Display', serif; font-size: 1.3rem; }
+#wp-political-root .wp-vt-urn-back span { font-size: .7rem; letter-spacing: 2px; text-transform: uppercase; }
+#wp-political-root .wp-vt-urn-front { background: #f6f1e4; color: #1b1b1b; border: 3px solid var(--vc, var(--gold)); }
+#wp-political-root .wp-vt-urn-front strong { font-family: 'Playfair Display', serif; font-size: 1.7rem; color: var(--vc); line-height: 1.1; }
+#wp-political-root .wp-vt-urn-front.wp-vt-c-nulla strong { color: #555; }
+#wp-political-root .wp-vt-urn-front.wp-vt-c-astenuto strong { color: #a87a12; }
+#wp-political-root .wp-vt-urn-front em { font-size: .8rem; color: #444; line-height: 1.35; }
+#wp-political-root .wp-vt-urn-fast {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-family: 'Playfair Display', serif; font-size: 1.3rem; color: var(--gold2); animation: wp-vt-blink 1s ease-in-out infinite;
+}
+#wp-political-root .wp-vt-urn-fast[hidden] { display: none; }
+@keyframes wp-vt-blink { 50% { opacity: .45; } }
+#wp-political-root .wp-vt-urn-count { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: .74rem; color: var(--text2); }
+#wp-political-root .wp-vt-urn-piles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; align-items: end; }
+#wp-political-root .wp-vt-urn-pile { display: flex; flex-direction: column; align-items: center; gap: 4px; transition: transform .2s; }
+#wp-political-root .wp-vt-urn-pile.bump { animation: wp-vt-bump .4s ease-out; }
+@keyframes wp-vt-bump { 40% { transform: translateY(-6px) scale(1.08); } }
+#wp-political-root .wp-vt-urn-stack { position: relative; width: 54px; height: 90px; }
+#wp-political-root .wp-vt-urn-stack i {
+  position: absolute; left: 3px; bottom: calc(var(--i) * 5px); width: 48px; height: 30px; border-radius: 3px;
+  background: #f6f1e4; border: 2px solid var(--vc); transform: rotate(var(--r)); box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+}
+#wp-political-root .wp-vt-urn-n {
+  font-family: 'Playfair Display', serif; font-size: 1.6rem; font-weight: 700; color: var(--vc); font-variant-numeric: tabular-nums; line-height: 1;
+}
+#wp-political-root .wp-vt-urn-l { font-size: .66rem; text-transform: uppercase; letter-spacing: .5px; color: var(--text2); text-align: center; }
+#wp-political-root .wp-vt-urn-meter { display: flex; flex-direction: column; gap: 4px; }
+#wp-political-root .wp-vt-urn-meter-bar { position: relative; height: 10px; border-radius: 5px; background: var(--s3); overflow: visible; }
+#wp-political-root .wp-vt-urn-meter-bar i { display: block; height: 100%; border-radius: 5px; background: var(--green); transition: width .3s; }
+#wp-political-root .wp-vt-urn-meter-bar b { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--gold2); transform: translateX(-1px); }
+#wp-political-root .wp-vt-urn-meter-l { display: flex; justify-content: space-between; font-size: .74rem; color: var(--text2); }
+#wp-political-root .wp-vt-urn-meter-l em { color: var(--green); font-style: normal; font-weight: 700; }
+#wp-political-root .wp-vt-urn-meter-l em[hidden] { display: none; }
+#wp-political-root .wp-vt-urn .wp-vt-hemi-stamp { top: 45%; }
+#wp-political-root .wp-vt-urn-done .wp-vt-urn-box { opacity: .55; }
+body.wp-no-motion #wp-political-root .wp-vt-urn-box.shake,
+body.wp-no-motion #wp-political-root .wp-vt-urn-pile.bump,
+body.wp-no-motion #wp-political-root .wp-vt-urn-fast { animation: none; }
+@media (max-width: 700px) {
+  #wp-political-root .wp-vt-urn-stage { grid-template-columns: 80px 1fr; }
+  #wp-political-root .wp-vt-urn-piles { grid-column: 1 / -1; }
+  #wp-political-root .wp-vt-urn-box { height: 110px; }
+  #wp-political-root .wp-vt-urn-desk { height: 170px; }
+}
+
+/* ── Corpo elettorale ── (il <details> prende freccia e stile da political.css) */
+#wp-political-root .wp-vt-electorate .badge-count { margin-left: 8px; }
+
+/* ── Modulo ── */
+#wp-political-root .wp-vt-form { display: flex; flex-direction: column; gap: 14px; border-color: rgba(197, 150, 74, .35); }
+#wp-political-root .wp-vt-field { display: flex; flex-direction: column; gap: 5px; font-size: .74rem; color: var(--text2); flex: 1; min-width: 160px; }
+#wp-political-root .wp-vt-field[hidden] { display: none; }
+#wp-political-root .wp-vt-field textarea { resize: vertical; line-height: 1.5; }
+#wp-political-root .wp-vt-row { display: flex; gap: 12px; flex-wrap: wrap; }
+#wp-political-root .wp-vt-fs { border: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+#wp-political-root .wp-vt-fs legend { font-size: .74rem; color: var(--text2); margin-bottom: 6px; }
+#wp-political-root .wp-vt-opt {
+  display: flex; gap: 8px; align-items: flex-start; cursor: pointer;
+  background: var(--s2); border: 1px solid var(--bd2); border-radius: var(--r2); padding: 9px 11px;
+}
+#wp-political-root .wp-vt-opt:has(input:checked) { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 9%, var(--s2)); }
+#wp-political-root .wp-vt-opt input { margin-top: 3px; accent-color: var(--gold); }
+#wp-political-root .wp-vt-opt span { display: flex; flex-direction: column; gap: 2px; }
+#wp-political-root .wp-vt-opt strong { font-size: .82rem; color: var(--text); font-weight: 600; }
+#wp-political-root .wp-vt-opt small { font-size: .72rem; color: var(--text2); line-height: 1.4; }
+#wp-political-root .wp-vt-summary {
+  font-size: .8rem; color: var(--text); background: var(--s2); border-left: 3px solid var(--gold);
+  border-radius: var(--r2); padding: 9px 12px; line-height: 1.5;
+}
+
+@media (max-width: 600px) {
+  #wp-political-root .wp-vt-choices { grid-template-columns: repeat(2, 1fr); }
+  #wp-political-root .wp-vt-board { grid-template-columns: repeat(2, 1fr); }
+  #wp-political-root .wp-vt-filters { margin-left: 0; width: 100%; }
+  #wp-political-root .wp-vt-filters select { flex: 1; min-width: 0; }
+  #wp-political-root .wp-vt-grid { grid-template-columns: 1fr; }
+  #wp-political-root .wp-vt-stamp { font-size: 1.5rem; }
+}

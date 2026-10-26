@@ -3,6 +3,7 @@ import { getProductionColor, productionInfo } from './productionHeatmap.js';
 import { COLORS, THEMES } from './config.js';
 import { flattenCoords } from './utils.js';
 import { getBlocMemberIds } from './diplomacy.js';
+import { lightenForLabel } from './gameColors.js';
 
 // WarEra+: sul tema chiaro ("mappa antica", palette seppia) i nomi
 // nazione passano a un serif d'ispirazione classica (Cinzel, caricato in
@@ -247,8 +248,15 @@ export function drawLabels() {
       // quando le etiche sono in memoria (vedi productionHeatmap.js). Con la
       // sola parte da risorse l'etichetta diceva +30 dove la mappa, la
       // legenda e il pannello dicevano +60.
-      const bonus = productionInfo(nation)?.bonus;
+      const info = productionInfo(nation);
+      const bonus = info?.bonus;
       if (typeof bonus !== 'number' || bonus <= 0) return null;
+      // WarEra+ v0.27 — la vista è la rendita al giorno: una cifra, non
+      // una percentuale (vedi productionHeatmap.js).
+      if (info.revenue) {
+        const text = bonus >= 1e3 ? (bonus / 1e3).toFixed(1) + 'K' : bonus >= 10 ? String(Math.round(bonus)) : bonus.toFixed(1);
+        return { text, color: getProductionColor(bonus) };
+      }
       // Mezzo punto in su vale la virgola (+25,5%), il tondo no (+25%).
       const text = `+${bonus % 1 ? bonus.toFixed(1) : bonus}%`;
       return { text, color: getProductionColor(bonus) };
@@ -370,13 +378,18 @@ export function drawLabels() {
         // etichetta e territorio direbbero due cose diverse.
         : ((state.builderPreview ? state.builderPreview.colorMap : state.blocColorMap).get(cId) || '#cccccc');
     }
-    else textColor = state.selectedCountryId ? '#ffffff' : (props.textColor || '#cccccc');
+    // WarEra+ v0.27: le etichette del gioco non hanno più `textColor` (solo
+    // `scheme`): il nome si colora schiarendo il colore della nazione, come
+    // la time machine. Senza, tutti i nomi diventerebbero grigi.
+    else textColor = state.selectedCountryId ? '#ffffff'
+      : (props.textColor || lightenForLabel(state.nationBaseColorMap.get(cId)) || '#cccccc');
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     const textY = startY + (cachedFlag ? flagH + 2 : 0);
-    // WarEra+ perf: shadowBlur tolto — drawLabels gira ~5-6 volte/sec per
-    // sempre (trainato dall'animazione delle navi, vedi oceanRoutes.js) e
+    // WarEra+ perf: shadowBlur tolto — drawLabels girava ~5-6 volte/sec per
+    // sempre (trainato dall'animazione delle navi, che dal 2026-10-20 non
+    // passa più da MapLibre: shipOverlay.js) e
     // shadowBlur è tra le operazioni più costose di Canvas2D (va
     // ricalcolato via software ad ogni chiamata che lo ha attivo). Lo
     // strokeText nero sottostante da solo basta per la leggibilità — era un

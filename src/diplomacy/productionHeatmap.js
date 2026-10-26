@@ -29,6 +29,23 @@
    dal vivo: 1 tipo/1 regione = 5%, 1/2 = 5,5%, 1/3 = 5,75%, 4 tipi/6
    regioni = 21%). La formula esatta non è documentata e non serve: qui si
    mostra il numero che dà il gioco, mai uno ricalcolato.
+
+   ── DALLA v0.27: RENDITA GIORNALIERA ───────────────────────────────
+   Con l'aggiornamento del 2026-10-26 il bonus non esiste più: via la
+   specializzazione, giacimenti spenti, e le risorse strategiche invece
+   di un bonus pagano una RENDITA (lo sviluppo della nazione d'origine).
+   Spariscono `strategicResources.bonuses` e la classifica
+   `countryProductionBonus`; arriva `income` su nazioni e regioni:
+   { development, strategicResourcesBonus, employeeIncomeTax,
+     managerIncomeTax, govType, total }.
+   ⚠️ Quei numeri sono ORARI: su apidev lo sviluppo dell'Egitto è 12,11 e
+   `income.development` 0,5046 = 12,11 / 24, e la rendita di una risorsa
+   (che le note dicono "giornaliera, pari allo sviluppo") torna allo
+   stesso modo. Qui si moltiplicano per 24 e si mostra il giorno.
+   La vista resta la stessa (stesso bottone, stessi agganci in map.js,
+   labels.js, ui.js, viewOverview.js) ma racconta la rendita: decide il
+   DATO (`income` presente), non la data, così lo stesso codice gira prima
+   e dopo il rilascio. Vedi isRevenueEra().
    ══════════════════════════════════════════════════════════════ */
 
 import { COLORS } from './config.js';
@@ -55,9 +72,51 @@ export const RESOURCE_TYPES = [
 export const SCALE_MAX = 30;
 export const SCALE_MAX_WITH_ETHICS = 60;
 
-/** Il tetto in vigore adesso: sale a 60 appena le etiche sono in memoria. */
+/** Il tetto in vigore adesso: sale a 60 appena le etiche sono in memoria.
+ *  Nella v0.27 è la rendita più alta del mondo (vedi revenueMax). */
 export function scaleMax() {
+  if (isRevenueEra()) return revenueMax();
   return ethicStats().loaded ? SCALE_MAX_WITH_ETHICS : SCALE_MAX;
+}
+
+/** v0.27: le nazioni portano `income`. Basta guardarne una — arrivano
+ *  tutte dalla stessa risposta. Costa niente: la chiamano le etichette a
+ *  ogni frame. */
+export function isRevenueEra() {
+  for (const n of state.nationMap.values()) return !!n?.income;
+  return false;
+}
+
+/** Ore → giorno, arrotondato al centesimo. Vedi "i numeri sono ORARI". */
+const perGiorno = (v) => (Number.isFinite(v) ? Math.round(v * 24 * 100) / 100 : 0);
+
+/** Le voci della rendita giornaliera di una nazione o di una regione. */
+export function revenueOf(obj) {
+  const inc = obj?.income;
+  if (!inc) return null;
+  return {
+    total: perGiorno(inc.total),
+    development: perGiorno(inc.development),
+    strategic: perGiorno(inc.strategicResourcesBonus),
+    employeeTax: perGiorno(inc.employeeIncomeTax),
+    managerTax: perGiorno(inc.managerIncomeTax),
+    govType: perGiorno(inc.govType),
+  };
+}
+
+/* Il tetto della scala nella v0.27. Non fisso come i 30/60 del bonus: la
+   rendita dipende dallo sviluppo e dalle aziende, e prima del rilascio non
+   c'è modo di sapere dove si fermi. Quindi la nazione più ricca di adesso,
+   memoizzata sul primo oggetto nazione (refreshData li sostituisce tutti:
+   cambia l'oggetto, si ricalcola). */
+let _maxCache = { key: null, max: 1 };
+function revenueMax() {
+  const first = state.nationMap.values().next().value;
+  if (_maxCache.key === first) return _maxCache.max;
+  let max = 0;
+  for (const n of state.nationMap.values()) max = Math.max(max, revenueOf(n)?.total || 0);
+  _maxCache = { key: first, max: max || 1 };
+  return _maxCache.max;
 }
 
 /* ⚠️ productionInfo è MEMOIZZATA, e non per gusto dell'ottimizzazione: la
@@ -100,6 +159,7 @@ export function productionInfo(nation) {
 }
 
 function _computeProductionInfo(nation) {
+  if (nation?.income) return _computeRevenueInfo(nation);
   const sr = nation?.strategicResources;
   const strategic = sr?.bonuses?.productionPercent ?? nation?.rankings?.countryProductionBonus?.value ?? 0;
   const ethic = ethicBonusOf(nation?._id);
@@ -125,6 +185,44 @@ function _computeProductionInfo(nation) {
   };
 }
 
+/* v0.27 — stessa forma di productionInfo, così map.js, labels.js e il
+   riepilogo non cambiano strada: `bonus` resta il VALORE DELLA VISTA, che
+   qui è la rendita totale al giorno (non una percentuale). Le voci stanno
+   in `revenue`; le risorse tenute in `types`, perché ora sono loro a
+   pagare. Nessuna etica: i partiti non ne hanno più. */
+function _computeRevenueInfo(nation) {
+  const revenue = revenueOf(nation);
+  if (!(revenue?.total > 0)) return null;
+  const res = nation?.strategicResources?.resources || {};
+  const types = RESOURCE_TYPES
+    .map(({ key, icon }) => ({ key, icon, regions: Array.isArray(res[key]) ? res[key].length : 0 }))
+    .filter(r => r.regions > 0);
+  return {
+    bonus: revenue.total,
+    revenue,
+    strategic: 0,
+    ethic: 0,
+    specializedItem: null,
+    dev: null,
+    rank: null,
+    regions: types.reduce((s, r) => s + r.regions, 0),
+    types,
+  };
+}
+
+/** Le regioni che rendono di più, per il riepilogo: la vista del gioco
+ *  ("Daily revenue") è per regione, e la domanda dopo "quale nazione"
+ *  è "dove". */
+export function topRevenueRegions(limit = 10) {
+  const rows = [];
+  for (const [id, region] of Object.entries(state.regionData || {})) {
+    const r = revenueOf(region);
+    if (r?.total > 0) rows.push({ id, region, ...r });
+  }
+  rows.sort((a, b) => b.total - a.total);
+  return rows.slice(0, limit);
+}
+
 /** Verde spento (poco) → menta acceso (molto). Tavolozza tenuta distinta
  *  dalle altre viste sequenziali: popolazione è rosa→giallo, danno
  *  settimanale blu→rosso. */
@@ -133,7 +231,11 @@ export function getProductionColor(bonus, max = scaleMax()) {
   // 15, 20, 25, 30, e col bonus etico 35, 50, 60) e si distinguono già; con
   // la radice quadrata il 5% — che sono due terzi delle nazioni dotate —
   // saliva a mezza rampa e l'Europa diventava tutta verde acceso.
-  const u = Math.max(0, Math.min(1, bonus / max));
+  // La rendita della v0.27 invece è continua e larghissima (dalle
+  // nazioni vuote alle grandi c'è un fattore cento): lì la radice serve,
+  // o resterebbe acceso solo il primo.
+  const r = Math.max(0, Math.min(1, bonus / max));
+  const u = isRevenueEra() ? Math.sqrt(r) : r;
   return `rgb(${Math.round(46 + (79 - 46) * u)},${Math.round(74 + (240 - 74) * u)},${Math.round(64 + (168 - 64) * u)})`;
 }
 
@@ -173,6 +275,8 @@ export function productionRankedList(limit = 20) {
 export function getProductionStats() {
   let withBonus = 0, without = 0, best = 0, sum = 0, withEthic = 0, ethicSum = 0;
   const byResource = Object.fromEntries(RESOURCE_TYPES.map(r => [r.key, 0]));
+  // v0.27: di cosa è fatta la rendita del mondo intero.
+  const parts = { development: 0, strategic: 0, employeeTax: 0, managerTax: 0, govType: 0 };
 
   for (const [, nation] of state.nationMap) {
     const info = productionInfo(nation);
@@ -182,9 +286,13 @@ export function getProductionStats() {
     if (info.ethic > 0) { withEthic++; ethicSum += info.ethic; }
     if (info.bonus > best) best = info.bonus;
     for (const t of info.types) byResource[t.key] += t.regions;
+    if (info.revenue) for (const k of Object.keys(parts)) parts[k] += info.revenue[k] || 0;
   }
 
   return {
+    revenue: isRevenueEra(),
+    total: sum,
+    parts,
     withBonus, without, best,
     avg: withBonus ? sum / withBonus : 0,
     // Quante nazioni devono una parte del totale all'etica del partito al
@@ -199,7 +307,10 @@ export function getProductionStats() {
 
 export function productionLegendGradient() {
   const max = scaleMax();
-  const stops = [0, 0.25, 0.5, 0.75, 1].map(f => getProductionColor(f * max, max));
+  // Con la radice della v0.27 i punti della legenda vanno presi al
+  // quadrato, o la barra non sarebbe la stessa rampa della mappa.
+  const quadra = isRevenueEra();
+  const stops = [0, 0.25, 0.5, 0.75, 1].map(f => getProductionColor((quadra ? f * f : f) * max, max));
   return `linear-gradient(to right, ${stops.join(', ')})`;
 }
 

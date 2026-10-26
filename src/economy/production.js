@@ -72,15 +72,23 @@ const COLONNE = [
   { key: 'code', label: 'resource', testo: true },
   { key: 'companies', label: 'companies' },
   { key: 'withWorkers', label: 'withWorkers' },
-  { key: 'workers', label: 'workers' },
+  { key: 'workers', label: 'workers', dip: true },
   { key: 'wages', label: 'wagesDay' },
   { key: 'tax', label: 'taxDay' },
 ];
 
+// WarEra+ v0.27 — il censimento non sa più quanti sono i dipendenti
+// (`workersKnown: false`, vedi server/companyCensus.js): la colonna va
+// via, e "con dipendenti" vuol dire "i cui dipendenti hanno prodotto ieri".
+const senzaDip = () => _census?.coverage?.workersKnown === false;
+const colonne = () => COLONNE.filter(c => !c.dip || !senzaDip());
+const cellaDip = (v) => (senzaDip() ? '' : `<span class="wp-ecn-num">${escapeHtml(fmtFull(v))}</span>`);
+const etichettaConDip = () => plusT(senzaDip() ? 'withWorkersV27' : 'withWorkers');
+
 function testataHtml() {
-  return `<div class="wp-ecn-pthead">${COLONNE.map(c => `
+  return `<div class="wp-ecn-pthead">${colonne().map(c => `
     <button type="button" class="wp-ecn-pth${c.testo ? '' : ' wp-ecn-num'}${_sort.key === c.key ? ' active' : ''}"
-            data-sort="${c.key}">${escapeHtml(plusT(c.label))}${_sort.key === c.key ? (_sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button>`).join('')}
+            data-sort="${c.key}">${escapeHtml(c.key === 'withWorkers' ? etichettaConDip() : plusT(c.label))}${_sort.key === c.key ? (_sort.dir > 0 ? ' ▲' : ' ▼') : ''}</button>`).join('')}
   </div>`;
 }
 
@@ -96,19 +104,19 @@ function elencoHtml() {
       <span class="wp-ecn-code">${escapeHtml(r.code)}</span>
       <span class="wp-ecn-num">${escapeHtml(fmtFull(r.companies))}</span>
       <span class="wp-ecn-num">${escapeHtml(fmtFull(r.withWorkers))}</span>
-      <span class="wp-ecn-num">${escapeHtml(fmtFull(r.workers))}</span>
+      ${cellaDip(r.workers)}
       <span class="wp-ecn-num">${escapeHtml(oro(r.wages))}</span>
       <span class="wp-ecn-num wp-ecn-price">${escapeHtml(oro(r.tax))}</span>
     </div>`;
   return `${scrollHintHtml(560)}
-    <div class="wp-ecn-ptable">
+    <div class="wp-ecn-ptable${senzaDip() ? ' wp-ecn-nodip' : ''}">
       ${testataHtml()}
       ${list.map(riga).join('')}
       <div class="wp-ecn-prow wp-ecn-ptotal">
         <span>${escapeHtml(plusT('total'))}</span>
         <span class="wp-ecn-num">${escapeHtml(fmtFull(tot.companies))}</span>
         <span class="wp-ecn-num">${escapeHtml(fmtFull(tot.withWorkers))}</span>
-        <span class="wp-ecn-num">${escapeHtml(fmtFull(tot.workers))}</span>
+        ${cellaDip(tot.workers)}
         <span class="wp-ecn-num">${escapeHtml(oro(tot.wages))}</span>
         <span class="wp-ecn-num wp-ecn-price">${escapeHtml(oro(tot.tax))}</span>
       </div>
@@ -140,11 +148,11 @@ function dettaglioHtml(code) {
   const tabellaPaesi = !paesi ? `<div class="wp-ecn-loading">${escapeHtml(plusT('loading'))}</div>`
     : !paesi.length ? `<p class="wp-ecn-note">${escapeHtml(plusT('noCountries'))}</p>`
       : `
-      <div class="wp-ecn-ptable wp-ecn-pcountries">
+      <div class="wp-ecn-ptable wp-ecn-pcountries${senzaDip() ? ' wp-ecn-nodip' : ''}">
         <div class="wp-ecn-pthead">
           <span class="wp-ecn-pth">${escapeHtml(plusT('country'))}</span>
           <span class="wp-ecn-pth wp-ecn-num">${escapeHtml(plusT('companies'))}</span>
-          <span class="wp-ecn-pth wp-ecn-num">${escapeHtml(plusT('workers'))}</span>
+          ${senzaDip() ? '' : `<span class="wp-ecn-pth wp-ecn-num">${escapeHtml(plusT('workers'))}</span>`}
           <span class="wp-ecn-pth wp-ecn-num">${escapeHtml(plusT('rate'))}</span>
           <span class="wp-ecn-pth wp-ecn-num">${escapeHtml(plusT('taxDay'))}</span>
           <span class="wp-ecn-pth wp-ecn-num">${escapeHtml(plusT('share'))}</span>
@@ -153,7 +161,7 @@ function dettaglioHtml(code) {
           <div class="wp-ecn-prow wp-ecn-prow-static${cid === _country ? ' wp-ecn-prow-mine' : ''}">
             <span class="wp-ecn-pcountry">${flagImg(cid, 'wp-ecn-flag')}<span>${escapeHtml(countryName(cid))}</span></span>
             <span class="wp-ecn-num">${escapeHtml(fmtFull(c))}</span>
-            <span class="wp-ecn-num">${escapeHtml(fmtFull(w))}</span>
+            ${cellaDip(w)}
             <span class="wp-ecn-num">${rate == null ? '—' : `${escapeHtml(fmtFull(rate))}%`}</span>
             <span class="wp-ecn-num wp-ecn-price">${escapeHtml(oro(t))}</span>
             <span class="wp-ecn-num">${totTasse > 0 && t > 0
@@ -170,8 +178,8 @@ function dettaglioHtml(code) {
       </header>
       <div class="wp-ecn-book">
         <span><em>${escapeHtml(plusT('companies'))}</em> ${escapeHtml(fmtFull(v[0]))}</span>
-        <span><em>${escapeHtml(plusT('withWorkers'))}</em> ${escapeHtml(fmtFull(v[1]))}</span>
-        <span><em>${escapeHtml(plusT('workers'))}</em> ${escapeHtml(fmtFull(v[2]))}</span>
+        <span><em>${escapeHtml(etichettaConDip())}</em> ${escapeHtml(fmtFull(v[1]))}</span>
+        ${senzaDip() ? '' : `<span><em>${escapeHtml(plusT('workers'))}</em> ${escapeHtml(fmtFull(v[2]))}</span>`}
         <span><em>${escapeHtml(plusT('wagesDay'))}</em> ${escapeHtml(oro(v[3]))}</span>
         <span><em>${escapeHtml(plusT('taxDay'))}</em> ${escapeHtml(oro(v[4]))}</span>
       </div>
@@ -190,12 +198,12 @@ function noteHtml() {
   if (!c?.available) return '';
   const cov = c.coverage || {};
   const parti = [
-    plusT('noteActive', {
+    plusT(senzaDip() ? 'noteActiveV27' : 'noteActive', {
       owners: fmtFull(cov.owners), companies: fmtFull(cov.companies), workers: fmtFull(cov.workers),
-      day: c.day ? fmtDay(c.day) : '—',
+      withWorkers: fmtFull(cov.withWorkers), day: c.day ? fmtDay(c.day) : '—',
     }),
     plusT('noteAvg', { n: c.averageDays || 0 }),
-    plusT('noteTax'),
+    plusT(senzaDip() ? 'noteTaxV27' : 'noteTax'),
   ];
   // I giorni ricostruiti a ritroso esistono solo se il primo censimento
   // ha riempito un mese intero: si dichiarano finché sono nella finestra.

@@ -43,6 +43,9 @@ import { syncBack } from '../app/backNav.js';
 import { trackEvent } from '../shared/analytics.js';
 import { animationsOn } from '../shared/motion.js';
 import { plyT } from './i18n.js';
+// Il versus (righe, conteggio dell'intro, stile) è condiviso con gli altri
+// confronti 1 vs 1: vedi src/shared/versus.js.
+import { vsRow, countUpScore as countUpIn } from '../shared/versus.js';
 import {
   LEADERBOARDS, fetchPlayer, searchPlayers, fetchEquipment, fetchWealthHistory,
   fetchLeaderboard, fetchNames, fetchPlayerBattles, fetchCompanies, fetchWorkStats,
@@ -777,7 +780,7 @@ function render() {
     if (intro) _introUntil = Date.now() + INTRO_MS;
   }
   _root.innerHTML = `<div class="wp-ply">${_pid && _cmpId ? compareHtml(intro) : _pid ? playerHtml() : homeHtml()}</div>`;
-  if (intro) countUpScore();
+  if (intro) countUpIn(_root);
   // Indietro del telefono/browser: dal confronto torna alla scheda, dalla
   // scheda alla partenza; l'URL porta ?player= (e ?vs=) finché sono aperti.
   syncBack('players/detail', !!_pid, () => { _pid = null; _cmpId = null; render(); }, () => !!_pid, { player: _pid || undefined });
@@ -993,30 +996,9 @@ export async function openCompare(id, { via = 'search' } = {}) {
 
 const CMP_GEAR_SUM = (it) => it?.skills ? Object.values(it.skills).reduce((t, v) => t + (Number(v) || 0), 0) : 0;
 
-/** Una voce del duello. `win` = 1 (A), 2 (B), 0 (pari o non confrontabile). */
-function duelRow(label, va, vb, { fmt = (v) => fmtFull(v), subA = '', subB = '', lower = false } = {}) {
-  const na = Number(va), nb = Number(vb);
-  const ok = Number.isFinite(na) && Number.isFinite(nb);
-  let win = 0;
-  if (ok && na !== nb) win = (na > nb) !== lower ? 1 : 2;
-  // La barra: quota di A sul totale. Con valori negativi o tutti a zero
-  // (succede: punti eco a 0 per entrambi) metà e metà.
-  const tot = ok && na >= 0 && nb >= 0 ? na + nb : 0;
-  const pa = tot > 0 ? Math.max(4, Math.min(96, (na / tot) * 100)) : 50;
-  const val = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? '—' : escapeHtml(fmt(v)));
-  return {
-    win,
-    html: `
-    <div class="wp-vs-row${win === 1 ? ' wp-vs-wa' : win === 2 ? ' wp-vs-wb' : ''}">
-      <div class="wp-vs-val wp-vs-val-a"><b>${val(va)}</b>${subA ? `<small>${escapeHtml(subA)}</small>` : ''}</div>
-      <div class="wp-vs-mid">
-        <span class="wp-vs-label">${escapeHtml(label)}</span>
-        <div class="wp-vs-bar"><i class="wp-vs-bar-a" style="width:${pa.toFixed(1)}%"></i><i class="wp-vs-bar-b" style="width:${(100 - pa).toFixed(1)}%"></i></div>
-      </div>
-      <div class="wp-vs-val wp-vs-val-b"><b>${val(vb)}</b>${subB ? `<small>${escapeHtml(subB)}</small>` : ''}</div>
-    </div>`,
-  };
-}
+/** Una voce del duello: quella condivisa, coi numeri interi in formato
+ *  locale di serie come prima. */
+const duelRow = (label, va, vb, opts = {}) => vsRow(label, va, vb, { fmt: (v) => fmtFull(v), ...opts });
 
 /* Radar delle undici abilità (guerra in alto, economia in basso), SVG a
    mano. Scala sul livello massimo dei due (almeno 10): un giocatore
@@ -1041,26 +1023,19 @@ function radarSvg(a, b) {
     return `<text class="wp-vs-rlabel${war ? '' : ' wp-vs-rlabel-eco'}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="middle">${escapeHtml(plyT(`sk_${k}`))}<title>${escapeHtml(`${plyT(`sk_${k}`)}: ${lv(a, k)} – ${lv(b, k)}`)}</title></text>`;
   }).join('');
   const dots = (p, cls) => keys.map((k, i) => { const [x, y] = pt(i, lv(p, k) / max); return `<circle class="${cls}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3"/>`; }).join('');
+  // WarEra+ (2026-10-22): esplorabile — uno spicchio invisibile per abilità,
+  // dal centro al bordo: passandoci sopra, i due livelli a confronto.
+  const sectors = keys.map((k, i) => {
+    const pts = [[C, C], pt(i - 0.5, 1.12), pt(i, 1.12), pt(i + 0.5, 1.12)].map(p => p.map(n => n.toFixed(1)).join(',')).join(' ');
+    return `<polygon class="wp-tip-hit" points="${pts}"${tipAttr(plyT(`sk_${k}`), `${a.username}\t${lv(a, k)}`, `${b.username}\t${lv(b, k)}`)}/>`;
+  }).join('');
   return `<svg class="wp-vs-radar" viewBox="-70 -24 ${S + 140} ${S + 48}" role="img" aria-label="${escapeHtml(plyT('cmpSkills'))}">
     ${grid}${spokes}
     <polygon class="wp-vs-rpoly-b" points="${poly(b)}"/>
     <polygon class="wp-vs-rpoly-a" points="${poly(a)}"/>
-    ${dots(b, 'wp-vs-rdot-b')}${dots(a, 'wp-vs-rdot-a')}
+    ${dots(b, 'wp-vs-rdot-b')}${dots(a, 'wp-vs-rdot-a')}${sectors}
     ${labels}
   </svg>`;
-}
-
-/** Il punteggio dell'intro conta da 0 al valore vero, dopo lo schianto
- *  del VS (stesso ritardo di wp-vs-pop in players.css). */
-function countUpScore() {
-  const els = [..._root.querySelectorAll('.wp-vs-hero [data-to]')];
-  const t0 = performance.now() + 950, dur = 700;
-  const step = (now) => {
-    const k = Math.max(0, Math.min(1, (now - t0) / dur));
-    els.forEach(el => { if (el.isConnected) el.textContent = String(Math.round(Number(el.dataset.to) * (1 - (1 - k) ** 3))); });
-    if (k < 1 && els.some(el => el.isConnected)) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
 }
 
 function compareHtml(intro = false) {
@@ -1117,7 +1092,7 @@ function compareHtml(intro = false) {
         <span class="wp-vs-lv">${escapeHtml(plyT('level'))} ${escapeHtml(p.leveling?.level ?? '—')}</span>
         <span class="wp-ply-ps wp-ply-ps-${ps.mode}">${escapeHtml(plyT(`style_${ps.mode}`))}</span>
       </div>
-      ${p.createdAt ? `<small class="wp-ply-dim">${escapeHtml(plyT('cmpSince', { d: fmtDate(p.createdAt) }))}</small>` : ''}
+      ${p.createdAt ? `<small class="wp-vs-sub">${escapeHtml(plyT('cmpSince', { d: fmtDate(p.createdAt) }))}</small>` : ''}
     </div>`;
 
   const gearLoading = _cmp.equip === undefined || _cmpEquipA === undefined;
@@ -1153,7 +1128,7 @@ function compareHtml(intro = false) {
             ? `<b class="wp-vs-sa" data-to="${winsA}">0</b><span>–</span><b class="wp-vs-sb" data-to="${winsB}">0</b>`
             : `<b class="wp-vs-sa">${winsA}</b><span>–</span><b class="wp-vs-sb">${winsB}</b>`}</div>
           <p class="wp-vs-verdict">${escapeHtml(verdict)}</p>
-          <button type="button" class="wp-ply-chip" id="wp-ply-cmp-swap">⇄ ${escapeHtml(plyT('cmpSwap'))}</button>
+          <button type="button" class="wp-vs-chip" id="wp-ply-cmp-swap">⇄ ${escapeHtml(plyT('cmpSwap'))}</button>
         </div>
         ${fighter(b, psB, 'b')}
       </div>

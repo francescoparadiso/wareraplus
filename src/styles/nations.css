@@ -70,9 +70,13 @@
 .wp-nat-count { font-size: 12px; color: var(--wp-ov-text-dim, #8b949e); }
 
 /* ── Panoramica: tabella delle nazioni ─────────────────────── */
-.wp-nat-table-wrap { overflow-x: auto; }
+/* WarEra+ — la tabella scorre dentro il suo riquadro, in verticale e in
+   orizzontale: così la barra laterale sta sempre in vista in fondo al
+   riquadro (prima era in fondo all'elenco intero) e l'intestazione sticky
+   resta ferma davvero, perché ora ha uno scroll container che si muove. */
+.wp-nat-table-wrap { overflow: auto; max-height: max(320px, calc(100dvh - 250px)); }
 .wp-nat-table {
-  --wp-nat-cols: minmax(170px, 1.4fr) repeat(14, minmax(72px, .75fr));
+  --wp-nat-cols: minmax(170px, 1.4fr) repeat(15, minmax(72px, .75fr));
   min-width: 1180px;
 }
 .wp-nat-thead, .wp-nat-row {
@@ -177,87 +181,8 @@ body.light-theme .wp-nat-crow > :first-child {
   color: #f85149; font-size: 12.5px; font-weight: 600; cursor: pointer;
 }
 
-.wp-nat-vs { list-style: none; margin: 0 0 22px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.wp-nat-vs-row {
-  display: grid;
-  grid-template-columns: minmax(90px, 130px) minmax(60px, 84px) 1fr minmax(60px, 84px);
-  align-items: center; gap: 10px;
-  font-size: 12.5px;
-}
-.wp-nat-vs-label { color: var(--wp-ov-text-dim, #8b949e); text-transform: uppercase; font-size: 10px; letter-spacing: .05em; }
-.wp-nat-vs-a { text-align: right; font-weight: 700; color: #58a6ff; font-variant-numeric: tabular-nums; }
-.wp-nat-vs-b { font-weight: 700; color: #f0883e; font-variant-numeric: tabular-nums; }
-.wp-nat-vs-track { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, .06); }
-.wp-nat-vs-fill-a { background: #58a6ff; }
-.wp-nat-vs-fill-b { background: #f0883e; }
-
-/* WarEra+ — chi vince la riga (vedi nationCompare.js): il vincitore in
-   grassetto col vantaggio, il perdente spento, le righe neutre in corsivo.
-   Stesso linguaggio del Faction 1 vs 2 delle alleanze. */
-/* Colonne dei valori più larghe per far stare il vantaggio accanto al
-   numero. Solo sopra i 640px: sotto la riga va in colonna (regola del
-   telefono più in alto nel file), e questa, venendo dopo, la batterebbe. */
-@media (min-width: 641px) {
-  .wp-nat-vs-row { grid-template-columns: minmax(96px, 150px) minmax(80px, 128px) 1fr minmax(80px, 128px); }
-}
-.wp-nat-vs-win-a .wp-nat-vs-a,
-.wp-nat-vs-win-b .wp-nat-vs-b { font-size: 13.5px; font-weight: 800; }
-.wp-nat-vs-win-a .wp-nat-vs-b,
-.wp-nat-vs-win-b .wp-nat-vs-a { opacity: .45; font-weight: 600; }
-.wp-nat-vs-win-a .wp-nat-vs-fill-b,
-.wp-nat-vs-win-b .wp-nat-vs-fill-a { opacity: .35; }
-.wp-nat-vs-win-a .wp-nat-vs-label { color: #58a6ff; }
-.wp-nat-vs-win-b .wp-nat-vs-label { color: #f0883e; }
-.wp-nat-vs-neutral .wp-nat-vs-label { font-style: italic; }
-.wp-nat-vs-neutral .wp-nat-vs-track { opacity: .45; }
-.wp-nat-vs-adv {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 700;
-  vertical-align: 1px;
-}
-.wp-nat-vs-win-a .wp-nat-vs-adv { background: rgba(88, 166, 255, .18); color: #79b8ff; }
-.wp-nat-vs-win-b .wp-nat-vs-adv { background: rgba(240, 136, 62, .18); color: #ffa657; }
-.wp-nat-vs-lower { text-transform: none; letter-spacing: 0; opacity: .8; }
-.wp-nat-vs-group {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--wp-ov-border, #30363d);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--wp-ov-text, #e6edf3);
-}
-.wp-nat-vs-note { font-size: 11px; color: var(--wp-ov-text-dim, #8b949e); text-align: center; margin: 0 0 14px; }
-.wp-nat-score {
-  display: grid;
-  grid-template-columns: 1fr minmax(120px, 1.3fr) 1fr;
-  gap: 14px;
-  align-items: center;
-  margin: 4px 0 6px;
-}
-.wp-nat-score-side { text-align: center; opacity: .7; min-width: 0; }
-.wp-nat-score-side.lead { opacity: 1; }
-.wp-nat-score-n { font-size: 34px; font-weight: 800; line-height: 1; }
-.wp-nat-score-a .wp-nat-score-n { color: #58a6ff; }
-.wp-nat-score-b .wp-nat-score-n { color: #f0883e; }
-.wp-nat-score-side.lead .wp-nat-score-n::after { content: ' 👑'; font-size: 18px; }
-.wp-nat-score-name { font-weight: 700; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wp-nat-score-sub { font-size: 11px; color: var(--wp-ov-text-dim, #8b949e); }
-.wp-nat-score-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, .08); }
-.wp-nat-score-bar .a { background: #58a6ff; }
-.wp-nat-score-bar .b { background: #f0883e; }
-.wp-nat-score-bar .pari { background: #6e7681; }
-.wp-nat-score-even { text-align: center; font-size: 11px; color: var(--wp-ov-text-dim, #8b949e); margin-top: 4px; }
-body.light-theme .wp-nat-vs-group { color: #1f2328; }
-@media (max-width: 640px) {
-  .wp-nat-score { grid-template-columns: 1fr 1fr; gap: 10px; }
-  .wp-nat-score-mid { grid-column: 1 / -1; order: 3; }
-  .wp-nat-score-n { font-size: 28px; }
-}
+/* Il confronto 1 vs 2 (barre, tabellone, chi vince) è disegnato dal versus
+   comune, src/styles/versus.css: qui restano solo selezione e chip. */
 
 /* Due elenchi affiancati, uno per schieramento (vedi nationCompare.js:
    erano un elenco solo a selezione ciclica, che mandava in A anche la
@@ -510,8 +435,6 @@ body.light-theme .wp-nat-ccard-stats { border-top-color: #e3e7ee; }
 
 @media (max-width: 640px) {
   .wp-nat-citizen-grid { grid-template-columns: 1fr; }
-  .wp-nat-vs-row { grid-template-columns: 1fr; gap: 3px; }
-  .wp-nat-vs-a, .wp-nat-vs-b { text-align: left; }
 }
 
 /* ── Livelli × stile di gioco (src/nations/levelPlaystyle.js) ── */
@@ -782,7 +705,7 @@ body.light-theme .wp-nat-lab-bar > span { background: #9c6b1f; }
    a parità di specificità vince la regola che viene dopo, e scritto più
    in alto questo blocco perdeva contro le regole base. */
 @media (max-width: 560px) {
-  .wp-nat-table { --wp-nat-cols: minmax(118px, 1.2fr) repeat(14, minmax(68px, .75fr)); }
+  .wp-nat-table { --wp-nat-cols: minmax(118px, 1.2fr) repeat(15, minmax(68px, .75fr)); }
   .wp-nat-ctable { --wp-nat-ccols: minmax(118px, 1.3fr) 48px 40px 56px 86px repeat(5, minmax(70px, .8fr)); }
   .wp-nat-th, .wp-nat-cth { min-height: 32px; }
   .wp-nat-tab { min-height: 36px; }

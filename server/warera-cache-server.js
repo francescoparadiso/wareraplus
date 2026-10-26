@@ -133,6 +133,14 @@ const {
   readBattleArchive, readWarExpenses, readArchiveStatus,
   BOOT_TZ: BOOT_ARCHIVE_TZ,
 } = require('./battleArchive');
+// WarEra+ danni delle unita' giorno per giorno, sommati battaglia per
+// battaglia dalla classifica per unita': lo storico che il 1 vs 1 delle
+// unita' disegna. Vive accanto all'archivio battaglie e ne legge il file,
+// senza toccarlo. Vedi server/muBattleDamage.js.
+const {
+  initMuBattleDamage, pollMuBattleDamage, pollMuBattleDamageBackfill,
+  readMuDamageHistory, muBattleDamageStatus, MU_DAMAGE_TZ,
+} = require('./muBattleDamage');
 // WarEra+ finanziamenti fra nazioni: chi versa nel tesoro di chi. Modulo a
 // se' come i due sopra. ⚠️ niente bootstrap, e non e' una dimenticanza:
 // l'API tiene solo ~3 giorni di bonifici, quindi i 90 giorni si ACCUMULANO
@@ -216,6 +224,12 @@ const {
 const {
   initCompanyCensus, runCompanyCensus, companyCensusDovuto, readCompanyCensus, statoCompanyCensus,
 } = require('./companyCensus');
+// WarEra+ tornei: tabellone e forza delle squadre (danno settimanale dei
+// loro iscritti) gia' calcolata, per non far scaricare a ogni browser la
+// classifica settimanale intera. Vedi il blocco in testa a server/tournament.js.
+const {
+  initTournament, pollTournament, snapshotWeekly, readTournament, readTournamentTeam, statoTournament,
+} = require('./tournament');
 
 const app = express();
 const PORT = 3001;
@@ -245,12 +259,11 @@ function privilegedFetch(url) {
 }
 // WarEra+: "crediti" statici del tool (userId fisso, sempre lo stesso) —
 // prima ognuno faceva la sua chiamata separata al Worker da OGNI browser
-// (src/app/authorPill.js, src/eco/main.js:enrichCreditCard). Generalizzato
+// (src/app/authorPill.js, e fino alla v0.27 la card di ArgusIA nell'Ottimizzatore). Generalizzato
 // qui in un'unica mappa: aggiungere un futuro terzo credito significa solo
 // aggiungere una riga sotto, nessun'altra modifica al server.
 const CREDIT_PROFILES = {
   author: '69d2ed249f38d300d59a2af1', // frappa10 — pill principale (Ko-fi)
-  argus:  '69cc14d4efc3f3f4291e93a9', // ArgusIA — credito Ottimizzatore industriale
 };
 
 app.use(cors({
@@ -406,6 +419,13 @@ initBattleArchive({
   readCache, writeCache,
 });
 
+// Danni per unita': classifiche pubbliche (api6, niente chiave), e la rotta
+// legge con readCacheShared come le altre.
+initMuBattleDamage({
+  trpcBatch: (...args) => trpcBatch(...args),
+  readCache, readCacheShared, writeCache,
+});
+
 // Prezzi: gli bastano trpcBatch (la procedura e' pubblica, niente chiave)
 // e i due attrezzi della cache.
 initPriceHistory({
@@ -415,6 +435,11 @@ initPriceHistory({
 
 // La giornata storica: solo cache, nessuna chiamata.
 initDayHistory({ readCache, writeCache });
+
+// Tornei: richieste pubbliche. In cache le fotografie della classifica
+// settimanale (weekly-snaps/), il danno delle partite finite e il registro
+// delle previsioni (vedi server/tournament.js).
+initTournament({ trpcBatch: (...args) => trpcBatch(...args), readCacheShared, readCache, writeCache, cacheDir: CACHE_DIR });
 
 // I trasferimenti: solo cache. La fotografia gliela passa pollCitizens.
 initCitizenMoves({ readCache, writeCache });
@@ -899,7 +924,8 @@ const MU_USER_LOOKUP_BUDGET = 20000;
 // ha ricchezza mediana 40.070 contro 25.560 (danni e ricchezza non entrano
 // nel calcolo, sono due misure indipendenti).
 const WAR_SKILLS = ['attack', 'criticalChance', 'criticalDamages', 'armor', 'precision', 'dodge', 'lootChance'];
-const ECO_SKILLS = ['companies', 'entrepreneurship', 'production', 'management'];
+// v0.27: Leadership prende il posto di Imprenditoria (vedi src/mu/playstyle.js).
+const ECO_SKILLS = ['companies', 'entrepreneurship', 'leadership', 'production', 'management'];
 const skillCost = n => (n * (n + 1)) / 2;
 
 /** 'w' | 'e' | 'm' | 'u' — una lettera sola perché finisce in 16k voci di
@@ -2482,6 +2508,12 @@ cron.schedule('16,36,56 * * * *', pollMercArchive);         // ogni 20 min, :16
 // di un riavvio pm2 in pieno giorno (il primo giro non passa dal cron).
 cron.schedule('* 2-6 * * *', pollBattleArchiveBootstrap, { timezone: BOOT_ARCHIVE_TZ });
 cron.schedule('* 2-6 * * *', pollMercArchiveBootstrap, { timezone: BOOT_ARCHIVE_TZ });
+// Danni per unita' (server/muBattleDamage.js): il giro incrementale tre
+// minuti dopo quello dell'archivio, da cui prende le battaglie nuove; il
+// recupero di notte come i bootstrap qui sopra, al secondo :30 per non
+// partire nello stesso istante.
+cron.schedule('9,29,49 * * * *', pollMuBattleDamage);       // ogni 20 min, :09
+cron.schedule('30 * 2-6 * * *', pollMuBattleDamageBackfill, { timezone: MU_DAMAGE_TZ });
 // Finanziamenti fra nazioni: ~36 al giorno in tutto il mondo, e il giro si
 // ferma al primo id gia' visto — cioe' quasi sempre UNA richiesta. Offset
 // :11 per non cadere addosso ai due giri dell'archivio (:06 e :16).
@@ -2511,6 +2543,15 @@ cron.schedule('40 */6 * * *', () => { refreshPillConfig().catch(() => {}); });
 // ha un tick di gioco a cui allinearsi. UNA richiesta pubblica che porta
 // tutte le risorse: ventiquattro al giorno in totale.
 cron.schedule('27 * * * *', pollPrices);
+
+// WarEra+ tornei: ogni 3 minuti, al secondo :20 (lontano dai cron al
+// minuto pieno). Tabellone e squadre dell'ultimo torneo di ogni tipo; la
+// classifica settimanale solo ogni 10 minuti (vedi server/tournament.js).
+cron.schedule('20 */3 * * * *', pollTournament);
+// Fotografia della classifica settimanale ogni 6 ore, alle :55 UTC: quella
+// delle 23:55 della domenica e' la lettura finale prima del reset del
+// lunedi', e regge la settimana mobile di tutta la settimana dopo.
+cron.schedule('0 55 5,11,17,23 * * *', snapshotWeekly, { timezone: 'UTC' });
 
 // WarEra+ andamento battaglie: ogni minuto, al secondo :40. Il tick dura
 // 2 minuti esatti, quindi un tick su due cade fra due giri e nessuno si
@@ -2558,6 +2599,9 @@ cron.schedule('20 3 * * *', () => {
   // si chiama qui — parte da solo alla prima notte utile (vedi cron sopra).
   await pollBattleArchive();
   await pollMercArchive();
+  // Danni per unita': dopo l'archivio, da cui legge. Il primo giro della sua
+  // vita costruisce anche la coda del recupero (che pero' gira solo di notte).
+  pollMuBattleDamage().catch(err => console.error('[mu-battle-damage] avvio:', err.message));
   // Finanziamenti: giro subito e non al primo cron. Non è impazienza —
   // la finestra che l'API espone è di ~3 giorni e scorre, quindi ogni
   // minuto in cui questo modulo non guarda è un pezzo di storico che si
@@ -2567,6 +2611,9 @@ cron.schedule('20 3 * * *', () => {
   // riavvio a meta' pomeriggio evita che la candela di oggi si apra solo
   // alle :27 successive.
   await pollPrices();
+  // Tornei: senza await, la prima classifica settimanale pesa 2 MB e non
+  // deve ritardare il resto dell'avvio.
+  pollTournament().catch(err => console.error('[tournament] avvio:', err.message));
   // Alleanze: senza await. Il primo giro della vita del file sfoglia ~115
   // pagine (un paio di minuti) e non deve ritardare il resto dell'avvio;
   // dopo, e' una richiesta per famiglia.
@@ -2964,6 +3011,17 @@ app.get('/region-history/external-status', (req, res) => {
 
 app.get('/credit-profiles', (req, res) => sendCacheFile(req, res, 'credit-profiles', { fetchedAt: null, data: {} }));
 
+// ── Danni per unita' giorno per giorno (server/muBattleDamage.js) ──
+// ?ids=a,b (fino a 10). Il giorno e' quello UTC in cui la battaglia FINISCE:
+// giusto per settimane e cumulati, rumoroso giorno per giorno (vedi la testa
+// del modulo). `coverageFrom` e' il primo giorno di cui sono state contate
+// tutte le battaglie: prima, il client non disegna niente.
+app.get('/mu-damage-history', (req, res) => {
+  const ids = String(req.query.ids || '').split(',').map(s => s.trim()).filter(s => /^[0-9a-f]{24}$/i.test(s));
+  if (!ids.length) return res.status(400).json({ error: 'serve ?ids=<id>,<id>' });
+  res.json(readMuDamageHistory(ids));
+});
+
 // ── Archivio battaglie e spese di guerra (server/battleArchive.js) ──
 // /battle-archive porta le righe compatte (chiavi corte: il file viaggia
 // intero verso il browser, vedi il commento su _toRow nel modulo).
@@ -3125,8 +3183,9 @@ app.get('/migration-flows', (req, res) => {
 // quella data una serie vuota NON vuol dire "nessun danno", e il client la
 // taglia li' invece di riempirla di zeri.
 app.get('/damage-timeline', (req, res) => {
-  const hours = Math.min(Math.max(Number(req.query.hours) || 48, 1), 24 * 16);
-  const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 16);
+  // Tetti allineati a RETENTION_MS di damageTimeline.js (32 giorni).
+  const hours = Math.min(Math.max(Number(req.query.hours) || 48, 1), 24 * 32);
+  const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 32);
   // `countryIds=a,b,c`: un gruppo sommato (Statistiche alleanze). Tetto a
   // 200 id, piu' di tutte le nazioni del gioco: oltre e' una richiesta rotta.
   const countryIds = req.query.countryIds
@@ -3159,6 +3218,32 @@ app.get('/battle-timeline', (req, res) => {
 // risorsa. `days` e' la finestra chiesta, `coverageFrom` quella che c'e'
 // davvero — la vista disegna la seconda e dichiara la differenza invece di
 // far sembrare "prezzo fermo" un archivio che non era ancora nato.
+// Tornei (server/tournament.js): tabellone + forza di ogni squadra gia'
+// sommata. `type` mu|country, `id` un torneo preciso (default l'ultimo del
+// tipo), `me` l'id di un personaggio per sapere la sua squadra.
+// Iscritti di una squadra col danno degli ultimi 7 giorni e quello fatto
+// nel torneo. 404 se il torneo non e' in memoria: il client ricade sui
+// dati che ha.
+app.get('/tournament/team', (req, res) => {
+  const id = /^[a-f0-9]{24}$/.test(String(req.query.id || '')) ? String(req.query.id) : null;
+  const team = /^[a-f0-9]{24}$/.test(String(req.query.team || '')) ? String(req.query.team) : null;
+  const data = id && team ? readTournamentTeam({ id, team }) : null;
+  if (!data) return res.status(404).json({ error: 'squadra non in memoria' });
+  res.json(data);
+});
+
+app.get('/tournament', async (req, res) => {
+  const type = req.query.type === 'country' ? 'country' : 'mu';
+  const id = /^[a-f0-9]{24}$/.test(String(req.query.id || '')) ? String(req.query.id) : null;
+  const me = /^[a-f0-9]{24}$/.test(String(req.query.me || '')) ? String(req.query.me) : null;
+  try {
+    res.json(await readTournament({ type, id, me }));
+  } catch (err) {
+    console.error('[tournament] richiesta fallita:', err.message);
+    res.status(502).json({ error: err.message });
+  }
+});
+
 app.get('/price-history', (req, res) => {
   const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 365);
   res.json(readPriceHistory(days));
@@ -3747,6 +3832,9 @@ app.get('/health', (req, res) => res.json({
   // d'occhio se il bootstrap notturno ha gia' girato o se le due viste
   // stanno ancora lavorando in modalita' ridotta.
   battleArchive: readArchiveStatus(),
+  // Danni per unita': `pending` scende di notte fino a zero, `coverageFrom`
+  // dice fin dove arriva lo storico del 1 vs 1 delle unita'.
+  muBattleDamage: muBattleDamageStatus(),
   // Quanto indietro arrivano i finanziamenti. Subito dopo un deploy copre
   // i ~3 giorni che l'API ricorda, e da li' cresce da solo.
   moneyTransfers: readMoneyTransfersStatus(),
@@ -3774,6 +3862,8 @@ app.get('/health', (req, res) => res.json({
   // `copertura.statsOk` < `statsAsked` vuol dire statistiche perse (di
   // solito la chiave): i salari di quel giro sono sottostimati.
   companyCensus: statoCompanyCensus(),
+  // Tornei: quanti in memoria, a quando risale la classifica settimanale.
+  tournament: statoTournament(),
   // Storico politico: elezioni riassunte (complete) e i tre archivi che
   // accumulano, ognuno col suo `copreDa`.
   politicalHistory: statoPoliticalHistory(),

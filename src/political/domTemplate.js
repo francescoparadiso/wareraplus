@@ -70,6 +70,8 @@ export function getPoliticalTemplate() {
              applicati da main.js (non passano dal dizionario originale). -->
         <button class="btn-load wp-pol-nav-btn" id="wpPolHistoryBtn" data-view="history">📜 <span data-wp-pt="nav_history">History</span></button>
         <button class="btn-load wp-pol-nav-btn" id="wpPolWorldBtn" data-view="world">🌍 <span data-wp-pt="nav_world">World</span></button>
+        <!-- WarEra+: le votazioni del congresso (src/political/votes.js) -->
+        <button class="btn-load wp-pol-nav-btn" id="wpPolVotesBtn" data-view="votes">🗳️ <span data-wp-pt="nav_votes">Votes</span></button>
         <button class="btn-load wp-pol-nav-btn" id="wpPolNationBtn">📊 <span data-wp-pt="nav_nation">Nation stats</span></button>
 
         <div class="input-wrap select-wrap" style="margin-right:12px;">
@@ -502,6 +504,7 @@ export function getPoliticalTemplate() {
     <!-- WarEra+: viste nuove, riempite da src/political/history.js e world.js -->
     <div id="wp-pol-history-view" class="wp-pol-view" style="display:none;"></div>
     <div id="wp-pol-world-view" class="wp-pol-view" style="display:none;"></div>
+    <div id="wp-pol-votes-view" class="wp-pol-view" style="display:none;"></div>
     <div id="party-view" style="display:none;">
       <div class="party-view-grid">
         <!-- Party selector panel -->

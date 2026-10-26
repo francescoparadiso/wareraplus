@@ -593,3 +593,13 @@ button.wp-ecn-pth:hover { color: var(--wp-ov-text, #e6edf3); }
      regola delle tre schede più su, stesso motivo). */
   .wp-ecn-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* WarEra+ v0.27 — senza `workerCount` il numero dei dipendenti non si
+   conosce più (server/companyCensus.js): la colonna sparisce e le tabelle
+   di Produzione passano da sei colonne a cinque. */
+.wp-ecn-nodip .wp-ecn-pthead,
+.wp-ecn-nodip .wp-ecn-prow { grid-template-columns: minmax(130px, 1.4fr) repeat(4, minmax(70px, 1fr)); }
+@media (max-width: 560px) {
+  .wp-ecn-nodip .wp-ecn-pthead,
+  .wp-ecn-nodip .wp-ecn-prow { grid-template-columns: 104px 70px 76px 84px 84px; }
+}

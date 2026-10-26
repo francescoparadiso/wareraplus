@@ -730,6 +730,12 @@ body.light-theme .wp-panel-name {
 .wp-battles-overlay { --wp-ov-accent: #db6d28; } /* Battaglie: arancio bruciato */
 .wp-players-overlay { --wp-ov-accent: #ec4899; } /* Giocatori: rosa */
 body.light-theme .wp-players-overlay { --wp-ov-accent: #be185d; }
+.wp-accordi-overlay { --wp-ov-accent: #00d4ff; } /* Accordi: il ciano dei NAP sulla mappa */
+body.light-theme .wp-accordi-overlay { --wp-ov-accent: #0077a3; }
+.wp-tournament-overlay { --wp-ov-accent: #a3e635; } /* Tornei: lime */
+body.light-theme .wp-tournament-overlay { --wp-ov-accent: #4d7c0f; }
+.wp-tools-overlay { --wp-ov-accent: #34d399; }   /* Altri strumenti: menta */
+body.light-theme .wp-tools-overlay { --wp-ov-accent: #047857; }
 /* L'oro chiaro sparisce sul fondo chiaro: sul tema chiaro l'accento della
    sezione diventa la sua versione scura (la stessa dichiarata come
    rgbLight in OVERLAY_TINTS, src/app/overlayChrome.js). */
@@ -846,8 +852,7 @@ body.light-theme .wp-political-overlay {
 }
 .wp-political-overlay .wp-mu-more:hover,
 .wp-political-overlay .wp-mu-back:hover,
-.wp-political-overlay .wp-mu-member:hover,
-.wp-political-overlay .wp-eco-credit:hover {
+.wp-political-overlay .wp-mu-member:hover {
   border-color: var(--wp-ov-accent);
 }
 
@@ -1763,7 +1768,7 @@ body.light-theme .wp-mmb-credits { border-top-color: #e0d8c8; }
    (4+22+4+1+1bordo=32px) invece di sommarsi sopra. Sfondo rosso (richiesto
    dall'utente), testo su due parti — label "Creato da" (i18n condiviso
    con .wp-author-credit, vedi sotto) più tenue, nome in evidenza — sulla
-   falsariga della card di ArgusIA nell'ottimizzatore (src/eco/main.js). */
+   falsariga della card di ArgusIA che c'era nell'ottimizzatore (tolta con la v0.27). */
 .wp-author-pill {
   display: flex;
   align-items: center;
@@ -3862,6 +3867,39 @@ body.light-theme .wp-mig-note { color: #9a6700; }
   border: 1px solid currentColor;
 }
 
+/* ── WarEra+ tooltip comune dei grafici (src/shared/chartTip.js) ──
+   Fuori da ogni overflow (attaccato al body), sopra overlay e schede. */
+.wp-chart-tip {
+  position: fixed; left: 0; top: 0; z-index: 100000;
+  pointer-events: none;
+  max-width: 300px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(13, 17, 23, .96);
+  border: 1px solid #30363d;
+  color: #e6edf3;
+  font-size: 12px; line-height: 1.4;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+}
+.wp-chart-tip[hidden] { display: none; }
+.wp-chart-tip-head { font-weight: 700; margin-bottom: 2px; }
+.wp-chart-tip-row { display: flex; justify-content: space-between; gap: 16px; color: #8b949e; }
+.wp-chart-tip-row b { color: #e6edf3; font-variant-numeric: tabular-nums; white-space: nowrap; }
+body.light-theme .wp-chart-tip { background: rgba(250, 244, 230, .97); border-color: rgba(139, 90, 43, .35); color: #2b2418; }
+body.light-theme .wp-chart-tip-row { color: #5c5347; }
+body.light-theme .wp-chart-tip-row b { color: #2b2418; }
+/* Le zone di cattura sono invisibili; quella puntata si schiarisce appena,
+   per dire QUALE punto il tooltip sta descrivendo. */
+rect.wp-tip-hit, polygon.wp-tip-hit { fill: transparent; }
+rect.wp-tip-hit.wp-tip-on { fill: rgba(255, 255, 255, .08); }
+body.light-theme rect.wp-tip-hit.wp-tip-on { fill: rgba(0, 0, 0, .06); }
+svg [data-tip].wp-tip-on:not(.wp-tip-hit) { filter: brightness(1.3); }
+li[data-tip].wp-tip-on { background: rgba(255, 255, 255, .04); }
+
+/* Statistiche nazioni, danno nel tempo: etichetta della linea media. */
+.wp-nat-curve-avglab { font-size: 10.5px; font-weight: 700; paint-order: stroke; stroke: var(--wp-ov-surface, #161b22); stroke-width: 3px; }
+.wp-nat-curve-avgnote { margin-top: 4px; }
+
 /* ── WarEra+ replay della battaglia (src/diplomacy/battleReplay.js) ──
    Sopra la scheda della battaglia chiusa (che sta a bottom: 55px). */
 #wp-replay-hud {
@@ -3918,6 +3956,101 @@ body.light-theme .wp-mig-note { color: #9a6700; }
 .wp-replay-info b { font-size: 14px; font-variant-numeric: tabular-nums; }
 .wp-replay-info span { color: #8b949e; font-variant-numeric: tabular-nums; }
 .wp-replay-note { flex-basis: 100%; font-size: 11px; color: #e3b341; }
+/* Il muro della battaglia nel replay: stesso campo del widget della
+   scheda (battleFront.js) — difensori a sinistra, attaccanti a destra,
+   fronte d'oro, unità che marciano. In CIMA alla barra (grid-row 1: gli
+   altri elementi scorrono sotto da soli). --front lo scrive renderHud a
+   ogni fotogramma. */
+.wp-replay-wall {
+  --front: 50%;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  position: relative;
+  height: 72px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #16283a;
+}
+@media (max-width: 760px) { .wp-replay-wall { height: 56px; } }
+.wp-replay-wall[hidden] { display: none; }
+.wp-replay-wall-atk { position: absolute; top: 0; right: 0; bottom: 0; left: var(--front); background: #391f16; }
+.wp-replay-wall-origin { position: absolute; top: 0; bottom: 0; left: 50%; border-left: 1px dashed rgba(255, 255, 255, .25); }
+.wp-replay-wall-front {
+  position: absolute; top: 0; bottom: 0; left: var(--front);
+  width: 2px; margin-left: -1px;
+  background: #e2ac4d; box-shadow: 0 0 10px 1px rgba(226, 172, 77, .45);
+}
+.wp-replay-wall-units { position: absolute; inset: 0; }
+.wp-replay-unit {
+  position: absolute; width: 4px; height: 4px; margin: -2px 0 0 -2px;
+  border-radius: 50%; opacity: 0;
+}
+.wp-replay-unit.def { background: #8fc3e8; }
+.wp-replay-unit.atk { background: #ef9269; }
+.wp-replay-unit.tank { width: 8px; height: 5px; margin: -2.5px 0 0 -4px; border-radius: 1.5px; }
+/* Un fotogramma del replay ogni 100 ms: la transizione breve li raccorda. */
+.wp-replay-wall-atk, .wp-replay-wall-front { transition: left 160ms linear; }
+.wp-replay-unit { transition: left 160ms linear, opacity 300ms; }
+body.wp-no-motion .wp-replay-wall-atk,
+body.wp-no-motion .wp-replay-wall-front,
+body.wp-no-motion .wp-replay-unit { transition: none; }
+.wp-replay-wall-side, .wp-replay-wall-pct {
+  position: absolute; z-index: 1;
+  font-size: 11px; font-weight: 700; text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
+}
+.wp-replay-wall-side { top: 5px; display: flex; align-items: center; gap: 5px; max-width: 45%; }
+.wp-replay-wall-side span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-replay-wall-side img { width: 16px; height: 11px; object-fit: cover; border-radius: 2px; flex: none; }
+.wp-replay-wall-pct { bottom: 5px; font-variant-numeric: tabular-nums; }
+.wp-replay-wall-side.d, .wp-replay-wall-pct.d { left: 7px; color: #8fc3e8; }
+.wp-replay-wall-side.a, .wp-replay-wall-pct.a { right: 7px; color: #ef9269; flex-direction: row-reverse; }
+/* Fine round (battleReplay.js: triggerRoundEnd): il vincitore spinge il
+   muro fino al bordo, il campo s'illumina del suo colore e al centro
+   compare la scritta coi punti. Il replay intanto resta fermo. */
+.wp-replay-roundend {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  pointer-events: none; opacity: 0;
+  font-weight: 800; letter-spacing: .05em; text-transform: uppercase; text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .9), 0 0 12px rgba(0, 0, 0, .6);
+}
+.wp-replay-roundend b { font-size: 15px; }
+.wp-replay-roundend span { font-size: 12px; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.wp-replay-wall.roundend .wp-replay-roundend { animation: wp-roundend 1900ms ease-out forwards; }
+.wp-replay-wall.roundend.final .wp-replay-roundend { animation-duration: 2600ms; }
+.wp-replay-wall.roundend.final .wp-replay-roundend b { font-size: 17px; }
+.wp-replay-wall.roundend.atk .wp-replay-roundend { color: #ffc2a6; }
+.wp-replay-wall.roundend.def .wp-replay-roundend { color: #cfe6f7; }
+.wp-replay-wall.roundend.atk { box-shadow: inset 0 0 0 2px #ef9269, 0 0 18px rgba(239, 146, 105, .55); }
+.wp-replay-wall.roundend.def { box-shadow: inset 0 0 0 2px #8fc3e8, 0 0 18px rgba(143, 195, 232, .55); }
+.wp-replay-wall.roundend .wp-replay-wall-atk,
+.wp-replay-wall.roundend .wp-replay-wall-front,
+.wp-replay-wall.roundend .wp-replay-unit { transition: left 700ms cubic-bezier(.22, .61, .36, 1), opacity 300ms; }
+@keyframes wp-roundend {
+  0%   { opacity: 0; transform: scale(.6); }
+  14%  { opacity: 1; transform: scale(1.12); }
+  24%  { transform: scale(1); }
+  82%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+body.wp-no-motion .wp-replay-wall.roundend .wp-replay-roundend { animation: none; opacity: 1; }
+/* Gli anelli sulla regione contesa (maplibregl.Marker usa e getta). */
+.wp-replay-burst { position: relative; width: 0; height: 0; pointer-events: none; }
+.wp-replay-burst i {
+  position: absolute; left: -32px; top: -32px; width: 64px; height: 64px;
+  border-radius: 50%; border: 3px solid var(--c); box-shadow: 0 0 14px var(--c);
+  opacity: 0; animation: wp-replay-burst 1600ms ease-out forwards;
+}
+.wp-replay-burst i:nth-child(2) { animation-delay: 260ms; }
+.wp-replay-burst i:nth-child(3) { animation-delay: 520ms; }
+.wp-replay-burst b {
+  position: absolute; left: 0; top: -46px; transform: translateX(-50%);
+  white-space: nowrap; font-size: 13px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--c); text-shadow: 0 1px 3px #000, 0 0 10px rgba(0, 0, 0, .7);
+  opacity: 0; animation: wp-replay-burst-label 2200ms ease-out forwards;
+}
+@keyframes wp-replay-burst { 0% { transform: scale(.2); opacity: .95; } 100% { transform: scale(2.8); opacity: 0; } }
+@keyframes wp-replay-burst-label { 0% { opacity: 0; transform: translate(-50%, 8px); } 15% { opacity: 1; transform: translate(-50%, 0); } 80% { opacity: 1; } 100% { opacity: 0; } }
 body.light-theme .wp-replay-open,
 body.light-theme #wp-replay-hud.active .wp-replay-bar {
   background: rgba(250, 244, 230, .96);

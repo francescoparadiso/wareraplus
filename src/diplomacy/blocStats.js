@@ -8,6 +8,10 @@ import { withAlpha } from './utils.js';
 // WarEra+ — la vista era solo in inglese: testi tradotti in 9 lingue da un
 // dizionario locale, con il testo inglese come chiave (vedi blocStatsI18n.js).
 import { bT } from './blocStatsI18n.js';
+// WarEra+ — il Faction 1 vs 2 nello stile del versus, comune a tutti i
+// confronti (vedi cmpStats più sotto).
+import { vsRow, vsGroup, vsTally, vsFighter, vsHero, countUpScore } from '../shared/versus.js';
+import { animationsOn } from '../shared/motion.js';
 import { ensureDailyDamage, sumCountryDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
 
 // WarEra+ — tasto Indietro: chiude il popup in cima (prima il menu/dialogo
@@ -119,6 +123,7 @@ const BUILDER_SORTS = [
   { key: 'pop',     label: 'Population',        get: b => b.totalPop },
   { key: 'money',   label: 'Wealth',            get: b => b.totalMoney },
   { key: 'dpc',     label: 'Wk damage/citizen', get: b => b.dpc },
+  { key: 'dpd',     label: 'Dmg / Core Dev',    get: b => b.dpd },
   { key: 'wars',    label: 'Wars',              get: b => b.totalWars },
   { key: 'regdiff', label: 'Regions +/-',       get: b => b.totalRegDiff },
 ];
@@ -375,6 +380,8 @@ function buildMember(cid) {
     // Sviluppo "core": base del bonus danno d'alleanza, diverso da `dev`
     // (rankings.countryDevelopment) che e' lo sviluppo corrente.
     core: n?.coreDevelopment || 0,
+    // WarEra+ — danno settimanale per punto di sviluppo core (0 se manca).
+    dpd: n?.coreDevelopment > 0 ? (n?.rankings?.weeklyCountryDamages?.value || 0) / n.coreDevelopment : 0,
     wars:  n?.warsWith?.length || 0,
     // WarEra+ — `allies` e `swornEnemies` della nazione NON sono dati di
     // oggi. `allies` e' un fossile: le coppie delle alleanze bilaterali
@@ -430,6 +437,8 @@ function buildBlocStat(displayName, internalId, idSet, color, isMerged = false, 
     // Derivate: sviluppo medio e danno settimanale per cittadino dell'alleanza.
     avgDev: countryCount ? totalDev / countryCount : 0,
     dpc: totalPop ? totalDmg / totalPop : 0,
+    // Rapporto sui TOTALI (danno / devcore dell'alleanza), non media dei rapporti.
+    dpd: totalCore ? totalDmg / totalCore : 0,
   };
 }
 
@@ -725,6 +734,9 @@ function injectStyles() {
     .bs-fcmp{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-bottom:28px}
     .bs-fcard{background:rgba(88,166,255,.1);border:1px solid rgba(88,166,255,.3);border-radius:14px;padding:20px;text-align:center}
     .bs-fcard.f2{background:rgba(63,185,80,.1);border-color:rgba(63,185,80,.3)}
+    /* WarEra+ — il versus (src/styles/versus.css) legge i token --wp-ov-* delle
+       sezioni in overlay; questa pagina non e' una di quelle e li dichiara qui. */
+    #bs-fcmp-stats{--wp-ov-surface:rgba(22,27,34,.85);--wp-ov-border:rgba(255,255,255,.12);--wp-ov-text:#e6edf3;--wp-ov-text-dim:#8b949e}
     .bs-sgrid{background:rgba(13,17,23,.6);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:20px}
     .bs-srow{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}
     .bs-srow:last-child{border:none}
@@ -827,7 +839,7 @@ function injectStyles() {
     @media(max-width:640px){.bs-charts{grid-template-columns:minmax(0,1fr)}.bs-sum-mini{grid-template-columns:minmax(0,1fr)}.bs-chart-card{min-width:0}.bsw{padding-left:12px;padding-right:12px}}
 
     /* Tabella riassuntiva alleanze (tutte le alleanze su una riga sola) */
-    .bs-tbl-wrap{overflow:auto;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(13,17,23,.6);margin-bottom:20px}
+    .bs-tbl-wrap{overflow:auto;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(13,17,23,.6);margin-bottom:20px;max-height:max(320px,calc(100dvh - 250px))}
     /* Quando la tabella è l'ULTIMA cosa della pagina (tab Alliance Overview)
        i margini di coda diventano vuoto sotto la barra di scorrimento
        orizzontale, a fine pagina: il riquadro deve chiudere la schermata,
@@ -935,6 +947,7 @@ function injectStyles() {
     body.light-theme .bs-vs{color:#6b5a47}
     body.light-theme .bs-fcard{background:rgba(139,90,43,.1);border-color:rgba(139,90,43,.2)}
     body.light-theme .bs-fcard.f2{background:rgba(63,185,80,.1);border-color:rgba(63,185,80,.2)}
+    body.light-theme #bs-fcmp-stats{--wp-ov-surface:rgba(255,251,244,.9);--wp-ov-border:rgba(0,0,0,.12);--wp-ov-text:#1f2430;--wp-ov-text-dim:#5b6473}
     body.light-theme .bs-sgrid{background:rgba(240,230,210,.6);border-color:rgba(0,0,0,.1)}
     body.light-theme .bs-srow{border-bottom-color:rgba(0,0,0,.05)}
     body.light-theme .bs-slbl{color:#6b5a47}
@@ -1201,6 +1214,7 @@ function showBlocPopup(blocId) {
       <div class="bs-popup-item">${bT('Avg Dmg/Nation')} <span>${fmt(bloc.countryCount ? bloc.totalDmg / bloc.countryCount : 0)}</span></div>
       <div class="bs-popup-item">${bT('Avg Pop/Nation')} <span>${fmt(bloc.countryCount ? bloc.totalPop / bloc.countryCount : 0)}</span></div>
       <div class="bs-popup-item" title="${bloc.isUnaligned || !bloc.bonus ? '' : curveTooltip()}">${bT('Damage Bonus')} <span style="color:${isPenalty(bloc.bonus?.bonus) ? '#f85149' : '#3fb950'}">${bloc.isUnaligned || !bloc.bonus ? '—' : formatBonus(bloc.bonus.bonus)}</span></div>
+      <div class="bs-popup-item" title="${bT('Weekly damage per point of core development')}">${bT('Dmg / Core Dev')} <span style="color:#58a6ff">${bloc.totalCore ? fmt(bloc.dpd) : '—'}</span></div>
       <div class="bs-popup-item">${bT('Core Dev Share')} <span>${bloc.isUnaligned || !bloc.bonus ? '—' : bloc.bonus.share.toFixed(2) + '%'}</span></div>
     </div>`, closed)}
     ${secHtml('mobilization', bT('Mobilization'), '', closed, 'bloc-popup-ps')}
@@ -1211,6 +1225,7 @@ function showBlocPopup(blocId) {
       <span class="col ${sortKey === 'totalDmg' ? 'active' : ''}" data-key="totalDmg" style="flex:1">${bT('Total Dmg')}</span>
       <span class="col ${sortKey === 'money' ? 'active' : ''}" data-key="money" style="flex:1">${bT('Wealth')}</span>
       <span class="col ${sortKey === 'pop' ? 'active' : ''}" data-key="pop" style="flex:1">${bT('Pop')}</span>
+      <span class="col ${sortKey === 'dpd' ? 'active' : ''}" data-key="dpd" style="flex:1" title="${bT('Weekly damage per point of core development')}">${bT('Dmg/Core')}</span>
       <span class="col ${sortKey === 'wars' ? 'active' : ''}" data-key="wars" style="min-width:40px">${bT('Wars')}</span>
       <span class="col ${sortKey === 'warPct' ? 'active' : ''}" data-key="warPct" style="min-width:48px" title="${bT('Share of players with a war build')}">${bT('War %')}</span>
     </div>
@@ -1461,6 +1476,7 @@ const BUILDER_COLS = [
   { key: 'totdmg',  label: 'Tot Dmg' },
   { key: 'pop',     label: 'Pop' },
   { key: 'money',   label: 'Wealth' },
+  { key: 'dpd',     label: 'Dmg/Core' },
   { key: 'wars',    label: 'Wars' },
   { key: 'members', label: 'Nations — drag them between rows', left: true, nosort: true },
   { key: 'actions', label: '', nosort: true },
@@ -1493,6 +1509,7 @@ function builderTableHtml() {
       <td>${fmt(b.totalAbsoluteDmg)}</td>
       <td>${fmt(b.totalPop)}</td>
       <td class="money">${fmt(b.totalMoney)}</td>
+      <td title="${bT('Weekly damage per point of core development')}">${b.totalCore ? fmt(b.dpd) : '—'}</td>
       <td>${b.totalWars}</td>
       <td class="left bs-btbl-members">${pills}</td>
       <td class="bs-btbl-actions">${builderActionsHtml(b)}</td>
@@ -2051,6 +2068,7 @@ function blocCard(bloc, isUnaligned) {
     </div>
     ${!isUnaligned ? `<div class="bs-stats-row">
       <div class="bs-chip">🔥 ${bT('Wk')} ${fmt(bloc.totalDmg)}</div>
+      ${bloc.totalCore ? `<div class="bs-chip" title="${bT('Weekly damage per point of core development')}">🎯 ${fmt(bloc.dpd)}</div>` : ''}
       <div class="bs-chip">💥 ${bT('Tot')} ${fmt(bloc.totalAbsoluteDmg)}</div>
       <div class="bs-chip">👥 ${fmt(bloc.totalPop)}</div>
       <div class="bs-chip">💰 ${fmt(bloc.totalMoney)}</div>
@@ -2073,11 +2091,6 @@ function render1vs1() {
     <div class="bs-vs">VS</div>
     ${factionSel(2, f2)}
   </div>
-  <div class="bs-fcmp">
-    <div class="bs-fcard"><div style="font-size:18px;font-weight:700">${f1.name || bT('Select blocs')}</div><div style="color:#8b949e;font-size:13px">${bT('{n} nations', { n: f1.countryCount })}</div></div>
-    <div class="bs-vs">VS</div>
-    <div class="bs-fcard f2"><div style="font-size:18px;font-weight:700">${f2.name || bT('Select blocs')}</div><div style="color:#8b949e;font-size:13px">${bT('{n} nations', { n: f2.countryCount })}</div></div>
-  </div>
   ${cmpStats(f1, f2)}
   <div id="bs-fcmp-curves"></div>`;
 }
@@ -2089,6 +2102,11 @@ function render1vs1() {
    un clic non rifà la richiesta. */
 const FACTION_COLORS = ['#58a6ff', '#3fb950'];
 function mountFactionCurves() {
+  if (_introPending) {
+    _introPending = false;
+    const stats = document.getElementById('bs-fcmp-stats');
+    if (stats) countUpScore(stats);
+  }
   const host = document.getElementById('bs-fcmp-curves');
   if (!host) return;
   const groups = [aggFaction(faction1Blocs), aggFaction(faction2Blocs)]
@@ -2129,7 +2147,7 @@ function aggFaction(ids) {
   // (per cittadino, build, territorio): tutto gia' dentro buildBlocStat,
   // nessun dato nuovo. `members` serve alla build e al danno di oggi.
   const vuota = { name: '', countryCount: 0, totalPop: 0, totalDmg: 0, totalAbsoluteDmg: 0, totalMoney: 0, totalWars: 0, totalAllies: 0,
-    totalBounty: 0, totalDev: 0, totalRegDiff: 0, totalSworn: 0, members: [] };
+    totalBounty: 0, totalDev: 0, totalRegDiff: 0, totalSworn: 0, totalCore: 0, members: [] };
   if (!ids.length) return vuota;
   return allStats.filter(b => ids.includes(b.id)).reduce((a, b) => ({
     name: a.name ? `${a.name} + ${b.name}` : b.name,
@@ -2139,6 +2157,7 @@ function aggFaction(ids) {
     totalAllies: a.totalAllies + b.totalAllies,
     totalBounty: a.totalBounty + b.totalBounty, totalDev: a.totalDev + b.totalDev,
     totalRegDiff: a.totalRegDiff + b.totalRegDiff, totalSworn: a.totalSworn + b.totalSworn,
+    totalCore: a.totalCore + b.totalCore,
     members: a.members.concat(b.members),
   }), vuota);
 }
@@ -2147,54 +2166,43 @@ function aggFaction(ids) {
    WarEra+ — Il confronto 1 vs 2 dice chi è in vantaggio
    ------------------------------------------------------------------
    Richiesta dell'utente: «rendi più chiaro il 1 vs 2, in modo che si veda
-   bene chi è in vantaggio». Prima c'erano due barre e due numeri per riga,
-   e il vantaggio andava calcolato a occhio. Ora ogni riga ha un verso:
-   - dir 1 = di più è meglio: il valore di chi vince va in grassetto con
-     il suo vantaggio accanto (+34%, oppure ×2,3 oltre il doppio; in
-     differenza assoluta quando c'è uno zero o un negativo, come le
-     regioni), una freccia verso di lui, e il perdente si spegne;
+   bene chi è in vantaggio». Ogni riga ha un verso:
+   - dir 1 = di più è meglio: vince chi ha di più, nel colore del suo lato;
    - dir 0 = neutra: guerre, nemici giurati e QUOTE di build non sono né
      meglio né peggio, si mostrano senza vincitore e non contano.
-   In cima il tabellone somma le righe con un verso: chi è avanti in
-   quante misure, su quante.
-   ══════════════════════════════════════════════════════════════ */
-function vantaggio(a, b, fDiff) {
-  const hi = Math.max(a, b), lo = Math.min(a, b);
-  if (lo > 0) {
-    const r = hi / lo;
-    if (r >= 2) return '×' + r.toFixed(1);
-    return '+' + ((r - 1) * 100).toFixed(0) + '%';
-  }
-  return '+' + fDiff(hi - lo);
-}
+   In cima il punteggio somma le righe con un verso.
 
-function cmpRow(v1, v2, lbl, f = v => fmt(v), dir = 1, tally = null) {
-  // Le regioni guadagnate possono essere negative; la barra misura la
-  // grandezza, il segno lo dice il numero accanto. null = dato assente,
-  // niente riga (mai uno zero inventato).
-  if (v1 == null || v2 == null) return '';
-  v1 = Number(v1); v2 = Number(v2);
-  const mx = Math.max(Math.abs(v1), Math.abs(v2)) || 1;
-  let cls = 'nt', badge1 = '', badge2 = '', label = lbl;
-  if (dir === 1) {
-    if (tally) tally.tot++;
-    if (v1 > v2) {
-      cls = 'w1'; if (tally) tally.a++;
-      badge1 = ` <span class="bs-adv f1">${vantaggio(v1, v2, f)}</span>`;
-      label = `<span class="bs-arrow f1">◀</span> ${lbl}`;
-    } else if (v2 > v1) {
-      cls = 'w2'; if (tally) tally.b++;
-      badge2 = `<span class="bs-adv f2">${vantaggio(v1, v2, f)}</span> `;
-      label = `${lbl} <span class="bs-arrow f2">▶</span>`;
-    } else {
-      cls = 'tie'; if (tally) tally.pari++;
-    }
+   Dal 2026-10-18 nello stile del versus dei giocatori, comune a tutti i
+   confronti (src/shared/versus.js): stessa richiesta, «un modo solo di
+   leggere un confronto». I DUE COLORI restano quelli delle fazioni (blu e
+   verde, FACTION_COLORS), passati al versus con --vs-a/--vs-b: sono già
+   nei selettori qui sopra e nelle curve dei danni qui sotto, e lo stesso
+   lato non deve cambiare colore a metà pagina.
+   ══════════════════════════════════════════════════════════════ */
+let _lastFactions = null;   // l'ultimo confronto completo disegnato: l'intro parte solo su uno nuovo
+let _introPending = false;  // il prossimo mountFactionCurves fa contare il punteggio
+
+/** Il ritratto di una fazione: le iniziali della prima alleanza nel suo
+ *  colore, col numero delle alleanze se sono più d'una. */
+function factionFighter(f, ids, side, leader) {
+  const blocs = allStats.filter(b => ids.includes(b.id));
+  if (!blocs.length) {
+    return vsFighter({
+      side,
+      avatar: '<span class="wp-vs-av wp-vs-av-empty">?</span>',
+      name: `<span class="wp-vs-name wp-vs-name-empty">${bT('Faction {n}', { n: side === 'a' ? 1 : 2 })}</span>`,
+      sub: bT('Select blocs'),
+    });
   }
-  return `<div class="bs-srow ${cls}">
-    <div class="bs-bwrap"><div class="bs-bval f1">${f(v1)}${badge1}</div><div class="bs-btrack"><div class="bs-bfill f1" style="width:${(Math.abs(v1) / mx) * 100}%"></div></div></div>
-    <div class="bs-slbl">${label}</div>
-    <div class="bs-bwrap"><div class="bs-btrack"><div class="bs-bfill f2" style="width:${(Math.abs(v2) / mx) * 100}%"></div></div><div class="bs-bval f2">${badge2}${f(v2)}</div></div>
-  </div>`;
+  const first = blocs[0];
+  const sigla = String(first.name || '?').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase() || '?';
+  return vsFighter({
+    side, leader,
+    avatar: `<span class="wp-vs-av" style="background:${first.color};color:#fff;font-size:30px">${escapeHtml(sigla)}${blocs.length > 1 ? `<b class="wp-vs-av-count">${blocs.length}</b>` : ''}</span>`,
+    name: `<span class="wp-vs-name">${escapeHtml(f.name)}</span>`,
+    lines: [blocs.length > 1 ? `<div class="wp-vs-flags">${blocs.map(b => `<span class="bs-dot" style="background:${b.color}" title="${escapeHtml(b.name)}"></span>`).join('')}</div>` : ''],
+    tags: [`<span class="wp-vs-lv">${bT('{n} nations', { n: f.countryCount })}</span>`],
+  });
 }
 
 /** Build di una fazione: la stessa somma di blocPlaystyle, sui membri di
@@ -2210,11 +2218,20 @@ function cmpStats(f1, f2) {
   const segnato = v => (v > 0 ? '+' : '') + fmt(v, 0, true);
   const perCit = (f, k) => (f.totalPop ? f[k] / f.totalPop : 0);
   const media = (f, k) => (f.countryCount ? f[k] / f.countryCount : 0);
-  const tally = { a: 0, b: 0, pari: 0, tot: 0 };
-  const R = (v1, v2, lbl, fmtFn, dir = 1) => cmpRow(v1, v2, bT(lbl), fmtFn, dir, tally);
-  const gruppo = (titolo, righe, nota = '') => righe.trim()
-    ? '<div class="bs-sgroup">' + bT(titolo) + (nota ? ' <span class="bs-sgroup-note">' + bT(nota) + '</span>' : '') + '</div>' + righe
-    : '';
+  // null = dato assente, niente riga (mai uno zero inventato).
+  const R = (v1, v2, lbl, fmtFn = v => fmt(v), dir = 1) => (v1 == null || v2 == null
+    ? null : vsRow(bT(lbl), Number(v1), Number(v2), { fmt: fmtFn, neutral: dir === 0 }));
+  const colori = `--vs-a:${FACTION_COLORS[0]};--vs-b:${FACTION_COLORS[1]}`;
+  const both = f1.countryCount && f2.countryCount;
+
+  if (!both) {
+    return `<div class="wp-vs-scope" id="bs-fcmp-stats" style="${colori}">
+      <section class="wp-vs">${vsHero({
+        a: factionFighter(f1, faction1Blocs, 'a', false), b: factionFighter(f2, faction2Blocs, 'b', false),
+        winsA: 0, winsB: 0, verdict: bT('Pick at least one alliance on each side to compare them.'), score: false,
+      })}</section>
+    </div>`;
+  }
 
   // Build dei giocatori ("mobilitazione"): quanti giocano di guerra e quanti
   // di economia, dai punti abilita' (src/mu/playstyle.js). Le QUOTE sono
@@ -2222,56 +2239,62 @@ function cmpStats(f1, f2) {
   // piu' giocatori di guerra sono piu' forza militare.
   const ps1 = factionPlaystyle(f1), ps2 = factionPlaystyle(f2);
   const quota = (ps, k) => (ps?.known ? (ps[k] / ps.known) * 100 : 0);
-  const build = (ps1 && ps2)
-    ? R(quota(ps1, 'war'), quota(ps2, 'war'), 'War players %', pct, 0)
-      + R(quota(ps1, 'eco'), quota(ps2, 'eco'), 'Eco players %', pct, 0)
-      + R(ps1.war, ps2.war, 'War players', fi)
-      + R(ps1.eco, ps2.eco, 'Eco players', fi)
-      + R(ps1.mixed, ps2.mixed, 'Hybrid players', fi, 0)
-    : (f1.countryCount && f2.countryCount && !psByCountry ? '<div class="bs-sgroup-note bs-sgroup-wait">' + bT('Loading builds…') + '</div>' : '');
+  const build = (ps1 && ps2) ? [
+    R(ps1.war, ps2.war, 'War players', fi),
+    R(ps1.eco, ps2.eco, 'Eco players', fi),
+    R(quota(ps1, 'war'), quota(ps2, 'war'), 'War players %', pct, 0),
+    R(quota(ps1, 'eco'), quota(ps2, 'eco'), 'Eco players %', pct, 0),
+    R(ps1.mixed, ps2.mixed, 'Hybrid players', fi, 0),
+  ] : [];
 
   // Danno di oggi: solo se lo scatto giornaliero c'e' (altrimenti niente riga).
   const oggi = f => (dailyBaseline && f.members.length ? blocDamageToday({ members: f.members }) : null);
 
-  const righe = gruppo('Size & strength',
-      R(f1.countryCount, f2.countryCount, 'Countries', fi)
-      + R(f1.totalPop, f2.totalPop, 'Population')
-      + R(f1.totalDmg, f2.totalDmg, 'Weekly Damage')
-      + R(oggi(f1), oggi(f2), 'Damage Today')
-      + R(f1.totalAbsoluteDmg, f2.totalAbsoluteDmg, 'Total Damage')
-      + R(f1.totalMoney, f2.totalMoney, 'Wealth')
-      + R(f1.totalAllies, f2.totalAllies, 'Defensive Pacts', fi)
-      + R(f1.totalWars, f2.totalWars, 'Active Wars', fi, 0))
-    + gruppo('Builds · mobilization', build, 'from the skill points of each player')
-    + gruppo('Per citizen', R(perCit(f1, 'totalDmg'), perCit(f2, 'totalDmg'), 'Weekly Dmg / Citizen')
-      + R(perCit(f1, 'totalMoney'), perCit(f2, 'totalMoney'), 'Wealth / Citizen')
-      + R(media(f1, 'totalDev'), media(f2, 'totalDev'), 'Avg Development'))
-    + gruppo('Territory & bounty', R(f1.totalRegDiff, f2.totalRegDiff, 'Regions Gained', segnato)
-      + R(f1.totalSworn, f2.totalSworn, 'Sworn Enemies', fi, 0)
-      + R(f1.totalBounty, f2.totalBounty, 'Bounty Earned'));
+  const groups = [
+    { title: bT('Size & strength'), icon: '⚔', rows: [
+      R(f1.countryCount, f2.countryCount, 'Countries', fi),
+      R(f1.totalPop, f2.totalPop, 'Population'),
+      R(f1.totalDmg, f2.totalDmg, 'Weekly Damage'),
+      R(oggi(f1), oggi(f2), 'Damage Today'),
+      R(f1.totalAbsoluteDmg, f2.totalAbsoluteDmg, 'Total Damage'),
+      R(f1.totalMoney, f2.totalMoney, 'Wealth'),
+      R(f1.totalAllies, f2.totalAllies, 'Defensive Pacts', fi),
+      R(f1.totalWars, f2.totalWars, 'Active Wars', fi, 0),
+    ] },
+    { title: bT('Builds · mobilization'), icon: '🎯', rows: build,
+      body: build.length ? `<p class="wp-vs-note">${bT('from the skill points of each player')}</p>`
+        : psByCountry ? '' : `<p class="wp-vs-empty">${bT('Loading builds…')}</p>` },
+    { title: bT('Per citizen'), icon: '👤', rows: [
+      R(perCit(f1, 'totalDmg'), perCit(f2, 'totalDmg'), 'Weekly Dmg / Citizen'),
+      (f1.totalCore && f2.totalCore) ? R(f1.totalDmg / f1.totalCore, f2.totalDmg / f2.totalCore, 'Dmg / Core Dev') : null,
+      R(perCit(f1, 'totalMoney'), perCit(f2, 'totalMoney'), 'Wealth / Citizen'),
+      R(media(f1, 'totalDev'), media(f2, 'totalDev'), 'Avg Development'),
+    ] },
+    { title: bT('Territory & bounty'), icon: '🗺', rows: [
+      R(f1.totalRegDiff, f2.totalRegDiff, 'Regions Gained', segnato),
+      R(f1.totalSworn, f2.totalSworn, 'Sworn Enemies', fi, 0),
+      R(f1.totalBounty, f2.totalBounty, 'Bounty Earned'),
+    ] },
+  ].map(g => ({ ...g, rows: g.rows.filter(Boolean) }))
+    .filter(g => g.rows.length || g.body);
 
-  // Il tabellone: solo con qualcosa da entrambe le parti.
-  let tabellone = '';
-  if (f1.countryCount && f2.countryCount && tally.tot) {
-    const lato = (cls, nome, vinte) => `<div class="bs-score-side ${cls}${vinte > (cls === 'f1' ? tally.b : tally.a) ? ' lead' : ''}">
-        <div class="bs-score-n">${vinte}</div>
-        <div class="bs-score-name">${escapeHtml(nome)}</div>
-        <div class="bs-score-sub">${bT('ahead in {n} of {t}', { n: vinte, t: tally.tot })}</div>
-      </div>`;
-    tabellone = `<div class="bs-score">
-        ${lato('f1', f1.name, tally.a)}
-        <div class="bs-score-mid">
-          <div class="bs-score-bar"><span class="f1" style="width:${(tally.a / tally.tot) * 100}%"></span><span class="pari" style="width:${(tally.pari / tally.tot) * 100}%"></span><span class="f2" style="width:${(tally.b / tally.tot) * 100}%"></span></div>
-          ${tally.pari ? `<div class="bs-score-even">${bT('even')} · ${tally.pari}</div>` : ''}
-        </div>
-        ${lato('f2', f2.name, tally.b)}
-      </div>
-      <div class="bs-score-note">${bT('Counted on {t} measures where more is better; wars, sworn enemies and build shares are shown but not scored.', { t: tally.tot })}</div>`;
-  } else {
-    tabellone = `<div class="bs-score-note">${bT('Pick at least one alliance on each side to compare them.')}</div>`;
-  }
+  const t = vsTally(groups.flatMap(g => g.rows));
+  const verdict = t.a === t.b
+    ? `${bT('even')} · ${t.a}`
+    : `${(t.a > t.b ? f1 : f2).name} — ${bT('ahead in {n} of {t}', { n: Math.max(t.a, t.b), t: t.tot })}`;
+  // L'intro solo per un confronto nuovo: questo riquadro si ridisegna anche
+  // quando arrivano le build, e le barre ripartirebbero.
+  const key = [faction1Blocs.slice().sort().join(','), faction2Blocs.slice().sort().join(',')].sort().join('|');
+  let intro = false;
+  if (key !== _lastFactions) { _lastFactions = key; intro = animationsOn(); _introPending = intro; }
 
-  return `<div class="bs-sgrid" id="bs-fcmp-stats">${tabellone}${righe}</div>`;
+  return `<div class="wp-vs-scope" id="bs-fcmp-stats" style="${colori}">
+    <section class="wp-vs${intro ? ' wp-vs-intro' : ''}">
+      ${vsHero({ a: factionFighter(f1, faction1Blocs, 'a', t.a > t.b), b: factionFighter(f2, faction2Blocs, 'b', t.b > t.a), winsA: t.a, winsB: t.b, verdict, intro })}
+      ${groups.map((g, gi) => vsGroup({ ...g, g: gi })).join('')}
+    </section>
+    <p class="wp-vs-note">${bT('Counted on {t} measures where more is better; wars, sworn enemies and build shares are shown but not scored.', { t: t.tot })}</p>
+  </div>`;
 }
 
 function renderWars() {

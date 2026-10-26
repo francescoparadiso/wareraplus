@@ -437,3 +437,26 @@ body.light-theme .wp-mkt-chg-down b { color: #cf222e; }
 @media (max-width: 900px) {
   .wp-mkt-detail:has(.wp-mkt-dchart) { grid-template-columns: 1fr; }
 }
+
+/* WarEra+ v0.27 — otto colonne invece di tredici (COLUMNS_V27 in
+   model.js): risorsa · vendita · costo MP · pp · rendita · costo del
+   dipendente/pp · aspettativa di pareggio · tu /giorno. Sul telefono
+   vengono prima risorsa (1), rendita (5) e tu /giorno (8), come le tre
+   della tabella vecchia. */
+.wp-mkt-table.wp-mkt-v27 {
+  --wp-mkt-cols:
+    minmax(134px, 1.1fr) minmax(86px, .7fr) minmax(82px, .7fr) 44px
+    minmax(90px, .8fr) minmax(100px, .8fr) minmax(110px, .8fr) minmax(94px, .8fr);
+  min-width: 820px;
+}
+@media (max-width: 560px) {
+  .wp-mkt-table.wp-mkt-v27 {
+    /* risorsa · rendita · tu · vendita · costo MP · pp · costo dip. · pareggio */
+    --wp-mkt-cols: 104px 74px 84px 78px 76px 34px 84px 84px;
+    min-width: 0;
+  }
+  .wp-mkt-v27 .wp-mkt-thead > :nth-child(7), .wp-mkt-v27 .wp-mkt-row > :nth-child(7),
+  .wp-mkt-v27 .wp-mkt-thead > :nth-child(11), .wp-mkt-v27 .wp-mkt-row > :nth-child(11) { order: 3; }
+  .wp-mkt-v27 .wp-mkt-thead > :nth-child(5), .wp-mkt-v27 .wp-mkt-row > :nth-child(5) { order: 1; }
+  .wp-mkt-v27 .wp-mkt-thead > :nth-child(8), .wp-mkt-v27 .wp-mkt-row > :nth-child(8) { order: 2; }
+}

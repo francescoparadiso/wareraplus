@@ -28,6 +28,31 @@
        invece di restare sempre "piene" rispetto a chi è primo in quel
        momento.
 
+   ── Il muro (richiesta dell'utente, 2026-10-21) ────────────────
+   Sulla mappa si vedeva solo il danno per nazione; ora in cima alla barra
+   c'è anche il MURO della scheda battaglia (battleFront.js) che va avanti
+   e indietro: stesso campo coi due territori, stessa linea del fronte
+   (50 + (quota difensori − 0,5) × 130, fra 12 e 88), stesse unità che
+   marciano col fronte e si infittiscono dal lato che fa più danno, stessi
+   colori, difensori a sinistra. La prima versione era una striscia alta
+   18 px sotto il cursore, e l'utente non la riconosceva come il muro.
+   Il dato è il danno del ROUND in corso dei campioni al minuto (`s` di
+   /battle-timeline): a ogni cambio di round il muro torna al centro,
+   come nel gioco.
+
+   ── Fine round e replay dall'archivio (richiesta dell'utente) ──
+   Quando la riproduzione passa da un round al successivo il replay si
+   FERMA per un momento (ROUND_HOLD_MS): il vincitore spinge il muro fino
+   al bordo, sopra compare "Round N agli attaccanti/difensori" coi punti
+   finali, e sulla mappa si allargano tre anelli nel colore del vincitore
+   sopra la regione contesa (un maplibregl.Marker usa e getta, nessun
+   layer). Vincitore e punti da `rounds` (roundsHistory, chiusi), se no
+   dall'ultimo campione del round. A battaglia FINITA (wonBy) l'ultimo
+   round si chiude in fondo con la scritta della vittoria. Solo mentre si
+   riproduce: trascinando il cursore niente pause.
+   L'archivio battaglie (src/battles/battleDetail.js) apre il replay con
+   replayOnMap(): heatmap della battaglia, mappa sulla regione, play.
+
    ⚠️ L'archivio ACCUMULA dal 2026-10-07: una battaglia chiusa prima non
    ha replay, e il bottone non compare. Una battaglia già aperta al primo
    sguardo del server ha la prima lettura come FONDO (`baseAt`): tutto il
@@ -40,6 +65,9 @@ import { computeHighlightedIds } from './battleHeatmap.js';
 import { getLang } from '../shared/i18n.js';
 import { trackEvent } from '../shared/analytics.js';
 import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
+import maplibregl from 'maplibre-gl';
+import { ATTACKER_COLOR, DEFENDER_COLOR } from './battleFlows.js';
+import { animationsOn } from '../shared/motion.js';
 
 // Il replay dura sempre lo stesso tempo, qualunque sia la battaglia: una
 // di otto ore e una di quaranta minuti si guardano in mezzo minuto.
@@ -61,6 +89,11 @@ const T = {
   'Attackers take the lead': ['Gli attaccanti passano avanti', 'Los atacantes toman la delantera', 'Die Angreifer gehen in Führung', 'Les attaquants prennent l’avantage', 'De aanvallers nemen de leiding', 'Anfallarna tar ledningen', 'Os atacantes passam à frente', 'المهاجمون يتقدمون'],
   'Defenders take the lead': ['I difensori passano avanti', 'Los defensores toman la delantera', 'Die Verteidiger gehen in Führung', 'Les défenseurs prennent l’avantage', 'De verdedigers nemen de leiding', 'Försvararna tar ledningen', 'Os defensores passam à frente', 'المدافعون يتقدمون'],
   '{name} joins': ['Entra {name}', 'Entra {name}', '{name} steigt ein', '{name} entre', '{name} doet mee', '{name} går in', 'Entra {name}', 'تنضم {name}'],
+  'Round {n}: attackers win': ['Round {n} agli attaccanti', 'Ronda {n} para los atacantes', 'Runde {n} an die Angreifer', 'Manche {n} aux attaquants', 'Ronde {n} voor de aanvallers', 'Rond {n} till anfallarna', 'Ronda {n} para os atacantes', 'الجولة {n} للمهاجمين'],
+  'Round {n}: defenders win': ['Round {n} ai difensori', 'Ronda {n} para los defensores', 'Runde {n} an die Verteidiger', 'Manche {n} aux défenseurs', 'Ronde {n} voor de verdedigers', 'Rond {n} till försvararna', 'Ronda {n} para os defensores', 'الجولة {n} للمدافعين'],
+  'Attackers win the battle': ['Battaglia vinta dagli attaccanti', 'Los atacantes ganan la batalla', 'Die Angreifer gewinnen die Schlacht', 'Les attaquants gagnent la bataille', 'De aanvallers winnen de slag', 'Anfallarna vinner striden', 'Os atacantes vencem a batalha', 'المهاجمون يفوزون بالمعركة'],
+  'Defenders win the battle': ['Battaglia vinta dai difensori', 'Los defensores ganan la batalla', 'Die Verteidiger gewinnen die Schlacht', 'Les défenseurs gagnent la bataille', 'De verdedigers winnen de slag', 'Försvararna vinner striden', 'Os defensores vencem a batalha', 'المدافعون يفوزون بالمعركة'],
+  'Front line: damage share in the current round': ['Il muro: quota di danno nel round in corso', 'El frente: reparto del daño en la ronda actual', 'Die Front: Schadensanteil in der laufenden Runde', 'Le front : part des dégâts dans la manche en cours', 'Het front: aandeel in de schade deze ronde', 'Fronten: andel av skadan i pågående rond', 'A frente: parte do dano na ronda atual', 'خط الجبهة: حصة الضرر في الجولة الحالية'],
   'Recorded from {time}: damage done before arrives all at once.': [
     'Registrata dalle {time}: il danno fatto prima arriva tutto in un colpo.',
     'Registrada desde las {time}: el daño anterior llega de golpe.',
@@ -119,6 +152,67 @@ function lastIndexAtOrBefore(arr, t, key = x => x.t) {
   return ans;
 }
 
+/* ── Il muro a un istante ──
+   Campioni `s`: [t, round, ticks, dannoAtk, dannoDef, puntiAtk, puntiDef, …],
+   danno del round in corso. Il server salva un campione solo quando
+   qualcosa cambia, quindi fino a un minuto prima del successivo il valore
+   è fermo: si scivola verso il successivo solo in quell'ultimo minuto (e
+   mai a cavallo di due round, dove il danno riparte da zero). */
+const WALL_SPAN = 130, WALL_MIN = 12, WALL_MAX = 88;   // come battleFront.js: render()
+// Unità per lato come battleFront.js: MIN sempre in campo, MAX dal lato che
+// fa tutto il danno; l'ultimo quarto sono carri.
+const IS_NARROW = Math.min(window.innerWidth, window.innerHeight) <= 760;
+const WALL_MIN_UNITS = 4, WALL_MAX_UNITS = IS_NARROW ? 7 : 10;
+let _wallUnits = { def: [], atk: [] };   // { el, offset } creati una volta con la barra
+
+function wallAt(T) {
+  if (!_S?.length) return null;
+  const i = lastIndexAtOrBefore(_S, T, s => s[0]);
+  if (i < 0) return null;
+  const a = _S[i], b = _S[i + 1];
+  let atk = a[3] || 0, def = a[4] || 0;
+  if (b && b[1] === a[1]) {
+    const from = Math.max(a[0], b[0] - 60000);
+    if (T > from) {
+      const f = (T - from) / (b[0] - from);
+      atk += ((b[3] || 0) - atk) * f;
+      def += ((b[4] || 0) - def) * f;
+    }
+  }
+  const tot = atk + def;
+  const defShare = tot > 0 ? def / tot : 0.5;
+  return { defShare, front: Math.min(WALL_MAX, Math.max(WALL_MIN, 50 + (defShare - 0.5) * WALL_SPAN)) };
+}
+
+/* ── Fine round ── */
+const ROUND_HOLD_MS = 1900;
+const FINAL_HOLD_MS = 2600;
+
+function roundAt(T) {
+  if (!_S?.length) return null;
+  const i = lastIndexAtOrBefore(_S, T, s => s[0]);
+  return i >= 0 ? _S[i][1] : null;
+}
+
+/** Vincitore e punti finali del round n: da roundsHistory se c'è, se no
+ *  dall'ultimo campione di quel round (primo a 300; a pari punti, il danno). */
+function roundResult(n) {
+  const h = _tl?.rounds?.[n - 1];
+  let winner = h?.wonBy || null;
+  let ap = h?.attackerPoints, dp = h?.defenderPoints;
+  if (!winner || ap == null || dp == null) {
+    let last = null;
+    for (const s of _S || []) { if (s[1] === n) last = s; else if (s[1] > n) break; }
+    if (last) {
+      ap ??= last[5] ?? 0;
+      dp ??= last[6] ?? 0;
+      winner ||= ap === dp ? ((last[3] || 0) >= (last[4] || 0) ? 'attacker' : 'defender')
+        : (ap > dp ? 'attacker' : 'defender');
+    }
+  }
+  return winner ? { winner, ap: ap ?? 0, dp: dp ?? 0 } : null;
+}
+
 /* ── Stato del modulo ── */
 
 let _battleId = null;     // battaglia della heatmap per cui il replay è pronto
@@ -135,6 +229,11 @@ let _timer = null;
 let _lastFrameAt = 0;
 let _speed = 1;
 let _marks = [];          // { t, kind: 'flip'|'entry', side, country }
+let _roundShown = null;   // round dell'ultimo istante mostrato
+let _hold = null;         // { n, winner, final, ap, dp } mentre dura la scritta di fine round
+let _holdTimer = null;
+let _finalShown = false;
+let _autoplay = null;     // battaglia da far partire appena il replay è pronto (archivio)
 
 /* ── Segni sul cursore (richiesta dell'utente) ──
    I SORPASSI (cambio di chi fa più danno nel round) e gli INGRESSI delle
@@ -207,6 +306,37 @@ async function prepare(id) {
   _range = { t0, t1: Math.max(t1, t0 + 60000) };
   _marks = buildMarks(an);
   showHud();
+  // Aperta dall'archivio battaglie: parte da sola, dall'inizio.
+  if (_autoplay === id) {
+    _autoplay = null;
+    start();
+    applyAt(_range.t0, { force: true });
+    play();
+  }
+}
+
+/** Dall'archivio battaglie (src/battles/battleDetail.js): apre la battaglia
+ *  sulla mappa, ci porta la vista e fa partire il replay appena è pronto.
+ *  Vale anche per una battaglia CHIUSA: setBattleHeatmap legge classifiche
+ *  e dettagli da battle.getById/battleRanking, che le hanno per sempre. */
+export async function replayOnMap(battleId) {
+  if (!battleId) return;
+  _autoplay = battleId;
+  const already = state.coloringMode === 'battleHeatmap' && state.battleHeatmapData?.battleId === battleId;
+  if (!already) {
+    const { setBattleHeatmap } = await import('./battleHeatmap.js');
+    await setBattleHeatmap(battleId);
+  } else if (_snaps && _battleId === battleId) {
+    _autoplay = null;
+    start();
+    applyAt(_range.t0, { force: true });
+    play();
+  }
+  const rid = state.battleHeatmapData?.regionId;
+  const pos = rid && (state.regionData?.[rid]?.position || state.regionCache?.get(rid)?.position);
+  if (Array.isArray(pos) && state.map) {
+    state.map.flyTo({ center: pos, zoom: Math.max(state.map.getZoom(), 4), duration: 1200 });
+  }
 }
 
 /* ── Entrare e uscire ── */
@@ -234,6 +364,7 @@ export function pauseBattleReplay() {
 
 function teardown({ restore = true } = {}) {
   stopPlay();
+  _roundShown = null;
   const d = state.battleHeatmapData;
   if (restore && _orig && d && d.battleId === _battleId) {
     d.nations = _orig.nations;
@@ -263,6 +394,7 @@ function exitReplay() {
   state.battleReplay = null;
   _T = null;
   _shownIdx = -2;
+  _roundShown = null;
   renderHud();
   import('./map.js').then(m => m.renderMap());
 }
@@ -272,6 +404,10 @@ function exitReplay() {
 function applyAt(T, { force = false } = {}) {
   _T = Math.min(Math.max(T, _range.t0), _range.t1);
   const idx = lastIndexAtOrBefore(_snaps, _T);
+  // Si è appena chiuso un round (solo riproducendo, non trascinando).
+  const r = roundAt(_T);
+  if (_playing && !_hold && _roundShown != null && r != null && r > _roundShown) triggerRoundEnd(r - 1);
+  _roundShown = r;
   renderHud();
   if (idx === _shownIdx && !force) return;
   _shownIdx = idx;
@@ -292,17 +428,81 @@ function tick() {
   const now = performance.now();
   const dt = now - (_lastFrameAt || now);
   _lastFrameAt = now;
+  // Fine round: il replay resta fermo su quel momento finché dura la scritta.
+  if (_hold) { _timer = setTimeout(tick, FRAME_MS); return; }
   const span = _range.t1 - _range.t0;
   const next = _T + dt * span / DURATIONS[_speed];
   applyAt(next);
-  if (_T >= _range.t1) { stopPlay(); return; }
+  if (_T >= _range.t1) {
+    // Battaglia finita davvero (non solo la registrazione): l'ultimo round
+    // si chiude qui, con la scritta della vittoria.
+    if (_tl?.wonBy && !_finalShown) {
+      _finalShown = true;
+      triggerRoundEnd(roundAt(_T) || _tl.rounds?.length || 1, { final: true });
+      _timer = setTimeout(tick, FRAME_MS);
+      return;
+    }
+    stopPlay();
+    return;
+  }
   _timer = setTimeout(tick, FRAME_MS);
+}
+
+function triggerRoundEnd(n, { final = false } = {}) {
+  const wall = _hud?.querySelector('.wp-replay-wall');
+  if (!wall || wall.hidden) return;
+  const res = roundResult(n);
+  const winner = final ? _tl.wonBy : res?.winner;
+  if (winner !== 'attacker' && winner !== 'defender') return;
+  _hold = { n, winner, final, ap: res?.ap ?? 0, dp: res?.dp ?? 0 };
+  // Tolte e rimesse con un reflow in mezzo: l'animazione riparte anche
+  // quando due round si chiudono uno dietro l'altro.
+  wall.classList.remove('roundend', 'atk', 'def', 'final');
+  void wall.offsetWidth;
+  wall.classList.add('roundend', winner === 'attacker' ? 'atk' : 'def');
+  if (final) wall.classList.add('final');
+  const title = final
+    ? rT(winner === 'attacker' ? 'Attackers win the battle' : 'Defenders win the battle')
+    : rT(winner === 'attacker' ? 'Round {n}: attackers win' : 'Round {n}: defenders win', { n });
+  const box = wall.querySelector('.wp-replay-roundend');
+  box.querySelector('b').textContent = title;
+  // Difensori–attaccanti, nello stesso ordine della riga "Round · punti".
+  box.querySelector('span').textContent = `${_hold.dp}–${_hold.ap}`;
+  clearTimeout(_holdTimer);
+  _holdTimer = setTimeout(endHold, final ? FINAL_HOLD_MS : ROUND_HOLD_MS);
+  mapBurst(winner, final ? title : rT('Round {n}', { n }));
+  if (final) renderHud();
+}
+
+function endHold() {
+  clearTimeout(_holdTimer);
+  _holdTimer = null;
+  if (!_hold) return;
+  _hold = null;
+  _hud?.querySelector('.wp-replay-wall')?.classList.remove('roundend', 'atk', 'def', 'final');
+  if (_hud && !_hud.hidden) renderHud();
+}
+
+/** Tre anelli sulla regione contesa, nel colore del vincitore (gli stessi
+ *  della mappa: attaccanti blu, difensori rossi, battleFlows.js). */
+function mapBurst(winner, label) {
+  if (!animationsOn() || !state.map) return;
+  const rid = state.battleHeatmapData?.regionId || _tl?.region;
+  const pos = rid && (state.regionData?.[rid]?.position || state.regionCache?.get(rid)?.position);
+  if (!Array.isArray(pos)) return;
+  const el = document.createElement('div');
+  el.className = 'wp-replay-burst';
+  el.style.setProperty('--c', winner === 'attacker' ? ATTACKER_COLOR : DEFENDER_COLOR);
+  el.innerHTML = '<i></i><i></i><i></i><b></b>';
+  el.querySelector('b').textContent = label;
+  const marker = new maplibregl.Marker({ element: el }).setLngLat(pos).addTo(state.map);
+  setTimeout(() => marker.remove(), 2400);
 }
 
 function play() {
   if (!_range) return;
   start();
-  if (_T == null || _T >= _range.t1) applyAt(_range.t0, { force: true });
+  if (_T == null || _T >= _range.t1) { _finalShown = false; applyAt(_range.t0, { force: true }); }
   _playing = true;
   _lastFrameAt = 0;
   renderHud();
@@ -313,6 +513,7 @@ function stopPlay() {
   _playing = false;
   clearTimeout(_timer);
   _timer = null;
+  endHold();
   if (_hud && !_hud.hidden) renderHud();
 }
 
@@ -338,9 +539,33 @@ function showHud() {
         </div>
         <button type="button" class="wp-replay-btn wp-replay-speed" data-replay="speed"></button>
         <button type="button" class="wp-replay-btn wp-replay-x" data-replay="close">✕</button>
+        <div class="wp-replay-wall" hidden>
+          <div class="wp-replay-wall-atk"></div>
+          <div class="wp-replay-wall-origin"></div>
+          <div class="wp-replay-wall-units"></div>
+          <div class="wp-replay-wall-front"></div>
+          <span class="wp-replay-wall-side d"></span>
+          <span class="wp-replay-wall-side a"></span>
+          <span class="wp-replay-wall-pct d"></span>
+          <span class="wp-replay-wall-pct a"></span>
+          <div class="wp-replay-roundend" aria-live="polite"><b></b><span></span></div>
+        </div>
         <div class="wp-replay-info"></div>
       </div>`;
     document.body.appendChild(_hud);
+    // Le unità del muro: posizione (distanza dal fronte, altezza) fissata
+    // qui una volta sola, così marciano col fronte invece di saltare.
+    const unitsEl = _hud.querySelector('.wp-replay-wall-units');
+    for (const side of ['def', 'atk']) {
+      for (let i = 0; i < WALL_MAX_UNITS; i++) {
+        const el = document.createElement('div');
+        const tank = i >= WALL_MAX_UNITS - Math.max(1, Math.round(WALL_MAX_UNITS * 0.25));
+        el.className = `wp-replay-unit ${side}${tank ? ' tank' : ''}`;
+        el.style.top = `${12 + Math.random() * 76}%`;
+        unitsEl.appendChild(el);
+        _wallUnits[side].push({ el, offset: 3 + Math.random() * 26 });
+      }
+    }
     _hud.addEventListener('click', (e) => {
       // Un segno sul cursore: il replay salta lì e si ferma.
       const mark = e.target.closest('[data-replay-mark]');
@@ -454,6 +679,46 @@ function renderHud() {
   const T = _T ?? _range.t0;
   const range = _hud.querySelector('.wp-replay-range');
   if (document.activeElement !== range) range.value = String(Math.round((T - _range.t0) / (_range.t1 - _range.t0) * 1000));
+  const wallEl = _hud.querySelector('.wp-replay-wall');
+  const wall = wallAt(T);
+  wallEl.hidden = !wall;
+  // Fine round: il vincitore ha spinto il muro fino al bordo, e le unità
+  // in campo sono solo le sue.
+  if (wall && _hold) {
+    wall.front = _hold.winner === 'attacker' ? 0 : 100;
+    wall.defShare = _hold.winner === 'attacker' ? 0 : 1;
+  }
+  if (wall) {
+    wallEl.style.setProperty('--front', `${wall.front.toFixed(2)}%`);
+    const dp = Math.round(wall.defShare * 100);
+    wallEl.querySelector('.wp-replay-wall-pct.d').textContent = `${dp}%`;
+    wallEl.querySelector('.wp-replay-wall-pct.a').textContent = `${100 - dp}%`;
+    wallEl.title = rT('Front line: damage share in the current round');
+    // Unità: quante per lato secondo la quota, ognuna alla sua distanza
+    // dal fronte (stessa regola di battleFront.js: renderUnits).
+    for (const [side, share] of [['def', wall.defShare], ['atk', 1 - wall.defShare]]) {
+      const count = _hold ? (share ? WALL_MAX_UNITS : 0)
+        : Math.round(WALL_MIN_UNITS + (WALL_MAX_UNITS - WALL_MIN_UNITS) * share);
+      _wallUnits[side].forEach((u, i) => {
+        const on = i < count;
+        u.el.style.opacity = on ? '1' : '0';
+        if (!on) return;
+        const pct = side === 'def' ? wall.front - u.offset : wall.front + u.offset;
+        u.el.style.left = `${Math.min(98, Math.max(1, pct)).toFixed(2)}%`;
+      });
+    }
+    // Chi sta da che parte: bandiera e nome, come in cima alla scheda.
+    if (wallEl.dataset.for !== String(_battleId)) {
+      wallEl.dataset.for = String(_battleId);
+      for (const [cls, id] of [['d', _tl?.defender], ['a', _tl?.attacker]]) {
+        const n = id ? state.nationMap.get(id) : null;
+        const flag = n ? getFlagUrl(getNationCode(id, n)) : null;
+        wallEl.querySelector(`.wp-replay-wall-side.${cls}`).innerHTML = n
+          ? `${flag ? `<img src="${flag}" alt="" onerror="this.remove()">` : ''}<span>${n.name}</span>`
+          : '';
+      }
+    }
+  }
   // Round e punti dal campione al minuto più vicino (prima di T).
   const si = _S?.length ? lastIndexAtOrBefore(_S, T, s => s[0]) : -1;
   const s = si >= 0 ? _S[si] : null;

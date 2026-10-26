@@ -176,6 +176,90 @@ delle nazioni abilitate ogni ora alle :15 (tabella `nation_snapshot`,
 numeri confrontano con la fotografia più vecchia e scrivono quale.
 `/health` riporta `istantanee` con l'ultima fotografia.
 
+## Le operazioni (`operazioni.js`)
+
+La lavagna dei piani della nazione: un'operazione è una catena di passi
+(attacco, difesa, rivolta, pillole, contratto, altro) con regione, orario,
+priorità, incaricato e stato, più le frecce "questo dopo quello". Le vede
+chi vede la nazione (`contestoNazione` in `nazione.js`, stessa regola);
+le scrive il governo; lo **stato** di un passo lo sposta chiunque le veda.
+
+- `GET /operazioni` (`?archiviate=1` per includere le archiviate)
+- `POST /operazioni` — nuova (`titolo`, `nota`)
+- `POST /operazioni/:id` — titolo, nota, `stato` attiva/archiviata
+- `POST /operazioni/:id/remove`
+- `POST /operazioni/:id/passi` — nuovo passo (`dopo: [id…]` per le frecce)
+- `POST /operazioni/:id/passi/:pid` — modifica; senza governo solo `{stato}`
+- `POST /operazioni/:id/passi/:pid/remove`
+
+Ogni scrittura risponde con l'elenco intero aggiornato. Tre tabelle nuove
+(`operation`, `op_step`, `op_link`) nate dalla `CREATE TABLE IF NOT EXISTS`
+al primo riavvio: nessuna migrazione. Le frecce che chiuderebbero un cerchio
+si rifiutano (`ciclo`). `/health` → `db.operazioni`, `db.passiOperazioni`.
+
+## Gli accordi (`accordi.js`)
+
+L'archivio dei patti di non belligeranza (sezione "Accordi" del client).
+Una parte è una nazione o un'alleanza; i membri di un'alleanza si rileggono
+dal gioco ogni volta. **Leggere è pubblico, senza login**; scrive il governo
+(`gestisceNazione`) di una delle nazioni coinvolte, senza filtro P.A.S.T.A.
+
+- `GET /accordi` — tutti (pubblico)
+- `GET /accordi/:id/controllo` — battaglie del periodo: attacchi diretti e
+  danno di una parte contro l'altra rispetto al tetto (pubblico, 3' di memo;
+  le classifiche delle battaglie concluse si leggono una volta sola)
+- `GET /accordi/me` — cosa può fare chi guarda
+- `POST /accordi` · `POST /accordi/:id` · `POST /accordi/:id/remove`
+
+Una tabella nuova (`accordo`) dalla `CREATE TABLE IF NOT EXISTS`: nessuna
+migrazione. Cancellare scrive il patto intero nell'`audit`. `/health` →
+`db.accordi`. Il CORS resta l'allowlist: la lettura "pubblica" è per il
+tool, non per siti terzi.
+
+## Le votazioni (`votazioni.js`)
+
+Le votazioni del congresso e i referendum (vista "Votazioni" di Political).
+Corpo elettorale `congresso`, `istituzioni` (congresso + governo) o
+`referendum`; scrutinio `palese` o `segreto`; esito `pubblico` o riservato
+alle `istituzioni`. Le regole (chi crea, chi vede, il segreto, i tempi dello
+scrutinio) stanno nella testata del file.
+
+- `GET /votazioni?nazione=ID` — archivio della nazione + `poteri` di chi
+  guarda (login facoltativo)
+- `GET /votazioni/:id` — dettaglio, con il corpo elettorale fotografato
+- `GET /votazioni/:id/scrutinio` — la sequenza sigillata, da `scrutinioAlle`
+- `POST /votazioni` · `POST /votazioni/:id/voto` · `POST /votazioni/:id/ritira`
+- `POST /votazioni/:id/chiudi` — "hanno votato tutti": urne chiuse adesso,
+  scrutinio fra 10 s (`count_at`). Solo l'autore o l'amministratore, solo a
+  partecipazione completa, mai nel referendum
+- `POST /votazioni/:id/elimina` — cancella per sempre (solo amministratore,
+  a cascata su elettori, voti e schede); nell'audit resta cosa era, mai chi
+  ha votato cosa
+- `POST /votazioni/canale` — il webhook Discord degli avvisi della nazione
+  (scope `votazioni`, lo imposta il governo; url vuoto = toglierlo)
+
+Avvisi su Discord, in inglese, tre per votazione: apertura, INIZIO dello
+scrutinio (link per guardarlo in diretta) ed esito a scrutinio FINITO —
+mai prima, o rovinerebbe la diretta. Con esito riservato solo il link,
+senza numeri; mai il testo della proposta. Colonne `notified_*` in
+`votazione` (migrazione automatica): un riavvio non ne rimanda nessuno.
+
+**Due votazioni finte per provare le animazioni** (una palese, una
+segreta, voti finti dei membri veri del congresso, scrutinio fra pochi
+minuti). Solo sul dev: con `WP_ENV=live` o `DATA_DIR=./data` si rifiuta.
+
+```bash
+ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 \
+  "cd warera-plus-api && DATA_DIR=./data-dev WP_ENV=dev node --disable-warning=ExperimentalWarning votazioniFinte.js --tra 3"
+```
+
+Cinque tabelle nuove dalla `CREATE TABLE IF NOT EXISTS`, nessuna migrazione.
+Un giro ogni 20 s apre le programmate (fotografa il congresso dal gioco) e
+sigilla le scadute: `/health` → `votazioni` (`errore` che resta = il gioco
+non risponde all'apertura, e la votazione resta "in apertura" senza
+accettare voti). ⚠️ `votazione_scheda` si svuota al sigillo apposta: le
+schede segrete da lì esistono solo rimescolate dentro `votazione.result`.
+
 ## Aggiornare
 
 ```bash
@@ -190,7 +274,7 @@ Poi il preflight, e solo se stampa `PREFLIGHT-OK`:
 
 ```bash
 ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 \
-  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && node --check wealth.js && node --check fonti.js && node --check confini.js && node --check nemici.js && node --check nazione.js && node --check istantanee.js && echo PREFLIGHT-OK"
+  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && node --check wealth.js && node --check fonti.js && node --check confini.js && node --check nemici.js && node --check nazione.js && node --check istantanee.js && node --check operazioni.js && node --check accordi.js && node --check votazioni.js && node --check votazioniFinte.js && echo PREFLIGHT-OK"
 ```
 
 ```bash

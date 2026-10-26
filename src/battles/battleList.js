@@ -31,6 +31,16 @@ import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 import { btlT } from './i18n.js';
 import { getBattleBounty, getBattleContracts } from './api.js';
 import { splitArchiveBounty } from '../diplomacy/battleSpending.js';
+import { righeStima } from '../shared/battleTiming.js';
+
+/** WarEra+: sotto una battaglia in corso, quando può finire il round (per
+ *  lato, come il gioco ai lati del timer) e la battaglia. Calcolo e testi
+ *  in src/shared/battleTiming.js, gli stessi della mappa e delle Operazioni. */
+function tempiHtml(b) {
+  if (!b.timing) return '';
+  const r = righeStima(b.timing);
+  return `<span class="wp-btl-tempi" title="${escapeHtml(r.nota)}">${r.round ? `${escapeHtml(r.round)}<br>` : ''}${escapeHtml(r.battaglia)}</span>`;
+}
 
 // Righe mostrate per blocco: stessa scelta dell'elenco MU (60 righe), che
 // tiene la tabella scorrevole senza impaginare a mano.
@@ -133,7 +143,7 @@ function rowHtml(b) {
   return `
     <tr data-id="${b.id}" class="wp-btl-row wp-btl-clickable wp-btl-type-${b.type}${b.live ? ' wp-btl-live' : ''}">
       <td class="wp-btl-when">${b.live
-        ? `<span class="wp-btl-livetag"><span class="wp-btl-livedot"></span>${btlT('liveNow')}</span><span class="wp-btl-since">${escapeHtml(fmtElapsed(b.startedAt))}</span>`
+        ? `<span class="wp-btl-livetag"><span class="wp-btl-livedot"></span>${btlT('liveNow')}</span><span class="wp-btl-since">${escapeHtml(fmtElapsed(b.startedAt))}</span>${tempiHtml(b)}`
         : fmtDate(b.endedAt)}</td>
       <td class="wp-btl-match">
         ${sideHtml(b.defender, defWon)}

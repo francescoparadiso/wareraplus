@@ -15,6 +15,7 @@ import { loadModule } from '../shared/lazyModule.js';
 import { withModuleLoading } from '../shared/loadingScreen.js';
 import { enterOverlay, leaveOverlay } from './overlayChrome.js';
 import { pushBack, dropBack } from './backNav.js';
+import { state } from '../diplomacy/state.js';
 
 let overlayEl, backBtn, rootEl;
 
@@ -124,7 +125,26 @@ export function initPrivateOverlay() {
   // Si aspetta pero' che la mappa sia pronta, per non montare un overlay
   // sopra la schermata di caricamento.
   const appenaEntrato = catturaRitornoDaDiscord();
-  if (appenaEntrato || authError) {
+  // WarEra+ Accordi: chi è partito da "Entra con Discord" nella sezione
+  // Accordi torna lì, non qui (src/accordi/api.js: entraConDiscord). Un
+  // errore di login si mostra comunque qui, dove c'è chi sa spiegarlo.
+  let ritorno = null;
+  try { ritorno = sessionStorage.getItem('wp_after_login'); sessionStorage.removeItem('wp_after_login'); } catch { /* si atterra qui */ }
+  if (appenaEntrato && !authError && ritorno === 'accordi') {
+    window.addEventListener('wareraplus:diplomacy-ready', () => {
+      import('./accordiOverlay.js').then(m => m.openAccordiView()).catch(() => openPrivateView());
+    }, { once: true });
+  } else if (appenaEntrato && !authError && ritorno?.startsWith('votazioni:')) {
+    // Le Votazioni di Political (src/political/votesApi.js): si torna sulla
+    // nazione e sulla votazione da cui si era premuto "Entra con Discord".
+    const [, paese, voto] = ritorno.split(':');
+    window.addEventListener('wareraplus:diplomacy-ready', () => {
+      import('./politicalOverlay.js')
+        .then(m => m.openPoliticalView(paese || undefined, (paese && state.nationMap?.get(paese)?.name) || '',
+          { openVotes: true, voteId: voto || null }))
+        .catch(() => openPrivateView());
+    }, { once: true });
+  } else if (appenaEntrato || authError) {
     window.addEventListener('wareraplus:diplomacy-ready', () => { openPrivateView(); }, { once: true });
   }
 

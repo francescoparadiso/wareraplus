@@ -40,7 +40,7 @@ import {
 } from './api.js';
 import { nomeNazione, urlBandiera, coloreNazione } from './battles.js';
 import { state } from '../diplomacy/state.js';
-import { getLang } from '../shared/i18n.js';
+import { getLang, t as tShared } from '../shared/i18n.js';
 import { trackEvent } from '../shared/analytics.js';
 
 const CHIAVE_VISTI = 'wp_pv_confini_visti';
@@ -1291,9 +1291,29 @@ export function creaQuadroNazione(ctx) {
         tesseraVar(b, nzT('kProduction'), `${p.bonusProduzione.valore}%`, posizione(p.bonusProduzione, vv.bonusProd),
           { v: vv.bonusProd, formato: (x) => `${x} pp` });
       }
+      // v0.27: la tassa sul lavoro in proprio non esiste più, arriva quella
+      // sui manager. Lo dice il dato (`taxes.manager`), non la data.
       if (p.tasse) {
-        tesseraVar(b, nzT('kTaxes'), `${p.tasse.income ?? '—'}% · ${p.tasse.market ?? '—'}% · ${p.tasse.selfWork ?? '—'}%`, nzT('kTaxesHint'),
+        const v27 = p.tasse.manager != null;
+        tesseraVar(b, nzT('kTaxes'), `${p.tasse.income ?? '—'}% · ${p.tasse.market ?? '—'}% · ${(v27 ? p.tasse.manager : p.tasse.selfWork) ?? '—'}%`, nzT(v27 ? 'kTaxesHintV27' : 'kTaxesHint'),
           { v: vv.tassaReddito, formato: (x) => `${x} pp`, neutro: true });
+      }
+      // v0.27: rendita giornaliera del tesoro (il gioco la dà ORARIA, vedi
+      // src/diplomacy/productionHeatmap.js) e tipo di governo. Non ci sono
+      // finché warera-plus-api non è rideployato: le tessere non compaiono.
+      if (p.rendita) {
+        const g = (x) => Math.round((Number(x) || 0) * 24);
+        tesseraVar(b, nzT('kRevenue'), num(g(p.rendita.total)), t('kRevenueHint', {
+          d: num(g(p.rendita.development)),
+          s: num(g(p.rendita.strategicResourcesBonus)),
+          t: num(g(p.rendita.employeeIncomeTax) + g(p.rendita.managerIncomeTax)),
+        }));
+      }
+      if (p.governo) {
+        // I nomi dei tipi di governo stanno nel dizionario condiviso (li usa
+        // anche il pannello nazione).
+        tesseraVar(b, nzT('kGovType'), tShared('gov_' + p.governo),
+          p.governoDal && p.governo !== 'provisional' ? quando(Date.parse(p.governoDal)) : '');
       }
     });
     gruppo(nzT('grpPeople'), (b) => {
@@ -2726,5 +2746,11 @@ export function creaQuadroNazione(ctx) {
     if (!dati && !caricamento && !errore && !negato) carica();
   }
 
-  return { render, ricarica: carica, precarica, nuovi: () => (dati ? nuovi().length : 0) };
+  return {
+    render, ricarica: carica, precarica, nuovi: () => (dati ? nuovi().length : 0),
+    // Per la pagina Operazioni (main.js): la vede chi vede questa, sulla
+    // stessa nazione. null = non si sa ancora (quadro non arrivato).
+    accesso: () => (dati ? true : negato ? false : null),
+    paese: () => dati?.paese?.id || paeseScelto || null,
+  };
 }
