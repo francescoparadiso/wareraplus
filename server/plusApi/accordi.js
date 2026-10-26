@@ -15,6 +15,14 @@
    Chi entra nell'alleanza entra nel patto, chi esce esce — che è quello
    che un patto fra alleanze vuol dire.
 
+   Dal 2026-10-26 ogni parte può avere anche NAZIONI AGGIUNTE (`a_extra`,
+   `b_extra`): proxy e alleati che stanno fuori dall'alleanza ma dentro il
+   patto. Contano come la parte in tutto — mappa, permessi, controllo. Una
+   nazione non può stare da tutti e due i lati (`parti_sovrapposte`), ma lo
+   si controlla al salvataggio: un'alleanza che dopo accoglie una nazione
+   aggiunta dell'altro lato non invalida il patto, e la nazione si trova
+   semplicemente su tutti e due.
+
    ── CHI LEGGE, CHI SCRIVE ─────────────────────────────────────────────
    LEGGERE è di tutti, senza login: è un archivio pubblico e la mappa lo
    disegna per chiunque. Per questo GET / e GET /:id/controllo stanno
@@ -71,6 +79,7 @@ const LATI_TETTO = new Set(['a', 'b', 'entrambi']);
 // Tetti larghi per l'uso, stretti per l'abuso.
 const MAX_ACCORDI = 2000;
 const MAX_MU_ESCLUSE = 40;
+const MAX_AGGIUNTE = 40;
 const MAX_TESTO = 4000;
 // Le date: un NAP non comincia prima che il gioco esistesse, e un "fine"
 // fra dieci anni è quasi sempre un anno sbagliato nel campo.
@@ -106,6 +115,18 @@ async function nazioniDi(tipo, id) {
   return [...paesi.values()].filter((n) => n.allianceId === id).map((n) => n._id);
 }
 
+/** Le nazioni aggiunte a un lato, dal JSON salvato. */
+function extraDi(json) {
+  try { const v = json ? JSON.parse(json) : []; return Array.isArray(v) ? v : []; } catch { return []; }
+}
+
+/** Tutte le nazioni di un lato del patto, adesso: la parte più le aggiunte.
+ *  `lato` è 'a' o 'b' (le colonne a_type/a_id/a_extra…). */
+async function nazioniLato(acc, lato) {
+  const base = await nazioniDi(acc[`${lato}_type`], acc[`${lato}_id`]);
+  return [...new Set([...base, ...extraDi(acc[`${lato}_extra`])])];
+}
+
 async function parteValida(v, codice) {
   if (!v || typeof v !== 'object') throw new Rifiuto(codice);
   const tipo = String(v.tipo || '');
@@ -117,7 +138,17 @@ async function parteValida(v, codice) {
     const note = await alleanzeNote().catch(() => new Map());
     if (!note.has(id)) throw new Rifiuto(codice);
   }
-  return { tipo: tipoDb(tipo), id };
+  // Le nazioni aggiunte: esistenti, senza doppioni, mai la parte stessa.
+  const paesi = await paesiMappa();
+  if (v.aggiunte != null && (!Array.isArray(v.aggiunte) || v.aggiunte.length > MAX_AGGIUNTE)) throw new Rifiuto(codice);
+  const extra = [];
+  for (const x of v.aggiunte || []) {
+    const n = String(x || '').trim();
+    if (!ID_GIOCO.test(n) || !paesi.has(n)) throw new Rifiuto(codice);
+    if (n === id || extra.includes(n)) continue;
+    extra.push(n);
+  }
+  return { tipo: tipoDb(tipo), id, extra };
 }
 
 // ---------------------------------------------------------------------------
@@ -180,6 +211,12 @@ async function campiAccordo(body) {
   const a = await parteValida(b.parteA, 'parte_a_non_valida');
   const bb = await parteValida(b.parteB, 'parte_b_non_valida');
   if (a.tipo === bb.tipo && a.id === bb.id) throw new Rifiuto('parti_uguali');
+  // Nessuna nazione da tutti e due i lati, contando le aggiunte e i membri
+  // di adesso delle alleanze.
+  const latoA = new Set([...(await nazioniDi(a.tipo, a.id)), ...a.extra]);
+  for (const n of [...(await nazioniDi(bb.tipo, bb.id)), ...bb.extra]) {
+    if (latoA.has(n)) throw new Rifiuto('parti_sovrapposte');
+  }
   const inizio = data(b.inizio, 'inizio_non_valido', { obbligatoria: true });
   const fine = data(b.fine, 'fine_non_valida');
   if (fine != null && fine <= inizio) throw new Rifiuto('fine_prima_di_inizio');
@@ -187,6 +224,8 @@ async function campiAccordo(body) {
     kind: 'nap',
     a_type: a.tipo, a_id: a.id,
     b_type: bb.tipo, b_id: bb.id,
+    a_extra: a.extra.length ? JSON.stringify(a.extra) : null,
+    b_extra: bb.extra.length ? JSON.stringify(bb.extra) : null,
     title: testoBreve(b.titolo, 80),
     body: testoLungo(b.testo, MAX_TESTO),
     starts_at: inizio,
@@ -220,10 +259,9 @@ async function governaUnaParte(p, accordo) {
   if (p.amministra) return true;
   const gov = new Set(p.governa);
   if (!gov.size) return false;
-  const coinvolte = [
-    ...(await nazioniDi(accordo.a_type, accordo.a_id)),
-    ...(await nazioniDi(accordo.b_type, accordo.b_id)),
-  ];
+  // Le nazioni aggiunte sono parte del patto: il loro governo lo scrive
+  // come quello della parte principale.
+  const coinvolte = [...(await nazioniLato(accordo, 'a')), ...(await nazioniLato(accordo, 'b'))];
   return coinvolte.some((id) => gov.has(id));
 }
 
@@ -252,8 +290,8 @@ function forma(r) {
   return {
     id: r.id,
     tipo: r.kind,
-    parteA: { tipo: tipoApi(r.a_type), id: r.a_id },
-    parteB: { tipo: tipoApi(r.b_type), id: r.b_id },
+    parteA: { tipo: tipoApi(r.a_type), id: r.a_id, aggiunte: extraDi(r.a_extra) },
+    parteB: { tipo: tipoApi(r.b_type), id: r.b_id, aggiunte: extraDi(r.b_extra) },
     titolo: r.title,
     testo: r.body,
     inizio: r.starts_at,
@@ -327,8 +365,8 @@ async function leggiClassifiche(richieste) {
 }
 
 async function calcolaControllo(acc) {
-  const A = new Set(await nazioniDi(acc.a_type, acc.a_id));
-  const B = new Set(await nazioniDi(acc.b_type, acc.b_id));
+  const A = new Set(await nazioniLato(acc, 'a'));
+  const B = new Set(await nazioniLato(acc, 'b'));
   const ora = Date.now();
   const dal = acc.starts_at;
   const al = acc.ends_at || ora;

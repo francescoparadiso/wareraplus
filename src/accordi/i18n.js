@@ -11,6 +11,8 @@ import { getLang } from '../shared/i18n.js';
 
 const DICT = {
   it: {
+    addedNations: 'Nazioni aggiunte (proxy, alleati)', addNation: 'Aggiungi una nazione…',
+    err_parti_sovrapposte: 'Una nazione non può stare da tutti e due i lati.',
     statTotal: 'Accordi in archivio', statActive: 'In vigore',
     statNations: 'Nazioni coinvolte', statNationsActive: 'Nazioni con un accordo in vigore',
     title: 'Accordi',
@@ -94,6 +96,8 @@ const DICT = {
     err_errore_server: 'Errore del server. Riprova fra poco.',
   },
   en: {
+    addedNations: 'Added nations (proxies, allies)', addNation: 'Add a nation…',
+    err_parti_sovrapposte: 'A nation cannot be on both sides.',
     statTotal: 'Agreements on record', statActive: 'In force',
     statNations: 'Nations involved', statNationsActive: 'Nations with an agreement in force',
     title: 'Agreements',
@@ -177,6 +181,8 @@ const DICT = {
     err_errore_server: 'Server error. Try again shortly.',
   },
   es: {
+    addedNations: 'Naciones añadidas (proxies, aliados)', addNation: 'Añadir una nación…',
+    err_parti_sovrapposte: 'Una nación no puede estar en los dos lados.',
     statTotal: 'Acuerdos en el archivo', statActive: 'Vigentes',
     statNations: 'Naciones implicadas', statNationsActive: 'Naciones con un acuerdo vigente',
     title: 'Acuerdos',
@@ -260,6 +266,8 @@ const DICT = {
     err_errore_server: 'Error del servidor. Inténtalo de nuevo en breve.',
   },
   de: {
+    addedNations: 'Hinzugefügte Nationen (Proxys, Verbündete)', addNation: 'Nation hinzufügen…',
+    err_parti_sovrapposte: 'Eine Nation kann nicht auf beiden Seiten stehen.',
     statTotal: 'Abkommen im Archiv', statActive: 'Gültig',
     statNations: 'Beteiligte Nationen', statNationsActive: 'Nationen mit gültigem Abkommen',
     title: 'Abkommen',
@@ -343,6 +351,8 @@ const DICT = {
     err_errore_server: 'Serverfehler. Bitte gleich nochmal versuchen.',
   },
   fr: {
+    addedNations: 'Nations ajoutées (proxies, alliés)', addNation: 'Ajouter une nation…',
+    err_parti_sovrapposte: 'Une nation ne peut pas être des deux côtés.',
     statTotal: "Accords dans l'archive", statActive: 'En vigueur',
     statNations: 'Nations concernées', statNationsActive: 'Nations avec un accord en vigueur',
     title: 'Accords',
@@ -426,6 +436,8 @@ const DICT = {
     err_errore_server: 'Erreur du serveur. Réessaie dans un instant.',
   },
   nl: {
+    addedNations: 'Toegevoegde naties (proxy’s, bondgenoten)', addNation: 'Natie toevoegen…',
+    err_parti_sovrapposte: 'Een natie kan niet aan beide kanten staan.',
     statTotal: 'Akkoorden in het archief', statActive: 'Geldig',
     statNations: 'Betrokken naties', statNationsActive: 'Naties met een geldig akkoord',
     title: 'Akkoorden',
@@ -509,6 +521,8 @@ const DICT = {
     err_errore_server: 'Serverfout. Probeer het zo opnieuw.',
   },
   sv: {
+    addedNations: 'Tillagda nationer (proxyer, allierade)', addNation: 'Lägg till en nation…',
+    err_parti_sovrapposte: 'En nation kan inte stå på båda sidor.',
     statTotal: 'Avtal i arkivet', statActive: 'Gällande',
     statNations: 'Berörda nationer', statNationsActive: 'Nationer med ett gällande avtal',
     title: 'Avtal',
@@ -592,6 +606,8 @@ const DICT = {
     err_errore_server: 'Serverfel. Försök igen strax.',
   },
   pt: {
+    addedNations: 'Nações adicionadas (proxies, aliados)', addNation: 'Adicionar uma nação…',
+    err_parti_sovrapposte: 'Uma nação não pode estar dos dois lados.',
     statTotal: 'Acordos no arquivo', statActive: 'Em vigor',
     statNations: 'Nações envolvidas', statNationsActive: 'Nações com um acordo em vigor',
     title: 'Acordos',
@@ -675,6 +691,8 @@ const DICT = {
     err_errore_server: 'Erro do servidor. Tenta de novo daqui a pouco.',
   },
   ar: {
+    addedNations: 'دول مضافة (وكلاء، حلفاء)', addNation: 'أضف دولة…',
+    err_parti_sovrapposte: 'لا يمكن لدولة أن تكون في الطرفين.',
     statTotal: 'الاتفاقيات في الأرشيف', statActive: 'سارية',
     statNations: 'الدول المعنية', statNationsActive: 'دول لديها اتفاقية سارية',
     title: 'الاتفاقيات',

@@ -570,6 +570,16 @@ function migrate() {
     console.log('[plusApi] migrazione: aggiunta op_step.color');
   }
 
+  // 2026-10-26 - le nazioni AGGIUNTE a ciascuna parte di un accordo (proxy,
+  // alleati fuori dall'alleanza): JSON [countryId…], vuoto = solo la parte.
+  const colAccordo = colonne('accordo');
+  for (const nome of ['a_extra', 'b_extra']) {
+    if (!colAccordo.includes(nome)) {
+      db.exec(`ALTER TABLE accordo ADD COLUMN ${nome} TEXT`);
+      console.log(`[plusApi] migrazione: aggiunta accordo.${nome}`);
+    }
+  }
+
   // Qui e non in SCHEMA, per il motivo scritto accanto alla tabella.
   db.exec('CREATE INDEX IF NOT EXISTS idx_wealth_mu_slot ON wealth_snapshot (mu_id, slot)');
   // WarEra+ - scattiRicchezza() cerca per (war_user_id, slot), e la chiave
@@ -1348,7 +1358,7 @@ function impostaPrecedenti(stepId, fromIds) {
 // Solo lettura e scrittura: chi può cosa lo decide accordi.js.
 
 const CAMPI_ACCORDO = ['kind', 'a_type', 'a_id', 'b_type', 'b_id', 'title', 'body', 'starts_at', 'ends_at',
-  'excluded_mus', 'limit_damage', 'limit_side'];
+  'excluded_mus', 'limit_damage', 'limit_side', 'a_extra', 'b_extra'];
 
 function listaAccordi({ limit = 500 } = {}) {
   return getDb().prepare('SELECT * FROM accordo ORDER BY starts_at DESC, id DESC LIMIT ?').all(limit);

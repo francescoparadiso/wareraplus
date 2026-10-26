@@ -103,6 +103,55 @@ function chipParte(p) {
   return c;
 }
 
+/** Un lato nella scheda: la parte e, sotto, le nazioni aggiunte. */
+function latoScheda(p) {
+  const w = el('span', 'wp-ac-lato');
+  w.appendChild(chipParte(p));
+  if (p.aggiunte?.length) {
+    const r = el('span', 'wp-ac-aggiunte');
+    r.appendChild(el('span', 'wp-ac-aggiunte-piu', '+'));
+    for (const id of p.aggiunte) {
+      const g = el('span', 'wp-ac-aggiunta');
+      g.append(bandiera(id), el('span', null, nomeNazione(id)));
+      r.appendChild(g);
+    }
+    w.appendChild(r);
+  }
+  return w;
+}
+
+/** Il selettore delle nazioni aggiunte a un lato: un menù da cui si
+ *  pesca, e i gettoni di quelle già scelte. Costruito una volta per modulo:
+ *  cambiare il tipo di coppia non deve perdere i proxy già messi. */
+function creaAggiunte(iniziali) {
+  const scelte = new Set(iniziali || []);
+  const box = el('div', 'wp-ac-campo');
+  box.appendChild(el('span', 'wp-ac-etichetta', acT('addedNations')));
+  const gettoni = el('div', 'wp-ac-gettoni');
+  const menu = el('select', 'wp-ac-input');
+  const disegna = () => {
+    gettoni.textContent = '';
+    for (const id of scelte) {
+      const g = el('span', 'wp-ac-gettone');
+      g.append(bandiera(id), el('span', null, nomeNazione(id)));
+      const x = bottone('wp-ac-gettone-x', '×', () => { scelte.delete(id); disegna(); });
+      x.title = acT('remove'); x.setAttribute('aria-label', acT('remove'));
+      g.appendChild(x);
+      gettoni.appendChild(g);
+    }
+    menu.textContent = '';
+    const vuoto = el('option', null, acT('addNation')); vuoto.value = '';
+    menu.appendChild(vuoto);
+    const voci = (state.nazioniGlobal || []).filter(n => !scelte.has(n._id))
+      .map(n => [n._id, n.name]).sort((x, y) => String(x[1]).localeCompare(String(y[1])));
+    for (const [id, nome] of voci) { const o = el('option', null, nome); o.value = id; menu.appendChild(o); }
+  };
+  menu.addEventListener('change', () => { if (menu.value) { scelte.add(menu.value); disegna(); } });
+  disegna();
+  box.append(gettoni, menu);
+  return { el: box, valori: () => [...scelte] };
+}
+
 function statoDi(a, ora = Date.now()) {
   if (accordoInVigore(a, ora)) return 'attivo';
   return a.inizio > ora ? 'futuro' : 'scaduto';
@@ -343,7 +392,7 @@ function schedaAccordo(a, ora) {
 
   const testa = el('div', 'wp-ac-testa');
   const parti = el('div', 'wp-ac-parti');
-  parti.append(chipParte(a.parteA), el('span', 'wp-ac-vs', '⇄'), chipParte(a.parteB));
+  parti.append(latoScheda(a.parteA), el('span', 'wp-ac-vs', '⇄'), latoScheda(a.parteB));
   testa.appendChild(parti);
   const badge = el('span', `wp-ac-badge wp-ac-badge-${stato}`,
     acT(stato === 'attivo' ? 'stActive' : stato === 'futuro' ? 'stFuture' : 'stExpired'));
@@ -609,6 +658,10 @@ function apriModulo(a) {
   }
   const rigaParti = el('div', 'wp-ac-riga');
   let selA, selB;
+  // I proxy e gli alleati di ciascun lato. Se il patto si gira (alleanza a
+  // sinistra), le aggiunte girano con lui: pA/pB sono già quelli girati.
+  const aggA = creaAggiunte(pA?.aggiunte);
+  const aggB = creaAggiunte(pB?.aggiunte);
   const tipiDi = (c) => (c === 'nn' ? ['nazione', 'nazione'] : c === 'na' ? ['nazione', 'alleanza'] : ['alleanza', 'alleanza']);
   function disegnaParti() {
     const [ta, tb] = tipiDi(tipoSel.value);
@@ -619,7 +672,11 @@ function apriModulo(a) {
     selB = menuParti(tb, prevB?.tipo === tb ? prevB.id : '');
     selB.dataset.tipo = tb;
     rigaParti.textContent = '';
-    rigaParti.append(campo(acT('sideA'), selA), campo(acT('sideB'), selB));
+    const colA = el('div', 'wp-ac-colonna-lato');
+    colA.append(campo(acT('sideA'), selA), aggA.el);
+    const colB = el('div', 'wp-ac-colonna-lato');
+    colB.append(campo(acT('sideB'), selB), aggB.el);
+    rigaParti.append(colA, colB);
   }
   disegnaParti();
   tipoSel.addEventListener('change', disegnaParti);
@@ -723,8 +780,8 @@ function apriModulo(a) {
     e.preventDefault();
     msg.hidden = true;
     const corpo = {
-      parteA: { tipo: selA.dataset.tipo, id: selA.value },
-      parteB: { tipo: selB.dataset.tipo, id: selB.value },
+      parteA: { tipo: selA.dataset.tipo, id: selA.value, aggiunte: aggA.valori() },
+      parteB: { tipo: selB.dataset.tipo, id: selB.value, aggiunte: aggB.valori() },
       titolo: titolo.value,
       testo: testo.value,
       inizio: daInput(inizio.value),
@@ -736,6 +793,7 @@ function apriModulo(a) {
     const errLocale = !corpo.parteA.id ? 'parte_a_non_valida'
       : !corpo.parteB.id ? 'parte_b_non_valida'
       : corpo.parteA.tipo === corpo.parteB.tipo && corpo.parteA.id === corpo.parteB.id ? 'parti_uguali'
+      : nazioniParte(corpo.parteA).some(id => nazioniParte(corpo.parteB).includes(id)) ? 'parti_sovrapposte'
       : !Number.isFinite(corpo.inizio) ? 'inizio_non_valido'
       : Number.isNaN(corpo.fine) ? 'fine_non_valida'
       : corpo.fine != null && corpo.fine <= corpo.inizio ? 'fine_prima_di_inizio'

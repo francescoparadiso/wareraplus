@@ -39,12 +39,19 @@ export function accordoInVigore(a, ora = Date.now()) {
 }
 
 /** Le nazioni di una parte, adesso. */
+/** Le nazioni di una parte, adesso: la nazione o i membri dell'alleanza,
+ *  più le nazioni AGGIUNTE (proxy, alleati fuori dall'alleanza). */
 export function nazioniParte(parte) {
   if (!parte) return [];
-  if (parte.tipo === 'nazione') return [parte.id];
-  const all = (state.alliancesList || []).find(x => x._id === parte.id);
-  if (all) return (all.memberCountries || []).map(m => m.country).filter(Boolean);
-  return (state.nazioniGlobal || []).filter(n => n.allianceId === parte.id).map(n => n._id);
+  let base;
+  if (parte.tipo === 'nazione') base = [parte.id];
+  else {
+    const all = (state.alliancesList || []).find(x => x._id === parte.id);
+    base = all
+      ? (all.memberCountries || []).map(m => m.country).filter(Boolean)
+      : (state.nazioniGlobal || []).filter(n => n.allianceId === parte.id).map(n => n._id);
+  }
+  return [...new Set([...base, ...(parte.aggiunte || [])])];
 }
 
 function applica() {

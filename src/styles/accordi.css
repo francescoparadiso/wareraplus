@@ -211,6 +211,18 @@ body.light-theme #wp-accordi-root input[type="datetime-local"] { color-scheme: l
 .wp-ac-testa { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 .wp-ac-parti { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; flex: 1; min-width: 0; }
 .wp-ac-vs { color: var(--ac-accent); font-weight: 700; }
+/* Un lato = la parte e, sotto, le nazioni aggiunte (proxy, alleati). */
+.wp-ac-lato { display: inline-flex; flex-direction: column; gap: .3rem; min-width: 0; }
+.wp-ac-aggiunte { display: flex; flex-wrap: wrap; gap: .25rem; align-items: center; max-width: 26rem; }
+.wp-ac-aggiunte-piu { color: var(--ac-ink-soft); font-weight: 700; font-size: .85rem; }
+.wp-ac-aggiunta {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .1rem .45rem; border-radius: 999px;
+  border: 1px dashed var(--ac-rule);
+  font-size: .76rem; color: var(--ac-ink-soft);
+}
+.wp-ac-aggiunta .wp-ac-flag, .wp-ac-gettone .wp-ac-flag { width: 1.05rem; height: .75rem; }
+.wp-ac-colonna-lato { flex: 1 1 14rem; display: flex; flex-direction: column; gap: .5rem; min-width: 0; }
 .wp-ac-parte {
   display: inline-flex; align-items: center; gap: .4rem;
   padding: .25rem .6rem;
