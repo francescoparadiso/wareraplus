@@ -135,6 +135,11 @@ function formaPaese(n, paesi) {
       Object.entries(n.strategicResources.resources).map(([k, v]) => [k, (v || []).length])) : {},
     bonusStrategici: n.strategicResources?.bonuses || null,
     specializzazione: n.specializedItem || null,
+    // v0.27: entrate del tesoro (ORARIE, il client le porta al giorno) e
+    // tipo di governo. Senza `govType` una nazione v0.27 è Provvisoria.
+    rendita: n.income || null,
+    governo: n.govType || (n.income ? 'provisional' : null),
+    governoDal: n.dates?.govTypeChangedAt || null,
     alleanza,
     alleati,
     guerre: n.warsWith || [],

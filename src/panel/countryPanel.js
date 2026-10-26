@@ -13,7 +13,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { state } from '../diplomacy/state.js';
-import { productionInfo } from '../diplomacy/productionHeatmap.js';
+import { productionInfo, revenueOf } from '../diplomacy/productionHeatmap.js';
 import { activeEthics, fetchCountryEthics } from '../diplomacy/countryEthics.js';
 import {
   getAllianceAllies, getDefensivePactAllies,
@@ -379,6 +379,9 @@ function allianceBonusStatHtml(members) {
    segue la stessa regola delle altre: compare solo dove il gioco classifica
    davvero. */
 function productionBonusStatHtml(nation) {
+  // WarEra+ v0.27 — il bonus non c'è più: la stessa casella dice la rendita
+  // giornaliera del tesoro, con le voci nel title (vedi productionHeatmap.js).
+  if (nation?.income) return revenueStatHtml(nation);
   const info = productionInfo(nation);
   if (!info) {
     return `<div class="wp-stat" id="wp-stat-production"><div class="wp-stat-label">${t('production_bonus_label')}</div><div class="wp-stat-value">—</div></div>`;
@@ -396,6 +399,54 @@ function productionBonusStatHtml(nation) {
     `<div class="wp-stat-value up">+${info.bonus}%</div>` +
     (icons ? `<div class="wp-stat-sub">${icons}</div>` : '') +
     `</div>`;
+}
+
+function revenueStatHtml(nation) {
+  const r = revenueOf(nation);
+  if (!r) return `<div class="wp-stat" id="wp-stat-production"><div class="wp-stat-label">${t('revenue_label')}</div><div class="wp-stat-value">—</div></div>`;
+  const types = productionInfo(nation)?.types || [];
+  const icons = types.map(x => `${x.icon}${x.regions > 1 ? x.regions : ''}`).join(' ');
+  const voci = [
+    `🏗 ${fmt(r.development)}`,
+    r.strategic ? `💎 ${fmt(r.strategic)}` : '',
+    `💼 ${fmt(r.employeeTax + r.managerTax)}`,
+    r.govType ? `🏛 ${fmt(r.govType)}` : '',
+  ].filter(Boolean).join(' · ');
+  return `<div class="wp-stat" id="wp-stat-production" title="${voci}"><div class="wp-stat-label">${t('revenue_label')}</div>` +
+    `<div class="wp-stat-value">${fmt(r.total)}</div>` +
+    (icons ? `<div class="wp-stat-sub">${icons}</div>` : '') +
+    `</div>`;
+}
+
+/* WarEra+ v0.27 — il tipo di governo prende il posto delle etiche del
+   partito al governo: è sulla nazione (`govType`, `dates.govTypeChangedAt`),
+   quindi niente richieste. Senza `govType` una nazione v0.27 è ancora
+   Provvisoria (le note: "every country starts as Provisional"); un valore
+   che non conosciamo si mostra com'è, invece di sparire. Il cambio ha 30
+   giorni di attesa dopo la prima scelta. */
+const GOV_TYPES = ['provisional', 'republic', 'nationalistState', 'homelandFront', 'federation', 'plutocracy', 'autocracy', 'mercenaryState'];
+const GOV_ICONS = { provisional: '⏳', republic: '🏛️', nationalistState: '🦅', homelandFront: '🛡️', federation: '🤝', plutocracy: '💰', autocracy: '👑', mercenaryState: '⚔️' };
+const GOV_COOLDOWN_MS = 30 * 864e5;
+
+function govTypeHtml(nation) {
+  const type = nation.govType || 'provisional';
+  const known = GOV_TYPES.includes(type);
+  const name = known ? t('gov_' + type) : type.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
+  const lang = (localStorage.getItem('we_lang') || navigator.language || 'en').slice(0, 2);
+  const day = (ms) => new Date(ms).toLocaleDateString(lang, { day: 'numeric', month: 'short', year: 'numeric' });
+  const changed = Date.parse(nation.dates?.govTypeChangedAt) || 0;
+  const unlock = changed ? changed + GOV_COOLDOWN_MS : 0;
+  const meta = [
+    changed && type !== 'provisional' ? t('gov_since', { d: day(changed) }) : '',
+    unlock > Date.now() ? t('gov_locked', { d: day(unlock) }) : '',
+  ].filter(Boolean).join(' · ');
+  return `
+    <div class="wp-panel-section-title">${t('gov_title')}</div>
+    <div class="wp-eth-box">
+      <div class="wp-eth-party">${GOV_ICONS[type] || '🏛️'} ${escapeHtml(name)}</div>
+      ${known ? `<div class="wp-eth-spec">${escapeHtml(t('govd_' + type))}</div>` : ''}
+      ${meta ? `<div class="wp-eth-spec">${escapeHtml(meta)}</div>` : ''}
+    </div>`;
 }
 
 function buildPanelHtml(nation) {
@@ -494,6 +545,9 @@ function buildPanelHtml(nation) {
 function paintEthics(nation) {
   const host = document.getElementById('wp-panel-ethics');
   if (!host) return;
+  // WarEra+ v0.27 — le etiche non contano più (il dato `party.ethics` c'è
+  // ancora, ma il gioco non lo usa): al loro posto il tipo di governo.
+  if (nation?.income) { host.innerHTML = govTypeHtml(nation); return; }
   fetchCountryEthics(nation._id).then(info => {
     // Pannello già passato a un'altra nazione mentre la richiesta era in
     // volo: non si scrive niente.

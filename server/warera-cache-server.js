@@ -913,7 +913,8 @@ const MU_USER_LOOKUP_BUDGET = 20000;
 // ha ricchezza mediana 40.070 contro 25.560 (danni e ricchezza non entrano
 // nel calcolo, sono due misure indipendenti).
 const WAR_SKILLS = ['attack', 'criticalChance', 'criticalDamages', 'armor', 'precision', 'dodge', 'lootChance'];
-const ECO_SKILLS = ['companies', 'entrepreneurship', 'production', 'management'];
+// v0.27: Leadership prende il posto di Imprenditoria (vedi src/mu/playstyle.js).
+const ECO_SKILLS = ['companies', 'entrepreneurship', 'leadership', 'production', 'management'];
 const skillCost = n => (n * (n + 1)) / 2;
 
 /** 'w' | 'e' | 'm' | 'u' — una lettera sola perché finisce in 16k voci di

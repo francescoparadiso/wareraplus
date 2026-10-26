@@ -247,8 +247,15 @@ export function drawLabels() {
       // quando le etiche sono in memoria (vedi productionHeatmap.js). Con la
       // sola parte da risorse l'etichetta diceva +30 dove la mappa, la
       // legenda e il pannello dicevano +60.
-      const bonus = productionInfo(nation)?.bonus;
+      const info = productionInfo(nation);
+      const bonus = info?.bonus;
       if (typeof bonus !== 'number' || bonus <= 0) return null;
+      // WarEra+ v0.27 — la vista è la rendita al giorno: una cifra, non
+      // una percentuale (vedi productionHeatmap.js).
+      if (info.revenue) {
+        const text = bonus >= 1e3 ? (bonus / 1e3).toFixed(1) + 'K' : bonus >= 10 ? String(Math.round(bonus)) : bonus.toFixed(1);
+        return { text, color: getProductionColor(bonus) };
+      }
       // Mezzo punto in su vale la virgola (+25,5%), il tondo no (+25%).
       const text = `+${bonus % 1 ? bonus.toFixed(1) : bonus}%`;
       return { text, color: getProductionColor(bonus) };

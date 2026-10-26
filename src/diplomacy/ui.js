@@ -395,6 +395,26 @@ export function updateDynamicLegend() {
     const spread = RESOURCE_TYPES
       .map(r => `${r.icon} ${stats.byResource[r.key] || 0}`)
       .join(' · ');
+    // WarEra+ v0.27 — la stessa vista racconta la rendita giornaliera
+    // (vedi productionHeatmap.js): scala, estremi e nota cambiano.
+    if (stats.revenue) {
+      const k = (v) => (v >= 1e3 ? `${(v / 1e3).toFixed(1)}K` : v.toFixed(v >= 10 ? 0 : 1));
+      const p = stats.parts;
+      const tasse = p.employeeTax + p.managerTax;
+      const pct = (v) => (stats.total > 0 ? `${Math.round(v / stats.total * 100)}%` : '—');
+      box.innerHTML = `
+        <div class="legend-section-title">Daily revenue</div>
+        <div class="legend-scale" style="margin:4px 0;">
+          <div style="width:100%;height:14px;background:${productionLegendGradient()};border-radius:3px;"></div>
+        </div>
+        <div class="legend-item" style="justify-content:space-between; padding:0 4px;">
+          <span style="font-size:10px; color:${sub};">0</span>
+          <span style="font-size:10px; color:${sub};">${k(scaleMax())} / day</span>
+        </div>
+        <div class="legend-note">What each country's treasury earns per day (game estimate, square-root scale) · world ${k(stats.total)}/day: development ${pct(p.development)}, strategic resources ${pct(p.strategic)}, wage and manager taxes ${pct(tasse)}${p.govType ? `, government type ${pct(p.govType)}` : ''} · strategic resources held: ${spread} — each pays its holder the development of the country it came from · grey = no revenue (${stats.without} nations)</div>
+      `;
+      return;
+    }
     box.innerHTML = `
       <div class="legend-section-title">Production bonus</div>
       <div class="legend-scale" style="margin:4px 0;">

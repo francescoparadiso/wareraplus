@@ -21,6 +21,10 @@ import {
   setMinVotesToWin,
 } from './config.js';
 import { localFetch } from './api.js';
+// WarEra+ v0.27 — le etiche dei partiti non esistono più nel gioco (il dato
+// resta nella risposta, fermo): lo dice il dato delle nazioni, vedi
+// src/diplomacy/productionHeatmap.js.
+import { isRevenueEra } from '../diplomacy/productionHeatmap.js';
 import { startHeavyOperation, endHeavyOperation } from './loading.js';
 import { showSkeletonPartyView, hideSkeletonPartyView } from './ui.js';
 import { loadPartiesForCountry } from './congress.js';
@@ -129,7 +133,7 @@ export async function loadPartyDetails(partyId) {
       <div class="party-overview-item"><span class="party-overview-label">${t('party_country')}</span><span>${countryNamesMap.get(partyData.country) || partyData.country || currentCountryId}</span></div>
       <div class="party-overview-item"><span class="party-overview-label">${t('party_founded')}</span><span>${partyData.createdAt ? new Date(partyData.createdAt).toLocaleDateString() : '—'}</span></div>
       ${partyData.description ? `<div class="party-overview-item"><span class="party-overview-label">${t('party_description')}</span><span>${escapeHtml(partyData.description)}</span></div>` : ''}
-      ${partyData.ethics ? `
+      ${partyData.ethics && !isRevenueEra() ? `
         <div class="party-overview-item"><span class="party-overview-label">${t('party_ethics')}</span><span>
           Militarism: ${partyData.ethics.militarism ?? '—'} |
           Isolationism: ${partyData.ethics.isolationism ?? '—'} |

@@ -225,3 +225,65 @@ Tutto pubblico, quasi tutto già dentro le due chiamate del boot (costo zero):
    ricognizione si rifà in pochi minuti confrontando `gameConfig`,
    `getAllCountries`, `getRegionsObject`, `getMapData`), rideploy del
    cache-server e di warera-plus-api se toccati.
+
+---
+
+## 6. Fatto il 2026-10-26 (branch `v0.27`, giorno del rilascio)
+
+Tutto riconosce la versione **dal dato**, non dalla data: lo stesso codice
+gira sul live di oggi (v0.26) e su quello di domani. Provato nel browser
+innestando nella pagina i dati veri di apidev (nazioni e regioni per codice)
+e, per le Rendite, con `?api=dev`.
+
+**Risondato su apidev la mattina del rilascio** (cambiato dal 23/10):
+- `country.getAllCountries`: spariti anche `strategicResources.bonuses` e la
+  classifica `rankings.countryProductionBonus`; `taxes` è ora
+  `{income, market, manager}` (via `selfWork`); `govType` manca del tutto
+  sulle nazioni ancora Provvisorie. Su apidev mancano anche `allianceId`,
+  `enemy`, `rulingParty`, `specializedItem`: probabilmente perché vuoti in un
+  mondo nuovo, ma va ricontrollato sul live.
+- ⚠️ **`income` è ORARIO**: `income.development` dell'Egitto = 0,5046 =
+  sviluppo 12,11 ÷ 24, e la rendita di una risorsa strategica torna allo stesso
+  modo ("giornaliera, pari allo sviluppo" nelle note). Il tool moltiplica per
+  24 e mostra il giorno.
+- `company.getById` non ha nessun campo che dica quanti dipendenti ci sono.
+- `gameStat.getPpMoneyValue` vuole l'input **vuoto**: con `{}`, anche dentro un
+  batch, risponde 400. Si chiama con una GET a parte.
+
+**Le rotture:**
+- **Censimento aziende** (`server/companyCensus.js`): senza `workerCount` le
+  statistiche si chiedono per tutte le aziende (~2.100 blocchi da 25, di notte),
+  elaborate blocco per blocco per non tenerle in RAM; "con dipendenti" =
+  dipendenti che ieri hanno prodotto, numero dei dipendenti `null`,
+  `coverage.workersKnown: false`. La scheda Produzione toglie la colonna e lo
+  dice nella nota.
+- **Bonus produzione → Rendita giornaliera** (`productionHeatmap.js` e i suoi
+  agganci in `map.js`, `labels.js`, `ui.js`, `viewOverview.js`): stessa vista e
+  stesso bottone, ma con `income` racconta la rendita del tesoro (scala a
+  radice, cifre sulle nazioni, classifica con le voci, regioni più redditizie).
+  Niente più richieste per le etiche.
+- **Pannello nazione**: la casella del bonus diventa "Rendita / giorno"; la
+  sezione delle etiche del partito diventa **Tipo di governo** (nome, effetti
+  dalle note, da quando, fine dei 30 giorni di attesa).
+- **Rendite di produzione** (`src/market/*`): modalità dipendenti. Costo per
+  punto = valore del punto × aspettativa ÷ (1 + bonus), **aspettativa di
+  pareggio** per risorsa, simulatore con Produzione / Aspettativa / Bonus al
+  posto di paga, energia, fedeltà. Niente più chiamate alle regioni consigliate.
+- **Statistiche nazioni**: la colonna "Bonus produzione" diventa "Rendita /
+  giorno" (stessa chiave `prod`).
+- **Political**: le etiche del partito non si mostrano più.
+- **Stile di gioco**: Leadership conta come economia (client e server). ⚠️ Il
+  reset gratuito del rilascio sembrerà un travaso nelle tendenze a 7 giorni.
+- **Confini**: `costa` è `null` quando `hasCoast` manca, non `false`.
+- **La mia nazione**: tasse con quella sui manager, tessere Rendita e Tipo di
+  governo (servono i campi nuovi di `server/plusApi/nazione.js`).
+
+**Serve il rideploy** di cache-server (censimento, stile di gioco) e
+warera-plus-api (confini, la mia nazione). Senza, il resto funziona: il
+censimento resterebbe sul filtro vecchio e, dopo il rilascio, a zero
+dipendenti.
+
+**Non fatto:** Posizione e Manager dell'Ottimizzatore; una vista mappa per
+tipo di governo; i nomi delle regioni scritti a mano (etichette, ancore delle
+Operazioni, archivi importati) e gli `overseasLinks`, da controllare sul live
+dopo il rilascio.

@@ -350,6 +350,10 @@ document.getElementById('mode-production')?.addEventListener('click', async () =
   // essere già stata aperta dal pannello nazione per una nazione sola (vedi
   // countryEthics.js:_publish), e quella non basta a colorare il mondo.
   if (state.countryEthicsComplete) return;
+  // WarEra+ v0.27 — la vista è diventata la rendita giornaliera e le etiche
+  // non danno più nessun bonus: niente richieste per caricarle.
+  const { isRevenueEra } = await import('./productionHeatmap.js');
+  if (isRevenueEra()) return;
   try {
     const { ensureAllCountryEthics } = await import('./countryEthics.js');
     await ensureAllCountryEthics();

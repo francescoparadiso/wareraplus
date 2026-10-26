@@ -441,7 +441,8 @@ async function quadroConfini(countryId) {
       battaglia: r.activeBattle || null,
       giacimento: r.deposit?.type ? { tipo: r.deposit.type, bonus: r.deposit.bonusPercent ?? null, fine: Date.parse(r.deposit.endsAt || '') || null } : null,
       risorsa: r.strategicResource || null,
-      costa: Boolean(r.hasCoast),
+      // v0.27: `hasCoast` non c'è più nella regione → null (non noto), non false.
+      costa: r.hasCoast === undefined ? null : Boolean(r.hasCoast),
       difese: difese(id, r, cfg),
     };
   }).sort((a, b) => (b.capitale - a.capitale) || String(a.nome).localeCompare(String(b.nome)));

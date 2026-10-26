@@ -46,6 +46,16 @@
    Sono ~il 9% (campione di 914 aziende: 81 con dipendenti), cioè
    qualche migliaio di chiamate in meno al giorno.
 
+   ⚠️ DALLA v0.27 (2026-10-26) quel filtro non esiste più: i dipendenti
+   sono NPC, `company.getById` ha perso `workerCount` e `employee.*` con
+   la chiave risponde 403. Le statistiche si chiedono per TUTTE le
+   aziende (~2.100 blocchi da 25 invece di ~190: un'ora e mezza in più,
+   sempre di notte), elaborate blocco per blocco senza tenerle in memoria.
+   "Con dipendenti" diventa "i cui dipendenti hanno prodotto ieri"
+   (`employeeProd > 0`), il numero dei dipendenti diventa null e la
+   copertura lo dice (`workersKnown: false`). Lo scambio fra le due forme
+   lo decide il dato, non la data.
+
    ⚠️ COSA NON È CONTATO, E VA DETTO NELLA VISTA: la tassa sul lavoro in
    proprio (`taxes.selfWork`) e quella di mercato (`taxes.market`). Della
    prima non si sa ancora su cosa si applichi, la seconda dipende da chi
@@ -199,13 +209,21 @@ function _aliquote() {
  *  i risultati nello stesso ordine degli input (null dove è fallita). */
 async function _aBlocchi(proc, inputs, dimensione) {
   const out = [];
+  await _perBlocchi(proc, inputs, dimensione, (res) => { out.push(...res); });
+  return out;
+}
+
+/** Come _aBlocchi, ma consegna ogni blocco a `suBlocco(risultati, inizio)`
+ *  e non tiene niente: con la v0.27 le statistiche si chiedono per TUTTE
+ *  le aziende (~52.000 × 31 giorni), che tutte insieme in memoria
+ *  starebbero strette nei 954 MB del VPS. */
+async function _perBlocchi(proc, inputs, dimensione, suBlocco) {
   for (let i = 0; i < inputs.length; i += dimensione) {
     const blocco = inputs.slice(i, i + dimensione);
     const res = await deps.trpcBatch(blocco.map((x) => [proc, x]), { useWorker: true });
-    out.push(...res);
+    suBlocco(res, i);
     if (i + dimensione < inputs.length) await sleep(PAUSA_MS);
   }
-  return out;
 }
 
 // ── Il giro ────────────────────────────────────────────────────────────
@@ -251,50 +269,75 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
     const aliquote = _aliquote();
     const nazioneDi = (regionId) => regioni[regionId]?.country || null;
 
-    // 3. La fotografia: per risorsa e per nazione dove opera l'azienda.
-    const items = {};
-    const countries = {};
-    let conDipendenti = 0, dipendenti = 0;
+    // WarEra+ v0.27 — `company.getById` non porta più `workerCount`: i
+    // dipendenti sono NPC che con la chiave non si vedono (employee.* →
+    // 403). Quanti sono non lo dice più nessuno; si sa invece, dalle
+    // statistiche, se IERI i dipendenti di un'azienda hanno prodotto. Quindi
+    // senza `workerCount` le statistiche si chiedono per tutte le aziende
+    // (con la v0.27 le hanno quasi tutti: il filtro risparmierebbe poco),
+    // "con dipendenti" vuol dire "con produzione dei dipendenti ieri" e il
+    // numero dei dipendenti resta null. Riconosciuto dal dato, non dalla
+    // data: lo stesso codice gira prima e dopo il rilascio.
+    const conteggioNoto = aziende.some((c) => c.workerCount !== undefined);
+
+    // 3. Chi interrogare: con il conteggio, le sole aziende con dipendenti
+    //    (senza dipendenti non c'è salario, quindi non c'è tassa).
     const daInterrogare = [];
     for (const c of aziende) {
-      const code = c.itemCode;
       const w = Number(c.workerCount) || 0;
-      const cid = nazioneDi(c.region);
-      const it = items[code] || (items[code] = [0, 0, 0]);
-      it[0]++; if (w > 0) it[1]++; it[2] += w;
-      if (cid) {
-        const pc = countries[cid] || (countries[cid] = {});
-        const r = pc[code] || (pc[code] = [0, 0, 0]);
-        r[0]++; if (w > 0) r[1]++; r[2] += w;
-      }
-      if (w > 0) {
-        conDipendenti++; dipendenti += w;
-        daInterrogare.push({ id: c._id, code, cid });
-      }
+      if (!conteggioNoto || w > 0) daInterrogare.push({ id: c._id, code: c.itemCode, cid: nazioneDi(c.region) });
     }
 
-    // 4. I salari pagati, giorno per giorno, delle sole aziende con dipendenti.
-    const stats = await _aBlocchi('work.getStatsByCompany',
-      daInterrogare.map((x) => ({ companyId: x.id })), CHUNK_STATS);
+    // 4. I salari pagati, giorno per giorno, blocco per blocco.
     const ieriUtc = giornoMeno(giornoUtc(), 1);
     const oggiUtc = giornoUtc();
     const perGiorno = {};        // giornoUtc → code → cid → salari
+    const prodottoIeri = new Set();   // id delle aziende i cui dipendenti hanno prodotto ieri
     let statsOk = 0;
-    stats.forEach((righe, i) => {
-      if (!Array.isArray(righe)) return;
-      statsOk++;
-      const { code, cid } = daInterrogare[i];
-      if (!cid) return;
-      for (const r of righe) {
-        const g = r?.dailyDate;
-        const wage = Number(r?.wage) || 0;
-        // Oggi è una giornata a metà: entra domani, intera.
-        if (!g || g >= oggiUtc || wage <= 0) continue;
-        const pg = perGiorno[g] || (perGiorno[g] = {});
-        const pc = pg[code] || (pg[code] = {});
-        pc[cid] = (pc[cid] || 0) + wage;
+    await _perBlocchi('work.getStatsByCompany',
+      daInterrogare.map((x) => ({ companyId: x.id })), CHUNK_STATS, (res, inizio) => {
+        res.forEach((righe, j) => {
+          if (!Array.isArray(righe)) return;
+          statsOk++;
+          const { id, code, cid } = daInterrogare[inizio + j];
+          for (const r of righe) {
+            const g = r?.dailyDate;
+            if (g === ieriUtc && Number(r?.employeeProd) > 0) prodottoIeri.add(id);
+            const wage = Number(r?.wage) || 0;
+            // Oggi è una giornata a metà: entra domani, intera.
+            if (!cid || !g || g >= oggiUtc || wage <= 0) continue;
+            const pg = perGiorno[g] || (perGiorno[g] = {});
+            const pc = pg[code] || (pg[code] = {});
+            pc[cid] = (pc[cid] || 0) + wage;
+          }
+        });
+      });
+
+    // 5. La fotografia: per risorsa e per nazione dove opera l'azienda.
+    //    [aziende, conDipendenti, dipendenti] — il terzo null senza conteggio.
+    const items = {};
+    const countries = {};
+    let conDipendenti = 0, dipendenti = conteggioNoto ? 0 : null;
+    const conta = (riga, conDip, w) => {
+      riga[0]++;
+      if (conDip) riga[1]++;
+      riga[2] = conteggioNoto ? riga[2] + w : null;
+    };
+    for (const c of aziende) {
+      const code = c.itemCode;
+      const w = Number(c.workerCount) || 0;
+      const conDip = conteggioNoto ? w > 0 : prodottoIeri.has(c._id);
+      const cid = nazioneDi(c.region);
+      conta(items[code] || (items[code] = [0, 0, 0]), conDip, w);
+      if (cid) {
+        const pc = countries[cid] || (countries[cid] = {});
+        conta(pc[code] || (pc[code] = [0, 0, 0]), conDip, w);
       }
-    });
+      if (conDip) {
+        conDipendenti++;
+        if (conteggioNoto) dipendenti += w;
+      }
+    }
 
     // Un giorno già misurato non si riscrive: il giro di oggi, per un
     // giorno di due settimane fa, ne sa MENO di quello di allora (vedi
@@ -329,6 +372,9 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
       companies: aziende.length,
       withWorkers: conDipendenti,
       workers: dipendenti,
+      // false dalla v0.27: "con dipendenti" = dipendenti che hanno prodotto
+      // ieri, e il numero dei dipendenti non si conosce (vedi sopra).
+      workersKnown: conteggioNoto,
       statsAsked: daInterrogare.length,
       statsOk,
       seconds: Math.round((Date.now() - t0) / 1000),
@@ -337,7 +383,7 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
     store.updatedAt = Date.now();
     if (!store.startedAt) store.startedAt = store.updatedAt;
     _write(store);
-    console.log(`[company-census] ${aziende.length} aziende (${conDipendenti} con dipendenti, ${dipendenti} dipendenti), `
+    console.log(`[company-census] ${aziende.length} aziende (${conDipendenti} con dipendenti, ${dipendenti ?? '?'} dipendenti), `
       + `${statsOk}/${daInterrogare.length} statistiche, ${giorniScritti} giorni di salari scritti, ${store.coverage.seconds}s`);
   } catch (err) {
     console.error('[company-census] giro fallito:', err.message);

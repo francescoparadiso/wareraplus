@@ -20,7 +20,7 @@
    superjson `.json`), e `trpcBatchManual` gestisce già entrambi i casi.
    ══════════════════════════════════════════════════════════════ */
 
-import { ECO_PROXY_BASE } from '../diplomacy/config.js';
+import { API_BASE_URL, ECO_PROXY_BASE } from '../diplomacy/config.js';
 import { IS_DEV_BUILD } from '../shared/deployEnv.js';
 import { trpcBatchManual, cacheKey, cacheGet, cacheSet } from '../shared/trpcClient.js';
 
@@ -141,6 +141,27 @@ export async function ecoBatchByKey(proc, inputsByKey) {
 
 /* ── Dati globali (gameConfig + prezzi), cache localStorage 10 min ── */
 let _mem = null; // cache di processo entro la stessa sessione/run
+
+/* WarEra+ v0.27 — quanto vale in monete UN punto produzione, secondo il
+   gioco (scambi di materie prime degli ultimi 7 giorni). È la base del
+   salario dei dipendenti: paga oraria = Produzione ÷ 4 × questo valore ×
+   aspettativa del dipendente (70–130%). Pubblica, ma vuole l'input VUOTO
+   (con `{}` risponde 400), quindi niente batch: una GET a parte. Prima
+   della v0.27 la procedura non esiste (404) → null, e chi la usa lo sa. */
+let _pp = { v: null, ts: 0 };
+export async function loadPpMoneyValue() {
+  if (_pp.ts && (Date.now() - _pp.ts) < GLOBAL_TTL_MS) return _pp.v;
+  const base = _target === 'dev' ? DEV_API_BASE : API_BASE_URL;
+  try {
+    const res = await fetch(`${base}/trpc/gameStat.getPpMoneyValue`);
+    const json = res.ok ? await res.json() : null;
+    const v = Number(json?.result?.data);
+    _pp = { v: Number.isFinite(v) && v > 0 ? v : null, ts: Date.now() };
+  } catch (_) {
+    _pp = { v: null, ts: Date.now() };
+  }
+  return _pp.v;
+}
 
 export async function loadGameData() {
   if (_mem && (Date.now() - _mem.ts) < GLOBAL_TTL_MS) return _mem;
