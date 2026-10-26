@@ -732,6 +732,8 @@ body.light-theme .wp-panel-name {
 body.light-theme .wp-players-overlay { --wp-ov-accent: #be185d; }
 .wp-accordi-overlay { --wp-ov-accent: #00d4ff; } /* Accordi: il ciano dei NAP sulla mappa */
 body.light-theme .wp-accordi-overlay { --wp-ov-accent: #0077a3; }
+.wp-tournament-overlay { --wp-ov-accent: #a3e635; } /* Tornei: lime */
+body.light-theme .wp-tournament-overlay { --wp-ov-accent: #4d7c0f; }
 /* L'oro chiaro sparisce sul fondo chiaro: sul tema chiaro l'accento della
    sezione diventa la sua versione scura (la stessa dichiarata come
    rgbLight in OVERLAY_TINTS, src/app/overlayChrome.js). */

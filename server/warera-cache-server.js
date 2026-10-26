@@ -224,6 +224,12 @@ const {
 const {
   initCompanyCensus, runCompanyCensus, companyCensusDovuto, readCompanyCensus, statoCompanyCensus,
 } = require('./companyCensus');
+// WarEra+ tornei: tabellone e forza delle squadre (danno settimanale dei
+// loro iscritti) gia' calcolata, per non far scaricare a ogni browser la
+// classifica settimanale intera. Vedi il blocco in testa a server/tournament.js.
+const {
+  initTournament, pollTournament, snapshotWeekly, readTournament, readTournamentTeam, statoTournament,
+} = require('./tournament');
 
 const app = express();
 const PORT = 3001;
@@ -429,6 +435,11 @@ initPriceHistory({
 
 // La giornata storica: solo cache, nessuna chiamata.
 initDayHistory({ readCache, writeCache });
+
+// Tornei: richieste pubbliche. In cache le fotografie della classifica
+// settimanale (weekly-snaps/), il danno delle partite finite e il registro
+// delle previsioni (vedi server/tournament.js).
+initTournament({ trpcBatch: (...args) => trpcBatch(...args), readCacheShared, readCache, writeCache, cacheDir: CACHE_DIR });
 
 // I trasferimenti: solo cache. La fotografia gliela passa pollCitizens.
 initCitizenMoves({ readCache, writeCache });
@@ -2533,6 +2544,15 @@ cron.schedule('40 */6 * * *', () => { refreshPillConfig().catch(() => {}); });
 // tutte le risorse: ventiquattro al giorno in totale.
 cron.schedule('27 * * * *', pollPrices);
 
+// WarEra+ tornei: ogni 3 minuti, al secondo :20 (lontano dai cron al
+// minuto pieno). Tabellone e squadre dell'ultimo torneo di ogni tipo; la
+// classifica settimanale solo ogni 10 minuti (vedi server/tournament.js).
+cron.schedule('20 */3 * * * *', pollTournament);
+// Fotografia della classifica settimanale ogni 6 ore, alle :55 UTC: quella
+// delle 23:55 della domenica e' la lettura finale prima del reset del
+// lunedi', e regge la settimana mobile di tutta la settimana dopo.
+cron.schedule('0 55 5,11,17,23 * * *', snapshotWeekly, { timezone: 'UTC' });
+
 // WarEra+ andamento battaglie: ogni minuto, al secondo :40. Il tick dura
 // 2 minuti esatti, quindi un tick su due cade fra due giri e nessuno si
 // perde. Il :40 tiene il giro lontano dallo scatto dei cron al minuto :00
@@ -2591,6 +2611,9 @@ cron.schedule('20 3 * * *', () => {
   // riavvio a meta' pomeriggio evita che la candela di oggi si apra solo
   // alle :27 successive.
   await pollPrices();
+  // Tornei: senza await, la prima classifica settimanale pesa 2 MB e non
+  // deve ritardare il resto dell'avvio.
+  pollTournament().catch(err => console.error('[tournament] avvio:', err.message));
   // Alleanze: senza await. Il primo giro della vita del file sfoglia ~115
   // pagine (un paio di minuti) e non deve ritardare il resto dell'avvio;
   // dopo, e' una richiesta per famiglia.
@@ -3195,6 +3218,32 @@ app.get('/battle-timeline', (req, res) => {
 // risorsa. `days` e' la finestra chiesta, `coverageFrom` quella che c'e'
 // davvero — la vista disegna la seconda e dichiara la differenza invece di
 // far sembrare "prezzo fermo" un archivio che non era ancora nato.
+// Tornei (server/tournament.js): tabellone + forza di ogni squadra gia'
+// sommata. `type` mu|country, `id` un torneo preciso (default l'ultimo del
+// tipo), `me` l'id di un personaggio per sapere la sua squadra.
+// Iscritti di una squadra col danno degli ultimi 7 giorni e quello fatto
+// nel torneo. 404 se il torneo non e' in memoria: il client ricade sui
+// dati che ha.
+app.get('/tournament/team', (req, res) => {
+  const id = /^[a-f0-9]{24}$/.test(String(req.query.id || '')) ? String(req.query.id) : null;
+  const team = /^[a-f0-9]{24}$/.test(String(req.query.team || '')) ? String(req.query.team) : null;
+  const data = id && team ? readTournamentTeam({ id, team }) : null;
+  if (!data) return res.status(404).json({ error: 'squadra non in memoria' });
+  res.json(data);
+});
+
+app.get('/tournament', async (req, res) => {
+  const type = req.query.type === 'country' ? 'country' : 'mu';
+  const id = /^[a-f0-9]{24}$/.test(String(req.query.id || '')) ? String(req.query.id) : null;
+  const me = /^[a-f0-9]{24}$/.test(String(req.query.me || '')) ? String(req.query.me) : null;
+  try {
+    res.json(await readTournament({ type, id, me }));
+  } catch (err) {
+    console.error('[tournament] richiesta fallita:', err.message);
+    res.status(502).json({ error: err.message });
+  }
+});
+
 app.get('/price-history', (req, res) => {
   const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 365);
   res.json(readPriceHistory(days));
@@ -3813,6 +3862,8 @@ app.get('/health', (req, res) => res.json({
   // `copertura.statsOk` < `statsAsked` vuol dire statistiche perse (di
   // solito la chiave): i salari di quel giro sono sottostimati.
   companyCensus: statoCompanyCensus(),
+  // Tornei: quanti in memoria, a quando risale la classifica settimanale.
+  tournament: statoTournament(),
   // Storico politico: elezioni riassunte (complete) e i tre archivi che
   // accumulano, ognuno col suo `copreDa`.
   politicalHistory: statoPoliticalHistory(),

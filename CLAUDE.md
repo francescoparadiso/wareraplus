@@ -268,7 +268,7 @@ serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`
 `/ticker` + `/ticker/summary`,
 `/region-history/{at,range,events,contested,war-intensity}`, `/alliances`,
 `/battles`, `/elections`, `/parties`, `/users-lite`, `/credit-profiles`,
-`/mu-damage-history`,
+`/mu-damage-history`, `/tournament`,
 `/visits`, `/health`.
 
 Espone inoltre **`/trpc/*`**: un proxy passthrough verso `api2.warera.io`
@@ -564,6 +564,29 @@ sapere:
 - l'esito nelle liste compare solo a **scrutinio finito**
   (`fineScrutinio`): lo scrutinio parte per tutti alla stessa ora
   (`scrutinioAlle` = chiusura + 1 minuto) e dura quanto dice il server.
+
+I **Tornei** (`src/tournament/*` + `server/tournament.js`, dal 2026-10-25)
+prendono tabellone e forza delle squadre da `/tournament` (~50 KB invece dei
+~700 che il browser scaricava da solo); senza server fanno da sé, col solo
+danno della settimana in corso, e lo dichiarano. Tre cose che si riempiono col
+tempo, da sapere prima di crederle rotte:
+
+- la **settimana mobile** (forza = danno degli ultimi 7 giorni, non della
+  settimana in corso che riparte il lunedì alle 00:00 UTC) vive delle
+  fotografie della classifica in `cache/weekly-snaps/`, ogni 6 ore alle :55
+  UTC. La prima è del 25 ottobre: fino alla domenica successiva la parte della
+  settimana scorsa è STIMATA (`weeklyMode: 'estimate'`), poi è esatta;
+- la **forma nel torneo** (danno per round nelle partite già giocate) entra
+  nel modello solo con ≥ 30 partite in cui c'era prima di giocarle: misurata
+  sul turno 2 del 23 ottobre, log-loss fuori campione 0,458 contro ~0,51 del
+  solo settimanale. Lo stesso modello sta in `model.js` e nel server: se
+  cambi uno, cambia l'altro;
+- il **registro delle previsioni** (`cache/tournament-predictions`) scrive la
+  probabilità appena una partita ha le due squadre e non la tocca più: parte
+  dal 25 ottobre, e le partite già avviate al primo sguardo (`late`) non
+  contano. ⚠️ Non "riempirlo" ricalcolando le partite passate col modello di
+  oggi: sarebbe indovinare col senno di poi, esattamente quello che il
+  registro esiste per evitare.
 
 Il **danno ora per ora** e la **curva a 14 giorni** nella scheda nazione
 (`src/nations/damageCurves.js` + `server/damageTimeline.js`) dipendono da
