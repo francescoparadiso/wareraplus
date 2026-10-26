@@ -5,7 +5,12 @@
      · vista Produzione — le regioni con un GIACIMENTO (bonus temporaneo
        +30% su una risorsa, region.deposit in state.regionData) pulsano,
        sempre più in fretta man mano che il bonus sta per scadere: la
-       cosa da sapere di un giacimento è quanto gli resta;
+       cosa da sapere di un giacimento è quanto gli resta.
+       Dalla v0.27 i giacimenti non esistono più e la vista racconta la
+       rendita giornaliera (productionHeatmap.js): "respirano" in oro le
+       TOP_REVENUE regioni che rendono di più, grandi quanto la loro
+       rendita — le stesse dell'elenco nel riepilogo. Poche apposta: un
+       puntino per ogni regione con una rendita coprirebbe la mappa;
      · vista Popolazione — le nazioni che nelle ultime 24 ore hanno
        guadagnato giocatori ATTIVI "respirano" in verde, quelle che ne
        hanno persi in rosso, grandi quanto la variazione;
@@ -25,7 +30,8 @@
 
 import { state } from './state.js';
 import { countryAnchor } from './flowGeometry.js';
-import { activeDeposits } from './productionHeatmap.js';
+import { activeDeposits, isRevenueEra, topRevenueRegions } from './productionHeatmap.js';
+import { regionAnchor } from './travelDistance.js';
 import { animationsOn } from '../shared/motion.js';
 
 const SRC = 'wp-map-pulses-src';
@@ -36,6 +42,7 @@ const COIN = 'wp-funding-coin';       // la stessa moneta della vista Finanziame
 const FRAME_MS = 40;
 
 const MAX_POP = 40;                   // nazioni che respirano: le variazioni più grosse
+const TOP_REVENUE = 10;               // v0.27: regioni più redditizie che respirano
 const MIN_TREASURY_PCT = 2;           // sotto, il tesoro "non è cambiato molto"
 const MAX_TREASURY = 30;
 
@@ -60,7 +67,18 @@ function regionPos(id) {
 
 function build(mode) {
   _items = [];
-  if (mode === 'production') {
+  if (mode === 'production' && isRevenueEra()) {
+    // v0.27: le regioni più redditizie. Il punto è quello della geometria
+    // (regionAnchor), non `position`, che per alcune regioni è la città di
+    // un'altra (vedi le Operazioni in CLAUDE.md).
+    const rows = topRevenueRegions(TOP_REVENUE);
+    const max = rows[0]?.total || 1;
+    for (const r of rows) {
+      const pos = regionAnchor(r.id) || regionPos(r.id);
+      if (!pos) continue;
+      _items.push({ kind: 'revenue', pos, w: Math.sqrt(r.total / max), phase: _items.length * 0.37 % 1 });
+    }
+  } else if (mode === 'production') {
     const now = Date.now();
     for (const d of activeDeposits(now)) {
       const pos = regionPos(d.regionId);
@@ -102,6 +120,12 @@ function features(now, still) {
         if (still) break;
       }
       feats.push({ type: 'Feature', properties: { role: 'dot', c: '#e3b341', r: 3, o: 1 }, geometry: { type: 'Point', coordinates: it.pos } });
+    } else if (it.kind === 'revenue') {
+      // Un respiro lento in oro, come la popolazione: non è un conto alla
+      // rovescia, è "qui si incassa".
+      const b = still ? 0.5 : 0.5 + 0.5 * Math.sin((now / 3600 + it.phase) * 2 * Math.PI);
+      const r = (5 + 12 * it.w) * (0.75 + 0.35 * b);
+      feats.push({ type: 'Feature', properties: { role: 'ring', c: '#e3b341', r, o: 0.35 + 0.45 * b, fill: 1 }, geometry: { type: 'Point', coordinates: it.pos } });
     } else if (it.kind === 'pop') {
       // Un respiro lento: si gonfia e si sgonfia, non batte.
       const b = still ? 0.5 : 0.5 + 0.5 * Math.sin((now / 3200 + it.phase) * 2 * Math.PI);
