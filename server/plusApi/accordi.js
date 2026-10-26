@@ -46,11 +46,22 @@
      · ATTACCO DIRETTO: una nazione di una parte ha aperto la battaglia
        contro una nazione dell'altra — è la violazione classica di un NAP;
      · TETTO: con un limite, il danno di quella parte supera il massimo.
-   Le unità escluse dal patto si tolgono dal conto con la classifica per
-   UNITÀ dello stesso schieramento. È una STIMA e la vista lo dice: la
-   classifica per unità non dice di che nazionalità sono i membri, quindi
-   si toglie tutto il danno dell'unità esclusa anche se dentro ci fosse
-   qualche straniero.
+   Le unità escluse dal patto si tolgono dal conto GIOCATORE PER GIOCATORE
+   (dal 2026-10-26): la classifica per giocatore dello schieramento
+   (`type: 'user'`, a pagine da 100 — la somma torna al centesimo col
+   totale del lato, verificato) incrociata con i membri dell'unità esclusa
+   (`mu.getById` → `members`) e la loro nazionalità (`user.getUserLite`).
+   Si toglie solo chi sta in un'unità esclusa E ha la nazionalità della
+   parte: il danno degli stranieri di quell'unità nel totale per nazione
+   non c'era mai, e toglierlo — come faceva la prima versione, col danno
+   intero dell'unità — dava un netto più BASSO del vero, cioè un tetto
+   superato che risultava rispettato.
+   ⚠️ Unità e nazionalità sono quelle di ADESSO: il gioco non dice in che
+   unità stava un giocatore il giorno della battaglia. La vista lo dice.
+   Le pagine per giocatore si leggono solo nelle battaglie in cui la
+   classifica per unità mostra danno di un'unità esclusa (o è tagliata ai
+   primi 100). Se una lettura fallisce, quella riga ricade sulla vecchia
+   stima e lo dichiara (`escluseStima`).
 
    Senza tetto si guardano solo le battaglie DIRETTE fra le parti (chi ha
    colpito chi); con un tetto tutte quelle in cui l'altra parte è uno dei
@@ -66,7 +77,7 @@
 const express = require('express');
 const { calcolaEffettivi } = require('./roles');
 const { paesiMappa, battaglieVive, archivioBattaglie, dalCache, memo } = require('./fonti');
-const { trpcBatch } = require('./wareraApi');
+const { trpcGet, trpcBatch } = require('./wareraApi');
 const {
   listaAccordi, contaAccordi, getAccordo, creaAccordo, aggiornaAccordo, eliminaAccordo,
   getAccountById, audit,
@@ -364,6 +375,88 @@ async function leggiClassifiche(richieste) {
   return (r) => _classifiche.get(chiave(r)) || null;
 }
 
+// ── Le unità escluse, giocatore per giocatore ──────────────────────────
+
+// Classifiche PER GIOCATORE di uno schieramento: "battaglia|lato" →
+// { at, chiusa, valori: Map userId→danno, completa }. Più pesanti di quelle
+// per nazione (centinaia di voci), quindi un tetto più basso.
+const _perGiocatore = new Map();
+const MAX_VOCI_GIOCATORI = 400;
+// Una battaglia enorme ha qualche migliaio di giocatori per lato: 50 pagine
+// sono 5000. Oltre, la lettura si dichiara incompleta invece di continuare.
+const MAX_PAGINE_GIOCATORI = 50;
+// Quante battaglie si sfogliano insieme: abbastanza da non far aspettare
+// minuti il primo controllo, poche abbastanza da non sembrare un attacco.
+const PARALLELO_GIOCATORI = 4;
+
+async function classificaGiocatori(battaglia, lato, chiusa) {
+  const k = `${battaglia}|${lato}`;
+  const v = _perGiocatore.get(k);
+  if (fresca(v)) return v;
+  const valori = new Map();
+  let cursor = null;
+  let pagine = 0;
+  do {
+    const d = await trpcGet('battleRanking.getRanking', {
+      battleId: battaglia, type: 'user', side: lato, dataType: 'damage', limit: 100, ...(cursor ? { cursor } : {}),
+    });
+    for (const it of d?.items || []) {
+      if (it.user) valori.set(it.user, (valori.get(it.user) || 0) + (Number(it.value) || 0));
+    }
+    cursor = d?.nextCursor || null;
+    pagine++;
+  } while (cursor && pagine < MAX_PAGINE_GIOCATORI);
+  const voce = { at: Date.now(), chiusa, valori, completa: !cursor };
+  _perGiocatore.set(k, voce);
+  while (_perGiocatore.size > MAX_VOCI_GIOCATORI) _perGiocatore.delete(_perGiocatore.keys().next().value);
+  return voce;
+}
+
+/** I membri di un'unità, adesso. Dieci minuti: si entra e si esce. */
+const membriUnita = memo(10 * 60_000, async (muId) => {
+  const mu = await trpcGet('mu.getById', { muId });
+  return (mu?.members || []).map(String);
+});
+
+// Nazionalità dei giocatori: userId → { country, at }. Dieci minuti.
+const _nazionalita = new Map();
+const NAZIONALITA_MS = 10 * 60_000;
+
+async function nazionalitaDi(userIds) {
+  const ora = Date.now();
+  const mancanti = userIds.filter((u) => !(_nazionalita.get(u)?.at > ora - NAZIONALITA_MS));
+  for (let i = 0; i < mancanti.length; i += PEZZO_BATCH) {
+    const pezzo = mancanti.slice(i, i + PEZZO_BATCH);
+    const r = await trpcBatch(pezzo.map((userId) => ['user.getUserLite', { userId }]));
+    pezzo.forEach((u, k) => { if (r[k]) _nazionalita.set(u, { country: r[k].country || null, at: ora }); });
+  }
+  return new Map(userIds.map((u) => [u, _nazionalita.get(u)?.country || null]));
+}
+
+/** userId → nazionalità, per tutti i membri delle unità escluse. null se
+ *  un'unità non si è letta: allora il controllo ricade sulla stima. */
+async function membriEsclusi(muIds) {
+  try {
+    const membri = [...new Set((await Promise.all(muIds.map((id) => membriUnita(id)))).flat())];
+    const naz = await nazionalitaDi(membri);
+    if ([...naz.values()].some((c) => c == null)) return null;
+    return naz;
+  } catch (err) {
+    console.warn('[accordi] membri delle unità escluse non letti:', err.message);
+    return null;
+  }
+}
+
+/** fn su ogni elemento, al più `n` alla volta. */
+async function aGruppi(elementi, n, fn) {
+  const out = new Array(elementi.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, elementi.length) }, async () => {
+    while (i < elementi.length) { const k = i++; out[k] = await fn(elementi[k]); }
+  }));
+  return out;
+}
+
 async function calcolaControllo(acc) {
   const A = new Set(await nazioniLato(acc, 'a'));
   const B = new Set(await nazioniLato(acc, 'b'));
@@ -430,18 +523,53 @@ async function calcolaControllo(acc) {
   }
   const leggi = await leggiClassifiche(richieste);
 
+  // Le unità escluse: chi ne fa parte e di che nazionalità è, una volta per
+  // controllo. Poi, battaglia per battaglia, la classifica per giocatore —
+  // solo dove un'unità esclusa ha fatto danno o la classifica per unità è
+  // tagliata (l'unità potrebbe stare sotto il centesimo posto).
+  const membri = setEscluse.size ? await membriEsclusi([...setEscluse]) : null;
+  const daSfogliare = membri ? letti.filter((c) => {
+    const mu = leggi({ battaglia: c.id, tipo: 'mu', lato: c.lato });
+    return !mu || mu.tagliata || [...setEscluse].some((id) => (mu.valori.get(id) || 0) > 0);
+  }) : [];
+  const giocatori = new Map();
+  await aGruppi(daSfogliare, PARALLELO_GIOCATORI, async (c) => {
+    try { giocatori.set(`${c.id}|${c.lato}`, await classificaGiocatori(c.id, c.lato, !c.inCorso)); }
+    catch (err) { console.warn('[accordi] classifica per giocatore non letta:', c.id, err.message); }
+  });
+
   const righe = [];
   for (const c of letti) {
     const naz = leggi({ battaglia: c.id, tipo: 'country', lato: c.lato });
     const mu = setEscluse.size ? leggi({ battaglia: c.id, tipo: 'mu', lato: c.lato }) : null;
     let danno = null;
-    let dannoEscluse = 0;
     if (naz) {
       danno = 0;
       for (const [id, v] of naz.valori) if (c.X.has(id)) danno += v;
     }
-    if (mu) for (const [id, v] of mu.valori) if (setEscluse.has(id)) dannoEscluse += v;
-    const netto = danno == null ? null : Math.max(0, danno - dannoEscluse);
+    // Il danno da togliere: esatto se si sono letti membri e giocatori,
+    // altrimenti la vecchia stima (unità intera) dichiarata come tale.
+    let dannoEscluse = 0;
+    let escluseStima = false;
+    let escluseIncomplete = false;
+    if (setEscluse.size) {
+      const g = giocatori.get(`${c.id}|${c.lato}`);
+      const sfogliata = daSfogliare.includes(c);
+      if (membri && !sfogliata) {
+        dannoEscluse = 0; // nessuna unità esclusa ha fatto danno qui
+      } else if (membri && g) {
+        for (const [uid, v] of g.valori) {
+          if (membri.has(uid) && c.X.has(membri.get(uid))) dannoEscluse += v;
+        }
+        escluseIncomplete = !g.completa;
+      } else if (mu) {
+        for (const [id, v] of mu.valori) if (setEscluse.has(id)) dannoEscluse += v;
+        escluseStima = true;
+      } else {
+        dannoEscluse = null;
+      }
+    }
+    const netto = danno == null ? null : Math.max(0, danno - (dannoEscluse || 0));
     // Una battaglia in cui la parte non ha fatto niente e che nessuno ha
     // aperto contro l'altra è rumore: si conta, non si elenca.
     if (!c.attaccoDiretto && netto === 0) continue;
@@ -458,7 +586,9 @@ async function calcolaControllo(acc) {
       chi: c.chi,
       lato: c.lato,
       danno,
-      dannoEscluse: setEscluse.size ? (mu ? dannoEscluse : null) : 0,
+      dannoEscluse: setEscluse.size ? dannoEscluse : 0,
+      escluseStima,
+      escluseIncomplete,
       netto,
       attaccoDiretto: c.attaccoDiretto,
       sforato: Boolean(limiteQui && netto != null && netto > acc.limit_damage),
@@ -475,6 +605,9 @@ async function calcolaControllo(acc) {
     // più vecchio ha un buco che va detto, non spacciato per "niente".
     coperturaDal: archivioOk && Number.isFinite(coperturaDal) ? coperturaDal : null,
     archivioOk,
+    // Come si sono tolte le unità escluse: 'giocatori' (esatto, sui membri
+    // di adesso), 'stima' (unità intera: membri non letti), null (nessuna).
+    escluse: setEscluse.size ? { metodo: membri ? 'giocatori' : 'stima', membri: membri ? membri.size : null } : null,
     battaglieControllate: letti.length,
     battaglieCandidate: candidati.length,
     violazioni: righe.filter((r) => r.attaccoDiretto || r.sforato).length,

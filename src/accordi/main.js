@@ -548,7 +548,13 @@ function vistaControllo(a, ctl) {
       tr.appendChild(el('td', null, nomeParte(r.chi === 'a' ? a.parteA : a.parteB)));
       tr.appendChild(el('td', 'wp-ac-num', r.danno == null ? acT('notRead') : fmtNum(r.danno)));
       if (conEscluse) {
-        tr.appendChild(el('td', 'wp-ac-num', r.dannoEscluse == null ? acT('notRead') : fmtNum(r.dannoEscluse)));
+        // "≈" dove il server è ricaduto sulla stima (unità intera): il
+        // resto è esatto, giocatore per giocatore.
+        const tdX = el('td', 'wp-ac-num', r.dannoEscluse == null ? acT('notRead')
+          : `${r.escluseStima ? '≈ ' : ''}${fmtNum(r.dannoEscluse)}`);
+        if (r.escluseStima) tdX.title = acT('estimate');
+        else if (r.escluseIncomplete) tdX.title = acT('exclIncomplete');
+        tr.appendChild(tdX);
         tr.appendChild(el('td', 'wp-ac-num', fmtNum(r.netto)));
       }
       const tdE = el('td', 'wp-ac-cella-esito');
@@ -569,7 +575,16 @@ function vistaControllo(a, ctl) {
   if (d.battaglieCandidate > d.battaglieControllate) {
     piede.push(acT('checked', { n: d.battaglieControllate, m: d.battaglieCandidate }));
   }
-  if ((a.muEscluse || []).length) piede.push(acT('estimate'));
+  // Come sono state tolte le unità escluse. Un server senza il campo
+  // `escluse` è quello vecchio, che faceva solo la stima.
+  if ((a.muEscluse || []).length) {
+    if (d.escluse?.metodo === 'giocatori') {
+      piede.push(acT('exclExact'));
+      if (d.righe.some(r => r.escluseStima)) piede.push(acT('estimate'));
+    } else {
+      piede.push(acT('estimate'));
+    }
+  }
   piede.push(acT('checkedAt', { time: new Date(d.calcolatoIl).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) }));
   box.appendChild(el('p', 'wp-ac-note', piede.join(' ')));
   return box;
