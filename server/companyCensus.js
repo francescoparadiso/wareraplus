@@ -49,8 +49,11 @@
    ⚠️ DALLA v0.27 (2026-10-26) quel filtro non esiste più: i dipendenti
    sono NPC, `company.getById` ha perso `workerCount` e `employee.*` con
    la chiave risponde 403. Le statistiche si chiedono per TUTTE le
-   aziende (~2.100 blocchi da 25 invece di ~190: un'ora e mezza in più,
-   sempre di notte), elaborate blocco per blocco senza tenerle in memoria.
+   aziende (~114.000 al giro del 2026-10-26: ~4.600 blocchi da 25 invece
+   di ~500, circa un'ora in più, sempre di notte), elaborate blocco per
+   blocco senza tenerle in memoria. Il tetto della chiave (500 al minuto)
+   conta le richieste HTTP, non le procedure dentro un batch: quel giro
+   ne faceva ~77 al minuto, e il ritmo resta quello.
    "Con dipendenti" diventa "i cui dipendenti hanno prodotto ieri"
    (`employeeProd > 0`), il numero dei dipendenti diventa null e la
    copertura lo dice (`workersKnown: false`). Lo scambio fra le due forme

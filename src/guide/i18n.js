@@ -25,7 +25,7 @@ export const GUIDE_DICT = {
       map: {
         t: "The map",
         b: [
-          "Click a nation to open its side panel. The Map views menu changes the colouring: Diplomacy, Alliances, Sphere of influence, Weekly damage, Population, Contested regions, War history, War vs Eco.",
+          "Click a nation to open its side panel. The Map views menu changes the colouring: Diplomacy, Alliances, Sphere of influence, Weekly damage, Population, Daily revenue, Contested regions, War history, War vs Eco.",
           "Entering a view the panel opens on its summary: the ranking of what you are looking at, and for the less obvious views what the colour is actually counting. On mobile it waits behind the “See details” tab.",
           "The Battles button shows and hides the active fronts, with markers and a heat map. Sea routes are ornamental — hover a moving ship to see what it is carrying.",
           "Travel distance: click a region and every other region takes the colour of how far away it is — green→red within a full stamina bar (10 regions), purple past it, where each region costs 2 oil barrels. Hover to see the path; the panel plans the best route through up to 5 wooden cases.",
@@ -35,7 +35,7 @@ export const GUIDE_DICT = {
         t: "Nation panel",
         b: [
           "Opens on click and only uses data already downloaded for the map: no extra waiting.",
-          "Regions, alliances and NAPs, parliament hemicycle and the war/economy playstyle of the citizens.",
+          "Regions, alliances and NAPs, parliament hemicycle, government type and daily revenue, and the war/economy playstyle of the citizens.",
           "From a summary row you go down to a nation or an alliance, and back up with “← Overview”. Expand opens Politics; drag the panel edge to make it wider.",
         ],
       },
@@ -76,6 +76,7 @@ export const GUIDE_DICT = {
         b: [
           "What your employees really earn you, company by company: worth and cost of each point, daily margin and warning signs (losses, idle days, full storage).",
           "Suggests how to spread your economy skills: Companies, Energy, Production and Management.",
+          "Employees themselves cannot be seen from outside the game (stats, traits, happiness): the view works on the production and wages the game measures, and says so instead of guessing.",
         ],
       },
       news: {
@@ -113,7 +114,7 @@ export const GUIDE_DICT = {
       map: {
         t: "La mappa",
         b: [
-          "Clicca una nazione per aprire il suo pannello laterale. Il menù Viste mappa cambia la colorazione: Diplomazia, Alleanze, Sfera d'influenza, Danni settimanali, Popolazione, Regioni contese, Storico bellico, Guerra vs Eco.",
+          "Clicca una nazione per aprire il suo pannello laterale. Il menù Viste mappa cambia la colorazione: Diplomazia, Alleanze, Sfera d'influenza, Danni settimanali, Popolazione, Rendita giornaliera, Regioni contese, Storico bellico, Guerra vs Eco.",
           "Entrando in una vista il pannello si apre sul riepilogo: la classifica di quello che stai guardando e, per le viste meno ovvie, cosa sta contando davvero il colore. Su mobile aspetta dietro la linguetta “Vedi dettagli”.",
           "Il bottone Battaglie mostra e nasconde i fronti attivi, con marker e mappa di calore. Le rotte navali sono ornamentali — passa il mouse su una nave per sapere cosa trasporta.",
           "Distanze: clicca una regione e tutte le altre si colorano per quanto sono lontane — dal verde al rosso dentro una barra di stamina piena (10 regioni), viola oltre, dove ogni regione costa 2 barili di petrolio. Passa il mouse per vedere il percorso; il pannello calcola il giro migliore per raccogliere fino a 5 casse di legno.",
@@ -123,7 +124,7 @@ export const GUIDE_DICT = {
         t: "Pannello nazione",
         b: [
           "Si apre al click e usa solo dati già scaricati per la mappa: nessuna attesa in più.",
-          "Regioni, alleanze e NAP, emiciclo del parlamento e stile di gioco (guerra/economia) dei cittadini.",
+          "Regioni, alleanze e NAP, emiciclo del parlamento, tipo di governo e rendita giornaliera, e stile di gioco (guerra/economia) dei cittadini.",
           "Da una riga del riepilogo scendi su una nazione o un'alleanza, e risali con “← Riepilogo”. Espandi apre Politica; trascina il bordo del pannello per allargarlo.",
         ],
       },
@@ -164,6 +165,7 @@ export const GUIDE_DICT = {
         b: [
           "Quanto ti rendono davvero i dipendenti, azienda per azienda: valore e costo di ogni punto, margine al giorno e segnali d'allarme (perdite, giorni fermi, magazzino pieno).",
           "Suggerisce come distribuire le abilità economiche: Companies, Energy, Production e Management.",
+          "I dipendenti non si vedono da fuori dal gioco (statistiche, tratti, felicità): la vista lavora sulla produzione e sui salari che il gioco misura, e lo dice invece di tirare a indovinare.",
         ],
       },
       news: {
@@ -201,7 +203,7 @@ export const GUIDE_DICT = {
       map: {
         t: "El mapa",
         b: [
-          "Haz clic en una nación para abrir su panel lateral. El menú Vistas cambia el coloreado: Diplomacia, Alianzas, Esfera de influencia, Daño semanal, Población, Regiones disputadas, Histórico bélico, Guerra vs Eco.",
+          "Haz clic en una nación para abrir su panel lateral. El menú Vistas cambia el coloreado: Diplomacia, Alianzas, Esfera de influencia, Daño semanal, Población, Ingresos diarios, Regiones disputadas, Histórico bélico, Guerra vs Eco.",
           "Al entrar en una vista el panel se abre en su resumen: la clasificación de lo que estás mirando y, en las vistas menos obvias, qué está contando el color. En móvil espera detrás de la pestaña “Ver detalles”.",
           "El botón Batallas muestra y oculta los frentes activos, con marcadores y mapa de calor. Las rutas marítimas son ornamentales — pasa el ratón sobre un barco para ver qué lleva.",
           "Distancias: haz clic en una región y las demás se colorean según lo lejos que están — de verde a rojo dentro de una barra de stamina llena (10 regiones), morado más allá, donde cada región cuesta 2 barriles de petróleo. Pasa el ratón para ver el camino; el panel calcula la mejor ruta por hasta 5 cajas de madera.",
@@ -211,7 +213,7 @@ export const GUIDE_DICT = {
         t: "Panel de nación",
         b: [
           "Se abre al hacer clic y solo usa datos ya descargados para el mapa: sin esperas extra.",
-          "Regiones, alianzas y NAP, hemiciclo del parlamento y estilo de juego (guerra/economía) de los ciudadanos.",
+          "Regiones, alianzas y NAP, hemiciclo del parlamento, tipo de gobierno e ingresos diarios, y estilo de juego (guerra/economía) de los ciudadanos.",
           "Desde una fila del resumen bajas a una nación o una alianza, y vuelves con “← Resumen”. Expandir abre Política; arrastra el borde del panel para ensancharlo.",
         ],
       },
@@ -252,6 +254,7 @@ export const GUIDE_DICT = {
         b: [
           "Lo que tus empleados te rinden de verdad, empresa por empresa: valor y coste de cada punto, margen diario y señales de alerta (pérdidas, días parados, almacén lleno).",
           "Sugiere cómo repartir tus habilidades económicas: Companies, Energy, Production y Management.",
+          "Los empleados no se ven desde fuera del juego (estadísticas, rasgos, felicidad): la vista trabaja con la producción y los salarios que mide el juego, y lo dice en lugar de adivinar.",
         ],
       },
       news: {
@@ -289,7 +292,7 @@ export const GUIDE_DICT = {
       map: {
         t: "Die Karte",
         b: [
-          "Klicke eine Nation an, um ihr Seitenpanel zu öffnen. Das Menü Ansichten ändert die Einfärbung: Diplomatie, Bündnisse, Sphäre, Wöchentlicher Schaden, Bevölkerung, Umkämpfte Regionen, Kriegsgeschichte, Krieg vs Eco.",
+          "Klicke eine Nation an, um ihr Seitenpanel zu öffnen. Das Menü Ansichten ändert die Einfärbung: Diplomatie, Bündnisse, Sphäre, Wöchentlicher Schaden, Bevölkerung, Tageseinnahmen, Umkämpfte Regionen, Kriegsgeschichte, Krieg vs Eco.",
           "Beim Betreten einer Ansicht öffnet das Panel ihre Übersicht: die Rangliste dessen, was du siehst, und bei den weniger offensichtlichen Ansichten, was die Farbe wirklich zählt. Auf dem Handy wartet sie hinter dem Reiter „Details ansehen“.",
           "Die Schaltfläche Schlachten blendet die aktiven Fronten ein und aus, mit Markern und Heatmap. Seerouten sind Zierde — fahre über ein Schiff, um seine Ladung zu sehen.",
           "Reisen: Klicke auf eine Region, und alle anderen färben sich nach ihrer Entfernung — grün bis rot innerhalb eines vollen Ausdauerbalkens (10 Regionen), lila darüber hinaus, wo jede Region 2 Fässer Öl kostet. Fahre mit der Maus darüber, um den Weg zu sehen; das Panel plant die beste Route über bis zu 5 Holzkisten.",
@@ -299,7 +302,7 @@ export const GUIDE_DICT = {
         t: "Nationspanel",
         b: [
           "Öffnet sich per Klick und nutzt nur Daten, die für die Karte schon geladen sind: kein zusätzliches Warten.",
-          "Regionen, Bündnisse und NAPs, Parlamentshalbkreis und Spielstil (Krieg/Wirtschaft) der Bürger.",
+          "Regionen, Bündnisse und NAPs, Parlamentshalbkreis, Regierungsform und Tageseinnahmen sowie Spielstil (Krieg/Wirtschaft) der Bürger.",
           "Aus einer Übersichtszeile geht es hinunter zu einer Nation oder einem Bündnis und mit „← Übersicht“ wieder hinauf. Erweitern öffnet Politik; zieh den Panelrand, um es zu verbreitern.",
         ],
       },
@@ -340,6 +343,7 @@ export const GUIDE_DICT = {
         b: [
           "Was deine Angestellten dir wirklich bringen, Firma für Firma: Wert und Kosten jedes Punkts, Tagesmarge und Warnzeichen (Verluste, Stillstandstage, volles Lager).",
           "Schlägt vor, wie du deine Wirtschafts-Skills verteilst: Companies, Energy, Production und Management.",
+          "Die Angestellten selbst sind von außerhalb des Spiels nicht sichtbar (Werte, Eigenschaften, Zufriedenheit): Die Ansicht arbeitet mit der Produktion und den Löhnen, die das Spiel misst, und sagt das, statt zu raten.",
         ],
       },
       news: {
@@ -377,7 +381,7 @@ export const GUIDE_DICT = {
       map: {
         t: "La carte",
         b: [
-          "Clique sur une nation pour ouvrir son panneau latéral. Le menu Vues change la coloration : Diplomatie, Alliances, Sphère d'influence, Dégâts hebdomadaires, Population, Régions disputées, Historique de guerre, Guerre vs Éco.",
+          "Clique sur une nation pour ouvrir son panneau latéral. Le menu Vues change la coloration : Diplomatie, Alliances, Sphère d'influence, Dégâts hebdomadaires, Population, Revenu quotidien, Régions disputées, Historique de guerre, Guerre vs Éco.",
           "En entrant dans une vue, le panneau s'ouvre sur son résumé : le classement de ce que tu regardes et, pour les vues les moins évidentes, ce que la couleur compte vraiment. Sur mobile il attend derrière l'onglet « Voir les détails ».",
           "Le bouton Batailles affiche et masque les fronts actifs, avec marqueurs et carte de chaleur. Les routes maritimes sont ornementales — survole un navire pour voir sa cargaison.",
           "Distances : clique sur une région et toutes les autres prennent la couleur de leur éloignement — du vert au rouge dans une barre d’endurance pleine (10 régions), violet au-delà, où chaque région coûte 2 barils de pétrole. Survole pour voir le trajet ; le panneau planifie la meilleure tournée pour jusqu’à 5 caisses en bois.",
@@ -387,7 +391,7 @@ export const GUIDE_DICT = {
         t: "Panneau nation",
         b: [
           "S'ouvre au clic et n'utilise que des données déjà téléchargées pour la carte : aucune attente en plus.",
-          "Régions, alliances et NAP, hémicycle du parlement et style de jeu (guerre/économie) des citoyens.",
+          "Régions, alliances et NAP, hémicycle du parlement, type de gouvernement et revenu quotidien, et style de jeu (guerre/économie) des citoyens.",
           "Depuis une ligne du résumé tu descends sur une nation ou une alliance, et tu remontes avec « ← Vue d'ensemble ». Étendre ouvre Politique ; tire le bord du panneau pour l'élargir.",
         ],
       },
@@ -428,6 +432,7 @@ export const GUIDE_DICT = {
         b: [
           "Ce que tes employés te rapportent vraiment, entreprise par entreprise : valeur et coût de chaque point, marge par jour et signaux d'alerte (pertes, jours à l'arrêt, stock plein).",
           "Suggère comment répartir tes compétences économiques : Companies, Energy, Production et Management.",
+          "Les employés eux-mêmes ne sont pas visibles hors du jeu (stats, traits, bonheur) : la vue travaille sur la production et les salaires que le jeu mesure, et le dit au lieu de deviner.",
         ],
       },
       news: {
@@ -465,7 +470,7 @@ export const GUIDE_DICT = {
       map: {
         t: "De kaart",
         b: [
-          "Klik op een natie om haar zijpaneel te openen. Het menu Weergaven verandert de kleuring: Diplomatie, Bondgenootschappen, Invloedssfeer, Wekelijkse schade, Bevolking, Betwiste regio’s, Oorlogsgeschiedenis, Oorlog vs Eco.",
+          "Klik op een natie om haar zijpaneel te openen. Het menu Weergaven verandert de kleuring: Diplomatie, Bondgenootschappen, Invloedssfeer, Wekelijkse schade, Bevolking, Dagelijkse inkomsten, Betwiste regio’s, Oorlogsgeschiedenis, Oorlog vs Eco.",
           "Bij het openen van een weergave toont het paneel meteen het overzicht: de ranglijst van wat je bekijkt en, bij de minder voor de hand liggende weergaven, wat de kleur echt telt. Op mobiel wacht het achter het tabje “Bekijk details”.",
           "De knop Veldslagen toont en verbergt de actieve fronten, met markers en een heatmap. Zeeroutes zijn versiering — beweeg over een schip om de lading te zien.",
           "Afstanden: klik op een regio en alle andere kleuren naar hoe ver ze liggen — groen tot rood binnen een volle staminabalk (10 regio’s), paars daarbuiten, waar elke regio 2 vaten olie kost. Beweeg erover om de route te zien; het paneel plant de beste route langs tot 5 houten kisten.",
@@ -475,7 +480,7 @@ export const GUIDE_DICT = {
         t: "Natiepaneel",
         b: [
           "Opent bij een klik en gebruikt alleen gegevens die al voor de kaart zijn opgehaald: geen extra wachttijd.",
-          "Regio’s, allianties en NAP’s, halfrond van het parlement en speelstijl (oorlog/economie) van de burgers.",
+          "Regio’s, allianties en NAP’s, halfrond van het parlement, regeringsvorm en dagelijkse inkomsten, en speelstijl (oorlog/economie) van de burgers.",
           "Vanuit een rij in het overzicht ga je naar een natie of alliantie, en met “← Overzicht” weer terug. Uitklappen opent Politiek; sleep de rand van het paneel om het breder te maken.",
         ],
       },
@@ -516,6 +521,7 @@ export const GUIDE_DICT = {
         b: [
           "Wat je werknemers je echt opleveren, bedrijf per bedrijf: waarde en kosten van elk punt, marge per dag en waarschuwingen (verlies, stilstanddagen, volle opslag).",
           "Stelt voor hoe je je economische skills verdeelt: Companies, Energy, Production en Management.",
+          "De werknemers zelf zijn van buiten het spel niet te zien (stats, eigenschappen, geluk): de weergave werkt met de productie en lonen die het spel meet, en zegt dat in plaats van te gokken.",
         ],
       },
       news: {
@@ -553,7 +559,7 @@ export const GUIDE_DICT = {
       map: {
         t: "Kartan",
         b: [
-          "Klicka på en nation för att öppna dess sidopanel. Menyn Vyer byter färgläggning: Diplomati, Allianser, Sfär, Veckoskada, Befolkning, Omstridda regioner, Krigshistorik, Krig vs Eco.",
+          "Klicka på en nation för att öppna dess sidopanel. Menyn Vyer byter färgläggning: Diplomati, Allianser, Sfär, Veckoskada, Befolkning, Daglig intäkt, Omstridda regioner, Krigshistorik, Krig vs Eco.",
           "När du går in i en vy öppnas panelen på dess översikt: rankningen för det du tittar på och, för de mindre självklara vyerna, vad färgen faktiskt räknar. På mobil väntar den bakom fliken ”Visa detaljer”.",
           "Knappen Strider visar och döljer de aktiva fronterna, med markörer och värmekarta. Sjörutter är dekoration — håll musen över ett fartyg för att se lasten.",
           "Avstånd: klicka på en region så färgas alla andra efter hur långt bort de ligger — grönt till rött inom en full staminamätare (10 regioner), lila bortom, där varje region kostar 2 fat olja. Hovra för att se vägen; panelen planerar bästa rundan genom upp till 5 trälådor.",
@@ -563,7 +569,7 @@ export const GUIDE_DICT = {
         t: "Nationspanel",
         b: [
           "Öppnas vid klick och använder bara data som redan hämtats för kartan: ingen extra väntan.",
-          "Regioner, allianser och NAP, parlamentets halvcirkel och medborgarnas spelstil (krig/ekonomi).",
+          "Regioner, allianser och NAP, parlamentets halvcirkel, regeringsform och daglig intäkt, och medborgarnas spelstil (krig/ekonomi).",
           "Från en rad i översikten går du ner till en nation eller allians, och tillbaka med ”← Översikt”. Expandera öppnar Politik; dra i panelkanten för att göra den bredare.",
         ],
       },
@@ -604,6 +610,7 @@ export const GUIDE_DICT = {
         b: [
           "Vad dina anställda verkligen ger dig, företag för företag: värde och kostnad per poäng, marginal per dag och varningssignaler (förlust, stillastående dagar, fullt lager).",
           "Föreslår hur du fördelar dina ekonomiska färdigheter: Companies, Energy, Production och Management.",
+          "De anställda själva syns inte utanför spelet (värden, egenskaper, lycka): vyn arbetar med produktionen och lönerna som spelet mäter, och säger det i stället för att gissa.",
         ],
       },
       news: {
@@ -641,7 +648,7 @@ export const GUIDE_DICT = {
       map: {
         t: "O mapa",
         b: [
-          "Clica numa nação para abrir o seu painel lateral. O menu Vistas muda a coloração: Diplomacia, Alianças, Esfera de influência, Dano semanal, População, Regiões disputadas, Histórico bélico, Guerra vs Eco.",
+          "Clica numa nação para abrir o seu painel lateral. O menu Vistas muda a coloração: Diplomacia, Alianças, Esfera de influência, Dano semanal, População, Receita diária, Regiões disputadas, Histórico bélico, Guerra vs Eco.",
           "Ao entrar numa vista o painel abre no resumo: a classificação do que estás a ver e, nas vistas menos óbvias, o que a cor está mesmo a contar. No telemóvel espera atrás do separador “Ver detalhes”.",
           "O botão Batalhas mostra e esconde as frentes ativas, com marcadores e mapa de calor. As rotas marítimas são ornamentais — passa o rato sobre um navio para ver o que transporta.",
           "Distâncias: clica numa região e todas as outras ganham a cor da sua distância — do verde ao vermelho dentro de uma barra de stamina cheia (10 regiões), roxo para lá disso, onde cada região custa 2 barris de petróleo. Passa o rato para ver o caminho; o painel planeia a melhor rota por até 5 caixas de madeira.",
@@ -651,7 +658,7 @@ export const GUIDE_DICT = {
         t: "Painel da nação",
         b: [
           "Abre ao clique e usa apenas dados já descarregados para o mapa: sem espera extra.",
-          "Regiões, alianças e NAP, hemiciclo do parlamento e estilo de jogo (guerra/economia) dos cidadãos.",
+          "Regiões, alianças e NAP, hemiciclo do parlamento, tipo de governo e receita diária, e estilo de jogo (guerra/economia) dos cidadãos.",
           "A partir de uma linha do resumo desces a uma nação ou aliança, e voltas com “← Resumo”. Expandir abre Política; arrasta a borda do painel para o alargar.",
         ],
       },
@@ -692,6 +699,7 @@ export const GUIDE_DICT = {
         b: [
           "O que os teus empregados te rendem de verdade, empresa a empresa: valor e custo de cada ponto, margem diária e sinais de alerta (prejuízo, dias parados, armazém cheio).",
           "Sugere como distribuir as habilidades económicas: Companies, Energy, Production e Management.",
+          "Os empregados não se veem de fora do jogo (estatísticas, traços, felicidade): a vista trabalha com a produção e os salários que o jogo mede, e di-lo em vez de adivinhar.",
         ],
       },
       news: {
@@ -729,7 +737,7 @@ export const GUIDE_DICT = {
       map: {
         t: "الخريطة",
         b: [
-          "اضغط على دولة لفتح لوحتها الجانبية. قائمة العروض تغيّر التلوين: الدبلوماسية، التحالفات، النطاق، الضرر الأسبوعي، السكان، المناطق المتنازع عليها، تاريخ الحرب، حرب مقابل اقتصاد.",
+          "اضغط على دولة لفتح لوحتها الجانبية. قائمة العروض تغيّر التلوين: الدبلوماسية، التحالفات، النطاق، الضرر الأسبوعي، السكان، الإيراد اليومي، المناطق المتنازع عليها، تاريخ الحرب، حرب مقابل اقتصاد.",
           "عند دخول أي عرض تفتح اللوحة على ملخّصه: ترتيب ما تنظر إليه، وفي العروض الأقل وضوحاً ما يقيسه اللون فعلاً. على الهاتف تنتظر خلف لسان “عرض التفاصيل”.",
           "زرّ المعارك يُظهر ويُخفي الجبهات النشطة، مع علامات وخريطة حرارية. الطرق البحرية زخرفية — مرّر المؤشر فوق سفينة لترى حمولتها.",
           "المسافات: انقر على منطقة فتتلوّن كل المناطق الأخرى حسب بعدها — من الأخضر إلى الأحمر داخل شريط طاقة ممتلئ (10 مناطق)، والبنفسجي بعده حيث تكلف كل منطقة برميلي نفط. مرّر الماوس لرؤية الطريق؛ ويخطط اللوح لأفضل مسار عبر ما يصل إلى 5 صناديق خشبية.",
@@ -739,7 +747,7 @@ export const GUIDE_DICT = {
         t: "لوحة الدولة",
         b: [
           "تُفتح بالضغط وتستخدم فقط بيانات مُحمّلة مسبقاً للخريطة: دون انتظار إضافي.",
-          "المناطق والتحالفات واتفاقات عدم الاعتداء، وقوس البرلمان، وأسلوب لعب المواطنين (حرب/اقتصاد).",
+          "المناطق والتحالفات واتفاقات عدم الاعتداء، وقوس البرلمان، ونوع الحكم والإيراد اليومي، وأسلوب لعب المواطنين (حرب/اقتصاد).",
           "من صف في الملخّص تنزل إلى دولة أو تحالف، وتعود بـ “← نظرة عامة”. زرّ التوسيع يفتح السياسة؛ اسحب حافة اللوحة لتوسيعها.",
         ],
       },
@@ -780,6 +788,7 @@ export const GUIDE_DICT = {
         b: [
           "ما يدرّه عليك موظفوك فعلًا، شركة بشركة: قيمة كل نقطة وتكلفتها، الهامش اليومي وإشارات التحذير (خسائر، أيام توقف، مخزن ممتلئ).",
           "يقترح كيف توزّع مهاراتك الاقتصادية: Companies وEnergy وProduction وManagement.",
+          "لا يمكن رؤية الموظفين من خارج اللعبة (الإحصاءات والسمات والسعادة): يعمل العرض على الإنتاج والأجور التي تقيسها اللعبة، ويقول ذلك بدل التخمين.",
         ],
       },
       news: {

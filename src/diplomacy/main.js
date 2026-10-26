@@ -200,7 +200,10 @@ async function refreshData(boot = _startBootFetches()) {
     // dell'etichetta, poi l'hash — vedi gameColors.js per il perché.
     state.nationBaseColorMap.clear();
     state.labelsData.forEach(label => {
-      if (label.properties?.countryId) state.nationBaseColorMap.set(label.properties.countryId, label.properties.strokeColor);
+      // WarEra+ v0.27: le etichette non portano più `strokeColor`; senza
+      // questo controllo la chiave entrerebbe con `undefined` e l'hash qui
+      // sotto non la riempirebbe più (has() sarebbe già vero).
+      if (label.properties?.countryId && label.properties.strokeColor) state.nationBaseColorMap.set(label.properties.countryId, label.properties.strokeColor);
     });
     state.nazioniGlobal.forEach(n => {
       const game = gameNationColor(n);

@@ -687,7 +687,9 @@ export function renderMap() {
     fillExpr = '#2a2d33';
   } else if (state.mapSource === 'actual') {
     const styleMap = {};
-    state.labelsData.forEach(l => { if (l.properties?.countryId) styleMap[l.properties.countryId] = l.properties.strokeColor; });
+    // WarEra+ v0.27: `strokeColor` non c'è più nelle etichette — un undefined
+    // dentro l'espressione di MapLibre invaliderebbe il colore della mappa.
+    state.labelsData.forEach(l => { if (l.properties?.countryId && l.properties.strokeColor) styleMap[l.properties.countryId] = l.properties.strokeColor; });
     // WarEra+: i colori di gioco (scheme+accento, vedi gameColors.js) hanno la
     // precedenza sulla tinta dell'etichetta e coprono anche i paesi senza etichetta.
     state.nazioniGlobal.forEach(n => { const c = gameNationColor(n); if (c) styleMap[n._id] = c; });

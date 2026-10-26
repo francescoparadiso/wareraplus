@@ -3,6 +3,7 @@ import { getProductionColor, productionInfo } from './productionHeatmap.js';
 import { COLORS, THEMES } from './config.js';
 import { flattenCoords } from './utils.js';
 import { getBlocMemberIds } from './diplomacy.js';
+import { lightenForLabel } from './gameColors.js';
 
 // WarEra+: sul tema chiaro ("mappa antica", palette seppia) i nomi
 // nazione passano a un serif d'ispirazione classica (Cinzel, caricato in
@@ -377,7 +378,11 @@ export function drawLabels() {
         // etichetta e territorio direbbero due cose diverse.
         : ((state.builderPreview ? state.builderPreview.colorMap : state.blocColorMap).get(cId) || '#cccccc');
     }
-    else textColor = state.selectedCountryId ? '#ffffff' : (props.textColor || '#cccccc');
+    // WarEra+ v0.27: le etichette del gioco non hanno più `textColor` (solo
+    // `scheme`): il nome si colora schiarendo il colore della nazione, come
+    // la time machine. Senza, tutti i nomi diventerebbero grigi.
+    else textColor = state.selectedCountryId ? '#ffffff'
+      : (props.textColor || lightenForLabel(state.nationBaseColorMap.get(cId)) || '#cccccc');
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';

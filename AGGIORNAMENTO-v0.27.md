@@ -106,8 +106,10 @@ un'azienda passa da `work.getStatsBy*` e da `company.getById`.
 
 - Nuovo campo `overseasLinks` (i collegamenti via mare, che la mappa di gioco
   ora disegna come linee).
-- Geometrie: `regions` e `regionLabels` 742; `countryLabels` scende da 192 a
-  110 (da controllare se le etichette nazione si appoggiano a quell'oggetto).
+- Geometrie: `regions` e `regionLabels` 742. `countryLabels` resta a 183
+  (ricontato il 2026-10-26: il "da 192 a 110" scritto qui era sbagliato), ma
+  le etichette perdono `textColor`, `strokeColor` e `specializedItem` e
+  portano `scheme`: vedi la sezione 6.
 
 ### `company.getById`
 
@@ -252,7 +254,8 @@ e, per le Rendite, con `?api=dev`.
 
 **Le rotture:**
 - **Censimento aziende** (`server/companyCensus.js`): senza `workerCount` le
-  statistiche si chiedono per tutte le aziende (~2.100 blocchi da 25, di notte),
+  statistiche si chiedono per tutte le aziende (~114.000, ~4.600 blocchi da 25:
+  un'ora in più di notte; il tetto di 500/min conta le richieste HTTP),
   elaborate blocco per blocco per non tenerle in RAM; "con dipendenti" =
   dipendenti che ieri hanno prodotto, numero dei dipendenti `null`,
   `coverage.workersKnown: false`. La scheda Produzione toglie la colonna e lo
@@ -282,6 +285,20 @@ e, per le Rendite, con `?api=dev`.
 warera-plus-api (confini, la mia nazione). Senza, il resto funziona: il
 censimento resterebbe sul filtro vecchio e, dopo il rilascio, a zero
 dipendenti.
+
+**Secondo giro, lo stesso giorno:**
+- **Colori dei nomi sulla mappa**: le etichette di `map.getMapData` non hanno
+  più `textColor`/`strokeColor` (solo `scheme`). Il nome si colora schiarendo
+  il colore di gioco della nazione (`gameColors.js: lightenForLabel`, prima
+  privata della time machine); `strokeColor` assente non entra più né nella
+  mappa colori né in `nationBaseColorMap`.
+- **Bonus di battaglia per tipo di governo** (`src/shared/battleBonus.js`):
+  patriottico 30/15/10 per Stato nazionalista/Federazione/Plutocrazia,
+  Federazione +5% per un alleato, Fronte patriottico +5% al bunker (stimato:
+  solo dove il bunker c'è), Stato mercenario ordini ×2 finché la capitale non
+  è occupata. Numeri dalle note: la config del gioco non li ha.
+- **Guida**: la vista Rendita giornaliera nell'elenco delle viste, governo e
+  rendita nel pannello, terzo punto dell'Ottimizzatore.
 
 **Non fatto:** Posizione e Manager dell'Ottimizzatore; una vista mappa per
 tipo di governo; i nomi delle regioni scritti a mano (etichette, ancore delle
