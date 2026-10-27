@@ -327,3 +327,50 @@ e quante tasse servono perché la Plutocrazia batta la Repubblica
   la guida dà per la Germania +947 contro i nostri +1.039: tornerebbe se le
   conquistate perdessero anche la rendita delle risorse strategiche. Il
   controllo sul tipo attuale lo dirà da solo (riga con ⚠️).
+
+## 8. Endpoint nuovi (provati il 2026-10-27)
+
+Tutti pubblici su `api6`, senza chiave: non consumano il budget del proxy.
+Nessuno è ancora usato dal tool.
+
+- **`article.getPinnedArticles`** — input vuoto. Array di articoli completi
+  (`content` HTML compreso) con in più `pinnedUntil`. Al 27 ottobre uno solo:
+  le note della v0.27 (`6ade08f7899288ce9f0bfe36`).
+- **`assetSale.getLastSkinGifts`** — input vuoto (`limit` ignorato). Le ultime
+  3 skin regalate: `{ createdAt, buyer, giftedTo, skins: [{ key, slot }] }`.
+- **`managerOffer.getManyPaginated`** — `limit` (max 50), `cursor`;
+  risposta `{ items, nextCursor }`, ordinata per paga decrescente. Ogni
+  offerta: `{ _id, company, user, region, rateManagement, maxHourlyWage,
+  minManagement?, citizenship?, text?, createdAt, updatedAt }`. Al 27 ottobre
+  108 offerte (71 giocatori, una per azienda), 3 pagine.
+  - `maxHourlyWage` = `rateManagement × 11` in tutte (11 = Gestione massima):
+    l'offerta più alta è 0,1364/ora, ~3,3 oro al giorno. ⚠️ La guida di
+    Johnny_Sins parla di 24 oro al giorno per un manager: da chiarire prima
+    di costruirci la parte Manager dell'Ottimizzatore.
+  - I campi sconosciuti si ignorano, ma `regionId` e `countryId` danno una
+    lista VUOTA, anche con una regione che nelle offerte c'è: un filtro
+    esiste, con un nome o un significato che non abbiamo trovato.
+  - `citizenship` (92 su 108): presumibilmente offerta riservata ai
+    cittadini di quella nazione. `text` è un messaggio libero.
+- **`managerOffer.getWageStats`** — input vuoto (`userId` ignorato).
+  `{ allowedRange: { min, max, average, source: "market" }, topOffer,
+  topEligibleOffer }`: fascia di paga oraria ammessa (0,091–0,1366 il 27
+  ottobre), offerta più alta; `topEligibleOffer` è null da anonimi
+  (presumibilmente la migliore per chi è collegato).
+- **`poll.getPoll`** — `{ pollId }`. `{ _id, author, question, options: [{ id,
+  text, votes }], allowMultiple, durationHours, totalVoters, article,
+  startedAt, endsAt, isEnded, myVote, canVote, cannotVoteReason }`. Id
+  inesistente → 404 "Poll not found".
+- **`poll.getPollVoters`** — `{ pollId, optionId, limit (max 100), cursor }`;
+  `{ items, nextCursor }`, ogni voto `{ poll, user, options: [..], version,
+  createdAt }`. Il voto è pubblico per regola del gioco (note v0.27:
+  "who voted for what is public").
+
+⚠️ **Non esiste un elenco dei sondaggi** (`poll.getPolls`,
+`poll.getManyPaginated` → 404). L'id sta solo nell'HTML dell'articolo:
+`<div data-poll-id="…" class="tiptap-poll">`, quindi per trovarli si
+scorrono gli articoli (`article.getArticlesPaginated` con `type` fra
+`daily|weekly|top|my|subscriptions|last|saved`) e si legge `content`.
+Negli ultimi 50 articoli del 27 ottobre: 2 sondaggi. Regole dalle note:
+da 2 a 10 risposte, aperti da 1 ora a 7 giorni, voto limitabile per
+livello o nazione.
