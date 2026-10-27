@@ -1020,24 +1020,3 @@ body.light-theme .wp-mw-sc-giu { fill: #cf222e; }
   color: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap;
 }
 .wp-mu-compare-btn:hover { border-color: #f0883e; color: #f0883e; }
-
-/* ── Pillole dei membri (scheda unità) ─────────────────────────
-   Tre colonne affiancate: chi può pillare, chi è pillato, chi è in
-   debuff. Su schermo stretto si impilano. */
-.wp-mu-pills-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-@media (max-width: 900px) { .wp-mu-pills-grid { grid-template-columns: 1fr; } }
-.wp-mu-pills-col { border: 1px solid #30363d; border-radius: 10px; background: #161b22; min-width: 0; }
-body.light-theme .wp-mu-pills-col { border-color: #d0d7de; background: #fff; }
-.wp-mu-pills-head { margin: 0; padding: 8px 10px; font-size: 13px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #30363d; }
-body.light-theme .wp-mu-pills-head { border-bottom-color: #d0d7de; }
-.wp-mu-pills-can .wp-mu-pills-head { color: #3fb950; }
-.wp-mu-pills-on .wp-mu-pills-head { color: #e3b341; }
-.wp-mu-pills-down .wp-mu-pills-head { color: #f85149; }
-.wp-mu-pills-list { max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; }
-.wp-mu-pill-row { display: flex; align-items: center; gap: 6px; padding: 5px 10px; text-decoration: none; color: inherit; font-size: 12.5px; }
-.wp-mu-pill-row:hover { background: rgba(88, 166, 255, .08); }
-.wp-mu-pill-nick { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.wp-mu-pill-bar { display: inline-flex; align-items: center; gap: 2px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.wp-mu-pill-bar-k { font-size: 11px; }
-.wp-mu-pill-bar-v small { opacity: .6; font-size: 10.5px; }
-.wp-mu-pill-left { flex-shrink: 0; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 48px; text-align: right; }

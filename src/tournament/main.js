@@ -43,7 +43,9 @@ import { fetchTournamentBundle, fetchTournamentList, fetchTournament, fetchTeams
 import { buildModel, teamLabel, roundKind, matchState, subtree, bracketViews, viewForTeam, teamPath, difficultyOf, winProb, bracketOdds, sideTeam, METRICS } from './model.js';
 import { fetchNames } from '../players/api.js';
 import { escapeHtml, flagImg, avatarImg, countryName, fmtCompact, fmtFull, fmtDate } from '../mu/ui.js';
-import { fetchMuDirectory } from '../mu/api.js';
+import { fetchMuDirectory, fetchUsersLite } from '../mu/api.js';
+import { muT, muPillLabels } from '../mu/i18n.js';
+import { pillColumnsHtml } from '../shared/pillStatus.js';
 import { getAllCountries } from '../shared/countries.js';
 import { trackEvent } from '../shared/analytics.js';
 import { syncBack, updateBackParams } from '../app/backNav.js';
@@ -633,6 +635,7 @@ function teamCardHtml(t) {
       </ol>
       <h3 class="wp-trn-h3">${trnT('compTitle')}</h3>
       ${rosterHtml(t)}
+      ${pillsHtml(t)}
     </div>`;
 }
 
@@ -667,6 +670,23 @@ function rosterHtml(t) {
     </div>`;
 }
 
+/* ── Pillole della squadra (WarEra+) ──
+   Chi può pillare, chi è pillato e chi è in debuff fra gli iscritti, con
+   vita e cibo: serve a leggere la forza di OGGI di una squadra, non solo
+   quella storica del danno a 7 giorni. Stessi dati e stesso disegno della
+   scheda unità (src/shared/pillStatus.js); si carica dopo la composizione,
+   sugli stessi iscritti (al massimo i 60 che il server manda), con un
+   batch getUserLite. Le barre sono quelle del momento della lettura. */
+function pillsHtml(t) {
+  const r = _rosters.get(`${_model.id}:${t.id}`);
+  if (!r || r.loading || !r.rows.length) return '';
+  const body = r.lite
+    ? pillColumnsHtml(r.lite, muPillLabels())
+    : r.liteFailed ? '' : `<p class="wp-trn-hint">${trnT('compLoading')}</p>`;
+  if (!body) return '';
+  return `<h3 class="wp-trn-h3">💊 ${escapeHtml(muT('pillTitle'))}</h3>${body}`;
+}
+
 async function loadRoster(t) {
   const key = `${_model.id}:${t.id}`;
   if (_rosters.has(key)) return;
@@ -688,6 +708,14 @@ async function loadRoster(t) {
   }
   entry.loading = false;
   if (_container && _teamId === t.id) paint({ keepScroll: true });
+  // Le pillole vengono dopo: la composizione non deve aspettarle.
+  if (entry.rows.length) {
+    try {
+      entry.lite = (await fetchUsersLite(entry.rows.map(r => r.u))).filter(Boolean);
+    } catch { /* resta senza: la sezione non compare */ }
+    if (!entry.lite?.length) entry.liteFailed = true;
+    if (_container && _teamId === t.id) paint({ keepScroll: true });
+  }
 }
 
 /** Probabilità di vincere il torneo, con la posizione fra le squadre. */

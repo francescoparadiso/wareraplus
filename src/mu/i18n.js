@@ -386,6 +386,16 @@ const MU_DICT = {
   },
 };
 
+/** Etichette del blocco pillole (src/shared/pillStatus.js), per le viste che
+ *  lo mostrano: scheda unità, 1 vs 1, torneo. */
+export function muPillLabels() {
+  return {
+    can: muT('pillCan'), on: muT('pillOn'), down: muT('pillDown'), none: muT('pillNone'),
+    health: muT('pillHealth'), food: muT('pillFood'),
+    canHint: muT('pillCanHint'), onHint: muT('pillOnHint'), downHint: muT('pillDownHint'),
+  };
+}
+
 export function muT(key) {
   return MU_DICT[getLang()]?.[key] ?? MU_DICT.en[key] ?? key;
 }
