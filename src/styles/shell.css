@@ -3611,6 +3611,41 @@ body.light-theme .wp-ship-tip {
 .wp-eth-bonus { color: #3fb950; font-weight: 700; }
 .wp-eth-none { opacity: .75; }
 
+/* Entrate per tipo di governo nel pannello nazione
+   (src/shared/govIncome.js). Stessa scatola delle etiche. */
+.wp-govinc-box { display: flex; flex-direction: column; gap: 6px; }
+.wp-govinc-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.wp-govinc-table th {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+  color: var(--wp-ov-text-dim, #8b949e); text-align: right; padding: 0 0 4px 6px; white-space: nowrap;
+}
+.wp-govinc-table td { padding: 3px 0; border-top: 1px solid var(--wp-ov-border, #30363d); }
+.wp-govinc-table td + td { padding-left: 6px; }
+.wp-govinc-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wp-govinc-num.up { color: #3fb950; }
+.wp-govinc-num.down { color: #f85149; }
+.wp-govinc-now td:first-child { font-weight: 700; }
+.wp-govinc-tag {
+  display: inline-block; padding: 0 6px; margin-left: 2px; border-radius: 999px;
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  color: var(--wp-ov-text-dim, #8b949e); border: 1px solid var(--wp-ov-border, #30363d);
+  vertical-align: 1px;
+}
+.wp-govinc-tag-best { color: #3fb950; border-color: rgba(63, 185, 80, .45); background: rgba(63, 185, 80, .1); }
+.wp-govinc-warn { cursor: help; }
+.wp-govinc-sub { font-weight: 700; margin-top: 4px; }
+.wp-govinc-bar {
+  position: relative; height: 8px; border-radius: 999px;
+  background: var(--wp-ov-border, #30363d); overflow: visible;
+}
+.wp-govinc-bar-fill { height: 100%; border-radius: 999px; background: #d29922; }
+.wp-govinc-bar-fill.reached { background: #3fb950; }
+.wp-govinc-bar-mark {
+  position: absolute; top: -3px; width: 2px; height: 14px; margin-left: -1px;
+  background: var(--wp-ov-text, #e6edf3);
+}
+.wp-govinc-note { font-size: 11px; }
+
 /* ══════════════════════════════════════════════════════════════
    Cartellino DEV — versione di prova del tool
    ------------------------------------------------------------------

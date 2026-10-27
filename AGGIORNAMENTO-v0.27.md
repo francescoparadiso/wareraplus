@@ -304,3 +304,26 @@ dipendenti.
 tipo di governo; i nomi delle regioni scritti a mano (etichette, ancore delle
 Operazioni, archivi importati) e gli `overseasLinks`, da controllare sul live
 dopo il rilascio.
+
+## 7. Entrate per tipo di governo (2026-10-27)
+
+Nel pannello nazione, sotto "Tipo di governo": quanto renderebbe ogni tipo
+e quante tasse servono perché la Plutocrazia batta la Repubblica
+(`src/shared/govIncome.js`, idea dalla guida di Johnny_Sins del 26 ottobre).
+
+- `income.govType` è l'**effetto** del governo attuale: `total − govType` è
+  la nazione senza governo.
+- Regole, verificate sulle nazioni che hanno già quel tipo (17 su 17, scarto
+  massimo 0,04 oro/giorno): Repubblica + sviluppo delle regioni proprie −
+  sviluppo delle conquistate; Plutocrazia + 50% risorse strategiche + 40%
+  tasse su salari e manager; Autocrazia + 25% sviluppo; Stato nazionalista
+  − 30% sviluppo. Federazione, Fronte patriottico, Stato mercenario e
+  Provvisorio: nessun effetto (`govType` = 0 su tutte le 44 nazioni).
+- Proprie/conquistate da `country` contro `initialCountry` delle regioni;
+  una regione conquistata paga intero il suo sviluppo (Zurigo: 12,15 / 24).
+- Soglia: `T* = (proprie − conquistate − 0,5·S) / 0,4`, sotto zero conviene
+  già.
+- ⚠️ Aperto: la Repubblica con conquiste. Oggi nessuna Repubblica ne ha, e
+  la guida dà per la Germania +947 contro i nostri +1.039: tornerebbe se le
+  conquistate perdessero anche la rendita delle risorse strategiche. Il
+  controllo sul tipo attuale lo dirà da solo (riga con ⚠️).
