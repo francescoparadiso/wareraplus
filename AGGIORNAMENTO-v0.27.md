@@ -365,6 +365,29 @@ Nessuno è ancora usato dal tool.
   `{ items, nextCursor }`, ogni voto `{ poll, user, options: [..], version,
   createdAt }`. Il voto è pubblico per regola del gioco (note v0.27:
   "who voted for what is public").
+- **`gameStat.getPpMoneyValue`** — input `z.void()`: va chiamata SENZA
+  `?input=`. Con `{}` (anche dentro un batch) risponde 400 "Expected void,
+  received object". Restituisce un numero, il valore in oro di un punto
+  produzione (0,1012 il 27 ottobre). Il tool la usa già così, con una GET a
+  parte (`src/eco/api.js`).
+- **`gameConfig.getMaxBountyRate`** — restituisce un numero (0,91). Accetta
+  sia nessun input sia `{}`, quindi in un batch non dà problemi.
+- **`tradingOrder.getTopOrdersPerItemCode`** — `{ itemCodes: string[],
+  limit? }`, `limit` max 100 (oltre: 400 `too_big`); senza `itemCodes`: 400.
+  Restituisce `{ [codice]: { buyOrders, sellOrders } }`: più libri ordini in
+  una chiamata. Ogni codice chiesto è una chiave, uno sconosciuto ha due
+  liste vuote. `limit` conta gli ordini PER LATO; senza, uno per lato. Gli
+  ordini hanno gli stessi campi di `getTopOrders` e `getPublicOrdersByOwner`
+  (`_id, user, itemCode, quantity, price, offerAt, type`). Potrebbe sostituire
+  la `getTopOrders` per risorsa di `src/market/api.js`.
+- **`itemTrading.getItemTrading`** — `{ itemCode }`. `{ _id, itemCode,
+  minPrice, maxPrice, values, sellOrders, buyOrders, currentValue }`.
+  `values` sono gli ultimi 30 giorni consecutivi, dal più vecchio, l'ultimo è
+  oggi: `{ valueAt: "AAAA-MM-GG", avgValue, totalValue, totalQuantity,
+  transactionsCount }`, con `avgValue = totalValue / totalQuantity` su ogni
+  riga e `currentValue` = `avgValue` dell'ultima. `sellOrders`/`buyOrders`
+  vuoti. Un codice senza scambi (`toolbox`) → 404 "Itemtradings not found.".
+  Utile come ripiego o controllo per `/price-history`.
 
 ⚠️ **Non esiste un elenco dei sondaggi** (`poll.getPolls`,
 `poll.getManyPaginated` → 404). L'id sta solo nell'HTML dell'articolo:
