@@ -254,8 +254,29 @@ const WORKER_API_BASE = 'https://politicalview-proxy.fra-paradiso2.workers.dev';
 // risparmiare. Senza token si torna al Worker, come prima.
 const SERVER_API_TOKEN = process.env.WARERA_API_TOKEN || '';
 const PRIVILEGED_API_BASE = SERVER_API_TOKEN ? 'https://api2.warera.io' : WORKER_API_BASE;
-function privilegedFetch(url) {
-  return SERVER_API_TOKEN ? fetch(url, { headers: { 'X-API-Key': SERVER_API_TOKEN } }) : fetch(url);
+// WarEra+: il 2026-10-27 api2 rispondeva 503 "no available server" mentre
+// il Worker (e api3..api6) andavano: ogni chiamata con la chiave falliva e
+// il censimento cittadini e' uscito vuoto. Su 5xx o errore di rete si
+// ripiega sul Worker, e per PRIVILEGED_COOLDOWN_MS si va dritti li' senza
+// ripagare il tentativo su api2 a ogni chiamata — lo stesso schema del
+// client (src/shared/trpcProxy.js). Un 4xx NON ripiega: e' una risposta
+// vera (input sbagliato, 429 da rispettare), non un host giu'.
+const PRIVILEGED_COOLDOWN_MS = 2 * 60 * 1000;
+let privilegedDownUntil = 0;
+async function privilegedFetch(url) {
+  if (!SERVER_API_TOKEN) return fetch(url);
+  const viaWorker = () => fetch(WORKER_API_BASE + url.slice(PRIVILEGED_API_BASE.length));
+  if (!url.startsWith(PRIVILEGED_API_BASE)) return fetch(url, { headers: { 'X-API-Key': SERVER_API_TOKEN } });
+  if (Date.now() < privilegedDownUntil) return viaWorker();
+  try {
+    const res = await fetch(url, { headers: { 'X-API-Key': SERVER_API_TOKEN } });
+    if (res.status < 500) return res;
+    console.warn(`[api2] ${res.status}: ripiego sul Worker per ${PRIVILEGED_COOLDOWN_MS / 60000} minuti`);
+  } catch (err) {
+    console.warn(`[api2] irraggiungibile (${err.message}): ripiego sul Worker per ${PRIVILEGED_COOLDOWN_MS / 60000} minuti`);
+  }
+  privilegedDownUntil = Date.now() + PRIVILEGED_COOLDOWN_MS;
+  return viaWorker();
 }
 // WarEra+: "crediti" statici del tool (userId fisso, sempre lo stesso) —
 // prima ognuno faceva la sua chiamata separata al Worker da OGNI browser
@@ -1763,6 +1784,22 @@ async function pollCitizens() {
         if (res.nextCursor) next.push({ id: p.id, cursor: res.nextCursor });
       });
       pending = next;
+    }
+
+    // WarEra+: un giro andato a vuoto NON sovrascrive la fotografia buona.
+    // Il 2026-10-27 api2 era giu' e ogni pagina falliva: il giro delle 08:36
+    // ha scritto 0 cittadini in 181 nazioni, e Statistiche nazioni e' rimasta
+    // vuota per tutti fino al giro successivo riuscito. Stessa trappola delle
+    // battaglie vuote del 2026-09-25. Si tiene la fotografia precedente se il
+    // giro ha trovato meno della meta' dei cittadini di quella (un calo vero
+    // di quella portata in un'ora non esiste), e si salta anche il diff dei
+    // movimenti, che leggerebbe le pagine mancate come emigrazioni.
+    const previous = readCache(CITIZENS_FILE, { data: {} }).data || {};
+    const prevTotal = Object.values(previous).reduce((s, r) => s + (r?.n || 0), 0);
+    const foundTotal = [...idsByCountry.values()].reduce((s, ids) => s + ids.length, 0);
+    if (prevTotal > 0 && foundTotal < prevTotal / 2) {
+      console.warn(`[poll] citizens: giro incompleto (${foundTotal} cittadini contro ${prevTotal} del precedente), tengo la fotografia precedente`);
+      return;
     }
 
     const DAY = 24 * 60 * 60 * 1000;
