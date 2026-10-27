@@ -16,6 +16,7 @@ import { getLang } from '../shared/i18n.js';
 
 const MU_DICT = {
   en: {
+    pillTitle: "Pills", pillCan: "Can pill", pillOn: "Pilled", pillDown: "Debuffed", pillNone: "Nobody", pillHealth: "Health", pillFood: "Food", pillLeft: "left", pillCanHint: "Ready: no pill active and no debuff.", pillOnHint: "Pill active: ends in the time shown.", pillDownHint: "Debuff after the pill: ends in the time shown.",
     title: 'Military Units', subtitle: 'units', tabList: 'Directory', tabRanking: 'Leaderboards',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
     tabCompare: "1 vs 1", cmpUnitA: "Unit A", cmpUnitB: "Unit B", cmpPick: "Pick two units, one per side.", cmpSearch: "Search a unit…", cmpEmpty: "No unit chosen", cmpAhead: "ahead in {n} of {t}", cmpEven: "even", cmpNote: "The winner of each row is in bold, with its lead. {t} measures counted; shares are shown but not counted.", cmpDmgPerMember: "Weekly damage per member", cmpWealthPerMember: "Wealth per member", cmpBuilds: "How the members play", cmpWarPct: "War players %", cmpEcoPct: "Economy players %", cmpWarN: "War players", cmpEcoN: "Economy players", cmpHybN: "Hybrid players", cmpSwap: "Swap", cmpClear: "Remove", cmpCompare: "Compare", cmpOpen: "Open the unit card",
@@ -56,6 +57,7 @@ const MU_DICT = {
     wLastShot: 'Since last',
   },
   it: {
+    pillTitle: "Pillole", pillCan: "Possono pillare", pillOn: "Pillati", pillDown: "In debuff", pillNone: "Nessuno", pillHealth: "Vita", pillFood: "Cibo", pillLeft: "ancora", pillCanHint: "Pronti: nessuna pillola attiva e nessun debuff.", pillOnHint: "Pillola attiva: finisce fra il tempo indicato.", pillDownHint: "Debuff dopo la pillola: finisce fra il tempo indicato.",
     title: 'Unità Militari', subtitle: 'unità', tabList: 'Elenco', tabRanking: 'Classifiche',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
     tabCompare: "1 vs 1", cmpUnitA: "Unità A", cmpUnitB: "Unità B", cmpPick: "Scegli due unità, una per lato.", cmpSearch: "Cerca un'unità…", cmpEmpty: "Nessuna unità scelta", cmpAhead: "avanti in {n} su {t}", cmpEven: "pari", cmpNote: "In grassetto chi vince la riga, col suo vantaggio. Contate {t} misure; le quote si vedono ma non si contano.", cmpDmgPerMember: "Danni sett. per membro", cmpWealthPerMember: "Ricchezza per membro", cmpBuilds: "Come giocano i membri", cmpWarPct: "Giocatori da guerra %", cmpEcoPct: "Giocatori da economia %", cmpWarN: "Giocatori da guerra", cmpEcoN: "Giocatori da economia", cmpHybN: "Giocatori ibridi", cmpSwap: "Scambia", cmpClear: "Togli", cmpCompare: "Confronta", cmpOpen: "Apri la scheda dell'unità",
@@ -96,6 +98,7 @@ const MU_DICT = {
     wLastShot: "Dall'ultimo",
   },
   es: {
+    pillTitle: "Píldoras", pillCan: "Pueden pastillarse", pillOn: "Con píldora", pillDown: "En debuff", pillNone: "Nadie", pillHealth: "Vida", pillFood: "Comida", pillLeft: "quedan", pillCanHint: "Listos: sin píldora activa ni debuff.", pillOnHint: "Píldora activa: termina en el tiempo indicado.", pillDownHint: "Debuff tras la píldora: termina en el tiempo indicado.",
     title: 'Unidades Militares', subtitle: 'unidades', tabList: 'Listado', tabRanking: 'Clasificaciones',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
     tabCompare: "1 vs 1", cmpUnitA: "Unidad A", cmpUnitB: "Unidad B", cmpPick: "Elige dos unidades, una por lado.", cmpSearch: "Buscar una unidad…", cmpEmpty: "Ninguna unidad elegida", cmpAhead: "por delante en {n} de {t}", cmpEven: "empate", cmpNote: "En negrita quien gana la fila, con su ventaja. Se cuentan {t} medidas; las cuotas se muestran pero no se cuentan.", cmpDmgPerMember: "Daño sem. por miembro", cmpWealthPerMember: "Riqueza por miembro", cmpBuilds: "Cómo juegan los miembros", cmpWarPct: "Jugadores de guerra %", cmpEcoPct: "Jugadores de economía %", cmpWarN: "Jugadores de guerra", cmpEcoN: "Jugadores de economía", cmpHybN: "Jugadores híbridos", cmpSwap: "Intercambiar", cmpClear: "Quitar", cmpCompare: "Comparar", cmpOpen: "Abrir la ficha de la unidad",
@@ -136,6 +139,7 @@ const MU_DICT = {
     wLastShot: 'Desde la última',
   },
   de: {
+    pillTitle: "Pillen", pillCan: "Können pillen", pillOn: "Gepillt", pillDown: "Im Debuff", pillNone: "Niemand", pillHealth: "Leben", pillFood: "Essen", pillLeft: "noch", pillCanHint: "Bereit: keine Pille aktiv, kein Debuff.", pillOnHint: "Pille aktiv: endet in der angezeigten Zeit.", pillDownHint: "Debuff nach der Pille: endet in der angezeigten Zeit.",
     title: 'Militäreinheiten', subtitle: 'Einheiten', tabList: 'Verzeichnis', tabRanking: 'Ranglisten',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
     tabCompare: "1 vs 1", cmpUnitA: "Einheit A", cmpUnitB: "Einheit B", cmpPick: "Wähle zwei Einheiten, eine pro Seite.", cmpSearch: "Einheit suchen…", cmpEmpty: "Keine Einheit gewählt", cmpAhead: "vorne in {n} von {t}", cmpEven: "gleich", cmpNote: "Fett: wer die Zeile gewinnt, mit Vorsprung. {t} Kennzahlen gezählt; Anteile werden gezeigt, aber nicht gezählt.", cmpDmgPerMember: "Wöch. Schaden pro Mitglied", cmpWealthPerMember: "Vermögen pro Mitglied", cmpBuilds: "Wie die Mitglieder spielen", cmpWarPct: "Kriegsspieler %", cmpEcoPct: "Wirtschaftsspieler %", cmpWarN: "Kriegsspieler", cmpEcoN: "Wirtschaftsspieler", cmpHybN: "Hybridspieler", cmpSwap: "Tauschen", cmpClear: "Entfernen", cmpCompare: "Vergleichen", cmpOpen: "Einheitenkarte öffnen",
@@ -176,6 +180,7 @@ const MU_DICT = {
     wLastShot: 'Seit letzter',
   },
   fr: {
+    pillTitle: "Pilules", pillCan: "Peuvent se pilluler", pillOn: "Pilulés", pillDown: "En debuff", pillNone: "Personne", pillHealth: "Vie", pillFood: "Nourriture", pillLeft: "reste", pillCanHint: "Prêts : aucune pilule active ni debuff.", pillOnHint: "Pilule active : se termine dans le temps indiqué.", pillDownHint: "Debuff après la pilule : se termine dans le temps indiqué.",
     title: 'Unités Militaires', subtitle: 'unités', tabList: 'Annuaire', tabRanking: 'Classements',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
     tabCompare: "1 vs 1", cmpUnitA: "Unité A", cmpUnitB: "Unité B", cmpPick: "Choisis deux unités, une par côté.", cmpSearch: "Rechercher une unité…", cmpEmpty: "Aucune unité choisie", cmpAhead: "devant sur {n} de {t}", cmpEven: "égalité", cmpNote: "En gras, qui gagne la ligne, avec son avance. {t} mesures comptées ; les parts sont affichées mais pas comptées.", cmpDmgPerMember: "Dégâts hebdo. par membre", cmpWealthPerMember: "Richesse par membre", cmpBuilds: "Comment jouent les membres", cmpWarPct: "Joueurs guerre %", cmpEcoPct: "Joueurs économie %", cmpWarN: "Joueurs guerre", cmpEcoN: "Joueurs économie", cmpHybN: "Joueurs hybrides", cmpSwap: "Échanger", cmpClear: "Retirer", cmpCompare: "Comparer", cmpOpen: "Ouvrir la fiche de l'unité",
@@ -216,6 +221,7 @@ const MU_DICT = {
     wLastShot: 'Depuis la dernière',
   },
   nl: {
+    pillTitle: "Pillen", pillCan: "Kunnen pillen", pillOn: "Gepild", pillDown: "In debuff", pillNone: "Niemand", pillHealth: "Leven", pillFood: "Eten", pillLeft: "nog", pillCanHint: "Klaar: geen pil actief en geen debuff.", pillOnHint: "Pil actief: eindigt over de getoonde tijd.", pillDownHint: "Debuff na de pil: eindigt over de getoonde tijd.",
     title: 'Militaire Eenheden', subtitle: 'eenheden', tabList: 'Overzicht', tabRanking: 'Ranglijsten',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
     tabCompare: "1 vs 1", cmpUnitA: "Eenheid A", cmpUnitB: "Eenheid B", cmpPick: "Kies twee eenheden, één per kant.", cmpSearch: "Zoek een eenheid…", cmpEmpty: "Geen eenheid gekozen", cmpAhead: "voor in {n} van {t}", cmpEven: "gelijk", cmpNote: "Vet: wie de rij wint, met de voorsprong. {t} maatstaven geteld; aandelen worden getoond maar niet geteld.", cmpDmgPerMember: "Wekel. schade per lid", cmpWealthPerMember: "Vermogen per lid", cmpBuilds: "Hoe de leden spelen", cmpWarPct: "Oorlogsspelers %", cmpEcoPct: "Economiespelers %", cmpWarN: "Oorlogsspelers", cmpEcoN: "Economiespelers", cmpHybN: "Hybride spelers", cmpSwap: "Wisselen", cmpClear: "Verwijderen", cmpCompare: "Vergelijken", cmpOpen: "Open de eenheidskaart",
@@ -256,6 +262,7 @@ const MU_DICT = {
     wLastShot: 'Sinds vorige',
   },
   sv: {
+    pillTitle: "Piller", pillCan: "Kan pilla", pillOn: "Pillade", pillDown: "I debuff", pillNone: "Ingen", pillHealth: "Hälsa", pillFood: "Mat", pillLeft: "kvar", pillCanHint: "Redo: ingen pill aktiv och ingen debuff.", pillOnHint: "Pill aktiv: slutar om tiden som visas.", pillDownHint: "Debuff efter pillret: slutar om tiden som visas.",
     title: 'Militära Enheter', subtitle: 'enheter', tabList: 'Katalog', tabRanking: 'Topplistor',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
     tabCompare: "1 mot 1", cmpUnitA: "Enhet A", cmpUnitB: "Enhet B", cmpPick: "Välj två enheter, en per sida.", cmpSearch: "Sök en enhet…", cmpEmpty: "Ingen enhet vald", cmpAhead: "före i {n} av {t}", cmpEven: "lika", cmpNote: "Fetstil: vem som vinner raden, med försprånget. {t} mått räknade; andelar visas men räknas inte.", cmpDmgPerMember: "Veckoskada per medlem", cmpWealthPerMember: "Förmögenhet per medlem", cmpBuilds: "Hur medlemmarna spelar", cmpWarPct: "Krigsspelare %", cmpEcoPct: "Ekonomispelare %", cmpWarN: "Krigsspelare", cmpEcoN: "Ekonomispelare", cmpHybN: "Hybridspelare", cmpSwap: "Byt", cmpClear: "Ta bort", cmpCompare: "Jämför", cmpOpen: "Öppna enhetskortet",
@@ -296,6 +303,7 @@ const MU_DICT = {
     wLastShot: 'Sedan förra',
   },
   pt: {
+    pillTitle: "Pílulas", pillCan: "Podem pilular", pillOn: "Pilulados", pillDown: "Em debuff", pillNone: "Ninguém", pillHealth: "Vida", pillFood: "Comida", pillLeft: "faltam", pillCanHint: "Prontos: sem pílula ativa nem debuff.", pillOnHint: "Pílula ativa: termina no tempo indicado.", pillDownHint: "Debuff após a pílula: termina no tempo indicado.",
     title: 'Unidades Militares', subtitle: 'unidades', tabList: 'Diretório', tabRanking: 'Classificações',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
     tabCompare: "1 vs 1", cmpUnitA: "Unidade A", cmpUnitB: "Unidade B", cmpPick: "Escolhe duas unidades, uma de cada lado.", cmpSearch: "Procurar uma unidade…", cmpEmpty: "Nenhuma unidade escolhida", cmpAhead: "à frente em {n} de {t}", cmpEven: "empate", cmpNote: "A negrito quem vence a linha, com a vantagem. {t} medidas contadas; as quotas mostram-se mas não contam.", cmpDmgPerMember: "Dano sem. por membro", cmpWealthPerMember: "Riqueza por membro", cmpBuilds: "Como jogam os membros", cmpWarPct: "Jogadores de guerra %", cmpEcoPct: "Jogadores de economia %", cmpWarN: "Jogadores de guerra", cmpEcoN: "Jogadores de economia", cmpHybN: "Jogadores híbridos", cmpSwap: "Trocar", cmpClear: "Remover", cmpCompare: "Comparar", cmpOpen: "Abrir a ficha da unidade",
@@ -336,6 +344,7 @@ const MU_DICT = {
     wLastShot: 'Desde a última',
   },
   ar: {
+    pillTitle: "الحبوب", pillCan: "يمكنهم تناول الحبة", pillOn: "تحت تأثير الحبة", pillDown: "في حالة الضعف", pillNone: "لا أحد", pillHealth: "الصحة", pillFood: "الطعام", pillLeft: "متبقي", pillCanHint: "جاهزون: لا حبة نشطة ولا ضعف.", pillOnHint: "الحبة نشطة: تنتهي خلال الوقت المعروض.", pillDownHint: "ضعف بعد الحبة: ينتهي خلال الوقت المعروض.",
     title: 'الوحدات العسكرية', subtitle: 'وحدات', tabList: 'الدليل', tabRanking: 'التصنيفات',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
     tabCompare: "1 ضد 1", cmpUnitA: "الوحدة أ", cmpUnitB: "الوحدة ب", cmpPick: "اختر وحدتين، واحدة لكل جانب.", cmpSearch: "ابحث عن وحدة…", cmpEmpty: "لم يتم اختيار وحدة", cmpAhead: "متقدم في {n} من {t}", cmpEven: "تعادل", cmpNote: "بالخط العريض من يفوز بالسطر مع تقدمه. تم احتساب {t} مقاييس؛ النسب تُعرض ولا تُحتسب.", cmpDmgPerMember: "الضرر الأسبوعي لكل عضو", cmpWealthPerMember: "الثروة لكل عضو", cmpBuilds: "كيف يلعب الأعضاء", cmpWarPct: "لاعبو الحرب %", cmpEcoPct: "لاعبو الاقتصاد %", cmpWarN: "لاعبو الحرب", cmpEcoN: "لاعبو الاقتصاد", cmpHybN: "لاعبون هجينون", cmpSwap: "تبديل", cmpClear: "إزالة", cmpCompare: "قارن", cmpOpen: "افتح بطاقة الوحدة",

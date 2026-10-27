@@ -108,6 +108,8 @@ function paintHeader() {
         ${fighterCardHtml()}
       </section>
 
+      <section id="wp-mu-pills"></section>
+
       <section id="wp-mu-playstyle"></section>
 
       <section id="wp-mu-composition"></section>
@@ -208,6 +210,80 @@ function paintPlaystyle(counts) {
   el.innerHTML = `
     <h3 class="wp-mu-section-title">${escapeHtml(muT('playstyle'))} <span class="wp-mu-count">${counts.known}</span></h3>
     ${playstyleBarHtml(counts, playstyleLabels())}`;
+}
+
+/* ── Pillole dei membri (WarEra+) ──
+   Tre gruppi dal solo `buffs` di user.getUserLite, già scaricato per
+   l'elenco membri (zero fetch in più): chi può pillare adesso, chi è sotto
+   pillola, chi è nel debuff che la segue. Vita e cibo sono le barre
+   `skills.health` / `skills.hunger` (currentBarValue su total).
+   ⚠️ Sono le barre al momento della lettura, non una proiezione: la
+   rigenerazione dopo non la stimiamo. Stessa regola di pillHtml() in
+   src/players/main.js: contano solo le fini nel FUTURO. */
+function pillState(u, now) {
+  const b = u.buffs || {};
+  const on = Date.parse(b.buffEndAt || '');
+  const down = Date.parse(b.debuffEndAt || '');
+  if (on > now) return { group: 'on', end: on };
+  if (down > now) return { group: 'down', end: down };
+  return { group: 'can', end: null };
+}
+
+function fmtLeft(ms) {
+  const m = Math.max(1, Math.round(ms / 60000));
+  return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`;
+}
+
+function pillRow(u, st, now) {
+  const hp = u.skills?.health;
+  const fd = u.skills?.hunger;
+  const bar = (label, icon, s) => `
+    <span class="wp-mu-pill-bar" title="${escapeHtml(label)}">
+      <span class="wp-mu-pill-bar-k">${icon}</span>
+      <span class="wp-mu-pill-bar-v">${s?.total != null ? `${Math.round(s.currentBarValue ?? s.value ?? 0)}<small>/${Math.round(s.total)}</small>` : '—'}</span>
+    </span>`;
+  return `
+    <a class="wp-mu-pill-row" href="${APP_BASE}/user/${encodeURIComponent(u._id)}" target="_blank" rel="noopener noreferrer">
+      ${avatarImg(u.avatarUrl, u.username, 'wp-mu-avatar wp-mu-avatar-xs')}
+      ${flagImg(u.country)}
+      <span class="wp-mu-pill-nick">${escapeHtml(u.username)}</span>
+      ${bar(muT('pillHealth'), '❤', hp)}
+      ${bar(muT('pillFood'), '🍗', fd)}
+      ${st.end ? `<span class="wp-mu-pill-left">${escapeHtml(fmtLeft(st.end - now))}</span>` : ''}
+    </a>`;
+}
+
+function paintPills(users) {
+  const el = hostEl?.querySelector('#wp-mu-pills');
+  if (!el) return;
+  const now = Date.now();
+  const groups = { can: [], on: [], down: [] };
+  for (const u of users) {
+    const st = pillState(u, now);
+    groups[st.group].push({ u, st });
+  }
+  // Chi può pillare: i più in forma per primi. Gli altri due: chi sta per
+  // cambiare stato per primo.
+  const hpOf = (u) => u.skills?.health?.currentBarValue ?? 0;
+  groups.can.sort((a, b) => hpOf(b.u) - hpOf(a.u));
+  groups.on.sort((a, b) => a.st.end - b.st.end);
+  groups.down.sort((a, b) => a.st.end - b.st.end);
+
+  const col = (key, titleKey, hintKey, cls) => `
+    <div class="wp-mu-pills-col wp-mu-pills-${cls}">
+      <h4 class="wp-mu-pills-head" title="${escapeHtml(muT(hintKey))}">${escapeHtml(muT(titleKey))} <span class="wp-mu-count">${groups[key].length}</span></h4>
+      <div class="wp-mu-pills-list">
+        ${groups[key].length ? groups[key].map(({ u, st }) => pillRow(u, st, now)).join('') : `<div class="wp-mu-empty">${escapeHtml(muT('pillNone'))}</div>`}
+      </div>
+    </div>`;
+
+  el.innerHTML = `
+    <h3 class="wp-mu-section-title">💊 ${escapeHtml(muT('pillTitle'))}</h3>
+    <div class="wp-mu-pills-grid">
+      ${col('can', 'pillCan', 'pillCanHint', 'can')}
+      ${col('on', 'pillOn', 'pillOnHint', 'on')}
+      ${col('down', 'pillDown', 'pillDownHint', 'down')}
+    </div>`;
 }
 
 /** Etichette dei quattro gruppi, dal dizionario di questa vista. */
@@ -408,6 +484,7 @@ async function paintMembers(detail) {
   const comp = compositionFromUsers(users, ids.length);
   paintComposition(comp);
   paintPlaystyle(countPlaystyles(users));
+  paintPills(users);
   paintFighterCard(users, ids.length);
   const badge = hostEl.querySelector('#wp-mu-head-defacto');
   if (badge) badge.innerHTML = deFactoBadge(dominantCountry({ ...currentMu, composition: comp }));
