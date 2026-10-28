@@ -166,6 +166,12 @@ npm run preview   # testa la build in locale
 - Il proxy `/trpc` del VPS ha una **micro-cache di 10 s** sulle risposte
   200 e accorpa le richieste identiche in volo: la key condivisa ha un
   tetto solo (500/min) per tutto il tool. `/health` → `trpcProxy.cache`.
+- ⚠️ Il proxy `/trpc` del VPS inoltra **solo le procedure in
+  `TRPC_ALLOWED`** (dal 2026-10-28, quando WarEra ha aperto ai token
+  `employee.getMy*` e `employeeEvent.*`: chiunque avrebbe letto i dipendenti
+  del titolare della key). Una procedura nuova chiamata dal tool via proxy va
+  aggiunta lì, altrimenti 403 senza ricaduta sul Worker. `/health` →
+  `trpcProxy.blocked`.
 
 ## Struttura del progetto
 

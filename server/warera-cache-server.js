@@ -3458,6 +3458,81 @@ const TRPC_UPSTREAM = 'https://api2.warera.io/trpc';
 const PROXY_TIMEOUT_MS = 25000;
 const WARERA_API_TOKEN = process.env.WARERA_API_TOKEN || '';
 
+// ── Allowlist delle procedure ──────────────────────────────────────────
+// Il passthrough inoltrava QUALUNQUE procedura con la nostra key, e finche'
+// le procedure "dell'account" (user.getMe, tool.getMine…) rispondevano 403
+// ai token non importava. Il 2026-10-28 WarEra ha aperto ai token
+// `employee.*` e `employeeEvent.*`, comprese le `getMy*`: da quel giorno
+// chiunque, chiamando /trpc/employee.getMyEmployees su questo server,
+// leggeva dipendenti, eventi e costi del TITOLARE della key. Le procedure
+// per azienda/dipendente (getCompanyRoster, getById…) invece vanno bene:
+// rispondono uguale per qualunque azienda, sono dati del mondo, non nostri.
+//
+// Quindi si inoltra solo quello che il tool chiama davvero (client, plusApi
+// sulla loopback, branch v0.27: estratto dal codice il 2026-10-28) piu' le
+// procedure per azienda della v0.27 che l'Ottimizzatore usera'. Tutto il
+// resto riceve un 403 nella forma di errore tRPC. Un batch con anche una
+// sola procedura fuori lista si rifiuta intero: i client hanno gia' il
+// fallback a chiamate singole quando un batch fallisce.
+//
+// ⚠️ Una procedura NUOVA chiamata dal tool via proxy va aggiunta qui, poi
+// redeploy: fino ad allora risponde 403 e NON ricade sul Worker (un 4xx
+// non ripiega, vedi src/shared/trpcProxy.js). `pm2 logs` la nomina alla
+// prima richiesta respinta, `/health` → trpcProxy.blocked.
+const TRPC_ALLOWED = new Set([
+  'alliance.getById',
+  'article.getArticleLiteById',
+  'battle.getBattles', 'battle.getById', 'battle.getLiveBattleData',
+  'battleLootSummary.getByBattleAndUser',
+  'battleOrder.getByBattle',
+  'battleRanking.getRanking',
+  'company.getById', 'company.getCompanies', 'company.getProductionBonus',
+  'company.getRecommendedRegionIdsByItemCode',
+  'country.getAllCountries', 'country.getCountryById',
+  'countryDiplomacy.getByCountry',
+  'election.getElection', 'election.getElections',
+  // Solo quelle per azienda o per dipendente: le getMy* restano fuori.
+  'employee.getById', 'employee.getCompanyRoster', 'employee.getCompanyEmployees',
+  'employee.getCompanyEstimate', 'employee.getManagerPointValue',
+  'event.getEventsPaginated',
+  'gameConfig.getGameConfig', 'gameConfig.getDates',
+  'gameStat.getPpMoneyValue',
+  'government.getByCountryId',
+  'inventory.fetchCurrentEquipment',
+  'itemTrading.getPrices',
+  'manager.getByCompanyId', 'managerOffer.getByCompanyId', 'managerOffer.getWageStats',
+  'map.getMapData',
+  'mercenaryContractAuction.getPaginatedAuctions',
+  'mu.getById', 'mu.getManyPaginated',
+  'party.getById', 'party.getManyPaginated',
+  'ranking.getRanking',
+  'region.getById', 'region.getRegionsObject',
+  'search.searchAnything', 'search.searchUsers',
+  'tournament.getById', 'tournament.getManyPaginated',
+  'tournamentTeam.getByTournamentId',
+  'tradingOrder.getTopOrders',
+  'transaction.getPaginatedTransactions',
+  'upgrade.getUpgradeByTypeAndEntity',
+  'user.getUserById', 'user.getUserLite', 'user.getUsersByCountry',
+  'war.getActiveWarBetweenCountries', 'war.getById',
+  'work.getStatsByCompany', 'work.getStatsByUserId',
+]);
+
+const _proxyBlocked = { count: 0, names: new Set() };
+
+/** Le procedure del path ('/a.b,c.d') fuori allowlist; [] se tutte ammesse.
+ *  `null` se il path non si legge (va rifiutato anche quello). */
+function _proxyDisallowed(path) {
+  let names;
+  try {
+    names = decodeURIComponent(path.replace(/^\/+|\/+$/g, '')).split(',');
+  } catch {
+    return null;
+  }
+  if (!names.length || names.some(n => !n)) return null;
+  return names.filter(n => !TRPC_ALLOWED.has(n));
+}
+
 // Freno per IP: qui non c'e' Cloudflare davanti a fermare gli abusi, e
 // questa route e' un proxy pubblico verso un'API con la NOSTRA key (stessa
 // esposizione che ha oggi il Worker, non una nuova — ma li' c'era uno
@@ -3600,6 +3675,25 @@ async function _trpcProxy(req, res) {
   // nginx toglie /warera-cache, il mount app.use('/trpc') toglie /trpc:
   // qui req.path e' gia' '/battle.getBattles', da appendere all'upstream.
   const suffix = req.path;
+
+  const disallowed = _proxyDisallowed(suffix);
+  if (!disallowed || disallowed.length) {
+    _proxyBlocked.count++;
+    for (const n of disallowed || [suffix.slice(0, 120)]) {
+      // Un warning per nome, non per richiesta; e un tetto, perche' i nomi
+      // li sceglie chi chiama.
+      if (_proxyBlocked.names.has(n) || _proxyBlocked.names.size >= 100) continue;
+      _proxyBlocked.names.add(n);
+      console.warn('[proxy] procedura fuori allowlist:', n);
+    }
+    res.status(403).json({ error: {
+      message: 'Procedure not allowed by the WarEra+ proxy',
+      code: -32003,
+      data: { code: 'FORBIDDEN', httpStatus: 403, path: (disallowed || []).join(',') },
+    } });
+    return;
+  }
+
   const search = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
   const target = TRPC_UPSTREAM + suffix + search;
 
@@ -3873,6 +3967,9 @@ app.get('/health', (req, res) => res.json({
     ready: true,
     apiKey: WARERA_API_TOKEN ? 'caricata' : 'MANCANTE',
     cache: { ..._proxyCacheStats, entries: _proxyCache.size, bytes: _proxyCacheBytes },
+    // Richieste respinte dall'allowlist e i nomi visti (max 100): un nome
+    // del tool qui dentro vuol dire che manca in TRPC_ALLOWED.
+    blocked: { count: _proxyBlocked.count, names: [..._proxyBlocked.names] },
   },
   // Quanto e' avanti l'archivio battaglie: dopo un deploy dice a colpo
   // d'occhio se il bootstrap notturno ha gia' girato o se le due viste
