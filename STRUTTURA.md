@@ -622,7 +622,9 @@ wareraPlus/
     │   │                          punta su apidev.warera.io con una chiave in memoria
     │   ├── gameData.js, resolve.js
     │   ├── account.js           ← aziende + work.getStatsByCompany + tassa della nazione
-    │   ├── companies.js         ← scheda Aziende: margine dei dipendenti, segnali (pura)
+    │   │                          + employee.getCompanyRoster (rosa, dal 2026-10-28)
+    │   ├── companies.js         ← scheda Aziende: margine dei dipendenti, segnali,
+    │   │                          conti e avvisi dipendente per dipendente (pura)
     │   └── skills.js            ← scheda Competenze: Companies/Energy/Production/
     │                              Management sul budget delle abilità eco (pura)
     ├── market/                   ← NUOVO — Rendite di produzione: la classifica di

@@ -186,6 +186,32 @@
 .wp-eco-sig.good { color: #56d364; }
 .wp-eco-sig.dim { color: #6e7681; }
 .wp-eco-warnline { color: #e3b341; }
+/* La rosa dei dipendenti (dal 2026-10-28, employee.getCompanyRoster):
+   una riga a due piani per dipendente invece di una tabella, così regge
+   anche a 375px senza scorrere di lato. */
+.wp-eco-staff { margin-top: 10px; padding-top: 9px; border-top: 1px solid #21262d; }
+.wp-eco-staff-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 8px; font-size: 12px; }
+.wp-eco-staff-head > .wp-eco-dim { white-space: nowrap; }
+.wp-eco-emps { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.wp-eco-emp { font-size: 12px; line-height: 1.45; }
+.wp-eco-emp-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; }
+.wp-eco-emp-name { color: #c9d1d9; font-weight: 600; }
+.wp-eco-emp-top .wp-eco-tag { font-size: 10.5px; padding: 0 6px; }
+.wp-eco-emp-gold { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #adbac7; white-space: nowrap; }
+.wp-eco-emp-gold.pos { color: #56d364; }
+.wp-eco-emp-gold.neg { color: #f85149; }
+.wp-eco-emp-detail { color: #8b949e; font-size: 11.5px; }
+.wp-eco-emp-detail span[title] { text-decoration: underline dotted; cursor: help; }
+.wp-eco-emp-flags { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-top: 1px; font-size: 11.5px; }
+.wp-eco-emp-flag.bad { color: #ff9b9b; }
+.wp-eco-emp-flag.warn { color: #e3b341; }
+.wp-eco-emp-flag.good { color: #56d364; }
+body.light-theme .wp-eco-staff { border-color: #d0d7de; }
+body.light-theme .wp-eco-emp-name { color: #1a1a1a; }
+body.light-theme .wp-eco-emp-detail { color: #57606a; }
+body.light-theme .wp-eco-emp-flag.bad { color: #cf222e; }
+body.light-theme .wp-eco-emp-flag.warn { color: #9a6700; }
+body.light-theme .wp-eco-emp-flag.good { color: #1a7f37; }
 @media (max-width: 900px) {
   .wp-eco-colist-v27 { grid-template-columns: 1fr; }
 }

@@ -12,6 +12,8 @@
    quindi due schede costruite sul dato MISURATO di work.getStatsByCompany:
 
      · Aziende (companies.js) — margine dei dipendenti, motore, segnali;
+       dal 2026-10-28 anche la rosa, dipendente per dipendente, da quando
+       WarEra ha aperto employee.getCompanyRoster ai token (account.js);
      · Competenze (skills.js) — l'ottimizzatore delle abilità, rifatto sulle nuove.
 
    Posizione (tasse e fronte, non più bonus) e Manager arriveranno dopo:
@@ -381,6 +383,122 @@ const DICT = {
     otherMatched: 'طابق أيضًا: {names}',
   },
 };
+
+// WarEra+ (2026-10-28) — la rosa dei dipendenti (employee.getCompanyRoster,
+// vedi account.js). Chiavi tenute a parte e fuse in DICT, per non spargere
+// diciotto righe nuove in nove blocchi già lunghi.
+const STAFF_DICT = {
+  en: {
+    lblStaff: '{n} of {cap} employees', staffFull: 'full time {g}/day',
+    staffRow: 'Prod. {s} · {b} · {p} pts/h · wage {w}/h · {c}/pt · happiness {h}',
+    fLoss: 'costs more than it produces', fQuit: '{q}% chance to quit', fRetire: 'asks to retire on {d}',
+    fToolBroken: 'tool broken', fToolWorn: 'tool at {s}%', fUnhappy: 'unhappy: {p}% output ({why})', fTrainable: 'can be trained today',
+    sigEmpLoss: '{n} employee(s) cost more than they produce at current prices',
+    sigQuit: '{n} employee(s) might quit', sigRetire: '{n} employee(s) ask to retire within 3 days',
+    sigTool: '{n} tool(s) broken or nearly worn out', sigUnhappy: '{n} employee(s) unhappy enough to lose output',
+    rIncomeTax: 'income tax', rEvent: 'event',
+    coNoteStaff: 'Measured: last {n} full days (UTC); worth per point = (price − inputs) ÷ production points; cost per point = wages actually paid ÷ points your employees made. Employee rows: the game\'s own hourly estimate for the roster as it is now. "Full time" assumes every hour is paid, so the measured figure is usually lower.',
+    skMgmtMeasured: 'Each Management point adds 2% of every employee\'s base output, next to the other bonuses (traits, tools, region) — weighed on your current roster.',
+  },
+  it: {
+    lblStaff: '{n} dipendenti su {cap}', staffFull: 'a pieno regime {g}/giorno',
+    staffRow: 'Prod. {s} · {b} · {p} pt/h · salario {w}/h · {c}/pt · felicità {h}',
+    fLoss: 'costa più di quanto produce', fQuit: '{q}% di probabilità di dimettersi', fRetire: 'chiede la pensione il {d}',
+    fToolBroken: 'attrezzo rotto', fToolWorn: 'attrezzo al {s}%', fUnhappy: 'infelice: {p}% di produzione ({why})', fTrainable: 'si può addestrare oggi',
+    sigEmpLoss: '{n} dipendente/i costano più di quanto producono ai prezzi di adesso',
+    sigQuit: '{n} dipendente/i potrebbero dimettersi', sigRetire: '{n} dipendente/i chiedono la pensione entro 3 giorni',
+    sigTool: '{n} attrezzo/i rotti o quasi consumati', sigUnhappy: '{n} dipendente/i così infelici da produrre meno',
+    rIncomeTax: 'tassa sul reddito', rEvent: 'evento',
+    coNoteStaff: 'Misurato: ultimi {n} giorni interi (UTC); valore del punto = (prezzo − materie prime) ÷ punti produzione; costo del punto = salari pagati davvero ÷ punti prodotti dai dipendenti. Righe dei dipendenti: la stima oraria del gioco sulla rosa di adesso. "A pieno regime" vuol dire tutte le ore pagate, quindi il misurato di solito è più basso.',
+    skMgmtMeasured: 'Ogni punto di Gestione aggiunge il 2% della produzione di base di ogni dipendente, accanto agli altri bonus (tratti, attrezzi, regione) — pesato sulla tua rosa di adesso.',
+  },
+  es: {
+    lblStaff: '{n} de {cap} empleados', staffFull: 'a pleno rendimiento {g}/día',
+    staffRow: 'Prod. {s} · {b} · {p} pts/h · salario {w}/h · {c}/pt · felicidad {h}',
+    fLoss: 'cuesta más de lo que produce', fQuit: '{q}% de probabilidad de dimitir', fRetire: 'pide jubilarse el {d}',
+    fToolBroken: 'herramienta rota', fToolWorn: 'herramienta al {s}%', fUnhappy: 'infeliz: {p}% de producción ({why})', fTrainable: 'se puede entrenar hoy',
+    sigEmpLoss: '{n} empleado(s) cuestan más de lo que producen a los precios actuales',
+    sigQuit: '{n} empleado(s) podrían dimitir', sigRetire: '{n} empleado(s) piden jubilarse en 3 días',
+    sigTool: '{n} herramienta(s) rotas o casi gastadas', sigUnhappy: '{n} empleado(s) tan infelices que producen menos',
+    rIncomeTax: 'impuesto sobre la renta', rEvent: 'evento',
+    coNoteStaff: 'Medido: últimos {n} días completos (UTC); valor del punto = (precio − insumos) ÷ puntos de producción; coste del punto = salarios pagados ÷ puntos de tus empleados. Filas de empleados: la estimación horaria del propio juego con la plantilla actual. "A pleno rendimiento" supone todas las horas pagadas, así que lo medido suele ser menor.',
+    skMgmtMeasured: 'Cada punto de Management añade el 2% de la producción base de cada empleado, junto a los demás bonus (rasgos, herramientas, región) — calculado con tu plantilla actual.',
+  },
+  de: {
+    lblStaff: '{n} von {cap} Angestellten', staffFull: 'bei voller Zeit {g}/Tag',
+    staffRow: 'Prod. {s} · {b} · {p} Pkt/h · Lohn {w}/h · {c}/Pkt · Zufriedenheit {h}',
+    fLoss: 'kostet mehr, als er produziert', fQuit: '{q}% Kündigungsrisiko', fRetire: 'will am {d} in Rente',
+    fToolBroken: 'Werkzeug kaputt', fToolWorn: 'Werkzeug bei {s}%', fUnhappy: 'unzufrieden: {p}% Produktion ({why})', fTrainable: 'heute trainierbar',
+    sigEmpLoss: '{n} Angestellte(r) kosten zu aktuellen Preisen mehr, als sie produzieren',
+    sigQuit: '{n} Angestellte(r) könnten kündigen', sigRetire: '{n} Angestellte(r) wollen in 3 Tagen in Rente',
+    sigTool: '{n} Werkzeug(e) kaputt oder fast verbraucht', sigUnhappy: '{n} Angestellte(r) so unzufrieden, dass sie weniger produzieren',
+    rIncomeTax: 'Einkommensteuer', rEvent: 'Ereignis',
+    coNoteStaff: 'Gemessen: letzte {n} volle Tage (UTC); Wert pro Punkt = (Preis − Rohstoffe) ÷ Produktionspunkte; Kosten pro Punkt = tatsächlich gezahlte Löhne ÷ Punkte deiner Angestellten. Angestellten-Zeilen: die stündliche Schätzung des Spiels für die aktuelle Belegschaft. "Volle Zeit" heißt alle Stunden bezahlt, daher ist der gemessene Wert meist niedriger.',
+    skMgmtMeasured: 'Jeder Management-Punkt fügt 2% der Grundproduktion jedes Angestellten hinzu, neben den anderen Boni (Eigenschaften, Werkzeuge, Region) — gewichtet auf deine aktuelle Belegschaft.',
+  },
+  fr: {
+    lblStaff: '{n} employés sur {cap}', staffFull: 'à plein régime {g}/jour',
+    staffRow: 'Prod. {s} · {b} · {p} pts/h · salaire {w}/h · {c}/pt · bonheur {h}',
+    fLoss: 'coûte plus qu\'il ne produit', fQuit: '{q}% de risque de démission', fRetire: 'demande sa retraite le {d}',
+    fToolBroken: 'outil cassé', fToolWorn: 'outil à {s}%', fUnhappy: 'malheureux : {p}% de production ({why})', fTrainable: 'peut être entraîné aujourd\'hui',
+    sigEmpLoss: '{n} employé(s) coûtent plus qu\'ils ne produisent aux prix actuels',
+    sigQuit: '{n} employé(s) pourraient démissionner', sigRetire: '{n} employé(s) demandent leur retraite d\'ici 3 jours',
+    sigTool: '{n} outil(s) cassés ou presque usés', sigUnhappy: '{n} employé(s) assez malheureux pour produire moins',
+    rIncomeTax: 'impôt sur le revenu', rEvent: 'événement',
+    coNoteStaff: 'Mesuré : {n} derniers jours complets (UTC) ; valeur du point = (prix − matières premières) ÷ points de production ; coût du point = salaires réellement payés ÷ points de tes employés. Lignes des employés : l\'estimation horaire du jeu sur l\'effectif actuel. "À plein régime" suppose toutes les heures payées, donc le mesuré est en général plus bas.',
+    skMgmtMeasured: 'Chaque point de Management ajoute 2% de la production de base de chaque employé, à côté des autres bonus (traits, outils, région) — pesé sur ton effectif actuel.',
+  },
+  nl: {
+    lblStaff: '{n} van {cap} werknemers', staffFull: 'op volle tijd {g}/dag',
+    staffRow: 'Prod. {s} · {b} · {p} pt/u · loon {w}/u · {c}/pt · geluk {h}',
+    fLoss: 'kost meer dan hij produceert', fQuit: '{q}% kans op ontslag', fRetire: 'vraagt pensioen op {d}',
+    fToolBroken: 'gereedschap kapot', fToolWorn: 'gereedschap op {s}%', fUnhappy: 'ongelukkig: {p}% productie ({why})', fTrainable: 'kan vandaag getraind worden',
+    sigEmpLoss: '{n} werknemer(s) kosten bij de huidige prijzen meer dan ze produceren',
+    sigQuit: '{n} werknemer(s) kunnen ontslag nemen', sigRetire: '{n} werknemer(s) vragen binnen 3 dagen pensioen',
+    sigTool: '{n} gereedschap(pen) kapot of bijna versleten', sigUnhappy: '{n} werknemer(s) zo ongelukkig dat ze minder produceren',
+    rIncomeTax: 'inkomstenbelasting', rEvent: 'gebeurtenis',
+    coNoteStaff: 'Gemeten: laatste {n} volle dagen (UTC); waarde per punt = (prijs − grondstoffen) ÷ productiepunten; kosten per punt = echt betaalde lonen ÷ punten van je werknemers. Werknemersrijen: de uurschatting van het spel voor het huidige team. "Volle tijd" betekent alle uren betaald, dus het gemeten cijfer is meestal lager.',
+    skMgmtMeasured: 'Elk Management-punt voegt 2% van de basisproductie van elke werknemer toe, naast de andere bonussen (eigenschappen, gereedschap, regio) — gewogen op je huidige team.',
+  },
+  sv: {
+    lblStaff: '{n} av {cap} anställda', staffFull: 'på heltid {g}/dag',
+    staffRow: 'Prod. {s} · {b} · {p} p/h · lön {w}/h · {c}/p · trivsel {h}',
+    fLoss: 'kostar mer än den producerar', fQuit: '{q}% risk att säga upp sig', fRetire: 'vill gå i pension {d}',
+    fToolBroken: 'verktyget trasigt', fToolWorn: 'verktyget på {s}%', fUnhappy: 'missnöjd: {p}% produktion ({why})', fTrainable: 'kan tränas i dag',
+    sigEmpLoss: '{n} anställd(a) kostar mer än de producerar till dagens priser',
+    sigQuit: '{n} anställd(a) kan säga upp sig', sigRetire: '{n} anställd(a) vill gå i pension inom 3 dagar',
+    sigTool: '{n} verktyg trasiga eller nästan slitna', sigUnhappy: '{n} anställd(a) så missnöjda att de producerar mindre',
+    rIncomeTax: 'inkomstskatt', rEvent: 'händelse',
+    coNoteStaff: 'Uppmätt: senaste {n} hela dagarna (UTC); värde per poäng = (pris − råvaror) ÷ produktionspoäng; kostnad per poäng = faktiskt betalda löner ÷ poäng från dina anställda. Rader för anställda: spelets egen timuppskattning för personalen som den är nu. "Heltid" förutsätter att alla timmar betalas, så det uppmätta är oftast lägre.',
+    skMgmtMeasured: 'Varje Management-poäng lägger till 2% av varje anställds grundproduktion, bredvid de andra bonusarna (egenskaper, verktyg, region) — viktat på din nuvarande personal.',
+  },
+  pt: {
+    lblStaff: '{n} de {cap} empregados', staffFull: 'a tempo inteiro {g}/dia',
+    staffRow: 'Prod. {s} · {b} · {p} pts/h · salário {w}/h · {c}/pt · felicidade {h}',
+    fLoss: 'custa mais do que produz', fQuit: '{q}% de probabilidade de se demitir', fRetire: 'pede a reforma a {d}',
+    fToolBroken: 'ferramenta partida', fToolWorn: 'ferramenta a {s}%', fUnhappy: 'infeliz: {p}% de produção ({why})', fTrainable: 'pode ser treinado hoje',
+    sigEmpLoss: '{n} empregado(s) custam mais do que produzem aos preços atuais',
+    sigQuit: '{n} empregado(s) podem demitir-se', sigRetire: '{n} empregado(s) pedem a reforma dentro de 3 dias',
+    sigTool: '{n} ferramenta(s) partidas ou quase gastas', sigUnhappy: '{n} empregado(s) tão infelizes que produzem menos',
+    rIncomeTax: 'imposto sobre o rendimento', rEvent: 'evento',
+    coNoteStaff: 'Medido: últimos {n} dias completos (UTC); valor do ponto = (preço − matérias-primas) ÷ pontos de produção; custo do ponto = salários pagos de facto ÷ pontos dos teus empregados. Linhas dos empregados: a estimativa horária do próprio jogo para a equipa atual. "Tempo inteiro" supõe todas as horas pagas, por isso o medido costuma ser mais baixo.',
+    skMgmtMeasured: 'Cada ponto de Management soma 2% da produção base de cada empregado, ao lado dos outros bónus (traços, ferramentas, região) — pesado na tua equipa atual.',
+  },
+  ar: {
+    lblStaff: '{n} من {cap} موظفين', staffFull: 'بدوام كامل {g}/يوم',
+    staffRow: 'إنتاج {s} · {b} · {p} نقطة/ساعة · أجر {w}/ساعة · {c}/نقطة · سعادة {h}',
+    fLoss: 'يكلّف أكثر مما ينتج', fQuit: 'احتمال الاستقالة {q}%', fRetire: 'يطلب التقاعد في {d}',
+    fToolBroken: 'الأداة مكسورة', fToolWorn: 'الأداة عند {s}%', fUnhappy: 'غير سعيد: {p}% من الإنتاج ({why})', fTrainable: 'يمكن تدريبه اليوم',
+    sigEmpLoss: '{n} موظف يكلّفون أكثر مما ينتجون بالأسعار الحالية',
+    sigQuit: '{n} موظف قد يستقيلون', sigRetire: '{n} موظف يطلبون التقاعد خلال 3 أيام',
+    sigTool: '{n} أداة مكسورة أو شبه مستهلكة', sigUnhappy: '{n} موظف غير سعداء لدرجة أنهم ينتجون أقل',
+    rIncomeTax: 'ضريبة الدخل', rEvent: 'حدث',
+    coNoteStaff: 'المقاس: آخر {n} أيام كاملة (UTC)؛ قيمة النقطة = (السعر − المواد الخام) ÷ نقاط الإنتاج؛ تكلفة النقطة = الأجور المدفوعة فعلًا ÷ نقاط موظفيك. صفوف الموظفين: تقدير اللعبة نفسها بالساعة للفريق الحالي. "بدوام كامل" يفترض دفع كل الساعات، لذا يكون المقاس عادةً أقل.',
+    skMgmtMeasured: 'كل نقطة Management تضيف 2% من الإنتاج الأساسي لكل موظف، إلى جانب المكافآت الأخرى (السمات، الأدوات، المنطقة) — محسوبة على فريقك الحالي.',
+  },
+};
+for (const [lang, extra] of Object.entries(STAFF_DICT)) Object.assign(DICT[lang], extra);
+
 function tf(key, params) {
   let s = (DICT[getLang()] || DICT.en)[key] ?? DICT.en[key] ?? key;
   if (params) for (const [k, v] of Object.entries(params)) s = s.replaceAll(`{${k}}`, v);
@@ -544,7 +662,12 @@ function section(titleText, headlineHtml, headlineClass) {
 const SIGNAL_VIEW = {
   loss:        { emoji: '🔴', cls: 'bad',  text: () => tf('sigLoss') },
   negValue:    { emoji: '🔴', cls: 'bad',  text: () => tf('sigNegValue') },
+  empLoss:     { emoji: '🔴', cls: 'bad',  text: s => tf('sigEmpLoss', { n: s.n }) },
+  quit:        { emoji: '🚪', cls: 'bad',  text: s => tf('sigQuit', { n: s.n }) },
+  tool:        { emoji: '🔧', cls: 'warn', text: s => tf('sigTool', { n: s.n }) },
   full:        { emoji: '🟠', cls: 'warn', text: () => tf('sigFull') },
+  unhappy:     { emoji: '😞', cls: 'warn', text: s => tf('sigUnhappy', { n: s.n }) },
+  retire:      { emoji: '👴', cls: 'warn', text: s => tf('sigRetire', { n: s.n }) },
   down:        { emoji: '🟡', cls: 'warn', text: s => tf('sigDown', { p: f(s.pct, 0) }) },
   idle:        { emoji: '⚫', cls: 'warn', text: s => tf('sigIdle', { n: s.days }) },
   noEmployees: { emoji: '⚪', cls: 'dim',  text: s => tf('sigNoEmp', { n: s.days }) },
@@ -577,6 +700,75 @@ function sparkline(series) {
   }).join('');
   const width = SLOTS * (W + GAP) - GAP;
   return `<svg class="wp-eco-spark" viewBox="0 0 ${width} ${H}" width="${width}" height="${H}" preserveAspectRatio="none" role="img" aria-label="${esc(tf('sparkHint'))}">${bars}</svg>`;
+}
+
+/** 'primaDonna' → 'prima donna': tratti e voci arrivano come codici del
+ *  gioco, in inglese come i nomi delle abilità, e così restano. */
+function humanize(code) {
+  return String(code || '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+}
+
+// Avvisi del singolo dipendente: stesso ordine, dal più grave.
+const FLAG_VIEW = {
+  loss:       { emoji: '🔴', cls: 'bad',  text: () => tf('fLoss') },
+  quit:       { emoji: '🚪', cls: 'bad',  text: m => tf('fQuit', { q: f(quitPct(m.quitChance), 0) }) },
+  toolBroken: { emoji: '🔧', cls: 'bad',  text: () => tf('fToolBroken') },
+  toolWorn:   { emoji: '🔧', cls: 'warn', text: m => tf('fToolWorn', { s: f(m.tool.state / m.tool.maxState * 100, 0) }) },
+  unhappy:    { emoji: '😞', cls: 'warn', text: m => tf('fUnhappy', { p: signed(m.happinessPct, 1), why: unhappyWhy(m) }) },
+  retire:     { emoji: '👴', cls: 'warn', text: m => tf('fRetire', { d: new Date(m.retireAt).toLocaleDateString(getLang()) }) },
+  trainable:  { emoji: '🎓', cls: 'good', text: () => tf('fTrainable') },
+};
+
+/** `quitChance` l'abbiamo visto solo a 0: se arriva come frazione (≤ 1)
+ *  la si porta in percento, se arriva già in percento la si lascia. */
+function quitPct(q) { return q <= 1 ? q * 100 : q; }
+
+function unhappyWhy(m) {
+  return m.happinessParts.filter(p => p.delta < 0).map(p => {
+    const what = !p.revealed ? '?'
+      : p.reason === 'incomeTax' ? tf('rIncomeTax')
+      : p.reason === 'event' ? tf('rEvent')
+      : p.reason === 'trait' ? humanize(p.code)
+      : humanize(p.reason);
+    return `${what} ${signed(p.delta, 0)}`;
+  }).join(', ') || '—';
+}
+
+/** La rosa dentro la card dell'azienda: il totale "a pieno regime" e una
+ *  riga per dipendente, i peggiori in cima (companies.js li ordina). */
+function staffBlock(r) {
+  const s = r.staff;
+  if (!s || !s.count) return '';
+  const cls = v => (v > 0.005 ? 'pos' : (v < -0.005 ? 'neg' : ''));
+  const rows = s.members.map(m => {
+    const traits = m.traits.map(t => `<span class="wp-eco-tag">${esc(t.revealed ? humanize(t.code) : '?')}</span>`).join('');
+    const bonusTitle = m.bonusParts.map(p => `${humanize(p.source)} ${signed(p.pct, 1)}%`).join(' · ');
+    const detail = tf('staffRow', {
+      s: f(m.production, 0),
+      b: `<span title="${esc(bonusTitle)}">${signed(m.bonusPct, 0)}%</span>`,
+      p: f(m.pointsHour, 2),
+      w: f(m.wageHour, 3),
+      c: m.costPerPoint != null ? f(m.costPerPoint, 3) : '—',
+      h: f(m.happiness, 0),
+    }) + (m.tool ? ` · ${esc(m.tool.code)}` : '');
+    const flags = m.flags.map(k => {
+      const v = FLAG_VIEW[k];
+      return `<span class="wp-eco-emp-flag ${v.cls}">${v.emoji} ${esc(v.text(m))}</span>`;
+    }).join('');
+    const day = m.marginHour * 24;
+    return `<li class="wp-eco-emp">
+      <div class="wp-eco-emp-top"><span class="wp-eco-emp-name">${esc(m.name)}</span>${traits}
+        <span class="wp-eco-emp-gold ${cls(day)}">${signed(day)}</span></div>
+      <div class="wp-eco-emp-detail">${detail}</div>
+      ${flags ? `<div class="wp-eco-emp-flags">${flags}</div>` : ''}
+    </li>`;
+  }).join('');
+  const capText = s.cap != null ? s.cap : r.company.maxEmployees;
+  return `<div class="wp-eco-staff">
+    <div class="wp-eco-staff-head"><span class="wp-eco-dim">${esc(tf('lblStaff', { n: s.count, cap: capText }))}</span>
+      <span class="wp-eco-emp-gold ${cls(s.fullMarginDay)}">${esc(tf('staffFull', { g: signed(s.fullMarginDay) }))}</span></div>
+    <ul class="wp-eco-emps">${rows}</ul>
+  </div>`;
 }
 
 function renderCompanies(result) {
@@ -614,10 +806,11 @@ function renderCompanies(result) {
       <div class="wp-eco-cocard-emp"><span class="wp-eco-dim">${esc(tf('lblEmployees'))}</span> ${empLine}</div>
       ${sparkline(r.series)}
       <div class="wp-eco-cocard-tags">${tags}</div>
-      ${sigHtml}`));
+      ${sigHtml}
+      ${staffBlock(r)}`));
   }
   sec.appendChild(list);
-  sec.appendChild(h('div', 'wp-eco-footnote', esc(tf('coNote', { n: result.windowDays }))));
+  sec.appendChild(h('div', 'wp-eco-footnote', esc(tf(result.staffKnown ? 'coNoteStaff' : 'coNote', { n: result.windowDays }))));
   return sec;
 }
 
@@ -673,6 +866,7 @@ function renderSkills(data, companies) {
     meta.appendChild(h('div', 'wp-eco-kv', `<span class="wp-eco-dim">${esc(tf('skSelfNone'))}</span>`));
   }
   meta.appendChild(h('div', 'wp-eco-kv', esc(tf('skMgmt', { l: best.levels.management, p: f(data.mgmtPct(best.levels.management), 0) }))));
+  if (data.mgmtMeasured) meta.appendChild(h('div', 'wp-eco-kv', `<span class="wp-eco-dim">${esc(tf('skMgmtMeasured'))}</span>`));
   const active = companies.rows.filter(r => !r.company.disabled).length;
   const cap = Math.floor(data.capAt(best.levels.companies));
   if (cap < active) {

@@ -30,9 +30,22 @@
        lavorato nessuno ("se non paghi l'ora intera, quell'ora non lavora
        nessuno", note v0.27).
 
-   ⚠️ Quello che NON si può dire: quanti dipendenti ci sono (la capienza
-   dell'area relax è solo un tetto), chi rende e chi no, la loro felicità.
-   La vista lo dichiara invece di stimarlo.
+   ── LA ROSA (dal 2026-10-28) ────────────────────────────────────────
+   Fino al 2026-10-27 qui c'era scritto cosa NON si poteva dire: quanti
+   dipendenti ci sono, chi rende e chi no, la loro felicità. Con
+   `employee.getCompanyRoster` (vedi account.js) si può, dipendente per
+   dipendente:
+     margine/ora = punti/ora stimati × v − salario/ora
+   e lo stesso a livello d'azienda con `hourly` (che è la loro somma, più
+   il costo del manager). Sono numeri "a pieno regime", tutte le ore
+   pagate: il misurato qui sopra resta il conto vero, e di solito è più
+   basso (ore non pagate, rosa cambiata nella settimana, felicità che è
+   scesa). Per questo i due stanno accanto e non si sostituiscono.
+
+   Gli avvisi della rosa sono fatti, non stime: probabilità di dimissioni
+   (`quitChance` del gioco), data in cui chiede la pensione (`retireAskAt`),
+   attrezzo rotto o quasi consumato, felicità che toglie produzione,
+   addestramento ancora disponibile oggi.
    ══════════════════════════════════════════════════════════════ */
 
 /** Giorni interi su cui si fa il conto (la "settimana"). */
@@ -41,6 +54,63 @@ export const WINDOW_DAYS = 7;
 const RECENT_DAYS = 3;
 /** Variazione di punti-per-moneta oltre la quale si segnala una tendenza. */
 const TREND_THRESHOLD = 0.10;
+/** Pensione "vicina": entro quanti giorni la si segnala. */
+const RETIRE_SOON_DAYS = 3;
+/** Attrezzo "quasi consumato": sotto questa frazione dello stato massimo. */
+const TOOL_WORN_FRACTION = 0.15;
+/** Felicità che pesa: un malus di produzione da questa soglia in giù (%). */
+const UNHAPPY_PCT = -5;
+
+/** Conti e avvisi di un dipendente, al valore del punto `value`. */
+function staffMember(e, value, now) {
+  const marginHour = e.pointsHour * value - e.wageHour;
+  const happinessPct = e.bonusParts.find(p => p.source === 'happiness')?.pct ?? 0;
+  const retireMs = e.retireAt ? Date.parse(e.retireAt) - now : null;
+  const flags = [];
+  if (value > 0 && marginHour < 0) flags.push('loss');
+  if (e.quitChance > 0) flags.push('quit');
+  if (retireMs != null && retireMs <= RETIRE_SOON_DAYS * 86400000) flags.push('retire');
+  if (e.tool && (e.tool.broken || !e.tool.usable)) flags.push('toolBroken');
+  else if (e.tool && e.tool.state / e.tool.maxState < TOOL_WORN_FRACTION) flags.push('toolWorn');
+  if (happinessPct <= UNHAPPY_PCT) flags.push('unhappy');
+  if (e.trainable) flags.push('trainable');
+  return {
+    ...e,
+    marginHour,
+    costPerPoint: e.pointsHour > 0 ? e.wageHour / e.pointsHour : null,
+    happinessPct,
+    retireInDays: retireMs != null ? retireMs / 86400000 : null,
+    flags,
+  };
+}
+
+/** La rosa dell'azienda con i conti, o null se non è arrivata. */
+function staffOf(roster, value, now) {
+  if (!roster) return null;
+  const members = roster.employees.map(e => staffMember(e, value, now))
+    .sort((a, b) => a.marginHour - b.marginHour);
+  const count = flag => members.filter(m => m.flags.includes(flag)).length;
+  return {
+    members,
+    count: members.length,
+    cap: roster.cap,
+    pointsHour: roster.production,
+    wageHour: roster.wageCost,
+    managerHour: roster.managerCost,
+    // A pieno regime: tutte le ore pagate, la rosa di adesso.
+    fullMarginDay: (roster.production * value - roster.wageCost - roster.managerCost) * 24,
+    // Punti l'ora senza bonus, sommati: è la base su cui la Gestione
+    // aggiunge il suo 2% per punto (skills.js). Il gioco dà lo stesso
+    // numero, arrotondato a due decimali, con employee.getManagerPointValue.
+    rawHourly: members.reduce((s, m) => s + m.rawHourly, 0),
+    losing: count('loss'),
+    quitting: count('quit'),
+    retiring: count('retire'),
+    tools: count('toolBroken') + count('toolWorn'),
+    unhappy: count('unhappy'),
+    trainable: count('trainable'),
+  };
+}
 
 function todayUtc() { return new Date().toISOString().slice(0, 10); }
 
@@ -55,11 +125,13 @@ function pointsPerCoin(days) {
 /**
  * @param gd  makeGameData(...)
  * @param companies  loadOwnedCompanies(...)
- * @param {{today?: string}} [opts]  `today` (YYYY-MM-DD, UTC) solo per i test
+ * @param {{today?: string, now?: number}} [opts]  `today` (YYYY-MM-DD, UTC)
+ *   e `now` (ms) solo per i test
  */
-export function computeCompanies(gd, companies, { today = todayUtc() } = {}) {
+export function computeCompanies(gd, companies, { today = todayUtc(), now = Date.now() } = {}) {
   const rows = companies.map(oc => {
     const value = gd.getNetPerPoint(oc.itemCode, oc.bonus);
+    const staff = staffOf(oc.roster, value, now);
     const days = (oc.stats || [])
       .filter(d => d?.dailyDate && d.dailyDate < today)
       .sort((a, b) => (a.dailyDate < b.dailyDate ? -1 : 1));
@@ -103,11 +175,23 @@ export function computeCompanies(gd, companies, { today = todayUtc() } = {}) {
         else if (change >= TREND_THRESHOLD) signals.push({ kind: 'up', pct: change * 100 });
       }
     }
+    // Dalla rosa: uno per tipo, col numero di dipendenti coinvolti. Il
+    // dettaglio (chi, quando) sta nella riga del dipendente. "Addestrabile
+    // oggi" resta solo lì: varrebbe per quasi ogni azienda ogni giorno, e
+    // un segnale sempre acceso smette di essere letto.
+    if (staff && !oc.disabled) {
+      if (staff.losing) signals.push({ kind: 'empLoss', n: staff.losing });
+      if (staff.quitting) signals.push({ kind: 'quit', n: staff.quitting });
+      if (staff.retiring) signals.push({ kind: 'retire', n: staff.retiring });
+      if (staff.tools) signals.push({ kind: 'tool', n: staff.tools });
+      if (staff.unhappy) signals.push({ kind: 'unhappy', n: staff.unhappy });
+    }
 
     return {
       company: oc,
       value,
       days: n,
+      staff,
       employees,
       engineDay,
       selfDay,
@@ -130,5 +214,7 @@ export function computeCompanies(gd, companies, { today = todayUtc() } = {}) {
     employeesMarginDay: active.reduce((s, r) => s + r.employees.marginDay, 0),
     passiveDay: active.reduce((s, r) => s + r.passiveDay, 0),
     losing: rows.filter(r => r.signals.some(s => s.kind === 'loss')).length,
+    // true se la rosa è arrivata per tutte: decide quale nota mostrare.
+    staffKnown: rows.length > 0 && rows.every(r => r.staff),
   };
 }

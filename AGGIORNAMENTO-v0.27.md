@@ -64,8 +64,8 @@ il lavoro di adeguamento parta da qui e non da una nuova ricognizione.
 | Procedura | Esito su apidev | Note |
 |---|---|---|
 | `worker.getWorkers` | **404, non esiste più** | usata dall'Ottimizzatore |
-| `employee.getCompanyRoster`, `employee.getMyWorkforceSummary` | **403 con chiave API** | solo sessione di gioco |
-| `tool.getMine`, `employeeEvent.getMine`, `manager.getMyJob`, `managerOffer.getMyProfile`, `user.getMe` | **403 con chiave API** | idem |
+| `employee.getCompanyRoster`, `employee.getMyWorkforceSummary` | ~~403 con chiave API~~ → **✅ con chiave dal 2026-10-28** | vedi sotto la tabella |
+| `tool.getMine`, `employeeEvent.getMine`, `manager.getMyJob`, `managerOffer.getMyProfile`, `user.getMe` | **403 con chiave API** (`employeeEvent.*` ✅ dal 2026-10-28) | solo sessione di gioco |
 | `company.getCompaniesCount`, `company.getActiveCompaniesCount`, `company.canProduceAll` | **403 con chiave API** | idem |
 | `work.getStatsByCompany {companyId}`, `work.getStatsByUserId {userId}` | ✅ con chiave | 31 giorni; ogni giorno `{dailyDate, total, wage, employeeProd, selfWork, automatedEngine}` |
 | `transaction.getPaginatedTransactions` | ✅ con chiave | enum dei tipi invariato (`applicationFee trading itemMarket wage donation articleTip openCase craftItem dismantleItem battleLoot countryMoneyTransfer`), ma **nessuna transazione `wage`** su dev: i salari escono dal gioco e non arrivano a nessun giocatore |
@@ -78,10 +78,18 @@ il lavoro di adeguamento parta da qui e non da una nuova ricognizione.
 | `itemTrading.getPrices`, `gameConfig.getDates` | invariate | |
 | `party.getById` | invariata | `ethics` è **ancora presente** ma il gioco non la usa più |
 
-**Conseguenza principale:** nessuno — né il browser con la chiave dell'utente,
-né il VPS — può leggere i dipendenti di un giocatore (statistiche, tratti,
-felicità, attrezzi). Tutto ciò che il tool potrà dire sulla produzione di
-un'azienda passa da `work.getStatsBy*` e da `company.getById`.
+~~**Conseguenza principale:** nessuno può leggere i dipendenti di un
+giocatore.~~ **Superato il 2026-10-28**: WarEra ha aperto ai token dieci
+procedure `employee.*` / `employeeEvent.*`. Quelle per azienda o per
+dipendente (`getCompanyRoster`, `getCompanyEmployees`, `getCompanyEstimate`,
+`getManagerPointValue`, `getById`) rispondono per QUALUNQUE azienda: rosa con
+statistiche, tratti, felicità, attrezzo, salario e stima oraria del gioco.
+L'Ottimizzatore la mostra nella scheda Aziende (`src/eco/account.js`). Le
+`getMy*` e `employeeEvent.getMine/getPendingCount` danno invece i dati del
+titolare della chiave: il proxy del VPS le respinge (`TRPC_ALLOWED` nel
+cache-server). Misurato sulla rosa: la Gestione è un +2% della produzione di
+BASE per punto, sommato agli altri bonus, non moltiplicato (vedi
+`src/eco/skills.js`).
 
 ### `country.getAllCountries`
 

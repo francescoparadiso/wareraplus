@@ -19,8 +19,9 @@
    ── COME SI VALUTA OGNI ABILITÀ ─────────────────────────────────────
    Tutto parte dalle aziende MISURATE (companies.js), non da una stima:
 
-     dipendenti(azienda, Gestione G) = punti_base × (1 + 0,02·G) × v − salari
-       con punti_base = punti misurati / (1 + 0,02·G_attuale)
+     dipendenti(azienda, Gestione G) = P × (1 + R · 0,02 · (G − G_attuale)) × v − salari
+       con P = punti misurati e R = quota dei punti che è "senza bonus"
+       (vedi sotto)
      motore(azienda)                 = punti del motore × v
      passivo(Aziende A, G)           = somma delle A aziende migliori
      lavoro in proprio(E, P)         = 0,24 × E × P × v_migliore
@@ -30,6 +31,19 @@
    e si cerca su Aziende × Energia × Produzione × Gestione (0–10 l'una).
    Il salario non cambia con la Gestione: si paga a ora, non a punto
    (vedi la testata di companies.js).
+
+   ── LA GESTIONE È ADDITIVA (misurato il 2026-10-28) ─────────────────
+   Prima della rosa si supponeva che la Gestione moltiplicasse gli altri
+   bonus: R = 1 / (1 + 0,02·G_attuale). La rosa dice di no. Ogni
+   dipendente ha `productionBonus.contributions`, e la Gestione è una voce
+   in percentuale ACCANTO alle altre (regione d'origine, attrezzo,
+   specializzazione, tratti, felicità): punti/ora = base × (1 + somma/100).
+   Un punto di Gestione aggiunge quindi il 2% della BASE, non dei punti
+   già maggiorati: con un "sociable" a +50% la vecchia formula sbagliava
+   di un terzo. Con la rosa R = Σ base/ora ÷ Σ punti/ora stimati, dalla
+   fotografia di adesso; senza, si torna alla vecchia stima. Il gioco lo
+   conferma con employee.getManagerPointValue, che vale proprio
+   Σ base × 2% (arrotondato a due decimali, per questo non lo si usa).
 
    ── IL BUDGET ───────────────────────────────────────────────────────
    Il bot originale assumeva un respec completo di TUTTI i punti. Qui no:
@@ -41,9 +55,8 @@
 
    ⚠️ Fuori dal conto anche: l'energia che va in assunzioni e
    addestramento (10 a volta), un manager assunto (si somma alla Gestione
-   del proprietario fino a +44%), e se la maggiorazione della Gestione sia
-   davvero moltiplicativa sulle altre (felicità, attrezzo, anzianità sul
-   prodotto): le note non lo dicono.
+   del proprietario fino a +44%). Che la Gestione si SOMMI alle altre voci
+   invece di moltiplicarle non è più un'ipotesi: vedi qui sopra.
    ══════════════════════════════════════════════════════════════ */
 
 export const ECO_SKILLS = ['companies', 'energy', 'production', 'management'];
@@ -60,15 +73,20 @@ export function computeSkills(gd, me, companiesResult) {
   // hourlyBarRegen 10). Azioni al giorno per punto di Energia.
   const actionsPerEnergy = (0.10 * 24) / energyPerAction;
 
-  const mgmtFactor = lvl => 1 + (MGMT_PCT_PER_POINT / 100) * value.management[lvl];
-  const curMgmtFactor = mgmtFactor(cur.management);
+  const mgmtPctAt = lvl => MGMT_PCT_PER_POINT * value.management[lvl];
+  // Senza rosa: la vecchia ipotesi moltiplicativa (vedi la testata).
+  const fallbackShare = 1 / (1 + mgmtPctAt(cur.management) / 100);
+  const baseShare = r => (r.staff && r.staff.pointsHour > 0
+    ? r.staff.rawHourly / r.staff.pointsHour
+    : fallbackShare);
 
   // Solo le aziende attive con un conto: quelle disabilitate tornano in
   // gioco se il tetto Aziende sale, quindi entrano anche loro nel search.
   const rows = companiesResult.rows;
   const employeeDay = (r, lvl) => {
-    const base = r.employees.pointsDay / curMgmtFactor;
-    return base * mgmtFactor(lvl) * r.value - r.employees.wageDay;
+    const deltaPct = mgmtPctAt(lvl) - mgmtPctAt(cur.management);
+    const points = r.employees.pointsDay * (1 + baseShare(r) * deltaPct / 100);
+    return points * r.value - r.employees.wageDay;
   };
   const passiveAt = (lvl) => rows.map(r => r.engineDay + employeeDay(r, lvl)).sort((a, b) => b - a);
   const passiveByMgmt = Array.from({ length: 11 }, (_, m) => passiveAt(m));
@@ -129,6 +147,8 @@ export function computeSkills(gd, me, companiesResult) {
     selfActionsDay: lvl => actionsPerEnergy * value.energy[lvl],
     capAt: lvl => value.companies[lvl],
     leadershipLevel: me.skills?.leadership?.level ?? 0,
-    mgmtPct: lvl => (MGMT_PCT_PER_POINT * value.management[lvl]),
+    mgmtPct: mgmtPctAt,
+    // true se la Gestione è stata pesata sulla rosa vera di ogni azienda.
+    mgmtMeasured: rows.length > 0 && rows.every(r => r.staff && r.staff.pointsHour > 0),
   };
 }
