@@ -557,11 +557,6 @@ function detailHtml(r) {
     ['colEmpCost', r.empCost == null ? '—' : escapeHtml(gold(r.empCost))],
     ['colBreakExp', r.breakExp == null ? '—' : escapeHtml(pct(r.breakExp, 0))],
     ['colYouV27', r.ownerPerDay == null ? '—' : `<span class="${r.ownerPerDay < 0 ? 'neg' : 'pos'}">${escapeHtml(signedGold(r.ownerPerDay))}</span>`],
-    // Dai dipendenti VERI di questa risorsa (censimento notturno): quanto
-    // costa per punto quello a metà classifica, e quanti nel mondo rendono
-    // più di quanto costano ai prezzi di adesso. Il costo dei
-    // riferimenti è per punto EFFETTIVO, come `perPoint`.
-    ...worldRef(r),
   ].map(([k, v]) => `<span>${escapeHtml(mktT(k))}: <b>${v}</b></span>`).join('') : [
     ['colPp', escapeHtml(String(r.pp))],
     ['colBase', escapeHtml(gold(r.basePerPoint))],
@@ -570,6 +565,18 @@ function detailHtml(r) {
     ['colWorker', escapeHtml(signedGold(r.workerNetPerDay))],
     ['colTotal', `<span class="${r.ownerTotal < 0 ? 'neg' : 'pos'}">${escapeHtml(signedGold(r.ownerTotal))}</span>`],
   ].map(([k, v]) => `<span>${escapeHtml(mktT(k, { n: sim.days }))}: <b>${v}</b></span>`).join('');
+
+  // Dai dipendenti VERI di questa risorsa (censimento notturno): quanto
+  // costa per punto quello a metà classifica, e quanti nel mondo rendono
+  // più di quanto costano ai prezzi di adesso. Il costo dei riferimenti è
+  // per punto EFFETTIVO, come `perPoint`. Colonna sua e non dentro `conto`,
+  // che il CSS mostra solo su telefono: lì su desktop non si vedeva mai.
+  const mondo = isV27() ? worldRef(r) : [];
+  const mondoHtml = mondo.length ? `
+      <div class="wp-mkt-dcol">
+        <h4>${escapeHtml(mktT('worldH'))}</h4>
+        <div class="wp-mkt-dlist">${mondo.map(([k, v]) => `<span>${escapeHtml(mktT(k))}: <b>${v}</b></span>`).join('')}</div>
+      </div>` : '';
 
   return `
     <div class="wp-mkt-detail">
@@ -586,6 +593,7 @@ function detailHtml(r) {
         <h4>${escapeHtml(mktT('materialsL'))}</h4>
         <div class="wp-mkt-dlist">${mats}</div>
       </div>
+      ${mondoHtml}
       ${isV27() ? '' : `<div class="wp-mkt-dcol wp-mkt-dregions">
         <h4>${escapeHtml(mktT('best5'))} <span class="wp-mkt-dim">· ${escapeHtml(mktT('bonusParts'))}</span></h4>
         ${regions || `<span class="wp-mkt-dim">${escapeHtml(mktT('noRegion'))}</span>`}
