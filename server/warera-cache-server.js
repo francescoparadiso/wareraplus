@@ -1002,7 +1002,10 @@ function muPlaystyle(members, userCountries) {
 // giri interi, e salvare 48 fotografie identiche al giorno per 151 nazioni
 // gonfierebbe il file senza aggiungere informazione.
 const MU_PLAYSTYLE_HISTORY_FILE = 'mu-playstyle-history';
-const PLAYSTYLE_HISTORY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 giorni
+// 90 giorni dal 2026-10-29 (erano 30), per il grafico "Giocatori nel tempo"
+// della scheda nazione. ⚠️ Non recupera il passato: i giorni già potati non
+// tornano, la serie si allunga di un giorno al giorno fino a novanta.
+const PLAYSTYLE_HISTORY_RETENTION_MS = 90 * 24 * 60 * 60 * 1000; // 90 giorni
 // Tetto ai `countryIds` di /mu-playstyle-history: il blocco piu' grande in
 // gioco ha poche decine di nazioni, il limite e' solo per non far costruire a
 // una richiesta arbitraria una risposta arbitrariamente grande.
@@ -1028,7 +1031,7 @@ function appendPlaystyleHistory(byCountry, now) {
   }
 
   // Potatura per ritenzione, tenendo però SEMPRE l'ultimo campione di ogni
-  // nazione: se una nazione non cambia da più di 30 giorni, buttare via
+  // nazione: se una nazione non cambia da più di 90 giorni, buttare via
   // tutta la sua serie la farebbe sparire dallo storico invece di dire
   // "ferma da un mese".
   for (const [countryId, series] of Object.entries(history)) {

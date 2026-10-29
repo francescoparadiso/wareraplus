@@ -410,7 +410,7 @@ mappa in RAM, l'unica aggiunta è non buttare via il valore precedente. Si
 scrive una riga solo quando i numeri di quella nazione **cambiano**
 (delta encoding): salvare 48 fotografie identiche al giorno per 151 nazioni
 gonfierebbe il file senza aggiungere informazione. Formato compatto per
-nazione: `[ts, war, eco, mixed, undecided, known]`, ritenzione 30 giorni —
+nazione: `[ts, war, eco, mixed, undecided, known]`, ritenzione 90 giorni (30 fino al 2026-10-29; il passato già potato non torna) —
 ma l'ultimo campione di ogni nazione si tiene **sempre**, altrimenti una
 nazione ferma da più di un mese sparirebbe invece di risultare "ferma".
 

@@ -14,8 +14,8 @@
    Fonte: /mu-playstyle-history del server di cache (già esistente, usato
    dal pannello nazione per il movimento a 24 ore). Ogni riga è
    [ts, war, eco, mixed, undecided, known]: il server aggiunge un campione
-   solo quando i conteggi di quella nazione cambiano, con 30 giorni di
-   retention. Nessun nuovo endpoint, quindi nessun deploy del server.
+   solo quando i conteggi di quella nazione cambiano, con 90 giorni di
+   retention (30 fino al 2026-10-29). Nessun nuovo endpoint, quindi nessun deploy del server.
 
    L'estremo destro del confronto è SEMPRE adesso; quello sinistro lo
    sposta lo slider del riepilogo, da ieri a una settimana fa. Lo storico

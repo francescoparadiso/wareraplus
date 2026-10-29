@@ -5,7 +5,7 @@
    quanti sull'economia ADESSO; il pannello nazione della mappa dice di
    quanto sono cambiati da ieri. Qui c'è la curva intera: come si sono mossi
    i due numeri (e, spegnibili, ibridi e senza punti) nelle ultime 24 ore,
-   fino a 30 giorni. Risponde a «questa nazione si sta mobilitando?», che il
+   fino a 90 giorni. Risponde a «questa nazione si sta mobilitando?», che il
    solo istante non può dire.
 
    ZERO LAVORO NUOVO LATO SERVER: il dato è lo storico che il cache-server
@@ -21,7 +21,7 @@
    precedente — e si disegna a scalini, non con segmenti obliqui che
    inventerebbero valori intermedi. Per lo stesso motivo il valore all'inizio
    di una finestra è quello dell'ultima riga PRIMA dell'inizio: per questo si
-   scarica sempre l'intera ritenzione (30 giorni) e si ritaglia qui, invece
+   scarica sempre l'intera ritenzione (90 giorni) e si ritaglia qui, invece
    di chiedere al server solo la finestra scelta — che taglierebbe proprio la
    riga che serve.
 
@@ -58,8 +58,10 @@ const DEFAULT_HIDDEN = 'mixed,undecided';
 
 const HOUR_MS = 3600 * 1000;
 const DAY_MS = 24 * HOUR_MS;
-// 30 giorni = PLAYSTYLE_HISTORY_RETENTION_MS del server: oltre non c'è altro.
-const RANGES = [24, 72, 7 * 24, 14 * 24, 30 * 24];
+// 90 giorni = PLAYSTYLE_HISTORY_RETENTION_MS del server (30 fino al
+// 2026-10-29): oltre non c'è altro. Un server non ancora rideployato ne tiene
+// ancora 30, e la fascia di copertura lo dichiara.
+const RANGES = [24, 72, 7 * 24, 14 * 24, 30 * 24, 90 * 24];
 const MAX_HOURS = RANGES[RANGES.length - 1];
 const RANGE_KEY = 'we_nat_pstrend_hours';
 const HIDDEN_KEY = 'we_nat_pstrend_hidden';

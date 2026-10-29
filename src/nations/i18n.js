@@ -96,7 +96,7 @@ const N_DICT = {
     // giocatori guerra / economia nel tempo (playstyleTrend.js)
     trendTitle: 'Players over time', trendLoading: 'Loading the history…',
     trendDelta: '{d} over {h}', trendDeltaSince: '{d} since {date}',
-    trendCoverage: 'The record for this nation starts on {date}: nothing is known before that. The server keeps 30 days.',
+    trendCoverage: 'The record for this nation starts on {date}: nothing is known before that. The server keeps 90 days.',
     trendNote: 'Counted by where each citizen puts their skill points. Only citizens whose skills the server has already read are counted, so the numbers can also rise when coverage grows.',
     trendKnown: 'Classified', trendReading: 'Last change: {when}', trendNoGroup: 'Turn on at least one group in the legend.',
   },
@@ -183,7 +183,7 @@ const N_DICT = {
     // giocatori guerra / economia nel tempo (playstyleTrend.js)
     trendTitle: 'Giocatori nel tempo', trendLoading: 'Caricamento dello storico…',
     trendDelta: '{d} in {h}', trendDeltaSince: '{d} dal {date}',
-    trendCoverage: 'Lo storico di questa nazione parte dal {date}: prima non si sa niente. Il server tiene 30 giorni.',
+    trendCoverage: 'Lo storico di questa nazione parte dal {date}: prima non si sa niente. Il server tiene 90 giorni.',
     trendNote: 'Contati da dove ogni cittadino mette i punti abilità. Sono contati solo i cittadini di cui il server ha già letto le abilità, quindi i numeri possono salire anche perché la copertura si allarga.',
     trendKnown: 'Classificati', trendReading: 'Ultima variazione: {when}', trendNoGroup: 'Accendi almeno un gruppo nella legenda.',
   },
@@ -270,7 +270,7 @@ const N_DICT = {
     // giocatori guerra / economia nel tempo (playstyleTrend.js)
     trendTitle: 'Jugadores en el tiempo', trendLoading: 'Cargando el historial…',
     trendDelta: '{d} en {h}', trendDeltaSince: '{d} desde el {date}',
-    trendCoverage: 'El historial de esta nación empieza el {date}: antes no se sabe nada. El servidor guarda 30 días.',
+    trendCoverage: 'El historial de esta nación empieza el {date}: antes no se sabe nada. El servidor guarda 90 días.',
     trendNote: 'Se cuentan según dónde pone cada ciudadano sus puntos de habilidad. Solo se cuentan los ciudadanos cuyas habilidades el servidor ya ha leído, así que las cifras también pueden subir cuando crece la cobertura.',
     trendKnown: 'Clasificados', trendReading: 'Último cambio: {when}', trendNoGroup: 'Activa al menos un grupo en la leyenda.',
   },
@@ -357,7 +357,7 @@ const N_DICT = {
     // giocatori guerra / economia nel tempo (playstyleTrend.js)
     trendTitle: 'Spieler im Zeitverlauf', trendLoading: 'Verlauf wird geladen…',
     trendDelta: '{d} in {h}', trendDeltaSince: '{d} seit {date}',
-    trendCoverage: 'Der Verlauf dieser Nation beginnt am {date}: davor ist nichts bekannt. Der Server speichert 30 Tage.',
+    trendCoverage: 'Der Verlauf dieser Nation beginnt am {date}: davor ist nichts bekannt. Der Server speichert 90 Tage.',
     trendNote: 'Gezählt wird danach, wohin jeder Bürger seine Fertigkeitspunkte setzt. Es zählen nur Bürger, deren Fertigkeiten der Server schon gelesen hat – die Zahlen können also auch steigen, wenn die Abdeckung wächst.',
     trendKnown: 'Eingeordnet', trendReading: 'Letzte Änderung: {when}', trendNoGroup: 'Schalte in der Legende mindestens eine Gruppe ein.',
   },
@@ -444,7 +444,7 @@ const N_DICT = {
     // giocatori guerra / economia nel tempo (playstyleTrend.js)
     trendTitle: 'Joueurs dans le temps', trendLoading: "Chargement de l'historique…",
     trendDelta: '{d} sur {h}', trendDeltaSince: '{d} depuis le {date}',
-    trendCoverage: "L'historique de cette nation commence le {date} : avant, on ne sait rien. Le serveur garde 30 jours.",
+    trendCoverage: "L'historique de cette nation commence le {date} : avant, on ne sait rien. Le serveur garde 90 jours.",
     trendNote: "Comptés selon l'endroit où chaque citoyen place ses points de compétence. Seuls les citoyens dont le serveur a déjà lu les compétences sont comptés : les chiffres peuvent donc aussi monter quand la couverture s'élargit.",
     trendKnown: 'Classés', trendReading: 'Dernier changement : {when}', trendNoGroup: 'Active au moins un groupe dans la légende.',
   },
@@ -531,7 +531,7 @@ const N_DICT = {
     // giocatori guerra / economia nel tempo (playstyleTrend.js)
     trendTitle: 'Spelers in de tijd', trendLoading: 'Geschiedenis laden…',
     trendDelta: '{d} in {h}', trendDeltaSince: '{d} sinds {date}',
-    trendCoverage: 'De geschiedenis van deze natie begint op {date}: daarvoor is niets bekend. De server bewaart 30 dagen.',
+    trendCoverage: 'De geschiedenis van deze natie begint op {date}: daarvoor is niets bekend. De server bewaart 90 dagen.',
     trendNote: 'Geteld naar waar elke burger zijn vaardigheidspunten zet. Alleen burgers wier vaardigheden de server al heeft gelezen tellen mee, dus de aantallen kunnen ook stijgen als de dekking groeit.',
     trendKnown: 'Ingedeeld', trendReading: 'Laatste wijziging: {when}', trendNoGroup: 'Zet minstens één groep aan in de legenda.',
   },
@@ -618,7 +618,7 @@ const N_DICT = {
     // giocatori guerra / economia nel tempo (playstyleTrend.js)
     trendTitle: 'Spelare över tid', trendLoading: 'Läser in historiken…',
     trendDelta: '{d} på {h}', trendDeltaSince: '{d} sedan {date}',
-    trendCoverage: 'Historiken för den här nationen börjar den {date}: innan dess vet man ingenting. Servern sparar 30 dagar.',
+    trendCoverage: 'Historiken för den här nationen börjar den {date}: innan dess vet man ingenting. Servern sparar 90 dagar.',
     trendNote: 'Räknas efter var varje medborgare lägger sina färdighetspoäng. Bara medborgare vars färdigheter servern redan läst räknas, så siffrorna kan också stiga när täckningen växer.',
     trendKnown: 'Klassade', trendReading: 'Senaste ändring: {when}', trendNoGroup: 'Slå på minst en grupp i teckenförklaringen.',
   },
@@ -705,7 +705,7 @@ const N_DICT = {
     // giocatori guerra / economia nel tempo (playstyleTrend.js)
     trendTitle: 'Jogadores ao longo do tempo', trendLoading: 'A carregar o histórico…',
     trendDelta: '{d} em {h}', trendDeltaSince: '{d} desde {date}',
-    trendCoverage: 'O histórico desta nação começa em {date}: antes disso não se sabe nada. O servidor guarda 30 dias.',
+    trendCoverage: 'O histórico desta nação começa em {date}: antes disso não se sabe nada. O servidor guarda 90 dias.',
     trendNote: 'Contados conforme onde cada cidadão põe os pontos de habilidade. Só contam os cidadãos cujas habilidades o servidor já leu, por isso os números também podem subir quando a cobertura aumenta.',
     trendKnown: 'Classificados', trendReading: 'Última alteração: {when}', trendNoGroup: 'Ative pelo menos um grupo na legenda.',
   },
@@ -792,7 +792,7 @@ const N_DICT = {
     // giocatori guerra / economia nel tempo (playstyleTrend.js)
     trendTitle: 'اللاعبون عبر الزمن', trendLoading: 'جارٍ تحميل السجل…',
     trendDelta: '{d} خلال {h}', trendDeltaSince: '{d} منذ {date}',
-    trendCoverage: 'يبدأ سجل هذه الدولة في {date}: لا يُعرف شيء قبل ذلك. يحتفظ الخادم بـ 30 يومًا.',
+    trendCoverage: 'يبدأ سجل هذه الدولة في {date}: لا يُعرف شيء قبل ذلك. يحتفظ الخادم بـ 90 يومًا.',
     trendNote: 'يُحتسبون بحسب المكان الذي يضع فيه كل مواطن نقاط مهاراته. يُحتسب فقط المواطنون الذين قرأ الخادم مهاراتهم، لذا قد ترتفع الأرقام أيضًا عند اتساع التغطية.',
     trendKnown: 'المصنّفون', trendReading: 'آخر تغيير: {when}', trendNoGroup: 'فعّل مجموعة واحدة على الأقل في دليل الرموز.',
   },
