@@ -99,6 +99,7 @@ const N_DICT = {
     trendCoverage: 'The record for this nation starts on {date}: nothing is known before that. The server keeps 90 days.',
     trendNote: 'Counted by where each citizen puts their skill points. Only citizens whose skills the server has already read are counted, so the numbers can also rise when coverage grows.',
     trendKnown: 'Classified', trendReading: 'Last change: {when}', trendNoGroup: 'Turn on at least one group in the legend.',
+    trendGroupFill: "Where a nation has no record yet at the start, its first known value is used instead.",
   },
   it: {
     title: 'Statistiche nazioni', tabOverview: 'Panoramica', tabCompare: '1 vs 2', tabCharts: 'Grafici',
@@ -186,6 +187,7 @@ const N_DICT = {
     trendCoverage: 'Lo storico di questa nazione parte dal {date}: prima non si sa niente. Il server tiene 90 giorni.',
     trendNote: 'Contati da dove ogni cittadino mette i punti abilità. Sono contati solo i cittadini di cui il server ha già letto le abilità, quindi i numeri possono salire anche perché la copertura si allarga.',
     trendKnown: 'Classificati', trendReading: 'Ultima variazione: {when}', trendNoGroup: 'Accendi almeno un gruppo nella legenda.',
+    trendGroupFill: "Dove una nazione non ha ancora uno storico all’inizio, si usa il suo primo valore noto.",
   },
   es: {
     title: 'Estadísticas de naciones', tabOverview: 'Resumen', tabCompare: '1 vs 2', tabCharts: 'Gráficos',
@@ -273,6 +275,7 @@ const N_DICT = {
     trendCoverage: 'El historial de esta nación empieza el {date}: antes no se sabe nada. El servidor guarda 90 días.',
     trendNote: 'Se cuentan según dónde pone cada ciudadano sus puntos de habilidad. Solo se cuentan los ciudadanos cuyas habilidades el servidor ya ha leído, así que las cifras también pueden subir cuando crece la cobertura.',
     trendKnown: 'Clasificados', trendReading: 'Último cambio: {when}', trendNoGroup: 'Activa al menos un grupo en la leyenda.',
+    trendGroupFill: "Donde una nación aún no tiene registro al principio, se usa su primer valor conocido.",
   },
   de: {
     title: 'Nationsstatistiken', tabOverview: 'Überblick', tabCompare: '1 vs 2', tabCharts: 'Diagramme',
@@ -360,6 +363,7 @@ const N_DICT = {
     trendCoverage: 'Der Verlauf dieser Nation beginnt am {date}: davor ist nichts bekannt. Der Server speichert 90 Tage.',
     trendNote: 'Gezählt wird danach, wohin jeder Bürger seine Fertigkeitspunkte setzt. Es zählen nur Bürger, deren Fertigkeiten der Server schon gelesen hat – die Zahlen können also auch steigen, wenn die Abdeckung wächst.',
     trendKnown: 'Eingeordnet', trendReading: 'Letzte Änderung: {when}', trendNoGroup: 'Schalte in der Legende mindestens eine Gruppe ein.',
+    trendGroupFill: "Wo eine Nation am Anfang noch keinen Eintrag hat, wird ihr erster bekannter Wert verwendet.",
   },
   fr: {
     title: 'Statistiques des nations', tabOverview: "Vue d'ensemble", tabCompare: '1 vs 2', tabCharts: 'Graphiques',
@@ -447,6 +451,7 @@ const N_DICT = {
     trendCoverage: "L'historique de cette nation commence le {date} : avant, on ne sait rien. Le serveur garde 90 jours.",
     trendNote: "Comptés selon l'endroit où chaque citoyen place ses points de compétence. Seuls les citoyens dont le serveur a déjà lu les compétences sont comptés : les chiffres peuvent donc aussi monter quand la couverture s'élargit.",
     trendKnown: 'Classés', trendReading: 'Dernier changement : {when}', trendNoGroup: 'Active au moins un groupe dans la légende.',
+    trendGroupFill: "Là où une nation n’a pas encore d’historique au début, on utilise sa première valeur connue.",
   },
   nl: {
     title: 'Natiestatistieken', tabOverview: 'Overzicht', tabCompare: '1 vs 2', tabCharts: 'Grafieken',
@@ -534,6 +539,7 @@ const N_DICT = {
     trendCoverage: 'De geschiedenis van deze natie begint op {date}: daarvoor is niets bekend. De server bewaart 90 dagen.',
     trendNote: 'Geteld naar waar elke burger zijn vaardigheidspunten zet. Alleen burgers wier vaardigheden de server al heeft gelezen tellen mee, dus de aantallen kunnen ook stijgen als de dekking groeit.',
     trendKnown: 'Ingedeeld', trendReading: 'Laatste wijziging: {when}', trendNoGroup: 'Zet minstens één groep aan in de legenda.',
+    trendGroupFill: "Waar een natie aan het begin nog geen gegevens heeft, wordt haar eerste bekende waarde gebruikt.",
   },
   sv: {
     title: 'Nationsstatistik', tabOverview: 'Översikt', tabCompare: '1 mot 2', tabCharts: 'Diagram',
@@ -621,6 +627,7 @@ const N_DICT = {
     trendCoverage: 'Historiken för den här nationen börjar den {date}: innan dess vet man ingenting. Servern sparar 90 dagar.',
     trendNote: 'Räknas efter var varje medborgare lägger sina färdighetspoäng. Bara medborgare vars färdigheter servern redan läst räknas, så siffrorna kan också stiga när täckningen växer.',
     trendKnown: 'Klassade', trendReading: 'Senaste ändring: {when}', trendNoGroup: 'Slå på minst en grupp i teckenförklaringen.',
+    trendGroupFill: "Där en nation ännu saknar historik i början används dess första kända värde.",
   },
   pt: {
     title: 'Estatísticas das nações', tabOverview: 'Visão geral', tabCompare: '1 vs 2', tabCharts: 'Gráficos',
@@ -708,6 +715,7 @@ const N_DICT = {
     trendCoverage: 'O histórico desta nação começa em {date}: antes disso não se sabe nada. O servidor guarda 90 dias.',
     trendNote: 'Contados conforme onde cada cidadão põe os pontos de habilidade. Só contam os cidadãos cujas habilidades o servidor já leu, por isso os números também podem subir quando a cobertura aumenta.',
     trendKnown: 'Classificados', trendReading: 'Última alteração: {when}', trendNoGroup: 'Ative pelo menos um grupo na legenda.',
+    trendGroupFill: "Onde uma nação ainda não tem registo no início, usa-se o seu primeiro valor conhecido.",
   },
   ar: {
     title: 'إحصاءات الدول', tabOverview: 'نظرة عامة', tabCompare: '1 ضد 2', tabCharts: 'الرسوم',
@@ -795,6 +803,7 @@ const N_DICT = {
     trendCoverage: 'يبدأ سجل هذه الدولة في {date}: لا يُعرف شيء قبل ذلك. يحتفظ الخادم بـ 90 يومًا.',
     trendNote: 'يُحتسبون بحسب المكان الذي يضع فيه كل مواطن نقاط مهاراته. يُحتسب فقط المواطنون الذين قرأ الخادم مهاراتهم، لذا قد ترتفع الأرقام أيضًا عند اتساع التغطية.',
     trendKnown: 'المصنّفون', trendReading: 'آخر تغيير: {when}', trendNoGroup: 'فعّل مجموعة واحدة على الأقل في دليل الرموز.',
+    trendGroupFill: "حيث لا يكون للدولة سجل في البداية، تُستخدم أول قيمة معروفة لها.",
   },
 };
 

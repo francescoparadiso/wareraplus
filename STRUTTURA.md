@@ -326,7 +326,7 @@ wareraPlus/
     │   ├── blocStatsI18n.js ← NUOVO — traduzioni (9 lingue) di Statistiche
     │   │                        alleanze: la CHIAVE è il testo inglese, bT('Weekly
     │   │                        damage'), e ciò che manca ricade sull'inglese.
-    │   ├── dualBadges.js, blocStats.js, weeklyDamage.js, population.js,
+    │   ├── dualBadges.js, blocStats.js (la scheda di un'alleanza è una PAGINA nel suo contenitore, non un popup: openBlocDetail/renderBlocDetail), weeklyDamage.js, population.js,
     │   │   regions.js, nationTooltip.js, utils.js
     │   ├── cacheClient.js       ← NUOVO — client del server di cache: OGNI funzione ha
     │   │                          fallback se il VPS non risponde (mai un nuovo SPOF)
@@ -521,13 +521,17 @@ wareraPlus/
     │   │                          BUCO (barra assente, linea spezzata), mai come zero.
     │   ├── playstyleTrend.js    ← NUOVO (2026-10-29) — nella scheda "Stile di gioco":
     │   │                          giocatori guerra / economia (e, spegnibili, ibridi e
-    │   │                          senza punti) nel tempo, da 24 ore a 30 giorni. Dati da
+    │   │                          senza punti) nel tempo, da 24 ore a 90 giorni. Dati da
     │   │                          /mu-playstyle-history, lo storico che il server già
     │   │                          salva per il "da ieri" del pannello mappa: nessun
     │   │                          lavoro lato server. ⚠️ Lo storico è a delta (una riga
     │   │                          solo quando i numeri cambiano): la serie è a SCALINI e
     │   │                          si scarica sempre l'intera ritenzione, perché il valore
     │   │                          a inizio finestra è l'ultima riga PRIMA dell'inizio.
+    │   │                          Anche per un GRUPPO (renderGroupPlaystyleTrend): la pagina di
+    │   │                          un'alleanza (Statistiche alleanze) somma le serie delle nazioni
+    │   │                          membre. ⚠️ Una nazione senza riga a inizio finestra si riempie
+    │   │                          all'indietro col primo valore noto, e la nota lo dichiara.
     │   ├── nationList.js, nationCompare.js, nationDetail.js, i18n.js (9 lingue)
     ├── players/                  ← NUOVO (2026-10-14) — Giocatori: voce di Approfondimenti
     │   │                            e destinazione del clic su un cittadino (Statistiche

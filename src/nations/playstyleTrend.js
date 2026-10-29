@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════
-   WarEra+ — Statistiche nazioni: giocatori guerra / economia nel tempo
+   WarEra+ — giocatori guerra / economia nel tempo (nazione e alleanza)
    ------------------------------------------------------------------
    La ciambella della scheda dice quanti cittadini stanno sulla guerra e
    quanti sull'economia ADESSO; il pannello nazione della mappa dice di
@@ -8,11 +8,22 @@
    fino a 90 giorni. Risponde a «questa nazione si sta mobilitando?», che il
    solo istante non può dire.
 
+   DUE INGRESSI, UN SOLO GRAFICO:
+     · renderPlaystyleTrend(host, nation)      — scheda nazione (Statistiche
+       nazioni, scheda "Stile di gioco");
+     · renderGroupPlaystyleTrend(host, {key, ids}) — un GRUPPO di nazioni, per
+       la pagina di un'alleanza (Statistiche alleanze): le serie delle
+       nazioni membre sommate (vedi mergeSeries).
+   Ogni disegno ha la SUA istanza (chiusura in mountTrend): le due viste sono
+   overlay diversi e restano entrambe nel DOM, quindi uno stato di modulo
+   unico le avrebbe fatte ridisegnare l'una sull'altra. Finestra scelta e
+   gruppi accesi sono invece preferenze, condivise e salvate.
+
    ZERO LAVORO NUOVO LATO SERVER: il dato è lo storico che il cache-server
    già salva ad ogni giro (`/mu-playstyle-history`, vedi
    appendPlaystyleHistory in server/warera-cache-server.js) e che il
    pannello della mappa già legge per il "da ieri". Una richiesta, qualche
-   KB per nazione.
+   KB per nazione (per un'alleanza, una richiesta ogni 60 nazioni).
 
    ── COME SI LEGGE LO STORICO ─────────────────────────────────────
    Il server scrive una riga SOLO quando i numeri di una nazione cambiano
@@ -24,6 +35,17 @@
    scarica sempre l'intera ritenzione (90 giorni) e si ritaglia qui, invece
    di chiedere al server solo la finestra scelta — che taglierebbe proprio la
    riga che serve.
+
+   ── LA SOMMA DI UN'ALLEANZA ──────────────────────────────────────
+   Le serie delle nazioni hanno righe in istanti diversi: la somma a un
+   istante è, per ogni nazione, il valore dell'ultima sua riga fino a lì.
+   ⚠️ Una nazione che non ha ancora righe all'inizio (il server potava anche
+   la riga PRIMA del taglio, prima del 2026-10-29: una nazione che cambia di
+   rado partiva "da dopo") viene riempita all'indietro col suo primo valore
+   noto — sbagliato al più di una variazione, mentre uno zero sbaglierebbe
+   di centinaia e farebbe comparire le nazioni una alla volta come salti che
+   nel gioco non sono mai avvenuti. Quando succede lo dice una nota sotto il
+   grafico (`trendGroupFill`).
 
    ⚠️ Cosa il grafico NON deve far credere:
      · prima della prima riga di quella nazione non si sa niente. La linea
@@ -40,11 +62,13 @@
    SVG scritto a mano come il resto della vista (damageCurves.js,
    levelPlaystyle.js): niente Chart.js, che nel bundle esiste solo per
    Political. Riusa le classi già tarate del grafico livelli e delle curve
-   del danno (carta, selettore, legenda, tooltip) invece di clonarle.
+   del danno (carta, selettore, legenda, tooltip) invece di clonarle — per
+   questo importa nations.css anche quando lo monta la pagina alleanza.
    ══════════════════════════════════════════════════════════════ */
 
+import '../styles/nations.css';
 import { natT } from './i18n.js';
-import { fetchPlaystyleHistory } from '../mu/api.js';
+import { fetchPlaystyleHistory, fetchPlaystyleHistoryAll } from '../mu/api.js';
 import { trackEvent } from '../shared/analytics.js';
 import { escapeHtml } from '../mu/ui.js';
 
@@ -57,7 +81,6 @@ const GROUP_COLORS = { war: '#e5484d', eco: '#3fb950', mixed: '#e3b341', undecid
 const DEFAULT_HIDDEN = 'mixed,undecided';
 
 const HOUR_MS = 3600 * 1000;
-const DAY_MS = 24 * HOUR_MS;
 // 90 giorni = PLAYSTYLE_HISTORY_RETENTION_MS del server (30 fino al
 // 2026-10-29): oltre non c'è altro. Un server non ancora rideployato ne tiene
 // ancora 30, e la fascia di copertura lo dichiara.
@@ -71,11 +94,7 @@ const rangeLabel = (h) => (h > 72 ? `${h / 24}${natT('curveDayShort')}` : `${h}$
 const PAD = { top: 12, right: 16, bottom: 22, left: 42 };
 const H = 200;
 
-let _host = null;
-let _nation = null;
-let _rows = null;                  // [{ t, war, eco, mixed, undecided, known }], dal più vecchio
-let _ro = null;                    // ResizeObserver: la carta cambia larghezza (scheda nascosta → visibile)
-let _lastWidth = 0;
+/* ── Preferenze (condivise fra tutte le istanze) ───────────────── */
 let _hours = (() => {
   try {
     const v = Number(localStorage.getItem(RANGE_KEY));
@@ -90,90 +109,135 @@ function persist(key, value) {
   try { localStorage.setItem(key, value); } catch { /* storage negato */ }
 }
 
-/* ── Ingresso ──────────────────────────────────────────────────── */
+const since = () => Date.now() - MAX_HOURS * HOUR_MS - HOUR_MS;
 
-/**
- * Disegna la sezione dentro `host`. Se il server non ha lo storico (o la
- * nazione non ci compare) la sezione NON compare: svuota l'host e basta —
- * stesso degrado voluto delle curve del danno, non un guasto da segnalare.
- */
-export async function renderPlaystyleTrend(host, nation) {
-  _ro?.disconnect();
-  _ro = null;
-  _host = host;
-  _nation = nation;
-  _rows = null;
-  host.innerHTML = `<div class="wp-nat-curve-loading">${escapeHtml(natT('trendLoading'))}</div>`;
-
-  // Sempre tutta la ritenzione, mai la sola finestra scelta: vedi la testata.
-  const raw = await fetchPlaystyleHistory(nation._id, Date.now() - MAX_HOURS * HOUR_MS - HOUR_MS);
-  if (_nation?._id !== nation._id) return;     // nazione cambiata nel frattempo
-
-  _rows = raw
+/** Righe grezze [ts, war, eco, mixed, undecided, known] → oggetti, in ordine. */
+function toRows(raw) {
+  return (raw || [])
     .filter(r => Array.isArray(r) && Number.isFinite(r[0]))
     .map(r => ({ t: r[0], war: r[1] || 0, eco: r[2] || 0, mixed: r[3] || 0, undecided: r[4] || 0, known: r[5] || 0 }))
     .sort((a, b) => a.t - b.t);
-  if (!_rows.length) { host.innerHTML = ''; return; }
-  paint();
 }
 
-function paint() {
-  if (!_host || !_rows) return;
-  const pts = windowPoints();
+/** Somma le serie di più nazioni ({ countryId: righe grezze }). Vedi la
+ *  testata: per ogni nazione vale l'ultima riga fino all'istante, e prima
+ *  della sua prima riga il suo primo valore noto. `filled` = almeno una
+ *  nazione è stata riempita per più di un'ora. */
+function mergeSeries(byCountry) {
+  const lists = Object.values(byCountry || {}).map(toRows).filter(l => l.length);
+  if (!lists.length) return { rows: [], filled: false };
+  const times = [...new Set(lists.flatMap(l => l.map(r => r.t)))].sort((a, b) => a - b);
+  const t0 = times[0];
+  const filled = lists.some(l => l[0].t - t0 > HOUR_MS);
+  const idx = lists.map(() => 0);
+  const cur = lists.map(l => l[0]);                // all'indietro: il primo valore noto
+  const rows = times.map(t => {
+    const sum = { t, war: 0, eco: 0, mixed: 0, undecided: 0, known: 0 };
+    lists.forEach((l, i) => {
+      while (idx[i] < l.length && l[idx[i]].t <= t) cur[i] = l[idx[i]++];
+      for (const k of ['war', 'eco', 'mixed', 'undecided', 'known']) sum[k] += cur[i][k];
+    });
+    return sum;
+  });
+  return { rows, filled };
+}
+
+/* ── Ingressi ──────────────────────────────────────────────────── */
+
+/**
+ * Disegna la sezione di una NAZIONE dentro `host`. Se il server non ha lo
+ * storico (o la nazione non ci compare) la sezione NON compare: svuota
+ * l'host e basta — stesso degrado voluto delle curve del danno.
+ */
+export function renderPlaystyleTrend(host, nation) {
+  return mountTrend(host, {
+    title: true,
+    load: async () => ({ rows: toRows(await fetchPlaystyleHistory(nation._id, since())), filled: false }),
+  });
+}
+
+/** Lo stesso per un GRUPPO di nazioni (`ids`): la pagina di un'alleanza.
+ *  Il titolo non c'è: lo mette la sezione che lo contiene. */
+export function renderGroupPlaystyleTrend(host, { ids }) {
+  return mountTrend(host, {
+    title: false,
+    load: async () => mergeSeries(await fetchPlaystyleHistoryAll(ids || [], since())),
+  });
+}
+
+async function mountTrend(host, { title, load }) {
+  host._wpTrend?.ro?.disconnect();
+  const inst = { host, title, rows: null, filled: false, ro: null, lastWidth: 0 };
+  host._wpTrend = inst;
+  host.innerHTML = `<div class="wp-nat-curve-loading">${escapeHtml(natT('trendLoading'))}</div>`;
+
+  const { rows, filled } = await load();
+  if (host._wpTrend !== inst) return;              // ridisegnata nel frattempo
+  inst.rows = rows;
+  inst.filled = filled;
+  if (!rows.length) { host.innerHTML = ''; return; }
+  paint(inst);
+}
+
+function paint(inst) {
+  const host = inst.host;
+  if (!host.isConnected || host._wpTrend !== inst) return;
+  const pts = windowPoints(inst);
   const first = pts[0];
 
-  _host.innerHTML = `
-    <h3 class="wp-nat-section-title">${escapeHtml(natT('trendTitle'))}</h3>
+  host.innerHTML = `
+    ${inst.title ? `<h3 class="wp-nat-section-title">${escapeHtml(natT('trendTitle'))}</h3>` : ''}
     <div class="wp-nat-curve-card">
       <div class="wp-nat-curve-head">
-        <ul class="wp-nat-legend wp-nat-lv-legend" id="wp-nat-trend-legend">
+        <ul class="wp-nat-legend wp-nat-lv-legend" data-trend="legend">
           ${GROUPS.map(g => `
             <li><button type="button" class="wp-nat-lv-key${_hidden.has(g) ? ' off' : ''}" data-group="${g}">
               <span class="wp-nat-dot" style="background:${GROUP_COLORS[g]}"></span>${escapeHtml(natT(g))}
             </button></li>`).join('')}
         </ul>
-        <div class="wp-nat-curve-range" id="wp-nat-trend-range" role="group">
+        <div class="wp-nat-curve-range" data-trend="range" role="group">
           ${RANGES.map(h => `<button type="button" data-h="${h}" class="${h === _hours ? 'active' : ''}">${escapeHtml(rangeLabel(h))}</button>`).join('')}
         </div>
       </div>
       ${statsHtml(pts)}
-      <div class="wp-nat-curve-slot" id="wp-nat-trend-slot"></div>
+      <div class="wp-nat-curve-slot" data-trend="slot"></div>
       <div class="wp-nat-lv-tip" hidden></div>
       ${first.partial ? `<p class="wp-nat-curve-note">${escapeHtml(natT('trendCoverage').replace('{date}', fmtDate(first.at)))}</p>` : ''}
+      ${inst.filled ? `<p class="wp-nat-curve-note">${escapeHtml(natT('trendGroupFill'))}</p>` : ''}
       <p class="wp-nat-curve-peak">${escapeHtml(natT('trendNote'))}</p>
     </div>`;
 
-  _host.querySelector('#wp-nat-trend-legend').addEventListener('click', (e) => {
+  host.querySelector('[data-trend="legend"]').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-group]');
     if (!btn) return;
     const g = btn.dataset.group;
     if (_hidden.has(g)) _hidden.delete(g); else _hidden.add(g);
     persist(HIDDEN_KEY, [..._hidden].join(','));
     trackEvent('nations-trend-group', { group: g, on: !_hidden.has(g) });
-    paint();
+    paint(inst);
   });
-  _host.querySelector('#wp-nat-trend-range').addEventListener('click', (e) => {
+  host.querySelector('[data-trend="range"]').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-h]');
     if (!btn) return;
     _hours = Number(btn.dataset.h);
     persist(RANGE_KEY, String(_hours));
     trackEvent('nations-trend-range', { hours: _hours });
-    paint();
+    paint(inst);
   });
 
-  const slot = _host.querySelector('#wp-nat-trend-slot');
-  _lastWidth = slot.clientWidth || 0;
-  draw();
+  const slot = host.querySelector('[data-trend="slot"]');
+  inst.lastWidth = slot.clientWidth || 0;
+  draw(inst);
   // La scheda "Stile di gioco" si disegna anche quando è nascosta: lì la
   // larghezza vale zero e il grafico uscirebbe al minimo di 320px.
-  _ro?.disconnect();
-  _ro = new ResizeObserver(() => {
+  inst.ro?.disconnect();
+  inst.ro = new ResizeObserver(() => {
     const w = slot.clientWidth || 0;
-    if (Math.abs(w - _lastWidth) < 2) return;
-    _lastWidth = w;
-    draw();
+    if (Math.abs(w - inst.lastWidth) < 2) return;
+    inst.lastWidth = w;
+    draw(inst);
   });
-  _ro.observe(slot);
+  inst.ro.observe(slot);
 }
 
 /* ── Serie della finestra ──────────────────────────────────────── */
@@ -183,15 +247,16 @@ function paint() {
  *  «adesso» col valore ancora in vigore. `at` è l'ora della riga vera (il
  *  punto iniziale ha `t` = inizio finestra); `partial` = prima della prima
  *  riga non si sa niente. */
-function windowPoints() {
+function windowPoints(inst) {
+  const rows = inst.rows;
   const now = Date.now();
   const t0 = now - _hours * HOUR_MS;
   let before = null;
-  for (const r of _rows) { if (r.t <= t0) before = r; else break; }
+  for (const r of rows) { if (r.t <= t0) before = r; else break; }
   const pts = [];
   if (before) pts.push({ ...before, t: t0, at: before.t, partial: false });
-  for (const r of _rows) if (r.t > t0 && r.t <= now) pts.push({ ...r, at: r.t, partial: false });
-  if (!pts.length) pts.push({ ..._rows[_rows.length - 1], at: _rows[_rows.length - 1].t, partial: false });
+  for (const r of rows) if (r.t > t0 && r.t <= now) pts.push({ ...r, at: r.t, partial: false });
+  if (!pts.length) pts.push({ ...rows[rows.length - 1], at: rows[rows.length - 1].t, partial: false });
   if (!before) pts[0].partial = true;
   pts.push({ ...pts[pts.length - 1], t: now, end: true });
   return pts;
@@ -258,16 +323,16 @@ function timeTicks(t0, t1, plotW) {
   return { ticks: out, stepH };
 }
 
-function draw() {
-  const slot = _host?.querySelector('#wp-nat-trend-slot');
-  if (!slot || !_rows) return;
+function draw(inst) {
+  const slot = inst.host.querySelector('[data-trend="slot"]');
+  if (!slot || !inst.rows) return;
   const groups = GROUPS.filter(g => !_hidden.has(g));
   if (!groups.length) {
     slot.innerHTML = `<p class="wp-nat-empty">${escapeHtml(natT('trendNoGroup'))}</p>`;
     return;
   }
 
-  const pts = windowPoints();
+  const pts = windowPoints(inst);
   const tStart = Date.now() - _hours * HOUR_MS;
   const tEnd = pts[pts.length - 1].t;
   const W = Math.max(slot.clientWidth || 0, 320);
@@ -314,7 +379,7 @@ function draw() {
       <line class="wp-nat-trend-cursor" y1="${PAD.top}" y2="${PAD.top + plotH}" x1="0" x2="0" hidden/>
       <rect class="wp-nat-trend-hit" x="${PAD.left}" y="${PAD.top}" width="${plotW}" height="${plotH}"/></svg>`;
 
-  bindHover(slot, pts.filter(p => !p.end), { W, plotW, tStart, tEnd, groups });
+  bindHover(slot, pts.filter(p => !p.end), { W, plotW, tStart, tEnd });
 }
 
 /* ── Tooltip: il valore in vigore sotto il cursore ─────────────── */

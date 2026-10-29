@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { worldCoreDevelopment, bonusFromShare, formatBonus, isPenalty, curveTooltip } from '../shared/allianceBonus.js';
 import { trackEvent } from '../shared/analytics.js';
-import { pushBack } from '../app/backNav.js';
+import { pushBack, syncBack } from '../app/backNav.js';
 // withAlpha: i colori delle alleanze sono stringhe hsl(...), la vecchia
 // trasparenza "colore + due cifre esa" su quelle non e' un colore valido.
 import { withAlpha } from './utils.js';
@@ -718,6 +718,23 @@ function injectStyles() {
       .bs-breakdown-row{padding:5px 12px}
     }
 
+    /* WarEra+ (2026-10-29) — la scheda di un'alleanza è una PAGINA nel
+       contenitore della vista, non più un popup: stesse sezioni, ma a
+       larghezza piena e senza lo scroll interno del popup. */
+    .bs-back{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:7px 14px;margin-bottom:14px;border:1px solid #30363d;border-radius:8px;background:#161b22;color:#e6edf3;font-size:13px;font-weight:600}
+    .bs-back:hover{border-color:#58a6ff;color:#fff}
+    .bs-back:focus-visible{outline:2px solid #58a6ff;outline-offset:2px}
+    .bs-detail-name{font-weight:700;font-size:22px;color:#fff}
+    .bs-detail .bs-breakdown-body{flex:none;min-height:0;max-height:none;overflow:visible}
+    @media(min-width:1100px){.bs-detail .bs-popup-grid{grid-template-columns:repeat(5,minmax(0,1fr))}}
+    /* I grafici condivisi con Statistiche nazioni (wp-nat-*, nations.css)
+       leggono queste variabili, definite lì solo dentro l'overlay Political. */
+    #bloc-stats-content{--wp-ov-surface:#161b22;--wp-ov-border:#30363d;--wp-ov-text:#e6edf3;--wp-ov-text-dim:#8b949e;--wp-ov-bg:#0d1117}
+    body.light-theme #bloc-stats-content{--wp-ov-surface:#fdfaf5;--wp-ov-border:#c4b394;--wp-ov-text:#3e2f1c;--wp-ov-text-dim:#6b5a47;--wp-ov-bg-light:#f1ebe0}
+    body.light-theme .bs-back{background:#fdfaf5;border-color:#c4b394;color:#3e2f1c}
+    body.light-theme .bs-back:hover{border-color:#8b5a2b;color:#2e1f0c}
+    body.light-theme .bs-detail-name{color:#2e1f0c}
+
     @keyframes glowPulse{0%,100%{opacity:.6;box-shadow:0 0 6px currentColor}50%{opacity:1;box-shadow:0 0 14px currentColor}}
     .bs-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;animation:glowPulse 2s ease-in-out infinite}
 
@@ -1145,16 +1162,50 @@ function wireSections(root, onOpen = {}) {
   }));
 }
 
-/* ── Popup Blocco (ordinamento decrescente corretto) ── */
-function showBlocPopup(blocId) {
-  const bloc = allStats.find(b => b.name === blocId || b.id === blocId);
-  if (!bloc) return;
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — La scheda di un'alleanza è una PAGINA, non un popup
+   ------------------------------------------------------------------
+   Richiesta dell'utente (2026-10-29): «dopo un click su alleanza mi aprisse
+   una pagina nuova come nelle stats nazionali e non una in sovrimpressione».
+   Come la scheda nazione di Statistiche nazioni: sostituisce il contenuto di
+   `#bloc-stats-content`, con "← Torna alle alleanze" in cima, e anche
+   Indietro del browser fa lo stesso ('blocstats/detail', app/backNav.js).
 
-  document.querySelectorAll('.bs-popup-overlay, .bs-popup').forEach(el => el.remove());
+   `detailBlocId` è lo stato: buildUI() disegna la pagina finché è
+   impostato, quindi un cambio lingua o un ridisegno la lasciano dov'è. Le
+   schede (Overview, Builder, 1 vs 2, Wars) e il loro stato restano intatti
+   sotto: tornando indietro si ritrova la tabella dov'era, anche come
+   scroll (`listScroll`). Le sezioni sono le stesse del vecchio popup, più
+   "Giocatori nel tempo" (guerra / economia sommati sulle nazioni membre).
+   ══════════════════════════════════════════════════════════════ */
+let detailBlocId = null;
+let listScroll = 0;
 
-  const overlay = document.createElement('div');
-  overlay.className = 'bs-popup-overlay';
-  overlay.onclick = () => { overlay.remove(); document.querySelector('.bs-popup')?.remove(); };
+function openBlocDetail(blocId) {
+  if (!allStats.some(b => b.name === blocId || b.id === blocId)) return;
+  const page = document.getElementById('bloc-stats-page');
+  listScroll = page?.scrollTop || 0;
+  detailBlocId = blocId;
+  syncBack('blocstats/detail', true, () => closeBlocDetail(), () => !!detailBlocId);
+  buildUI();
+  if (page) page.scrollTop = 0;
+}
+
+function closeBlocDetail() {
+  if (!detailBlocId) return;
+  detailBlocId = null;
+  syncBack('blocstats/detail', false);
+  buildUI();
+  const page = document.getElementById('bloc-stats-page');
+  if (page) page.scrollTop = listScroll;
+}
+
+/** Disegna la pagina dell'alleanza in `#bloc-stats-content`. Ritorna false
+ *  se l'alleanza non esiste più (fusa, cancellata): buildUI torna alla lista. */
+function renderBlocDetail() {
+  const c = document.getElementById('bloc-stats-content');
+  const bloc = allStats.find(b => b.name === detailBlocId || b.id === detailBlocId);
+  if (!c || !bloc) return false;
 
   let sortKey = 'dmg';
   let sortDir = 1; // -1 = decrescente (default: più alto prima)
@@ -1163,8 +1214,8 @@ function showBlocPopup(blocId) {
   // nazione (colonna "War %") e per l'alleanza intera (barra in alto). Stesso
   // dato della tabella e del pannello alleanza, gia' scaricato: zero fetch.
   const warPct = (id) => {
-    const c = psByCountry?.[id];
-    return c?.known ? (c.war / c.known) * 100 : null;
+    const ps = psByCountry?.[id];
+    return ps?.known ? (ps.war / ps.known) * 100 : null;
   };
   const conQuote = () => bloc.members.forEach(m => { m.warPct = warPct(m.id); });
   conQuote();
@@ -1192,15 +1243,13 @@ function showBlocPopup(blocId) {
     }).join('');
   }
 
-  const popup = document.createElement('div');
-  popup.className = 'bs-popup bloc-popup';
   const closed = closedSections();
-  popup.innerHTML = `
-    <div class="bs-popup-close">✕</div>
+  c.innerHTML = `<div class="bsw bs-detail">
+    <button type="button" class="bs-back" id="bs-detail-back">← ${bT('Back to alliances')}</button>
     <div class="bs-popup-header">
       <div style="width:16px;height:16px;border-radius:50%;background:${bloc.color};flex-shrink:0;box-shadow:0 0 12px ${withAlpha(bloc.color, .53)}"></div>
       <div style="flex:1">
-        <div style="font-weight:700;font-size:22px;color:#fff">${bloc.name}</div>
+        <div class="bs-detail-name">${bloc.name}</div>
         <div style="font-size:12px;color:#8b949e">${bT('{n} nations', { n: bloc.countryCount })}${bloc.isMerged ? ' · ' + bT('MERGED') : ''}</div>
       </div>
     </div>
@@ -1218,6 +1267,7 @@ function showBlocPopup(blocId) {
       <div class="bs-popup-item">${bT('Core Dev Share')} <span>${bloc.isUnaligned || !bloc.bonus ? '—' : bloc.bonus.share.toFixed(2) + '%'}</span></div>
     </div>`, closed)}
     ${secHtml('mobilization', bT('Mobilization'), '', closed, 'bloc-popup-ps')}
+    ${secHtml('trend', bT('Players over time'), '', closed, 'bloc-detail-trend')}
     ${secHtml('curves', bT('Hourly damage & pilled players'), '', closed, 'bloc-popup-curves')}
     ${secHtml('nations', bT('Nations'), `<div class="bs-breakdown-header">
       <span style="flex:1">${bT('Nation')}</span>
@@ -1230,9 +1280,12 @@ function showBlocPopup(blocId) {
       <span class="col ${sortKey === 'warPct' ? 'active' : ''}" data-key="warPct" style="min-width:48px" title="${bT('Share of players with a war build')}">${bT('War %')}</span>
     </div>
     <div class="bs-breakdown-body" id="bloc-popup-rows">${renderRows(sortKey, sortDir)}</div>`, closed)}
-  `;
+  </div>`;
 
-  popup.querySelectorAll('.col').forEach(hdr => {
+  const page = c.querySelector('.bs-detail');
+  page.querySelector('#bs-detail-back').onclick = () => closeBlocDetail();
+
+  page.querySelectorAll('.col').forEach(hdr => {
     hdr.addEventListener('click', () => {
       const key = hdr.dataset.key;
       if (key === sortKey) {
@@ -1241,16 +1294,11 @@ function showBlocPopup(blocId) {
         sortKey = key;
         sortDir = 1;
       }
-      const rowsContainer = popup.querySelector('#bloc-popup-rows');
+      const rowsContainer = page.querySelector('#bloc-popup-rows');
       if (rowsContainer) rowsContainer.innerHTML = renderRows(sortKey, sortDir);
-      popup.querySelectorAll('.col').forEach(c => c.classList.toggle('active', c.dataset.key === sortKey));
+      page.querySelectorAll('.col').forEach(col => col.classList.toggle('active', col.dataset.key === sortKey));
     });
   });
-
-  popup.querySelector('.bs-popup-close').onclick = () => { overlay.remove(); popup.remove(); };
-  document.body.appendChild(overlay);
-  document.body.appendChild(popup);
-  registraPopup(); // WarEra+: Indietro lo chiude (app/backNav.js)
 
   // WarEra+ — danno ora per ora e pillati dell'alleanza, sommati sulle sue
   // nazioni (src/diplomacy/blocDamageCurves.js). Modulo a parte, caricato
@@ -1258,7 +1306,7 @@ function showBlocPopup(blocId) {
   // I grafici prendono la larghezza dal contenitore al momento del disegno:
   // disegnati a sezione chiusa (larghezza 0) uscirebbero a 300px, quindi
   // all'apertura si ridisegnano (i dati sono già in cache nel modulo).
-  const curvesHost = popup.querySelector('#bloc-popup-curves');
+  const curvesHost = page.querySelector('#bloc-popup-curves');
   const drawCurves = () => {
     if (!curvesHost || !bloc.members.length) return;
     import('./blocDamageCurves.js')
@@ -1266,15 +1314,30 @@ function showBlocPopup(blocId) {
       .catch(() => { curvesHost.innerHTML = ''; });
   };
   drawCurves();
-  wireSections(popup, { curves: drawCurves });
+  wireSections(page, { curves: drawCurves });
+
+  // WarEra+ — giocatori guerra / economia nel tempo (2026-10-29): lo storico
+  // delle nazioni membre sommato, come nella scheda nazione. Dato pubblico
+  // (/mu-playstyle-history), quindi NON dietro al cancello dei governi come i
+  // grafici del danno. Si monta una volta sola: se la sezione è chiusa il
+  // grafico si ridisegna da sé quando prende larghezza (ResizeObserver).
+  const trendHost = page.querySelector('#bloc-detail-trend');
+  if (trendHost && bloc.members.length) {
+    import('../nations/playstyleTrend.js')
+      .then(m => m.renderGroupPlaystyleTrend(trendHost, { ids: bloc.members.map(x => x.id) }))
+      .catch(err => {
+        console.warn('WarEra+ blocStats: andamento guerra/eco non disegnato:', err.message);
+        trendHost.innerHTML = '';
+      });
+  }
 
   // La barra della mobilitazione: subito se i dati ci sono, altrimenti
   // quando arrivano (e allora anche la colonna War % si riempie).
   whenPlaystyle(async () => {
-    if (!popup.isConnected) return;
+    if (!page.isConnected) return;
     conQuote();
     const ps = blocPlaystyle(bloc);
-    const host = popup.querySelector('#bloc-popup-ps');
+    const host = page.querySelector('#bloc-popup-ps');
     if (host && ps) {
       const { playstyleBarHtml } = await import('../mu/playstyle.js');
       const labels = { war: bT('war'), eco: bT('economy'), mixed: bT('hybrid'), undecided: bT('no points spent') };
@@ -1282,9 +1345,10 @@ function showBlocPopup(blocId) {
       host.innerHTML = '<div class="bs-popup-ps-sub">' + bT('builds of {n} players', { n: fmt(ps.known, 0, true) }) + '</div>'
         + playstyleBarHtml(ps, labels);
     }
-    const rows = popup.querySelector('#bloc-popup-rows');
+    const rows = page.querySelector('#bloc-popup-rows');
     if (rows) rows.innerHTML = renderRows(sortKey, sortDir);
   });
+  return true;
 }
 
 /* Ordine dei tab. "Alliance Builder" (le schede trascinabili) è stato
@@ -1303,6 +1367,14 @@ const TABS = {
 /* ── UI Builder ── */
 function buildUI() {
   const c = document.getElementById('bloc-stats-content');
+  // WarEra+ — la pagina di un'alleanza prende il posto delle schede finché
+  // detailBlocId è impostato (vedi openBlocDetail). Se l'alleanza non c'è più
+  // (fusa o cancellata nel builder) si torna alla lista.
+  if (detailBlocId) {
+    if (renderBlocDetail()) return;
+    detailBlocId = null;
+    syncBack('blocstats/detail', false);
+  }
   let html = `<div class="bsw">
     <div class="bs-header">
       <div></div>
@@ -2659,7 +2731,7 @@ function attachEvents(c) {
     }
 
     const tblRow = e.target.closest('.bs-tbl tr[data-tbl-bloc]');
-    if (tblRow) { showBlocPopup(tblRow.dataset.tblBloc); return; }
+    if (tblRow) { openBlocDetail(tblRow.dataset.tblBloc); return; }
 
     const mergeBtn = e.target.closest('.bs-mergebtn');
     if (mergeBtn) {
@@ -2683,7 +2755,7 @@ function attachEvents(c) {
     const hdrClick = e.target.closest('[data-bloc-id]');
     if (hdrClick && !e.target.closest('.bs-split-btn') && !e.target.closest('.bs-pill')
         && !e.target.closest('.bs-mergebtn') && !e.target.closest('.bs-pin-btn')) {
-      showBlocPopup(hdrClick.dataset.blocId);
+      openBlocDetail(hdrClick.dataset.blocId);
       return;
     }
 

@@ -1034,9 +1034,14 @@ function appendPlaystyleHistory(byCountry, now) {
   // nazione: se una nazione non cambia da più di 90 giorni, buttare via
   // tutta la sua serie la farebbe sparire dallo storico invece di dire
   // "ferma da un mese".
+  // Si tiene anche l'ULTIMA riga prima del taglio (2026-10-29): è il valore
+  // in vigore all'inizio della finestra. Senza, una nazione che cambia di
+  // rado partiva "da dopo": il grafico della scheda nazione dichiarava una
+  // copertura più corta del vero, e la somma di un'alleanza vedeva comparire
+  // le nazioni una alla volta come salti che nel gioco non sono mai avvenuti.
   for (const [countryId, series] of Object.entries(history)) {
-    const kept = series.filter(row => row[0] >= cutoff);
-    history[countryId] = kept.length ? kept : series.slice(-1);
+    const first = series.findIndex(row => row[0] >= cutoff);
+    history[countryId] = first === -1 ? series.slice(-1) : series.slice(Math.max(0, first - 1));
   }
 
   writeCache(MU_PLAYSTYLE_HISTORY_FILE, { fetchedAt: now, data: history }, { compact: true });
