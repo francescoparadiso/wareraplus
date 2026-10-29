@@ -81,6 +81,7 @@ function normalizeEmployee(e) {
     })),
     quitChance: Number(e.happinessBreakdown?.quitChance) || 0,
     retireAt: e.retireAskAt || null,
+    hiredAt: e.createdAt || null,
     traits: (e.traits || []).map(t => ({ code: t.code, revealed: t.revealed !== false })),
     potential: e.potential ?? null,
     potentialMax: e.potentialMax ?? null,

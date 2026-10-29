@@ -401,7 +401,7 @@ const STAFF_DICT = {
     rankPricier: "costs more per point than {p}% of {item} employees", rankCheaper: "costs less per point than {p}% of {item} employees",
     coNoteStaff: 'Measured: last {n} full days (UTC); worth per point = (price − inputs) ÷ production points; cost per point = wages actually paid ÷ points your employees made. Employee rows: the game\'s own hourly estimate for the roster as it is now. "Full time" assumes every hour is paid, so the measured figure is usually lower.',
     skMgmtMeasured: 'Each Management point adds 2% of every employee\'s base output, next to the other bonuses (traits, tools, region) — weighed on your current roster.',
-    skEnergyFloor: "Your {t} employee trainings a day (10 energy each) come out of the energy left for self-work. Energy is never suggested lower: hiring also costs energy, and that isn't counted.",
+    skEnergyFloor: "Energy a day: {u} of {m} actions' worth — {a} self-work, {t} trainings (1 per employee, 2 with the traits that allow it), ~{h} hires (estimated from how long your employees stay; 10 energy each, assumed). Energy is never suggested lower: building costs energy too, and hires come in waves.",
   },
   it: {
     lblStaff: '{n} dipendenti su {cap}', staffFull: 'a pieno regime {g}/giorno',
@@ -415,7 +415,7 @@ const STAFF_DICT = {
     rankPricier: "costa più per punto del {p}% dei dipendenti del {item}", rankCheaper: "costa meno per punto del {p}% dei dipendenti del {item}",
     coNoteStaff: 'Misurato: ultimi {n} giorni interi (UTC); valore del punto = (prezzo − materie prime) ÷ punti produzione; costo del punto = salari pagati davvero ÷ punti prodotti dai dipendenti. Righe dei dipendenti: la stima oraria del gioco sulla rosa di adesso. "A pieno regime" vuol dire tutte le ore pagate, quindi il misurato di solito è più basso.',
     skMgmtMeasured: 'Ogni punto di Gestione aggiunge il 2% della produzione di base di ogni dipendente, accanto agli altri bonus (tratti, attrezzi, regione) — pesato sulla tua rosa di adesso.',
-    skEnergyFloor: "I tuoi {t} addestramenti al giorno (10 energia l'uno) sono tolti dall'energia che resta per il lavoro in proprio. L'Energia non viene mai consigliata più bassa: costano energia anche le assunzioni, che qui non sono contate.",
+    skEnergyFloor: "Energia al giorno: {u} azioni su {m} — {a} di lavoro, {t} addestramenti (1 a dipendente, 2 con i tratti che lo permettono), ~{h} assunzioni (stimate da quanto restano i tuoi dipendenti; 10 energia l'una, ipotesi). L'Energia non viene mai consigliata più bassa: costa energia anche costruire, e le assunzioni arrivano a ondate.",
   },
   es: {
     lblStaff: '{n} de {cap} empleados', staffFull: 'a pleno rendimiento {g}/día',
@@ -428,7 +428,7 @@ const STAFF_DICT = {
     rIncomeTax: 'impuesto sobre la renta', rEvent: 'evento',
     coNoteStaff: 'Medido: últimos {n} días completos (UTC); valor del punto = (precio − insumos) ÷ puntos de producción; coste del punto = salarios pagados ÷ puntos de tus empleados. Filas de empleados: la estimación horaria del propio juego con la plantilla actual. "A pleno rendimiento" supone todas las horas pagadas, así que lo medido suele ser menor.',
     skMgmtMeasured: 'Cada punto de Management añade el 2% de la producción base de cada empleado, junto a los demás bonus (rasgos, herramientas, región) — calculado con tu plantilla actual.',
-    skEnergyFloor: "Tus {t} entrenamientos al día (10 de energía cada uno) se restan de la energía que queda para el trabajo propio. La Energía nunca se sugiere más baja: contratar también cuesta energía, y eso no se cuenta.",
+    skEnergyFloor: "Energía al día: {u} de {m} acciones — {a} de trabajo, {t} entrenamientos (1 por empleado, 2 con los rasgos que lo permiten), ~{h} contrataciones (estimadas por cuánto duran tus empleados; 10 de energía cada una, supuesto). La Energía nunca se sugiere más baja: construir también cuesta energía, y las contrataciones llegan en oleadas.",
   },
   de: {
     lblStaff: '{n} von {cap} Angestellten', staffFull: 'bei voller Zeit {g}/Tag',
@@ -443,7 +443,7 @@ const STAFF_DICT = {
     rankPricier: "cuesta más por punto que el {p}% de los empleados de {item}", rankCheaper: "cuesta menos por punto que el {p}% de los empleados de {item}",
     coNoteStaff: 'Gemessen: letzte {n} volle Tage (UTC); Wert pro Punkt = (Preis − Rohstoffe) ÷ Produktionspunkte; Kosten pro Punkt = tatsächlich gezahlte Löhne ÷ Punkte deiner Angestellten. Angestellten-Zeilen: die stündliche Schätzung des Spiels für die aktuelle Belegschaft. "Volle Zeit" heißt alle Stunden bezahlt, daher ist der gemessene Wert meist niedriger.',
     skMgmtMeasured: 'Jeder Management-Punkt fügt 2% der Grundproduktion jedes Angestellten hinzu, neben den anderen Boni (Eigenschaften, Werkzeuge, Region) — gewichtet auf deine aktuelle Belegschaft.',
-    skEnergyFloor: "Deine {t} Trainings pro Tag (je 10 Energie) werden von der Energie für eigene Arbeit abgezogen. Energie wird nie niedriger empfohlen: Auch Einstellungen kosten Energie, und die werden nicht gezählt.",
+    skEnergyFloor: "Energie pro Tag: {u} von {m} Aktionen — {a} eigene Arbeit, {t} Trainings (1 pro Angestelltem, 2 mit den passenden Eigenschaften), ~{h} Einstellungen (geschätzt aus der Verweildauer deiner Angestellten; je 10 Energie, Annahme). Energie wird nie niedriger empfohlen: Auch Bauen kostet Energie, und Einstellungen kommen in Wellen.",
   },
   fr: {
     lblStaff: '{n} employés sur {cap}', staffFull: 'à plein régime {g}/jour',
@@ -457,7 +457,7 @@ const STAFF_DICT = {
     rankPricier: "coûte plus par point que {p}% des employés de {item}", rankCheaper: "coûte moins par point que {p}% des employés de {item}",
     coNoteStaff: 'Mesuré : {n} derniers jours complets (UTC) ; valeur du point = (prix − matières premières) ÷ points de production ; coût du point = salaires réellement payés ÷ points de tes employés. Lignes des employés : l\'estimation horaire du jeu sur l\'effectif actuel. "À plein régime" suppose toutes les heures payées, donc le mesuré est en général plus bas.',
     skMgmtMeasured: 'Chaque point de Management ajoute 2% de la production de base de chaque employé, à côté des autres bonus (traits, outils, région) — pesé sur ton effectif actuel.',
-    skEnergyFloor: "Tes {t} entraînements par jour (10 d'énergie chacun) sont retirés de l'énergie qui reste pour le travail personnel. L'Énergie n'est jamais conseillée plus basse : embaucher coûte aussi de l'énergie, non comptée ici.",
+    skEnergyFloor: "Énergie par jour : {u} actions sur {m} — {a} de travail, {t} entraînements (1 par employé, 2 avec les traits qui le permettent), ~{h} embauches (estimées d'après la durée de tes employés ; 10 d'énergie chacune, hypothèse). L'Énergie n'est jamais conseillée plus basse : construire coûte aussi de l'énergie, et les embauches arrivent par vagues.",
   },
   nl: {
     lblStaff: '{n} van {cap} werknemers', staffFull: 'op volle tijd {g}/dag',
@@ -471,7 +471,7 @@ const STAFF_DICT = {
     rankPricier: "kost per punt meer dan {p}% van de {item}-werknemers", rankCheaper: "kost per punt minder dan {p}% van de {item}-werknemers",
     coNoteStaff: 'Gemeten: laatste {n} volle dagen (UTC); waarde per punt = (prijs − grondstoffen) ÷ productiepunten; kosten per punt = echt betaalde lonen ÷ punten van je werknemers. Werknemersrijen: de uurschatting van het spel voor het huidige team. "Volle tijd" betekent alle uren betaald, dus het gemeten cijfer is meestal lager.',
     skMgmtMeasured: 'Elk Management-punt voegt 2% van de basisproductie van elke werknemer toe, naast de andere bonussen (eigenschappen, gereedschap, regio) — gewogen op je huidige team.',
-    skEnergyFloor: "Je {t} trainingen per dag (10 energie per keer) gaan af van de energie die overblijft voor eigen werk. Energie wordt nooit lager aangeraden: aannemen kost ook energie, en dat telt hier niet mee.",
+    skEnergyFloor: "Energie per dag: {u} van {m} acties — {a} eigen werk, {t} trainingen (1 per werknemer, 2 met de eigenschappen die dat toelaten), ~{h} aannames (geschat uit hoe lang je werknemers blijven; 10 energie per keer, aanname). Energie wordt nooit lager aangeraden: bouwen kost ook energie, en aannames komen in golven.",
   },
   sv: {
     lblStaff: '{n} av {cap} anställda', staffFull: 'på heltid {g}/dag',
@@ -485,7 +485,7 @@ const STAFF_DICT = {
     rankPricier: "kostar mer per poäng än {p}% av de anställda inom {item}", rankCheaper: "kostar mindre per poäng än {p}% av de anställda inom {item}",
     coNoteStaff: 'Uppmätt: senaste {n} hela dagarna (UTC); värde per poäng = (pris − råvaror) ÷ produktionspoäng; kostnad per poäng = faktiskt betalda löner ÷ poäng från dina anställda. Rader för anställda: spelets egen timuppskattning för personalen som den är nu. "Heltid" förutsätter att alla timmar betalas, så det uppmätta är oftast lägre.',
     skMgmtMeasured: 'Varje Management-poäng lägger till 2% av varje anställds grundproduktion, bredvid de andra bonusarna (egenskaper, verktyg, region) — viktat på din nuvarande personal.',
-    skEnergyFloor: "Dina {t} träningar per dag (10 energi var) dras från energin som blir kvar för eget arbete. Energi föreslås aldrig lägre: anställningar kostar också energi, och de räknas inte.",
+    skEnergyFloor: "Energi per dag: {u} av {m} handlingar — {a} eget arbete, {t} träningar (1 per anställd, 2 med egenskaper som tillåter det), ~{h} anställningar (uppskattade från hur länge dina anställda stannar; 10 energi var, antagande). Energi föreslås aldrig lägre: att bygga kostar också energi, och anställningar kommer i vågor.",
   },
   pt: {
     lblStaff: '{n} de {cap} empregados', staffFull: 'a tempo inteiro {g}/dia',
@@ -498,7 +498,7 @@ const STAFF_DICT = {
     rIncomeTax: 'imposto sobre o rendimento', rEvent: 'evento',
     coNoteStaff: 'Medido: últimos {n} dias completos (UTC); valor do ponto = (preço − matérias-primas) ÷ pontos de produção; custo do ponto = salários pagos de facto ÷ pontos dos teus empregados. Linhas dos empregados: a estimativa horária do próprio jogo para a equipa atual. "Tempo inteiro" supõe todas as horas pagas, por isso o medido costuma ser mais baixo.',
     skMgmtMeasured: 'Cada ponto de Management soma 2% da produção base de cada empregado, ao lado dos outros bónus (traços, ferramentas, região) — pesado na tua equipa atual.',
-    skEnergyFloor: "Os teus {t} treinos por dia (10 de energia cada) saem da energia que sobra para o trabalho próprio. A Energia nunca é sugerida mais baixa: contratar também custa energia, e isso não é contado.",
+    skEnergyFloor: "Energia por dia: {u} de {m} ações — {a} de trabalho, {t} treinos (1 por empregado, 2 com os traços que o permitem), ~{h} contratações (estimadas por quanto tempo ficam os teus empregados; 10 de energia cada, suposição). A Energia nunca é sugerida mais baixa: construir também custa energia, e as contratações chegam em vagas.",
   },
   ar: {
     lblStaff: '{n} من {cap} موظفين', staffFull: 'بدوام كامل {g}/يوم',
@@ -513,7 +513,7 @@ const STAFF_DICT = {
     rankPricier: "custa mais por ponto do que {p}% dos empregados de {item}", rankCheaper: "custa menos por ponto do que {p}% dos empregados de {item}",
     coNoteStaff: 'المقاس: آخر {n} أيام كاملة (UTC)؛ قيمة النقطة = (السعر − المواد الخام) ÷ نقاط الإنتاج؛ تكلفة النقطة = الأجور المدفوعة فعلًا ÷ نقاط موظفيك. صفوف الموظفين: تقدير اللعبة نفسها بالساعة للفريق الحالي. "بدوام كامل" يفترض دفع كل الساعات، لذا يكون المقاس عادةً أقل.',
     skMgmtMeasured: 'كل نقطة Management تضيف 2% من الإنتاج الأساسي لكل موظف، إلى جانب المكافآت الأخرى (السمات، الأدوات، المنطقة) — محسوبة على فريقك الحالي.',
-    skEnergyFloor: "تُخصم تدريباتك اليومية البالغة {t} (10 طاقة لكل منها) من الطاقة المتبقية للعمل الذاتي. لا يُقترح خفض الطاقة أبدًا: التوظيف يكلّف طاقة أيضًا، وهذا لا يُحتسب.",
+    skEnergyFloor: "الطاقة اليومية: {u} من {m} إجراء — {a} عمل ذاتي، {t} تدريب (1 لكل موظف، و2 مع السمات التي تسمح بذلك)، ~{h} توظيف (مقدّر من مدة بقاء موظفيك؛ 10 طاقة لكل منها، افتراض). لا يُقترح خفض الطاقة أبدًا: البناء يكلّف طاقة أيضًا، والتوظيف يأتي على دفعات.",
   },
 };
 for (const [lang, extra] of Object.entries(STAFF_DICT)) Object.assign(DICT[lang], extra);
@@ -902,7 +902,10 @@ function renderSkills(data, companies) {
     meta.appendChild(h('div', 'wp-eco-kv wp-eco-warnline', `⚠️ ${esc(tf('skCap', { l: best.levels.companies, k: cap, n: active }))}`));
   }
   meta.appendChild(h('div', 'wp-eco-kv', `<span class="wp-eco-dim">${esc(tf('skLeader', { l: data.leadershipLevel }))}</span>`));
-  meta.appendChild(h('div', 'wp-eco-kv', `<span class="wp-eco-dim">${esc(tf('skEnergyFloor', { t: f(data.trainingsDay, 0) }))}</span>`));
+  meta.appendChild(h('div', 'wp-eco-kv', `<span class="wp-eco-dim">${esc(tf('skEnergyFloor', {
+    u: f(data.energyUsed, 0), m: f(data.energyMax, 0), a: f(data.measuredActions, 1),
+    t: f(data.trainingsDay, 0), h: f(data.hiresDay, 1),
+  }))}</span>`));
   sec.appendChild(meta);
 
   sec.appendChild(h('div', 'wp-eco-footnote', `${esc(tf('skBudget', { b: data.budget, f: data.free }))} ${esc(tf('skNote', { a: f(data.measuredActions, 1) }))}`));

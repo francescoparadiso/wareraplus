@@ -62,6 +62,22 @@
    L'energia usata è lavoro + addestramenti; "è l'Energia il limite" si
    giudica su quella, e le azioni di lavoro possibili a un livello E sono
    il massimo di E meno gli addestramenti.
+   `trainingsPerDay` è del gioco, dipendente per dipendente: 1, o 2 con i
+   tratti che lo permettono (sul conto dell'utente: 21 per 18 dipendenti).
+
+   ── ANCHE ASSUMERE CONSUMA ENERGIA (2026-10-29) ──────────────────────
+   Detto dall'utente. Le assunzioni non si vedono, ma si stimano dalla
+   rosa: ogni dipendente porta quando è stato assunto (`createdAt`) e
+   quando chiederà la pensione (`retireAskAt`), quindi a regime il suo
+   posto va ricoperto una volta ogni (retireAskAt − createdAt) giorni, e
+   le assunzioni al giorno sono Σ 1 / durata. Sul conto dell'utente:
+   durate di 22–47 giorni, ~0,5 assunzioni al giorno. È un piano, non un
+   conteggio: chi si dimette prima o chi viene licenziato le fa salire.
+   Il costo in energia di un'assunzione gameConfig non lo dice: HIRE_ENERGY
+   è 10 come un addestramento, da verificare.
+   Il pavimento dell'Energia resta: costa energia anche costruire
+   (`gameConfig.user.constructionEnergyCost`), e i giorni di assunzioni
+   arrivano a ondate, non a mezza al giorno.
 
    e si cerca su Aziende × Energia × Produzione × Gestione (0–10 l'una).
    Il salario non cambia con la Gestione: si paga a ora, non a punto
@@ -97,6 +113,7 @@
 export const ECO_SKILLS = ['companies', 'energy', 'production', 'management'];
 const MGMT_PCT_PER_POINT = 2;
 const TRAIN_ENERGY = 10;   // energia per addestramento: dalle note v0.27, gameConfig non lo dice
+const HIRE_ENERGY = 10;    // energia per assunzione: ipotesi (vedi la testata)
 
 export function computeSkills(gd, me, companiesResult) {
   const gc = gd.gameConfig;
@@ -154,12 +171,19 @@ export function computeSkills(gd, me, companiesResult) {
   const trainingsDay = rows.filter(r => !r.company.disabled).reduce((s, r) => s
     + (r.staff?.members || []).reduce((t, m) => t
       + (m.lastTrainedAt && now - Date.parse(m.lastTrainedAt) < 48 * 3600 * 1000 ? m.trainingsPerDay : 0), 0), 0);
-  const trainActions = trainingsDay * TRAIN_ENERGY / energyPerAction;
-  const energyUsed = measuredActions + trainActions;
+  // Assunzioni al giorno a regime: Σ 1 / durata del dipendente (testata).
+  const hiresDay = rows.filter(r => !r.company.disabled).reduce((s, r) => s
+    + (r.staff?.members || []).reduce((t, m) => {
+      const days = (Date.parse(m.retireAt) - Date.parse(m.hiredAt)) / 86400000;
+      return t + (days > 0 ? 1 / days : 0);
+    }, 0), 0);
+  // Energia che NON va nel lavoro in proprio, in azioni da energyPerAction.
+  const otherActions = (trainingsDay * TRAIN_ENERGY + hiresDay * HIRE_ENERGY) / energyPerAction;
+  const energyUsed = measuredActions + otherActions;
   const energyBound = energyUsed >= 0.9 * maxActions(cur.energy);
   const actionsAt = le => Math.max(0, energyBound
-    ? maxActions(le) * Math.min(1, energyUsed / maxActions(cur.energy)) - trainActions
-    : Math.min(measuredActions, maxActions(le) - trainActions));
+    ? maxActions(le) * Math.min(1, energyUsed / maxActions(cur.energy)) - otherActions
+    : Math.min(measuredActions, maxActions(le) - otherActions));
   const selfDay = (le, lp) => actionsAt(le) * value.production[lp] * selfValue;
 
   const spent = ECO_SKILLS.reduce((s, k) => s + cost[k][cur[k]], 0);
@@ -209,6 +233,9 @@ export function computeSkills(gd, me, companiesResult) {
     // Quante azioni al giorno fa davvero, e se è l'Energia a fermarlo.
     measuredActions,
     trainingsDay,
+    hiresDay,
+    energyUsed,
+    energyMax: maxActions(cur.energy),
     energyBound,
     capAt: lvl => value.companies[lvl],
     leadershipLevel: me.skills?.leadership?.level ?? 0,
