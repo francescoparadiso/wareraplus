@@ -80,7 +80,7 @@ const DICT = {
     skMgmt: 'Management L{l}: +{p}% employee output',
     skCap: 'Companies L{l} keeps {k} of your {n} companies active: the others stop producing.',
     skLeader: 'Leadership L{l} stays as is: it improves training and events, which have no gold value.',
-    skNote: "Self-work is counted at the {a} actions a day you actually did over the last week, not at the most your Energy would allow: more Energy only helps if you already use almost all of it. Energy for hiring and training, and any manager you hire, aren't counted. v0.27 gives everyone one free skill reset.",
+    skNote: "Self-work is counted at the {a} actions a day you actually did over the last week, not at the most your Energy would allow: more Energy only helps if you already use almost all of it. Any manager you hire isn't counted. v0.27 gives everyone one free skill reset.",
     noCompanies: 'No owned companies found.',
     errNotFound: 'No player found with that name or ID.', errAmbiguous: 'Multiple players match — be more specific:',
     errGeneric: 'Something went wrong while analyzing. Try again in a moment.',
@@ -119,7 +119,7 @@ const DICT = {
     skMgmt: 'Gestione L{l}: +{p}% di produzione dei dipendenti',
     skCap: 'Con Aziende L{l} restano attive {k} delle tue {n} aziende: le altre smettono di produrre.',
     skLeader: 'Leadership L{l} resta com\'è: migliora addestramento ed eventi, che non hanno un valore in oro.',
-    skNote: "Il lavoro in proprio è contato sulle {a} azioni al giorno che hai fatto davvero nell'ultima settimana, non sul massimo che l'Energia permetterebbe: più Energia serve solo se la usi già quasi tutta. Energia per assumere e addestrare e un eventuale manager non sono contati. Con la v0.27 tutti hanno un reset delle abilità gratuito.",
+    skNote: "Il lavoro in proprio è contato sulle {a} azioni al giorno che hai fatto davvero nell'ultima settimana, non sul massimo che l'Energia permetterebbe: più Energia serve solo se la usi già quasi tutta. Un eventuale manager non è contato. Con la v0.27 tutti hanno un reset delle abilità gratuito.",
     noCompanies: 'Nessuna azienda posseduta trovata.',
     errNotFound: 'Nessun giocatore trovato con quel nome o ID.', errAmbiguous: 'Più giocatori corrispondono — sii più preciso:',
     errGeneric: 'Qualcosa è andato storto durante l\'analisi. Riprova tra un momento.',
@@ -158,7 +158,7 @@ const DICT = {
     skMgmt: 'Management N{l}: +{p}% de producción de los empleados',
     skCap: 'Con Companies N{l} quedan activas {k} de tus {n} empresas: las demás dejan de producir.',
     skLeader: 'Leadership N{l} se queda igual: mejora entrenamiento y eventos, que no tienen valor en oro.',
-    skNote: "El trabajo propio se cuenta con las {a} acciones al día que hiciste de verdad la última semana, no con el máximo que permitiría tu Energía: más Energía solo sirve si ya la usas casi toda. No cuenta la energía para contratar y entrenar ni un posible mánager. Con la v0.27 todos tienen un reinicio de habilidades gratis.",
+    skNote: "El trabajo propio se cuenta con las {a} acciones al día que hiciste de verdad la última semana, no con el máximo que permitiría tu Energía: más Energía solo sirve si ya la usas casi toda. No cuenta un posible mánager. Con la v0.27 todos tienen un reinicio de habilidades gratis.",
     noCompanies: 'No se encontraron empresas propias.',
     errNotFound: 'No se encontró ningún jugador con ese nombre o ID.', errAmbiguous: 'Varios jugadores coinciden — sé más específico:',
     errGeneric: 'Algo salió mal al analizar. Inténtalo de nuevo en un momento.',
@@ -194,7 +194,7 @@ const DICT = {
     skMgmt: 'Management L{l}: +{p}% Produktion der Angestellten',
     skCap: 'Mit Companies L{l} bleiben {k} deiner {n} Firmen aktiv: die anderen produzieren nicht mehr.',
     skLeader: 'Leadership L{l} bleibt, wie es ist: verbessert Training und Ereignisse, die keinen Goldwert haben.',
-    skNote: "Eigene Arbeit wird mit den {a} Aktionen pro Tag gerechnet, die du letzte Woche wirklich gemacht hast, nicht mit dem Maximum deiner Energie: Mehr Energie hilft nur, wenn du sie schon fast ganz nutzt. Energie für Einstellen und Training sowie ein Manager sind nicht eingerechnet. Mit v0.27 gibt es für alle einen kostenlosen Skill-Reset.",
+    skNote: "Eigene Arbeit wird mit den {a} Aktionen pro Tag gerechnet, die du letzte Woche wirklich gemacht hast, nicht mit dem Maximum deiner Energie: Mehr Energie hilft nur, wenn du sie schon fast ganz nutzt. Ein Manager ist nicht eingerechnet. Mit v0.27 gibt es für alle einen kostenlosen Skill-Reset.",
     noCompanies: 'Keine eigenen Firmen gefunden.',
     errNotFound: 'Kein Spieler mit diesem Namen oder ID gefunden.', errAmbiguous: 'Mehrere Spieler passen — sei genauer:',
     errGeneric: 'Bei der Analyse ging etwas schief. Versuch es gleich nochmal.',
@@ -230,7 +230,7 @@ const DICT = {
     skMgmt: 'Management N{l} : +{p}% de production des employés',
     skCap: 'Avec Companies N{l}, {k} de tes {n} entreprises restent actives : les autres arrêtent de produire.',
     skLeader: 'Leadership N{l} reste tel quel : il améliore entraînement et événements, qui n\'ont pas de valeur en or.',
-    skNote: "Le travail personnel est compté sur les {a} actions par jour que tu as vraiment faites la semaine dernière, pas sur le maximum que ton Énergie permettrait : plus d'Énergie n'aide que si tu l'utilises déjà presque entièrement. L'énergie pour embaucher et entraîner, et un éventuel manager, ne sont pas comptés. Avec la v0.27 tout le monde a une réinitialisation gratuite des compétences.",
+    skNote: "Le travail personnel est compté sur les {a} actions par jour que tu as vraiment faites la semaine dernière, pas sur le maximum que ton Énergie permettrait : plus d'Énergie n'aide que si tu l'utilises déjà presque entièrement. Un éventuel manager n'est pas compté. Avec la v0.27 tout le monde a une réinitialisation gratuite des compétences.",
     noCompanies: 'Aucune entreprise possédée trouvée.',
     errNotFound: 'Aucun joueur trouvé avec ce nom ou cet ID.', errAmbiguous: 'Plusieurs joueurs correspondent — sois plus précis :',
     errGeneric: 'Un problème est survenu pendant l\'analyse. Réessaie dans un instant.',
@@ -266,7 +266,7 @@ const DICT = {
     skMgmt: 'Management L{l}: +{p}% productie van werknemers',
     skCap: 'Met Companies L{l} blijven {k} van je {n} bedrijven actief: de andere stoppen met produceren.',
     skLeader: 'Leadership L{l} blijft zoals het is: het verbetert training en gebeurtenissen, die geen goudwaarde hebben.',
-    skNote: "Eigen werk telt met de {a} acties per dag die je vorige week echt deed, niet met het maximum dat je Energie toelaat: meer Energie helpt alleen als je die al bijna helemaal gebruikt. Energie voor aannemen en trainen en een eventuele manager zijn niet meegeteld. Met v0.27 krijgt iedereen één gratis skill-reset.",
+    skNote: "Eigen werk telt met de {a} acties per dag die je vorige week echt deed, niet met het maximum dat je Energie toelaat: meer Energie helpt alleen als je die al bijna helemaal gebruikt. Een eventuele manager is niet meegeteld. Met v0.27 krijgt iedereen één gratis skill-reset.",
     noCompanies: 'Geen eigen bedrijven gevonden.',
     errNotFound: 'Geen speler gevonden met die naam of ID.', errAmbiguous: 'Meerdere spelers matchen — wees specifieker:',
     errGeneric: 'Er ging iets mis bij het analyseren. Probeer het zo opnieuw.',
@@ -302,7 +302,7 @@ const DICT = {
     skMgmt: 'Management N{l}: +{p}% produktion från anställda',
     skCap: 'Med Companies N{l} är {k} av dina {n} företag aktiva: de andra slutar producera.',
     skLeader: 'Leadership N{l} lämnas som den är: den förbättrar träning och händelser, som inte har något guldvärde.',
-    skNote: "Eget arbete räknas på de {a} handlingar per dag du faktiskt gjorde senaste veckan, inte på det max din Energi skulle tillåta: mer Energi hjälper bara om du redan använder nästan all. Energi för anställning och träning och en eventuell manager räknas inte. Med v0.27 får alla en gratis återställning av färdigheter.",
+    skNote: "Eget arbete räknas på de {a} handlingar per dag du faktiskt gjorde senaste veckan, inte på det max din Energi skulle tillåta: mer Energi hjälper bara om du redan använder nästan all. En eventuell manager räknas inte. Med v0.27 får alla en gratis återställning av färdigheter.",
     noCompanies: 'Inga egna företag hittades.',
     errNotFound: 'Ingen spelare hittades med det namnet eller ID:t.', errAmbiguous: 'Flera spelare matchar — var mer specifik:',
     errGeneric: 'Något gick fel vid analysen. Försök igen strax.',
@@ -338,7 +338,7 @@ const DICT = {
     skMgmt: 'Management N{l}: +{p}% de produção dos empregados',
     skCap: 'Com Companies N{l} ficam ativas {k} das tuas {n} empresas: as outras deixam de produzir.',
     skLeader: 'Leadership N{l} fica como está: melhora treino e eventos, que não têm valor em ouro.',
-    skNote: "O trabalho próprio é contado nas {a} ações por dia que fizeste de facto na última semana, não no máximo que a tua Energia permitiria: mais Energia só ajuda se já a usas quase toda. A energia para contratar e treinar e um eventual gestor não são contados. Com a v0.27 todos têm um reset de habilidades grátis.",
+    skNote: "O trabalho próprio é contado nas {a} ações por dia que fizeste de facto na última semana, não no máximo que a tua Energia permitiria: mais Energia só ajuda se já a usas quase toda. Um eventual gestor não é contado. Com a v0.27 todos têm um reset de habilidades grátis.",
     noCompanies: 'Nenhuma empresa própria encontrada.',
     errNotFound: 'Nenhum jogador encontrado com esse nome ou ID.', errAmbiguous: 'Vários jogadores correspondem — sê mais específico:',
     errGeneric: 'Algo correu mal na análise. Tenta novamente daqui a pouco.',
@@ -374,7 +374,7 @@ const DICT = {
     skMgmt: 'Management م{l}: +{p}% من إنتاج الموظفين',
     skCap: 'مع Companies م{l} تبقى {k} من شركاتك الـ{n} نشطة: البقية تتوقف عن الإنتاج.',
     skLeader: 'تبقى Leadership م{l} كما هي: تحسّن التدريب والأحداث، وليس لها قيمة بالذهب.',
-    skNote: "يُحتسب العمل الذاتي على أساس {a} إجراء يوميًا قمت بها فعلًا في الأسبوع الأخير، لا على الحد الأقصى الذي تسمح به طاقتك: المزيد من الطاقة يفيد فقط إن كنت تستخدمها كلها تقريبًا. لا تُحتسب طاقة التوظيف والتدريب ولا أي مدير توظفه. مع v0.27 يحصل الجميع على إعادة تعيين مجانية للمهارات.",
+    skNote: "يُحتسب العمل الذاتي على أساس {a} إجراء يوميًا قمت بها فعلًا في الأسبوع الأخير، لا على الحد الأقصى الذي تسمح به طاقتك: المزيد من الطاقة يفيد فقط إن كنت تستخدمها كلها تقريبًا. لا يُحتسب أي مدير توظفه. مع v0.27 يحصل الجميع على إعادة تعيين مجانية للمهارات.",
     noCompanies: 'لم يُعثر على شركات مملوكة.',
     errNotFound: 'لم يُعثر على لاعب بهذا الاسم أو المعرّف.', errAmbiguous: 'عدة لاعبين مطابقون — كن أكثر تحديدًا:',
     errGeneric: 'حدث خطأ أثناء التحليل. حاول مرة أخرى بعد لحظة.',
@@ -401,7 +401,7 @@ const STAFF_DICT = {
     rankPricier: "costs more per point than {p}% of {item} employees", rankCheaper: "costs less per point than {p}% of {item} employees",
     coNoteStaff: 'Measured: last {n} full days (UTC); worth per point = (price − inputs) ÷ production points; cost per point = wages actually paid ÷ points your employees made. Employee rows: the game\'s own hourly estimate for the roster as it is now. "Full time" assumes every hour is paid, so the measured figure is usually lower.',
     skMgmtMeasured: 'Each Management point adds 2% of every employee\'s base output, next to the other bonuses (traits, tools, region) — weighed on your current roster.',
-    skEnergyFloor: "Energy is never suggested lower: it also pays for hiring and training (10 each), which aren't counted here.",
+    skEnergyFloor: "Your {t} employee trainings a day (10 energy each) come out of the energy left for self-work. Energy is never suggested lower: hiring also costs energy, and that isn't counted.",
   },
   it: {
     lblStaff: '{n} dipendenti su {cap}', staffFull: 'a pieno regime {g}/giorno',
@@ -415,7 +415,7 @@ const STAFF_DICT = {
     rankPricier: "costa più per punto del {p}% dei dipendenti del {item}", rankCheaper: "costa meno per punto del {p}% dei dipendenti del {item}",
     coNoteStaff: 'Misurato: ultimi {n} giorni interi (UTC); valore del punto = (prezzo − materie prime) ÷ punti produzione; costo del punto = salari pagati davvero ÷ punti prodotti dai dipendenti. Righe dei dipendenti: la stima oraria del gioco sulla rosa di adesso. "A pieno regime" vuol dire tutte le ore pagate, quindi il misurato di solito è più basso.',
     skMgmtMeasured: 'Ogni punto di Gestione aggiunge il 2% della produzione di base di ogni dipendente, accanto agli altri bonus (tratti, attrezzi, regione) — pesato sulla tua rosa di adesso.',
-    skEnergyFloor: "L'Energia non viene mai consigliata più bassa: paga anche assunzioni e addestramenti (10 l'uno), che qui non sono contati.",
+    skEnergyFloor: "I tuoi {t} addestramenti al giorno (10 energia l'uno) sono tolti dall'energia che resta per il lavoro in proprio. L'Energia non viene mai consigliata più bassa: costano energia anche le assunzioni, che qui non sono contate.",
   },
   es: {
     lblStaff: '{n} de {cap} empleados', staffFull: 'a pleno rendimiento {g}/día',
@@ -428,7 +428,7 @@ const STAFF_DICT = {
     rIncomeTax: 'impuesto sobre la renta', rEvent: 'evento',
     coNoteStaff: 'Medido: últimos {n} días completos (UTC); valor del punto = (precio − insumos) ÷ puntos de producción; coste del punto = salarios pagados ÷ puntos de tus empleados. Filas de empleados: la estimación horaria del propio juego con la plantilla actual. "A pleno rendimiento" supone todas las horas pagadas, así que lo medido suele ser menor.',
     skMgmtMeasured: 'Cada punto de Management añade el 2% de la producción base de cada empleado, junto a los demás bonus (rasgos, herramientas, región) — calculado con tu plantilla actual.',
-    skEnergyFloor: "La Energía nunca se sugiere más baja: también paga contrataciones y entrenamientos (10 cada uno), que aquí no se cuentan.",
+    skEnergyFloor: "Tus {t} entrenamientos al día (10 de energía cada uno) se restan de la energía que queda para el trabajo propio. La Energía nunca se sugiere más baja: contratar también cuesta energía, y eso no se cuenta.",
   },
   de: {
     lblStaff: '{n} von {cap} Angestellten', staffFull: 'bei voller Zeit {g}/Tag',
@@ -443,7 +443,7 @@ const STAFF_DICT = {
     rankPricier: "cuesta más por punto que el {p}% de los empleados de {item}", rankCheaper: "cuesta menos por punto que el {p}% de los empleados de {item}",
     coNoteStaff: 'Gemessen: letzte {n} volle Tage (UTC); Wert pro Punkt = (Preis − Rohstoffe) ÷ Produktionspunkte; Kosten pro Punkt = tatsächlich gezahlte Löhne ÷ Punkte deiner Angestellten. Angestellten-Zeilen: die stündliche Schätzung des Spiels für die aktuelle Belegschaft. "Volle Zeit" heißt alle Stunden bezahlt, daher ist der gemessene Wert meist niedriger.',
     skMgmtMeasured: 'Jeder Management-Punkt fügt 2% der Grundproduktion jedes Angestellten hinzu, neben den anderen Boni (Eigenschaften, Werkzeuge, Region) — gewichtet auf deine aktuelle Belegschaft.',
-    skEnergyFloor: "Energie wird nie niedriger empfohlen: Sie bezahlt auch Einstellungen und Training (je 10), die hier nicht gezählt werden.",
+    skEnergyFloor: "Deine {t} Trainings pro Tag (je 10 Energie) werden von der Energie für eigene Arbeit abgezogen. Energie wird nie niedriger empfohlen: Auch Einstellungen kosten Energie, und die werden nicht gezählt.",
   },
   fr: {
     lblStaff: '{n} employés sur {cap}', staffFull: 'à plein régime {g}/jour',
@@ -457,7 +457,7 @@ const STAFF_DICT = {
     rankPricier: "coûte plus par point que {p}% des employés de {item}", rankCheaper: "coûte moins par point que {p}% des employés de {item}",
     coNoteStaff: 'Mesuré : {n} derniers jours complets (UTC) ; valeur du point = (prix − matières premières) ÷ points de production ; coût du point = salaires réellement payés ÷ points de tes employés. Lignes des employés : l\'estimation horaire du jeu sur l\'effectif actuel. "À plein régime" suppose toutes les heures payées, donc le mesuré est en général plus bas.',
     skMgmtMeasured: 'Chaque point de Management ajoute 2% de la production de base de chaque employé, à côté des autres bonus (traits, outils, région) — pesé sur ton effectif actuel.',
-    skEnergyFloor: "L'Énergie n'est jamais conseillée plus basse : elle paie aussi embauches et entraînements (10 chacun), non comptés ici.",
+    skEnergyFloor: "Tes {t} entraînements par jour (10 d'énergie chacun) sont retirés de l'énergie qui reste pour le travail personnel. L'Énergie n'est jamais conseillée plus basse : embaucher coûte aussi de l'énergie, non comptée ici.",
   },
   nl: {
     lblStaff: '{n} van {cap} werknemers', staffFull: 'op volle tijd {g}/dag',
@@ -471,7 +471,7 @@ const STAFF_DICT = {
     rankPricier: "kost per punt meer dan {p}% van de {item}-werknemers", rankCheaper: "kost per punt minder dan {p}% van de {item}-werknemers",
     coNoteStaff: 'Gemeten: laatste {n} volle dagen (UTC); waarde per punt = (prijs − grondstoffen) ÷ productiepunten; kosten per punt = echt betaalde lonen ÷ punten van je werknemers. Werknemersrijen: de uurschatting van het spel voor het huidige team. "Volle tijd" betekent alle uren betaald, dus het gemeten cijfer is meestal lager.',
     skMgmtMeasured: 'Elk Management-punt voegt 2% van de basisproductie van elke werknemer toe, naast de andere bonussen (eigenschappen, gereedschap, regio) — gewogen op je huidige team.',
-    skEnergyFloor: "Energie wordt nooit lager aangeraden: ze betaalt ook aannemen en trainen (10 per keer), die hier niet meetellen.",
+    skEnergyFloor: "Je {t} trainingen per dag (10 energie per keer) gaan af van de energie die overblijft voor eigen werk. Energie wordt nooit lager aangeraden: aannemen kost ook energie, en dat telt hier niet mee.",
   },
   sv: {
     lblStaff: '{n} av {cap} anställda', staffFull: 'på heltid {g}/dag',
@@ -485,7 +485,7 @@ const STAFF_DICT = {
     rankPricier: "kostar mer per poäng än {p}% av de anställda inom {item}", rankCheaper: "kostar mindre per poäng än {p}% av de anställda inom {item}",
     coNoteStaff: 'Uppmätt: senaste {n} hela dagarna (UTC); värde per poäng = (pris − råvaror) ÷ produktionspoäng; kostnad per poäng = faktiskt betalda löner ÷ poäng från dina anställda. Rader för anställda: spelets egen timuppskattning för personalen som den är nu. "Heltid" förutsätter att alla timmar betalas, så det uppmätta är oftast lägre.',
     skMgmtMeasured: 'Varje Management-poäng lägger till 2% av varje anställds grundproduktion, bredvid de andra bonusarna (egenskaper, verktyg, region) — viktat på din nuvarande personal.',
-    skEnergyFloor: "Energi föreslås aldrig lägre: den betalar också anställningar och träning (10 per gång), som inte räknas här.",
+    skEnergyFloor: "Dina {t} träningar per dag (10 energi var) dras från energin som blir kvar för eget arbete. Energi föreslås aldrig lägre: anställningar kostar också energi, och de räknas inte.",
   },
   pt: {
     lblStaff: '{n} de {cap} empregados', staffFull: 'a tempo inteiro {g}/dia',
@@ -498,7 +498,7 @@ const STAFF_DICT = {
     rIncomeTax: 'imposto sobre o rendimento', rEvent: 'evento',
     coNoteStaff: 'Medido: últimos {n} dias completos (UTC); valor do ponto = (preço − matérias-primas) ÷ pontos de produção; custo do ponto = salários pagos de facto ÷ pontos dos teus empregados. Linhas dos empregados: a estimativa horária do próprio jogo para a equipa atual. "Tempo inteiro" supõe todas as horas pagas, por isso o medido costuma ser mais baixo.',
     skMgmtMeasured: 'Cada ponto de Management soma 2% da produção base de cada empregado, ao lado dos outros bónus (traços, ferramentas, região) — pesado na tua equipa atual.',
-    skEnergyFloor: "A Energia nunca é sugerida mais baixa: paga também contratações e treinos (10 cada), que aqui não são contados.",
+    skEnergyFloor: "Os teus {t} treinos por dia (10 de energia cada) saem da energia que sobra para o trabalho próprio. A Energia nunca é sugerida mais baixa: contratar também custa energia, e isso não é contado.",
   },
   ar: {
     lblStaff: '{n} من {cap} موظفين', staffFull: 'بدوام كامل {g}/يوم',
@@ -513,7 +513,7 @@ const STAFF_DICT = {
     rankPricier: "custa mais por ponto do que {p}% dos empregados de {item}", rankCheaper: "custa menos por ponto do que {p}% dos empregados de {item}",
     coNoteStaff: 'المقاس: آخر {n} أيام كاملة (UTC)؛ قيمة النقطة = (السعر − المواد الخام) ÷ نقاط الإنتاج؛ تكلفة النقطة = الأجور المدفوعة فعلًا ÷ نقاط موظفيك. صفوف الموظفين: تقدير اللعبة نفسها بالساعة للفريق الحالي. "بدوام كامل" يفترض دفع كل الساعات، لذا يكون المقاس عادةً أقل.',
     skMgmtMeasured: 'كل نقطة Management تضيف 2% من الإنتاج الأساسي لكل موظف، إلى جانب المكافآت الأخرى (السمات، الأدوات، المنطقة) — محسوبة على فريقك الحالي.',
-    skEnergyFloor: "لا يُقترح خفض الطاقة أبدًا: فهي تدفع أيضًا للتوظيف والتدريب (10 لكل مرة)، وهذه لا تُحتسب هنا.",
+    skEnergyFloor: "تُخصم تدريباتك اليومية البالغة {t} (10 طاقة لكل منها) من الطاقة المتبقية للعمل الذاتي. لا يُقترح خفض الطاقة أبدًا: التوظيف يكلّف طاقة أيضًا، وهذا لا يُحتسب.",
   },
 };
 for (const [lang, extra] of Object.entries(STAFF_DICT)) Object.assign(DICT[lang], extra);
@@ -902,7 +902,7 @@ function renderSkills(data, companies) {
     meta.appendChild(h('div', 'wp-eco-kv wp-eco-warnline', `⚠️ ${esc(tf('skCap', { l: best.levels.companies, k: cap, n: active }))}`));
   }
   meta.appendChild(h('div', 'wp-eco-kv', `<span class="wp-eco-dim">${esc(tf('skLeader', { l: data.leadershipLevel }))}</span>`));
-  meta.appendChild(h('div', 'wp-eco-kv', `<span class="wp-eco-dim">${esc(tf('skEnergyFloor'))}</span>`));
+  meta.appendChild(h('div', 'wp-eco-kv', `<span class="wp-eco-dim">${esc(tf('skEnergyFloor', { t: f(data.trainingsDay, 0) }))}</span>`));
   sec.appendChild(meta);
 
   sec.appendChild(h('div', 'wp-eco-footnote', `${esc(tf('skBudget', { b: data.budget, f: data.free }))} ${esc(tf('skNote', { a: f(data.measuredActions, 1) }))}`));

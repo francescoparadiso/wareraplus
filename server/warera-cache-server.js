@@ -2611,6 +2611,23 @@ cron.schedule('20 3 * * *', () => {
   runCompanyCensus().catch(err => console.error('[company-census] cron:', err.message));
 }, { timezone: DAILY_DAMAGE_TZ });
 
+// Giro FUORI ORARIO, a mano (2026-10-29, richiesta esplicita: la rosa dei
+// dipendenti appena aperta, senza aspettare la notte). Un file-segnale e
+// non una rotta HTTP o una variabile d'ambiente: la rotta andrebbe
+// protetta, e una env var pm2 se la porterebbe dietro a ogni riavvio
+// (ogni restart rifarebbe un'ora e mezza di giro). Il file si consuma:
+// vale una volta sola. Sul VPS:
+//   touch ~/warera-cache-server/force-company-census
+// ⚠️ È un'ora e mezza abbondante di richieste sulla chiave condivisa: di
+// giorno solo se serve davvero (vedi la testata di companyCensus.js).
+const CENSUS_FORCE_FLAG = path.join(__dirname, 'force-company-census');
+cron.schedule('* * * * *', () => {
+  if (!fs.existsSync(CENSUS_FORCE_FLAG)) return;
+  try { fs.unlinkSync(CENSUS_FORCE_FLAG); } catch { return; }   // se non si cancella, non si rischia un giro a ogni minuto
+  runCompanyCensus({ motivo: 'forzato a mano', forza: true })
+    .catch(err => console.error('[company-census] forzato:', err.message));
+});
+
 // Primo giro completo all'avvio (in ordine: countries prima, perché tutto
 // il resto dipende dalla cache delle nazioni), così non si parte a vuoto.
 (async () => {

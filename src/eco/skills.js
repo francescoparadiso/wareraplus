@@ -51,6 +51,18 @@
    giorno), che qui non si misurano e non hanno un prezzo. Il search parte
    quindi dal livello attuale: l'Energia può solo salire, se è lei il limite.
 
+   ── GLI ADDESTRAMENTI CONSUMANO ENERGIA (2026-10-29) ─────────────────
+   Chiesto dall'utente. Il pavimento qui sopra impediva di consigliare MENO
+   Energia, ma l'energia degli addestramenti non era tolta da quella libera
+   per lavorare: chi addestra ogni giorno sembrava avere energia d'avanzo.
+   Ora, dalla rosa: addestramenti/giorno = Σ trainingsPerDay dei dipendenti
+   addestrati nelle ultime 48 ore (chi li addestra davvero, non chi
+   potrebbe). Ognuno costa TRAIN_ENERGY: gameConfig non lo dice, il 10
+   viene dalle note della v0.27 (lo stesso costo di un'azione di lavoro).
+   L'energia usata è lavoro + addestramenti; "è l'Energia il limite" si
+   giudica su quella, e le azioni di lavoro possibili a un livello E sono
+   il massimo di E meno gli addestramenti.
+
    e si cerca su Aziende × Energia × Produzione × Gestione (0–10 l'una).
    Il salario non cambia con la Gestione: si paga a ora, non a punto
    (vedi la testata di companies.js).
@@ -84,6 +96,7 @@
 
 export const ECO_SKILLS = ['companies', 'energy', 'production', 'management'];
 const MGMT_PCT_PER_POINT = 2;
+const TRAIN_ENERGY = 10;   // energia per addestramento: dalle note v0.27, gameConfig non lo dice
 
 export function computeSkills(gd, me, companiesResult) {
   const gc = gd.gameConfig;
@@ -136,10 +149,17 @@ export function computeSkills(gd, me, companiesResult) {
   const selfPointsDay = rows.reduce((s, r) => s + (r.selfPointsDay || 0), 0);
   const curPerAction = value.production[cur.production] || 0;
   const measuredActions = curPerAction > 0 ? selfPointsDay / curPerAction : 0;
-  const energyBound = measuredActions >= 0.9 * maxActions(cur.energy);
-  const actionsAt = le => (energyBound
-    ? maxActions(le) * Math.min(1, measuredActions / maxActions(cur.energy))
-    : Math.min(measuredActions, maxActions(le)));
+  // Addestramenti al giorno, in "azioni" di energia (vedi la testata).
+  const now = Date.now();
+  const trainingsDay = rows.filter(r => !r.company.disabled).reduce((s, r) => s
+    + (r.staff?.members || []).reduce((t, m) => t
+      + (m.lastTrainedAt && now - Date.parse(m.lastTrainedAt) < 48 * 3600 * 1000 ? m.trainingsPerDay : 0), 0), 0);
+  const trainActions = trainingsDay * TRAIN_ENERGY / energyPerAction;
+  const energyUsed = measuredActions + trainActions;
+  const energyBound = energyUsed >= 0.9 * maxActions(cur.energy);
+  const actionsAt = le => Math.max(0, energyBound
+    ? maxActions(le) * Math.min(1, energyUsed / maxActions(cur.energy)) - trainActions
+    : Math.min(measuredActions, maxActions(le) - trainActions));
   const selfDay = (le, lp) => actionsAt(le) * value.production[lp] * selfValue;
 
   const spent = ECO_SKILLS.reduce((s, k) => s + cost[k][cur[k]], 0);
@@ -188,6 +208,7 @@ export function computeSkills(gd, me, companiesResult) {
     selfActionsDay: actionsAt,
     // Quante azioni al giorno fa davvero, e se è l'Energia a fermarlo.
     measuredActions,
+    trainingsDay,
     energyBound,
     capAt: lvl => value.companies[lvl],
     leadershipLevel: me.skills?.leadership?.level ?? 0,

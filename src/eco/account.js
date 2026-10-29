@@ -85,6 +85,8 @@ function normalizeEmployee(e) {
     potential: e.potential ?? null,
     potentialMax: e.potentialMax ?? null,
     trainable: Number(e.trainingsToday || 0) < Number(e.trainingsPerDay || 0),
+    trainingsPerDay: Number(e.trainingsPerDay) || 0,
+    lastTrainedAt: e.lastTrainedAt || null,
     tool,
   };
 }
