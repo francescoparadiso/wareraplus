@@ -2360,6 +2360,8 @@ export function creaQuadroNazione(ctx) {
       g.appendChild(el('span', null, a.nomeRegione || nomeRegione(a.regione) || '?'));
       g.appendChild(el('span', 'wp-pv-nz-az-item', a.item));
       g.title = [nomeNazione(a.ospite) || '?', a.item, `${nzT('abrValue')}: ${num(a.valore)}`,
+        a.dipendenti ? t('abrEmployees', { n: num(a.dipendenti) }) : null,
+        a.ptsOra != null ? t('abrHourly', { p: a.ptsOra.toFixed(2), w: a.salariOra.toFixed(3) }) : null,
         a.disabilitata ? nzT('abrDisabled') : null, guerre.has(a.ospite) ? nzT('abrAtWar') : null].filter(Boolean).join(' · ');
       return g;
     }
@@ -2382,6 +2384,19 @@ export function creaQuadroNazione(ctx) {
         [nzT('abrHosts'), num(ospiti.size)],
         [nzT('abrValue'), compatto(aziende.reduce((s, a) => s + a.valore, 0))],
       ], 'wp-pv-nz-tessere-strette'));
+      // Dal 2026-10-28: quanto lavoro va all'estero ADESSO (stima oraria del
+      // gioco, vedi quadroAziendeEstero in server/plusApi/nazione.js). I
+      // salari pagati là li tassa la nazione ospite, con la sua aliquota.
+      const lv = st.dati.lavoro;
+      if (lv) {
+        corpo.appendChild(tessere([
+          [nzT('abrWagesDay'), compatto(lv.salariGiorno), t('abrTaxLost', { n: compatto(lv.tasseGiorno) })],
+          [nzT('abrPtsHour'), num(Math.round(lv.ptsOra)), lv.dipendenti ? t('abrEmployees', { n: num(lv.dipendenti) }) : null],
+        ], 'wp-pv-nz-tessere-strette'));
+        if (lv.stimate < lv.daStimare) {
+          corpo.appendChild(el('p', 'wp-pv-note', t('abrPartial', { n: num(lv.stimate), tot: num(lv.daStimare) })));
+        }
+      }
       if (!tutti.length) { corpo.appendChild(el('p', 'wp-pv-note', nzT('abrNone'))); return; }
 
       // Le nazioni ospiti, le più frequenti prima: il filtro si rifà sui

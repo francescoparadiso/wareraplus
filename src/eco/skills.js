@@ -24,9 +24,32 @@
        (vedi sotto)
      motore(azienda)                 = punti del motore × v
      passivo(Aziende A, G)           = somma delle A aziende migliori
-     lavoro in proprio(E, P)         = 0,24 × E × P × v_migliore
+     lavoro in proprio(E, P)         = azioni(E) × P × v_migliore
        (v_migliore = il punto che vale di più fra le aziende attive; se
         nessuna rende, il lavoro in proprio vale 0)
+
+   ── LE AZIONI SONO QUELLE CHE FAI, NON QUELLE CHE POTRESTI (2026-10-29) ──
+   Fino al 2026-10-28 azioni(E) era il massimo teorico, 0,24 × Energia: TUTTA
+   l'energia rigenerata in 24 ore nel lavoro in proprio, anche di notte e
+   anche quella che va in battaglia. Segnalato dall'utente ("dice di
+   cambiare skill ma penso sia errato"), e misurato sul suo account: 48
+   azioni al giorno supposte contro 5–10 vere (224 punti al giorno di
+   selfWork contro ~2.000). Il lavoro in proprio valeva nove volte il vero,
+   e il consiglio spostava punti dalla Gestione alla Produzione per un
+   guadagno che non c'era.
+   Ora azioni = punti di selfWork misurati ÷ punti per azione al livello di
+   Produzione attuale. L'Energia conta solo se è lei il limite: se le
+   azioni misurate arrivano al 90% del massimo teorico, salgono e scendono
+   con lei; altrimenti più Energia non cambia niente (non lavoreresti di
+   più), e meno Energia conta solo se scende sotto quelle che fai. Chi non
+   lavora mai in proprio ha azioni 0: Energia e Produzione non gli rendono
+   niente qui, e la vista lo dice invece di inventargli un lavoro.
+   ⚠️ E l'Energia non si consiglia MAI al ribasso. Con le azioni vere il
+   primo consiglio fu "Energia da 10 a 0" (6 azioni al giorno ci stanno
+   anche con 100 di energia), ma l'energia paga anche addestramenti e
+   assunzioni (10 a volta: con 17 dipendenti fino a 17 addestramenti al
+   giorno), che qui non si misurano e non hanno un prezzo. Il search parte
+   quindi dal livello attuale: l'Energia può solo salire, se è lei il limite.
 
    e si cerca su Aziende × Energia × Produzione × Gestione (0–10 l'una).
    Il salario non cambia con la Gestione: si paga a ora, non a punto
@@ -83,9 +106,15 @@ export function computeSkills(gd, me, companiesResult) {
   // Solo le aziende attive con un conto: quelle disabilitate tornano in
   // gioco se il tetto Aziende sale, quindi entrano anche loro nel search.
   const rows = companiesResult.rows;
+  // Il guadagno della Gestione si pesa sulla produzione della squadra di
+  // ADESSO: con la rosa, gli ultimi 3 giorni (la settimana può contenere i
+  // giorni prima delle assunzioni: misurato il 2026-10-29, metà dei
+  // dipendenti dell'utente assunti il 26 e la Gestione sottostimata di
+  // cinque volte). Il passivo di base resta quello della settimana.
+  const mgmtPoints = r => (r.staff ? Math.max(r.employees.recentPointsDay, r.employees.pointsDay) : r.employees.pointsDay);
   const employeeDay = (r, lvl) => {
     const deltaPct = mgmtPctAt(lvl) - mgmtPctAt(cur.management);
-    const points = r.employees.pointsDay * (1 + baseShare(r) * deltaPct / 100);
+    const points = r.employees.pointsDay + mgmtPoints(r) * baseShare(r) * deltaPct / 100;
     return points * r.value - r.employees.wageDay;
   };
   const passiveAt = (lvl) => rows.map(r => r.engineDay + employeeDay(r, lvl)).sort((a, b) => b - a);
@@ -101,7 +130,17 @@ export function computeSkills(gd, me, companiesResult) {
     .filter(r => !r.company.disabled && r.value > 0)
     .reduce((a, b) => (!a || b.value > a.value ? b : a), null);
   const selfValue = bestSelf ? bestSelf.value : 0;
-  const selfDay = (le, lp) => actionsPerEnergy * value.energy[le] * value.production[lp] * selfValue;
+  // Le azioni che fa DAVVERO (vedi la testata): punti misurati ÷ punti per
+  // azione di adesso. L'Energia conta solo se è lei il limite.
+  const maxActions = le => actionsPerEnergy * value.energy[le];
+  const selfPointsDay = rows.reduce((s, r) => s + (r.selfPointsDay || 0), 0);
+  const curPerAction = value.production[cur.production] || 0;
+  const measuredActions = curPerAction > 0 ? selfPointsDay / curPerAction : 0;
+  const energyBound = measuredActions >= 0.9 * maxActions(cur.energy);
+  const actionsAt = le => (energyBound
+    ? maxActions(le) * Math.min(1, measuredActions / maxActions(cur.energy))
+    : Math.min(measuredActions, maxActions(le)));
+  const selfDay = (le, lp) => actionsAt(le) * value.production[lp] * selfValue;
 
   const spent = ECO_SKILLS.reduce((s, k) => s + cost[k][cur[k]], 0);
   const free = Number(me.leveling?.availableSkillPoints) || 0;
@@ -116,7 +155,9 @@ export function computeSkills(gd, me, companiesResult) {
       const cM = cost.management[lm];
       if (cC + cM > budget) break;
       const passive = topSum(passiveByMgmt[lm], cap);
-      for (let le = 0; le <= 10; le++) {
+      // Mai sotto il livello di adesso: vedi "l'Energia non si consiglia mai
+      // al ribasso" in testa.
+      for (let le = cur.energy; le <= 10; le++) {
         const cE = cost.energy[le];
         if (cC + cM + cE > budget) break;
         for (let lp = 0; lp <= 10; lp++) {
@@ -144,7 +185,10 @@ export function computeSkills(gd, me, companiesResult) {
     current: { levels: cur, passive: curPassive, self: curSelf, total: curPassive + curSelf },
     best,
     bestSelf,
-    selfActionsDay: lvl => actionsPerEnergy * value.energy[lvl],
+    selfActionsDay: actionsAt,
+    // Quante azioni al giorno fa davvero, e se è l'Energia a fermarlo.
+    measuredActions,
+    energyBound,
     capAt: lvl => value.companies[lvl],
     leadershipLevel: me.skills?.leadership?.level ?? 0,
     mgmtPct: mgmtPctAt,

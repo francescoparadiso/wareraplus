@@ -197,13 +197,17 @@ function noteHtml() {
   const c = _census;
   if (!c?.available) return '';
   const cov = c.coverage || {};
+  // WarEra+ (2026-10-28): con la rosa (`rosterScope`) i dipendenti tornano
+  // contati, ma solo nelle aziende che hanno prodotto in settimana — la
+  // nota lo dice. La tassa resta quella della v0.27 in tutti e due i casi.
+  const notaAttive = cov.rosterScope ? 'noteActiveRoster' : (senzaDip() ? 'noteActiveV27' : 'noteActive');
   const parti = [
-    plusT(senzaDip() ? 'noteActiveV27' : 'noteActive', {
+    plusT(notaAttive, {
       owners: fmtFull(cov.owners), companies: fmtFull(cov.companies), workers: fmtFull(cov.workers),
       withWorkers: fmtFull(cov.withWorkers), day: c.day ? fmtDay(c.day) : '—',
     }),
     plusT('noteAvg', { n: c.averageDays || 0 }),
-    plusT(senzaDip() ? 'noteTaxV27' : 'noteTax'),
+    plusT(senzaDip() || cov.rosterScope ? 'noteTaxV27' : 'noteTax'),
   ];
   // I giorni ricostruiti a ritroso esistono solo se il primo censimento
   // ha riempito un mese intero: si dichiarano finché sono nella finestra.

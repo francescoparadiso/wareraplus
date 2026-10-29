@@ -116,6 +116,10 @@
 .wp-ply-rowlink { cursor: pointer; }
 .wp-ply-rowlink:hover td { background: color-mix(in srgb, var(--wp-ov-accent, #ec4899) 8%, transparent); }
 .wp-ply-gold { color: #e3b341; }
+.wp-ply-pos { color: #56d364; }
+.wp-ply-neg { color: #f85149; }
+body.light-theme .wp-ply-pos { color: #1a7f37; }
+body.light-theme .wp-ply-neg { color: #cf222e; }
 .wp-ply-violet { color: #a371f7; }
 body.light-theme .wp-ply-gold { color: #8a6410; }
 body.light-theme .wp-ply-violet { color: #6e42c1; }

@@ -206,6 +206,12 @@
 .wp-eco-emp-flag.bad { color: #ff9b9b; }
 .wp-eco-emp-flag.warn { color: #e3b341; }
 .wp-eco-emp-flag.good { color: #56d364; }
+.wp-eco-emp-flag.dim { color: #6e7681; }
+.wp-eco-emp-rank { font-size: 11.5px; }
+.wp-eco-emp-rank.pos { color: #56d364; }
+.wp-eco-emp-rank.neg { color: #e3b341; }
+body.light-theme .wp-eco-emp-rank.pos { color: #1a7f37; }
+body.light-theme .wp-eco-emp-rank.neg { color: #9a6700; }
 body.light-theme .wp-eco-staff { border-color: #d0d7de; }
 body.light-theme .wp-eco-emp-name { color: #1a1a1a; }
 body.light-theme .wp-eco-emp-detail { color: #57606a; }

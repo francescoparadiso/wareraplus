@@ -1042,6 +1042,9 @@ wareraPlus/
     │   │                          per tick secondo il TOTALE del round (non il numero del
     │   │                          tick). Dati da currentRound.live di /battles, zero fetch.
     │   │                          Usato da Operazioni, sezione Battaglie e tooltip dei marker.
+    │   ├── employeeBench.js    ← NUOVO (2026-10-28) — riferimenti mondiali dei dipendenti
+    │   │                          per risorsa (/employee-benchmarks, dal censimento
+    │   │                          notturno) e percentile di un valore. Ottimizzatore e Rendite.
     │   ├── particlesBackground.js ← motore dello sfondo a particelle, condiviso da tutte
     │   │                            le sezioni (Political oro, Eco verde, MU rosso,
     │   │                            News blu, Alleanze viola)

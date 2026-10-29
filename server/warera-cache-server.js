@@ -222,7 +222,7 @@ const {
 // giorno di notte, partendo dai cittadini attivi del censimento. Vedi il
 // blocco in testa a server/companyCensus.js.
 const {
-  initCompanyCensus, runCompanyCensus, companyCensusDovuto, readCompanyCensus, readCompanyAbroad, statoCompanyCensus,
+  initCompanyCensus, runCompanyCensus, companyCensusDovuto, readCompanyCensus, readCompanyAbroad, readEmployeeBenchmarks, statoCompanyCensus,
 } = require('./companyCensus');
 // WarEra+ tornei: tabellone e forza delle squadre (danno settimanale dei
 // loro iscritti) gia' calcolata, per non far scaricare a ogni browser la
@@ -3295,6 +3295,14 @@ app.get('/company-census', (req, res) => {
   const countryId = /^[a-f0-9]{24}$/.test(String(req.query.countryId || '')) ? String(req.query.countryId) : null;
   const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
   res.json(readCompanyCensus({ item, countryId, days }));
+});
+
+// I riferimenti mondiali dei dipendenti per risorsa (percentili di costo
+// per punto, punti all'ora, Produzione; tratti), dalla rosa che il giro
+// notturno chiede alle aziende attive. Li legge l'Ottimizzatore per dire
+// "costa più dell'80% dei dipendenti del ferro". Pochi KB.
+app.get('/employee-benchmarks', (req, res) => {
+  res.json(readEmployeeBenchmarks());
 });
 
 // Le aziende dei cittadini di una nazione in regioni di altre nazioni,

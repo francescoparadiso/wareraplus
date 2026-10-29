@@ -48,6 +48,8 @@
    addestramento ancora disponibile oggi.
    ══════════════════════════════════════════════════════════════ */
 
+import { shareBelow } from '../shared/employeeBench.js';
+
 /** Giorni interi su cui si fa il conto (la "settimana"). */
 export const WINDOW_DAYS = 7;
 /** Giorni recenti confrontati col resto della finestra per la tendenza. */
@@ -61,9 +63,38 @@ const TOOL_WORN_FRACTION = 0.15;
 /** Felicità che pesa: un malus di produzione da questa soglia in giù (%). */
 const UNHAPPY_PCT = -5;
 
-/** Conti e avvisi di un dipendente, al valore del punto `value`. */
-function staffMember(e, value, now) {
+/* Attrezzi: gameConfig dice quanto dà ogni livello (`dynamicStats.production`,
+   uguale per le sei famiglie: livello 1 +3–6%, … livello 6 +46–65%), ma NON
+   quale famiglia serve a quale prodotto, e attrezzi e cassette non sono in
+   vendita (isTradable false, niente prezzo). Quindi al dipendente senza
+   attrezzo si dice solo quanti punti in più darebbe uno di livello 1, e la
+   famiglia la si nomina soltanto se un collega con lo stesso prodotto ne
+   ha già uno: visto, non indovinato. */
+function toolTier1Range(gameConfig) {
+  const items = gameConfig?.items || {};
+  const t1 = Object.values(items).find(x => x?.type === 'tool' && /1$/.test(x.code) && x.dynamicStats?.production);
+  return t1 ? t1.dynamicStats.production : null;
+}
+
+function toolFamiliesByItem(companies) {
+  const out = {};
+  for (const oc of companies) {
+    for (const e of oc.roster?.employees || []) {
+      if (e.tool?.code && !out[oc.itemCode]) out[oc.itemCode] = e.tool.code.replace(/\d+$/, '');
+    }
+  }
+  return out;
+}
+
+/** Conti e avvisi di un dipendente, al valore del punto `value`.
+ *  `ref` = i percentili mondiali della sua risorsa (shared/employeeBench.js),
+ *  o null: senza, il confronto col mondo semplicemente non c'è. */
+function staffMember(e, value, now, tool, ref) {
   const marginHour = e.pointsHour * value - e.wageHour;
+  const costPerPoint = e.pointsHour > 0 ? e.wageHour / e.pointsHour : null;
+  // Quota dei dipendenti del mondo, stessa risorsa, che costano MENO di lui
+  // per punto: 80 = "costa più dell'80%".
+  const costRank = ref && costPerPoint != null ? shareBelow(costPerPoint, ref.cost, ref.ps) : null;
   const happinessPct = e.bonusParts.find(p => p.source === 'happiness')?.pct ?? 0;
   const retireMs = e.retireAt ? Date.parse(e.retireAt) - now : null;
   const flags = [];
@@ -74,10 +105,17 @@ function staffMember(e, value, now) {
   else if (e.tool && e.tool.state / e.tool.maxState < TOOL_WORN_FRACTION) flags.push('toolWorn');
   if (happinessPct <= UNHAPPY_PCT) flags.push('unhappy');
   if (e.trainable) flags.push('trainable');
+  // Il guadagno è sulla BASE, come la Gestione: le voci si sommano.
+  const noTool = !e.tool && tool.range
+    ? { family: tool.family, minDay: e.rawHourly * 24 * tool.range[0] / 100, maxDay: e.rawHourly * 24 * tool.range[1] / 100 }
+    : null;
+  if (noTool) flags.push('noTool');
   return {
     ...e,
+    noTool,
     marginHour,
-    costPerPoint: e.pointsHour > 0 ? e.wageHour / e.pointsHour : null,
+    costPerPoint,
+    costRank,
     happinessPct,
     retireInDays: retireMs != null ? retireMs / 86400000 : null,
     flags,
@@ -85,9 +123,9 @@ function staffMember(e, value, now) {
 }
 
 /** La rosa dell'azienda con i conti, o null se non è arrivata. */
-function staffOf(roster, value, now) {
+function staffOf(roster, value, now, tool, ref) {
   if (!roster) return null;
-  const members = roster.employees.map(e => staffMember(e, value, now))
+  const members = roster.employees.map(e => staffMember(e, value, now, tool, ref))
     .sort((a, b) => a.marginHour - b.marginHour);
   const count = flag => members.filter(m => m.flags.includes(flag)).length;
   return {
@@ -125,13 +163,20 @@ function pointsPerCoin(days) {
 /**
  * @param gd  makeGameData(...)
  * @param companies  loadOwnedCompanies(...)
- * @param {{today?: string, now?: number}} [opts]  `today` (YYYY-MM-DD, UTC)
- *   e `now` (ms) solo per i test
+ * @param {{today?: string, now?: number, bench?: object}} [opts]  `today`
+ *   (YYYY-MM-DD, UTC) e `now` (ms) solo per i test; `bench` = i riferimenti
+ *   mondiali (shared/employeeBench.js: loadEmployeeBenchmarks), o null
  */
-export function computeCompanies(gd, companies, { today = todayUtc(), now = Date.now() } = {}) {
+export function computeCompanies(gd, companies, { today = todayUtc(), now = Date.now(), bench = null } = {}) {
+  const tier1 = toolTier1Range(gd.gameConfig);
+  const families = toolFamiliesByItem(companies);
+  const refOf = (code) => {
+    const it = bench?.items?.[code];
+    return it?.cost ? { cost: it.cost, ps: bench.percentiles, n: it.n } : null;
+  };
   const rows = companies.map(oc => {
     const value = gd.getNetPerPoint(oc.itemCode, oc.bonus);
-    const staff = staffOf(oc.roster, value, now);
+    const staff = staffOf(oc.roster, value, now, { range: tier1, family: families[oc.itemCode] || null }, refOf(oc.itemCode));
     const days = (oc.stats || [])
       .filter(d => d?.dailyDate && d.dailyDate < today)
       .sort((a, b) => (a.dailyDate < b.dailyDate ? -1 : 1));
@@ -144,15 +189,21 @@ export function computeCompanies(gd, companies, { today = todayUtc(), now = Date
     const selfPoints = sum(win, 'selfWork');
 
     const perDay = x => (n ? x / n : 0);
+    const recentWin = win.slice(-RECENT_DAYS);
     const employees = {
       pointsDay: perDay(empPoints),
+      // Gli ultimi RECENT_DAYS giorni: con la rosa, skills.js pesa la
+      // Gestione su questi e non sulla settimana, che può ancora contenere
+      // i giorni prima delle assunzioni (vedi la testata di skills.js).
+      recentPointsDay: recentWin.length ? sum(recentWin, 'employeeProd') / recentWin.length : 0,
       wageDay: perDay(wages),
       costPerPoint: empPoints > 0 ? wages / empPoints : null,
       marginDay: perDay(empPoints * value - wages),
     };
     // Senza statistiche il motore vale comunque quello che dice la config.
     const engineDay = (n ? perDay(enginePoints) : oc.engineDailyProd) * value;
-    const selfDay = perDay(selfPoints) * value;
+    const selfPointsDay = perDay(selfPoints);
+    const selfDay = selfPointsDay * value;
 
     // ── Segnali ──
     const signals = [];
@@ -195,6 +246,9 @@ export function computeCompanies(gd, companies, { today = todayUtc(), now = Date
       employees,
       engineDay,
       selfDay,
+      // Punti del lavoro in proprio al giorno, MISURATI: skills.js ne
+      // ricava quante azioni fa davvero il giocatore.
+      selfPointsDay,
       // Quello che l'azienda rende da sola, senza il tempo del proprietario.
       passiveDay: engineDay + employees.marginDay,
       signals,

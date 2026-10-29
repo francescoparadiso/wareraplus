@@ -39,6 +39,7 @@ import {
 } from './model.js';
 import { escapeHtml, flagImg, fmtCompact, fmtRelative } from '../mu/ui.js';
 import { trackEvent } from '../shared/analytics.js';
+import { loadEmployeeBenchmarks, shareBelow } from '../shared/employeeBench.js';
 
 const SIM_KEY = 'we_mkt_sim';
 
@@ -148,7 +149,15 @@ function primeHistory() {
   loadPriceHistory().then(h => {
     if (h && rootEl?.isConnected && data) repaint();
   });
+  // WarEra+ (2026-10-28) — i riferimenti mondiali dei dipendenti, dal
+  // censimento notturno (shared/employeeBench.js). Stessa regola dello
+  // storico: in sottofondo, e senza il server la riga aperta non cambia.
+  loadEmployeeBenchmarks().then(b => {
+    bench = b;
+    if (b && rootEl?.isConnected && data) repaint();
+  });
 }
+let bench = null;
 
 function bindLangChange() {
   if (langBound) return;
@@ -494,6 +503,17 @@ function rowHtml(r) {
   return row + (expanded === r.code ? detailHtml(r) : '');
 }
 
+/** Le due righe del confronto col mondo per la riga aperta, o nessuna. */
+function worldRef(r) {
+  const ref = bench?.items?.[r.code];
+  if (!ref?.cost || !(ref.n > 0)) return [];
+  const inAttivo = shareBelow(r.perPoint, ref.cost, bench.percentiles);
+  return [
+    ['worldMedianCost', `${escapeHtml(gold(ref.cost[2]))} <span class="wp-mkt-dim">(${escapeHtml(mktT('worldN', { n: fmtCompact(ref.n) }))})</span>`],
+    ['worldProfitable', inAttivo == null ? '—' : `~${escapeHtml(pct(inAttivo, 0))}`],
+  ];
+}
+
 function detailHtml(r) {
   const regions = r.regions.map(reg => {
     const parts = [
@@ -537,6 +557,11 @@ function detailHtml(r) {
     ['colEmpCost', r.empCost == null ? '—' : escapeHtml(gold(r.empCost))],
     ['colBreakExp', r.breakExp == null ? '—' : escapeHtml(pct(r.breakExp, 0))],
     ['colYouV27', r.ownerPerDay == null ? '—' : `<span class="${r.ownerPerDay < 0 ? 'neg' : 'pos'}">${escapeHtml(signedGold(r.ownerPerDay))}</span>`],
+    // Dai dipendenti VERI di questa risorsa (censimento notturno): quanto
+    // costa per punto quello a metà classifica, e quanti nel mondo rendono
+    // più di quanto costano ai prezzi di adesso. Il costo dei
+    // riferimenti è per punto EFFETTIVO, come `perPoint`.
+    ...worldRef(r),
   ].map(([k, v]) => `<span>${escapeHtml(mktT(k))}: <b>${v}</b></span>`).join('') : [
     ['colPp', escapeHtml(String(r.pp))],
     ['colBase', escapeHtml(gold(r.basePerPoint))],

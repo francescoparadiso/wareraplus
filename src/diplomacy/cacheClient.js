@@ -611,6 +611,23 @@ export async function fetchCompanyCensusViaCache({ item = null, countryId = null
   }
 }
 
+/** WarEra+ — Riferimenti mondiali dei dipendenti per risorsa
+ *  (server/companyCensus.js, dal 2026-10-28): percentili di costo per
+ *  punto, punti all'ora e Produzione, dalla rosa del giro notturno.
+ *  Nessun ripiego diretto, per lo stesso motivo del censimento: servirebbe
+ *  la rosa di decine di migliaia di aziende. `null` o `available: false`
+ *  = il confronto semplicemente non compare. */
+export async function fetchEmployeeBenchmarksViaCache() {
+  try {
+    const json = await _fetchCacheJsonRaw('/employee-benchmarks');
+    if (!json || typeof json.available !== 'boolean') return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /employee-benchmarks non disponibile:', err.message);
+    return null;
+  }
+}
+
 /** WarEra+ — Storico ricchezza di UN giocatore: { userId, username,
  *  days: [[giorno, ricchezza]], rank, rankBefore, archiveFrom }. Viene
  *  dall'archivio della classifica mondiale (uno scatto al giorno dal 19

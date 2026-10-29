@@ -48,7 +48,7 @@ import { plyT } from './i18n.js';
 import { vsRow, countUpScore as countUpIn } from '../shared/versus.js';
 import {
   LEADERBOARDS, fetchPlayer, searchPlayers, fetchEquipment, fetchWealthHistory,
-  fetchLeaderboard, fetchNames, fetchPlayerBattles, fetchCompanies, fetchWorkStats,
+  fetchLeaderboard, fetchNames, fetchPlayerBattles, fetchCompanies, fetchPointValues, fetchWorkStats,
   fetchPolitics, fetchNationRanks,
 } from './api.js';
 
@@ -90,6 +90,7 @@ let _muName = null;
 let _wealthObs = null;
 let _natRanks = null;        // posizione nella sua nazione (fetchNationRanks)
 let _companies;              // undefined = non chiesta, 'loading', null, []
+let _pointValues = null;     // { itemCode: monete per punto }, per il margine
 let _work;                   // idem, statistiche di lavoro a 31 giorni
 let _politics;               // idem
 let _lootOpen = new Set();   // battaglie con la riga del bottino aperta
@@ -217,6 +218,7 @@ export async function openPlayer(id, { tabs = true } = {}) {
   _muName = null;
   _natRanks = null;
   _companies = undefined;
+  _pointValues = null;
   _work = undefined;
   _politics = undefined;
   _lootOpen = new Set();
@@ -269,7 +271,15 @@ function loadTab(tab) {
     const pid = _pid;
     _companies = 'loading';
     _work = 'loading';
-    fetchCompanies(pid).catch(() => null).then(c => { if (_pid === pid) { _companies = c; render(); } });
+    fetchCompanies(pid).catch(() => null).then(async c => {
+      if (_pid !== pid) return;
+      _companies = c;
+      render();
+      if (c?.length) {
+        const v = await fetchPointValues(c.map(x => x.itemCode));
+        if (_pid === pid) { _pointValues = v; render(); }
+      }
+    });
     fetchWorkStats(pid).then(w => { if (_pid === pid) { _work = w; render(); } });
   }
   if (tab === 'politics' && _politics === undefined) {
@@ -1197,28 +1207,58 @@ function workHtml() {
   else if (!_companies.length) comp = `<p class="wp-ply-note">${escapeHtml(plyT('wkNone'))}</p>`;
   else {
     const totV = _companies.reduce((t, c) => t + c.value, 0);
-    const totW = _companies.reduce((t, c) => t + c.workers, 0);
     const region = (id) => state.regionData?.[id];
+    // Rosa e stima oraria (fetchCompanies): null dove il proxy non l'ha data.
+    const known = _companies.filter(c => c.workers != null);
+    const active = known.filter(c => !c.disabled);
+    const totW = known.reduce((t, c) => t + c.workers, 0);
+    const totCap = known.reduce((t, c) => t + (c.cap || 0), 0);
+    const totP = active.reduce((t, c) => t + c.pointsHour, 0);
+    const totWage = active.reduce((t, c) => t + c.wageHour + c.managerHour, 0);
+    // Margine a pieno regime, monete al giorno: serve il valore del punto.
+    const marginDay = (c) => (_pointValues && c.workers != null && _pointValues[c.itemCode] != null
+      ? (c.pointsHour * _pointValues[c.itemCode] - c.wageHour - c.managerHour) * 24 : null);
+    const margins = active.map(marginDay).filter(v => v != null);
+    const totM = margins.length ? margins.reduce((t, v) => t + v, 0) : null;
+    const signedMoney = (v) => (v < 0 ? '−' : '+') + fmtMoney(Math.abs(v));
+    const marginCell = (v) => (v == null ? '—'
+      : `<span class="${v >= 0 ? 'wp-ply-pos' : 'wp-ply-neg'}">${escapeHtml(signedMoney(v))}</span>`);
+    const hourly = known.length ? `
+      <div class="wp-ply-minor wp-ply-minor-big">
+        <span>${escapeHtml(plyT('wkStaff'))} <b>${totW}</b>${totCap ? `<small class="wp-ply-dim">/${totCap}</small>` : ''}</span>
+        <span>${escapeHtml(plyT('wkPtsHour'))} <b>${escapeHtml(totP.toFixed(1))}</b></span>
+        <span>${escapeHtml(plyT('wkWageHour'))} <b class="wp-ply-gold">${escapeHtml(fmtMoney(totWage))}</b></span>
+        ${totM != null ? `<span>${escapeHtml(plyT('wkMarginDay'))} <b>${marginCell(totM)}</b></span>` : ''}
+      </div>` : '';
     comp = `
       <p class="wp-ply-summary">${escapeHtml(plyT('wkCompanies', { n: _companies.length }))}
-        <span class="wp-ply-dim">· ${escapeHtml(plyT('wkValue'))} ${escapeHtml(fmtMoney(totV))} · ${escapeHtml(plyT('wkWorkers'))} ${totW}</span></p>
+        <span class="wp-ply-dim">· ${escapeHtml(plyT('wkValue'))} ${escapeHtml(fmtMoney(totV))}</span></p>
+      ${hourly}
       <div class="wp-ply-tablewrap"><table class="wp-ply-table">
         <thead><tr><th>${escapeHtml(plyT('wkProduct'))}</th><th>${escapeHtml(plyT('wkRegion'))}</th>
-          <th class="wp-ply-num">${escapeHtml(plyT('wkWorkers'))}</th><th class="wp-ply-num">${escapeHtml(plyT('wkStock'))}</th>
+          <th class="wp-ply-num">${escapeHtml(plyT('wkWorkers'))}</th>
+          <th class="wp-ply-num">${escapeHtml(plyT('wkPtsHour'))}</th><th class="wp-ply-num">${escapeHtml(plyT('wkWageHour'))}</th>
+          <th class="wp-ply-num">${escapeHtml(plyT('wkMarginDay'))}</th>
+          <th class="wp-ply-num">${escapeHtml(plyT('wkStock'))}</th>
           <th class="wp-ply-num">${escapeHtml(plyT('wkValue'))}</th><th>${escapeHtml(plyT('wkUpgrades'))}</th></tr></thead>
         <tbody>${_companies.map(c => {
           const r = region(c.region);
           const ups = UPGRADES.filter(k => c.upgrades[k]).map(k => `${plyT(`up_${k}`)} ${c.upgrades[k]}`).join(' · ');
+          const has = c.workers != null;
           return `<tr${c.disabled ? ' class="wp-ply-off"' : ''}>
             <td><b>${escapeHtml(c.itemCode || '—')}</b>${c.disabled ? ` <small class="wp-ply-dim">(${escapeHtml(plyT('wkDisabled'))})</small>` : ''}</td>
             <td><span class="wp-ply-who">${r?.country ? flagImg(r.country, 'wp-ply-flag') : ''}<span>${escapeHtml(r?.name || '—')}</span></span></td>
-            <td class="wp-ply-num">${c.workers || '—'}</td>
+            <td class="wp-ply-num">${has ? `${c.workers}${c.cap ? `<small class="wp-ply-dim">/${c.cap}</small>` : ''}` : '—'}</td>
+            <td class="wp-ply-num">${has ? escapeHtml(c.pointsHour.toFixed(2)) : '—'}</td>
+            <td class="wp-ply-num">${has ? escapeHtml(fmtMoney(c.wageHour + c.managerHour)) : '—'}</td>
+            <td class="wp-ply-num">${marginCell(c.disabled ? null : marginDay(c))}</td>
             <td class="wp-ply-num">${escapeHtml(fmtMoney(c.stock))}</td>
             <td class="wp-ply-num">${escapeHtml(fmtMoney(c.value))}</td>
             <td><small class="wp-ply-dim">${escapeHtml(ups || '—')}</small></td>
           </tr>`;
         }).join('')}</tbody>
-      </table></div>`;
+      </table></div>
+      ${known.length ? `<p class="wp-ply-note">${escapeHtml(plyT('wkHourlyNote'))}</p>` : ''}`;
   }
 
   let work;

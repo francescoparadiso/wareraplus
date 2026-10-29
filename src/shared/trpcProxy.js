@@ -189,6 +189,26 @@ function _userKeyUsable() {
   return Boolean(_userApiKey) && !_userKeyRejected && Date.now() >= _userKeyDownUntil;
 }
 
+/* Le procedure "MIE" (employee.getMyWorkforceSummary,
+   employeeEvent.getPendingCount…) rispondono coi dati del titolare della
+   chiave. Con la chiave di chi guarda sono le SUE, ed è giusto mostrarle;
+   con quella del VPS sarebbero quelle del proprietario del tool, e infatti
+   il proxy le respinge (TRPC_ALLOWED nel cache-server). Quindi qui solo
+   api2 con la chiave dell'utente, CONFERMATA dalla prova: mai proxy né
+   Worker, nemmeno come ripiego. `null` per qualunque cosa non vada. */
+export async function userKeyCall(procedure, input) {
+  if (!_userKeyUsable() || !_userKeyConfirmed) return null;
+  const qs = input === undefined ? '' : `?input=${encodeURIComponent(JSON.stringify(input))}`;
+  try {
+    const res = await fetch(`${USER_KEY_BASE}/trpc/${procedure}${qs}`, { headers: { 'X-API-Key': _userApiKey } });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.result?.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Basi da provare, in ordine, per una chiamata destinata a `resolvedBase`.
  * Se non e' il Worker (es. una base custom, o api6 diretta) non c'e' niente

@@ -224,8 +224,16 @@ export async function fetchPlayerBattles(userId, { days = 3 } = {}) {
 /* ── Aziende e lavoro ─────────────────────────────────────────── */
 
 /** Le aziende del giocatore: `company.getCompanies {userId}` dà solo gli
- *  id, `company.getById` il resto (prodotto, regione, dipendenti,
- *  magazzino, valore stimato, potenziamenti). Pubbliche, due giri. */
+ *  id, `company.getById` il resto (prodotto, regione, magazzino, valore
+ *  stimato, potenziamenti). Pubbliche, due giri.
+ *
+ *  WarEra+ (2026-10-28): `workerCount` non c'è più dalla v0.27, e la
+ *  colonna Dipendenti restava a "—" per tutti. Ora la riempie
+ *  `employee.getCompanyRoster` (con chiave, quindi dal proxy; vedi
+ *  src/eco/account.js), che dà anche la stima ORARIA del gioco per la rosa
+ *  di adesso: punti, salari, manager. Della rosa qui si tengono solo i
+ *  conti: il dettaglio dipendente per dipendente sta nell'Ottimizzatore.
+ *  Se il proxy non risponde le colonne restano vuote, il resto no. */
 export async function fetchCompanies(userId) {
   const [list] = await trpcBatchManual([['company.getCompanies', { userId, perPage: 50 }]]);
   const ids = (list?.items || []).map(x => (typeof x === 'string' ? x : x?._id)).filter(Boolean);
@@ -237,12 +245,54 @@ export async function fetchCompanies(userId) {
       if (!c) return;
       out.push({
         id: chunk[k], name: c.name || '', itemCode: c.itemCode, region: c.region,
-        workers: c.workerCount || 0, stock: c.production || 0, value: c.estimatedValue || 0,
+        workers: null, cap: null, pointsHour: null, wageHour: null, managerHour: null,
+        stock: c.production || 0, value: c.estimatedValue || 0,
         upgrades: c.activeUpgradeLevels || {}, disabled: !!c.disabledAt,
       });
     });
   }
+  for (let i = 0; i < out.length; i += 25) {
+    const chunk = out.slice(i, i + 25);
+    let res = [];
+    try {
+      res = await trpcBatchManual(chunk.map(c => ['employee.getCompanyRoster', { companyId: c.id }]), { useWorker: true });
+    } catch (err) {
+      console.warn('WarEra+ giocatori: rosa dei dipendenti non disponibile:', err.message);
+    }
+    res.forEach((r, k) => {
+      if (!r || !Array.isArray(r.employees)) return;
+      const c = chunk[k], hr = r.hourly || {};
+      c.workers = r.employees.length;
+      c.cap = Number(hr.cap) || null;
+      c.pointsHour = Number(hr.production) || 0;
+      c.wageHour = Number(hr.wageCost) || 0;
+      c.managerHour = Number(hr.managerCost) || 0;
+    });
+  }
   return out.sort((a, b) => b.value - a.value);
+}
+
+/** Quanto vale un punto produzione di ciascun prodotto, in monete:
+ *  (prezzo − materie prime) ÷ punti per unità, la stessa formula e gli
+ *  stessi dati (gameConfig + prezzi, cache 10 min) dell'Ottimizzatore,
+ *  presi da lì con un import dinamico per non legare i due bundle.
+ *  `null` se i dati di gioco non arrivano: la colonna margine sparisce. */
+export async function fetchPointValues(itemCodes) {
+  try {
+    const [{ loadGameData }, { makeGameData }] = await Promise.all([
+      import('../eco/api.js'), import('../eco/gameData.js'),
+    ]);
+    const gd = makeGameData(await loadGameData());
+    const out = {};
+    for (const code of new Set(itemCodes)) {
+      const v = gd.gameConfig.items?.[code] ? gd.getNetPerPoint(code, 0) : NaN;
+      if (Number.isFinite(v)) out[code] = v;
+    }
+    return out;
+  } catch (err) {
+    console.warn('WarEra+ giocatori: valore del punto non disponibile:', err.message);
+    return null;
+  }
 }
 
 /** 31 giorni di lavoro DELLE SUE AZIENDE, giorno per giorno:
