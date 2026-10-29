@@ -519,6 +519,15 @@ wareraPlus/
     │   │                          non ce l'ha la sezione non compare.
     │   │                          ⚠️ un'ora senza misura è `d: null` e si disegna come
     │   │                          BUCO (barra assente, linea spezzata), mai come zero.
+    │   ├── playstyleTrend.js    ← NUOVO (2026-10-29) — nella scheda "Stile di gioco":
+    │   │                          giocatori guerra / economia (e, spegnibili, ibridi e
+    │   │                          senza punti) nel tempo, da 24 ore a 30 giorni. Dati da
+    │   │                          /mu-playstyle-history, lo storico che il server già
+    │   │                          salva per il "da ieri" del pannello mappa: nessun
+    │   │                          lavoro lato server. ⚠️ Lo storico è a delta (una riga
+    │   │                          solo quando i numeri cambiano): la serie è a SCALINI e
+    │   │                          si scarica sempre l'intera ritenzione, perché il valore
+    │   │                          a inizio finestra è l'ultima riga PRIMA dell'inizio.
     │   ├── nationList.js, nationCompare.js, nationDetail.js, i18n.js (9 lingue)
     ├── players/                  ← NUOVO (2026-10-14) — Giocatori: voce di Approfondimenti
     │   │                            e destinazione del clic su un cittadino (Statistiche
