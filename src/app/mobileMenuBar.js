@@ -491,7 +491,7 @@ function buildInsightsAccordion() {
   body.appendChild(stats);
 
   // Economia (src/economy/*) — stessa voce del menù desktop: prezzi,
-  // rendite di produzione e ottimizzatore industriale in tre schede.
+  // produzione e ottimizzatore industriale in tre schede.
   const eco = el('button', 'wp-mmb-item', { type: 'button' });
   eco.appendChild(iconEl('scales'));
   eco.appendChild(regSpan('economy'));

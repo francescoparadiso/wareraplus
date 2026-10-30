@@ -28,14 +28,15 @@ ed è poi cresciuto ben oltre quei due:
   Aziende e Competenze, ricostruite sulle statistiche di lavoro misurate
   (vedi `AGGIORNAMENTO-v0.27.md`). Dal 2026-09-19 è
   una **scheda** della sezione Economia (`src/economy/`), insieme alle
-  Rendite di produzione e alla scheda Prezzi.
+  Prezzi e Produzione (le Rendite di produzione, tolte il 2026-10-30:
+  con i dipendenti la paga non la decidi tu e il gioco mostra già il guadagno).
   La card di attribuzione ad ArgusIA in cima alla vista è stata **tolta il
   2026-10-23**, su richiesta del proprietario del progetto, insieme alla
   riscrittura per la v0.27: della logica del bot non resta più niente.
   L'origine resta scritta nelle testate di `src/eco/` e nella storia di git.
 
 Tutto il resto è **nuovo di WarEra+**: pannello nazione, Unità Militari,
-Statistiche nazioni, Rendite di produzione, News + ticker, Time machine,
+Statistiche nazioni, Prezzi e Produzione, News + ticker, Time machine,
 Guida, barre menù, preferiti, PWA, server di cache, temi mappa, viste mappa
 aggiuntive.
 
@@ -195,7 +196,7 @@ ne aggiungi o ne sposti uno. In breve:
 lavoro, tipi di governo, 742 regioni): cosa cambia nelle API e cosa si rompe
 nel tool, misurato su apidev prima del rilascio, sta in
 **`AGGIORNAMENTO-v0.27.md`**. Leggilo prima di toccare Ottimizzatore,
-Rendite, censimento aziende o la vista Bonus produzione.
+censimento aziende o la vista Bonus produzione.
 
 ⚠️ **Attenzione ai nomi duplicati tra le due varianti di Political**:
 `config.js`, `main.js`, `ui.js`, `i18n.js`, `api.js`, `loading.js`,
@@ -318,10 +319,9 @@ punto di fallimento. Vedi il ⚠️ in fondo per cosa degrada e come.
 - **Prezzi e libro ordini sono PUBBLICI**: `itemTrading.getPrices` e
   `tradingOrder.getTopOrders` rispondono da `API_BASE_URL` senza chiave, e
   `src/market/api.js` li prende così — un solo batch, nessun consumo del
-  budget del Worker. La chiave (quindi il proxy) serve solo per
-  `company.getRecommendedRegionIdsByItemCode`, che è anche l'unica fonte
-  ammessa del bonus produzione: **il bonus non si ricalcola mai lato
-  client**, né qui né in `src/eco/gameData.js`.
+  budget del Worker. La chiave (quindi il proxy) non serve ai Prezzi.
+  Il bonus produzione non si ricalcola mai lato client: con la v0.27 non
+  esiste più (giacimenti spenti), vedi `src/eco/gameData.js`.
 - **`useWorker: true`** instrada attraverso il Worker Cloudflare
   (`WORKER_API_BASE`, limite 500/min invece di 100) — usato SOLO per
   battaglie ed elezioni/parlamenti/Political, e per gli endpoint token-gated
@@ -656,10 +656,10 @@ semplicemente non compare — è il degrado voluto, non un guasto. Il seme di
 1325 è la misura di Vercel Analytics al 2026-08-31 e vive in `VISITS_SEED`
 nel server, non nel client.
 
-Lo **storico prezzi** in Rendite di produzione (`src/market/priceChart.js` +
-`server/priceHistory.js`) è dello stesso tipo: senza rideploy `/price-history`
-non esiste e la colonna "andamento" non compare nella riga aperta, mentre
-tabella, rendite e simulatore restano identici. Dopo il deploy l'archivio si
+Lo **storico prezzi** della scheda Prezzi di Economia (`src/economy/prices.js`,
+`src/market/priceChart.js` + `server/priceHistory.js`) è dello stesso tipo:
+senza rideploy `/price-history` non esiste e la scheda mostra i prezzi di
+adesso dichiarando che l'archivio manca. Dopo il deploy l'archivio si
 riempie da sé a una candela al giorno — ma i tre mesi indietro (aprile →
 settembre 2026) ci sono subito solo se si lancia anche `import/prezzi.js`,
 perché `itemTrading.getPrices` dice quanto costa ADESSO e ieri non esiste da

@@ -564,46 +564,35 @@ wareraPlus/
     │   │                          I 404 in console sono i batch dove non ha combattuto.
     │   └── main.js, i18n.js (9 lingue); stile in styles/players.css (wp-ply-*), il versus in styles/versus.css
     ├── economy/                  ← NUOVO — Economia: UNA voce di Approfondimenti,
-    │   │                            TRE schede dal 2026-10-30 (Prezzi e rendite,
-    │   │                            Produzione, Ottimizzatore): i Prezzi sono stati
-    │   │                            fusi nelle Rendite e la Ricchezza è passata in
-    │   │                            Giocatori — vedi le due voci "TOLTO" qui sotto.
-    │   │                            Il resto di questo blocco racconta com'è nata:
-    │   │                            Prima erano due voci separate
-    │   │                            ("Ottimizzatore industriale" e "Rendite di
-    │   │                            produzione") e i prezzi non avevano casa: erano
-    │   │                            separate per come sono NATE, non per come si
-    │   │                            usano. Le tre domande sono un discorso solo, e
-    │   │                            nell'ordine in cui si fanno — quanto vale la
-    │   │                            roba, cosa conviene produrre, come sistemo la
-    │   │                            MIA azienda.
+    │   │                            TRE schede (Prezzi, Produzione, Ottimizzatore).
+    │   │                            Dal 2026-10-30 NON ci sono più le Rendite di
+    │   │                            produzione (con i dipendenti la paga non la
+    │   │                            decidi tu e il gioco mostra già il guadagno:
+    │   │                            una tabella di rendite per punto con una paga
+    │   │                            simulata non diceva niente di più) e la
+    │   │                            Ricchezza è passata in Giocatori
+    │   │                            (src/players/main.js). I vecchi link
+    │   │                            ?tab=yields e ?tab=wealth ricadono sui Prezzi e
+    │   │                            sul "mio" giocatore.
     │   │                            ⚠️ Per AFFIANCAMENTO, non per fusione:
-    │   │                            src/market/* e src/eco/* non sono toccati
-    │   │                            dentro. Ogni scheda ha il suo contenitore, ci si
-    │   │                            monta la vista di prima con la sua
-    │   │                            init*(container), e cambiare scheda NASCONDE
-    │   │                            invece di smontare — tornare sulle Rendite
-    │   │                            ritrova paga, giorni e riga aperta com'erano.
-    │   │                            Restano quindi TRE dizionari (economy/i18n.js,
-    │   │                            market/i18n.js, testi interni di eco/main.js) e
-    │   │                            TRE fogli di stile: è voluto.
+    │   │                            src/eco/* non è toccato dentro. Ogni scheda ha
+    │   │                            il suo contenitore, ci si monta la vista con la
+    │   │                            sua init*(container), e cambiare scheda NASCONDE
+    │   │                            invece di smontare. Restano quindi più
+    │   │                            dizionari (economy/i18n.js, i18nPlus.js, testi
+    │   │                            interni di eco/main.js): è voluto.
     │   ├── main.js               ← initEconomyView(container, {tab}) +
     │   │                          stopEconomyView(). import() per scheda alla prima
     │   │                          apertura: chi entra per i prezzi non si scarica
     │   │                          anche l'Ottimizzatore. Cambiando scheda ferma il
     │   │                          timer di quella che si lascia e lo riattacca
     │   │                          rientrando (le tre init* sono riapribili).
-    │   ├── (prices.js TOLTO il 2026-10-30)  ← la scheda PREZZI era un elenco di
-    │   │                          risorse con prezzo e variazioni, quasi la stessa
-    │   │                          tabella delle Rendite: è stata FUSA in
-    │   │                          src/market/main.js. Le Rendite hanno ora le
-    │   │                          colonne 24h/7g/30g (da /price-history, "—" senza
-    │   │                          server), la ricerca per nome e, nella riga aperta,
-    │   │                          il grafico a candele di candleChart.js con periodo
-    │   │                          e esploratore. I vecchi link ?tab=prices&item=X
-    │   │                          aprono la riga di X (`openMarketItem`); le
-    │   │                          etichette restano in economy/i18n.js (ecoT), che
-    │   │                          market/main.js importa per non ritradurle.
+    │   ├── prices.js             ← la scheda PREZZI: elenco di tutte le risorse con
+    │   │                          prezzo, denaro/lettera del libro ordini e
+    │   │                          variazioni 24h/7g/30g, e per ognuna la sua scheda
+    │   │                          col grafico. ZERO fetch proprie — prezzi e libro
+    │   │                          ordini li chiede a market/api.js, lo storico a
+    │   │                          /price-history.
     │   ├── candleChart.js        ← NUOVO — le candele (SVG a mano). ⚠️ NON sostituisce
     │   │                          market/priceChart.js: quello disegna le sole
     │   │                          chiusure perché sta in una riga alta 88px, questo
@@ -650,38 +639,20 @@ wareraPlus/
     │   │                          conti e avvisi dipendente per dipendente (pura)
     │   └── skills.js            ← scheda Competenze: Companies/Energy/Production/
     │                              Management sul budget delle abilità eco (pura)
-    ├── market/                   ← NUOVO — Rendite di produzione: la classifica di
-    │   │                            mercato... e dal 2026-09-19 la SECONDA SCHEDA di
-    │   │                            src/economy/, non più una voce di menù sua (il
-    │   │                            codice non è cambiato, cambia chi chiama
-    │   │                            initMarketView()). Sotto, la descrizione di
-    │   │                            sempre:
-    │   │                            mercato di tutte le risorse per rendita al punto
-    │   │                            produzione. Gemella dell'Ottimizzatore per chi
-    │   │                            un'azienda non ce l'ha ancora (cosa produrre, dove
-    │   │                            aprirla): NON chiede uno username, si apre e mostra.
-    │   ├── main.js               ← initMarketView(container) + stopMarketAutoRefresh():
-    │   │                          tabella, ordinamenti, riga espandibile, simulatore paga
+    ├── market/                   ← il data layer dei PREZZI. Era la vista Rendite di
+    │   │                            produzione, tolta il 2026-10-30 (main.js, model.js,
+    │   │                            i18n.js e market.css sono nella storia di git):
+    │   │                            ne restano due file, usati da economy/prices.js.
     │   ├── api.js                ← due orologi: prezzi + libro ordini (PUBBLICI, diretti
-    │   │                          su api6, TTL 5 min, giro automatico mentre è aperta) e
-    │   │                          regioni consigliate (token-gated via ecoBatch → proxy,
-    │   │                          TTL 30 min + localStorage). Un refresh completo = 2
-    │   │                          richieste HTTP. Regioni e tasse: zero fetch. Più una
-    │   │                          terza cosa, sola per sessione: lo STORICO dal server
-    │   │                          di cache (/price-history), senza fallback — il gioco
-    │   │                          non sa dire quanto costava ieri, quindi se il server
-    │   │                          non ce l'ha la sezione non compare e basta.
-    │   ├── priceChart.js         ← NUOVO — la linea delle chiusure (SVG a mano, come
+    │   │                          su api6, TTL 5 min, giro automatico mentre la scheda
+    │   │                          è aperta) e lo STORICO dal server di cache
+    │   │                          (/price-history), senza fallback — il gioco non sa
+    │   │                          dire quanto costava ieri, quindi se il server non ce
+    │   │                          l'ha la sezione andamento non compare e basta.
+    │   └── priceChart.js         ← NUOVO — la linea delle chiusure (SVG a mano, come
     │   │                          nations/charts.js) + variazione 7/30 giorni. Un
     │   │                          giorno senza candela è un BUCO: la linea si spezza,
     │   │                          mai uno zero.
-    │   ├── model.js              ← formule PURE (la stessa di eco/gameData.js, ma con i
-    │   │                          prezzi eseguibili) + paga di pareggio, guadagno
-    │   │                          giornaliero per paga offerta e bonus FEDELTÀ allo
-    │   │                          slider dei giorni (+1%/giorno fino a 10, letto da
-    │   │                          gameConfig.worker, come eco/workers.js). Cambiare
-    │   │                          paga o giorni non costa una richiesta.
-    │   └── i18n.js               ← dizionario locale (9 lingue)
     ├── accordi/                  ← NUOVO (2026-10-23) — Accordi: archivio dei patti di non
     │   │                            belligeranza (nazione–nazione, nazione–alleanza,
     │   │                            alleanza–alleanza), con testo, inizio/fine, unità fuori
@@ -1087,7 +1058,7 @@ wareraPlus/
     │   │                          Usato da Operazioni, sezione Battaglie e tooltip dei marker.
     │   ├── employeeBench.js    ← NUOVO (2026-10-28) — riferimenti mondiali dei dipendenti
     │   │                          per risorsa (/employee-benchmarks, dal censimento
-    │   │                          notturno) e percentile di un valore. Ottimizzatore e Rendite.
+    │   │                          notturno) e percentile di un valore. Ottimizzatore.
     │   ├── particlesBackground.js ← motore dello sfondo a particelle, condiviso da tutte
     │   │                            le sezioni (Political oro, Eco verde, MU rosso,
     │   │                            News blu, Alleanze viola)
@@ -1142,7 +1113,7 @@ wareraPlus/
     │   │                          <title> nativi degli SVG diventano tooltip istantanei
     │   ├── scrollHint.js       ← NUOVO — "Scorri di lato per tutte le colonne": l'avviso
     │   │                          sopra le tabelle dati che su telefono SCORRONO invece
-    │   │                          di nascondere colonne (Rendite, Prezzi, Produzione,
+    │   │                          di nascondere colonne (Prezzi, Produzione,
     │   │                          Unità, Spese di guerra, Statistiche nazioni). Prima
     │   │                          colonna ferma, il resto scorre (2026-10-15: da
     │   │                          telefono non si vedeva più "Rendita/pp base").

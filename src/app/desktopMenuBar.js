@@ -535,11 +535,9 @@ function buildInsightsDropdown() {
   stats.addEventListener('click', () => { closeAnySubview(); document.getElementById('bloc-stats-btn')?.click(); closeAllDropdowns(); });
   panel.appendChild(stats);
 
-  // Economia (src/economy/*): UNA voce per tre schede — prezzi, rendite
-  // di produzione, ottimizzatore industriale. Erano due voci separate
-  // ("Ottimizzatore industriale" e "Rendite di produzione") per come
-  // erano NATE, non per come si usano: il perché sta in testa a
-  // src/economy/main.js.
+  // Economia (src/economy/*): UNA voce per tre schede — prezzi, produzione,
+  // ottimizzatore industriale. Erano voci separate per come erano NATE,
+  // non per come si usano: il perché sta in testa a src/economy/main.js.
   const ecoItem = el('button', 'wp-mb-item', { type: 'button' });
   ecoItem.appendChild(iconEl('scales'));
   ecoItem.appendChild(regSpan('economy'));

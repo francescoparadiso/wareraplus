@@ -196,11 +196,10 @@ async function handleIncomingDeepLink() {
         return openPlayersView(getMeId() || undefined);
       }
       const item = params.get('item');
-      // WarEra+: i Prezzi sono stati fusi nelle Rendite (2026-10-30). I vecchi
-      // link ?tab=prices&item=X aprono la riga di X lì; 'prices' non è più una
-      // scheda e initEconomyView ricade da sé sulle Rendite.
-      if (item) (await import('./market/main.js')).openMarketItem(item);
-      return openEconomyView({ tab: item ? 'yields' : (params.get('tab') || undefined) });
+      if (item) (await import('./economy/prices.js')).openPriceItem(item);
+      // ?tab=yields (le Rendite, tolte il 2026-10-30) non è più una scheda:
+      // initEconomyView ricade da sé sui Prezzi.
+      return openEconomyView({ tab: item ? 'prices' : (params.get('tab') || undefined) });
     },
     news: () => openNewsView(),
     mu: () => openMuView(params.get('mu') || undefined,
