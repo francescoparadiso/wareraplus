@@ -146,7 +146,9 @@ function compareCtx() {
 /** Link condivisibile (?section=mu&tab=compare&mua=&mub=) e scorciatoie:
  *  scheda e lati da impostare PRIMA di initMuView (vedi src/main.js). */
 export function presetMuView({ tab: t, a, b } = {}) {
-  if (['list', 'ranking', 'compare'].includes(t)) tab = t;
+  // WarEra+: 'wealth' (Bilancio) arriva dal link dell'area riservata. Se la
+  // linguetta non è concessa a chi guarda, render() ricade sull'elenco.
+  if (['list', 'ranking', 'compare', 'wealth'].includes(t)) tab = t;
   if (a) cmp.a = a;
   if (b && b !== a) cmp.b = b;
   if (a || b) tab = 'compare';

@@ -1738,3 +1738,41 @@ button.wp-pv-nz-minaccia:hover { background: var(--pv-hover); }
   .wp-pv-nz-minaccia.wp-pv-nz-tab-testa { display: none; }
   .wp-pv-nz-minaccia .wp-pv-nz-tab-num { text-align: left; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Cosa puoi fare (src/private/panoramica.js)
+   ══════════════════════════════════════════════════════════════ */
+.wp-pv-pn { display: flex; flex-direction: column; gap: .9rem; width: 100%; }
+.wp-pv-pn-testa { display: flex; flex-direction: column; gap: .5rem; max-width: 46rem; }
+.wp-pv-pn-titolo { margin: 0; font-size: 1.35rem; line-height: 1.2; }
+.wp-pv-pn-gruppo {
+  margin: .6rem 0 0; font-size: .78rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--pv-accent);
+}
+.wp-pv-pn-griglia {
+  display: grid; gap: .8rem; width: 100%;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+}
+.wp-pv-pn-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: .55rem;
+  padding: 1.05rem 1.1rem 1.1rem;
+  background: var(--pv-surface); border: 1px solid var(--pv-rule); border-radius: 10px;
+}
+.wp-pv-pn-card:not(.chiusa) { border-color: var(--pv-accent); }
+.wp-pv-pn-card.chiusa { border-style: dashed; }
+.wp-pv-pn-card.chiusa .wp-pv-pn-nome,
+.wp-pv-pn-card.chiusa .wp-pv-pn-desc { opacity: .62; }
+.wp-pv-pn-riga { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; flex-wrap: wrap; width: 100%; }
+.wp-pv-pn-nome { margin: 0; font-size: 1.05rem; }
+.wp-pv-pn-stato {
+  padding: .1rem .55rem; border-radius: 999px; font-size: .74rem; font-weight: 600; white-space: nowrap;
+  border: 1px solid var(--pv-rule); color: var(--pv-ink-soft);
+}
+.wp-pv-pn-stato.si { background: var(--pv-accent-soft); border-color: var(--pv-accent); color: var(--pv-accent); }
+.wp-pv-pn-desc { margin: 0; font-size: .9rem; line-height: 1.55; }
+.wp-pv-pn-motivo {
+  margin: 0; padding: .45rem .65rem; width: 100%; box-sizing: border-box;
+  border-left: 3px solid var(--pv-danger); background: rgba(240, 119, 108, .08);
+  border-radius: 0 6px 6px 0; font-size: .84rem; line-height: 1.45;
+}
+.wp-pv-pn-card > .wp-pv-btn { margin-top: auto; }

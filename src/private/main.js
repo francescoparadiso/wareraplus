@@ -43,6 +43,8 @@ import { creaQuadroNazione } from './nazione.js';
 import { creaOperazioni } from './operazioni.js';
 import { nzT } from './i18nNazione.js';
 import { opT } from './i18nOperazioni.js';
+import { creaPanoramica } from './panoramica.js';
+import { pnT } from './i18nPanoramica.js';
 
 let rootEl = null;
 let account = null;
@@ -82,8 +84,10 @@ let attesaChiesta = false;
 // Quale pagina dell'area è aperta: "La mia nazione", "Contratti
 // mercenari", "Amministrazione". Una preferenza di chi guarda, in
 // localStorage come ogni altra comodità per-browser del tool.
+// Chi non ha mai scelto parte da "Cosa puoi fare" (panoramica.js): è la
+// pagina che dice cosa c'è a chi entra per la prima volta.
 const SCHEDA_KEY = 'wp_pv_scheda';
-let schedaAttiva = (() => { try { return localStorage.getItem(SCHEDA_KEY) || 'nazione'; } catch { return 'nazione'; } })();
+let schedaAttiva = (() => { try { return localStorage.getItem(SCHEDA_KEY) || 'start'; } catch { return 'start'; } })();
 
 export async function initPrivateView(container, { authError = null, comeAccount = null } = {}) {
   rootEl = container;
@@ -243,6 +247,9 @@ function disegna() {
       if (passo === 'codice' && claim) colonnaDx.appendChild(cardCodice());
       else if (passo === 'scelta') colonnaDx.appendChild(cardScelta());
       else colonnaDx.appendChild(cardRicerca());
+      // Anche prima del collegamento si vede cosa si sblocca: è il motivo
+      // per cui vale la pena farlo.
+      if (!account.admin) colonnaDx.appendChild(cardPanoramica());
     }
 
     // Nazione non abilitata: si dice, e si dice PRIMA. Il permesso vero e'
@@ -253,6 +260,10 @@ function disegna() {
     // muto, senza mai capire il perche'.
     const nazione = ruoli?.nazione;
     if (account.verificato && nazione && nazione.abilitata === false) {
+      // Fuori dal perimetro non si resta con un "no" e basta: "Cosa puoi
+      // fare" elenca quello che invece è aperto (Accordi, Votazioni) e il
+      // motivo per cui il resto no; solo DOPO viene l'elenco dei paesi.
+      colonnaDx.appendChild(cardPanoramica());
       colonnaDx.appendChild(cardNazioneNonAbilitata(nazione));
     } else if (account.verificato || account.admin) {
       // ── Tre pagine, un bottone ciascuna ──────────────────────────────
@@ -269,7 +280,7 @@ function disegna() {
       // senza cariche sarebbe una scatola vuota con dentro una spiegazione
       // di qualcosa che non lo riguarda. L'amministrazione solo a chi lo è.
       const cap = ruoli?.capacita;
-      const chiavi = ['nazione', 'operazioni'];
+      const chiavi = ['start', 'nazione', 'operazioni'];
       if (cap && (cap.chiedePer?.length || cap.approvaPer?.length || cap.gestisceNazione?.length || cap.admin)) {
         chiavi.push('contratti');
       }
@@ -767,7 +778,8 @@ function areaSchede(chiavi) {
   if (q.accesso() === false) chiavi = chiavi.filter((k) => k !== 'operazioni');
   if (!chiavi.includes(schedaAttiva)) schedaAttiva = chiavi[0];
   if (chiavi.length > 1) frag.appendChild(barraSchede(chiavi));
-  if (schedaAttiva === 'operazioni') frag.appendChild(creaOOperazioni().render());
+  if (schedaAttiva === 'start') frag.appendChild(cardPanoramica(q.accesso()));
+  else if (schedaAttiva === 'operazioni') frag.appendChild(creaOOperazioni().render());
   else if (schedaAttiva === 'contratti') frag.appendChild(creaOTavolo().render());
   else if (schedaAttiva === 'admin') frag.appendChild(creaOAdmin().render());
   else frag.appendChild(q.render());
@@ -778,6 +790,7 @@ function barraSchede(chiavi) {
   const nav = el('nav', 'wp-pv-schede');
   nav.setAttribute('role', 'tablist');
   const voci = {
+    start: [pnT('tab'), pnT('tabHint')],
     nazione: [nzT('natTitle'), null],
     operazioni: [opT('tab'), opT('tabHint')],
     contratti: [nzT('secContracts'), nzT('secContractsHint')],
@@ -833,6 +846,16 @@ function contrattiInAttesa() {
     t.contaAttesa().then((x) => { attesaContratti = x; render(); });
   }
   return attesaContratti;
+}
+
+/** "Cosa puoi fare": le funzioni, aperte o no, con il bottone per andarci.
+ *  `accessoNazione` lo conosce solo chi ha già il quadro della nazione. */
+function cardPanoramica(accessoNazione = null) {
+  return creaPanoramica({ account, ruoli, accessoNazione }, (scheda) => {
+    schedaAttiva = scheda;
+    try { localStorage.setItem(SCHEDA_KEY, scheda); } catch { /* resta per questa apertura */ }
+    render();
+  });
 }
 
 function cardIndisponibile() {

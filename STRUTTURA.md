@@ -836,6 +836,16 @@ wareraPlus/
     │   │                          mano. Dati da /nazione e /nazione/nemici: nessuna chiamata nuova.
     │   │                          In PERSONE, dal 2026-10-26, "Aziende all'estero" (cittadini con
     │   │                          aziende in regioni di altre nazioni) da /nazione/aziende-estero.
+    │   ├── panoramica.js        ← NUOVO (2026-10-30) — "Cosa puoi fare": prima pagina dopo il
+    │   │                          login. Una card per funzione (nazione, operazioni, contratti,
+    │   │                          amministrazione + Bilancio unità, Accordi, Votazioni) con
+    │   │                          "aperta a te" / "non aperta" e, se chiusa, il PERCHÉ. Serve
+    │   │                          a chi non è di una nazione P.A.S.T.A.: prima vedeva solo "non
+    │   │                          aperta al tuo paese". ⚠️ Annuncio, non permesso: la regola in
+    │   │                          `stato()` rispecchia quella del server (filtroNazione,
+    │   │                          capacitaDi), che resta l'unico a decidere. Le funzioni fuori
+    │   │                          dall'area chiudono l'overlay e aprono la sezione.
+    │   ├── i18nPanoramica.js    ← dizionario (9 lingue) di panoramica.js
     │   ├── i18nNazione.js       ← dizionario (9 lingue) di nazione.js e delle sezioni
     │   ├── operazioni.js        ← NUOVO (2026-10-22) — pagina "Operazioni", subito dopo la
     │   │                          nazione: la lavagna dei piani. Un flowchart su un asse
