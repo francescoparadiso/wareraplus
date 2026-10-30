@@ -35,6 +35,7 @@ import { fetchPlayerWealthViaCache } from '../diplomacy/cacheClient.js';
 import { candleChartSvg, attachCandleExplorer } from './candleChart.js';
 import { plusT } from './i18nPlus.js';
 import { ecoT } from './i18n.js';
+import { setMe, clearMe } from '../shared/me.js';
 
 const MIO_KEY = 'we_my_player';
 const MAX_CANDIDATI = 8;
@@ -265,8 +266,8 @@ function wire() {
     const c = _candidati?.find(x => x.id === b.dataset.player);
     b.addEventListener('click', () => apriGiocatore(b.dataset.player, c?.lite || null));
   });
-  root.querySelector('[data-mine]')?.addEventListener('click', () => { safeSet(MIO_KEY, _player.id); paint(); });
-  root.querySelector('[data-forget]')?.addEventListener('click', () => { safeDel(MIO_KEY); paint(); });
+  root.querySelector('[data-mine]')?.addEventListener('click', () => { setMe(_player.id); paint(); });
+  root.querySelector('[data-forget]')?.addEventListener('click', () => { clearMe(); paint(); });
   root.querySelectorAll('[data-range]').forEach(b => {
     b.addEventListener('click', () => { _giorni = Number(b.dataset.range); paint(); });
   });

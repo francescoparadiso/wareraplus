@@ -1020,3 +1020,6 @@ body.light-theme .wp-mw-sc-giu { fill: #cf222e; }
   color: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap;
 }
 .wp-mu-compare-btn:hover { border-color: #f0883e; color: #f0883e; }
+
+/* WarEra+: la stella sulla propria unità (vedi shared/me.js). */
+.wp-mu-mine { margin-left: .35rem; color: #e3b341; font-size: .85em; }

@@ -1015,6 +1015,10 @@ wareraPlus/
     │   ├── desktopMenuBar.js   ← barra menù desktop (Viste mappa / Approfondimenti /
     │   │                         Impostazioni, ricerca ⌘K, Preferiti)
     │   ├── mobileMenuBar.js    ← equivalente mobile (drawer)
+    │   ├── meWidget.js         ← NUOVO (2026-10-30) — blocco "Il mio personaggio" in cima ai
+    │   │                          Preferiti (desktop e mobile): tre righe (personaggio, unità,
+    │   │                          nazione) o la ricerca per collegarlo. Costruito una volta
+    │   │                          sola per barra (ascolta i propri eventi).
     │   ├── pins.js             ← store dei Preferiti (nazioni/alleanze/unità), localStorage
     │   ├── backNav.js          ← NUOVO — tasto Indietro (browser, gesto Android, PWA):
     │   │                         chiude la cosa aperta invece di USCIRE dal tool.
@@ -1060,6 +1064,12 @@ wareraPlus/
     │   ├── blocLabelsToggle.js ← toggle nomi alleanze
     │   └── authorPill.js       ← pill autore accanto al bottone Ko-fi
     ├── shared/
+    │   ├── me.js                ← NUOVO (2026-10-30) — "Il mio personaggio": setMe/clearMe/getMeId
+    │   │                          e metadati (nome, avatar, nazione, unità) sulla chiave
+    │   │                          `we_my_player` che Giocatori, Tornei, Ricchezza e Bonus
+    │   │                          battaglia già leggevano. Evento `wareraplus:me-changed`.
+    │   │                          Preferenza locale, non un login. Chi collega il personaggio
+    │   │                          nell'area riservata lo trova impostato (private/main.js).
     │   ├── battleTiming.js      ← NUOVO (2026-10-22) — quando finisce il round (per lato) e
     │   │                          la battaglia: 300 punti a round, un tick ogni 120 s, punti
     │   │                          per tick secondo il TOTALE del round (non il numero del

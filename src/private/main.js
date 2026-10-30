@@ -45,6 +45,7 @@ import { nzT } from './i18nNazione.js';
 import { opT } from './i18nOperazioni.js';
 import { creaPanoramica } from './panoramica.js';
 import { pnT } from './i18nPanoramica.js';
+import { getMeId, setMe } from '../shared/me.js';
 
 let rootEl = null;
 let account = null;
@@ -132,6 +133,9 @@ async function refresh() {
       passo = claim ? 'codice' : 'ricerca';
     }
     if (account) await caricaRuoli();
+    // Chi ha collegato il personaggio qui non deve rifarlo nei Preferiti:
+    // si imposta da solo, ma MAI sopra una scelta già fatta.
+    if (account?.verificato && account.warUserId && !comeAltri && !getMeId()) setMe(account.warUserId);
   } catch {
     account = null;
     erroreRete = true;

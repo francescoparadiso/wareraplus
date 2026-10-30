@@ -43,6 +43,7 @@ import { syncBack } from '../app/backNav.js';
 import { trackEvent } from '../shared/analytics.js';
 import { animationsOn } from '../shared/motion.js';
 import { plyT } from './i18n.js';
+import { setMe, clearMe } from '../shared/me.js';
 // Il versus (righe, conteggio dell'intro, stile) è condiviso con gli altri
 // confronti 1 vs 1: vedi src/shared/versus.js.
 import { vsRow, countUpScore as countUpIn } from '../shared/versus.js';
@@ -862,8 +863,8 @@ function wire() {
     if (t.closest('#wp-ply-back')) { _pid = null; render(); return; }
     const ptab = t.closest('[data-ptab]');
     if (ptab) { _ptab = ptab.dataset.ptab; render(); loadTab(_ptab); return; }
-    if (t.closest('[data-mine]')) { safeSet(MINE_KEY, _pid); render(); return; }
-    if (t.closest('[data-forget]')) { safeDel(MINE_KEY); render(); return; }
+    if (t.closest('[data-mine]')) { setMe(_pid, _lite); render(); return; }
+    if (t.closest('[data-forget]')) { clearMe(); render(); return; }
     if (t.closest('#wp-ply-bt-more')) {
       _battleDays = BATTLE_DAYS.find(d => d > (_battles?.days || 0)) || _battleDays;
       loadBattles();

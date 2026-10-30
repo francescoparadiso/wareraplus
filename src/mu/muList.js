@@ -35,6 +35,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { muT } from './i18n.js';
+import { getMeMeta } from '../shared/me.js';
 import { scrollHintHtml } from '../shared/scrollHint.js';
 import { PLAYSTYLE_GROUPS } from './playstyle.js';
 import { avatarImg, countryName, dominantCountry, escapeHtml, flagImg, fmtCompact, tierOf } from './ui.js';
@@ -414,7 +415,7 @@ function rowHtml(m, position) {
       <span class="wp-mu-cell-pos">${position}</span>
       <span class="wp-mu-cell-name">
         ${avatarImg(m.avatarUrl, m.name, 'wp-mu-avatar wp-mu-avatar-sm')}
-        <span class="wp-mu-name-text">${escapeHtml(m.name)}</span>
+        <span class="wp-mu-name-text">${escapeHtml(m.name)}</span>${m._id === getMeMeta()?.muId ? `<span class="wp-mu-mine" title="${escapeHtml(muT('mineUnit'))}">★</span>` : ''}
       </span>
       <span class="wp-mu-cell-country">
         ${flagImg(m.country)}

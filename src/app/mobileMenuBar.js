@@ -67,6 +67,7 @@ import { fetchMuDirectory, getCachedDirectory, getCachedMu } from '../mu/api.js'
 import { trackEvent } from '../shared/analytics.js';
 import { getLang } from '../shared/i18n.js';
 import { getPinned, getMuPinMeta, isPinned, togglePin } from './pins.js';
+import { buildMeBlock } from './meWidget.js';
 
 const FLAG_BASE = 'https://media.warera.io/images/flags';
 
@@ -647,8 +648,29 @@ function buildFavoritesAccordion() {
   renderFavorites(body);
   return sec;
 }
+// WarEra+: "Il mio personaggio" in cima ai Preferiti (vedi desktopMenuBar).
+let meBlock = null;
+function getMeBlock() {
+  if (!meBlock) {
+    meBlock = buildMeBlock({
+      cls: { group: 'wp-mmb-res-group', row: 'wp-mmb-res-row', img: 'wp-mmb-res-img', logo: 'wp-mmb-res-logo', name: 'wp-mmb-res-name' },
+      go: (type, id) => {
+        if (type === 'player') {
+          closeAnySubview();
+          closeDrawer();
+          openPlayersView(id);
+          trackEvent('me-open', { type, source: 'mobile' });
+        } else {
+          goToDetail(type, id);
+        }
+      },
+    });
+  }
+  return meBlock;
+}
 function renderFavorites(panel) {
   panel.innerHTML = '';
+  panel.appendChild(getMeBlock());
   const { nation, alliance, mu } = getPinned();
   if (!nation.length && !alliance.length && !mu.length) {
     panel.appendChild(el('div', 'wp-mmb-res-empty', { text: mbT('noFavorites') }));
