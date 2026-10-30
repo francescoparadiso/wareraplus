@@ -99,10 +99,12 @@
    ── IL BUDGET ───────────────────────────────────────────────────────
    Il bot originale assumeva un respec completo di TUTTI i punti. Qui no:
    il budget sono i punti già messi in queste quattro abilità più quelli
-   non spesi. Le abilità da combattimento non si toccano, e Leadership
-   nemmeno — migliora addestramento ed eventi dei dipendenti, che non
-   hanno un prezzo, e darle un valore inventato sarebbe peggio che
-   lasciarla fuori dal conto. La vista lo dice.
+   non spesi. Le abilità da combattimento non si toccano. Dalla v0.27.3
+   Leadership non esiste più (fusa nella Gestione, punti rimborsati, quindi
+   già nei "non spesi"): la Gestione ora migliora anche le carte di
+   addestramento e le probabilità negli eventi, che non hanno un prezzo, e
+   darle un valore inventato sarebbe peggio che lasciarli fuori dal conto.
+   Il guadagno mostrato è quindi un minimo, e la vista lo dice.
 
    ⚠️ Fuori dal conto anche: l'energia che va in assunzioni e
    addestramento (10 a volta), un manager assunto (si somma alla Gestione
@@ -238,7 +240,6 @@ export function computeSkills(gd, me, companiesResult) {
     energyMax: maxActions(cur.energy),
     energyBound,
     capAt: lvl => value.companies[lvl],
-    leadershipLevel: me.skills?.leadership?.level ?? 0,
     mgmtPct: mgmtPctAt,
     // true se la Gestione è stata pesata sulla rosa vera di ogni azienda.
     mgmtMeasured: rows.length > 0 && rows.every(r => r.staff && r.staff.pointsHour > 0),

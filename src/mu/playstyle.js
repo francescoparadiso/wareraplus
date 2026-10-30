@@ -50,7 +50,8 @@ export const WAR_SKILLS = ['attack', 'criticalChance', 'criticalDamages', 'armor
 // WarEra+ v0.27 — Imprenditoria sparisce (punti rimborsati) e arriva
 // Leadership, che serve solo ai dipendenti (carte di addestramento,
 // eventi): è economia. Prima della v0.27 non esiste e vale 0, quindi le
-// due liste convivono. ⚠️ Il giorno del rilascio c'è un reset gratuito per
+// due liste convivono. Dalla v0.27.3 Leadership è fusa nella Gestione e
+// sparisce di nuovo (vale 0): si lascia in lista, costa niente. ⚠️ Il giorno del rilascio c'è un reset gratuito per
 // tutti: le tendenze a 7 giorni lo vedranno come un travaso che è solo il
 // ricalcolo delle build.
 export const ECO_SKILLS = ['companies', 'entrepreneurship', 'leadership', 'production', 'management'];
