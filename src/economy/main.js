@@ -53,21 +53,19 @@ import { loadModule } from '../shared/lazyModule.js';
 import { trackEvent } from '../shared/analytics.js';
 import { updateBackParams } from '../app/backNav.js';
 
-// WarEra+ 2026-10-08: due schede in più. "Produzione" sta subito dopo i
-// Prezzi perché continua la stessa domanda (chi produce questa roba, e
-// dove); "Ricchezza" in fondo perché è l'unica che guarda UN giocatore
-// invece del mercato. Stesso schema delle altre: import() alla prima
-// apertura, nascoste e non smontate al cambio scheda.
+// WarEra+ 2026-10-08: "Produzione" sta subito dopo i Prezzi perché
+// continua la stessa domanda (chi produce questa roba, e dove). La scheda
+// "Ricchezza", che guardava UN giocatore invece del mercato, dal
+// 2026-10-30 sta in Giocatori. Stesso schema delle altre: import() alla
+// prima apertura, nascoste e non smontate al cambio scheda.
 const TABS = [
-  { id: 'prices', key: 'tabPrices' },
-  { id: 'production', key: 'tabProduction' },
   { id: 'yields', key: 'tabYields' },
+  { id: 'production', key: 'tabProduction' },
   { id: 'optimizer', key: 'tabOptimizer' },
-  { id: 'wealth', key: 'tabWealth' },
 ];
 
 let _container = null;
-let _tab = 'prices';
+let _tab = 'yields';
 let _langHandler = null;
 // Cosa è già stato montato, e cosa sa fare. `stop` è opzionale: solo le
 // schede con un timer ne hanno uno.
@@ -128,18 +126,10 @@ async function apri(id) {
   if (!_montate.has(id)) host.innerHTML = `<div class="wp-ecn-loading">${escapeHtml(ecoT('loading'))}</div>`;
 
   try {
-    if (id === 'prices') {
-      const m = await loadModule(() => import('./prices.js'), 'economy');
-      await m.initPricesTab(host);
-      _montate.set(id, { stop: m.stopPricesTab, retranslate: m.retranslatePricesTab });
-    } else if (id === 'production') {
+    if (id === 'production') {
       const m = await loadModule(() => import('./production.js'), 'economy');
       await m.initProductionTab(host);
       _montate.set(id, { stop: m.stopProductionTab, retranslate: m.retranslateProductionTab });
-    } else if (id === 'wealth') {
-      const m = await loadModule(() => import('./playerWealth.js'), 'economy');
-      await m.initWealthTab(host);
-      _montate.set(id, { stop: m.stopWealthTab, retranslate: m.retranslateWealthTab });
     } else if (id === 'yields') {
       const m = await loadModule(() => import('../market/main.js'), 'economy');
       await m.initMarketView(host);
@@ -187,7 +177,7 @@ export async function initEconomyView(container, { tab } = {}) {
 
   if (primoMontaggio) {
     _montate.clear();
-    _tab = TABS.some(t => t.id === tab) ? tab : 'prices';
+    _tab = TABS.some(t => t.id === tab) ? tab : 'yields';
     container.innerHTML = shellHtml();
 
     container.querySelectorAll('.wp-ecn-tab').forEach(b => {

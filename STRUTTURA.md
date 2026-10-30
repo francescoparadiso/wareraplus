@@ -564,7 +564,12 @@ wareraPlus/
     │   │                          I 404 in console sono i batch dove non ha combattuto.
     │   └── main.js, i18n.js (9 lingue); stile in styles/players.css (wp-ply-*), il versus in styles/versus.css
     ├── economy/                  ← NUOVO — Economia: UNA voce di Approfondimenti,
-    │   │                            TRE schede. Prima erano due voci separate
+    │   │                            TRE schede dal 2026-10-30 (Prezzi e rendite,
+    │   │                            Produzione, Ottimizzatore): i Prezzi sono stati
+    │   │                            fusi nelle Rendite e la Ricchezza è passata in
+    │   │                            Giocatori — vedi le due voci "TOLTO" qui sotto.
+    │   │                            Il resto di questo blocco racconta com'è nata:
+    │   │                            Prima erano due voci separate
     │   │                            ("Ottimizzatore industriale" e "Rendite di
     │   │                            produzione") e i prezzi non avevano casa: erano
     │   │                            separate per come sono NATE, non per come si
@@ -588,14 +593,17 @@ wareraPlus/
     │   │                          anche l'Ottimizzatore. Cambiando scheda ferma il
     │   │                          timer di quella che si lascia e lo riattacca
     │   │                          rientrando (le tre init* sono riapribili).
-    │   ├── prices.js             ← NUOVO — la scheda PREZZI, l'unica parte davvero
-    │   │                          nuova: elenco di tutte le risorse con prezzo,
-    │   │                          denaro/lettera del libro ordini e variazioni
-    │   │                          24h/7g/30g, e per ognuna la sua scheda col
-    │   │                          grafico. ZERO fetch proprie — prezzi e libro
-    │   │                          ordini li chiede a market/api.js (stessa cache,
-    │   │                          stesso TTL: aprire questa scheda dopo le Rendite
-    │   │                          non ricompra niente), lo storico a /price-history.
+    │   ├── (prices.js TOLTO il 2026-10-30)  ← la scheda PREZZI era un elenco di
+    │   │                          risorse con prezzo e variazioni, quasi la stessa
+    │   │                          tabella delle Rendite: è stata FUSA in
+    │   │                          src/market/main.js. Le Rendite hanno ora le
+    │   │                          colonne 24h/7g/30g (da /price-history, "—" senza
+    │   │                          server), la ricerca per nome e, nella riga aperta,
+    │   │                          il grafico a candele di candleChart.js con periodo
+    │   │                          e esploratore. I vecchi link ?tab=prices&item=X
+    │   │                          aprono la riga di X (`openMarketItem`); le
+    │   │                          etichette restano in economy/i18n.js (ecoT), che
+    │   │                          market/main.js importa per non ritradurle.
     │   ├── candleChart.js        ← NUOVO — le candele (SVG a mano). ⚠️ NON sostituisce
     │   │                          market/priceChart.js: quello disegna le sole
     │   │                          chiusure perché sta in una riga alta 88px, questo
@@ -610,14 +618,16 @@ wareraPlus/
     │   │                          risorsa in quali nazioni si produce. Tutto da
     │   │                          /company-census, NESSUN ripiego (servirebbero
     │   │                          ~50.000 chiamate e la chiave): senza server lo dice.
-    │   ├── playerWealth.js       ← NUOVO (2026-10-08) — scheda RICCHEZZA: cerchi
-    │   │                          un giocatore (search.searchUsers + getUserLite,
-    │   │                          pubbliche) e vedi la sua curva giorno per giorno
-    │   │                          da /player-wealth, giorni migliori e peggiori,
-    │   │                          posizione. "Sono io" salva solo l'id in
-    │   │                          localStorage (`we_my_player`). ⚠️ La differenza
-    │   │                          fra due giorni è il saldo NETTO, non "spese".
-    │   └── i18nPlus.js           ← dizionario (9 lingue) delle due schede nuove
+    │   ├── (playerWealth.js TOLTO il 2026-10-30)  ← la scheda RICCHEZZA guardava UN
+    │   │                          giocatore, non il mercato, e Giocatori ne aveva già
+    │   │                          una scarna: resta quella, in src/players/main.js,
+    │   │                          con la versione ricca (posizione, variazioni in %,
+    │   │                          finestre 30/90/tutto, giorni migliori e peggiori).
+    │   │                          I vecchi link ?section=economy&tab=wealth aprono il
+    │   │                          "mio" giocatore (src/main.js). ⚠️ La differenza fra
+    │   │                          due giorni è il saldo NETTO, non "spese".
+    │   └── i18nPlus.js           ← dizionario (9 lingue) della scheda Produzione e,
+    │                              in prestito, della Ricchezza di Giocatori (plusT)
     ├── eco/                      ← NUOVO — Ottimizzatore industriale (port del bot Discord
     │   │                            "WarEra Eco Optimizer" di ArgusIA; la sua card in
     │   │                            cima è stata tolta con la v0.27). Dal 2026-09-19

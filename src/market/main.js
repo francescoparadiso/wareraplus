@@ -31,7 +31,7 @@ import '../styles/market.css';
 import { mktT } from './i18n.js';
 import { scrollHintHtml } from '../shared/scrollHint.js';
 import { loadMarketData, PRICE_TTL_MS, loadPriceHistory, priceSeries, priceHistoryCoverage } from './api.js';
-import { priceChartSvg, variazione } from './priceChart.js';
+import { variazione } from './priceChart.js';
 import {
   buildRows, sortRows, columnsFor, THIN_BOOK_QTY,
   workerPointsPerDay, enginePointsPerDay, fidelityConfig, fidelityPercent,
@@ -40,6 +40,11 @@ import {
 import { escapeHtml, flagImg, fmtCompact, fmtRelative } from '../mu/ui.js';
 import { trackEvent } from '../shared/analytics.js';
 import { loadEmployeeBenchmarks, shareBelow } from '../shared/employeeBench.js';
+// WarEra+ 2026-10-30: i Prezzi sono stati fusi qui. Il grafico a candele e
+// le sue etichette (già tradotte in 9 lingue) restano in economy/.
+import { candleChartSvg, attachCandleExplorer } from '../economy/candleChart.js';
+import { ecoT } from '../economy/i18n.js';
+import { syncBack } from '../app/backNav.js';
 
 const SIM_KEY = 'we_mkt_sim';
 
@@ -49,6 +54,12 @@ let rows = [];
 let sort = { key: 'perPoint', dir: -1 };
 let filter = 'all';                 // 'all' | 'raw' | 'product'
 let expanded = null;                // codice risorsa con la riga aperta
+let search = '';                    // filtro per nome (era nella scheda Prezzi)
+let chartDays = 90;                 // periodo del grafico nella riga aperta
+let chartMode = 'candles';          // 'candles' | 'line'
+const CHART_RANGES = [
+  { g: 30, key: 'r30' }, { g: 90, key: 'r90' }, { g: 365, key: 'r365' }, { g: 3650, key: 'rAll' },
+];
 let loading = false;
 let loadError = null;
 let langBound = false;
@@ -264,6 +275,7 @@ function render() {
 
   wireToolbar();
   wireBody();
+  syncExpandedBack();
 }
 
 /** Ricalcola `rows` dalle impostazioni correnti e torna i punti/giorno del
@@ -275,6 +287,11 @@ function computeRows() {
       netMarketTax: opts.netMarketTax,
       employee: { ppValue: data.ppValue, production: sim.empProd, expectation: sim.expectation, bonusPct: sim.empBonus },
     });
+    // Le variazioni 24h/7g/30g dallo storico (null senza server di cache).
+    for (const r of rows) {
+      const s = priceSeries(r.code);
+      r.d1 = variazione(s, 1); r.d7 = variazione(s, 7); r.d30 = variazione(s, 30);
+    }
     return employeePointsPerDay(sim.empProd, sim.empBonus);
   }
   const ppDay = workerPointsPerDay(sim.energy, sim.production);
@@ -290,7 +307,9 @@ function computeRows() {
 }
 
 function bodyHtml(ppDay) {
-  const visible = sortRows(rows.filter(r => filter === 'all' || r.type === filter), sort.key, sort.dir, columnsFor(data.gameConfig));
+  const q = search.trim().toLowerCase();
+  const visible = sortRows(rows.filter(r => (filter === 'all' || r.type === filter) && (!q || r.code.toLowerCase().includes(q))),
+    sort.key, sort.dir, columnsFor(data.gameConfig));
   if (isV27()) {
     return `
     ${data.ppValue ? '' : `<p class="wp-mkt-notice">${escapeHtml(mktT('noPpValue'))}</p>`}
@@ -382,6 +401,9 @@ function toolbarHtml(ppDay) {
   const fidPct = fidelityPercent(sim.days, fid);
   return `
     <div class="wp-mkt-toolbar">
+      <input type="search" id="wp-mkt-search" class="wp-mkt-search" autocomplete="off"
+             placeholder="${escapeHtml(ecoT('search'))}" value="${escapeHtml(search)}">
+
       <div class="wp-mkt-seg" role="group">
         ${['all', 'raw', 'product'].map(f => `
           <button type="button" data-filter="${f}" class="${filter === f ? 'active' : ''}">${
@@ -432,10 +454,13 @@ function toolbarHtml(ppDay) {
 function tableHtml(list) {
   if (!list.length) return `<div class="wp-mkt-empty">${escapeHtml(mktT('empty'))}</div>`;
 
-  const head = columnsFor(data.gameConfig).map(c => `
-    <button type="button" class="wp-mkt-th${c.num ? ' wp-mkt-num' : ''}${sort.key === c.key ? ' active' : ''}"
+  const head = columnsFor(data.gameConfig).map(c => {
+    const label = c.eco ? ecoT(c.label) : mktT(c.label, { n: sim.days });
+    return `
+    <button type="button" class="wp-mkt-th${c.num ? ' wp-mkt-num' : ''}${c.eco ? ' wp-mkt-chgcol' : ''}${sort.key === c.key ? ' active' : ''}"
             data-sort="${c.key}" data-dir="${sort.dir}"
-            title="${escapeHtml(mktT(c.label, { n: sim.days }))}">${escapeHtml(mktT(c.label, { n: sim.days }))}</button>`).join('');
+            title="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
+  }).join('');
 
   const body = list.map(r => rowHtml(r)).join('');
 
@@ -468,8 +493,19 @@ function rowV27Html(r) {
       <span class="wp-mkt-num">${r.empCost == null ? '—' : escapeHtml(gold(r.empCost))}</span>
       <span class="wp-mkt-num wp-mkt-break${over ? ' over' : ''}"${over ? ` title="${escapeHtml(mktT('lossWarn'))}"` : ''}>${r.breakExp == null ? '—' : escapeHtml(pct(r.breakExp, 0))}</span>
       <span class="wp-mkt-num ${r.ownerPerDay < 0 ? 'neg' : 'pos'}">${r.ownerPerDay == null ? '—' : escapeHtml(signedGold(r.ownerPerDay))}</span>
+      <span class="wp-mkt-num wp-mkt-chgcol">${deltaHtml(r.d1)}</span>
+      <span class="wp-mkt-num wp-mkt-chgcol">${deltaHtml(r.d7)}</span>
+      <span class="wp-mkt-num wp-mkt-chgcol">${deltaHtml(r.d30)}</span>
     </div>`;
   return row + (expanded === r.code ? detailHtml(r) : '');
+}
+
+/** Variazione del prezzo in colonna: verde su, rosso giù, "—" se non c'è
+ *  lo storico (mai uno zero: un null non è "invariato"). */
+function deltaHtml(v) {
+  if (v == null || !Number.isFinite(v)) return '<span class="wp-mkt-dim">—</span>';
+  const cls = v > 0.05 ? 'up' : v < -0.05 ? 'down' : 'flat';
+  return `<span class="wp-mkt-chg wp-mkt-chg-${cls}"><b>${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)}%</b></span>`;
 }
 
 function rowHtml(r) {
@@ -604,33 +640,129 @@ function detailHtml(r) {
 
 /* L'andamento del prezzo. Compare solo se il server di cache ha lo
    storico: senza, questa colonna non c'è affatto — è una sezione in
-   più, non un pezzo mancante da annunciare. */
-function historyHtml(r) {
-  const serie = priceSeries(r.code);
-  const svg = priceChartSvg(serie, { fmt: (v) => gold(v) });
-  if (!svg) return '';
+   più, non un pezzo mancante da annunciare.
 
-  const cambi = [[7, mktT('chg7')], [30, mktT('chg30')]].map(([giorni, label]) => {
-    const v = variazione(serie, giorni);
-    if (v == null) return '';
-    const segno = v > 0 ? 'up' : v < 0 ? 'down' : 'flat';
-    const testo = `${v > 0 ? '+' : ''}${pct(v)}`;
-    return `<span class="wp-mkt-chg wp-mkt-chg-${segno}">${escapeHtml(label)} <b>${escapeHtml(testo)}</b></span>`;
-  }).join('');
+   Dal 2026-10-30 è il grafico a candele che stava nella scheda Prezzi
+   (economy/candleChart.js): periodo, candele o linea, e l'esploratore a
+   mouse e frecce. Le variazioni portano il giorno con cui confrontano,
+   perché "7g" non è sempre sette giorni esatti se il giorno è un buco. */
+let _chartFinestra = null;   // la serie disegnata per ultima, per wireChart
+const lang = () => {
+  try { return (localStorage.getItem('we_lang') || navigator.language || 'it').slice(0, 2); }
+  catch (_) { return 'it'; }
+};
+
+function confrontoHtml(serie, giorni, chiave) {
+  const v = variazione(serie, giorni);
+  const ultimo = serie[serie.length - 1];
+  let rif = null;
+  if (ultimo) {
+    const b = new Date(`${ultimo[0]}T12:00:00Z`);
+    b.setUTCDate(b.getUTCDate() - giorni);
+    rif = serie.find(c => c[0] >= b.toISOString().slice(0, 10)) || null;
+  }
+  const giorno = rif ? new Intl.DateTimeFormat(lang(), { day: 'numeric', month: 'short', timeZone: 'UTC' })
+    .format(new Date(`${rif[0]}T12:00:00Z`)) : null;
+  const title = rif ? ecoT('vsCloseTitle', { date: giorno, price: gold(rif[4]), last: gold(ultimo[4]) }) : '';
+  return `<span class="wp-mkt-chgitem"${title ? ` title="${escapeHtml(title)}"` : ''}>
+      <em>${escapeHtml(ecoT(chiave))}</em> ${deltaHtml(v)}
+      ${giorno && v != null ? `<small class="wp-mkt-dim">${escapeHtml(ecoT('sinceDay', { date: giorno }))}</small>` : ''}
+    </span>`;
+}
+
+function historyHtml(r) {
+  _chartFinestra = null;
+  const serie = priceSeries(r.code);
+  if (!serie.length) return '';
+
+  // Il taglio si fa sui GIORNI e non sulle ultime N candele: con dei buchi
+  // dentro, "le ultime 30 righe" possono coprire due mesi.
+  const dal = new Date(Date.now() - chartDays * 86400000).toISOString().slice(0, 10);
+  const finestra = serie.filter(c => c[0] >= dal);
+  const ultima = serie[serie.length - 1];
+  const grafico = finestra.length > 1
+    ? candleChartSvg(finestra, { fmt: (v) => gold(v), lingua: lang(), mode: chartMode })
+    : '';
+  if (grafico && expanded === r.code) _chartFinestra = finestra;
+  const spread = (r.ask != null && r.bid != null) ? r.ask - r.bid : null;
 
   // Da che giorno guarda l'archivio: una linea che comincia a metà agosto
   // non deve sembrare "il prezzo prima non esisteva".
   const da = priceHistoryCoverage();
-  const nota = da
-    ? `<span class="wp-mkt-dim">${escapeHtml(mktT('histFrom', { d: da }))}</span>`
-    : '';
 
   return `
     <div class="wp-mkt-dcol wp-mkt-dchart">
       <h4>${escapeHtml(mktT('histTitle'))} <span class="wp-mkt-dim">· ${escapeHtml(mktT('histDays', { n: serie.length }))}</span></h4>
-      ${svg}
-      <div class="wp-mkt-chgs">${cambi}${nota}</div>
+      <div class="wp-mkt-chgs">
+        ${confrontoHtml(serie, 1, 'd1')} ${confrontoHtml(serie, 7, 'd7')} ${confrontoHtml(serie, 30, 'd30')}
+      </div>
+      <div class="wp-mkt-chgs wp-mkt-dim">
+        <span>${escapeHtml(ecoT('spread'))} <b>${escapeHtml(gold(spread))}</b></span>
+        <span>${escapeHtml(ecoT('open'))} <b>${escapeHtml(gold(ultima[1]))}</b></span>
+        <span>${escapeHtml(ecoT('high'))} <b>${escapeHtml(gold(ultima[2]))}</b></span>
+        <span>${escapeHtml(ecoT('low'))} <b>${escapeHtml(gold(ultima[3]))}</b></span>
+      </div>
+      <div class="wp-ecn-chartbar">
+        <span class="wp-mkt-dim">${escapeHtml(ecoT('range'))}</span>
+        ${CHART_RANGES.map(x => `<button type="button" class="wp-ecn-chip${chartDays === x.g ? ' active' : ''}" data-crange="${x.g}">${escapeHtml(ecoT(x.key))}</button>`).join('')}
+        <span class="wp-ecn-sep"></span>
+        <button type="button" class="wp-ecn-chip${chartMode === 'candles' ? ' active' : ''}" data-cmode="candles">${escapeHtml(ecoT('candles'))}</button>
+        <button type="button" class="wp-ecn-chip${chartMode === 'line' ? ' active' : ''}" data-cmode="line">${escapeHtml(ecoT('line'))}</button>
+      </div>
+      <div class="wp-ecn-chartwrap">${grafico || `<p class="wp-mkt-dim">${escapeHtml(ecoT('noSeries'))}</p>`}</div>
+      <p class="wp-mkt-dim wp-mkt-chartnote">${grafico ? `${escapeHtml(ecoT('exploreHint'))} ` : ''}${escapeHtml(ecoT('gap'))}
+        ${da ? escapeHtml(mktT('histFrom', { d: da })) : ''}</p>
     </div>`;
+}
+
+/* Il grafico nasceva a 880x320 e il browser lo stirava sulla larghezza vera:
+   su un telefono si stringeva e le etichette diventavano illeggibili. Appena
+   è nel documento lo si ridisegna alla misura del suo contenitore (e di
+   nuovo se cambia), così un pixel del disegno è un pixel dello schermo.
+   L'esploratore riceve la stessa misura. Stessa regola di prima, quando
+   questo codice stava in economy/prices.js. */
+let _chartObs = null;
+function wireChart() {
+  _chartObs?.disconnect();
+  const wrap = rootEl?.querySelector('.wp-ecn-chartwrap');
+  if (!wrap || !_chartFinestra) return;
+  const disegna = () => {
+    const svg = wrap.querySelector('.wp-ecn-chart');
+    if (!svg) return 0;
+    const w = Math.round(svg.clientWidth), h = Math.round(svg.clientHeight);
+    if (w > 50 && h > 50) {
+      const nuovo = candleChartSvg(_chartFinestra, { w, h, fmt: (v) => gold(v), lingua: lang(), mode: chartMode });
+      if (nuovo) svg.outerHTML = nuovo;
+    }
+    wrap.querySelectorAll('.wp-ecn-guide, .wp-ecn-tip').forEach(e => e.remove());
+    attachCandleExplorer(wrap, _chartFinestra, {
+      w: w > 50 ? w : 880, h: h > 50 ? h : 320, fmt: (v) => gold(v), lingua: lang(), t: ecoT,
+    });
+    return w;
+  };
+  let ultimaW = disegna();
+  _chartObs = new ResizeObserver(() => {
+    const nw = Math.round(wrap.querySelector('.wp-ecn-chart')?.clientWidth || 0);
+    if (!nw || Math.abs(nw - ultimaW) < 8 || !wrap.isConnected) return;
+    ultimaW = disegna() || ultimaW;
+  });
+  _chartObs.observe(wrap);
+}
+
+/** WarEra+: con una risorsa aperta, Indietro del telefono la richiude invece
+ *  di chiudere Economia (vedi app/backNav.js). Il link porta ?item=. Cambiando
+ *  scheda il contenitore si NASCONDE, non si smonta: da qui il controllo sui
+ *  rect. */
+function syncExpandedBack() {
+  syncBack('economy/market', !!expanded, () => { expanded = null; repaint(); },
+    () => !!expanded && (rootEl?.getClientRects().length || 0) > 0, { item: expanded || undefined });
+}
+
+/** Apre la riga di una risorsa (link ?section=economy&item=). Prima di
+ *  initMarketView basta impostarla: il primo disegno la vede. */
+export function openMarketItem(code) {
+  expanded = code || null;
+  if (rootEl && data) { repaint(); syncExpandedBack(); }
 }
 
 // ══ Eventi ═════════════════════════════════════════════════════════
@@ -638,6 +770,10 @@ function historyHtml(r) {
    nodi sopravvivono ai repaint. */
 function wireToolbar() {
   const q = sel => rootEl.querySelector(sel);
+
+  // Solo il corpo: ridisegnare la barra farebbe perdere il fuoco al campo
+  // mentre si scrive (vedi il commento sopra render()).
+  q('#wp-mkt-search')?.addEventListener('input', (e) => { search = e.target.value; repaint(); });
 
   rootEl.querySelectorAll('[data-filter]').forEach(b => {
     b.addEventListener('click', () => { filter = b.dataset.filter; render(); });
@@ -705,7 +841,22 @@ function wireBody() {
     });
   });
 
-  const toggleRow = code => { expanded = expanded === code ? null : code; repaint(); };
+  rootEl.querySelectorAll('[data-crange]').forEach(b => {
+    b.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      chartDays = Number(b.dataset.crange);
+      // Un periodo più largo di quello già scaricato costa una richiesta al
+      // server; gli altri no (vedi loadPriceHistory).
+      await loadPriceHistory(chartDays);
+      repaint();
+    });
+  });
+  rootEl.querySelectorAll('[data-cmode]').forEach(b => {
+    b.addEventListener('click', (e) => { e.stopPropagation(); chartMode = b.dataset.cmode; repaint(); });
+  });
+  wireChart();
+
+  const toggleRow = code => { expanded = expanded === code ? null : code; repaint(); syncExpandedBack(); };
   rootEl.querySelectorAll('.wp-mkt-row[data-row]').forEach(row => {
     row.addEventListener('click', () => toggleRow(row.dataset.row));
     row.addEventListener('keydown', e => {

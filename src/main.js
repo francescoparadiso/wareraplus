@@ -189,9 +189,18 @@ async function handleIncomingDeepLink() {
       // WarEra+ Votazioni: ?tab=votes (&vote=id) riapre la vista e la votazione.
       { openSenate: params.get('senate') === '1', openVotes: params.get('tab') === 'votes', voteId: params.get('vote') || null }),
     economy: async () => {
+      // WarEra+: la scheda Ricchezza è passata in Giocatori (2026-10-30). I
+      // vecchi link ?section=economy&tab=wealth aprono lì il "mio" giocatore.
+      if (params.get('tab') === 'wealth') {
+        const { getMeId } = await import('./shared/me.js');
+        return openPlayersView(getMeId() || undefined);
+      }
       const item = params.get('item');
-      if (item) (await import('./economy/prices.js')).openPriceItem(item);
-      return openEconomyView({ tab: item ? 'prices' : (params.get('tab') || undefined) });
+      // WarEra+: i Prezzi sono stati fusi nelle Rendite (2026-10-30). I vecchi
+      // link ?tab=prices&item=X aprono la riga di X lì; 'prices' non è più una
+      // scheda e initEconomyView ricade da sé sulle Rendite.
+      if (item) (await import('./market/main.js')).openMarketItem(item);
+      return openEconomyView({ tab: item ? 'yields' : (params.get('tab') || undefined) });
     },
     news: () => openNewsView(),
     mu: () => openMuView(params.get('mu') || undefined,

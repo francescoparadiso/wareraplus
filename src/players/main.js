@@ -39,6 +39,7 @@ import { escapeHtml, countryName, flagImg, avatarImg, fmtCompact, fmtFull, fmtRe
 import { classifyPlaystyle, WAR_SKILLS, ECO_SKILLS } from '../mu/playstyle.js';
 import { candleChartSvg, attachCandleExplorer } from '../economy/candleChart.js';
 import { ecoT } from '../economy/i18n.js';
+import { plusT } from '../economy/i18nPlus.js';
 import { syncBack } from '../app/backNav.js';
 import { trackEvent } from '../shared/analytics.js';
 import { animationsOn } from '../shared/motion.js';
@@ -663,47 +664,106 @@ function battlesHtml() {
     <p class="wp-ply-note">${escapeHtml(plyT('btNoSide'))}</p>`;
 }
 
+/* ── Scheda Ricchezza ─────────────────────────────────────────────
+   Dal 2026-10-30 è QUI e non più una scheda di Economia: guarda un
+   giocatore, non il mercato. Prima esistevano due versioni — questa,
+   scarna, e quella di Economia (src/economy/playerWealth.js, tolta) con
+   posizione, variazioni in percentuale, finestre di tempo e giorni
+   migliori e peggiori. Resta la seconda, in questa scheda: la ricerca, il
+   "Sono io" e la testata del giocatore ce li ha già la pagina.
+   Le etichette nuove vengono da economy/i18nPlus.js (plusT), dove sono già
+   tradotte in 9 lingue. */
+
+const W_RANGES = [{ g: 30, key: 'r30' }, { g: 90, key: 'r90' }, { g: 0, key: 'rAll' }];
+let _wGiorni = 90;
+
 /** Variazione fra l'ultimo scatto e quello di `giorni` fa (o il primo
- *  dopo, se quel giorno è un buco) — come in economy/playerWealth.js. */
+ *  dopo, se quel giorno è un buco); 0 = dall'inizio dell'archivio. */
 function change(days, giorni) {
   if (!days || days.length < 2) return null;
   const last = days[days.length - 1];
-  const target = dayNum(last[0]) - giorni;
+  const target = giorni ? dayNum(last[0]) - giorni : -Infinity;
   const first = days.find(r => dayNum(r[0]) >= target);
   if (!first || first === last) return null;
-  return last[1] - first[1];
+  const abs = last[1] - first[1];
+  return { abs, pct: first[1] ? (abs / Math.abs(first[1])) * 100 : null, da: first[0] };
 }
-function deltaHtml(v) {
-  if (v == null || !Number.isFinite(v)) return '<span class="wp-ply-dim">—</span>';
-  const cls = v > 0 ? 'wp-ply-up' : v < 0 ? 'wp-ply-down' : 'wp-ply-dim';
-  return `<span class="${cls}">${v > 0 ? '+' : v < 0 ? '−' : ''}${escapeHtml(fmtMoney(Math.abs(v)))}</span>`;
+function deltaHtml(abs, pct) {
+  if (abs == null || !Number.isFinite(abs)) return '<span class="wp-ply-dim">—</span>';
+  const cls = abs > 0 ? 'wp-ply-up' : abs < 0 ? 'wp-ply-down' : 'wp-ply-dim';
+  const segno = abs > 0 ? '+' : abs < 0 ? '−' : '';
+  const p = pct != null && Number.isFinite(pct)
+    ? ` <small>(${segno}${escapeHtml(new Intl.NumberFormat(lingua(), { maximumFractionDigits: 1 }).format(Math.abs(pct)))}%)</small>` : '';
+  return `<span class="${cls}">${segno}${escapeHtml(fmtMoney(Math.abs(abs)))}${p}</span>`;
+}
+
+/** Le differenze fra due scatti CONSECUTIVI di calendario. Quelle a
+ *  cavallo di un buco coprono più giorni e non sono "un giorno": fuori. */
+function dayChanges(days) {
+  const out = [];
+  for (let i = 1; i < days.length; i++) {
+    if (dayNum(days[i][0]) - dayNum(days[i - 1][0]) !== 1) continue;
+    out.push({ g: days[i][0], d: days[i][1] - days[i - 1][1] });
+  }
+  return out;
+}
+
+/** La serie del grafico: solo la finestra scelta, dall'ultimo scatto. */
+function wealthWindow(days) {
+  if (!days?.length) return [];
+  const from = _wGiorni ? dayNum(days[days.length - 1][0]) - _wGiorni : -Infinity;
+  return days.filter(r => dayNum(r[0]) >= from).map(([g, v]) => [g, v, v, v, v, null]);
 }
 
 function wealthHtml() {
   if (_wealth === undefined || _wealth === 'loading') return `<div class="wp-ply-loading">${escapeHtml(plyT('loading'))}</div>`;
-  const now = _lite?.rankings?.userWealth?.value;
-  const nowCard = `<div class="wp-ply-minor wp-ply-minor-big"><span>${escapeHtml(plyT('wlNow'))} <b>${now != null ? escapeHtml(fmtFull(Math.round(now))) : '—'}</b></span>`;
-  if (!_wealth) return `${nowCard}</div><p class="wp-ply-note">${escapeHtml(plyT('wlNoServer'))}</p>`;
+  const ora = _lite?.rankings?.userWealth;
+  const nowCard = `<span>${escapeHtml(plyT('wlNow'))} <b>${ora?.value != null ? escapeHtml(fmtFull(Math.round(ora.value))) : '—'}</b></span>`;
+  if (!_wealth) return `<div class="wp-ply-minor wp-ply-minor-big">${nowCard}</div><p class="wp-ply-note">${escapeHtml(plyT('wlNoServer'))}</p>`;
   const days = _wealth.days || [];
-  if (!days.length) return `${nowCard}</div><p class="wp-ply-note">${escapeHtml(plyT('wlNotIn'))}</p>`;
+  if (!days.length) return `<div class="wp-ply-minor wp-ply-minor-big">${nowCard}</div><p class="wp-ply-note">${escapeHtml(plyT('wlNotIn'))}</p>`;
+
+  const rank = _wealth.rank, prima = _wealth.rankBefore;
+  const v1 = change(days, 1), v7 = change(days, 7), v30 = change(days, 30), vAll = change(days, 0);
+  const gg = dayChanges(days);
+  const migliori = [...gg].sort((x, y) => y.d - x.d).filter(x => x.d > 0).slice(0, 5);
+  const peggiori = [...gg].sort((x, y) => x.d - y.d).filter(x => x.d < 0).slice(0, 5);
+  const lista = (arr) => arr.length
+    ? arr.map(x => `<li><span>${escapeHtml(fmtDate(x.g))}</span>${deltaHtml(x.d)}</li>`).join('')
+    : `<li class="wp-ply-dim">${escapeHtml(plusT('none'))}</li>`;
+  const posizione = ora?.rank
+    ? `#${escapeHtml(fmtFull(ora.rank))}`
+    : rank ? escapeHtml(plusT('wlRankOf', { p: fmtFull(rank.posizione), n: fmtFull(rank.su) })) : '—';
+  const prec = prima
+    ? `<small class="wp-ply-dim">${escapeHtml(plusT('wlRankMove', { p: fmtFull(prima.posizione), d: fmtDate(prima.slot) }))}</small>` : '';
+
   return `
-    ${nowCard}
-      <span>${escapeHtml(plyT('wl1'))} ${deltaHtml(change(days, 1))}</span>
-      <span>${escapeHtml(plyT('wl7'))} ${deltaHtml(change(days, 7))}</span>
-      <span>${escapeHtml(plyT('wl30'))} ${deltaHtml(change(days, 30))}</span>
+    <div class="wp-ply-minor wp-ply-minor-big">
+      ${nowCard}
+      <span>${escapeHtml(plusT('wlRank'))} <b>${posizione}</b> ${prec}</span>
+      <span>${escapeHtml(plyT('wl1'))} ${deltaHtml(v1?.abs, v1?.pct)}</span>
+      <span>${escapeHtml(plyT('wl7'))} ${deltaHtml(v7?.abs, v7?.pct)}</span>
+      <span>${escapeHtml(plyT('wl30'))} ${deltaHtml(v30?.abs, v30?.pct)}</span>
+      ${vAll ? `<span>${escapeHtml(plusT('wlDAll', { d: fmtDate(vAll.da) }))} ${deltaHtml(vAll.abs, vAll.pct)}</span>` : ''}
+    </div>
+    <div class="wp-ecn-chartbar">
+      ${W_RANGES.map(x => `<button type="button" class="wp-ply-chip${_wGiorni === x.g ? ' wp-ply-chip-me' : ''}" data-wrange="${x.g}">${escapeHtml(plusT(x.key))}</button>`).join('')}
     </div>
     <div class="wp-ecn-chartwrap wp-ply-chart" id="wp-ply-wchart"></div>
+    <div class="wp-ecn-wdays">
+      <div><h4 class="wp-ecn-psec">${escapeHtml(plusT('wlBest'))}</h4><ul>${lista(migliori)}</ul></div>
+      <div><h4 class="wp-ecn-psec">${escapeHtml(plusT('wlWorst'))}</h4><ul>${lista(peggiori)}</ul></div>
+    </div>
     <p class="wp-ply-note">${escapeHtml(plyT('wlNote'))}${_wealth.archiveFrom ? ' ' + escapeHtml(plyT('wlSince', { d: fmtDate(_wealth.archiveFrom) })) : ''}</p>`;
 }
 
 /* Il grafico si disegna alla misura vera del contenitore, e si ridisegna
-   se cambia (stessa regola di economy/playerWealth.js). */
+   se cambia. */
 function drawWealthChart() {
   _wealthObs?.disconnect();
   const wrap = _root?.querySelector('#wp-ply-wchart');
-  const days = _wealth?.days;
-  if (!wrap || !days || days.length < 2) return;
-  const serie = days.map(([g, v]) => [g, v, v, v, v, null]);
+  const serie = wealthWindow(_wealth?.days);
+  if (!wrap || serie.length < 2) return;
   const draw = () => {
     const w = Math.max(320, Math.round(wrap.clientWidth || 0));
     const h = 280;
@@ -861,6 +921,8 @@ function wire() {
     const board = t.closest('[data-board]');
     if (board) { if (_board !== board.dataset.board) { _board = board.dataset.board; loadBoard(); } return; }
     if (t.closest('#wp-ply-back')) { _pid = null; render(); return; }
+    const wr = t.closest('[data-wrange]');
+    if (wr) { _wGiorni = Number(wr.dataset.wrange); render(); return; }
     const ptab = t.closest('[data-ptab]');
     if (ptab) { _ptab = ptab.dataset.ptab; render(); loadTab(_ptab); return; }
     if (t.closest('[data-mine]')) { setMe(_pid, _lite); render(); return; }

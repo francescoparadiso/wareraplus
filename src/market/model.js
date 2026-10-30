@@ -275,6 +275,12 @@ export const COLUMNS_V27 = [
   { key: 'empCost',     label: 'colEmpCost',   num: true },
   { key: 'breakExp',    label: 'colBreakExp',  num: true },
   { key: 'ownerPerDay', label: 'colYouV27',    num: true },
+  // WarEra+ 2026-10-30: le variazioni del prezzo, che stavano nella scheda
+  // Prezzi (tolta). `eco`: l'etichetta viene da economy/i18n.js (ecoT), dove
+  // le tre ci sono già in 9 lingue, non da questo dizionario.
+  { key: 'd1',          label: 'd1',           num: true, eco: true },
+  { key: 'd7',          label: 'd7',           num: true, eco: true },
+  { key: 'd30',         label: 'd30',          num: true, eco: true },
 ];
 
 export function columnsFor(gameConfig) {

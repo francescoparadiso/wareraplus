@@ -400,9 +400,24 @@ body.light-theme .wp-mkt-detail { border-bottom-color: #e3e7ee; }
 }
 
 /* ── Andamento del prezzo (src/market/priceChart.js) ──────────────── */
+/* Dal 2026-10-30 l'andamento è il grafico a candele dei Prezzi: largo, e
+   sulla propria riga sotto le altre colonne invece di una terza colonna
+   stretta. */
 .wp-mkt-detail:has(.wp-mkt-dchart) {
-  grid-template-columns: minmax(240px, .8fr) minmax(300px, 1.4fr) minmax(240px, 1fr);
+  grid-template-columns: minmax(240px, .8fr) minmax(320px, 1.6fr);
 }
+.wp-mkt-dchart { grid-column: 1 / -1; min-width: 0; }
+.wp-mkt-chgitem { display: inline-flex; align-items: baseline; gap: 5px; }
+.wp-mkt-chgitem em { font-style: normal; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-mkt-chartnote { font-size: 11.5px; margin: 6px 0 0; }
+.wp-mkt-dchart .wp-ecn-chartbar { margin-top: 10px; }
+.wp-mkt-search {
+  min-width: 170px; padding: 6px 10px; border-radius: 8px; font: inherit; font-size: 13px;
+  color: var(--wp-ov-text, #e6edf3); background: transparent;
+  border: 1px solid var(--wp-ov-border, #30363d);
+}
+.wp-mkt-search:focus { outline: none; border-color: var(--wp-ov-accent, #e3b341); }
+body.light-theme .wp-mkt-search { color: #1f2328; border-color: #d0d7de; }
 .wp-mkt-chart { width: 100%; height: auto; display: block; overflow: visible; }
 .wp-mkt-line {
   fill: none;
@@ -444,10 +459,13 @@ body.light-theme .wp-mkt-chg-down b { color: #cf222e; }
    vengono prima risorsa (1), rendita (5) e tu /giorno (8), come le tre
    della tabella vecchia. */
 .wp-mkt-table.wp-mkt-v27 {
+  /* Le ultime tre: variazione 24h · 7g · 30g (dai Prezzi, fusi qui il
+     2026-10-30). */
   --wp-mkt-cols:
     minmax(134px, 1.1fr) minmax(86px, .7fr) minmax(82px, .7fr) 44px
-    minmax(90px, .8fr) minmax(100px, .8fr) minmax(110px, .8fr) minmax(94px, .8fr);
-  min-width: 820px;
+    minmax(90px, .8fr) minmax(100px, .8fr) minmax(110px, .8fr) minmax(94px, .8fr)
+    minmax(62px, .5fr) minmax(62px, .5fr) minmax(62px, .5fr);
+  min-width: 1060px;
 }
 @media (max-width: 560px) {
   .wp-mkt-table.wp-mkt-v27 {
@@ -455,6 +473,9 @@ body.light-theme .wp-mkt-chg-down b { color: #cf222e; }
     --wp-mkt-cols: 104px 74px 84px 78px 76px 34px 84px 84px;
     min-width: 0;
   }
+  /* Le tre variazioni non stanno in una riga da telefono: le porta la
+     riga aperta, nel riquadro dell'andamento. */
+  .wp-mkt-v27 .wp-mkt-chgcol { display: none; }
   .wp-mkt-v27 .wp-mkt-thead > :nth-child(7), .wp-mkt-v27 .wp-mkt-row > :nth-child(7),
   .wp-mkt-v27 .wp-mkt-thead > :nth-child(11), .wp-mkt-v27 .wp-mkt-row > :nth-child(11) { order: 3; }
   .wp-mkt-v27 .wp-mkt-thead > :nth-child(5), .wp-mkt-v27 .wp-mkt-row > :nth-child(5) { order: 1; }
