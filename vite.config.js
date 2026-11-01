@@ -132,23 +132,22 @@ export default defineConfig({
                 maxEntries: 300,
                 maxAgeSeconds: 10 * 60, // 10 minuti
               },
-              cacheableResponse: { statuses: [0, 200] },
+              // Solo 200: una risposta opaca (status 0) non è leggibile come
+              // dato e pesa ~7 MB di quota — vedi le immagini qui sotto.
+              cacheableResponse: { statuses: [200] },
             },
           },
-          // ── Immagini bandiere / asset statici WarEra — cache-first,
-          //    cambiano raramente. ──
-          {
-            urlPattern: ({ url }) => url.hostname === 'media.warera.io' || url.hostname === 'app.warera.io',
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'warera-images-cache',
-              expiration: {
-                maxEntries: 300,
-                maxAgeSeconds: 30 * 24 * 60 * 60, // 30 giorni
-              },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
+          // ── Immagini WarEra (media.warera.io): NIENTE regola, di proposito
+          //    (2026-11-01). C'era una CacheFirst da 300 voci che accettava
+          //    lo status 0, e media.warera.io non manda CORS: ogni bandiera
+          //    o avatar entrava come risposta OPACA, che Chrome nel conteggio
+          //    della quota gonfia a ~7 MB l'una per non far misurare la
+          //    dimensione vera di un file di un altro sito. 300 voci ≈ 2 GB:
+          //    un utente ha visto wareraplus.vercel.app a 1,6 GB, per SVG da
+          //    700 byte. E non serviva: media.warera.io risponde già con
+          //    `cache-control: public, max-age=31536000, immutable`, quindi
+          //    la cache HTTP del browser le tiene un anno senza contare nello
+          //    spazio del sito. La vecchia cache si svuota da src/main.js. ──
           // ── Illustrazioni oceano (nostro dominio) — tolte dal precache
           //    (vedi globIgnores sopra): si scaricano quando il tema che le
           //    usa le chiede, e poi restano in cache a lungo. Sono file che
