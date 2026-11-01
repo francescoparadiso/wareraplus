@@ -30,6 +30,13 @@ import { inject } from '@vercel/analytics';
 import { IS_WALLPAPER } from './shared/wallpaper.js';
 if (IS_LIVE && !IS_WALLPAPER) inject();
 
+// WarEra+ (2026-11-01): svuota la vecchia cache immagini del service worker.
+// Erano risposte opache di media.warera.io, ~7 MB di quota l'una per Chrome:
+// fino a ~2 GB di "spazio usato" per qualche centinaio di bandiere. La regola
+// non c'è più (vedi vite.config.js); questo toglie ciò che aveva già scritto.
+// Idempotente: dopo la prima volta non trova niente da cancellare.
+try { globalThis.caches?.delete('warera-images-cache').catch(() => {}); } catch {}
+
 // Umami: era un tag statico in index.html, ora si carica da qui (e solo
 // in live) per lo stesso motivo.
 import { initAnalytics } from './shared/analytics.js';
