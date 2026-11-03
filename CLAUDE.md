@@ -368,6 +368,40 @@ punto di fallimento. Vedi il ⚠️ in fondo per cosa degrada e come.
 - **Niente barre di scorrimento di sistema**: mai le native grigie — regola
   globale in `shell.css`, cursore nella tinta della sezione.
 
+## Articoli (arcana.warera.wiki/news)
+
+Gli articoli su WarEra+ (aggiornamenti di versione, analisi delle elezioni…)
+si scrivono **sempre nell'Article Writer di `https://arcana.warera.wiki/news`,
+in inglese**, e l'articolo intero **resta aperto lì** (in cima, nel pannello
+Browser): il proprietario lo copia con "Copy HTML" e da altrove non lo prende
+bene. Procedura, ricette e trappole in **`articles/README.md`** — leggilo
+prima di scrivere. Le regole sono richieste esplicite del proprietario:
+
+- **Riverifica i numeri** sui dati grezzi (voti, percentuali, margini,
+  iscritti; i governi riletti dal vivo) e dichiara l'orario di lettura e ciò
+  che non hai potuto verificare. Se due viste del tool danno numeri diversi,
+  vale quella che compare nello screenshot.
+- **Governi: i membri esistenti**, con chi è nuovo / rimasto / spostato e le
+  cariche vuote.
+- **Niente segnaposto in consegna**: l'immagine citata si crea (screenshot
+  dal tool, anche più d'uno, e un **collage** per più paesi; un grafico nello
+  stile di WarEra+ dove il tool non ha una vista) e si mette dove serve.
+- **Immagini su Imgur**: si caricano e nell'articolo va il link diretto
+  `i.imgur.com`. Il **login lo fa l'utente** nel pannello Browser (mai
+  credenziali tue); album **nascosto**, mai alla galleria pubblica.
+- **Link al tool** (`https://wareraplus.vercel.app/`, il live): nelle
+  didascalie, nella riga del governo, nel testo e in una sezione finale.
+- **Link ai partiti con `partyId`** nei dati (`{"partyId":…,"fullMatch":…}`),
+  altrimenti non si risolvono; Arcana li mostra come URL nudi, è normale.
+- **Formattazione, font e colori** (Texturina per i titoli, palette e
+  blockquote in `articles/README.md`), non solo testo nero.
+- **Non chiedere il consenso a ogni passo** di questo flusso (screenshot,
+  Imgur, editor): si fa e si riferisce. Restano all'utente il login, "Copy
+  HTML" e la pubblicazione su WarEra.
+- Prima di un nuovo articolo leggi l'ultimo uscito dall'API
+  (`article.getArticleById`, campo `content` in HTML): la pagina
+  `app.warera.io` chiede il login. Così non ripeti ciò che è già stato detto.
+
 ## Cose da verificare se stai debuggando in queste aree
 
 - `country.getAllCountries` e `map.getMapData` rispondono come atteso da
