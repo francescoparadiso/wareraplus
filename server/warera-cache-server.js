@@ -200,8 +200,15 @@ const {
 // nient'altro era mai stato salvato nel tempo. Adesso questi quattro campi
 // lo sono. Zero fetch: legge le cache che il server riempie gia'.
 const {
-  initDayHistory, snapshotDay, readDay, statoDayHistory,
+  initDayHistory, snapshotDay, readDay, statoDayHistory, treasuryByDay,
 } = require('./dayHistory');
+// WarEra+ soldi bloccati negli ordini d'acquisto, per risorsa, unita' e
+// nazione del compratore, piu' il totale dei tesori. Il gioco non dice quanti
+// soldi ha un giocatore: l'unica parte visibile del suo portafoglio e' quella
+// gia' messa in un ordine. Vedi il blocco in testa a server/orderMoney.js.
+const {
+  initOrderMoney, pollOrderMoney, readOrderMoney, statoOrderMoney,
+} = require('./orderMoney');
 // WarEra+ lavoro e tasse: ogni pagamento di salario del gioco, aggregato per
 // nazione. Archivio CHIUSO (29 lug - 17 set 2026) e senza poll: sono ~550.000
 // pagamenti al giorno, sfogliarli vorrebbe dire undicimila pagine al giorno.
@@ -456,6 +463,14 @@ initPriceHistory({
 
 // La giornata storica: solo cache, nessuna chiamata.
 initDayHistory({ readCache, writeCache });
+
+// Soldi negli ordini: richieste pubbliche (libro ordini), la mappa
+// utente -> nazione che il giro dei cittadini tiene gia', e i tesori giorno
+// per giorno da dayHistory.
+initOrderMoney({
+  trpcBatch: (...args) => trpcBatch(...args),
+  readCache, readCacheShared, writeCache, treasuryByDay,
+});
 
 // Tornei: richieste pubbliche. In cache le fotografie della classifica
 // settimanale (weekly-snaps/), il danno delle partite finite e il registro
@@ -2589,6 +2604,11 @@ cron.schedule('40 */6 * * *', () => { refreshPillConfig().catch(() => {}); });
 // tutte le risorse: ventiquattro al giorno in totale.
 cron.schedule('27 * * * *', pollPrices);
 
+// WarEra+ soldi negli ordini d'acquisto: un campione all'ora alle :42, fuori
+// dai minuti dei prezzi (:27) e dei bonifici (:11,:31,:51). Un batch pubblico
+// di getTopOrders, una procedura per risorsa.
+cron.schedule('42 * * * *', pollOrderMoney);
+
 // WarEra+ tornei: ogni 3 minuti, al secondo :20 (lontano dai cron al
 // minuto pieno). Tabellone e squadre dell'ultimo torneo di ogni tipo; la
 // classifica settimanale solo ogni 10 minuti (vedi server/tournament.js).
@@ -2673,6 +2693,8 @@ cron.schedule('* * * * *', () => {
   // riavvio a meta' pomeriggio evita che la candela di oggi si apra solo
   // alle :27 successive.
   await pollPrices();
+  // Soldi negli ordini: un campione subito, per lo stesso motivo.
+  await pollOrderMoney();
   // Tornei: senza await, la prima classifica settimanale pesa 2 MB e non
   // deve ritardare il resto dell'avvio.
   pollTournament().catch(err => console.error('[tournament] avvio:', err.message));
@@ -3304,6 +3326,16 @@ app.get('/tournament', async (req, res) => {
     console.error('[tournament] richiesta fallita:', err.message);
     res.status(502).json({ error: err.message });
   }
+});
+
+// Soldi bloccati negli ordini d'acquisto (server/orderMoney.js). `days` la
+// finestra della serie, `country` o `mu` (id) la serie di quell'unico
+// compratore. Il totale e' un MINIMO: getTopOrders si ferma a 100 ordini per
+// libro, e `latest.byItem[code][2]` dice quali libri sono al tetto.
+app.get('/order-money', (req, res) => {
+  const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 3650);
+  const id = (v) => (/^[a-f0-9]{24}$/.test(String(v || '')) ? String(v) : null);
+  res.json(readOrderMoney({ days, country: id(req.query.country), mu: id(req.query.mu) }));
 });
 
 app.get('/price-history', (req, res) => {
@@ -4026,6 +4058,7 @@ app.get('/health', (req, res) => res.json({
   // (vedi server/import/prezzi.js): la vista funziona lo stesso, ma la
   // linea comincia dal deploy.
   priceHistory: statoPriceHistory(),
+  orderMoney: statoOrderMoney(),
   // Quanti giorni di diplomazia e di battaglie storiche ci sono. Se
   // `primo` e' recente l'import non e' mai stato fatto (import/diplomazia.js,
   // import/battaglie.js) e la time machine mostra la fascia "fuori portata"

@@ -90,6 +90,15 @@ wareraPlus/
 │   │                              conviene ADESSO perché il gioco non pubblica altro;
 │   │                              da qui in poi sa anche da dove viene quel prezzo.
 │   │                              Endpoint: /price-history?days=N.
+│   ├── orderMoney.js           ← NUOVO (2026-11-03) — soldi bloccati negli ordini
+│   │                              d'acquisto: un campione all'ora (:42) di
+│   │                              tradingOrder.getTopOrders, 100 ordini per risorsa
+│   │                              (il massimo che accetta), quantità × prezzo per
+│   │                              risorsa, unità e nazione del compratore (mappa
+│   │                              mu-user-countries) + somma dei tesori. ⚠️ Il totale
+│   │                              è un MINIMO: i libri al tetto sono segnati. Il
+│   │                              portafoglio dei giocatori non è pubblico e non si
+│   │                              stima. Endpoint: /order-money?days=N[&country=|&mu=].
 │   ├── dayHistory.js           ← NUOVO — la giornata storica: diplomazia (patti,
 │   │                              guerre, nemico giurato, tesoro) e battaglie aperte,
 │   │                              giorno per giorno. Toglie alla time machine il suo
@@ -601,6 +610,12 @@ wareraPlus/
     │   │                          Disegna anche le serie a un valore al giorno
     │   │                          (mode 'line'): l'esploratore accetta `righe` per
     │   │                          non mostrare apertura/massimo/minimo di una tassa.
+    │   ├── money.js              ← NUOVO (2026-11-03) — scheda SOLDI: tesori delle
+    │   │                            nazioni (countryWealth, mai `money`, fermo da mesi)
+    │   │                            + soldi negli ordini d'acquisto, per risorsa /
+    │   │                            nazione del compratore / unità. Tutto da
+    │   │                            /order-money, NESSUN ripiego. Dizionario in
+    │   │                            economy/i18nMoney.js.
     │   ├── production.js         ← NUOVO (2026-10-08) — scheda PRODUZIONE: per
     │   │                          risorsa aziende, dipendenti, salari e tasse sui
     │   │                          salari al giorno, filtro per nazione, e per ogni

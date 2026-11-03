@@ -603,3 +603,64 @@ button.wp-ecn-pth:hover { color: var(--wp-ov-text, #e6edf3); }
   .wp-ecn-nodip .wp-ecn-pthead,
   .wp-ecn-nodip .wp-ecn-prow { grid-template-columns: 104px 70px 76px 84px 84px; }
 }
+
+/* ── Scheda Soldi ─────────────────────────────────────────────── */
+.wp-ecn-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.wp-ecn-kpi {
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 10px;
+  background: var(--wp-ov-surface-2, #161b22);
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.wp-ecn-kpi em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--wp-ov-text-dim, #8b949e);
+}
+.wp-ecn-kpi strong { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.wp-ecn-kpi small { font-size: 11.5px; color: var(--wp-ov-text-dim, #8b949e); }
+
+.wp-ecn-msec { margin-top: 18px; min-width: 0; }
+.wp-ecn-msec h3 { margin: 0 0 7px; font-size: 14px; font-weight: 700; }
+/* Altezza dal viewBox, non fissa: qui il testo degli assi non si deve
+   stirare (nei grafici a candele sì, con preserveAspectRatio="none"). */
+.wp-ecn-mchart { width: 100%; height: auto; display: block; }
+
+.wp-ecn-mgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 6px 22px;
+}
+.wp-ecn-mrow {
+  display: grid;
+  grid-template-columns: minmax(90px, 1.6fr) minmax(80px, 1fr) minmax(48px, .6fr) minmax(52px, .6fr);
+  gap: 8px;
+  align-items: center;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--wp-ov-border-soft, rgba(110, 118, 129, .18));
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.wp-ecn-mrow.wp-ecn-mhead {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--wp-ov-text-dim, #8b949e);
+}
+.wp-ecn-mname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-ecn-mcap { text-transform: capitalize; }
+.wp-ecn-mdim { opacity: .7; font-style: italic; }
+.wp-ecn-mrow[title] { cursor: help; }

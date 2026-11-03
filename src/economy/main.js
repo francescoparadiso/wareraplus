@@ -45,6 +45,8 @@ import { loadModule } from '../shared/lazyModule.js';
 import { trackEvent } from '../shared/analytics.js';
 import { updateBackParams } from '../app/backNav.js';
 
+// WarEra+ 2026-11-03: "Soldi" — dove stanno i soldi che il gioco lascia
+// vedere (tesori delle nazioni, ordini d'acquisto). Vedi src/economy/money.js.
 // WarEra+ 2026-10-08: "Produzione" sta subito dopo i Prezzi perché
 // continua la stessa domanda (chi produce questa roba, e dove). Dal
 // 2026-10-30 la scheda "Ricchezza", che guardava UN giocatore invece del
@@ -57,6 +59,7 @@ import { updateBackParams } from '../app/backNav.js';
 const TABS = [
   { id: 'prices', key: 'tabPrices' },
   { id: 'production', key: 'tabProduction' },
+  { id: 'money', key: 'tabMoney' },
   { id: 'optimizer', key: 'tabOptimizer' },
 ];
 
@@ -126,6 +129,10 @@ async function apri(id) {
       const m = await loadModule(() => import('./production.js'), 'economy');
       await m.initProductionTab(host);
       _montate.set(id, { stop: m.stopProductionTab, retranslate: m.retranslateProductionTab });
+    } else if (id === 'money') {
+      const m = await loadModule(() => import('./money.js'), 'economy');
+      await m.initMoneyTab(host);
+      _montate.set(id, { stop: m.stopMoneyTab, retranslate: m.retranslateMoneyTab });
     } else if (id === 'prices') {
       const m = await loadModule(() => import('./prices.js'), 'economy');
       await m.initPricesTab(host);

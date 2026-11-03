@@ -268,7 +268,7 @@ WarEra una volta per tutti invece di lasciare che lo faccia ogni browser —
 serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`,
 `/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
 `/citizen-moves`, `/migration-flows`, `/battle-timeline`,
-`/daily-damage`, `/damage-history`, `/damage-timeline`, `/damage-pulse`, `/price-history`, `/day-history`,
+`/daily-damage`, `/damage-history`, `/damage-timeline`, `/damage-pulse`, `/price-history`, `/order-money`, `/day-history`,
 `/alliance-history`,
 `/labour-history`, `/company-census`, `/player-wealth`,
 `/political-history`, `/political-overview`, `/presidents`,
@@ -699,6 +699,25 @@ settembre 2026) ci sono subito solo se si lancia anche `import/prezzi.js`,
 perché `itemTrading.getPrices` dice quanto costa ADESSO e ieri non esiste da
 nessuna parte. Stesso vincolo di bonifici e ricchezza, stessa soluzione: un
 archivio di terzi importato una volta sola.
+
+La scheda **Soldi** di Economia (`src/economy/money.js` + `server/orderMoney.js`,
+dal 2026-11-03) dipende dal rideploy del **cache-server** (`/order-money`):
+senza, la scheda dice che il server non risponde e non ha ripieghi. Dopo il
+deploy il primo campione è subito, poi uno all'ora alle :42; i tesori invece
+si vedono dal primo giorno, perché vengono da `day-history` (dal 13 aprile).
+Tre cose da sapere prima di crederla sbagliata:
+
+- ⚠️ **il totale degli ordini è un MINIMO**: `getTopOrders` accetta al massimo
+  100 ordini per libro (200 → errore di validazione) e il 3 novembre 17 libri su
+  24 erano già al tetto. Non stimare la coda con un modello dell'orderbook:
+  sarebbe un numero preciso e inventato. I libri al tetto portano `capped`;
+- i **portafogli dei giocatori non si vedono**: `user.getUserLite` non porta
+  `money` e `inventory.getInventory` è token-gated. Il solo pezzo visibile è
+  quello già messo in un ordine, e la scheda non pretende di più;
+- ⚠️ **`country.money` NON è il tesoro**: somma 54 mila contro 4,4 milioni di
+  `rankings.countryWealth`, che è quello che usano tutti (dayHistory, ticker).
+  Un compratore non presente in `mu-user-countries` va in `noCountry`, mai
+  assegnato a una nazione a caso.
 
 Le schede **Produzione** e **Ricchezza** di Economia (`src/economy/production.js`,
 `src/economy/playerWealth.js`) dipendono da DUE deploy diversi, e conviene

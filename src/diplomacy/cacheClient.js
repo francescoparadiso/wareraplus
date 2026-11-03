@@ -645,6 +645,22 @@ export async function fetchPlayerWealthViaCache(userId) {
   }
 }
 
+/** WarEra+ — soldi bloccati negli ordini d'acquisto (`/order-money`, vedi
+ *  server/orderMoney.js): serie oraria del totale, ultimo campione per
+ *  risorsa/nazione/unità e tesori giorno per giorno. null se il server non
+ *  risponde o non ha ancora la rotta: la scheda Soldi di Economia non ha
+ *  nessun ripiego, il gioco non conserva questi numeri da nessuna parte. */
+export async function fetchOrderMoneyViaCache(days = 30) {
+  try {
+    const json = await _fetchCacheJsonRaw(`/order-money?days=${encodeURIComponent(days)}`);
+    if (!json || !Array.isArray(json.series)) return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /order-money non disponibile:', err.message);
+    return null;
+  }
+}
+
 /** Serie giornaliera per nazione: { fetchedAt, retentionDays, tz, byDay }
  *  con byDay[YYYY-MM-DD][countryId] = {bounty, contracts, contractCount,
  *  battles}. Ritorna null se il server non ce l'ha. */
