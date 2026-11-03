@@ -313,3 +313,15 @@ body.light-theme .wp-ply-duel { --vs-a: #be185d; --vs-b: #0369a1; }
 
 /* Il confronto 1 vs 1 (wp-vs-*) sta in versus.css, condiviso con unità,
    nazioni e fazioni: lo importa src/shared/versus.js. */
+
+/* ── Ricchezza: le parti (aziende, ordini, resto) ───────────────── */
+.wp-ply-parts { margin: 0 0 12px; }
+.wp-ply-pmodes { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 12px; margin-bottom: 8px; }
+.wp-ply-phint { margin-left: 6px; font-size: 11.5px; }
+/* La barra è la ricchezza intera, divisa: ogni tratto è un pulsante. */
+.wp-ply-pbar { display: flex; gap: 2px; height: 14px; border-radius: 7px; overflow: hidden; }
+.wp-ply-pseg { appearance: none; border: 0; padding: 0; min-width: 3px; cursor: pointer; transition: opacity .15s; }
+.wp-ply-pseg.off { opacity: .25; }
+.wp-ply-pseg:hover { opacity: .8; }
+.wp-ply-plegend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.wp-ply-pchip i { width: 9px; height: 9px; border-radius: 50%; flex: none; }

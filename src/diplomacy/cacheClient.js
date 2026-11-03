@@ -661,6 +661,22 @@ export async function fetchOrderMoneyViaCache(days = 30) {
   }
 }
 
+/** WarEra+ — le parti della ricchezza di UN giocatore (`/player-parts`, vedi
+ *  server/playerParts.js): righe [giorno, aziende|null, ordini|null] e i
+ *  valori di adesso. null se il server non risponde o non ha ancora la rotta:
+ *  la scheda Ricchezza mostra comunque la divisione di oggi, calcolata dal
+ *  browser, e dichiara che lo storico manca. */
+export async function fetchPlayerPartsViaCache(userId, days = 3650) {
+  try {
+    const json = await _fetchCacheJsonRaw(`/player-parts?userId=${encodeURIComponent(userId)}&days=${encodeURIComponent(days)}`);
+    if (!json || !Array.isArray(json.rows)) return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /player-parts non disponibile:', err.message);
+    return null;
+  }
+}
+
 /** Serie giornaliera per nazione: { fetchedAt, retentionDays, tz, byDay }
  *  con byDay[YYYY-MM-DD][countryId] = {bounty, contracts, contractCount,
  *  battles}. Ritorna null se il server non ce l'ha. */

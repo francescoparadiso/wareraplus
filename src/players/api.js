@@ -37,7 +37,7 @@
 
 import { API_BASE_URL, WARERA_CACHE_BASE } from '../diplomacy/config.js';
 import { trpcBatchManual, trpcCall } from '../shared/trpcClient.js';
-import { fetchPlayerWealthViaCache, fetchUsersLiteViaCache } from '../diplomacy/cacheClient.js';
+import { fetchPlayerWealthViaCache, fetchPlayerPartsViaCache, fetchUsersLiteViaCache } from '../diplomacy/cacheClient.js';
 import { getBattleArchive, getLiveBattles } from '../battles/api.js';
 import { fetchCountryCitizens } from '../nations/api.js';
 
@@ -83,6 +83,32 @@ export async function fetchEquipment(userId) {
 
 export function fetchWealthHistory(userId) {
   return fetchPlayerWealthViaCache(userId).catch(() => null);
+}
+
+/** Le parti della ricchezza giorno per giorno, dal server (null se non c'è). */
+export function fetchWealthParts(userId) {
+  return fetchPlayerPartsViaCache(userId).catch(() => null);
+}
+
+/** Il valore stimato delle aziende di adesso: SOLO `company.getCompanies` e
+ *  `company.getById` (pubbliche), senza la rosa dei dipendenti che
+ *  `fetchCompanies` chiede per la scheda Aziende. Serve alla divisione della
+ *  ricchezza, che deve funzionare anche per chi il censimento notturno non
+ *  vede (inattivo da più di tre giorni). null se la lettura fallisce: "non
+ *  so" non diventa uno zero. */
+export async function fetchCompaniesValue(userId) {
+  try {
+    const [list] = await trpcBatchManual([['company.getCompanies', { userId, perPage: 100 }]]);
+    const ids = (list?.items || []).map(x => (typeof x === 'string' ? x : x?._id)).filter(Boolean);
+    let somma = 0;
+    for (let i = 0; i < ids.length; i += 25) {
+      const res = await trpcBatchManual(ids.slice(i, i + 25).map(id => ['company.getById', { companyId: id }]));
+      for (const c of res) somma += Number(c?.estimatedValue) || 0;
+    }
+    return Math.round(somma);
+  } catch (_) {
+    return null;
+  }
 }
 
 /* ── Classifiche mondiali ─────────────────────────────────────── */

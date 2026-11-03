@@ -63,6 +63,14 @@ function initOrderMoney(tools) {
   deps = tools;
 }
 
+// Soldi negli ordini per compratore, dell'ULTIMO campione: serve a
+// playerParts.js (le parti della ricchezza di un giocatore). In memoria e
+// non su disco: per giocatore il campione orario sarebbe ~700 righe all'ora
+// per niente, e lo scatto giornaliero lo salva playerParts. null finché il
+// primo campione dopo un avvio non c'è.
+let _perUtente = null;
+function orderMoneyByUser() { return _perUtente; }
+
 let _mem = null;
 function _read() {
   if (_mem) return _mem;
@@ -132,6 +140,7 @@ async function pollOrderMoney() {
   const byItem = {};
   const byCountry = {};
   const byMu = {};
+  const perUtente = new Map();
   let total = 0;
   let orders = 0;
   let noCountry = 0;
@@ -152,6 +161,7 @@ async function pollOrderMoney() {
       if (paese) byCountry[paese] = (byCountry[paese] || 0) + m;
       else noCountry += m;
       if (o.mu) byMu[o.mu] = (byMu[o.mu] || 0) + m;
+      if (o.user) perUtente.set(o.user, (perUtente.get(o.user) || 0) + m);
     }
     const capped = buy.length >= LIMITE_ORDINI ? 1 : 0;
     cappedItems += capped;
@@ -163,6 +173,7 @@ async function pollOrderMoney() {
   for (const k of Object.keys(byCountry)) byCountry[k] = arrotonda(byCountry[k]);
   for (const k of Object.keys(byMu)) byMu[k] = arrotonda(byMu[k]);
 
+  _perUtente = perUtente;
   const store = _read();
   const t = Date.now();
   store.samples.push({
@@ -238,6 +249,7 @@ function statoOrderMoney() {
 module.exports = {
   initOrderMoney,
   pollOrderMoney,
+  orderMoneyByUser,
   readOrderMoney,
   statoOrderMoney,
 };

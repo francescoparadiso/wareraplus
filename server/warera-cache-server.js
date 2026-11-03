@@ -207,8 +207,15 @@ const {
 // soldi ha un giocatore: l'unica parte visibile del suo portafoglio e' quella
 // gia' messa in un ordine. Vedi il blocco in testa a server/orderMoney.js.
 const {
-  initOrderMoney, pollOrderMoney, readOrderMoney, statoOrderMoney,
+  initOrderMoney, pollOrderMoney, orderMoneyByUser, readOrderMoney, statoOrderMoney,
 } = require('./orderMoney');
+// WarEra+ le parti della ricchezza di un giocatore (aziende, ordini
+// d'acquisto), un valore al giorno dal censimento notturno. Il resto —
+// soldi, oggetti, equipaggiamento — il gioco non lo mostra e non si stima.
+// Vedi il blocco in testa a server/playerParts.js.
+const {
+  initPlayerParts, snapshotPlayerParts, readPlayerParts, statoPlayerParts,
+} = require('./playerParts');
 // WarEra+ lavoro e tasse: ogni pagamento di salario del gioco, aggregato per
 // nazione. Archivio CHIUSO (29 lug - 17 set 2026) e senza poll: sono ~550.000
 // pagamenti al giorno, sfogliarli vorrebbe dire undicimila pagine al giorno.
@@ -471,6 +478,10 @@ initOrderMoney({
   trpcBatch: (...args) => trpcBatch(...args),
   readCache, readCacheShared, writeCache, treasuryByDay,
 });
+
+// Parti della ricchezza: solo cache, e i soldi negli ordini per compratore
+// dalla memoria di orderMoney.
+initPlayerParts({ readCache, writeCache, ordersByUser: () => orderMoneyByUser() });
 
 // Tornei: richieste pubbliche. In cache le fotografie della classifica
 // settimanale (weekly-snaps/), il danno delle partite finite e il registro
@@ -2609,6 +2620,11 @@ cron.schedule('27 * * * *', pollPrices);
 // di getTopOrders, una procedura per risorsa.
 cron.schedule('42 * * * *', pollOrderMoney);
 
+// WarEra+ parti della ricchezza: ogni ora alle :50 controlla se il censimento
+// aziende e' finito (dura un'ora e mezza, la sua fine si sposta) e in quel
+// caso aggiunge il giorno. Quasi sempre non fa niente.
+cron.schedule('50 * * * *', snapshotPlayerParts);
+
 // WarEra+ tornei: ogni 3 minuti, al secondo :20 (lontano dai cron al
 // minuto pieno). Tabellone e squadre dell'ultimo torneo di ogni tipo; la
 // classifica settimanale solo ogni 10 minuti (vedi server/tournament.js).
@@ -3332,6 +3348,16 @@ app.get('/tournament', async (req, res) => {
 // finestra della serie, `country` o `mu` (id) la serie di quell'unico
 // compratore. Il totale e' un MINIMO: getTopOrders si ferma a 100 ordini per
 // libro, e `latest.byItem[code][2]` dice quali libri sono al tetto.
+// Le parti della ricchezza di UN giocatore (server/playerParts.js): righe
+// [giorno, aziende|null, ordini|null] piu' i valori di adesso. 404 mai: un
+// giocatore sconosciuto ha semplicemente `rows: []`.
+app.get('/player-parts', (req, res) => {
+  const userId = /^[a-f0-9]{24}$/.test(String(req.query.userId || '')) ? String(req.query.userId) : null;
+  if (!userId) return res.status(400).json({ error: 'userId mancante o non valido' });
+  const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 3650);
+  res.json(readPlayerParts(userId, days));
+});
+
 app.get('/order-money', (req, res) => {
   const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 3650);
   const id = (v) => (/^[a-f0-9]{24}$/.test(String(v || '')) ? String(v) : null);
@@ -4059,6 +4085,7 @@ app.get('/health', (req, res) => res.json({
   // linea comincia dal deploy.
   priceHistory: statoPriceHistory(),
   orderMoney: statoOrderMoney(),
+  playerParts: statoPlayerParts(),
   // Quanti giorni di diplomazia e di battaglie storiche ci sono. Se
   // `primo` e' recente l'import non e' mai stato fatto (import/diplomazia.js,
   // import/battaglie.js) e la time machine mostra la fascia "fuori portata"

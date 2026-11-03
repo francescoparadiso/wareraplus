@@ -99,6 +99,14 @@ wareraPlus/
 │   │                              è un MINIMO: i libri al tetto sono segnati. Il
 │   │                              portafoglio dei giocatori non è pubblico e non si
 │   │                              stima. Endpoint: /order-money?days=N[&country=|&mu=].
+│   ├── playerParts.js          ← NUOVO (2026-11-03) — le parti della ricchezza di un
+│   │                              giocatore, un valore al giorno: aziende (somma di
+│   │                              estimatedValue, dal censimento notturno →
+│   │                              company-owner-values) e soldi nei suoi ordini
+│   │                              (memoria di orderMoney). Per colonne e per
+│   │                              giocatore. Il RESTO (soldi, oggetti, armi,
+│   │                              equipaggiamento) non è visibile: lo calcola il
+│   │                              client per differenza. Endpoint: /player-parts.
 │   ├── dayHistory.js           ← NUOVO — la giornata storica: diplomazia (patti,
 │   │                              guerre, nemico giurato, tesoro) e battaglie aperte,
 │   │                              giorno per giorno. Toglie alla time machine il suo
@@ -543,6 +551,8 @@ wareraPlus/
     │   │                          all'indietro col primo valore noto, e la nota lo dichiara.
     │   ├── nationList.js, nationCompare.js, nationDetail.js, i18n.js (9 lingue)
     ├── players/                  ← NUOVO (2026-10-14) — Giocatori: voce di Approfondimenti
+    │   │                            (2026-11-03: la scheda Ricchezza si divide in PARTI
+    │   │                            selezionabili — partsChart.js, i18nParts.js)
     │   │                            e destinazione del clic su un cittadino (Statistiche
     │   │                            nazioni → Cittadini; Ctrl/clic centrale aprono ancora il
     │   │                            profilo sul gioco). Partenza: ricerca, "Sono io" (stessa

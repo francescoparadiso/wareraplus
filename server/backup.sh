@@ -87,7 +87,7 @@ salva_sqlite "$PLUS_DEV_DIR" plus-dev
   echo "backup WarEra+ del $(date -Is)"
   echo
   echo "## righe negli archivi che non si rifanno"
-  for f in money-transfers price-history order-money day-history-diplomacy day-history-battles labour-history; do
+  for f in money-transfers price-history order-money player-parts day-history-diplomacy day-history-battles labour-history; do
     [ -f "$CACHE_DIR/$f.json" ] && echo "  $f.json  $(du -h "$CACHE_DIR/$f.json" | cut -f1)"
   done
   echo

@@ -700,6 +700,23 @@ perché `itemTrading.getPrices` dice quanto costa ADESSO e ieri non esiste da
 nessuna parte. Stesso vincolo di bonifici e ricchezza, stessa soluzione: un
 archivio di terzi importato una volta sola.
 
+Le **parti della ricchezza** di un giocatore (scheda Ricchezza di Giocatori,
+`src/players/partsChart.js` + `server/playerParts.js`, dal 2026-11-03) dipendono
+dal rideploy del cache-server (`/player-parts`) e dal censimento notturno delle
+aziende: lo storico delle parti parte dal PRIMO censimento dopo il deploy e
+non si ricostruisce (nessuna procedura dice quanto valevano le aziende di ieri).
+Prima di allora si vede solo la divisione di oggi, che il browser calcola da
+solo (`fetchCompaniesValue`: `company.getCompanies` + `getById`, pubbliche).
+Tre cose da sapere:
+
+- **il gioco non scompone la ricchezza**: soldi, oggetti, armi ed equipaggiamento
+  non sono visibili. Il «Resto» è la ricchezza meno aziende meno ordini, e non
+  va chiamato «soldi». `estimatedValue` non ha mai superato `userWealth` (nove
+  giocatori, 1° → 14.000°, 15–84%);
+- il valore delle aziende storico viene dal censimento, che vede solo i
+  proprietari ATTIVI (3 giorni): per gli altri il giorno è `null`, non zero;
+- gli ordini d'acquisto per giocatore sono un MINIMO (100 ordini per libro).
+
 La scheda **Soldi** di Economia (`src/economy/money.js` + `server/orderMoney.js`,
 dal 2026-11-03) dipende dal rideploy del **cache-server** (`/order-money`):
 senza, la scheda dice che il server non risponde e non ha ripieghi. Dopo il

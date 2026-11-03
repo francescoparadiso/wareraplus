@@ -51,8 +51,10 @@ import { vsRow, countUpScore as countUpIn } from '../shared/versus.js';
 import {
   LEADERBOARDS, fetchPlayer, searchPlayers, fetchEquipment, fetchWealthHistory,
   fetchLeaderboard, fetchNames, fetchPlayerBattles, fetchCompanies, fetchPointValues, fetchWorkStats,
-  fetchPolitics, fetchNationRanks,
+  fetchPolitics, fetchNationRanks, fetchWealthParts, fetchCompaniesValue,
 } from './api.js';
+import { prtT } from './i18nParts.js';
+import { partsChartSvg, PART_COLORS, PART_KEYS } from './partsChart.js';
 
 const APP_BASE = 'https://app.warera.io';
 const MINE_KEY = 'we_my_player';
@@ -87,6 +89,9 @@ let _battles = null;         // risposta di fetchPlayerBattles
 let _battleDays = BATTLE_DAYS[0];
 let _battlesLoading = false;
 let _wealth;                 // undefined = non chiesta, null = non disponibile
+let _parts;                  // idem: { srv, live } — le parti della ricchezza
+let _wMode = 'total';        // 'total' | 'parts'
+let _wSel = new Set(PART_KEYS);   // parti accese nel grafico
 let _equip;                  // idem
 let _muName = null;
 let _wealthObs = null;
@@ -216,6 +221,7 @@ export async function openPlayer(id, { tabs = true } = {}) {
   _battles = null;
   _battleDays = BATTLE_DAYS[0];
   _wealth = undefined;
+  _parts = undefined;
   _equip = undefined;
   _muName = null;
   _natRanks = null;
@@ -263,6 +269,14 @@ function loadTab(tab) {
     const pid = _pid;
     _wealth = 'loading';
     fetchWealthHistory(pid).then(h => { if (_pid === pid) { _wealth = h; render(); } });
+  }
+  if (tab === 'wealth' && _parts === undefined) {
+    const pid = _pid;
+    _parts = 'loading';
+    // Il server dà lo storico e gli ordini di adesso, il browser il valore
+    // delle aziende di adesso: due fonti indipendenti, nessuna blocca l'altra.
+    Promise.all([fetchWealthParts(pid), fetchCompaniesValue(pid)])
+      .then(([srv, live]) => { if (_pid === pid) { _parts = { srv, live }; render(); } });
   }
   if (tab === 'skills' && _equip === undefined) {
     const pid = _pid;
@@ -715,6 +729,80 @@ function wealthWindow(days) {
   return days.filter(r => dayNum(r[0]) >= from).map(([g, v]) => [g, v, v, v, v, null]);
 }
 
+/* ── Le parti della ricchezza ─────────────────────────────────────
+   Aziende e ordini d'acquisto sono le uniche parti che il gioco lascia
+   vedere; il resto è la differenza con la ricchezza e lo dichiara il suo
+   nome. Vedi server/playerParts.js. */
+function partsNow() {
+  const w = _lite?.rankings?.userWealth?.value;
+  if (!Number.isFinite(w) || !_parts || _parts === 'loading') return null;
+  const c = _parts.live ?? _parts.srv?.companiesNow?.value ?? null;
+  if (c == null) return null;
+  const o = _parts.srv?.ordersNow ?? null;     // null = il server non risponde
+  return { w, companies: c, orders: o, rest: Math.max(0, w - c - (o || 0)) };
+}
+
+/** Le righe giorno per giorno, con il resto calcolato sulla ricchezza di
+ *  QUEL giorno. Dove manca una delle due metà il resto manca, non è zero. */
+function partsSeries() {
+  const rows = _parts?.srv?.rows;
+  if (!rows?.length || !_wealth?.days?.length) return [];
+  const wmap = new Map(_wealth.days.map(r => [r[0], r[1]]));
+  const out = rows.map(([g, c, o]) => {
+    const w = wmap.get(g);
+    return { g, companies: c, orders: o, rest: (w != null && c != null) ? Math.max(0, w - c - (o || 0)) : null };
+  });
+  const from = _wGiorni ? dayNum(out[out.length - 1].g) - _wGiorni : -Infinity;
+  return out.filter(r => dayNum(r.g) >= from);
+}
+
+function partsBlockHtml() {
+  const modi = ['total', 'parts'].map(m =>
+    `<button type="button" class="wp-ply-chip${_wMode === m ? ' wp-ply-chip-me' : ''}" data-wmode="${m}">${escapeHtml(prtT(m === 'total' ? 'modeTotal' : 'modeParts'))}</button>`).join('');
+  const now = partsNow();
+  let corpo;
+  if (_parts === 'loading' || _parts === undefined) {
+    corpo = `<p class="wp-ply-note">${escapeHtml(plyT('loading'))}</p>`;
+  } else if (!now) {
+    corpo = `<p class="wp-ply-note">${escapeHtml(prtT('noteNoCompanies'))}</p>`;
+  } else {
+    const parti = [
+      ['companies', now.companies, 'hintCompanies'],
+      ['orders', now.orders, 'hintOrders'],
+      ['rest', now.rest, 'hintRest'],
+    ];
+    const attiva = (k) => _wMode === 'parts' && _wSel.has(k);
+    const pct = (v) => (now.w > 0 && v != null ? `${((v / now.w) * 100).toFixed(1)}%` : '—');
+    corpo = `
+      <div class="wp-ply-pbar" role="group" aria-label="${escapeHtml(prtT('modeParts'))}">
+        ${parti.filter(p => p[1]).map(([k, v, h]) => `<button type="button" class="wp-ply-pseg${_wMode === 'parts' && !_wSel.has(k) ? ' off' : ''}" data-part="${k}"
+            style="flex:${v};background:${PART_COLORS[k]}" title="${escapeHtml(`${prtT(k)}: ${fmtFull(Math.round(v))} · ${prtT(h)}`)}"></button>`).join('')}
+      </div>
+      <div class="wp-ply-plegend">
+        ${parti.map(([k, v, h]) => `<button type="button" class="wp-ply-chip wp-ply-pchip${attiva(k) ? ' wp-ply-chip-me' : ''}" data-part="${k}" title="${escapeHtml(prtT(h))}">
+            <i style="background:${PART_COLORS[k]}"></i>${escapeHtml(prtT(k))}
+            <b>${v != null ? escapeHtml(fmtMoney(Math.round(v))) : '—'}</b> <small class="wp-ply-dim">${escapeHtml(pct(v))}</small></button>`).join('')}
+      </div>`;
+  }
+
+  let storia = '';
+  if (_wMode === 'parts' && _parts && _parts !== 'loading') {
+    const srv = _parts.srv;
+    if (!srv) storia = prtT('noteNoServer');
+    else if (!srv.rows.length) storia = prtT('noteNone');
+    else if (srv.rows.length === 1) storia = prtT('noteFew', { n: 1 });
+    else storia = prtT('noteSince', { d: fmtDate(srv.rows[0][0]) });
+  }
+
+  return `
+    <div class="wp-ply-parts">
+      <div class="wp-ply-pmodes"><span class="wp-ply-dim">${escapeHtml(prtT('modeLabel'))}</span> ${modi}
+        ${_wMode === 'parts' ? `<span class="wp-ply-dim wp-ply-phint">${escapeHtml(prtT('select'))}</span>` : ''}</div>
+      ${corpo}
+      <p class="wp-ply-note">${escapeHtml(prtT('noteParts'))}${storia ? ' ' + escapeHtml(storia) : ''}</p>
+    </div>`;
+}
+
 function wealthHtml() {
   if (_wealth === undefined || _wealth === 'loading') return `<div class="wp-ply-loading">${escapeHtml(plyT('loading'))}</div>`;
   const ora = _lite?.rankings?.userWealth;
@@ -746,6 +834,7 @@ function wealthHtml() {
       <span>${escapeHtml(plyT('wl30'))} ${deltaHtml(v30?.abs, v30?.pct)}</span>
       ${vAll ? `<span>${escapeHtml(plusT('wlDAll', { d: fmtDate(vAll.da) }))} ${deltaHtml(vAll.abs, vAll.pct)}</span>` : ''}
     </div>
+    ${partsBlockHtml()}
     <div class="wp-ecn-chartbar">
       ${W_RANGES.map(x => `<button type="button" class="wp-ply-chip${_wGiorni === x.g ? ' wp-ply-chip-me' : ''}" data-wrange="${x.g}">${escapeHtml(plusT(x.key))}</button>`).join('')}
     </div>
@@ -762,8 +851,37 @@ function wealthHtml() {
 function drawWealthChart() {
   _wealthObs?.disconnect();
   const wrap = _root?.querySelector('#wp-ply-wchart');
+  if (!wrap) return;
+
+  // Vista "Parti": una linea per parte accesa, dai giorni che il server ha
+  // salvato. Con meno di due giorni (o nessuna parte accesa) non c'è una
+  // linea da disegnare, e lo si dice invece di lasciare il riquadro vuoto.
+  if (_wMode === 'parts') {
+    const serie = partsSeries();
+    if (!_wSel.size || serie.length < 2) {
+      const msg = !_wSel.size ? prtT('nothing') : serie.length ? prtT('noteFew', { n: serie.length }) : prtT('noteNone');
+      wrap.innerHTML = `<p class="wp-ply-note">${escapeHtml(msg)}</p>`;
+      return;
+    }
+    const drawParts = () => {
+      const w = Math.max(320, Math.round(wrap.clientWidth || 0));
+      wrap.innerHTML = partsChartSvg(serie, _wSel, {
+        w, h: 280, fmt: fmtMoney, lingua: lingua(), label: (k) => prtT(k),
+      });
+      return w;
+    };
+    let lastP = drawParts();
+    _wealthObs = new ResizeObserver(() => {
+      const w = Math.round(wrap.clientWidth || 0);
+      if (!w || !wrap.isConnected || Math.abs(w - lastP) < 8) return;
+      lastP = drawParts();
+    });
+    _wealthObs.observe(wrap);
+    return;
+  }
+
   const serie = wealthWindow(_wealth?.days);
-  if (!wrap || serie.length < 2) return;
+  if (serie.length < 2) return;
   const draw = () => {
     const w = Math.max(320, Math.round(wrap.clientWidth || 0));
     const h = 280;
@@ -923,6 +1041,18 @@ function wire() {
     if (t.closest('#wp-ply-back')) { _pid = null; render(); return; }
     const wr = t.closest('[data-wrange]');
     if (wr) { _wGiorni = Number(wr.dataset.wrange); render(); return; }
+    const wm = t.closest('[data-wmode]');
+    if (wm) { _wMode = wm.dataset.wmode === 'parts' ? 'parts' : 'total'; render(); return; }
+    // Un clic su una parte la accende o la spegne; da "Totale" porta alla
+    // vista "Parti", dove ha senso sceglierle.
+    const pt = t.closest('[data-part]');
+    if (pt && PART_KEYS.includes(pt.dataset.part)) {
+      if (_wMode !== 'parts') _wMode = 'parts';
+      else if (_wSel.has(pt.dataset.part)) _wSel.delete(pt.dataset.part);
+      else _wSel.add(pt.dataset.part);
+      render();
+      return;
+    }
     const ptab = t.closest('[data-ptab]');
     if (ptab) { _ptab = ptab.dataset.ptab; render(); loadTab(_ptab); return; }
     if (t.closest('[data-mine]')) { setMe(_pid, _lite); render(); return; }
