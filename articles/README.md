@@ -169,6 +169,6 @@ nessuna dipendenza), non col browser interno (screenshot a ~800 px) e sul
 - Per l'articolo di novembre 2026 l'HTML dell'editor è stato generato da un
   piccolo script con una sintassi a token (`@u:ID`, `@p:ID`, `@c:ID`,
   `[[testo|url]]`, colori), tenuto in una cartella temporanea e **non nel
-  repo**: nel repo c'è solo l'HTML finale (`presidential-november-2026.html`,
-  se è stato committato). Rifarlo è un'ora di lavoro; se si vuole averlo
+  repo**: nel repo c'è solo l'HTML finale (`presidential-november-2026.html`;
+  le immagini stanno su Imgur, non nel repo). Rifarlo è un'ora di lavoro; se si vuole averlo
   sotto mano per i prossimi articoli, conviene metterlo in `tools/articles/`.
