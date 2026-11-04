@@ -49,6 +49,9 @@ import { initNewsOverlay, openNewsView } from './app/newsOverlay.js';
 import { initMuOverlay, openMuView } from './app/muOverlay.js';
 import { initNationsOverlay, openNationsView } from './app/nationsOverlay.js';
 import { initPlayersOverlay, openPlayersView } from './app/playersOverlay.js';
+// WarEra+ (2026-11-04): riquadro "Novita'" alla prima visita dopo un aggiornamento
+// (contenuto in app/changelog.js).
+import { initWhatsNew } from './app/whatsNew.js';
 import { initBattlesOverlay, openBattlesView } from './app/battlesOverlay.js';
 import { initAccordiOverlay, openAccordiView } from './app/accordiOverlay.js';
 import { initTournamentOverlay, openTournamentView } from './app/tournamentOverlay.js';
@@ -251,6 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initGuideOverlay();
   initToolsOverlay();
   initPrivateOverlay();
+  initWhatsNew();
   applyTranslations();
   initLangButton();
 });

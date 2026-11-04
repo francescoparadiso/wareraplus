@@ -1067,6 +1067,15 @@ wareraPlus/
     │   │                         non si scrive (la closePanel() del boot cancellerebbe
     │   │                         ?country= prima che venga letto). Dentro lo sfondo
     │   │                         valgono solo ?country= e ?tm=, come prima.
+    │   ├── whatsNew.js         ← NUOVO (2026-11-04) — riquadro "Novità" in sovraimpressione, UNA
+    │   │                          volta a chi torna dopo un aggiornamento (chiave
+    │   │                          we_whatsnew_seen = id più recente chiuso). Non compare alla
+    │   │                          prima visita assoluta, sui link condivisi (?section=…,
+    │   │                          ?player=…) né nello sfondo Wallpaper Engine; ?whatsnew=1 lo
+    │   │                          riapre a mano. Contenuto in changelog.js.
+    │   ├── changelog.js        ← NUOVO (2026-11-04) — il registro delle novità: l'UNICO file da
+    │   │                          toccare a ogni release (istruzioni in testa al file). en+it
+    │   │                          obbligatori, le altre lingue ricadono sull'inglese.
     │   ├── overlayChrome.js    ← chrome condiviso degli overlay: sfondo a particelle nella
     │   │                         tinta della sezione + pausa mappa
     │   ├── mapIdle.js          ← pausa/riprende il lavoro di sfondo della mappa (pallini

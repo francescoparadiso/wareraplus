@@ -368,6 +368,19 @@ punto di fallimento. Vedi il ⚠️ in fondo per cosa degrada e come.
 - **Niente barre di scorrimento di sistema**: mai le native grigie — regola
   globale in `shell.css`, cursore nella tinta della sezione.
 
+## Novità per gli utenti (`src/app/changelog.js`)
+
+Ogni release che porta qualcosa di visibile a chi usa il tool ha una voce in
+**`src/app/changelog.js`** (in cima, istruzioni nel file): il riquadro «Novità»
+la mostra UNA volta a chi torna dopo l'aggiornamento (`src/app/whatsNew.js`,
+chiave `we_whatsnew_seen`). Si scrive per chi usa il tool, non per chi lo
+sviluppa; `en` e `it` obbligatori, le altre lingue ricadono sull'inglese; l'`id`
+è una data ISO, non si riusa né si ritocca dopo la pubblicazione. Chi non ha
+mai aperto il tool e chi arriva da un link condiviso non lo vede (vedi la
+testata di `whatsNew.js`); `?whatsnew=1` lo riapre a mano. La voce va aggiunta
+quando il lavoro arriva su `main`, non su `dev`: il riquadro compare anche sul
+dev (chiave per origin), ma sono gli utenti del live quelli a cui è rivolto.
+
 ## Articoli (arcana.warera.wiki/news)
 
 Gli articoli su WarEra+ (aggiornamenti di versione, analisi delle elezioni…)
