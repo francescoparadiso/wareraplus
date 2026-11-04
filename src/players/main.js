@@ -51,7 +51,7 @@ import { vsRow, countUpScore as countUpIn } from '../shared/versus.js';
 import {
   LEADERBOARDS, fetchPlayer, searchPlayers, fetchEquipment, fetchWealthHistory,
   fetchLeaderboard, fetchNames, fetchPlayerBattles, fetchCompanies, fetchPointValues, fetchWorkStats,
-  fetchPolitics, fetchNationRanks, fetchWealthParts, fetchCompaniesValue,
+  fetchPolitics, fetchNationRanks, fetchWealthParts, fetchUserWealth,
 } from './api.js';
 import { prtT } from './i18nParts.js';
 import { partsChartSvg, PART_COLORS, PART_KEYS } from './partsChart.js';
@@ -89,7 +89,7 @@ let _battles = null;         // risposta di fetchPlayerBattles
 let _battleDays = BATTLE_DAYS[0];
 let _battlesLoading = false;
 let _wealth;                 // undefined = non chiesta, null = non disponibile
-let _parts;                  // idem: { srv, live } — le parti della ricchezza
+let _parts;                  // idem: { srv, live } — la ricchezza per categoria
 let _wMode = 'total';        // 'total' | 'parts'
 let _wSel = new Set(PART_KEYS);   // parti accese nel grafico
 let _equip;                  // idem
@@ -273,9 +273,9 @@ function loadTab(tab) {
   if (tab === 'wealth' && _parts === undefined) {
     const pid = _pid;
     _parts = 'loading';
-    // Il server dà lo storico e gli ordini di adesso, il browser il valore
-    // delle aziende di adesso: due fonti indipendenti, nessuna blocca l'altra.
-    Promise.all([fetchWealthParts(pid), fetchCompaniesValue(pid)])
+    // Il gioco dà la divisione di adesso (getUserById), il server lo storico
+    // e i soldi negli ordini: due fonti indipendenti, nessuna blocca l'altra.
+    Promise.all([fetchWealthParts(pid), fetchUserWealth(pid)])
       .then(([srv, live]) => { if (_pid === pid) { _parts = { srv, live }; render(); } });
   }
   if (tab === 'skills' && _equip === undefined) {
@@ -729,29 +729,29 @@ function wealthWindow(days) {
   return days.filter(r => dayNum(r[0]) >= from).map(([g, v]) => [g, v, v, v, v, null]);
 }
 
-/* ── Le parti della ricchezza ─────────────────────────────────────
-   Aziende e ordini d'acquisto sono le uniche parti che il gioco lascia
-   vedere; il resto è la differenza con la ricchezza e lo dichiara il suo
-   nome. Vedi server/playerParts.js. */
+/* ── La ricchezza per categoria ───────────────────────────────────
+   `user.getUserById` → `stats.wealth`: aziende, equipaggiamento, armi,
+   oggetti, soldi. Sono le voci del gioco e sommano al totale. I soldi negli
+   ordini d'acquisto NON ne fanno parte (escono dal portafoglio quando
+   l'ordine si piazza): si mostrano a parte. Vedi server/playerParts.js. */
 function partsNow() {
-  const w = _lite?.rankings?.userWealth?.value;
-  if (!Number.isFinite(w) || !_parts || _parts === 'loading') return null;
-  const c = _parts.live ?? _parts.srv?.companiesNow?.value ?? null;
-  if (c == null) return null;
-  const o = _parts.srv?.ordersNow ?? null;     // null = il server non risponde
-  return { w, companies: c, orders: o, rest: Math.max(0, w - c - (o || 0)) };
+  const w = _parts && _parts !== 'loading' ? _parts.live : null;
+  if (!w) return null;
+  return {
+    w: Number(w.total),
+    companies: Number(w.companies), equipments: Number(w.equipments), weapons: Number(w.weapons),
+    items: Number(w.items), money: Number(w.money),
+  };
 }
 
-/** Le righe giorno per giorno, con il resto calcolato sulla ricchezza di
- *  QUEL giorno. Dove manca una delle due metà il resto manca, non è zero. */
+/** Le righe giorno per giorno salvate dal server. */
 function partsSeries() {
-  const rows = _parts?.srv?.rows;
-  if (!rows?.length || !_wealth?.days?.length) return [];
-  const wmap = new Map(_wealth.days.map(r => [r[0], r[1]]));
-  const out = rows.map(([g, c, o]) => {
-    const w = wmap.get(g);
-    return { g, companies: c, orders: o, rest: (w != null && c != null) ? Math.max(0, w - c - (o || 0)) : null };
-  });
+  // Solo le righe nel formato nuovo (7 colonne): un server non ancora
+  // aggiornato manda quello di prima, e leggerlo con questo schema darebbe
+  // numeri sbagliati sotto etichette giuste.
+  const rows = (_parts?.srv?.rows || []).filter(r => r.length >= 7);
+  if (!rows.length) return [];
+  const out = rows.map(([g, c, e, w, i, m]) => ({ g, companies: c, equipments: e, weapons: w, items: i, money: m }));
   const from = _wGiorni ? dayNum(out[out.length - 1].g) - _wGiorni : -Infinity;
   return out.filter(r => dayNum(r.g) >= from);
 }
@@ -764,25 +764,22 @@ function partsBlockHtml() {
   if (_parts === 'loading' || _parts === undefined) {
     corpo = `<p class="wp-ply-note">${escapeHtml(plyT('loading'))}</p>`;
   } else if (!now) {
-    corpo = `<p class="wp-ply-note">${escapeHtml(prtT('noteNoCompanies'))}</p>`;
+    corpo = `<p class="wp-ply-note">${escapeHtml(prtT('noteNoSplit'))}</p>`;
   } else {
-    const parti = [
-      ['companies', now.companies, 'hintCompanies'],
-      ['orders', now.orders, 'hintOrders'],
-      ['rest', now.rest, 'hintRest'],
-    ];
     const attiva = (k) => _wMode === 'parts' && _wSel.has(k);
-    const pct = (v) => (now.w > 0 && v != null ? `${((v / now.w) * 100).toFixed(1)}%` : '—');
+    const pct = (v) => (now.w > 0 && Number.isFinite(v) ? `${((v / now.w) * 100).toFixed(1)}%` : '—');
+    const ordini = _parts.srv?.ordersNow;
     corpo = `
       <div class="wp-ply-pbar" role="group" aria-label="${escapeHtml(prtT('modeParts'))}">
-        ${parti.filter(p => p[1]).map(([k, v, h]) => `<button type="button" class="wp-ply-pseg${_wMode === 'parts' && !_wSel.has(k) ? ' off' : ''}" data-part="${k}"
-            style="flex:${v};background:${PART_COLORS[k]}" title="${escapeHtml(`${prtT(k)}: ${fmtFull(Math.round(v))} · ${prtT(h)}`)}"></button>`).join('')}
+        ${PART_KEYS.filter(k => now[k] > 0).map(k => `<button type="button" class="wp-ply-pseg${_wMode === 'parts' && !_wSel.has(k) ? ' off' : ''}" data-part="${k}"
+            style="flex:${now[k]};background:${PART_COLORS[k]}" title="${escapeHtml(`${prtT(k)}: ${fmtFull(Math.round(now[k]))} · ${prtT('hint_' + k)}`)}"></button>`).join('')}
       </div>
       <div class="wp-ply-plegend">
-        ${parti.map(([k, v, h]) => `<button type="button" class="wp-ply-chip wp-ply-pchip${attiva(k) ? ' wp-ply-chip-me' : ''}" data-part="${k}" title="${escapeHtml(prtT(h))}">
+        ${PART_KEYS.map(k => `<button type="button" class="wp-ply-chip wp-ply-pchip${attiva(k) ? ' wp-ply-chip-me' : ''}" data-part="${k}" title="${escapeHtml(prtT('hint_' + k))}">
             <i style="background:${PART_COLORS[k]}"></i>${escapeHtml(prtT(k))}
-            <b>${v != null ? escapeHtml(fmtMoney(Math.round(v))) : '—'}</b> <small class="wp-ply-dim">${escapeHtml(pct(v))}</small></button>`).join('')}
-      </div>`;
+            <b>${escapeHtml(fmtMoney(Math.round(now[k])))}</b> <small class="wp-ply-dim">${escapeHtml(pct(now[k]))}</small></button>`).join('')}
+      </div>
+      ${ordini != null && ordini > 0 ? `<p class="wp-ply-note wp-ply-pextra"><b>${escapeHtml(fmtMoney(Math.round(ordini)))}</b> ${escapeHtml(prtT('ordersExtra'))}</p>` : ''}`;
   }
 
   let storia = '';

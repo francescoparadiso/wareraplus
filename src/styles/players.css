@@ -325,3 +325,5 @@ body.light-theme .wp-ply-duel { --vs-a: #be185d; --vs-b: #0369a1; }
 .wp-ply-pseg:hover { opacity: .8; }
 .wp-ply-plegend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .wp-ply-pchip i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.wp-ply-pextra { margin-top: 8px; }
+.wp-ply-pextra b { color: var(--wp-ov-text, #e6edf3); }

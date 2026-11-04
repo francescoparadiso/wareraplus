@@ -56,6 +56,7 @@ echo "[backup] $STAMP → $WORK"
 if [ -d "$CACHE_DIR" ]; then
   tar -czf "$WORK/cache.tar.gz" \
       --exclude='bootstrap-raw-battles.json' \
+      --exclude='player-parts.sqlite*' \
       -C "$(dirname "$CACHE_DIR")" "$(basename "$CACHE_DIR")"
   echo "[backup] cache.tar.gz $(du -h "$WORK/cache.tar.gz" | cut -f1)"
 else
@@ -64,7 +65,7 @@ fi
 
 # ── 2. I due database di plusApi ───────────────────────────────────────
 salva_sqlite() {
-  local sorgente="$1/plus.sqlite" nome="$2"
+  local sorgente="$1/${3:-plus.sqlite}" nome="$2"
   [ -f "$sorgente" ] || { echo "[backup] $sorgente non esiste, saltato"; return 0; }
   # `readOnly` no: VACUUM INTO deve poter leggere il WAL. Non scrive sulla
   # sorgente, scrive solo la copia.
@@ -79,6 +80,10 @@ salva_sqlite() {
 }
 salva_sqlite "$PLUS_DIR" plus
 salva_sqlite "$PLUS_DEV_DIR" plus-dev
+# L'archivio della ricchezza per categoria sta nella cache ma e' un sqlite che
+# il giro mattutino (05:00-07:00 italiane) scrive a blocchi: un tar lo
+# prenderebbe a meta'. VACUUM INTO ne fa una copia coerente.
+salva_sqlite "$CACHE_DIR" player-parts player-parts.sqlite
 
 # ── 3. Cosa c'era dentro, in chiaro ────────────────────────────────────
 # Un backup che non dice cosa contiene si scopre incompleto il giorno in
@@ -87,7 +92,7 @@ salva_sqlite "$PLUS_DEV_DIR" plus-dev
   echo "backup WarEra+ del $(date -Is)"
   echo
   echo "## righe negli archivi che non si rifanno"
-  for f in money-transfers price-history order-money player-parts day-history-diplomacy day-history-battles labour-history; do
+  for f in money-transfers price-history order-money player-money-days day-history-diplomacy day-history-battles labour-history; do
     [ -f "$CACHE_DIR/$f.json" ] && echo "  $f.json  $(du -h "$CACHE_DIR/$f.json" | cut -f1)"
   done
   echo

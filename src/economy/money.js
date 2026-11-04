@@ -2,19 +2,23 @@
    WarEra+ — Economia: la scheda SOLDI
    ------------------------------------------------------------------
    La domanda: «quanti soldi ci sono nel gioco, e dove stanno?».
-   Il gioco non ha una risposta: nessuna procedura pubblica dice quanto
-   denaro ha un giocatore (`user.getUserLite` non porta `money`,
-   `inventory.getInventory` è token-gated), e `country.money` è fermo da
-   mesi. Quello che si VEDE è di due tipi:
+   Tre pezzi, che non si sovrappongono:
 
+     · i PORTAFOGLI dei giocatori — la voce `money` di `stats.wealth`
+       (`user.getUserById`, pubblica), sommata su tutta la classifica della
+       ricchezza una volta al giorno (server/playerParts.js), per nazione
+       e per unità;
      · i TESORI delle nazioni — `rankings.countryWealth`, che il server
        già archivia un giorno alla volta (dayHistory.js);
      · i soldi già messi negli ORDINI D'ACQUISTO — quantità × prezzo,
        con compratore e unità (server/orderMoney.js, un campione all'ora).
+       ⚠️ Stanno FUORI dalla ricchezza dei giocatori: il gioco li toglie
+       dal portafoglio quando l'ordine si piazza (su 40 compratori, 16
+       avevano negli ordini più di `money`, diversi più dell'intero
+       `total`). Si sommano ai portafogli, non li contano due volte.
 
-   Il resto — i portafogli dei giocatori — non si vede e la scheda non
-   lo stima: un numero credibile e inventato è il modo peggiore di
-   sbagliare.
+   (Fino al 2026-11-03 questa scheda diceva che i portafogli «non si
+   vedono»: era falso, avevo guardato `getUserLite` e non `getUserById`.)
 
    ── ⚠️ IL TOTALE DEGLI ORDINI È UN MINIMO ───────────────────────────
    `getTopOrders` si ferma a 100 ordini per libro. I libri che ci
@@ -33,13 +37,14 @@
 import { escapeHtml } from '../mu/ui.js';
 import { ecoT } from './i18n.js';
 import { moneyT } from './i18nMoney.js';
-import { fetchOrderMoneyViaCache } from '../diplomacy/cacheClient.js';
+import { fetchOrderMoneyViaCache, fetchPlayerMoneyViaCache } from '../diplomacy/cacheClient.js';
 import { getAllCountries, getCountryById } from '../shared/countries.js';
 import { fetchMuDirectory } from '../mu/api.js';
 
 // ── Stato della scheda ──────────────────────────────────────────────
 let _container = null;
 let _data = null;          // risposta di /order-money, null = non risponde
+let _players = null;       // risposta di /player-money (portafogli), null = non c'è
 let _giorni = 30;
 let _loading = false;
 let _ts = 0;
@@ -69,6 +74,10 @@ function giorno(ms) {
 // ── Le serie ────────────────────────────────────────────────────────
 function serieOrdini() {
   return (_data?.series || []).map(r => ({ t: r[0], y: r[1] }));
+}
+
+function serieWallets() {
+  return (_players?.world || []).map(r => ({ t: Date.parse(`${r[0]}T12:00:00Z`), y: r[5] }));
 }
 
 /** Tesori: un punto al giorno dall'archivio di dayHistory, poi i campioni
@@ -148,14 +157,14 @@ function rigaHtml({ nome, soldi, ordini, tetto, titolo, tot, dim, cap }) {
     </div>`;
 }
 
-function tabellaHtml(titolo, righe, tot) {
+function tabellaHtml(titolo, righe, tot, colonna = 'colOrders') {
   if (!righe.length) return '';
   return `<section class="wp-ecn-msec">
       <h3>${escapeHtml(titolo)}</h3>
       <div class="wp-ecn-mrow wp-ecn-mhead">
         <span>${escapeHtml(moneyT('colName'))}</span>
         <span class="wp-ecn-num">${escapeHtml(moneyT('colMoney'))}</span>
-        <span class="wp-ecn-num">${escapeHtml(moneyT('colOrders'))}</span>
+        <span class="wp-ecn-num">${escapeHtml(moneyT(colonna))}</span>
         <span class="wp-ecn-num">${escapeHtml(moneyT('colShare'))}</span>
       </div>
       ${righe.map(r => rigaHtml({ ...r, tot })).join('')}
@@ -180,6 +189,12 @@ function righeNazioni(latest) {
   return righe;
 }
 
+function righePortafogli(mappa, nome, tot) {
+  return Object.entries(mappa || {})
+    .sort((a, b) => b[1][0] - a[1][0]).slice(0, RIGHE_MAX)
+    .map(([id, [soldi, , n]]) => ({ nome: nome(id), soldi, ordini: n }));
+}
+
 function righeUnita(latest) {
   return Object.entries(latest.byMu || {})
     .sort((a, b) => b[1] - a[1]).slice(0, RIGHE_MAX)
@@ -202,19 +217,27 @@ function corpoHtml() {
 
   const ordini = latest.total;
   const tesori = latest.treasury;
-  const visibile = tesori != null ? tesori + ordini : null;
+  const pw = _players?.latest || null;            // ultima lettura dei portafogli
+  const portafogli = pw ? pw.world[4] : null;
+  const visibile = tesori != null ? tesori + ordini + (portafogli || 0) : null;
   const libri = Object.keys(latest.byItem || {}).length;
   const dal = _data.coverageFrom ? giorno(Date.parse(_data.coverageFrom)) : '—';
   const primoTesoro = (_data.treasuryDaily || [])[0]?.[0];
 
   return `
     <div class="wp-ecn-kpis">
+      ${kpiHtml(moneyT('kWallets'), portafogli != null ? compatto(portafogli) : '—',
+        pw ? moneyT('kWalletsNote', { n: intero(pw.n), d: giorno(Date.parse(`${pw.day}T12:00:00Z`)) }) : moneyT('notYetWallets'))}
       ${kpiHtml(moneyT('kTreasury'), tesori != null ? compatto(tesori) : '—', moneyT('kTreasuryNote'))}
       ${kpiHtml(moneyT('kOrders'), `≥ ${compatto(ordini)}`, moneyT('kOrdersNote', { n: intero(latest.orders), r: libri })
         + (visibile ? ' · ' + moneyT('kShare', { p: ((ordini / visibile) * 100).toFixed(1) }) : ''))}
-      ${kpiHtml(moneyT('kTotal'), visibile != null ? compatto(visibile) : '—', '')}
+      ${kpiHtml(moneyT('kTotal'), visibile != null ? compatto(visibile) : '—', moneyT('kTotalNote'))}
     </div>
 
+    ${serieWallets().length ? `<section class="wp-ecn-msec">
+      <h3>${escapeHtml(moneyT('chartWallets'))}</h3>
+      <div class="wp-ecn-chartwrap">${graficoHtml(serieWallets())}</div>
+    </section>` : ''}
     <section class="wp-ecn-msec">
       <h3>${escapeHtml(moneyT('chartOrders'))}</h3>
       <div class="wp-ecn-chartwrap">${graficoHtml(serieOrdini())}</div>
@@ -223,6 +246,11 @@ function corpoHtml() {
       <h3>${escapeHtml(moneyT('chartTreasury'))}</h3>
       <div class="wp-ecn-chartwrap">${graficoHtml(serieTesori())}</div>
     </section>
+
+    ${pw ? `<div class="wp-ecn-mgrid">
+      ${tabellaHtml(moneyT('byCountryW'), righePortafogli(pw.byCountry, id => getCountryById(id)?.name || moneyT('unknownNation', { id: id.slice(-4) })), portafogli, 'colPlayers')}
+      ${tabellaHtml(moneyT('byMuW'), righePortafogli(pw.byMu, id => _nomiMu?.get(id) || moneyT('unknownMu', { id: id.slice(-4) })), portafogli, 'colPlayers')}
+    </div>` : ''}
 
     <div class="wp-ecn-mgrid">
       ${tabellaHtml(moneyT('byItem'), righeRisorse(latest), ordini)}
@@ -234,6 +262,7 @@ function corpoHtml() {
     <p class="wp-ecn-note">${escapeHtml(moneyT('noteWhy'))}</p>
     ${latest.noCountry > 0 ? `<p class="wp-ecn-note">${escapeHtml(moneyT('noteOthers', { v: `${compatto(latest.noCountry)} (${quota(latest.noCountry, ordini)})` }))}</p>` : ''}
     <p class="wp-ecn-note">${escapeHtml(moneyT('noteCoverage', { d: dal }))}</p>
+    ${_players?.coverageFrom ? `<p class="wp-ecn-note">${escapeHtml(moneyT('noteWallets', { d: giorno(Date.parse(`${_players.coverageFrom}T12:00:00Z`)) }))}</p>` : ''}
     ${primoTesoro ? `<p class="wp-ecn-note">${escapeHtml(moneyT('noteTreasury', { d: giorno(Date.parse(`${primoTesoro}T12:00:00Z`)) }))}</p>` : ''}`;
 }
 
@@ -270,7 +299,7 @@ async function carica() {
   _loading = true;
   paint();
   try {
-    _data = await fetchOrderMoneyViaCache(_giorni);
+    [_data, _players] = await Promise.all([fetchOrderMoneyViaCache(_giorni), fetchPlayerMoneyViaCache(_giorni)]);
     // I nomi arrivano a parte e senza bloccare: l'elenco delle unità si
     // ridisegna da solo quando ci sono, e prima mostra gli ultimi 4 caratteri
     // dell'id invece di un nome inventato.
@@ -280,7 +309,7 @@ async function carica() {
     _loading = false;
     paint();
   }
-  if (_data?.latest && Object.keys(_data.latest.byMu || {}).length && !_nomiMu) {
+  if (!_nomiMu && (Object.keys(_data?.latest?.byMu || {}).length || Object.keys(_players?.latest?.byMu || {}).length)) {
     fetchMuDirectory().then(dir => {
       _nomiMu = new Map(dir.map(m => [m._id, m.name]));
       paint();

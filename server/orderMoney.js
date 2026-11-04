@@ -2,15 +2,17 @@
    WarEra+ — Soldi bloccati negli ordini d'acquisto
    -----------------------------------------------------------------------
    La domanda: «quanti soldi stanno fermi nel mercato, e di chi sono?».
-   Il gioco non lo dice da nessuna parte: `tradingOrder.getTopOrders` è
-   pubblica ma mostra un libro alla volta, e nessuna procedura pubblica
-   dice quanti soldi ha un giocatore (`user.getUserLite` non porta
-   `money`, `inventory.getInventory` risponde 401 senza chiave).
+   `tradingOrder.getTopOrders` è pubblica ma mostra un libro alla volta.
+   Questo modulo somma, ogni ora, `quantity × price` degli ordini
+   d'acquisto per risorsa, per unità militare e per nazione del compratore.
 
-   Un ordine d'acquisto è però l'unico pezzo del portafoglio di un
-   giocatore che si vede: `quantity × price` sono soldi che hanno già
-   lasciato le sue mani. Questo modulo li somma, ogni ora, per risorsa,
-   per unità militare e per nazione del compratore.
+   ⚠️ Quei soldi sono FUORI dalla ricchezza del giocatore: il gioco li
+   toglie dal portafoglio quando l'ordine si piazza (verificato il
+   2026-11-04 su 40 compratori: 16 avevano negli ordini più di `money`,
+   diversi più dell'intero `stats.wealth.total`). Il portafoglio — la voce
+   `money` di `user.getUserById` — sta in playerParts.js, e i due si
+   SOMMANO senza sovrapporsi. (Fino al 2026-11-03 questo commento diceva
+   che i portafogli non si vedono: era falso.)
 
    ── COSTO ─────────────────────────────────────────────────────────────
    Una richiesta a `itemTrading.getPrices` (per sapere quali risorse

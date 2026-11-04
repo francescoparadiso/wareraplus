@@ -97,16 +97,23 @@ wareraPlus/
 │   │                              risorsa, unità e nazione del compratore (mappa
 │   │                              mu-user-countries) + somma dei tesori. ⚠️ Il totale
 │   │                              è un MINIMO: i libri al tetto sono segnati. Il
-│   │                              portafoglio dei giocatori non è pubblico e non si
-│   │                              stima. Endpoint: /order-money?days=N[&country=|&mu=].
-│   ├── playerParts.js          ← NUOVO (2026-11-03) — le parti della ricchezza di un
-│   │                              giocatore, un valore al giorno: aziende (somma di
-│   │                              estimatedValue, dal censimento notturno →
-│   │                              company-owner-values) e soldi nei suoi ordini
-│   │                              (memoria di orderMoney). Per colonne e per
-│   │                              giocatore. Il RESTO (soldi, oggetti, armi,
-│   │                              equipaggiamento) non è visibile: lo calcola il
-│   │                              client per differenza. Endpoint: /player-parts.
+│   │                              soldi negli ordini stanno FUORI dalla ricchezza dei
+│   │                              giocatori (il gioco li toglie dal portafoglio).
+│   │                              Endpoint: /order-money?days=N[&country=|&mu=].
+│   ├── playerParts.js          ← NUOVO (2026-11-03, rifatto 2026-11-04) — la
+│   │                              ricchezza dei giocatori DIVISA per categoria
+│   │                              (aziende, equipaggiamento, armi, oggetti, soldi:
+│   │                              user.getUserById → stats.wealth, PUBBLICA; la
+│   │                              somma torna al totale). Un giro al giorno fra le
+│   │                              05:00 e le 06:59 italiane su tutta la classifica
+│   │                              userWealth (~17.000 getUserById, ~5 minuti), più
+│   │                              uno al primo avvio se l'archivio è vuoto.
+│   │                              Archivi: cache/player-parts.sqlite (una riga per
+│   │                              giocatore e giorno, su DISCO: il VPS ha l'85% di
+│   │                              RAM già usata) e cache/player-money-days.json
+│   │                              (mondo, nazioni, prime 150 unità: i portafogli
+│   │                              sommati, per la scheda Soldi). Endpoint:
+│   │                              /player-parts?userId= e /player-money?days=.
 │   ├── dayHistory.js           ← NUOVO — la giornata storica: diplomazia (patti,
 │   │                              guerre, nemico giurato, tesoro) e battaglie aperte,
 │   │                              giorno per giorno. Toglie alla time machine il suo
@@ -551,8 +558,9 @@ wareraPlus/
     │   │                          all'indietro col primo valore noto, e la nota lo dichiara.
     │   ├── nationList.js, nationCompare.js, nationDetail.js, i18n.js (9 lingue)
     ├── players/                  ← NUOVO (2026-10-14) — Giocatori: voce di Approfondimenti
-    │   │                            (2026-11-03: la scheda Ricchezza si divide in PARTI
-    │   │                            selezionabili — partsChart.js, i18nParts.js)
+    │   │                            (2026-11-03: la scheda Ricchezza si divide nelle cinque
+    │   │                            CATEGORIE del gioco, selezionabili — partsChart.js,
+    │   │                            i18nParts.js)
     │   │                            e destinazione del clic su un cittadino (Statistiche
     │   │                            nazioni → Cittadini; Ctrl/clic centrale aprono ancora il
     │   │                            profilo sul gioco). Partenza: ricerca, "Sono io" (stessa
@@ -620,11 +628,11 @@ wareraPlus/
     │   │                          Disegna anche le serie a un valore al giorno
     │   │                          (mode 'line'): l'esploratore accetta `righe` per
     │   │                          non mostrare apertura/massimo/minimo di una tassa.
-    │   ├── money.js              ← NUOVO (2026-11-03) — scheda SOLDI: tesori delle
-    │   │                            nazioni (countryWealth, mai `money`, fermo da mesi)
-    │   │                            + soldi negli ordini d'acquisto, per risorsa /
-    │   │                            nazione del compratore / unità. Tutto da
-    │   │                            /order-money, NESSUN ripiego. Dizionario in
+    │   ├── money.js              ← NUOVO (2026-11-03) — scheda SOLDI: portafogli dei
+    │   │                            giocatori (/player-money), tesori delle nazioni
+    │   │                            (countryWealth, mai `country.money`, fermo da mesi)
+    │   │                            e soldi negli ordini d'acquisto (/order-money), per
+    │   │                            nazione / unità. NESSUN ripiego. Dizionario in
     │   │                            economy/i18nMoney.js.
     │   ├── production.js         ← NUOVO (2026-10-08) — scheda PRODUZIONE: per
     │   │                          risorsa aziende, dipendenti, salari e tasse sui

@@ -661,6 +661,21 @@ export async function fetchOrderMoneyViaCache(days = 30) {
   }
 }
 
+/** WarEra+ — i portafogli dei giocatori sommati (`/player-money`, vedi
+ *  server/playerParts.js): il mondo giorno per giorno e, per l'ultimo giorno,
+ *  per nazione e per unità. null se il server non risponde o non ha ancora la
+ *  rotta. */
+export async function fetchPlayerMoneyViaCache(days = 90) {
+  try {
+    const json = await _fetchCacheJsonRaw(`/player-money?days=${encodeURIComponent(days)}`);
+    if (!json || !Array.isArray(json.world)) return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /player-money non disponibile:', err.message);
+    return null;
+  }
+}
+
 /** WarEra+ — le parti della ricchezza di UN giocatore (`/player-parts`, vedi
  *  server/playerParts.js): righe [giorno, aziende|null, ordini|null] e i
  *  valori di adesso. null se il server non risponde o non ha ancora la rotta:

@@ -90,22 +90,17 @@ export function fetchWealthParts(userId) {
   return fetchPlayerPartsViaCache(userId).catch(() => null);
 }
 
-/** Il valore stimato delle aziende di adesso: SOLO `company.getCompanies` e
- *  `company.getById` (pubbliche), senza la rosa dei dipendenti che
- *  `fetchCompanies` chiede per la scheda Aziende. Serve alla divisione della
- *  ricchezza, che deve funzionare anche per chi il censimento notturno non
- *  vede (inattivo da più di tre giorni). null se la lettura fallisce: "non
- *  so" non diventa uno zero. */
-export async function fetchCompaniesValue(userId) {
+/** La ricchezza di adesso divisa per categoria: `user.getUserById` →
+ *  `stats.wealth` { companies, equipments, weapons, items, money, total }.
+ *  PUBBLICA, senza chiave. La somma delle cinque voci è uguale a `total`
+ *  (verificato su 40 giocatori, differenza zero): nessun «resto» da ricavare.
+ *  `getUserLite`, che la scheda usa per il resto, NON la porta: per questo è
+ *  una chiamata a parte. null se la lettura fallisce. */
+export async function fetchUserWealth(userId) {
   try {
-    const [list] = await trpcBatchManual([['company.getCompanies', { userId, perPage: 100 }]]);
-    const ids = (list?.items || []).map(x => (typeof x === 'string' ? x : x?._id)).filter(Boolean);
-    let somma = 0;
-    for (let i = 0; i < ids.length; i += 25) {
-      const res = await trpcBatchManual(ids.slice(i, i + 25).map(id => ['company.getById', { companyId: id }]));
-      for (const c of res) somma += Number(c?.estimatedValue) || 0;
-    }
-    return Math.round(somma);
+    const [u] = await trpcBatchManual([['user.getUserById', { userId }]]);
+    const w = u?.stats?.wealth;
+    return w && Number.isFinite(Number(w.total)) ? w : null;
   } catch (_) {
     return null;
   }

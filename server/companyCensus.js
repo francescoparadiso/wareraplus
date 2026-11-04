@@ -151,7 +151,6 @@ let deps = null;
 
 const FILE = 'company-census';
 const FILE_ESTERO = 'company-abroad';
-const FILE_VALORI = 'company-owner-values';   // vedi playerParts.js
 const TZ = 'Europe/Rome';
 
 const CHUNK_OWNERS = 50;
@@ -487,18 +486,6 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
       (estero[suo] || (estero[suo] = [])).push([uid, c._id, c.itemCode, c.region, ospite || null,
         Math.round(Number(c.estimatedValue) || 0), c.disabledAt ? 1 : 0, conDip ? 1 : 0, nDip]);
     }
-    // 6b. Il valore stimato delle aziende per PROPRIETARIO: lo legge
-    //     playerParts.js per le parti della ricchezza di un giocatore.
-    //     `estimatedValue` è pubblico e non supera mai userWealth.
-    const valoriPerProprietario = {};
-    for (const c of aziende) {
-      const uid = proprietarioDi.get(c._id);
-      if (!uid) continue;
-      valoriPerProprietario[uid] = (valoriPerProprietario[uid] || 0) + (Number(c.estimatedValue) || 0);
-    }
-    for (const uid of Object.keys(valoriPerProprietario)) valoriPerProprietario[uid] = Math.round(valoriPerProprietario[uid]);
-    deps.writeCache(FILE_VALORI, { day: oggi, updatedAt: Date.now(), byUser: valoriPerProprietario }, { compact: true });
-
     const proprietariPer = {};
     for (const cid of cittadinanza.values()) proprietariPer[cid] = (proprietariPer[cid] || 0) + 1;
     deps.writeCache(FILE_ESTERO, { day: oggi, updatedAt: Date.now(), owners: proprietariPer, byCountry: estero }, { compact: true });

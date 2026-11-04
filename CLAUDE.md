@@ -700,41 +700,42 @@ perché `itemTrading.getPrices` dice quanto costa ADESSO e ieri non esiste da
 nessuna parte. Stesso vincolo di bonifici e ricchezza, stessa soluzione: un
 archivio di terzi importato una volta sola.
 
-Le **parti della ricchezza** di un giocatore (scheda Ricchezza di Giocatori,
-`src/players/partsChart.js` + `server/playerParts.js`, dal 2026-11-03) dipendono
-dal rideploy del cache-server (`/player-parts`) e dal censimento notturno delle
-aziende: lo storico delle parti parte dal PRIMO censimento dopo il deploy e
-non si ricostruisce (nessuna procedura dice quanto valevano le aziende di ieri).
-Prima di allora si vede solo la divisione di oggi, che il browser calcola da
-solo (`fetchCompaniesValue`: `company.getCompanies` + `getById`, pubbliche).
-Tre cose da sapere:
+La **ricchezza per categoria** (scheda Ricchezza di Giocatori, vista
+«Categorie», `src/players/partsChart.js` + `server/playerParts.js`, dal
+2026-11-03) e la scheda **Soldi** di Economia (`src/economy/money.js` +
+`server/orderMoney.js` + `server/playerParts.js`) dipendono dal rideploy del
+**cache-server** (`/player-parts`, `/player-money`, `/order-money`). Cosa serve
+sapere prima di crederle rotte o sbagliate:
 
-- **il gioco non scompone la ricchezza**: soldi, oggetti, armi ed equipaggiamento
-  non sono visibili. Il «Resto» è la ricchezza meno aziende meno ordini, e non
-  va chiamato «soldi». `estimatedValue` non ha mai superato `userWealth` (nove
-  giocatori, 1° → 14.000°, 15–84%);
-- il valore delle aziende storico viene dal censimento, che vede solo i
-  proprietari ATTIVI (3 giorni): per gli altri il giorno è `null`, non zero;
-- gli ordini d'acquisto per giocatore sono un MINIMO (100 ordini per libro).
-
-La scheda **Soldi** di Economia (`src/economy/money.js` + `server/orderMoney.js`,
-dal 2026-11-03) dipende dal rideploy del **cache-server** (`/order-money`):
-senza, la scheda dice che il server non risponde e non ha ripieghi. Dopo il
-deploy il primo campione è subito, poi uno all'ora alle :42; i tesori invece
-si vedono dal primo giorno, perché vengono da `day-history` (dal 13 aprile).
-Tre cose da sapere prima di crederla sbagliata:
-
-- ⚠️ **il totale degli ordini è un MINIMO**: `getTopOrders` accetta al massimo
-  100 ordini per libro (200 → errore di validazione) e il 3 novembre 17 libri su
-  24 erano già al tetto. Non stimare la coda con un modello dell'orderbook:
-  sarebbe un numero preciso e inventato. I libri al tetto portano `capped`;
-- i **portafogli dei giocatori non si vedono**: `user.getUserLite` non porta
-  `money` e `inventory.getInventory` è token-gated. Il solo pezzo visibile è
-  quello già messo in un ordine, e la scheda non pretende di più;
+- ⚠️ **`user.getUserById` → `stats.wealth` è PUBBLICO** e dà la ricchezza già
+  divisa: `{ companies, equipments, weapons, items, money, total }`. La somma
+  delle cinque voci è uguale a `total` (differenza zero su 40 giocatori,
+  2026-11-04). `user.getUserLite` invece NON la porta: per due giorni questo
+  repo ha creduto che soldi, oggetti e armi «non si vedono» e ha diviso in
+  aziende/ordini/«resto» — sbagliato, guardava `getUserLite`. Non tornarci:
+  non esiste nessun «resto» da calcolare;
+- ⚠️ **i soldi degli ordini d'acquisto NON sono nella ricchezza**: il gioco li
+  toglie dal portafoglio quando l'ordine si piazza (su 40 compratori, 16
+  avevano negli ordini più di `money`, e diversi più dell'intero `total`).
+  Si SOMMANO ai portafogli, non si sovrappongono: la scheda Soldi li tiene
+  separati e la scheda Ricchezza li mostra a parte;
+- gli ordini sono un MINIMO: `getTopOrders` accetta al massimo 100 ordini per
+  libro (200 → errore di validazione) e il 3 novembre 17 libri su 24 erano già
+  al tetto. Non stimare la coda con un modello dell'orderbook: sarebbe un
+  numero preciso e inventato. I libri al tetto portano `capped`;
 - ⚠️ **`country.money` NON è il tesoro**: somma 54 mila contro 4,4 milioni di
   `rankings.countryWealth`, che è quello che usano tutti (dayHistory, ticker).
   Un compratore non presente in `mu-user-countries` va in `noCountry`, mai
-  assegnato a una nazione a caso.
+  assegnato a una nazione a caso;
+- lo **storico** (categorie per giocatore, portafogli per nazione e unità)
+  non si ricostruisce: nessuna procedura dice quanto aveva un giocatore ieri.
+  Parte dal primo giro di `playerParts` — uno al primo avvio se l'archivio è
+  vuoto, poi uno al giorno fra le 05:00 e le 06:59 italiane (~17.000
+  `getUserById`, ~5 minuti) — e un giorno saltato è un buco, mai uno zero.
+  Prima del primo giro la scheda Ricchezza mostra comunque la divisione di
+  oggi (il browser la legge da sé), la scheda Soldi no (non ha ripiego).
+  Archivio: `cache/player-parts.sqlite`, su disco e non in RAM (il VPS è
+  all'85%), ~250 MB all'anno; `backup.sh` ne fa una copia con VACUUM INTO.
 
 Le schede **Produzione** e **Ricchezza** di Economia (`src/economy/production.js`,
 `src/economy/playerWealth.js`) dipendono da DUE deploy diversi, e conviene

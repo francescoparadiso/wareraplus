@@ -1,8 +1,8 @@
 /* ══════════════════════════════════════════════════════════════
    WarEra+ — Giocatori: grafico delle PARTI della ricchezza
    ------------------------------------------------------------------
-   Una linea per parte (aziende, ordini d'acquisto, resto), giorno per
-   giorno. Le parti si accendono e si spengono dai riquadri sopra il
+   Una linea per categoria (aziende, equipaggiamento, armi, oggetti, soldi),
+   giorno per giorno. Le parti si accendono e si spengono dai riquadri sopra il
    grafico (`data-part`, gestiti da players/main.js): qui si disegna solo
    quello che arriva in `sel`.
 
@@ -10,24 +10,27 @@
    loro, e un asse che parte da un minimo scelto farebbe sembrare
    un'azienda da 2.000 più grossa di un resto da 20.000.
 
-   Dove una parte manca in un giorno (`null`: il censimento non c'era) la
-   linea si spezza, non scende a zero — "non so" non è "zero".
+   Dove una parte manca in un giorno (`null`) la linea si spezza, non scende
+   a zero — "non so" non è "zero".
    ══════════════════════════════════════════════════════════════ */
 
 import { escapeHtml } from '../mu/ui.js';
 
+// Le cinque voci di `stats.wealth`, nello stesso ordine del gioco.
 export const PART_COLORS = {
-  companies: '#e6a817',
-  orders: '#2f9de4',
-  rest: '#9b7be8',
+  companies: '#f59e0b',
+  equipments: '#38bdf8',
+  weapons: '#f87171',
+  items: '#34d399',
+  money: '#facc15',
 };
-export const PART_KEYS = ['companies', 'orders', 'rest'];
+export const PART_KEYS = ['companies', 'equipments', 'weapons', 'items', 'money'];
 
 const DAY = 86400_000;
 const dayMs = (g) => Date.parse(`${g}T12:00:00Z`);
 
 /**
- * @param {Array<{g:string, companies:number|null, orders:number|null, rest:number|null}>} serie
+ * @param {Array<{g:string, companies:number|null, equipments:number|null, weapons:number|null, items:number|null, money:number|null}>} serie
  * @param {Set<string>} sel parti da disegnare
  * @param {{ w:number, h:number, fmt:(v:number)=>string, lingua:string, label:(k:string)=>string }} o
  */
