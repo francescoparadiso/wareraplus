@@ -12,6 +12,8 @@
    quindi due schede costruite sul dato MISURATO di work.getStatsByCompany:
 
      · Aziende (companies.js) — margine dei dipendenti, motore, segnali;
+       dal 2026-10-28 anche la rosa, dipendente per dipendente, da quando
+       WarEra ha aperto employee.getCompanyRoster ai token (account.js);
      · Competenze (skills.js) — l'ottimizzatore delle abilità, rifatto sulle nuove.
 
    Posizione (tasse e fronte, non più bonus) e Manager arriveranno dopo:
@@ -45,6 +47,7 @@ import { resolveUserId, AmbiguousUserError, UserNotFoundError } from './resolve.
 import { loadOwnedCompanies } from './account.js';
 import { computeCompanies } from './companies.js';
 import { computeSkills, ECO_SKILLS } from './skills.js';
+import { loadEmployeeBenchmarks } from '../shared/employeeBench.js';
 
 const SKILL_LABEL = { companies: 'Companies', energy: 'Energy', production: 'Production', management: 'Management' };
 
@@ -71,13 +74,13 @@ const DICT = {
     coNote: 'Last {n} full days (UTC). Worth per point = (price − inputs) ÷ production points. Cost per point = wages actually paid ÷ points your employees made. The game doesn\'t show individual employees to other tools — only these company totals — so headcount, happiness and tools aren\'t visible here.',
     curLabel: 'Now', recLabel: 'Recommended', pointsUsed: '{used}/{budget} pts', available: 'available',
     brkPassive: 'companies {g}', brkSelf: 'self-work {g}',
-    skBudget: '{b} points in these four skills ({f} unspent). Combat skills and Leadership are left alone.',
+    skBudget: '{b} points in these four skills ({f} unspent). Combat skills are left alone.',
     skSelf: 'Self-work in', skSelfDetail: '{v}/pt · {a} actions/day',
     skSelfNone: 'At current prices self-work earns nothing in any of your companies.',
     skMgmt: 'Management L{l}: +{p}% employee output',
     skCap: 'Companies L{l} keeps {k} of your {n} companies active: the others stop producing.',
-    skLeader: 'Leadership L{l} stays as is: it improves training and events, which have no gold value.',
-    skNote: 'Assumes all the energy regenerated in 24 h goes into self-work (10 per action). Energy for hiring and training, and any manager you hire, aren\'t counted. v0.27 gives everyone one free skill reset.',
+    skLeader: 'Management also improves training cards and adds +2% event odds per level (v0.27.3 folded Leadership into it). Neither has a gold value, so the gain above is a floor.',
+    skNote: "Self-work is counted at the {a} actions a day you actually did over the last week, not at the most your Energy would allow: more Energy only helps if you already use almost all of it. Any manager you hire isn't counted. v0.27 gives everyone one free skill reset.",
     noCompanies: 'No owned companies found.',
     errNotFound: 'No player found with that name or ID.', errAmbiguous: 'Multiple players match — be more specific:',
     errGeneric: 'Something went wrong while analyzing. Try again in a moment.',
@@ -110,13 +113,13 @@ const DICT = {
     coNote: 'Ultimi {n} giorni interi (UTC). Valore del punto = (prezzo − materie prime) ÷ punti produzione. Costo del punto = salari pagati davvero ÷ punti prodotti dai dipendenti. Il gioco non mostra i singoli dipendenti agli altri tool — solo questi totali per azienda — quindi quanti sono, la loro felicità e gli attrezzi qui non si vedono.',
     curLabel: 'Ora', recLabel: 'Consigliato', pointsUsed: '{used}/{budget} pt', available: 'disponibili',
     brkPassive: 'aziende {g}', brkSelf: 'lavoro tuo {g}',
-    skBudget: '{b} punti in queste quattro abilità ({f} non spesi). Abilità da combattimento e Leadership restano come sono.',
+    skBudget: '{b} punti in queste quattro abilità ({f} non spesi). Le abilità da combattimento restano come sono.',
     skSelf: 'Lavoro in proprio in', skSelfDetail: '{v}/pt · {a} azioni/giorno',
     skSelfNone: 'Ai prezzi di adesso il lavoro in proprio non rende in nessuna delle tue aziende.',
     skMgmt: 'Gestione L{l}: +{p}% di produzione dei dipendenti',
     skCap: 'Con Aziende L{l} restano attive {k} delle tue {n} aziende: le altre smettono di produrre.',
-    skLeader: 'Leadership L{l} resta com\'è: migliora addestramento ed eventi, che non hanno un valore in oro.',
-    skNote: 'Assume che tutta l\'energia rigenerata in 24 ore vada nel lavoro in proprio (10 per azione). Energia per assumere e addestrare e un eventuale manager non sono contati. Con la v0.27 tutti hanno un reset delle abilità gratuito.',
+    skLeader: 'La Gestione migliora anche le carte di addestramento e dà +2% di probabilità negli eventi per livello (la v0.27.3 ci ha fuso dentro Leadership). Nessuno dei due ha un valore in oro: il guadagno sopra è un minimo.',
+    skNote: "Il lavoro in proprio è contato sulle {a} azioni al giorno che hai fatto davvero nell'ultima settimana, non sul massimo che l'Energia permetterebbe: più Energia serve solo se la usi già quasi tutta. Un eventuale manager non è contato. Con la v0.27 tutti hanno un reset delle abilità gratuito.",
     noCompanies: 'Nessuna azienda posseduta trovata.',
     errNotFound: 'Nessun giocatore trovato con quel nome o ID.', errAmbiguous: 'Più giocatori corrispondono — sii più preciso:',
     errGeneric: 'Qualcosa è andato storto durante l\'analisi. Riprova tra un momento.',
@@ -149,13 +152,13 @@ const DICT = {
     coNote: 'Últimos {n} días completos (UTC). Valor del punto = (precio − insumos) ÷ puntos de producción. Coste del punto = salarios pagados ÷ puntos de tus empleados. El juego no muestra los empleados uno a uno a otras herramientas — solo estos totales por empresa — así que cuántos son, su felicidad y herramientas no se ven aquí.',
     curLabel: 'Ahora', recLabel: 'Recomendado', pointsUsed: '{used}/{budget} pts', available: 'disponibles',
     brkPassive: 'empresas {g}', brkSelf: 'tu trabajo {g}',
-    skBudget: '{b} puntos en estas cuatro habilidades ({f} sin gastar). Las de combate y Leadership no se tocan.',
+    skBudget: '{b} puntos en estas cuatro habilidades ({f} sin gastar). Las de combate no se tocan.',
     skSelf: 'Trabajo propio en', skSelfDetail: '{v}/pt · {a} acciones/día',
     skSelfNone: 'A los precios actuales el trabajo propio no rinde en ninguna de tus empresas.',
     skMgmt: 'Management N{l}: +{p}% de producción de los empleados',
     skCap: 'Con Companies N{l} quedan activas {k} de tus {n} empresas: las demás dejan de producir.',
-    skLeader: 'Leadership N{l} se queda igual: mejora entrenamiento y eventos, que no tienen valor en oro.',
-    skNote: 'Supone que toda la energía regenerada en 24 h va al trabajo propio (10 por acción). No cuenta la energía para contratar y entrenar ni un posible mánager. Con la v0.27 todos tienen un reinicio de habilidades gratis.',
+    skLeader: 'Management también mejora las cartas de entrenamiento y suma +2% de probabilidad en eventos por nivel (la v0.27.3 le integró Leadership). Ninguno tiene valor en oro: la ganancia de arriba es un mínimo.',
+    skNote: "El trabajo propio se cuenta con las {a} acciones al día que hiciste de verdad la última semana, no con el máximo que permitiría tu Energía: más Energía solo sirve si ya la usas casi toda. No cuenta un posible mánager. Con la v0.27 todos tienen un reinicio de habilidades gratis.",
     noCompanies: 'No se encontraron empresas propias.',
     errNotFound: 'No se encontró ningún jugador con ese nombre o ID.', errAmbiguous: 'Varios jugadores coinciden — sé más específico:',
     errGeneric: 'Algo salió mal al analizar. Inténtalo de nuevo en un momento.',
@@ -185,13 +188,13 @@ const DICT = {
     coNote: 'Letzte {n} volle Tage (UTC). Wert pro Punkt = (Preis − Rohstoffe) ÷ Produktionspunkte. Kosten pro Punkt = tatsächlich gezahlte Löhne ÷ Punkte deiner Angestellten. Das Spiel zeigt anderen Tools keine einzelnen Angestellten — nur diese Firmensummen — Anzahl, Zufriedenheit und Werkzeuge sind hier also nicht sichtbar.',
     curLabel: 'Jetzt', recLabel: 'Empfohlen', pointsUsed: '{used}/{budget} Pkt', available: 'verfügbar',
     brkPassive: 'Firmen {g}', brkSelf: 'eigene Arbeit {g}',
-    skBudget: '{b} Punkte in diesen vier Skills ({f} unverteilt). Kampf-Skills und Leadership bleiben unberührt.',
+    skBudget: '{b} Punkte in diesen vier Skills ({f} unverteilt). Kampf-Skills bleiben unberührt.',
     skSelf: 'Selbst arbeiten in', skSelfDetail: '{v}/Pkt · {a} Aktionen/Tag',
     skSelfNone: 'Zu aktuellen Preisen bringt eigene Arbeit in keiner deiner Firmen etwas.',
     skMgmt: 'Management L{l}: +{p}% Produktion der Angestellten',
     skCap: 'Mit Companies L{l} bleiben {k} deiner {n} Firmen aktiv: die anderen produzieren nicht mehr.',
-    skLeader: 'Leadership L{l} bleibt, wie es ist: verbessert Training und Ereignisse, die keinen Goldwert haben.',
-    skNote: 'Nimmt an, dass die gesamte in 24 h regenerierte Energie in eigene Arbeit geht (10 pro Aktion). Energie für Einstellen und Training sowie ein Manager sind nicht eingerechnet. Mit v0.27 gibt es für alle einen kostenlosen Skill-Reset.',
+    skLeader: 'Management verbessert außerdem Trainingskarten und gibt +2% Ereigniswahrscheinlichkeit pro Stufe (v0.27.3 hat Leadership hineingefaltet). Beides hat keinen Goldwert, der Gewinn oben ist also eine Untergrenze.',
+    skNote: "Eigene Arbeit wird mit den {a} Aktionen pro Tag gerechnet, die du letzte Woche wirklich gemacht hast, nicht mit dem Maximum deiner Energie: Mehr Energie hilft nur, wenn du sie schon fast ganz nutzt. Ein Manager ist nicht eingerechnet. Mit v0.27 gibt es für alle einen kostenlosen Skill-Reset.",
     noCompanies: 'Keine eigenen Firmen gefunden.',
     errNotFound: 'Kein Spieler mit diesem Namen oder ID gefunden.', errAmbiguous: 'Mehrere Spieler passen — sei genauer:',
     errGeneric: 'Bei der Analyse ging etwas schief. Versuch es gleich nochmal.',
@@ -221,13 +224,13 @@ const DICT = {
     coNote: '{n} derniers jours complets (UTC). Valeur du point = (prix − matières premières) ÷ points de production. Coût du point = salaires réellement payés ÷ points de tes employés. Le jeu ne montre pas les employés un par un aux autres outils — seulement ces totaux par entreprise — donc leur nombre, leur bonheur et leurs outils ne sont pas visibles ici.',
     curLabel: 'Actuel', recLabel: 'Recommandé', pointsUsed: '{used}/{budget} pts', available: 'disponibles',
     brkPassive: 'entreprises {g}', brkSelf: 'ton travail {g}',
-    skBudget: '{b} points dans ces quatre compétences ({f} non dépensés). Combat et Leadership ne sont pas touchés.',
+    skBudget: '{b} points dans ces quatre compétences ({f} non dépensés). Le combat n\'est pas touché.',
     skSelf: 'Travail personnel à', skSelfDetail: '{v}/pt · {a} actions/jour',
     skSelfNone: 'Aux prix actuels, le travail personnel ne rapporte rien dans aucune de tes entreprises.',
     skMgmt: 'Management N{l} : +{p}% de production des employés',
     skCap: 'Avec Companies N{l}, {k} de tes {n} entreprises restent actives : les autres arrêtent de produire.',
-    skLeader: 'Leadership N{l} reste tel quel : il améliore entraînement et événements, qui n\'ont pas de valeur en or.',
-    skNote: 'Suppose que toute l\'énergie régénérée en 24 h va dans le travail personnel (10 par action). L\'énergie pour embaucher et entraîner, et un éventuel manager, ne sont pas comptés. Avec la v0.27 tout le monde a une réinitialisation gratuite des compétences.',
+    skLeader: 'Management améliore aussi les cartes d\'entraînement et ajoute +2% de chances aux événements par niveau (la v0.27.3 y a intégré Leadership). Aucun n\'a de valeur en or : le gain ci-dessus est un minimum.',
+    skNote: "Le travail personnel est compté sur les {a} actions par jour que tu as vraiment faites la semaine dernière, pas sur le maximum que ton Énergie permettrait : plus d'Énergie n'aide que si tu l'utilises déjà presque entièrement. Un éventuel manager n'est pas compté. Avec la v0.27 tout le monde a une réinitialisation gratuite des compétences.",
     noCompanies: 'Aucune entreprise possédée trouvée.',
     errNotFound: 'Aucun joueur trouvé avec ce nom ou cet ID.', errAmbiguous: 'Plusieurs joueurs correspondent — sois plus précis :',
     errGeneric: 'Un problème est survenu pendant l\'analyse. Réessaie dans un instant.',
@@ -257,13 +260,13 @@ const DICT = {
     coNote: 'Laatste {n} volle dagen (UTC). Waarde per punt = (prijs − grondstoffen) ÷ productiepunten. Kosten per punt = echt betaalde lonen ÷ punten van je werknemers. Het spel toont andere tools geen individuele werknemers — alleen deze bedrijfstotalen — dus aantal, geluk en gereedschap zijn hier niet zichtbaar.',
     curLabel: 'Nu', recLabel: 'Aanbevolen', pointsUsed: '{used}/{budget} pnt', available: 'beschikbaar',
     brkPassive: 'bedrijven {g}', brkSelf: 'eigen werk {g}',
-    skBudget: '{b} punten in deze vier skills ({f} niet besteed). Gevechtsskills en Leadership blijven ongemoeid.',
+    skBudget: '{b} punten in deze vier skills ({f} niet besteed). Gevechtsskills blijven ongemoeid.',
     skSelf: 'Zelf werken bij', skSelfDetail: '{v}/pt · {a} acties/dag',
     skSelfNone: 'Tegen de huidige prijzen levert zelf werken in geen van je bedrijven iets op.',
     skMgmt: 'Management L{l}: +{p}% productie van werknemers',
     skCap: 'Met Companies L{l} blijven {k} van je {n} bedrijven actief: de andere stoppen met produceren.',
-    skLeader: 'Leadership L{l} blijft zoals het is: het verbetert training en gebeurtenissen, die geen goudwaarde hebben.',
-    skNote: 'Gaat ervan uit dat alle in 24 uur geregenereerde energie naar eigen werk gaat (10 per actie). Energie voor aannemen en trainen en een eventuele manager zijn niet meegeteld. Met v0.27 krijgt iedereen één gratis skill-reset.',
+    skLeader: 'Management verbetert ook trainingskaarten en geeft +2% kans bij gebeurtenissen per niveau (v0.27.3 voegde Leadership hierin samen). Geen van beide heeft een goudwaarde, dus de winst hierboven is een ondergrens.',
+    skNote: "Eigen werk telt met de {a} acties per dag die je vorige week echt deed, niet met het maximum dat je Energie toelaat: meer Energie helpt alleen als je die al bijna helemaal gebruikt. Een eventuele manager is niet meegeteld. Met v0.27 krijgt iedereen één gratis skill-reset.",
     noCompanies: 'Geen eigen bedrijven gevonden.',
     errNotFound: 'Geen speler gevonden met die naam of ID.', errAmbiguous: 'Meerdere spelers matchen — wees specifieker:',
     errGeneric: 'Er ging iets mis bij het analyseren. Probeer het zo opnieuw.',
@@ -293,13 +296,13 @@ const DICT = {
     coNote: 'Senaste {n} hela dagarna (UTC). Värde per poäng = (pris − råvaror) ÷ produktionspoäng. Kostnad per poäng = faktiskt betalda löner ÷ poäng från dina anställda. Spelet visar inte enskilda anställda för andra verktyg — bara dessa företagssummor — så antal, trivsel och verktyg syns inte här.',
     curLabel: 'Nu', recLabel: 'Rekommenderat', pointsUsed: '{used}/{budget} p', available: 'tillgängligt',
     brkPassive: 'företag {g}', brkSelf: 'eget arbete {g}',
-    skBudget: '{b} poäng i dessa fyra färdigheter ({f} ospenderade). Stridsfärdigheter och Leadership lämnas orörda.',
+    skBudget: '{b} poäng i dessa fyra färdigheter ({f} ospenderade). Stridsfärdigheter lämnas orörda.',
     skSelf: 'Eget arbete i', skSelfDetail: '{v}/p · {a} handlingar/dag',
     skSelfNone: 'Med dagens priser ger eget arbete inget i något av dina företag.',
     skMgmt: 'Management N{l}: +{p}% produktion från anställda',
     skCap: 'Med Companies N{l} är {k} av dina {n} företag aktiva: de andra slutar producera.',
-    skLeader: 'Leadership N{l} lämnas som den är: den förbättrar träning och händelser, som inte har något guldvärde.',
-    skNote: 'Antar att all energi som återhämtas på 24 h går till eget arbete (10 per handling). Energi för anställning och träning och en eventuell manager räknas inte. Med v0.27 får alla en gratis återställning av färdigheter.',
+    skLeader: 'Management förbättrar också träningskort och ger +2% chans vid händelser per nivå (v0.27.3 slog ihop Leadership med den). Inget av det har något guldvärde, så vinsten ovan är ett golv.',
+    skNote: "Eget arbete räknas på de {a} handlingar per dag du faktiskt gjorde senaste veckan, inte på det max din Energi skulle tillåta: mer Energi hjälper bara om du redan använder nästan all. En eventuell manager räknas inte. Med v0.27 får alla en gratis återställning av färdigheter.",
     noCompanies: 'Inga egna företag hittades.',
     errNotFound: 'Ingen spelare hittades med det namnet eller ID:t.', errAmbiguous: 'Flera spelare matchar — var mer specifik:',
     errGeneric: 'Något gick fel vid analysen. Försök igen strax.',
@@ -329,13 +332,13 @@ const DICT = {
     coNote: 'Últimos {n} dias completos (UTC). Valor do ponto = (preço − matérias-primas) ÷ pontos de produção. Custo do ponto = salários pagos de facto ÷ pontos dos teus empregados. O jogo não mostra os empregados um a um a outras ferramentas — só estes totais por empresa — por isso quantos são, a felicidade e as ferramentas não se veem aqui.',
     curLabel: 'Agora', recLabel: 'Recomendado', pointsUsed: '{used}/{budget} pts', available: 'disponíveis',
     brkPassive: 'empresas {g}', brkSelf: 'o teu trabalho {g}',
-    skBudget: '{b} pontos nestas quatro habilidades ({f} por gastar). Combate e Leadership não são tocados.',
+    skBudget: '{b} pontos nestas quatro habilidades ({f} por gastar). O combate não é tocado.',
     skSelf: 'Trabalho próprio em', skSelfDetail: '{v}/pt · {a} ações/dia',
     skSelfNone: 'Aos preços atuais o trabalho próprio não rende em nenhuma das tuas empresas.',
     skMgmt: 'Management N{l}: +{p}% de produção dos empregados',
     skCap: 'Com Companies N{l} ficam ativas {k} das tuas {n} empresas: as outras deixam de produzir.',
-    skLeader: 'Leadership N{l} fica como está: melhora treino e eventos, que não têm valor em ouro.',
-    skNote: 'Assume que toda a energia regenerada em 24 h vai para trabalho próprio (10 por ação). A energia para contratar e treinar e um eventual gestor não são contados. Com a v0.27 todos têm um reset de habilidades grátis.',
+    skLeader: 'Management também melhora as cartas de treino e dá +2% de hipótese nos eventos por nível (a v0.27.3 integrou-lhe a Leadership). Nenhum tem valor em ouro: o ganho acima é um mínimo.',
+    skNote: "O trabalho próprio é contado nas {a} ações por dia que fizeste de facto na última semana, não no máximo que a tua Energia permitiria: mais Energia só ajuda se já a usas quase toda. Um eventual gestor não é contado. Com a v0.27 todos têm um reset de habilidades grátis.",
     noCompanies: 'Nenhuma empresa própria encontrada.',
     errNotFound: 'Nenhum jogador encontrado com esse nome ou ID.', errAmbiguous: 'Vários jogadores correspondem — sê mais específico:',
     errGeneric: 'Algo correu mal na análise. Tenta novamente daqui a pouco.',
@@ -365,13 +368,13 @@ const DICT = {
     coNote: 'آخر {n} أيام كاملة (UTC). قيمة النقطة = (السعر − المواد الخام) ÷ نقاط الإنتاج. تكلفة النقطة = الأجور المدفوعة فعلًا ÷ نقاط موظفيك. لا تعرض اللعبة الموظفين فرادى للأدوات الأخرى — فقط هذه المجاميع لكل شركة — لذا لا يظهر هنا عددهم ولا سعادتهم ولا أدواتهم.',
     curLabel: 'الآن', recLabel: 'موصى به', pointsUsed: '{used}/{budget} نقطة', available: 'متاح',
     brkPassive: 'الشركات {g}', brkSelf: 'عملك {g}',
-    skBudget: '{b} نقطة في هذه المهارات الأربع ({f} غير مصروفة). مهارات القتال وLeadership لا تُمس.',
+    skBudget: '{b} نقطة في هذه المهارات الأربع ({f} غير مصروفة). مهارات القتال لا تُمس.',
     skSelf: 'العمل الذاتي في', skSelfDetail: '{v}/نقطة · {a} إجراء/يوم',
     skSelfNone: 'بالأسعار الحالية لا يدرّ العمل الذاتي شيئًا في أي من شركاتك.',
     skMgmt: 'Management م{l}: +{p}% من إنتاج الموظفين',
     skCap: 'مع Companies م{l} تبقى {k} من شركاتك الـ{n} نشطة: البقية تتوقف عن الإنتاج.',
-    skLeader: 'تبقى Leadership م{l} كما هي: تحسّن التدريب والأحداث، وليس لها قيمة بالذهب.',
-    skNote: 'يفترض أن كل الطاقة المستعادة خلال 24 ساعة تذهب إلى العمل الذاتي (10 لكل إجراء). لا تُحتسب طاقة التوظيف والتدريب ولا أي مدير توظفه. مع v0.27 يحصل الجميع على إعادة تعيين مجانية للمهارات.',
+    skLeader: 'تحسّن Management أيضاً بطاقات التدريب وتزيد فرص الأحداث بنسبة 2% لكل مستوى (دمجت v0.27.3 مهارة Leadership فيها). لا قيمة بالذهب لأيٍّ منهما، لذا الربح أعلاه حدّ أدنى.',
+    skNote: "يُحتسب العمل الذاتي على أساس {a} إجراء يوميًا قمت بها فعلًا في الأسبوع الأخير، لا على الحد الأقصى الذي تسمح به طاقتك: المزيد من الطاقة يفيد فقط إن كنت تستخدمها كلها تقريبًا. لا يُحتسب أي مدير توظفه. مع v0.27 يحصل الجميع على إعادة تعيين مجانية للمهارات.",
     noCompanies: 'لم يُعثر على شركات مملوكة.',
     errNotFound: 'لم يُعثر على لاعب بهذا الاسم أو المعرّف.', errAmbiguous: 'عدة لاعبين مطابقون — كن أكثر تحديدًا:',
     errGeneric: 'حدث خطأ أثناء التحليل. حاول مرة أخرى بعد لحظة.',
@@ -381,6 +384,140 @@ const DICT = {
     otherMatched: 'طابق أيضًا: {names}',
   },
 };
+
+// WarEra+ (2026-10-28) — la rosa dei dipendenti (employee.getCompanyRoster,
+// vedi account.js). Chiavi tenute a parte e fuse in DICT, per non spargere
+// diciotto righe nuove in nove blocchi già lunghi.
+const STAFF_DICT = {
+  en: {
+    lblStaff: '{n} of {cap} employees', staffFull: 'full time {g}/day',
+    staffRow: 'Prod. {s} · {b} · {p} pts/h · wage {w}/h · {c}/pt · happiness {h}',
+    fLoss: 'costs more than it produces', fQuit: '{q}% chance to quit', fRetire: 'asks to retire on {d}',
+    fToolBroken: 'tool broken', fToolWorn: 'tool at {s}%', fUnhappy: 'unhappy: {p}% output ({why})', fTrainable: 'can be trained today',
+    sigEmpLoss: '{n} employee(s) cost more than they produce at current prices',
+    sigQuit: '{n} employee(s) might quit', sigRetire: '{n} employee(s) ask to retire within 3 days',
+    sigTool: '{n} tool(s) broken or nearly worn out', sigUnhappy: '{n} employee(s) unhappy enough to lose output',
+    rIncomeTax: 'income tax', rEvent: 'event', fNoTool: "no tool: a level-1 one would add {a}–{b} pts/day", fNoToolFam: "no tool: a {t}1 would add {a}–{b} pts/day",
+    rankPricier: "costs more per point than {p}% of {item} employees", rankCheaper: "costs less per point than {p}% of {item} employees",
+    coNoteStaff: 'Measured: last {n} full days (UTC); worth per point = (price − inputs) ÷ production points; cost per point = wages actually paid ÷ points your employees made. Employee rows: the game\'s own hourly estimate for the roster as it is now. "Full time" assumes every hour is paid, so the measured figure is usually lower.',
+    skMgmtMeasured: 'Each Management point adds 2% of every employee\'s base output, next to the other bonuses (traits, tools, region) — weighed on your current roster.',
+    skEnergyFloor: "Energy a day: {u} of {m} actions' worth — {a} self-work, {t} trainings (1 per employee, 2 with the traits that allow it), ~{h} hires (estimated from how long your employees stay; 10 energy each, assumed). Energy is never suggested lower: building costs energy too, and hires come in waves.",
+  },
+  it: {
+    lblStaff: '{n} dipendenti su {cap}', staffFull: 'a pieno regime {g}/giorno',
+    staffRow: 'Prod. {s} · {b} · {p} pt/h · salario {w}/h · {c}/pt · felicità {h}',
+    fLoss: 'costa più di quanto produce', fQuit: '{q}% di probabilità di dimettersi', fRetire: 'chiede la pensione il {d}',
+    fToolBroken: 'attrezzo rotto', fToolWorn: 'attrezzo al {s}%', fUnhappy: 'infelice: {p}% di produzione ({why})', fTrainable: 'si può addestrare oggi',
+    sigEmpLoss: '{n} dipendente/i costano più di quanto producono ai prezzi di adesso',
+    sigQuit: '{n} dipendente/i potrebbero dimettersi', sigRetire: '{n} dipendente/i chiedono la pensione entro 3 giorni',
+    sigTool: '{n} attrezzo/i rotti o quasi consumati', sigUnhappy: '{n} dipendente/i così infelici da produrre meno',
+    rIncomeTax: 'tassa sul reddito', rEvent: 'evento', fNoTool: "sem ferramenta: uma de nível 1 daria mais {a}–{b} pts/dia", fNoToolFam: "sem ferramenta: um {t}1 daria mais {a}–{b} pts/dia", fNoTool: "sin herramienta: una de nivel 1 daría {a}–{b} pts/día más", fNoToolFam: "sin herramienta: un {t}1 daría {a}–{b} pts/día más", fNoTool: "senza attrezzo: uno di livello 1 darebbe {a}–{b} pt/giorno in più", fNoToolFam: "senza attrezzo: un {t}1 darebbe {a}–{b} pt/giorno in più",
+    rankPricier: "costa più per punto del {p}% dei dipendenti che producono {item}", rankCheaper: "costa meno per punto del {p}% dei dipendenti che producono {item}",
+    coNoteStaff: 'Misurato: ultimi {n} giorni interi (UTC); valore del punto = (prezzo − materie prime) ÷ punti produzione; costo del punto = salari pagati davvero ÷ punti prodotti dai dipendenti. Righe dei dipendenti: la stima oraria del gioco sulla rosa di adesso. "A pieno regime" vuol dire tutte le ore pagate, quindi il misurato di solito è più basso.',
+    skMgmtMeasured: 'Ogni punto di Gestione aggiunge il 2% della produzione di base di ogni dipendente, accanto agli altri bonus (tratti, attrezzi, regione) — pesato sulla tua rosa di adesso.',
+    skEnergyFloor: "Energia al giorno: {u} azioni su {m} — {a} di lavoro, {t} addestramenti (1 a dipendente, 2 con i tratti che lo permettono), ~{h} assunzioni (stimate da quanto restano i tuoi dipendenti; 10 energia l'una, ipotesi). L'Energia non viene mai consigliata più bassa: costa energia anche costruire, e le assunzioni arrivano a ondate.",
+  },
+  es: {
+    lblStaff: '{n} de {cap} empleados', staffFull: 'a pleno rendimiento {g}/día',
+    staffRow: 'Prod. {s} · {b} · {p} pts/h · salario {w}/h · {c}/pt · felicidad {h}',
+    fLoss: 'cuesta más de lo que produce', fQuit: '{q}% de probabilidad de dimitir', fRetire: 'pide jubilarse el {d}',
+    fToolBroken: 'herramienta rota', fToolWorn: 'herramienta al {s}%', fUnhappy: 'infeliz: {p}% de producción ({why})', fTrainable: 'se puede entrenar hoy',
+    sigEmpLoss: '{n} empleado(s) cuestan más de lo que producen a los precios actuales',
+    sigQuit: '{n} empleado(s) podrían dimitir', sigRetire: '{n} empleado(s) piden jubilarse en 3 días',
+    sigTool: '{n} herramienta(s) rotas o casi gastadas', sigUnhappy: '{n} empleado(s) tan infelices que producen menos',
+    rIncomeTax: 'impuesto sobre la renta', rEvent: 'evento',
+    coNoteStaff: 'Medido: últimos {n} días completos (UTC); valor del punto = (precio − insumos) ÷ puntos de producción; coste del punto = salarios pagados ÷ puntos de tus empleados. Filas de empleados: la estimación horaria del propio juego con la plantilla actual. "A pleno rendimiento" supone todas las horas pagadas, así que lo medido suele ser menor.',
+    skMgmtMeasured: 'Cada punto de Management añade el 2% de la producción base de cada empleado, junto a los demás bonus (rasgos, herramientas, región) — calculado con tu plantilla actual.',
+    skEnergyFloor: "Energía al día: {u} de {m} acciones — {a} de trabajo, {t} entrenamientos (1 por empleado, 2 con los rasgos que lo permiten), ~{h} contrataciones (estimadas por cuánto duran tus empleados; 10 de energía cada una, supuesto). La Energía nunca se sugiere más baja: construir también cuesta energía, y las contrataciones llegan en oleadas.",
+  },
+  de: {
+    lblStaff: '{n} von {cap} Angestellten', staffFull: 'bei voller Zeit {g}/Tag',
+    staffRow: 'Prod. {s} · {b} · {p} Pkt/h · Lohn {w}/h · {c}/Pkt · Zufriedenheit {h}',
+    fLoss: 'kostet mehr, als er produziert', fQuit: '{q}% Kündigungsrisiko', fRetire: 'will am {d} in Rente',
+    fToolBroken: 'Werkzeug kaputt', fToolWorn: 'Werkzeug bei {s}%', fUnhappy: 'unzufrieden: {p}% Produktion ({why})', fTrainable: 'heute trainierbar',
+    sigEmpLoss: '{n} Angestellte(r) kosten zu aktuellen Preisen mehr, als sie produzieren',
+    sigQuit: '{n} Angestellte(r) könnten kündigen', sigRetire: '{n} Angestellte(r) wollen in 3 Tagen in Rente',
+    sigTool: '{n} Werkzeug(e) kaputt oder fast verbraucht', sigUnhappy: '{n} Angestellte(r) so unzufrieden, dass sie weniger produzieren',
+    rIncomeTax: 'Einkommensteuer', rEvent: 'Ereignis', fNoTool: "kein Werkzeug: eins der Stufe 1 brächte {a}–{b} Pkt/Tag mehr", fNoToolFam: "kein Werkzeug: ein {t}1 brächte {a}–{b} Pkt/Tag mehr",
+    rankPricier: "kostet pro Punkt mehr als {p}% der {item}-Angestellten", rankCheaper: "kostet pro Punkt weniger als {p}% der {item}-Angestellten",
+    rankPricier: "cuesta más por punto que el {p}% de los empleados de {item}", rankCheaper: "cuesta menos por punto que el {p}% de los empleados de {item}",
+    coNoteStaff: 'Gemessen: letzte {n} volle Tage (UTC); Wert pro Punkt = (Preis − Rohstoffe) ÷ Produktionspunkte; Kosten pro Punkt = tatsächlich gezahlte Löhne ÷ Punkte deiner Angestellten. Angestellten-Zeilen: die stündliche Schätzung des Spiels für die aktuelle Belegschaft. "Volle Zeit" heißt alle Stunden bezahlt, daher ist der gemessene Wert meist niedriger.',
+    skMgmtMeasured: 'Jeder Management-Punkt fügt 2% der Grundproduktion jedes Angestellten hinzu, neben den anderen Boni (Eigenschaften, Werkzeuge, Region) — gewichtet auf deine aktuelle Belegschaft.',
+    skEnergyFloor: "Energie pro Tag: {u} von {m} Aktionen — {a} eigene Arbeit, {t} Trainings (1 pro Angestelltem, 2 mit den passenden Eigenschaften), ~{h} Einstellungen (geschätzt aus der Verweildauer deiner Angestellten; je 10 Energie, Annahme). Energie wird nie niedriger empfohlen: Auch Bauen kostet Energie, und Einstellungen kommen in Wellen.",
+  },
+  fr: {
+    lblStaff: '{n} employés sur {cap}', staffFull: 'à plein régime {g}/jour',
+    staffRow: 'Prod. {s} · {b} · {p} pts/h · salaire {w}/h · {c}/pt · bonheur {h}',
+    fLoss: 'coûte plus qu\'il ne produit', fQuit: '{q}% de risque de démission', fRetire: 'demande sa retraite le {d}',
+    fToolBroken: 'outil cassé', fToolWorn: 'outil à {s}%', fUnhappy: 'malheureux : {p}% de production ({why})', fTrainable: 'peut être entraîné aujourd\'hui',
+    sigEmpLoss: '{n} employé(s) coûtent plus qu\'ils ne produisent aux prix actuels',
+    sigQuit: '{n} employé(s) pourraient démissionner', sigRetire: '{n} employé(s) demandent leur retraite d\'ici 3 jours',
+    sigTool: '{n} outil(s) cassés ou presque usés', sigUnhappy: '{n} employé(s) assez malheureux pour produire moins',
+    rIncomeTax: 'impôt sur le revenu', rEvent: 'événement', fNoTool: "sans outil : un outil de niveau 1 ajouterait {a}–{b} pts/jour", fNoToolFam: "sans outil : un {t}1 ajouterait {a}–{b} pts/jour",
+    rankPricier: "coûte plus par point que {p}% des employés de {item}", rankCheaper: "coûte moins par point que {p}% des employés de {item}",
+    coNoteStaff: 'Mesuré : {n} derniers jours complets (UTC) ; valeur du point = (prix − matières premières) ÷ points de production ; coût du point = salaires réellement payés ÷ points de tes employés. Lignes des employés : l\'estimation horaire du jeu sur l\'effectif actuel. "À plein régime" suppose toutes les heures payées, donc le mesuré est en général plus bas.',
+    skMgmtMeasured: 'Chaque point de Management ajoute 2% de la production de base de chaque employé, à côté des autres bonus (traits, outils, région) — pesé sur ton effectif actuel.',
+    skEnergyFloor: "Énergie par jour : {u} actions sur {m} — {a} de travail, {t} entraînements (1 par employé, 2 avec les traits qui le permettent), ~{h} embauches (estimées d'après la durée de tes employés ; 10 d'énergie chacune, hypothèse). L'Énergie n'est jamais conseillée plus basse : construire coûte aussi de l'énergie, et les embauches arrivent par vagues.",
+  },
+  nl: {
+    lblStaff: '{n} van {cap} werknemers', staffFull: 'op volle tijd {g}/dag',
+    staffRow: 'Prod. {s} · {b} · {p} pt/u · loon {w}/u · {c}/pt · geluk {h}',
+    fLoss: 'kost meer dan hij produceert', fQuit: '{q}% kans op ontslag', fRetire: 'vraagt pensioen op {d}',
+    fToolBroken: 'gereedschap kapot', fToolWorn: 'gereedschap op {s}%', fUnhappy: 'ongelukkig: {p}% productie ({why})', fTrainable: 'kan vandaag getraind worden',
+    sigEmpLoss: '{n} werknemer(s) kosten bij de huidige prijzen meer dan ze produceren',
+    sigQuit: '{n} werknemer(s) kunnen ontslag nemen', sigRetire: '{n} werknemer(s) vragen binnen 3 dagen pensioen',
+    sigTool: '{n} gereedschap(pen) kapot of bijna versleten', sigUnhappy: '{n} werknemer(s) zo ongelukkig dat ze minder produceren',
+    rIncomeTax: 'inkomstenbelasting', rEvent: 'gebeurtenis', fNoTool: "geen gereedschap: een van niveau 1 zou {a}–{b} pt/dag toevoegen", fNoToolFam: "geen gereedschap: een {t}1 zou {a}–{b} pt/dag toevoegen",
+    rankPricier: "kost per punt meer dan {p}% van de {item}-werknemers", rankCheaper: "kost per punt minder dan {p}% van de {item}-werknemers",
+    coNoteStaff: 'Gemeten: laatste {n} volle dagen (UTC); waarde per punt = (prijs − grondstoffen) ÷ productiepunten; kosten per punt = echt betaalde lonen ÷ punten van je werknemers. Werknemersrijen: de uurschatting van het spel voor het huidige team. "Volle tijd" betekent alle uren betaald, dus het gemeten cijfer is meestal lager.',
+    skMgmtMeasured: 'Elk Management-punt voegt 2% van de basisproductie van elke werknemer toe, naast de andere bonussen (eigenschappen, gereedschap, regio) — gewogen op je huidige team.',
+    skEnergyFloor: "Energie per dag: {u} van {m} acties — {a} eigen werk, {t} trainingen (1 per werknemer, 2 met de eigenschappen die dat toelaten), ~{h} aannames (geschat uit hoe lang je werknemers blijven; 10 energie per keer, aanname). Energie wordt nooit lager aangeraden: bouwen kost ook energie, en aannames komen in golven.",
+  },
+  sv: {
+    lblStaff: '{n} av {cap} anställda', staffFull: 'på heltid {g}/dag',
+    staffRow: 'Prod. {s} · {b} · {p} p/h · lön {w}/h · {c}/p · trivsel {h}',
+    fLoss: 'kostar mer än den producerar', fQuit: '{q}% risk att säga upp sig', fRetire: 'vill gå i pension {d}',
+    fToolBroken: 'verktyget trasigt', fToolWorn: 'verktyget på {s}%', fUnhappy: 'missnöjd: {p}% produktion ({why})', fTrainable: 'kan tränas i dag',
+    sigEmpLoss: '{n} anställd(a) kostar mer än de producerar till dagens priser',
+    sigQuit: '{n} anställd(a) kan säga upp sig', sigRetire: '{n} anställd(a) vill gå i pension inom 3 dagar',
+    sigTool: '{n} verktyg trasiga eller nästan slitna', sigUnhappy: '{n} anställd(a) så missnöjda att de producerar mindre',
+    rIncomeTax: 'inkomstskatt', rEvent: 'händelse', fNoTool: "inget verktyg: ett på nivå 1 skulle ge {a}–{b} p/dag till", fNoToolFam: "inget verktyg: en {t}1 skulle ge {a}–{b} p/dag till",
+    rankPricier: "kostar mer per poäng än {p}% av de anställda inom {item}", rankCheaper: "kostar mindre per poäng än {p}% av de anställda inom {item}",
+    coNoteStaff: 'Uppmätt: senaste {n} hela dagarna (UTC); värde per poäng = (pris − råvaror) ÷ produktionspoäng; kostnad per poäng = faktiskt betalda löner ÷ poäng från dina anställda. Rader för anställda: spelets egen timuppskattning för personalen som den är nu. "Heltid" förutsätter att alla timmar betalas, så det uppmätta är oftast lägre.',
+    skMgmtMeasured: 'Varje Management-poäng lägger till 2% av varje anställds grundproduktion, bredvid de andra bonusarna (egenskaper, verktyg, region) — viktat på din nuvarande personal.',
+    skEnergyFloor: "Energi per dag: {u} av {m} handlingar — {a} eget arbete, {t} träningar (1 per anställd, 2 med egenskaper som tillåter det), ~{h} anställningar (uppskattade från hur länge dina anställda stannar; 10 energi var, antagande). Energi föreslås aldrig lägre: att bygga kostar också energi, och anställningar kommer i vågor.",
+  },
+  pt: {
+    lblStaff: '{n} de {cap} empregados', staffFull: 'a tempo inteiro {g}/dia',
+    staffRow: 'Prod. {s} · {b} · {p} pts/h · salário {w}/h · {c}/pt · felicidade {h}',
+    fLoss: 'custa mais do que produz', fQuit: '{q}% de probabilidade de se demitir', fRetire: 'pede a reforma a {d}',
+    fToolBroken: 'ferramenta partida', fToolWorn: 'ferramenta a {s}%', fUnhappy: 'infeliz: {p}% de produção ({why})', fTrainable: 'pode ser treinado hoje',
+    sigEmpLoss: '{n} empregado(s) custam mais do que produzem aos preços atuais',
+    sigQuit: '{n} empregado(s) podem demitir-se', sigRetire: '{n} empregado(s) pedem a reforma dentro de 3 dias',
+    sigTool: '{n} ferramenta(s) partidas ou quase gastas', sigUnhappy: '{n} empregado(s) tão infelizes que produzem menos',
+    rIncomeTax: 'imposto sobre o rendimento', rEvent: 'evento',
+    coNoteStaff: 'Medido: últimos {n} dias completos (UTC); valor do ponto = (preço − matérias-primas) ÷ pontos de produção; custo do ponto = salários pagos de facto ÷ pontos dos teus empregados. Linhas dos empregados: a estimativa horária do próprio jogo para a equipa atual. "Tempo inteiro" supõe todas as horas pagas, por isso o medido costuma ser mais baixo.',
+    skMgmtMeasured: 'Cada ponto de Management soma 2% da produção base de cada empregado, ao lado dos outros bónus (traços, ferramentas, região) — pesado na tua equipa atual.',
+    skEnergyFloor: "Energia por dia: {u} de {m} ações — {a} de trabalho, {t} treinos (1 por empregado, 2 com os traços que o permitem), ~{h} contratações (estimadas por quanto tempo ficam os teus empregados; 10 de energia cada, suposição). A Energia nunca é sugerida mais baixa: construir também custa energia, e as contratações chegam em vagas.",
+  },
+  ar: {
+    lblStaff: '{n} من {cap} موظفين', staffFull: 'بدوام كامل {g}/يوم',
+    staffRow: 'إنتاج {s} · {b} · {p} نقطة/ساعة · أجر {w}/ساعة · {c}/نقطة · سعادة {h}',
+    fLoss: 'يكلّف أكثر مما ينتج', fQuit: 'احتمال الاستقالة {q}%', fRetire: 'يطلب التقاعد في {d}',
+    fToolBroken: 'الأداة مكسورة', fToolWorn: 'الأداة عند {s}%', fUnhappy: 'غير سعيد: {p}% من الإنتاج ({why})', fTrainable: 'يمكن تدريبه اليوم',
+    sigEmpLoss: '{n} موظف يكلّفون أكثر مما ينتجون بالأسعار الحالية',
+    sigQuit: '{n} موظف قد يستقيلون', sigRetire: '{n} موظف يطلبون التقاعد خلال 3 أيام',
+    sigTool: '{n} أداة مكسورة أو شبه مستهلكة', sigUnhappy: '{n} موظف غير سعداء لدرجة أنهم ينتجون أقل',
+    rIncomeTax: 'ضريبة الدخل', rEvent: 'حدث', fNoTool: "بلا أداة: أداة من المستوى 1 ستضيف {a}–{b} نقطة/يوم", fNoToolFam: "بلا أداة: {t}1 ستضيف {a}–{b} نقطة/يوم",
+    rankPricier: "يكلّف لكل نقطة أكثر من {p}% من موظفي {item}", rankCheaper: "يكلّف لكل نقطة أقل من {p}% من موظفي {item}",
+    rankPricier: "custa mais por ponto do que {p}% dos empregados de {item}", rankCheaper: "custa menos por ponto do que {p}% dos empregados de {item}",
+    coNoteStaff: 'المقاس: آخر {n} أيام كاملة (UTC)؛ قيمة النقطة = (السعر − المواد الخام) ÷ نقاط الإنتاج؛ تكلفة النقطة = الأجور المدفوعة فعلًا ÷ نقاط موظفيك. صفوف الموظفين: تقدير اللعبة نفسها بالساعة للفريق الحالي. "بدوام كامل" يفترض دفع كل الساعات، لذا يكون المقاس عادةً أقل.',
+    skMgmtMeasured: 'كل نقطة Management تضيف 2% من الإنتاج الأساسي لكل موظف، إلى جانب المكافآت الأخرى (السمات، الأدوات، المنطقة) — محسوبة على فريقك الحالي.',
+    skEnergyFloor: "الطاقة اليومية: {u} من {m} إجراء — {a} عمل ذاتي، {t} تدريب (1 لكل موظف، و2 مع السمات التي تسمح بذلك)، ~{h} توظيف (مقدّر من مدة بقاء موظفيك؛ 10 طاقة لكل منها، افتراض). لا يُقترح خفض الطاقة أبدًا: البناء يكلّف طاقة أيضًا، والتوظيف يأتي على دفعات.",
+  },
+};
+for (const [lang, extra] of Object.entries(STAFF_DICT)) Object.assign(DICT[lang], extra);
+
 function tf(key, params) {
   let s = (DICT[getLang()] || DICT.en)[key] ?? DICT.en[key] ?? key;
   if (params) for (const [k, v] of Object.entries(params)) s = s.replaceAll(`{${k}}`, v);
@@ -492,13 +629,15 @@ async function run() {
   try {
     const { userId, otherMatches } = await resolveUserId(query);
     const gd = makeGameData(await loadGameData());
-    const [owned, me] = await Promise.all([
+    const [owned, me, bench] = await Promise.all([
       loadOwnedCompanies(gd, userId),
       ecoCall('user.getUserLite', { userId }),
+      // Sul mondo di prova (apidev) i riferimenti del live non c'entrano.
+      isDevApi() ? null : loadEmployeeBenchmarks(),
     ]);
     if (!me) throw new EcoProxyUnavailableError('user.getUserLite null');
 
-    const companies = computeCompanies(gd, owned);
+    const companies = computeCompanies(gd, owned, { bench });
     const skills = computeSkills(gd, me, companies);
 
     resultsEl.innerHTML = '';
@@ -544,7 +683,12 @@ function section(titleText, headlineHtml, headlineClass) {
 const SIGNAL_VIEW = {
   loss:        { emoji: '🔴', cls: 'bad',  text: () => tf('sigLoss') },
   negValue:    { emoji: '🔴', cls: 'bad',  text: () => tf('sigNegValue') },
+  empLoss:     { emoji: '🔴', cls: 'bad',  text: s => tf('sigEmpLoss', { n: s.n }) },
+  quit:        { emoji: '🚪', cls: 'bad',  text: s => tf('sigQuit', { n: s.n }) },
+  tool:        { emoji: '🔧', cls: 'warn', text: s => tf('sigTool', { n: s.n }) },
   full:        { emoji: '🟠', cls: 'warn', text: () => tf('sigFull') },
+  unhappy:     { emoji: '😞', cls: 'warn', text: s => tf('sigUnhappy', { n: s.n }) },
+  retire:      { emoji: '👴', cls: 'warn', text: s => tf('sigRetire', { n: s.n }) },
   down:        { emoji: '🟡', cls: 'warn', text: s => tf('sigDown', { p: f(s.pct, 0) }) },
   idle:        { emoji: '⚫', cls: 'warn', text: s => tf('sigIdle', { n: s.days }) },
   noEmployees: { emoji: '⚪', cls: 'dim',  text: s => tf('sigNoEmp', { n: s.days }) },
@@ -577,6 +721,83 @@ function sparkline(series) {
   }).join('');
   const width = SLOTS * (W + GAP) - GAP;
   return `<svg class="wp-eco-spark" viewBox="0 0 ${width} ${H}" width="${width}" height="${H}" preserveAspectRatio="none" role="img" aria-label="${esc(tf('sparkHint'))}">${bars}</svg>`;
+}
+
+/** 'primaDonna' → 'prima donna': tratti e voci arrivano come codici del
+ *  gioco, in inglese come i nomi delle abilità, e così restano. */
+function humanize(code) {
+  return String(code || '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+}
+
+// Avvisi del singolo dipendente: stesso ordine, dal più grave.
+const FLAG_VIEW = {
+  loss:       { emoji: '🔴', cls: 'bad',  text: () => tf('fLoss') },
+  quit:       { emoji: '🚪', cls: 'bad',  text: m => tf('fQuit', { q: f(quitPct(m.quitChance), 0) }) },
+  toolBroken: { emoji: '🔧', cls: 'bad',  text: () => tf('fToolBroken') },
+  toolWorn:   { emoji: '🔧', cls: 'warn', text: m => tf('fToolWorn', { s: f(m.tool.state / m.tool.maxState * 100, 0) }) },
+  unhappy:    { emoji: '😞', cls: 'warn', text: m => tf('fUnhappy', { p: signed(m.happinessPct, 1), why: unhappyWhy(m) }) },
+  retire:     { emoji: '👴', cls: 'warn', text: m => tf('fRetire', { d: new Date(m.retireAt).toLocaleDateString(getLang()) }) },
+  trainable:  { emoji: '🎓', cls: 'good', text: () => tf('fTrainable') },
+  noTool:     { emoji: '🧰', cls: 'dim',  text: m => tf(m.noTool.family ? 'fNoToolFam' : 'fNoTool', { t: m.noTool.family || '', a: f(m.noTool.minDay, 1), b: f(m.noTool.maxDay, 1) }) },
+};
+
+/** `quitChance` l'abbiamo visto solo a 0: se arriva come frazione (≤ 1)
+ *  la si porta in percento, se arriva già in percento la si lascia. */
+function quitPct(q) { return q <= 1 ? q * 100 : q; }
+
+function unhappyWhy(m) {
+  return m.happinessParts.filter(p => p.delta < 0).map(p => {
+    const what = !p.revealed ? '?'
+      : p.reason === 'incomeTax' ? tf('rIncomeTax')
+      : p.reason === 'event' ? tf('rEvent')
+      : p.reason === 'trait' ? humanize(p.code)
+      : humanize(p.reason);
+    return `${what} ${signed(p.delta, 0)}`;
+  }).join(', ') || '—';
+}
+
+/** La rosa dentro la card dell'azienda: il totale "a pieno regime" e una
+ *  riga per dipendente, i peggiori in cima (companies.js li ordina). */
+function staffBlock(r) {
+  const s = r.staff;
+  if (!s || !s.count) return '';
+  const cls = v => (v > 0.005 ? 'pos' : (v < -0.005 ? 'neg' : ''));
+  const rows = s.members.map(m => {
+    const traits = m.traits.map(t => `<span class="wp-eco-tag">${esc(t.revealed ? humanize(t.code) : '?')}</span>`).join('');
+    const bonusTitle = m.bonusParts.map(p => `${humanize(p.source)} ${signed(p.pct, 1)}%`).join(' · ');
+    const detail = tf('staffRow', {
+      s: f(m.production, 0),
+      b: `<span title="${esc(bonusTitle)}">${signed(m.bonusPct, 0)}%</span>`,
+      p: f(m.pointsHour, 2),
+      w: f(m.wageHour, 3),
+      c: m.costPerPoint != null ? f(m.costPerPoint, 3) : '—',
+      h: f(m.happiness, 0),
+    }) + (m.tool ? ` · ${esc(m.tool.code)}` : '');
+    // Confronto col mondo, stessa risorsa (shared/employeeBench.js). Nella
+    // fascia 40–60 è nella media: non c'è niente da dire.
+    const rank = m.costRank;
+    const rankHtml = rank == null || (rank > 40 && rank < 60) ? ''
+      : `<div class="wp-eco-emp-rank ${rank >= 60 ? 'neg' : 'pos'}">${esc(tf(rank >= 60 ? 'rankPricier' : 'rankCheaper', {
+        p: f(rank >= 60 ? rank : 100 - rank, 0), item: r.company.itemCode }))}</div>`;
+    const flags = m.flags.map(k => {
+      const v = FLAG_VIEW[k];
+      return `<span class="wp-eco-emp-flag ${v.cls}">${v.emoji} ${esc(v.text(m))}</span>`;
+    }).join('');
+    const day = m.marginHour * 24;
+    return `<li class="wp-eco-emp">
+      <div class="wp-eco-emp-top"><span class="wp-eco-emp-name">${esc(m.name)}</span>${traits}
+        <span class="wp-eco-emp-gold ${cls(day)}">${signed(day)}</span></div>
+      <div class="wp-eco-emp-detail">${detail}</div>
+      ${rankHtml}
+      ${flags ? `<div class="wp-eco-emp-flags">${flags}</div>` : ''}
+    </li>`;
+  }).join('');
+  const capText = s.cap != null ? s.cap : r.company.maxEmployees;
+  return `<div class="wp-eco-staff">
+    <div class="wp-eco-staff-head"><span class="wp-eco-dim">${esc(tf('lblStaff', { n: s.count, cap: capText }))}</span>
+      <span class="wp-eco-emp-gold ${cls(s.fullMarginDay)}">${esc(tf('staffFull', { g: signed(s.fullMarginDay) }))}</span></div>
+    <ul class="wp-eco-emps">${rows}</ul>
+  </div>`;
 }
 
 function renderCompanies(result) {
@@ -614,10 +835,11 @@ function renderCompanies(result) {
       <div class="wp-eco-cocard-emp"><span class="wp-eco-dim">${esc(tf('lblEmployees'))}</span> ${empLine}</div>
       ${sparkline(r.series)}
       <div class="wp-eco-cocard-tags">${tags}</div>
-      ${sigHtml}`));
+      ${sigHtml}
+      ${staffBlock(r)}`));
   }
   sec.appendChild(list);
-  sec.appendChild(h('div', 'wp-eco-footnote', esc(tf('coNote', { n: result.windowDays }))));
+  sec.appendChild(h('div', 'wp-eco-footnote', esc(tf(result.staffKnown ? 'coNoteStaff' : 'coNote', { n: result.windowDays }))));
   return sec;
 }
 
@@ -673,14 +895,19 @@ function renderSkills(data, companies) {
     meta.appendChild(h('div', 'wp-eco-kv', `<span class="wp-eco-dim">${esc(tf('skSelfNone'))}</span>`));
   }
   meta.appendChild(h('div', 'wp-eco-kv', esc(tf('skMgmt', { l: best.levels.management, p: f(data.mgmtPct(best.levels.management), 0) }))));
+  if (data.mgmtMeasured) meta.appendChild(h('div', 'wp-eco-kv', `<span class="wp-eco-dim">${esc(tf('skMgmtMeasured'))}</span>`));
   const active = companies.rows.filter(r => !r.company.disabled).length;
   const cap = Math.floor(data.capAt(best.levels.companies));
   if (cap < active) {
     meta.appendChild(h('div', 'wp-eco-kv wp-eco-warnline', `⚠️ ${esc(tf('skCap', { l: best.levels.companies, k: cap, n: active }))}`));
   }
-  meta.appendChild(h('div', 'wp-eco-kv', `<span class="wp-eco-dim">${esc(tf('skLeader', { l: data.leadershipLevel }))}</span>`));
+  meta.appendChild(h('div', 'wp-eco-kv', `<span class="wp-eco-dim">${esc(tf('skLeader'))}</span>`));
+  meta.appendChild(h('div', 'wp-eco-kv', `<span class="wp-eco-dim">${esc(tf('skEnergyFloor', {
+    u: f(data.energyUsed, 0), m: f(data.energyMax, 0), a: f(data.measuredActions, 1),
+    t: f(data.trainingsDay, 0), h: f(data.hiresDay, 1),
+  }))}</span>`));
   sec.appendChild(meta);
 
-  sec.appendChild(h('div', 'wp-eco-footnote', `${esc(tf('skBudget', { b: data.budget, f: data.free }))} ${esc(tf('skNote'))}`));
+  sec.appendChild(h('div', 'wp-eco-footnote', `${esc(tf('skBudget', { b: data.budget, f: data.free }))} ${esc(tf('skNote', { a: f(data.measuredActions, 1) }))}`));
   return sec;
 }

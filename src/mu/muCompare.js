@@ -42,8 +42,9 @@
 import '../styles/nations.css';    // i due elenchi di scelta (wp-nat-picker)
 import { vsRow, vsGroup, vsTally, vsFighter, vsHero, countUpScore } from '../shared/versus.js';
 import { animationsOn } from '../shared/motion.js';
-import { MU_RANKING_TYPES, fetchMuDamageHistory } from './api.js';
-import { muT } from './i18n.js';
+import { MU_RANKING_TYPES, fetchMuDamageHistory, fetchMuDetail, fetchUsersLite } from './api.js';
+import { groupPills, pillColumnsHtml } from '../shared/pillStatus.js';
+import { muT, muPillLabels } from './i18n.js';
 import { avatarImg, countryName, dominantCountry, escapeHtml, flagImg, fmtCompact, fmtDate, tierBadge } from './ui.js';
 
 const PICK_LIMIT = 40;
@@ -410,6 +411,50 @@ function mountHist(host, a, b, ctx) {
   svg.addEventListener('mouseleave', () => { tip.hidden = true; hair.style.display = 'none'; });
 }
 
+/* ── Pillole dei membri ───────────────────────────────────────
+   Chi può pillare, chi è pillato, chi è in debuff in ciascuna unità, con
+   vita e cibo (src/shared/pillStatus.js). Servono i membri di entrambe:
+   mu.getById + un batch getUserLite per unità (poche decine di utenti),
+   tenuti per 2 minuti perché la ricerca ridisegna a ogni lettera e le
+   barre cambiano comunque di continuo. Fuori dal punteggio in cima: è
+   uno stato di adesso, non una misura. */
+const PILL_TTL_MS = 120000;
+const _pillUsers = new Map();   // id unità → { at, p: Promise<utenti[]> }
+
+function loadPillUsers(id) {
+  const hit = _pillUsers.get(id);
+  if (hit && Date.now() - hit.at < PILL_TTL_MS) return hit.p;
+  const p = fetchMuDetail(id)
+    .then(d => fetchUsersLite(Array.isArray(d?.members) ? d.members : []))
+    .then(list => list.filter(Boolean))
+    .catch(() => { _pillUsers.delete(id); return null; });
+  _pillUsers.set(id, { at: Date.now(), p });
+  return p;
+}
+
+function pillsHtml(a, b, ua, ub) {
+  const L = muPillLabels();
+  const ga = groupPills(ua), gb = groupPills(ub);
+  const row = (key, label) => vsRow(label, ga[key].length, gb[key].length, { neutral: key !== 'can' });
+  const group = vsGroup({
+    title: muT('pillTitle'), icon: '💊', g: 4, score: false,
+    rows: [row('can', L.can), row('on', L.on), row('down', L.down)],
+  });
+  const side = (m, users, cls) => `<h4 class="wp-pills-side wp-pills-side-${cls}">${escapeHtml(m.name)}</h4>${pillColumnsHtml(users, L)}`;
+  return group + `<div class="wp-vs-group">${side(a, ua, 'a')}${side(b, ub, 'b')}</div>`;
+}
+
+function mountPills(host, a, b, cmp) {
+  const box = host.querySelector('#wp-mu-cmp-pills');
+  if (!box) return;
+  Promise.all([loadPillUsers(a._id), loadPillUsers(b._id)]).then(([ua, ub]) => {
+    // Ancora la stessa coppia? La ricerca può aver cambiato il DOM.
+    if (!ua || !ub || !host.isConnected || cmp.a !== a._id || cmp.b !== b._id) return;
+    const el = host.querySelector('#wp-mu-cmp-pills');
+    if (el) el.innerHTML = pillsHtml(a, b, ua, ub);
+  });
+}
+
 /* ── Elenchi di scelta ────────────────────────────────────────── */
 
 function pickerHtml(directory, side, cmp) {
@@ -470,6 +515,7 @@ export function renderMuCompare(host, ctx) {
         ${vsHero({ a: fighterHtml(a, 'a', t.a > t.b), b: fighterHtml(b, 'b', t.b > t.a), winsA: t.a, winsB: t.b, verdict, intro, center: swap })}
         ${groups.map((g, gi) => vsGroup({ ...g, g: gi })).join('')}
         ${histGroupHtml(a, b, 900)}
+        <div id="wp-mu-cmp-pills"></div>
       </section>`;
   } else {
     section = `
@@ -492,6 +538,7 @@ export function renderMuCompare(host, ctx) {
   if (a && b) {
     // I grafici col disegno vero della larghezza, adesso che il riquadro c'è.
     mountHist(host, a, b, ctx);
+    mountPills(host, a, b, cmp);
     const key = pairKey(a, b);
     if (!_hist.has(key)) {
       fetchMuDamageHistory([a._id, b._id]).then(data => {

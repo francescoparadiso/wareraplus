@@ -6,9 +6,11 @@
    api2.warera.io usando una `X-API-Key` server-side. Qui la key NON può
    stare nel browser (vedi config.js: ECO_PROXY_BASE), quindi ogni chiamata
    passa dal proxy (VPS, poi Worker Cloudflare), che aggiunge lui l'header
-   `X-API-Key` server-side. Dalla v0.27 l'unico endpoint token-gated che
-   serve qui è `work.getStatsByCompany` (produzione e salari giorno per
-   giorno): tutto il resto è pubblico.
+   `X-API-Key` server-side. Dalla v0.27 gli endpoint token-gated che
+   servono qui sono `work.getStatsByCompany` (produzione e salari giorno
+   per giorno) e, dal 2026-10-28, `employee.getCompanyRoster` (la rosa dei
+   dipendenti): tutto il resto è pubblico. Tutti e due devono stare
+   nell'allowlist del proxy VPS (TRPC_ALLOWED nel cache-server).
 
    Riuso di `trpcBatchManual` (src/shared/trpcClient.js): stessa politica di
    batching GET + retry-su-429 già usata da Diplomacy, puntata sulla base

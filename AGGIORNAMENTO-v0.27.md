@@ -64,8 +64,8 @@ il lavoro di adeguamento parta da qui e non da una nuova ricognizione.
 | Procedura | Esito su apidev | Note |
 |---|---|---|
 | `worker.getWorkers` | **404, non esiste più** | usata dall'Ottimizzatore |
-| `employee.getCompanyRoster`, `employee.getMyWorkforceSummary` | **403 con chiave API** | solo sessione di gioco |
-| `tool.getMine`, `employeeEvent.getMine`, `manager.getMyJob`, `managerOffer.getMyProfile`, `user.getMe` | **403 con chiave API** | idem |
+| `employee.getCompanyRoster`, `employee.getMyWorkforceSummary` | ~~403 con chiave API~~ → **✅ con chiave dal 2026-10-28** | vedi sotto la tabella |
+| `tool.getMine`, `employeeEvent.getMine`, `manager.getMyJob`, `managerOffer.getMyProfile`, `user.getMe` | **403 con chiave API** (`employeeEvent.*` ✅ dal 2026-10-28) | solo sessione di gioco |
 | `company.getCompaniesCount`, `company.getActiveCompaniesCount`, `company.canProduceAll` | **403 con chiave API** | idem |
 | `work.getStatsByCompany {companyId}`, `work.getStatsByUserId {userId}` | ✅ con chiave | 31 giorni; ogni giorno `{dailyDate, total, wage, employeeProd, selfWork, automatedEngine}` |
 | `transaction.getPaginatedTransactions` | ✅ con chiave | enum dei tipi invariato (`applicationFee trading itemMarket wage donation articleTip openCase craftItem dismantleItem battleLoot countryMoneyTransfer`), ma **nessuna transazione `wage`** su dev: i salari escono dal gioco e non arrivano a nessun giocatore |
@@ -78,10 +78,18 @@ il lavoro di adeguamento parta da qui e non da una nuova ricognizione.
 | `itemTrading.getPrices`, `gameConfig.getDates` | invariate | |
 | `party.getById` | invariata | `ethics` è **ancora presente** ma il gioco non la usa più |
 
-**Conseguenza principale:** nessuno — né il browser con la chiave dell'utente,
-né il VPS — può leggere i dipendenti di un giocatore (statistiche, tratti,
-felicità, attrezzi). Tutto ciò che il tool potrà dire sulla produzione di
-un'azienda passa da `work.getStatsBy*` e da `company.getById`.
+~~**Conseguenza principale:** nessuno può leggere i dipendenti di un
+giocatore.~~ **Superato il 2026-10-28**: WarEra ha aperto ai token dieci
+procedure `employee.*` / `employeeEvent.*`. Quelle per azienda o per
+dipendente (`getCompanyRoster`, `getCompanyEmployees`, `getCompanyEstimate`,
+`getManagerPointValue`, `getById`) rispondono per QUALUNQUE azienda: rosa con
+statistiche, tratti, felicità, attrezzo, salario e stima oraria del gioco.
+L'Ottimizzatore la mostra nella scheda Aziende (`src/eco/account.js`). Le
+`getMy*` e `employeeEvent.getMine/getPendingCount` danno invece i dati del
+titolare della chiave: il proxy del VPS le respinge (`TRPC_ALLOWED` nel
+cache-server). Misurato sulla rosa: la Gestione è un +2% della produzione di
+BASE per punto, sommato agli altri bonus, non moltiplicato (vedi
+`src/eco/skills.js`).
 
 ### `country.getAllCountries`
 
@@ -304,3 +312,96 @@ dipendenti.
 tipo di governo; i nomi delle regioni scritti a mano (etichette, ancore delle
 Operazioni, archivi importati) e gli `overseasLinks`, da controllare sul live
 dopo il rilascio.
+
+## 7. Entrate per tipo di governo (2026-10-27)
+
+Nel pannello nazione, sotto "Tipo di governo": quanto renderebbe ogni tipo
+e quante tasse servono perché la Plutocrazia batta la Repubblica
+(`src/shared/govIncome.js`, idea dalla guida di Johnny_Sins del 26 ottobre).
+
+- `income.govType` è l'**effetto** del governo attuale: `total − govType` è
+  la nazione senza governo.
+- Regole, verificate sulle nazioni che hanno già quel tipo (17 su 17, scarto
+  massimo 0,04 oro/giorno): Repubblica + sviluppo delle regioni proprie −
+  sviluppo delle conquistate; Plutocrazia + 50% risorse strategiche + 40%
+  tasse su salari e manager; Autocrazia + 25% sviluppo; Stato nazionalista
+  − 30% sviluppo. Federazione, Fronte patriottico, Stato mercenario e
+  Provvisorio: nessun effetto (`govType` = 0 su tutte le 44 nazioni).
+- Proprie/conquistate da `country` contro `initialCountry` delle regioni;
+  una regione conquistata paga intero il suo sviluppo (Zurigo: 12,15 / 24).
+- Soglia: `T* = (proprie − conquistate − 0,5·S) / 0,4`, sotto zero conviene
+  già.
+- ⚠️ Aperto: la Repubblica con conquiste. Oggi nessuna Repubblica ne ha, e
+  la guida dà per la Germania +947 contro i nostri +1.039: tornerebbe se le
+  conquistate perdessero anche la rendita delle risorse strategiche. Il
+  controllo sul tipo attuale lo dirà da solo (riga con ⚠️).
+
+## 8. Endpoint nuovi (provati il 2026-10-27)
+
+Tutti pubblici su `api6`, senza chiave: non consumano il budget del proxy.
+Nessuno è ancora usato dal tool.
+
+- **`article.getPinnedArticles`** — input vuoto. Array di articoli completi
+  (`content` HTML compreso) con in più `pinnedUntil`. Al 27 ottobre uno solo:
+  le note della v0.27 (`6ade08f7899288ce9f0bfe36`).
+- **`assetSale.getLastSkinGifts`** — input vuoto (`limit` ignorato). Le ultime
+  3 skin regalate: `{ createdAt, buyer, giftedTo, skins: [{ key, slot }] }`.
+- **`managerOffer.getManyPaginated`** — `limit` (max 50), `cursor`;
+  risposta `{ items, nextCursor }`, ordinata per paga decrescente. Ogni
+  offerta: `{ _id, company, user, region, rateManagement, maxHourlyWage,
+  minManagement?, citizenship?, text?, createdAt, updatedAt }`. Al 27 ottobre
+  108 offerte (71 giocatori, una per azienda), 3 pagine.
+  - `maxHourlyWage` = `rateManagement × 11` in tutte (11 = Gestione massima):
+    l'offerta più alta è 0,1364/ora, ~3,3 oro al giorno. ⚠️ La guida di
+    Johnny_Sins parla di 24 oro al giorno per un manager: da chiarire prima
+    di costruirci la parte Manager dell'Ottimizzatore.
+  - I campi sconosciuti si ignorano, ma `regionId` e `countryId` danno una
+    lista VUOTA, anche con una regione che nelle offerte c'è: un filtro
+    esiste, con un nome o un significato che non abbiamo trovato.
+  - `citizenship` (92 su 108): presumibilmente offerta riservata ai
+    cittadini di quella nazione. `text` è un messaggio libero.
+- **`managerOffer.getWageStats`** — input vuoto (`userId` ignorato).
+  `{ allowedRange: { min, max, average, source: "market" }, topOffer,
+  topEligibleOffer }`: fascia di paga oraria ammessa (0,091–0,1366 il 27
+  ottobre), offerta più alta; `topEligibleOffer` è null da anonimi
+  (presumibilmente la migliore per chi è collegato).
+- **`poll.getPoll`** — `{ pollId }`. `{ _id, author, question, options: [{ id,
+  text, votes }], allowMultiple, durationHours, totalVoters, article,
+  startedAt, endsAt, isEnded, myVote, canVote, cannotVoteReason }`. Id
+  inesistente → 404 "Poll not found".
+- **`poll.getPollVoters`** — `{ pollId, optionId, limit (max 100), cursor }`;
+  `{ items, nextCursor }`, ogni voto `{ poll, user, options: [..], version,
+  createdAt }`. Il voto è pubblico per regola del gioco (note v0.27:
+  "who voted for what is public").
+- **`gameStat.getPpMoneyValue`** — input `z.void()`: va chiamata SENZA
+  `?input=`. Con `{}` (anche dentro un batch) risponde 400 "Expected void,
+  received object". Restituisce un numero, il valore in oro di un punto
+  produzione (0,1012 il 27 ottobre). Il tool la usa già così, con una GET a
+  parte (`src/eco/api.js`).
+- **`gameConfig.getMaxBountyRate`** — restituisce un numero (0,91). Accetta
+  sia nessun input sia `{}`, quindi in un batch non dà problemi.
+- **`tradingOrder.getTopOrdersPerItemCode`** — `{ itemCodes: string[],
+  limit? }`, `limit` max 100 (oltre: 400 `too_big`); senza `itemCodes`: 400.
+  Restituisce `{ [codice]: { buyOrders, sellOrders } }`: più libri ordini in
+  una chiamata. Ogni codice chiesto è una chiave, uno sconosciuto ha due
+  liste vuote. `limit` conta gli ordini PER LATO; senza, uno per lato. Gli
+  ordini hanno gli stessi campi di `getTopOrders` e `getPublicOrdersByOwner`
+  (`_id, user, itemCode, quantity, price, offerAt, type`). Potrebbe sostituire
+  la `getTopOrders` per risorsa di `src/market/api.js`.
+- **`itemTrading.getItemTrading`** — `{ itemCode }`. `{ _id, itemCode,
+  minPrice, maxPrice, values, sellOrders, buyOrders, currentValue }`.
+  `values` sono gli ultimi 30 giorni consecutivi, dal più vecchio, l'ultimo è
+  oggi: `{ valueAt: "AAAA-MM-GG", avgValue, totalValue, totalQuantity,
+  transactionsCount }`, con `avgValue = totalValue / totalQuantity` su ogni
+  riga e `currentValue` = `avgValue` dell'ultima. `sellOrders`/`buyOrders`
+  vuoti. Un codice senza scambi (`toolbox`) → 404 "Itemtradings not found.".
+  Utile come ripiego o controllo per `/price-history`.
+
+⚠️ **Non esiste un elenco dei sondaggi** (`poll.getPolls`,
+`poll.getManyPaginated` → 404). L'id sta solo nell'HTML dell'articolo:
+`<div data-poll-id="…" class="tiptap-poll">`, quindi per trovarli si
+scorrono gli articoli (`article.getArticlesPaginated` con `type` fra
+`daily|weekly|top|my|subscriptions|last|saved`) e si legge `content`.
+Negli ultimi 50 articoli del 27 ottobre: 2 sondaggi. Regole dalle note:
+da 2 a 10 risposte, aperti da 1 ora a 7 giorni, voto limitabile per
+livello o nazione.

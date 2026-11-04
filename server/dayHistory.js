@@ -250,6 +250,31 @@ function readDay(giorno) {
   };
 }
 
+/**
+ * La somma dei tesori giorno per giorno, per la scheda Soldi di Economia
+ * (server/orderMoney.js): `[[giorno, somma, nazioni]]` dal più vecchio.
+ * Una riga senza tesoro (`null`, i giorni importati ne hanno qualcuna) non
+ * entra nella somma ma si vede da `nazioni`: la vista scarta i giorni in cui
+ * le nazioni contate sono molte meno del solito, invece di disegnarli come
+ * un crollo.
+ */
+function treasuryByDay(giorni = 90) {
+  const store = _read(FILE_DIPL);
+  const da = giornoMeno(giornoDi(), Math.max(1, giorni));
+  const out = [];
+  for (const [giorno, righe] of Object.entries(store.days)) {
+    if (giorno < da) continue;
+    let somma = 0;
+    let n = 0;
+    for (const r of righe || []) {
+      const v = r?.[4];
+      if (Number.isFinite(v)) { somma += v; n++; }
+    }
+    if (n) out.push([giorno, Math.round(somma), n]);
+  }
+  return out.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+}
+
 /** Per /health. */
 function statoDayHistory() {
   const storeD = _read(FILE_DIPL);
@@ -286,5 +311,6 @@ module.exports = {
   snapshotDay,
   readDay,
   statoDayHistory,
+  treasuryByDay,
   forgetDayHistoryCache,
 };

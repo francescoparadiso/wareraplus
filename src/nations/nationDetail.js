@@ -31,6 +31,7 @@ import { barsHtml, donutHtml } from './charts.js';
 import { classifyPlaystyle } from '../mu/playstyle.js';
 import { renderLevelPlaystyle } from './levelPlaystyle.js';
 import { renderDamageCurves } from './damageCurves.js';
+import { renderPlaystyleTrend } from './playstyleTrend.js';
 import { renderLabour } from './labourSection.js';
 import { avatarImg, escapeHtml, flagImg, fmtCompact, fmtRelative } from '../mu/ui.js';
 import { countryDamageToday, dailyDamageLabel, ensureDailyDamage } from '../shared/dailyDamage.js';
@@ -128,6 +129,7 @@ export function renderNationDetail(host, nation, ctx) {
 
     <div data-npanel="style"${_ntab === 'style' ? '' : ' hidden'}>
       <section class="wp-nat-charts" id="wp-nat-charts"></section>
+      <section class="wp-nat-trend" id="wp-nat-trend"></section>
       <section class="wp-nat-lv" id="wp-nat-levels"></section>
     </div>
 
@@ -207,7 +209,8 @@ function showTab(id) {
    dall'elenco cittadini e si disegnano quando arriva (loadCitizens). */
 function paintTab(id) {
   if (!_nation || _painted.has(id)) return;
-  if (id === 'damage') { _painted.add(id); paintCurves(_nation); }
+  if (id === 'style') { _painted.add(id); paintTrend(_nation); }
+  else if (id === 'damage') { _painted.add(id); paintCurves(_nation); }
   else if (id === 'labour') { _painted.add(id); paintLabour(_nation); }
 }
 
@@ -263,6 +266,19 @@ function paintCurves(nation) {
     console.warn('WarEra+ nations: curve del danno non disegnate:', err.message);
     el.innerHTML = '';
   }).then(() => markIfEmpty(el));
+}
+
+/* Giocatori guerra / economia nel tempo: viene dallo storico che il server
+   salva già per il "da ieri" del pannello mappa (/mu-playstyle-history),
+   quindi indipendente dall'elenco cittadini. Senza storico la sezione resta
+   vuota e la scheda è quella di prima. Vedi src/nations/playstyleTrend.js. */
+function paintTrend(nation) {
+  const el = _host?.querySelector('#wp-nat-trend');
+  if (!el) return;
+  renderPlaystyleTrend(el, nation).catch(err => {
+    console.warn('WarEra+ nations: andamento guerra/eco non disegnato:', err.message);
+    el.innerHTML = '';
+  });
 }
 
 /* Lavoro e tasse: archivio CHIUSO (29 lug - 17 set 2026), nessun poll che

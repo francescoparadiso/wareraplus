@@ -90,6 +90,30 @@ wareraPlus/
 │   │                              conviene ADESSO perché il gioco non pubblica altro;
 │   │                              da qui in poi sa anche da dove viene quel prezzo.
 │   │                              Endpoint: /price-history?days=N.
+│   ├── orderMoney.js           ← NUOVO (2026-11-03) — soldi bloccati negli ordini
+│   │                              d'acquisto: un campione all'ora (:42) di
+│   │                              tradingOrder.getTopOrders, 100 ordini per risorsa
+│   │                              (il massimo che accetta), quantità × prezzo per
+│   │                              risorsa, unità e nazione del compratore (mappa
+│   │                              mu-user-countries) + somma dei tesori. ⚠️ Il totale
+│   │                              è un MINIMO: i libri al tetto sono segnati. Il
+│   │                              soldi negli ordini stanno FUORI dalla ricchezza dei
+│   │                              giocatori (il gioco li toglie dal portafoglio).
+│   │                              Endpoint: /order-money?days=N[&country=|&mu=].
+│   ├── playerParts.js          ← NUOVO (2026-11-03, rifatto 2026-11-04) — la
+│   │                              ricchezza dei giocatori DIVISA per categoria
+│   │                              (aziende, equipaggiamento, armi, oggetti, soldi:
+│   │                              user.getUserById → stats.wealth, PUBBLICA; la
+│   │                              somma torna al totale). Un giro al giorno fra le
+│   │                              05:00 e le 06:59 italiane su tutta la classifica
+│   │                              userWealth (~17.000 getUserById, ~5 minuti), più
+│   │                              uno al primo avvio se l'archivio è vuoto.
+│   │                              Archivi: cache/player-parts.sqlite (una riga per
+│   │                              giocatore e giorno, su DISCO: il VPS ha l'85% di
+│   │                              RAM già usata) e cache/player-money-days.json
+│   │                              (mondo, nazioni, prime 150 unità: i portafogli
+│   │                              sommati, per la scheda Soldi). Endpoint:
+│   │                              /player-parts?userId= e /player-money?days=.
 │   ├── dayHistory.js           ← NUOVO — la giornata storica: diplomazia (patti,
 │   │                              guerre, nemico giurato, tesoro) e battaglie aperte,
 │   │                              giorno per giorno. Toglie alla time machine il suo
@@ -155,6 +179,10 @@ wareraPlus/
 │   │                              ⚠️ Non conta la tassa sul lavoro in proprio né
 │   │                              quella di mercato, e la vista lo scrive.
 │   │                              Endpoint: /company-census.
+│   │                              Dal 2026-10-26 lo stesso giro mette da parte, per
+│   │                              nazione del proprietario, le aziende in regioni di
+│   │                              ALTRE nazioni (file company-abroad, zero richieste in
+│   │                              più). Endpoint: /company-abroad?countryId=.
 │   ├── import/                 ← NUOVO — import UNA TANTUM da un archivio esterno
 │   │   ├── bonifici.js            (il dump PostgreSQL di un altro tool della
 │   │   ├── ricchezza.js            comunità, passato dal suo autore). Servono solo
@@ -322,7 +350,7 @@ wareraPlus/
     │   ├── blocStatsI18n.js ← NUOVO — traduzioni (9 lingue) di Statistiche
     │   │                        alleanze: la CHIAVE è il testo inglese, bT('Weekly
     │   │                        damage'), e ciò che manca ricade sull'inglese.
-    │   ├── dualBadges.js, blocStats.js, weeklyDamage.js, population.js,
+    │   ├── dualBadges.js, blocStats.js (la scheda di un'alleanza è una PAGINA nel suo contenitore, non un popup: openBlocDetail/renderBlocDetail), weeklyDamage.js, population.js,
     │   │   regions.js, nationTooltip.js, utils.js
     │   ├── cacheClient.js       ← NUOVO — client del server di cache: OGNI funzione ha
     │   │                          fallback se il VPS non risponde (mai un nuovo SPOF)
@@ -515,8 +543,24 @@ wareraPlus/
     │   │                          non ce l'ha la sezione non compare.
     │   │                          ⚠️ un'ora senza misura è `d: null` e si disegna come
     │   │                          BUCO (barra assente, linea spezzata), mai come zero.
+    │   ├── playstyleTrend.js    ← NUOVO (2026-10-29) — nella scheda "Stile di gioco":
+    │   │                          giocatori guerra / economia (e, spegnibili, ibridi e
+    │   │                          senza punti) nel tempo, da 24 ore a 90 giorni. Dati da
+    │   │                          /mu-playstyle-history, lo storico che il server già
+    │   │                          salva per il "da ieri" del pannello mappa: nessun
+    │   │                          lavoro lato server. ⚠️ Lo storico è a delta (una riga
+    │   │                          solo quando i numeri cambiano): la serie è a SCALINI e
+    │   │                          si scarica sempre l'intera ritenzione, perché il valore
+    │   │                          a inizio finestra è l'ultima riga PRIMA dell'inizio.
+    │   │                          Anche per un GRUPPO (renderGroupPlaystyleTrend): la pagina di
+    │   │                          un'alleanza (Statistiche alleanze) somma le serie delle nazioni
+    │   │                          membre. ⚠️ Una nazione senza riga a inizio finestra si riempie
+    │   │                          all'indietro col primo valore noto, e la nota lo dichiara.
     │   ├── nationList.js, nationCompare.js, nationDetail.js, i18n.js (9 lingue)
     ├── players/                  ← NUOVO (2026-10-14) — Giocatori: voce di Approfondimenti
+    │   │                            (2026-11-03: la scheda Ricchezza si divide nelle cinque
+    │   │                            CATEGORIE del gioco, selezionabili — partsChart.js,
+    │   │                            i18nParts.js)
     │   │                            e destinazione del clic su un cittadino (Statistiche
     │   │                            nazioni → Cittadini; Ctrl/clic centrale aprono ancora il
     │   │                            profilo sul gioco). Partenza: ricerca, "Sono io" (stessa
@@ -547,38 +591,35 @@ wareraPlus/
     │   │                          I 404 in console sono i batch dove non ha combattuto.
     │   └── main.js, i18n.js (9 lingue); stile in styles/players.css (wp-ply-*), il versus in styles/versus.css
     ├── economy/                  ← NUOVO — Economia: UNA voce di Approfondimenti,
-    │   │                            TRE schede. Prima erano due voci separate
-    │   │                            ("Ottimizzatore industriale" e "Rendite di
-    │   │                            produzione") e i prezzi non avevano casa: erano
-    │   │                            separate per come sono NATE, non per come si
-    │   │                            usano. Le tre domande sono un discorso solo, e
-    │   │                            nell'ordine in cui si fanno — quanto vale la
-    │   │                            roba, cosa conviene produrre, come sistemo la
-    │   │                            MIA azienda.
+    │   │                            TRE schede (Prezzi, Produzione, Ottimizzatore).
+    │   │                            Dal 2026-10-30 NON ci sono più le Rendite di
+    │   │                            produzione (con i dipendenti la paga non la
+    │   │                            decidi tu e il gioco mostra già il guadagno:
+    │   │                            una tabella di rendite per punto con una paga
+    │   │                            simulata non diceva niente di più) e la
+    │   │                            Ricchezza è passata in Giocatori
+    │   │                            (src/players/main.js). I vecchi link
+    │   │                            ?tab=yields e ?tab=wealth ricadono sui Prezzi e
+    │   │                            sul "mio" giocatore.
     │   │                            ⚠️ Per AFFIANCAMENTO, non per fusione:
-    │   │                            src/market/* e src/eco/* non sono toccati
-    │   │                            dentro. Ogni scheda ha il suo contenitore, ci si
-    │   │                            monta la vista di prima con la sua
-    │   │                            init*(container), e cambiare scheda NASCONDE
-    │   │                            invece di smontare — tornare sulle Rendite
-    │   │                            ritrova paga, giorni e riga aperta com'erano.
-    │   │                            Restano quindi TRE dizionari (economy/i18n.js,
-    │   │                            market/i18n.js, testi interni di eco/main.js) e
-    │   │                            TRE fogli di stile: è voluto.
+    │   │                            src/eco/* non è toccato dentro. Ogni scheda ha
+    │   │                            il suo contenitore, ci si monta la vista con la
+    │   │                            sua init*(container), e cambiare scheda NASCONDE
+    │   │                            invece di smontare. Restano quindi più
+    │   │                            dizionari (economy/i18n.js, i18nPlus.js, testi
+    │   │                            interni di eco/main.js): è voluto.
     │   ├── main.js               ← initEconomyView(container, {tab}) +
     │   │                          stopEconomyView(). import() per scheda alla prima
     │   │                          apertura: chi entra per i prezzi non si scarica
     │   │                          anche l'Ottimizzatore. Cambiando scheda ferma il
     │   │                          timer di quella che si lascia e lo riattacca
     │   │                          rientrando (le tre init* sono riapribili).
-    │   ├── prices.js             ← NUOVO — la scheda PREZZI, l'unica parte davvero
-    │   │                          nuova: elenco di tutte le risorse con prezzo,
-    │   │                          denaro/lettera del libro ordini e variazioni
-    │   │                          24h/7g/30g, e per ognuna la sua scheda col
-    │   │                          grafico. ZERO fetch proprie — prezzi e libro
-    │   │                          ordini li chiede a market/api.js (stessa cache,
-    │   │                          stesso TTL: aprire questa scheda dopo le Rendite
-    │   │                          non ricompra niente), lo storico a /price-history.
+    │   ├── prices.js             ← la scheda PREZZI: elenco di tutte le risorse con
+    │   │                          prezzo, denaro/lettera del libro ordini e
+    │   │                          variazioni 24h/7g/30g, e per ognuna la sua scheda
+    │   │                          col grafico. ZERO fetch proprie — prezzi e libro
+    │   │                          ordini li chiede a market/api.js, lo storico a
+    │   │                          /price-history.
     │   ├── candleChart.js        ← NUOVO — le candele (SVG a mano). ⚠️ NON sostituisce
     │   │                          market/priceChart.js: quello disegna le sole
     │   │                          chiusure perché sta in una riga alta 88px, questo
@@ -587,20 +628,28 @@ wareraPlus/
     │   │                          Disegna anche le serie a un valore al giorno
     │   │                          (mode 'line'): l'esploratore accetta `righe` per
     │   │                          non mostrare apertura/massimo/minimo di una tassa.
+    │   ├── money.js              ← NUOVO (2026-11-03) — scheda SOLDI: portafogli dei
+    │   │                            giocatori (/player-money), tesori delle nazioni
+    │   │                            (countryWealth, mai `country.money`, fermo da mesi)
+    │   │                            e soldi negli ordini d'acquisto (/order-money), per
+    │   │                            nazione / unità. NESSUN ripiego. Dizionario in
+    │   │                            economy/i18nMoney.js.
     │   ├── production.js         ← NUOVO (2026-10-08) — scheda PRODUZIONE: per
     │   │                          risorsa aziende, dipendenti, salari e tasse sui
     │   │                          salari al giorno, filtro per nazione, e per ogni
     │   │                          risorsa in quali nazioni si produce. Tutto da
     │   │                          /company-census, NESSUN ripiego (servirebbero
     │   │                          ~50.000 chiamate e la chiave): senza server lo dice.
-    │   ├── playerWealth.js       ← NUOVO (2026-10-08) — scheda RICCHEZZA: cerchi
-    │   │                          un giocatore (search.searchUsers + getUserLite,
-    │   │                          pubbliche) e vedi la sua curva giorno per giorno
-    │   │                          da /player-wealth, giorni migliori e peggiori,
-    │   │                          posizione. "Sono io" salva solo l'id in
-    │   │                          localStorage (`we_my_player`). ⚠️ La differenza
-    │   │                          fra due giorni è il saldo NETTO, non "spese".
-    │   └── i18nPlus.js           ← dizionario (9 lingue) delle due schede nuove
+    │   ├── (playerWealth.js TOLTO il 2026-10-30)  ← la scheda RICCHEZZA guardava UN
+    │   │                          giocatore, non il mercato, e Giocatori ne aveva già
+    │   │                          una scarna: resta quella, in src/players/main.js,
+    │   │                          con la versione ricca (posizione, variazioni in %,
+    │   │                          finestre 30/90/tutto, giorni migliori e peggiori).
+    │   │                          I vecchi link ?section=economy&tab=wealth aprono il
+    │   │                          "mio" giocatore (src/main.js). ⚠️ La differenza fra
+    │   │                          due giorni è il saldo NETTO, non "spese".
+    │   └── i18nPlus.js           ← dizionario (9 lingue) della scheda Produzione e,
+    │                              in prestito, della Ricchezza di Giocatori (plusT)
     ├── eco/                      ← NUOVO — Ottimizzatore industriale (port del bot Discord
     │   │                            "WarEra Eco Optimizer" di ArgusIA; la sua card in
     │   │                            cima è stata tolta con la v0.27). Dal 2026-09-19
@@ -618,41 +667,25 @@ wareraPlus/
     │   │                          punta su apidev.warera.io con una chiave in memoria
     │   ├── gameData.js, resolve.js
     │   ├── account.js           ← aziende + work.getStatsByCompany + tassa della nazione
-    │   ├── companies.js         ← scheda Aziende: margine dei dipendenti, segnali (pura)
+    │   │                          + employee.getCompanyRoster (rosa, dal 2026-10-28)
+    │   ├── companies.js         ← scheda Aziende: margine dei dipendenti, segnali,
+    │   │                          conti e avvisi dipendente per dipendente (pura)
     │   └── skills.js            ← scheda Competenze: Companies/Energy/Production/
     │                              Management sul budget delle abilità eco (pura)
-    ├── market/                   ← NUOVO — Rendite di produzione: la classifica di
-    │   │                            mercato... e dal 2026-09-19 la SECONDA SCHEDA di
-    │   │                            src/economy/, non più una voce di menù sua (il
-    │   │                            codice non è cambiato, cambia chi chiama
-    │   │                            initMarketView()). Sotto, la descrizione di
-    │   │                            sempre:
-    │   │                            mercato di tutte le risorse per rendita al punto
-    │   │                            produzione. Gemella dell'Ottimizzatore per chi
-    │   │                            un'azienda non ce l'ha ancora (cosa produrre, dove
-    │   │                            aprirla): NON chiede uno username, si apre e mostra.
-    │   ├── main.js               ← initMarketView(container) + stopMarketAutoRefresh():
-    │   │                          tabella, ordinamenti, riga espandibile, simulatore paga
+    ├── market/                   ← il data layer dei PREZZI. Era la vista Rendite di
+    │   │                            produzione, tolta il 2026-10-30 (main.js, model.js,
+    │   │                            i18n.js e market.css sono nella storia di git):
+    │   │                            ne restano due file, usati da economy/prices.js.
     │   ├── api.js                ← due orologi: prezzi + libro ordini (PUBBLICI, diretti
-    │   │                          su api6, TTL 5 min, giro automatico mentre è aperta) e
-    │   │                          regioni consigliate (token-gated via ecoBatch → proxy,
-    │   │                          TTL 30 min + localStorage). Un refresh completo = 2
-    │   │                          richieste HTTP. Regioni e tasse: zero fetch. Più una
-    │   │                          terza cosa, sola per sessione: lo STORICO dal server
-    │   │                          di cache (/price-history), senza fallback — il gioco
-    │   │                          non sa dire quanto costava ieri, quindi se il server
-    │   │                          non ce l'ha la sezione non compare e basta.
-    │   ├── priceChart.js         ← NUOVO — la linea delle chiusure (SVG a mano, come
+    │   │                          su api6, TTL 5 min, giro automatico mentre la scheda
+    │   │                          è aperta) e lo STORICO dal server di cache
+    │   │                          (/price-history), senza fallback — il gioco non sa
+    │   │                          dire quanto costava ieri, quindi se il server non ce
+    │   │                          l'ha la sezione andamento non compare e basta.
+    │   └── priceChart.js         ← NUOVO — la linea delle chiusure (SVG a mano, come
     │   │                          nations/charts.js) + variazione 7/30 giorni. Un
     │   │                          giorno senza candela è un BUCO: la linea si spezza,
     │   │                          mai uno zero.
-    │   ├── model.js              ← formule PURE (la stessa di eco/gameData.js, ma con i
-    │   │                          prezzi eseguibili) + paga di pareggio, guadagno
-    │   │                          giornaliero per paga offerta e bonus FEDELTÀ allo
-    │   │                          slider dei giorni (+1%/giorno fino a 10, letto da
-    │   │                          gameConfig.worker, come eco/workers.js). Cambiare
-    │   │                          paga o giorni non costa una richiesta.
-    │   └── i18n.js               ← dizionario locale (9 lingue)
     ├── accordi/                  ← NUOVO (2026-10-23) — Accordi: archivio dei patti di non
     │   │                            belligeranza (nazione–nazione, nazione–alleanza,
     │   │                            alleanza–alleanza), con testo, inizio/fine, unità fuori
@@ -815,6 +848,18 @@ wareraPlus/
     │   │                          (canali Discord, accessi). Colori di stato a tre livelli
     │   │                          (alto/medio/ok, `--liv` in private.css). Grafici in SVG a
     │   │                          mano. Dati da /nazione e /nazione/nemici: nessuna chiamata nuova.
+    │   │                          In PERSONE, dal 2026-10-26, "Aziende all'estero" (cittadini con
+    │   │                          aziende in regioni di altre nazioni) da /nazione/aziende-estero.
+    │   ├── panoramica.js        ← NUOVO (2026-10-30) — "Cosa puoi fare": prima pagina dopo il
+    │   │                          login. Una card per funzione (nazione, operazioni, contratti,
+    │   │                          amministrazione + Bilancio unità, Accordi, Votazioni) con
+    │   │                          "aperta a te" / "non aperta" e, se chiusa, il PERCHÉ. Serve
+    │   │                          a chi non è di una nazione P.A.S.T.A.: prima vedeva solo "non
+    │   │                          aperta al tuo paese". ⚠️ Annuncio, non permesso: la regola in
+    │   │                          `stato()` rispecchia quella del server (filtroNazione,
+    │   │                          capacitaDi), che resta l'unico a decidere. Le funzioni fuori
+    │   │                          dall'area chiudono l'overlay e aprono la sezione.
+    │   ├── i18nPanoramica.js    ← dizionario (9 lingue) di panoramica.js
     │   ├── i18nNazione.js       ← dizionario (9 lingue) di nazione.js e delle sezioni
     │   ├── operazioni.js        ← NUOVO (2026-10-22) — pagina "Operazioni", subito dopo la
     │   │                          nazione: la lavagna dei piani. Un flowchart su un asse
@@ -984,6 +1029,10 @@ wareraPlus/
     │   ├── desktopMenuBar.js   ← barra menù desktop (Viste mappa / Approfondimenti /
     │   │                         Impostazioni, ricerca ⌘K, Preferiti)
     │   ├── mobileMenuBar.js    ← equivalente mobile (drawer)
+    │   ├── meWidget.js         ← NUOVO (2026-10-30) — blocco "Il mio personaggio" in cima ai
+    │   │                          Preferiti (desktop e mobile): tre righe (personaggio, unità,
+    │   │                          nazione) o la ricerca per collegarlo. Costruito una volta
+    │   │                          sola per barra (ascolta i propri eventi).
     │   ├── pins.js             ← store dei Preferiti (nazioni/alleanze/unità), localStorage
     │   ├── backNav.js          ← NUOVO — tasto Indietro (browser, gesto Android, PWA):
     │   │                         chiude la cosa aperta invece di USCIRE dal tool.
@@ -1018,6 +1067,15 @@ wareraPlus/
     │   │                         non si scrive (la closePanel() del boot cancellerebbe
     │   │                         ?country= prima che venga letto). Dentro lo sfondo
     │   │                         valgono solo ?country= e ?tm=, come prima.
+    │   ├── whatsNew.js         ← NUOVO (2026-11-04) — riquadro "Novità" in sovraimpressione, UNA
+    │   │                          volta a chi torna dopo un aggiornamento (chiave
+    │   │                          we_whatsnew_seen = id più recente chiuso). Non compare alla
+    │   │                          prima visita assoluta, sui link condivisi (?section=…,
+    │   │                          ?player=…) né nello sfondo Wallpaper Engine; ?whatsnew=1 lo
+    │   │                          riapre a mano. Contenuto in changelog.js.
+    │   ├── changelog.js        ← NUOVO (2026-11-04) — il registro delle novità: l'UNICO file da
+    │   │                          toccare a ogni release (istruzioni in testa al file). en+it
+    │   │                          obbligatori, le altre lingue ricadono sull'inglese.
     │   ├── overlayChrome.js    ← chrome condiviso degli overlay: sfondo a particelle nella
     │   │                         tinta della sezione + pausa mappa
     │   ├── mapIdle.js          ← pausa/riprende il lavoro di sfondo della mappa (pallini
@@ -1029,11 +1087,20 @@ wareraPlus/
     │   ├── blocLabelsToggle.js ← toggle nomi alleanze
     │   └── authorPill.js       ← pill autore accanto al bottone Ko-fi
     ├── shared/
+    │   ├── me.js                ← NUOVO (2026-10-30) — "Il mio personaggio": setMe/clearMe/getMeId
+    │   │                          e metadati (nome, avatar, nazione, unità) sulla chiave
+    │   │                          `we_my_player` che Giocatori, Tornei, Ricchezza e Bonus
+    │   │                          battaglia già leggevano. Evento `wareraplus:me-changed`.
+    │   │                          Preferenza locale, non un login. Chi collega il personaggio
+    │   │                          nell'area riservata lo trova impostato (private/main.js).
     │   ├── battleTiming.js      ← NUOVO (2026-10-22) — quando finisce il round (per lato) e
     │   │                          la battaglia: 300 punti a round, un tick ogni 120 s, punti
     │   │                          per tick secondo il TOTALE del round (non il numero del
     │   │                          tick). Dati da currentRound.live di /battles, zero fetch.
     │   │                          Usato da Operazioni, sezione Battaglie e tooltip dei marker.
+    │   ├── employeeBench.js    ← NUOVO (2026-10-28) — riferimenti mondiali dei dipendenti
+    │   │                          per risorsa (/employee-benchmarks, dal censimento
+    │   │                          notturno) e percentile di un valore. Ottimizzatore.
     │   ├── particlesBackground.js ← motore dello sfondo a particelle, condiviso da tutte
     │   │                            le sezioni (Political oro, Eco verde, MU rosso,
     │   │                            News blu, Alleanze viola)
@@ -1053,6 +1120,13 @@ wareraPlus/
     │   │                          chi riceve metà di bunker/base (qui alleanza o
     │   │                          patto) e il totale come somma.
     │   ├── allianceBonus.js    ← ricalcola il bonus danno d'alleanza (l'API non lo espone)
+    │   ├── govIncome.js        ← NUOVO (2026-10-27) — entrate per tipo di governo
+    │   │                          (Repubblica / Plutocrazia / Autocrazia / Stato
+    │   │                          nazionalista) e soglia di tasse perché la
+    │   │                          Plutocrazia batta la Repubblica. Zero richieste:
+    │   │                          `income` di nazione e regioni. Regole dalle note,
+    │   │                          verificate sul tipo attuale (`income.govType`).
+    │   │                          ⚠️ Repubblica con conquiste non ancora verificabile.
     │   ├── dailyDamage.js      ← "danno di oggi" per nazioni/alleanze/unità, dalla
     │   │                          differenza fra due snapshot del cumulato settimanale
     │   ├── analytics.js        ← wrapper su Umami (trackEvent)
@@ -1076,12 +1150,18 @@ wareraPlus/
     │   │                          impulsi, battiti, ping, navi e particelle; restano
     │   │                          frecce e colori. Tutti i moduli animati chiedono
     │   │                          animationsOn(). Il replay battaglia NO (è a mano).
+    │   ├── trendLine.js        ← NUOVO (2026-11-04) — linee dei grafici a UNA serie nel
+    │   │                          tempo colorate per direzione: tratto verde se sale, rosso
+    │   │                          se scende, grigio se uguale (stessi colori delle
+    │   │                          variazioni in %). Usato da economy/candleChart.js (modo
+    │   │                          linea), market/priceChart.js e economy/money.js. NON per i
+    │   │                          grafici a più serie, dove il colore dice chi è.
     │   ├── chartTip.js         ← NUOVO — tooltip comune dei grafici: ogni elemento con
     │   │                          data-tip (tipAttr) lo mostra al passaggio o al tocco, e i
     │   │                          <title> nativi degli SVG diventano tooltip istantanei
     │   ├── scrollHint.js       ← NUOVO — "Scorri di lato per tutte le colonne": l'avviso
     │   │                          sopra le tabelle dati che su telefono SCORRONO invece
-    │   │                          di nascondere colonne (Rendite, Prezzi, Produzione,
+    │   │                          di nascondere colonne (Prezzi, Produzione,
     │   │                          Unità, Spese di guerra, Statistiche nazioni). Prima
     │   │                          colonna ferma, il resto scorre (2026-10-15: da
     │   │                          telefono non si vedeva più "Rendita/pp base").

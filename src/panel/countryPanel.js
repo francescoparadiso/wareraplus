@@ -28,6 +28,7 @@ import { trackEvent } from '../shared/analytics.js';
 import { isPinned, togglePin } from '../app/pins.js';
 import { ensureDailyDamage, sumCountryDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
 import { allianceDamageBonus, formatBonus, isPenalty, curveTooltip } from '../shared/allianceBonus.js';
+import { govIncomeModel, GOV_NEUTRAL_TYPES } from '../shared/govIncome.js';
 // getFlagUrl/getNationCode vivevano qui: spostate in nationFlag.js perche'
 // le usa anche viewOverview.js (import circolare, altrimenti).
 import { getFlagUrl, getNationCode } from './nationFlag.js';
@@ -449,6 +450,69 @@ function govTypeHtml(nation) {
     </div>`;
 }
 
+/* WarEra+ v0.27 — quanto renderebbe ogni tipo di governo, e quante tasse
+   servono perché la Plutocrazia batta la Repubblica. Il calcolo (e le sue
+   regole, prese dalle note e verificate sui dati) sta in
+   src/shared/govIncome.js; qui solo il disegno. Senza regioni in memoria
+   la sezione non c'è: il pannello resta quello di prima. */
+function govCompareHtml(nation) {
+  const m = govIncomeModel(nation, state.regionData);
+  if (!m) return '';
+  const name = (type) => t('gov_' + type);
+  // Cifre intere e non fmt(): "+1.0K" contro "+1.1K" nasconde proprio la
+  // differenza che la tabella esiste per mostrare.
+  const int = (v) => Math.round(v).toLocaleString();
+  const signed = (v) => {
+    const r = Math.round(v);
+    return r > 0 ? `+${int(r)}` : r < 0 ? `−${int(-r)}` : '0';
+  };
+  const cls = (v) => (Math.round(v) > 0 ? ' up' : Math.round(v) < 0 ? ' down' : '');
+
+  const rows = m.rows.map(r => `
+    <tr class="${r.isCurrent ? 'wp-govinc-now' : ''}${r.best ? ' wp-govinc-best' : ''}">
+      <td>${GOV_ICONS[r.type]} ${escapeHtml(name(r.type))}${r.isCurrent ? ` <span class="wp-govinc-tag">${t('govc_now')}</span>` : ''}${r.best ? ` <span class="wp-govinc-tag wp-govinc-tag-best">${t('govc_best')}</span>` : ''}${r.check === 'mismatch' ? ` <span class="wp-govinc-warn" title="${escapeHtml(t('govc_rule_changed'))}">⚠️</span>` : ''}</td>
+      <td class="wp-govinc-num${cls(r.effect)}">${signed(r.effect)}</td>
+      <td class="wp-govinc-num${cls(r.vsNow)}">${r.isCurrent ? '—' : signed(r.vsNow)}</td>
+    </tr>`).join('');
+
+  const neutral = GOV_NEUTRAL_TYPES.map(name).join(', ');
+
+  // Barra della soglia: tasse di oggi (pallino) contro tasse che servono
+  // (tacca). Scala sul più grande dei due, con un po' di margine.
+  const p = m.pluto;
+  let pluto;
+  if (p.free) {
+    pluto = `<div class="wp-eth-spec">${escapeHtml(t('govc_pluto_free'))}</div>`;
+  } else {
+    const max = Math.max(p.threshold, p.tax) * 1.15 || 1;
+    const pct = (v) => Math.min(100, (v / max) * 100).toFixed(1);
+    pluto = `
+      <div class="wp-govinc-bar" role="img" aria-label="${escapeHtml(t(p.reached ? 'govc_pluto_reached' : 'govc_pluto_need', { x: int(p.threshold), y: int(p.tax) }))}">
+        <div class="wp-govinc-bar-fill${p.reached ? ' reached' : ''}" style="width:${pct(p.tax)}%"></div>
+        <div class="wp-govinc-bar-mark" style="left:${pct(p.threshold)}%"></div>
+      </div>
+      <div class="wp-eth-spec">${escapeHtml(t(p.reached ? 'govc_pluto_reached' : 'govc_pluto_need', { x: int(p.threshold), y: int(p.tax) }))}</div>`;
+  }
+
+  const conq = m.conquered.count
+    ? `<div class="wp-eth-spec">${escapeHtml(t('govc_conq_note', { n: m.conquered.count, x: int(m.conquered.dev) }))}</div>`
+    : '';
+
+  return `
+    <div class="wp-panel-section-title">${t('govc_title')}</div>
+    <div class="wp-eth-box wp-govinc-box">
+      <table class="wp-govinc-table">
+        <thead><tr><th></th><th>${t('govc_vs_none')}</th><th>${t('govc_vs_now')}</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="wp-eth-spec">${escapeHtml(t('govc_neutral', { types: neutral }))}</div>
+      ${conq}
+      <div class="wp-govinc-sub">${t('govc_pluto_title')}</div>
+      ${pluto}
+      <div class="wp-eth-spec wp-govinc-note">${escapeHtml(t('govc_note'))}</div>
+    </div>`;
+}
+
 function buildPanelHtml(nation) {
   const code = getNationCode(nation._id, nation);
   const flagUrl = getFlagUrl(code);
@@ -547,7 +611,7 @@ function paintEthics(nation) {
   if (!host) return;
   // WarEra+ v0.27 — le etiche non contano più (il dato `party.ethics` c'è
   // ancora, ma il gioco non lo usa): al loro posto il tipo di governo.
-  if (nation?.income) { host.innerHTML = govTypeHtml(nation); return; }
+  if (nation?.income) { host.innerHTML = govTypeHtml(nation) + govCompareHtml(nation); return; }
   fetchCountryEthics(nation._id).then(info => {
     // Pannello già passato a un'altra nazione mentre la richiesta era in
     // volo: non si scrive niente.

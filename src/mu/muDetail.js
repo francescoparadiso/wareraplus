@@ -19,10 +19,11 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { MU_RANKING_TYPES, fetchMuDetail, fetchUsersLite } from './api.js';
-import { muT } from './i18n.js';
+import { muT, muPillLabels } from './i18n.js';
 import { isPinned, togglePin } from '../app/pins.js';
 import { classifyPlaystyle, countPlaystyles, playstyleBarHtml } from './playstyle.js';
 import { trackEvent } from '../shared/analytics.js';
+import { pillColumnsHtml } from '../shared/pillStatus.js';
 import { avatarImg, countryName, dominantCountry, escapeHtml, flagImg, fmtCompact, fmtDate, fmtFull, fmtRelative, tierBadge } from './ui.js';
 import { ensureDailyDamage, muDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
 // L'etichetta della finestra ("Oggi" / "Dalle HH:MM") vive nel dizionario
@@ -107,6 +108,8 @@ function paintHeader() {
         ${todayCardHtml()}
         ${fighterCardHtml()}
       </section>
+
+      <section id="wp-mu-pills"></section>
 
       <section id="wp-mu-playstyle"></section>
 
@@ -208,6 +211,18 @@ function paintPlaystyle(counts) {
   el.innerHTML = `
     <h3 class="wp-mu-section-title">${escapeHtml(muT('playstyle'))} <span class="wp-mu-count">${counts.known}</span></h3>
     ${playstyleBarHtml(counts, playstyleLabels())}`;
+}
+
+/* ── Pillole dei membri (WarEra+) ──
+   Chi può pillare, chi è pillato, chi è in debuff, con vita e cibo: logica
+   e disegno in src/shared/pillStatus.js (stessi dati di user.getUserLite
+   già scaricati per l'elenco membri, zero fetch in più). */
+function paintPills(users) {
+  const el = hostEl?.querySelector('#wp-mu-pills');
+  if (!el) return;
+  el.innerHTML = `
+    <h3 class="wp-mu-section-title">💊 ${escapeHtml(muT('pillTitle'))}</h3>
+    ${pillColumnsHtml(users, muPillLabels())}`;
 }
 
 /** Etichette dei quattro gruppi, dal dizionario di questa vista. */
@@ -408,6 +423,7 @@ async function paintMembers(detail) {
   const comp = compositionFromUsers(users, ids.length);
   paintComposition(comp);
   paintPlaystyle(countPlaystyles(users));
+  paintPills(users);
   paintFighterCard(users, ids.length);
   const badge = hostEl.querySelector('#wp-mu-head-defacto');
   if (badge) badge.innerHTML = deFactoBadge(dominantCountry({ ...currentMu, composition: comp }));

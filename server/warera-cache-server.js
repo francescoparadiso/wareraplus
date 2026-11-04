@@ -200,8 +200,23 @@ const {
 // nient'altro era mai stato salvato nel tempo. Adesso questi quattro campi
 // lo sono. Zero fetch: legge le cache che il server riempie gia'.
 const {
-  initDayHistory, snapshotDay, readDay, statoDayHistory,
+  initDayHistory, snapshotDay, readDay, statoDayHistory, treasuryByDay,
 } = require('./dayHistory');
+// WarEra+ soldi bloccati negli ordini d'acquisto, per risorsa, unita' e
+// nazione del compratore, piu' il totale dei tesori. Il gioco non dice quanti
+// soldi ha un giocatore: l'unica parte visibile del suo portafoglio e' quella
+// gia' messa in un ordine. Vedi il blocco in testa a server/orderMoney.js.
+const {
+  initOrderMoney, pollOrderMoney, orderMoneyByUser, readOrderMoney, statoOrderMoney,
+} = require('./orderMoney');
+// WarEra+ la ricchezza dei giocatori divisa per categoria (aziende,
+// equipaggiamento, armi, oggetti, soldi: `user.getUserById` stats.wealth,
+// pubblico) e i portafogli sommati per nazione e unita'. Un giro notturno
+// su tutta la classifica, archivio sqlite su disco. Vedi il blocco in testa
+// a server/playerParts.js.
+const {
+  initPlayerParts, sweepSeDovuto, sweepAlPrimoAvvio, readPlayerParts, readPlayerMoney, statoPlayerParts,
+} = require('./playerParts');
 // WarEra+ lavoro e tasse: ogni pagamento di salario del gioco, aggregato per
 // nazione. Archivio CHIUSO (29 lug - 17 set 2026) e senza poll: sono ~550.000
 // pagamenti al giorno, sfogliarli vorrebbe dire undicimila pagine al giorno.
@@ -222,7 +237,7 @@ const {
 // giorno di notte, partendo dai cittadini attivi del censimento. Vedi il
 // blocco in testa a server/companyCensus.js.
 const {
-  initCompanyCensus, runCompanyCensus, companyCensusDovuto, readCompanyCensus, statoCompanyCensus,
+  initCompanyCensus, runCompanyCensus, companyCensusDovuto, readCompanyCensus, readCompanyAbroad, readEmployeeBenchmarks, statoCompanyCensus,
 } = require('./companyCensus');
 // WarEra+ tornei: tabellone e forza delle squadre (danno settimanale dei
 // loro iscritti) gia' calcolata, per non far scaricare a ogni browser la
@@ -254,8 +269,29 @@ const WORKER_API_BASE = 'https://politicalview-proxy.fra-paradiso2.workers.dev';
 // risparmiare. Senza token si torna al Worker, come prima.
 const SERVER_API_TOKEN = process.env.WARERA_API_TOKEN || '';
 const PRIVILEGED_API_BASE = SERVER_API_TOKEN ? 'https://api2.warera.io' : WORKER_API_BASE;
-function privilegedFetch(url) {
-  return SERVER_API_TOKEN ? fetch(url, { headers: { 'X-API-Key': SERVER_API_TOKEN } }) : fetch(url);
+// WarEra+: il 2026-10-27 api2 rispondeva 503 "no available server" mentre
+// il Worker (e api3..api6) andavano: ogni chiamata con la chiave falliva e
+// il censimento cittadini e' uscito vuoto. Su 5xx o errore di rete si
+// ripiega sul Worker, e per PRIVILEGED_COOLDOWN_MS si va dritti li' senza
+// ripagare il tentativo su api2 a ogni chiamata — lo stesso schema del
+// client (src/shared/trpcProxy.js). Un 4xx NON ripiega: e' una risposta
+// vera (input sbagliato, 429 da rispettare), non un host giu'.
+const PRIVILEGED_COOLDOWN_MS = 2 * 60 * 1000;
+let privilegedDownUntil = 0;
+async function privilegedFetch(url) {
+  if (!SERVER_API_TOKEN) return fetch(url);
+  const viaWorker = () => fetch(WORKER_API_BASE + url.slice(PRIVILEGED_API_BASE.length));
+  if (!url.startsWith(PRIVILEGED_API_BASE)) return fetch(url, { headers: { 'X-API-Key': SERVER_API_TOKEN } });
+  if (Date.now() < privilegedDownUntil) return viaWorker();
+  try {
+    const res = await fetch(url, { headers: { 'X-API-Key': SERVER_API_TOKEN } });
+    if (res.status < 500) return res;
+    console.warn(`[api2] ${res.status}: ripiego sul Worker per ${PRIVILEGED_COOLDOWN_MS / 60000} minuti`);
+  } catch (err) {
+    console.warn(`[api2] irraggiungibile (${err.message}): ripiego sul Worker per ${PRIVILEGED_COOLDOWN_MS / 60000} minuti`);
+  }
+  privilegedDownUntil = Date.now() + PRIVILEGED_COOLDOWN_MS;
+  return viaWorker();
 }
 // WarEra+: "crediti" statici del tool (userId fisso, sempre lo stesso) —
 // prima ognuno faceva la sua chiamata separata al Worker da OGNI browser
@@ -435,6 +471,23 @@ initPriceHistory({
 
 // La giornata storica: solo cache, nessuna chiamata.
 initDayHistory({ readCache, writeCache });
+
+// Soldi negli ordini: richieste pubbliche (libro ordini), la mappa
+// utente -> nazione che il giro dei cittadini tiene gia', e i tesori giorno
+// per giorno da dayHistory.
+initOrderMoney({
+  trpcBatch: (...args) => trpcBatch(...args),
+  readCache, readCacheShared, writeCache, treasuryByDay,
+});
+
+// Ricchezza per categoria: getUserById e' pubblica (trpcBatch, niente
+// chiave), l'archivio e' un sqlite nella cartella della cache, e i soldi negli
+// ordini per compratore vengono dalla memoria di orderMoney.
+initPlayerParts({
+  trpcBatch: (...args) => trpcBatch(...args),
+  readCache, writeCache, cacheDir: CACHE_DIR,
+  ordersByUser: () => orderMoneyByUser(),
+});
 
 // Tornei: richieste pubbliche. In cache le fotografie della classifica
 // settimanale (weekly-snaps/), il danno delle partite finite e il registro
@@ -981,7 +1034,10 @@ function muPlaystyle(members, userCountries) {
 // giri interi, e salvare 48 fotografie identiche al giorno per 151 nazioni
 // gonfierebbe il file senza aggiungere informazione.
 const MU_PLAYSTYLE_HISTORY_FILE = 'mu-playstyle-history';
-const PLAYSTYLE_HISTORY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 giorni
+// 90 giorni dal 2026-10-29 (erano 30), per il grafico "Giocatori nel tempo"
+// della scheda nazione. ⚠️ Non recupera il passato: i giorni già potati non
+// tornano, la serie si allunga di un giorno al giorno fino a novanta.
+const PLAYSTYLE_HISTORY_RETENTION_MS = 90 * 24 * 60 * 60 * 1000; // 90 giorni
 // Tetto ai `countryIds` di /mu-playstyle-history: il blocco piu' grande in
 // gioco ha poche decine di nazioni, il limite e' solo per non far costruire a
 // una richiesta arbitraria una risposta arbitrariamente grande.
@@ -1007,12 +1063,17 @@ function appendPlaystyleHistory(byCountry, now) {
   }
 
   // Potatura per ritenzione, tenendo però SEMPRE l'ultimo campione di ogni
-  // nazione: se una nazione non cambia da più di 30 giorni, buttare via
+  // nazione: se una nazione non cambia da più di 90 giorni, buttare via
   // tutta la sua serie la farebbe sparire dallo storico invece di dire
   // "ferma da un mese".
+  // Si tiene anche l'ULTIMA riga prima del taglio (2026-10-29): è il valore
+  // in vigore all'inizio della finestra. Senza, una nazione che cambia di
+  // rado partiva "da dopo": il grafico della scheda nazione dichiarava una
+  // copertura più corta del vero, e la somma di un'alleanza vedeva comparire
+  // le nazioni una alla volta come salti che nel gioco non sono mai avvenuti.
   for (const [countryId, series] of Object.entries(history)) {
-    const kept = series.filter(row => row[0] >= cutoff);
-    history[countryId] = kept.length ? kept : series.slice(-1);
+    const first = series.findIndex(row => row[0] >= cutoff);
+    history[countryId] = first === -1 ? series.slice(-1) : series.slice(Math.max(0, first - 1));
   }
 
   writeCache(MU_PLAYSTYLE_HISTORY_FILE, { fetchedAt: now, data: history }, { compact: true });
@@ -1763,6 +1824,22 @@ async function pollCitizens() {
         if (res.nextCursor) next.push({ id: p.id, cursor: res.nextCursor });
       });
       pending = next;
+    }
+
+    // WarEra+: un giro andato a vuoto NON sovrascrive la fotografia buona.
+    // Il 2026-10-27 api2 era giu' e ogni pagina falliva: il giro delle 08:36
+    // ha scritto 0 cittadini in 181 nazioni, e Statistiche nazioni e' rimasta
+    // vuota per tutti fino al giro successivo riuscito. Stessa trappola delle
+    // battaglie vuote del 2026-09-25. Si tiene la fotografia precedente se il
+    // giro ha trovato meno della meta' dei cittadini di quella (un calo vero
+    // di quella portata in un'ora non esiste), e si salta anche il diff dei
+    // movimenti, che leggerebbe le pagine mancate come emigrazioni.
+    const previous = readCache(CITIZENS_FILE, { data: {} }).data || {};
+    const prevTotal = Object.values(previous).reduce((s, r) => s + (r?.n || 0), 0);
+    const foundTotal = [...idsByCountry.values()].reduce((s, ids) => s + ids.length, 0);
+    if (prevTotal > 0 && foundTotal < prevTotal / 2) {
+      console.warn(`[poll] citizens: giro incompleto (${foundTotal} cittadini contro ${prevTotal} del precedente), tengo la fotografia precedente`);
+      return;
     }
 
     const DAY = 24 * 60 * 60 * 1000;
@@ -2544,6 +2621,17 @@ cron.schedule('40 */6 * * *', () => { refreshPillConfig().catch(() => {}); });
 // tutte le risorse: ventiquattro al giorno in totale.
 cron.schedule('27 * * * *', pollPrices);
 
+// WarEra+ soldi negli ordini d'acquisto: un campione all'ora alle :42, fuori
+// dai minuti dei prezzi (:27) e dei bonifici (:11,:31,:51). Un batch pubblico
+// di getTopOrders, una procedura per risorsa.
+cron.schedule('42 * * * *', pollOrderMoney);
+
+// WarEra+ ricchezza per categoria: il giro su tutta la classifica (~17.000
+// getUserById, ~12 minuti) parte fra le 05:00 e le 06:59 italiane, dopo il
+// censimento aziende che tiene occupata la chiave fino a li'. Ogni dieci
+// minuti controlla se il giorno e' gia' fatto: quasi sempre non fa niente.
+cron.schedule('*/10 5-6 * * *', sweepSeDovuto, { timezone: 'Europe/Rome' });
+
 // WarEra+ tornei: ogni 3 minuti, al secondo :20 (lontano dai cron al
 // minuto pieno). Tabellone e squadre dell'ultimo torneo di ogni tipo; la
 // classifica settimanale solo ogni 10 minuti (vedi server/tournament.js).
@@ -2573,6 +2661,23 @@ cron.schedule('5 2 * * *', () => {
 cron.schedule('20 3 * * *', () => {
   runCompanyCensus().catch(err => console.error('[company-census] cron:', err.message));
 }, { timezone: DAILY_DAMAGE_TZ });
+
+// Giro FUORI ORARIO, a mano (2026-10-29, richiesta esplicita: la rosa dei
+// dipendenti appena aperta, senza aspettare la notte). Un file-segnale e
+// non una rotta HTTP o una variabile d'ambiente: la rotta andrebbe
+// protetta, e una env var pm2 se la porterebbe dietro a ogni riavvio
+// (ogni restart rifarebbe un'ora e mezza di giro). Il file si consuma:
+// vale una volta sola. Sul VPS:
+//   touch ~/warera-cache-server/force-company-census
+// ⚠️ È un'ora e mezza abbondante di richieste sulla chiave condivisa: di
+// giorno solo se serve davvero (vedi la testata di companyCensus.js).
+const CENSUS_FORCE_FLAG = path.join(__dirname, 'force-company-census');
+cron.schedule('* * * * *', () => {
+  if (!fs.existsSync(CENSUS_FORCE_FLAG)) return;
+  try { fs.unlinkSync(CENSUS_FORCE_FLAG); } catch { return; }   // se non si cancella, non si rischia un giro a ogni minuto
+  runCompanyCensus({ motivo: 'forzato a mano', forza: true })
+    .catch(err => console.error('[company-census] forzato:', err.message));
+});
 
 // Primo giro completo all'avvio (in ordine: countries prima, perché tutto
 // il resto dipende dalla cache delle nazioni), così non si parte a vuoto.
@@ -2611,6 +2716,11 @@ cron.schedule('20 3 * * *', () => {
   // riavvio a meta' pomeriggio evita che la candela di oggi si apra solo
   // alle :27 successive.
   await pollPrices();
+  // Soldi negli ordini: un campione subito, per lo stesso motivo.
+  await pollOrderMoney();
+  // Ricchezza per categoria: solo se l'archivio e' vuoto, e senza await (12
+  // minuti). Con l'archivio gia' avviato aspetta la finestra notturna.
+  sweepAlPrimoAvvio().catch(err => console.error('[player-parts] avvio:', err.message));
   // Tornei: senza await, la prima classifica settimanale pesa 2 MB e non
   // deve ritardare il resto dell'avvio.
   pollTournament().catch(err => console.error('[tournament] avvio:', err.message));
@@ -3244,6 +3354,34 @@ app.get('/tournament', async (req, res) => {
   }
 });
 
+// Soldi bloccati negli ordini d'acquisto (server/orderMoney.js). `days` la
+// finestra della serie, `country` o `mu` (id) la serie di quell'unico
+// compratore. Il totale e' un MINIMO: getTopOrders si ferma a 100 ordini per
+// libro, e `latest.byItem[code][2]` dice quali libri sono al tetto.
+// La ricchezza di UN giocatore divisa per categoria (server/playerParts.js):
+// righe [giorno, aziende, equipaggiamento, armi, oggetti, soldi, ordini|null]
+// piu' i soldi negli ordini di adesso. 404 mai: un giocatore sconosciuto ha
+// semplicemente `rows: []`.
+app.get('/player-parts', (req, res) => {
+  const userId = /^[a-f0-9]{24}$/.test(String(req.query.userId || '')) ? String(req.query.userId) : null;
+  if (!userId) return res.status(400).json({ error: 'userId mancante o non valido' });
+  const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 3650);
+  res.json(readPlayerParts(userId, days));
+});
+
+// I portafogli sommati (server/playerParts.js): il mondo giorno per giorno e
+// l'ultimo giorno per nazione e unita'. Alimenta la scheda Soldi.
+app.get('/player-money', (req, res) => {
+  const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 3650);
+  res.json(readPlayerMoney(days));
+});
+
+app.get('/order-money', (req, res) => {
+  const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 3650);
+  const id = (v) => (/^[a-f0-9]{24}$/.test(String(v || '')) ? String(v) : null);
+  res.json(readOrderMoney({ days, country: id(req.query.country), mu: id(req.query.mu) }));
+});
+
 app.get('/price-history', (req, res) => {
   const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 365);
   res.json(readPriceHistory(days));
@@ -3258,6 +3396,23 @@ app.get('/company-census', (req, res) => {
   const countryId = /^[a-f0-9]{24}$/.test(String(req.query.countryId || '')) ? String(req.query.countryId) : null;
   const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
   res.json(readCompanyCensus({ item, countryId, days }));
+});
+
+// I riferimenti mondiali dei dipendenti per risorsa (percentili di costo
+// per punto, punti all'ora, Produzione; tratti), dalla rosa che il giro
+// notturno chiede alle aziende attive. Li legge l'Ottimizzatore per dire
+// "costa più dell'80% dei dipendenti del ferro". Pochi KB.
+app.get('/employee-benchmarks', (req, res) => {
+  res.json(readEmployeeBenchmarks());
+});
+
+// Le aziende dei cittadini di una nazione in regioni di altre nazioni,
+// dallo stesso giro notturno. La legge l'area riservata (plusApi
+// /nazione/aziende-estero), che ci aggiunge nomi e nazione ospite di adesso.
+app.get('/company-abroad', (req, res) => {
+  const countryId = String(req.query.countryId || '');
+  if (!/^[a-f0-9]{24}$/.test(countryId)) return res.status(400).json({ error: 'countryId' });
+  res.json(readCompanyAbroad(countryId));
 });
 
 // Lo storico ricchezza di un giocatore. L'archivio sta nel database di
@@ -3412,6 +3567,81 @@ const TRPC_UPSTREAM = 'https://api2.warera.io/trpc';
 const PROXY_TIMEOUT_MS = 25000;
 const WARERA_API_TOKEN = process.env.WARERA_API_TOKEN || '';
 
+// ── Allowlist delle procedure ──────────────────────────────────────────
+// Il passthrough inoltrava QUALUNQUE procedura con la nostra key, e finche'
+// le procedure "dell'account" (user.getMe, tool.getMine…) rispondevano 403
+// ai token non importava. Il 2026-10-28 WarEra ha aperto ai token
+// `employee.*` e `employeeEvent.*`, comprese le `getMy*`: da quel giorno
+// chiunque, chiamando /trpc/employee.getMyEmployees su questo server,
+// leggeva dipendenti, eventi e costi del TITOLARE della key. Le procedure
+// per azienda/dipendente (getCompanyRoster, getById…) invece vanno bene:
+// rispondono uguale per qualunque azienda, sono dati del mondo, non nostri.
+//
+// Quindi si inoltra solo quello che il tool chiama davvero (client, plusApi
+// sulla loopback, branch v0.27: estratto dal codice il 2026-10-28) piu' le
+// procedure per azienda della v0.27 che l'Ottimizzatore usera'. Tutto il
+// resto riceve un 403 nella forma di errore tRPC. Un batch con anche una
+// sola procedura fuori lista si rifiuta intero: i client hanno gia' il
+// fallback a chiamate singole quando un batch fallisce.
+//
+// ⚠️ Una procedura NUOVA chiamata dal tool via proxy va aggiunta qui, poi
+// redeploy: fino ad allora risponde 403 e NON ricade sul Worker (un 4xx
+// non ripiega, vedi src/shared/trpcProxy.js). `pm2 logs` la nomina alla
+// prima richiesta respinta, `/health` → trpcProxy.blocked.
+const TRPC_ALLOWED = new Set([
+  'alliance.getById',
+  'article.getArticleLiteById',
+  'battle.getBattles', 'battle.getById', 'battle.getLiveBattleData',
+  'battleLootSummary.getByBattleAndUser',
+  'battleOrder.getByBattle',
+  'battleRanking.getRanking',
+  'company.getById', 'company.getCompanies', 'company.getProductionBonus',
+  'company.getRecommendedRegionIdsByItemCode',
+  'country.getAllCountries', 'country.getCountryById',
+  'countryDiplomacy.getByCountry',
+  'election.getElection', 'election.getElections',
+  // Solo quelle per azienda o per dipendente: le getMy* restano fuori.
+  'employee.getById', 'employee.getCompanyRoster', 'employee.getCompanyEmployees',
+  'employee.getCompanyEstimate', 'employee.getManagerPointValue',
+  'event.getEventsPaginated',
+  'gameConfig.getGameConfig', 'gameConfig.getDates',
+  'gameStat.getPpMoneyValue',
+  'government.getByCountryId',
+  'inventory.fetchCurrentEquipment',
+  'itemTrading.getPrices',
+  'manager.getByCompanyId', 'managerOffer.getByCompanyId', 'managerOffer.getWageStats',
+  'map.getMapData',
+  'mercenaryContractAuction.getPaginatedAuctions',
+  'mu.getById', 'mu.getManyPaginated',
+  'party.getById', 'party.getManyPaginated',
+  'ranking.getRanking',
+  'region.getById', 'region.getRegionsObject',
+  'search.searchAnything', 'search.searchUsers',
+  'tournament.getById', 'tournament.getManyPaginated',
+  'tournamentTeam.getByTournamentId',
+  'tradingOrder.getTopOrders',
+  'transaction.getPaginatedTransactions',
+  'upgrade.getUpgradeByTypeAndEntity',
+  'user.getUserById', 'user.getUserLite', 'user.getUsersByCountry',
+  'war.getActiveWarBetweenCountries', 'war.getById',
+  'work.getStatsByCompany', 'work.getStatsByUserId',
+]);
+
+const _proxyBlocked = { count: 0, names: new Set() };
+
+/** Le procedure del path ('/a.b,c.d') fuori allowlist; [] se tutte ammesse.
+ *  `null` se il path non si legge (va rifiutato anche quello). */
+function _proxyDisallowed(path) {
+  let names;
+  try {
+    names = decodeURIComponent(path.replace(/^\/+|\/+$/g, '')).split(',');
+  } catch {
+    return null;
+  }
+  if (!names.length || names.some(n => !n)) return null;
+  return names.filter(n => !TRPC_ALLOWED.has(n));
+}
+
 // Freno per IP: qui non c'e' Cloudflare davanti a fermare gli abusi, e
 // questa route e' un proxy pubblico verso un'API con la NOSTRA key (stessa
 // esposizione che ha oggi il Worker, non una nuova — ma li' c'era uno
@@ -3554,6 +3784,25 @@ async function _trpcProxy(req, res) {
   // nginx toglie /warera-cache, il mount app.use('/trpc') toglie /trpc:
   // qui req.path e' gia' '/battle.getBattles', da appendere all'upstream.
   const suffix = req.path;
+
+  const disallowed = _proxyDisallowed(suffix);
+  if (!disallowed || disallowed.length) {
+    _proxyBlocked.count++;
+    for (const n of disallowed || [suffix.slice(0, 120)]) {
+      // Un warning per nome, non per richiesta; e un tetto, perche' i nomi
+      // li sceglie chi chiama.
+      if (_proxyBlocked.names.has(n) || _proxyBlocked.names.size >= 100) continue;
+      _proxyBlocked.names.add(n);
+      console.warn('[proxy] procedura fuori allowlist:', n);
+    }
+    res.status(403).json({ error: {
+      message: 'Procedure not allowed by the WarEra+ proxy',
+      code: -32003,
+      data: { code: 'FORBIDDEN', httpStatus: 403, path: (disallowed || []).join(',') },
+    } });
+    return;
+  }
+
   const search = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
   const target = TRPC_UPSTREAM + suffix + search;
 
@@ -3827,6 +4076,9 @@ app.get('/health', (req, res) => res.json({
     ready: true,
     apiKey: WARERA_API_TOKEN ? 'caricata' : 'MANCANTE',
     cache: { ..._proxyCacheStats, entries: _proxyCache.size, bytes: _proxyCacheBytes },
+    // Richieste respinte dall'allowlist e i nomi visti (max 100): un nome
+    // del tool qui dentro vuol dire che manca in TRPC_ALLOWED.
+    blocked: { count: _proxyBlocked.count, names: [..._proxyBlocked.names] },
   },
   // Quanto e' avanti l'archivio battaglie: dopo un deploy dice a colpo
   // d'occhio se il bootstrap notturno ha gia' girato o se le due viste
@@ -3850,6 +4102,8 @@ app.get('/health', (req, res) => res.json({
   // (vedi server/import/prezzi.js): la vista funziona lo stesso, ma la
   // linea comincia dal deploy.
   priceHistory: statoPriceHistory(),
+  orderMoney: statoOrderMoney(),
+  playerParts: statoPlayerParts(),
   // Quanti giorni di diplomazia e di battaglie storiche ci sono. Se
   // `primo` e' recente l'import non e' mai stato fatto (import/diplomazia.js,
   // import/battaglie.js) e la time machine mostra la fascia "fuori portata"

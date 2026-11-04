@@ -28,14 +28,15 @@ ed è poi cresciuto ben oltre quei due:
   Aziende e Competenze, ricostruite sulle statistiche di lavoro misurate
   (vedi `AGGIORNAMENTO-v0.27.md`). Dal 2026-09-19 è
   una **scheda** della sezione Economia (`src/economy/`), insieme alle
-  Rendite di produzione e alla scheda Prezzi.
+  Prezzi e Produzione (le Rendite di produzione, tolte il 2026-10-30:
+  con i dipendenti la paga non la decidi tu e il gioco mostra già il guadagno).
   La card di attribuzione ad ArgusIA in cima alla vista è stata **tolta il
   2026-10-23**, su richiesta del proprietario del progetto, insieme alla
   riscrittura per la v0.27: della logica del bot non resta più niente.
   L'origine resta scritta nelle testate di `src/eco/` e nella storia di git.
 
 Tutto il resto è **nuovo di WarEra+**: pannello nazione, Unità Militari,
-Statistiche nazioni, Rendite di produzione, News + ticker, Time machine,
+Statistiche nazioni, Prezzi e Produzione, News + ticker, Time machine,
 Guida, barre menù, preferiti, PWA, server di cache, temi mappa, viste mappa
 aggiuntive.
 
@@ -166,6 +167,12 @@ npm run preview   # testa la build in locale
 - Il proxy `/trpc` del VPS ha una **micro-cache di 10 s** sulle risposte
   200 e accorpa le richieste identiche in volo: la key condivisa ha un
   tetto solo (500/min) per tutto il tool. `/health` → `trpcProxy.cache`.
+- ⚠️ Il proxy `/trpc` del VPS inoltra **solo le procedure in
+  `TRPC_ALLOWED`** (dal 2026-10-28, quando WarEra ha aperto ai token
+  `employee.getMy*` e `employeeEvent.*`: chiunque avrebbe letto i dipendenti
+  del titolare della key). Una procedura nuova chiamata dal tool via proxy va
+  aggiunta lì, altrimenti 403 senza ricaduta sul Worker. `/health` →
+  `trpcProxy.blocked`.
 
 ## Struttura del progetto
 
@@ -189,7 +196,7 @@ ne aggiungi o ne sposti uno. In breve:
 lavoro, tipi di governo, 742 regioni): cosa cambia nelle API e cosa si rompe
 nel tool, misurato su apidev prima del rilascio, sta in
 **`AGGIORNAMENTO-v0.27.md`**. Leggilo prima di toccare Ottimizzatore,
-Rendite, censimento aziende o la vista Bonus produzione.
+censimento aziende o la vista Bonus produzione.
 
 ⚠️ **Attenzione ai nomi duplicati tra le due varianti di Political**:
 `config.js`, `main.js`, `ui.js`, `i18n.js`, `api.js`, `loading.js`,
@@ -261,7 +268,7 @@ WarEra una volta per tutti invece di lasciare che lo faccia ogni browser —
 serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`,
 `/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
 `/citizen-moves`, `/migration-flows`, `/battle-timeline`,
-`/daily-damage`, `/damage-history`, `/damage-timeline`, `/damage-pulse`, `/price-history`, `/day-history`,
+`/daily-damage`, `/damage-history`, `/damage-timeline`, `/damage-pulse`, `/price-history`, `/order-money`, `/day-history`,
 `/alliance-history`,
 `/labour-history`, `/company-census`, `/player-wealth`,
 `/political-history`, `/political-overview`, `/presidents`,
@@ -312,10 +319,9 @@ punto di fallimento. Vedi il ⚠️ in fondo per cosa degrada e come.
 - **Prezzi e libro ordini sono PUBBLICI**: `itemTrading.getPrices` e
   `tradingOrder.getTopOrders` rispondono da `API_BASE_URL` senza chiave, e
   `src/market/api.js` li prende così — un solo batch, nessun consumo del
-  budget del Worker. La chiave (quindi il proxy) serve solo per
-  `company.getRecommendedRegionIdsByItemCode`, che è anche l'unica fonte
-  ammessa del bonus produzione: **il bonus non si ricalcola mai lato
-  client**, né qui né in `src/eco/gameData.js`.
+  budget del Worker. La chiave (quindi il proxy) non serve ai Prezzi.
+  Il bonus produzione non si ricalcola mai lato client: con la v0.27 non
+  esiste più (giacimenti spenti), vedi `src/eco/gameData.js`.
 - **`useWorker: true`** instrada attraverso il Worker Cloudflare
   (`WORKER_API_BASE`, limite 500/min invece di 100) — usato SOLO per
   battaglie ed elezioni/parlamenti/Political, e per gli endpoint token-gated
@@ -361,6 +367,53 @@ punto di fallimento. Vedi il ⚠️ in fondo per cosa degrada e come.
   condivise dallo shell vanno in `src/shared/i18n.js`.
 - **Niente barre di scorrimento di sistema**: mai le native grigie — regola
   globale in `shell.css`, cursore nella tinta della sezione.
+
+## Novità per gli utenti (`src/app/changelog.js`)
+
+Ogni release che porta qualcosa di visibile a chi usa il tool ha una voce in
+**`src/app/changelog.js`** (in cima, istruzioni nel file): il riquadro «Novità»
+la mostra UNA volta a chi torna dopo l'aggiornamento (`src/app/whatsNew.js`,
+chiave `we_whatsnew_seen`). Si scrive per chi usa il tool, non per chi lo
+sviluppa; `en` e `it` obbligatori, le altre lingue ricadono sull'inglese; l'`id`
+è una data ISO, non si riusa né si ritocca dopo la pubblicazione. Chi non ha
+mai aperto il tool e chi arriva da un link condiviso non lo vede (vedi la
+testata di `whatsNew.js`); `?whatsnew=1` lo riapre a mano. La voce va aggiunta
+quando il lavoro arriva su `main`, non su `dev`: il riquadro compare anche sul
+dev (chiave per origin), ma sono gli utenti del live quelli a cui è rivolto.
+
+## Articoli (arcana.warera.wiki/news)
+
+Gli articoli su WarEra+ (aggiornamenti di versione, analisi delle elezioni…)
+si scrivono **sempre nell'Article Writer di `https://arcana.warera.wiki/news`,
+in inglese**, e l'articolo intero **resta aperto lì** (in cima, nel pannello
+Browser): il proprietario lo copia con "Copy HTML" e da altrove non lo prende
+bene. Procedura, ricette e trappole in **`articles/README.md`** — leggilo
+prima di scrivere. Le regole sono richieste esplicite del proprietario:
+
+- **Riverifica i numeri** sui dati grezzi (voti, percentuali, margini,
+  iscritti; i governi riletti dal vivo) e dichiara l'orario di lettura e ciò
+  che non hai potuto verificare. Se due viste del tool danno numeri diversi,
+  vale quella che compare nello screenshot.
+- **Governi: i membri esistenti**, con chi è nuovo / rimasto / spostato e le
+  cariche vuote.
+- **Niente segnaposto in consegna**: l'immagine citata si crea (screenshot
+  dal tool, anche più d'uno, e un **collage** per più paesi; un grafico nello
+  stile di WarEra+ dove il tool non ha una vista) e si mette dove serve.
+- **Immagini su Imgur**: si caricano e nell'articolo va il link diretto
+  `i.imgur.com`. Il **login lo fa l'utente** nel pannello Browser (mai
+  credenziali tue); album **nascosto**, mai alla galleria pubblica.
+- **Link al tool** (`https://wareraplus.vercel.app/`, il live): nelle
+  didascalie, nella riga del governo, nel testo e in una sezione finale.
+- **Link ai partiti con `partyId`** nei dati (`{"partyId":…,"fullMatch":…}`),
+  altrimenti non si risolvono; Arcana li mostra come URL nudi, è normale.
+- **Formattazione, font e colori** (Texturina per i titoli, palette e
+  blockquote in `articles/README.md`), non solo testo nero.
+- **Non chiedere il consenso a ogni passo** di questo flusso (screenshot,
+  Imgur, editor): si fa e si riferisce. Restano all'utente il login, "Copy
+  HTML" e la pubblicazione su WarEra.
+- Prima di un nuovo articolo leggi l'ultimo uscito dall'API
+  (`article.getArticleById`, campo `content` in HTML): la pagina
+  `app.warera.io` chiede il login. Così non ripeti ciò che è già stato detto.
 
 ## Cose da verificare se stai debuggando in queste aree
 
@@ -505,6 +558,16 @@ amministrazione restano identici. Tre cose da sapere prima di crederla rotta:
   (stesso blocco), MAI dal campo `allies`, fossile del 10 giugno: l'Italia
   vi ha ancora la Francia, con cui è in guerra.
 
+Le **Aziende all'estero** (scheda Persone di "La mia nazione", dal
+2026-10-26: cittadini con aziende in regioni di altre nazioni) dipendono da
+DUE redeploy: cache-server (`/company-abroad`, scritto dal giro notturno di
+`companyCensus.js`) e warera-plus-api (`/nazione/aziende-estero`). Dopo i
+deploy la lista resta vuota con "si riempie stanotte" fino al giro delle
+03:20: non c'è un giro all'avvio, perché il censimento aziende è un'ora e
+mezza di richieste e non si lancia di giorno. Solo cittadini ATTIVI (soglia
+del censimento, 3 giorni); la nazione ospite la ricalcola plusApi sulle
+regioni di adesso.
+
 Le **Operazioni** dell'area riservata (`src/private/operazioni.js` +
 `mappaOperazione.js` + `server/plusApi/operazioni.js`, dal 2026-10-22) sono
 la lavagna dei piani: passi in sequenza con orari e frecce, e "Vedi sulla
@@ -640,15 +703,52 @@ semplicemente non compare — è il degrado voluto, non un guasto. Il seme di
 1325 è la misura di Vercel Analytics al 2026-08-31 e vive in `VISITS_SEED`
 nel server, non nel client.
 
-Lo **storico prezzi** in Rendite di produzione (`src/market/priceChart.js` +
-`server/priceHistory.js`) è dello stesso tipo: senza rideploy `/price-history`
-non esiste e la colonna "andamento" non compare nella riga aperta, mentre
-tabella, rendite e simulatore restano identici. Dopo il deploy l'archivio si
+Lo **storico prezzi** della scheda Prezzi di Economia (`src/economy/prices.js`,
+`src/market/priceChart.js` + `server/priceHistory.js`) è dello stesso tipo:
+senza rideploy `/price-history` non esiste e la scheda mostra i prezzi di
+adesso dichiarando che l'archivio manca. Dopo il deploy l'archivio si
 riempie da sé a una candela al giorno — ma i tre mesi indietro (aprile →
 settembre 2026) ci sono subito solo se si lancia anche `import/prezzi.js`,
 perché `itemTrading.getPrices` dice quanto costa ADESSO e ieri non esiste da
 nessuna parte. Stesso vincolo di bonifici e ricchezza, stessa soluzione: un
 archivio di terzi importato una volta sola.
+
+La **ricchezza per categoria** (scheda Ricchezza di Giocatori, vista
+«Categorie», `src/players/partsChart.js` + `server/playerParts.js`, dal
+2026-11-03) e la scheda **Soldi** di Economia (`src/economy/money.js` +
+`server/orderMoney.js` + `server/playerParts.js`) dipendono dal rideploy del
+**cache-server** (`/player-parts`, `/player-money`, `/order-money`). Cosa serve
+sapere prima di crederle rotte o sbagliate:
+
+- ⚠️ **`user.getUserById` → `stats.wealth` è PUBBLICO** e dà la ricchezza già
+  divisa: `{ companies, equipments, weapons, items, money, total }`. La somma
+  delle cinque voci è uguale a `total` (differenza zero su 40 giocatori,
+  2026-11-04). `user.getUserLite` invece NON la porta: per due giorni questo
+  repo ha creduto che soldi, oggetti e armi «non si vedono» e ha diviso in
+  aziende/ordini/«resto» — sbagliato, guardava `getUserLite`. Non tornarci:
+  non esiste nessun «resto» da calcolare;
+- ⚠️ **i soldi degli ordini d'acquisto NON sono nella ricchezza**: il gioco li
+  toglie dal portafoglio quando l'ordine si piazza (su 40 compratori, 16
+  avevano negli ordini più di `money`, e diversi più dell'intero `total`).
+  Si SOMMANO ai portafogli, non si sovrappongono: la scheda Soldi li tiene
+  separati e la scheda Ricchezza li mostra a parte;
+- gli ordini sono un MINIMO: `getTopOrders` accetta al massimo 100 ordini per
+  libro (200 → errore di validazione) e il 3 novembre 17 libri su 24 erano già
+  al tetto. Non stimare la coda con un modello dell'orderbook: sarebbe un
+  numero preciso e inventato. I libri al tetto portano `capped`;
+- ⚠️ **`country.money` NON è il tesoro**: somma 54 mila contro 4,4 milioni di
+  `rankings.countryWealth`, che è quello che usano tutti (dayHistory, ticker).
+  Un compratore non presente in `mu-user-countries` va in `noCountry`, mai
+  assegnato a una nazione a caso;
+- lo **storico** (categorie per giocatore, portafogli per nazione e unità)
+  non si ricostruisce: nessuna procedura dice quanto aveva un giocatore ieri.
+  Parte dal primo giro di `playerParts` — uno al primo avvio se l'archivio è
+  vuoto, poi uno al giorno fra le 05:00 e le 06:59 italiane (~17.000
+  `getUserById`, ~5 minuti) — e un giorno saltato è un buco, mai uno zero.
+  Prima del primo giro la scheda Ricchezza mostra comunque la divisione di
+  oggi (il browser la legge da sé), la scheda Soldi no (non ha ripiego).
+  Archivio: `cache/player-parts.sqlite`, su disco e non in RAM (il VPS è
+  all'85%), ~250 MB all'anno; `backup.sh` ne fa una copia con VACUUM INTO.
 
 Le schede **Produzione** e **Ricchezza** di Economia (`src/economy/production.js`,
 `src/economy/playerWealth.js`) dipendono da DUE deploy diversi, e conviene

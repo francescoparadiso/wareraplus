@@ -1,36 +1,28 @@
 /* ══════════════════════════════════════════════════════════════
    WarEra+ — Economia: una voce, tre schede
    ------------------------------------------------------------------
-   Prima erano due voci separate in Approfondimenti — "Ottimizzatore
-   industriale" e "Rendite di produzione" — e la terza cosa, i prezzi,
-   non esisteva se non come riquadro dentro una riga di tabella.
-
-   Erano separate per come sono NATE, non per come si usano:
-   l'Ottimizzatore è il port di un bot Discord di terzi (ArgusIA), le
-   Rendite sono nate dopo per chi un'azienda non ce l'ha ancora. Ma le
-   tre domande sono un discorso solo, e nell'ordine in cui si fanno:
+   Prima erano voci separate in Approfondimenti — "Ottimizzatore
+   industriale" e "Rendite di produzione" — e i prezzi non esistevano se
+   non come riquadro dentro una riga di tabella. Le domande sono un
+   discorso solo, nell'ordine in cui si fanno:
 
      1. Prezzi          — quanto vale la roba, e come si sta muovendo
-     2. Rendite         — cosa conviene produrre, dove, e quanto resta
-                          dopo le tasse e la paga degli operai
-     3. Ottimizzatore   — la MIA azienda: competenze, posizione,
-                          lavoratori, assunzioni
+     2. Produzione      — chi produce cosa, e dove (censimento)
+     3. Ottimizzatore   — la MIA azienda: competenze e dipendenti
 
-   Chi arrivava dall'una all'altra doveva tornare alla mappa e riaprire
-   un'altra voce, perdendo quello che aveva impostato.
+   Le Rendite di produzione (cosa conviene produrre, con una paga
+   simulata) sono state tolte il 2026-10-30: dalla v0.27 la paga la
+   decidono i dipendenti e il gioco mostra già il guadagno.
 
    ── COME SONO MESSE INSIEME ────────────────────────────────────────
-   Per affiancamento, non per fusione: `src/market/*` e `src/eco/*` non
-   sono stati toccati dentro. Ogni scheda ha il SUO contenitore, ci si
-   monta la vista di prima con la sua `init*(container)`, e cambiare
-   scheda nasconde invece di smontare — così tornare sulle Rendite
-   ritrova la paga, i giorni e la riga aperta esattamente com'erano.
+   Per affiancamento, non per fusione: `src/eco/*` non è stato toccato
+   dentro. Ogni scheda ha il SUO contenitore, ci si monta la vista con la
+   sua `init*(container)`, e cambiare scheda nasconde invece di smontare.
 
-   Il costo di questa scelta è che i tre dizionari restano tre
-   (`economy/i18n.js` per lo scheletro e i Prezzi, `market/i18n.js` per
-   le Rendite, i testi interni di `eco/main.js` per l'Ottimizzatore).
-   È voluto: unificarli sarebbe un diff enorme dentro codice che
-   funziona, e la regola del repo è che le etichette di una vista sola
+   Il costo di questa scelta è che i dizionari restano più d'uno
+   (`economy/i18n.js` per lo scheletro e i Prezzi, `economy/i18nPlus.js`
+   per Produzione, i testi interni di `eco/main.js` per l'Ottimizzatore).
+   È voluto: la regola del repo è che le etichette di una vista sola
    stanno in un dizionario di quella vista.
 
    ── L'ATTRIBUZIONE AD ARGUSIA ──────────────────────────────────────
@@ -53,17 +45,22 @@ import { loadModule } from '../shared/lazyModule.js';
 import { trackEvent } from '../shared/analytics.js';
 import { updateBackParams } from '../app/backNav.js';
 
-// WarEra+ 2026-10-08: due schede in più. "Produzione" sta subito dopo i
-// Prezzi perché continua la stessa domanda (chi produce questa roba, e
-// dove); "Ricchezza" in fondo perché è l'unica che guarda UN giocatore
-// invece del mercato. Stesso schema delle altre: import() alla prima
-// apertura, nascoste e non smontate al cambio scheda.
+// WarEra+ 2026-11-03: "Soldi" — dove stanno i soldi che il gioco lascia
+// vedere (tesori delle nazioni, ordini d'acquisto). Vedi src/economy/money.js.
+// WarEra+ 2026-10-08: "Produzione" sta subito dopo i Prezzi perché
+// continua la stessa domanda (chi produce questa roba, e dove). Dal
+// 2026-10-30 la scheda "Ricchezza", che guardava UN giocatore invece del
+// mercato, sta in Giocatori, e le "Rendite di produzione" non ci sono più:
+// con la v0.27 la paga la decidono i dipendenti e il gioco mostra già il
+// guadagno di ogni azienda, quindi una tabella di rendite per punto con una
+// paga simulata non diceva niente che il gioco non dica meglio. Stesso
+// schema di prima: import() alla prima apertura, schede nascoste e non
+// smontate al cambio.
 const TABS = [
   { id: 'prices', key: 'tabPrices' },
   { id: 'production', key: 'tabProduction' },
-  { id: 'yields', key: 'tabYields' },
+  { id: 'money', key: 'tabMoney' },
   { id: 'optimizer', key: 'tabOptimizer' },
-  { id: 'wealth', key: 'tabWealth' },
 ];
 
 let _container = null;
@@ -128,22 +125,18 @@ async function apri(id) {
   if (!_montate.has(id)) host.innerHTML = `<div class="wp-ecn-loading">${escapeHtml(ecoT('loading'))}</div>`;
 
   try {
-    if (id === 'prices') {
-      const m = await loadModule(() => import('./prices.js'), 'economy');
-      await m.initPricesTab(host);
-      _montate.set(id, { stop: m.stopPricesTab, retranslate: m.retranslatePricesTab });
-    } else if (id === 'production') {
+    if (id === 'production') {
       const m = await loadModule(() => import('./production.js'), 'economy');
       await m.initProductionTab(host);
       _montate.set(id, { stop: m.stopProductionTab, retranslate: m.retranslateProductionTab });
-    } else if (id === 'wealth') {
-      const m = await loadModule(() => import('./playerWealth.js'), 'economy');
-      await m.initWealthTab(host);
-      _montate.set(id, { stop: m.stopWealthTab, retranslate: m.retranslateWealthTab });
-    } else if (id === 'yields') {
-      const m = await loadModule(() => import('../market/main.js'), 'economy');
-      await m.initMarketView(host);
-      _montate.set(id, { stop: m.stopMarketAutoRefresh });
+    } else if (id === 'money') {
+      const m = await loadModule(() => import('./money.js'), 'economy');
+      await m.initMoneyTab(host);
+      _montate.set(id, { stop: m.stopMoneyTab, retranslate: m.retranslateMoneyTab });
+    } else if (id === 'prices') {
+      const m = await loadModule(() => import('./prices.js'), 'economy');
+      await m.initPricesTab(host);
+      _montate.set(id, { stop: m.stopPricesTab, retranslate: m.retranslatePricesTab });
     } else {
       const m = await loadModule(() => import('../eco/main.js'), 'economy');
       m.initEcoView(host);

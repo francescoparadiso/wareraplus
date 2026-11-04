@@ -628,6 +628,19 @@ body.light-theme .wp-nat-pill-diff strong { color: #24292f; }
   .wp-nat-pill-tile { padding: 6px 8px; }
 }
 .wp-nat-curve-loading { padding: 10px 0; font-size: 12.5px; color: var(--wp-ov-text-dim, #8b949e); }
+
+/* Giocatori guerra / economia nel tempo (src/nations/playstyleTrend.js).
+   Carta, selettore, legenda e tooltip sono quelli delle curve del danno;
+   qui solo i riquadri (una tinta per gruppo, via --c) e il cursore. */
+.wp-nat-trend { margin-bottom: 18px; }
+.wp-nat-trend:empty { display: none; margin: 0; }
+.wp-nat-trend-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin: 8px 0 6px; }
+.wp-nat-trend-tile strong { color: var(--c); }
+body.light-theme .wp-nat-trend-tile strong { color: var(--c); }
+.wp-nat-trend-hit { fill: transparent; cursor: crosshair; }
+.wp-nat-trend-cursor { stroke: rgba(255, 255, 255, .35); stroke-width: 1; pointer-events: none; }
+.wp-nat-trend-cursor[hidden] { display: none; }
+body.light-theme .wp-nat-trend-cursor { stroke: rgba(0, 0, 0, .3); }
 .wp-nat-curve-tip-warn { color: #e3b341; font-size: 11px; }
 /* Tooltip orario: i pillati ai quattro quarti d'ora, rientrati sotto la loro voce. */
 .wp-nat-curve-tip-fine { padding-left: 16px; font-size: 11.5px; }

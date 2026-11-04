@@ -49,6 +49,9 @@ import { initNewsOverlay, openNewsView } from './app/newsOverlay.js';
 import { initMuOverlay, openMuView } from './app/muOverlay.js';
 import { initNationsOverlay, openNationsView } from './app/nationsOverlay.js';
 import { initPlayersOverlay, openPlayersView } from './app/playersOverlay.js';
+// WarEra+ (2026-11-04): riquadro "Novita'" alla prima visita dopo un aggiornamento
+// (contenuto in app/changelog.js).
+import { initWhatsNew } from './app/whatsNew.js';
 import { initBattlesOverlay, openBattlesView } from './app/battlesOverlay.js';
 import { initAccordiOverlay, openAccordiView } from './app/accordiOverlay.js';
 import { initTournamentOverlay, openTournamentView } from './app/tournamentOverlay.js';
@@ -196,8 +199,16 @@ async function handleIncomingDeepLink() {
       // WarEra+ Votazioni: ?tab=votes (&vote=id) riapre la vista e la votazione.
       { openSenate: params.get('senate') === '1', openVotes: params.get('tab') === 'votes', voteId: params.get('vote') || null }),
     economy: async () => {
+      // WarEra+: la scheda Ricchezza è passata in Giocatori (2026-10-30). I
+      // vecchi link ?section=economy&tab=wealth aprono lì il "mio" giocatore.
+      if (params.get('tab') === 'wealth') {
+        const { getMeId } = await import('./shared/me.js');
+        return openPlayersView(getMeId() || undefined);
+      }
       const item = params.get('item');
       if (item) (await import('./economy/prices.js')).openPriceItem(item);
+      // ?tab=yields (le Rendite, tolte il 2026-10-30) non è più una scheda:
+      // initEconomyView ricade da sé sui Prezzi.
       return openEconomyView({ tab: item ? 'prices' : (params.get('tab') || undefined) });
     },
     news: () => openNewsView(),
@@ -243,6 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initGuideOverlay();
   initToolsOverlay();
   initPrivateOverlay();
+  initWhatsNew();
   applyTranslations();
   initLangButton();
 });

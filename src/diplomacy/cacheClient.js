@@ -611,6 +611,23 @@ export async function fetchCompanyCensusViaCache({ item = null, countryId = null
   }
 }
 
+/** WarEra+ — Riferimenti mondiali dei dipendenti per risorsa
+ *  (server/companyCensus.js, dal 2026-10-28): percentili di costo per
+ *  punto, punti all'ora e Produzione, dalla rosa del giro notturno.
+ *  Nessun ripiego diretto, per lo stesso motivo del censimento: servirebbe
+ *  la rosa di decine di migliaia di aziende. `null` o `available: false`
+ *  = il confronto semplicemente non compare. */
+export async function fetchEmployeeBenchmarksViaCache() {
+  try {
+    const json = await _fetchCacheJsonRaw('/employee-benchmarks');
+    if (!json || typeof json.available !== 'boolean') return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /employee-benchmarks non disponibile:', err.message);
+    return null;
+  }
+}
+
 /** WarEra+ — Storico ricchezza di UN giocatore: { userId, username,
  *  days: [[giorno, ricchezza]], rank, rankBefore, archiveFrom }. Viene
  *  dall'archivio della classifica mondiale (uno scatto al giorno dal 19
@@ -624,6 +641,53 @@ export async function fetchPlayerWealthViaCache(userId) {
     return json;
   } catch (err) {
     console.warn('WarEra+ cache: /player-wealth non disponibile:', err.message);
+    return null;
+  }
+}
+
+/** WarEra+ — soldi bloccati negli ordini d'acquisto (`/order-money`, vedi
+ *  server/orderMoney.js): serie oraria del totale, ultimo campione per
+ *  risorsa/nazione/unità e tesori giorno per giorno. null se il server non
+ *  risponde o non ha ancora la rotta: la scheda Soldi di Economia non ha
+ *  nessun ripiego, il gioco non conserva questi numeri da nessuna parte. */
+export async function fetchOrderMoneyViaCache(days = 30) {
+  try {
+    const json = await _fetchCacheJsonRaw(`/order-money?days=${encodeURIComponent(days)}`);
+    if (!json || !Array.isArray(json.series)) return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /order-money non disponibile:', err.message);
+    return null;
+  }
+}
+
+/** WarEra+ — i portafogli dei giocatori sommati (`/player-money`, vedi
+ *  server/playerParts.js): il mondo giorno per giorno e, per l'ultimo giorno,
+ *  per nazione e per unità. null se il server non risponde o non ha ancora la
+ *  rotta. */
+export async function fetchPlayerMoneyViaCache(days = 90) {
+  try {
+    const json = await _fetchCacheJsonRaw(`/player-money?days=${encodeURIComponent(days)}`);
+    if (!json || !Array.isArray(json.world)) return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /player-money non disponibile:', err.message);
+    return null;
+  }
+}
+
+/** WarEra+ — le parti della ricchezza di UN giocatore (`/player-parts`, vedi
+ *  server/playerParts.js): righe [giorno, aziende|null, ordini|null] e i
+ *  valori di adesso. null se il server non risponde o non ha ancora la rotta:
+ *  la scheda Ricchezza mostra comunque la divisione di oggi, calcolata dal
+ *  browser, e dichiara che lo storico manca. */
+export async function fetchPlayerPartsViaCache(userId, days = 3650) {
+  try {
+    const json = await _fetchCacheJsonRaw(`/player-parts?userId=${encodeURIComponent(userId)}&days=${encodeURIComponent(days)}`);
+    if (!json || !Array.isArray(json.rows)) return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /player-parts non disponibile:', err.message);
     return null;
   }
 }

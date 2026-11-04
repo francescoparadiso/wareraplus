@@ -1,16 +1,15 @@
 /* ══════════════════════════════════════════════════════════════
    WarEra+ — Economia: la scheda PREZZI
    ------------------------------------------------------------------
-   La domanda: «quanto vale adesso, e da dove viene quel prezzo». È la
-   scheda nuova della sezione — le altre due (Rendite, Ottimizzatore)
-   esistevano già come viste separate e qui sono state solo affiancate.
+   La domanda: «quanto vale adesso, e da dove viene quel prezzo». Le
+   Rendite di produzione, che stavano accanto, sono state tolte il
+   2026-10-30 (vedi economy/main.js).
 
-   ── DUE OROLOGI, COME NELLE RENDITE ────────────────────────────────
+   ── DUE OROLOGI ────────────────────────────────────────────────────
    · il prezzo di ADESSO e il libro ordini: `itemTrading.getPrices` e
      `tradingOrder.getTopOrders`, PUBBLICHE, dirette su api6, TTL 5
      minuti. Sono gli stessi dati che carica `src/market/api.js`, e
-     infatti li si chiede a lui: aprire questa scheda dopo le Rendite
-     non ricompra niente, e viceversa. Un refresh = una richiesta HTTP.
+     infatti li si chiede a lui. Un refresh = una richiesta HTTP.
    · lo STORICO: `/price-history` sul server di cache, una candela al
      giorno. Senza fallback e senza scuse — WarEra dice quanto costa
      adesso e basta, quindi se il server non risponde questa scheda
@@ -42,7 +41,7 @@ import {
 } from '../market/api.js';
 
 // ── Stato della scheda ──────────────────────────────────────────────
-// Vive quanto la sezione: tornare sui Prezzi dopo un giro sulle Rendite
+// Vive quanto la sezione: tornare sui Prezzi dopo un giro su un'altra scheda
 // ritrova la risorsa aperta e il periodo scelto.
 let _container = null;
 let _data = null;          // quello che torna da loadMarketData
@@ -60,7 +59,7 @@ const RANGES = [
 ];
 
 // ── Numeri ──────────────────────────────────────────────────────────
-/* Stessa regola delle Rendite: il mercato lavora sui millesimi (grain a
+/* Il mercato lavora sui millesimi (grain a
    0,0767), quindi i decimali si scelgono in base alla grandezza invece
    di troncare a due e cancellare le differenze che contano. */
 function gold(v) {
@@ -387,9 +386,7 @@ async function aggiorna({ force = false } = {}) {
   _loading = true;
   paint();
   try {
-    // `pricesOnly`: le regioni consigliate servono alle Rendite, non qui,
-    // e sono l'unica chiamata di tutta la sezione che passa dal proxy.
-    _data = await loadMarketData({ force, pricesOnly: true });
+    _data = await loadMarketData({ force });
   } catch (err) {
     console.warn('[economia/prezzi] prezzi non disponibili:', err.message);
   } finally {

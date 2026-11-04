@@ -60,11 +60,11 @@ const {
   accessiNazione, haAccessoNazione, aggiungiAccessoNazione, togliAccessoNazione,
 } = require('./db');
 const { urlWebhookValido } = require('./notify');
-const { trpcGet } = require('./wareraApi');
+const { trpcGet, trpcBatch } = require('./wareraApi');
 const {
   regioniMappa, paesiMappa, paeseLive, governo, nomiUtenti,
   battaglieVive, baseDannoGiornaliero, bonifici, timeline,
-  cittadiniTutti, conteggiCittadini, eventiTicker, archivioBattaglie, speseGuerra, direttorioMu, elezioniDi,
+  cittadiniTutti, conteggiCittadini, aziendeEstero, eventiTicker, archivioBattaglie, speseGuerra, direttorioMu, elezioniDi, memo,
 } = require('./fonti');
 const { quadroConfini, relazione } = require('./confini');
 const { quadroNemici, giocatoriNemico, idNemici } = require('./nemici');
@@ -611,6 +611,123 @@ async function quadroNazione(countryId) {
  *  proprio uno che fa poco danno (un diplomatico, un economista). */
 const tuttiICittadini = cittadiniTutti;
 
+// ---------------------------------------------------------------------------
+// Aziende all'estero (2026-10-26)
+// ---------------------------------------------------------------------------
+
+/**
+ * I cittadini con aziende in regioni di altre nazioni: lì vanno le tasse
+ * sui salari e lì si produce. La fotografia è del censimento aziende
+ * notturno del cache-server (vedi la testata di server/companyCensus.js);
+ * qui si aggiungono i nomi e la nazione ospite DI ADESSO, ricalcolata
+ * sulle regioni: una regione persa stamattina cambia bandiera subito, e
+ * un'azienda tornata in casa nostra esce dall'elenco.
+ *
+ * Senza rideploy del cache-server la rotta là risponde 404: qui diventa
+ * `disponibile: false` e la vista lo dice, nessun errore.
+ */
+async function quadroAziendeEstero(countryId) {
+  let base;
+  try { base = await aziendeEstero(countryId); }
+  catch { return { disponibile: false, motivo: 'server' }; }
+  if (!base?.available) return { disponibile: false, motivo: 'attesa' };
+
+  const [reg, cit] = await Promise.all([
+    regioniMappa().catch(() => ({})),
+    cittadiniTutti(countryId).catch(() => null),
+  ]);
+  const perId = new Map((cit?.data || []).map((c) => [c.id, c]));
+
+  const giocatori = new Map();
+  const conDipendenti = [];   // le aziende di cui chiedere la stima oraria (sotto)
+  for (const [uid, companyId, item, regionId, ospiteAllora, valore, disabilitata, conDip, nDip] of base.rows || []) {
+    const ospite = reg[regionId]?.country || ospiteAllora || null;
+    if (ospite === countryId) continue;
+    let g = giocatori.get(uid);
+    if (!g) {
+      const c = perId.get(uid);
+      g = { id: uid, nome: c?.u || null, avatar: c?.a || null, livello: c?.lv ?? null, aziende: [] };
+      giocatori.set(uid, g);
+    }
+    const azienda = {
+      id: companyId, item, regione: regionId, nomeRegione: reg[regionId]?.name || null, ospite,
+      valore: valore || 0, disabilitata: Boolean(disabilitata), conDipendenti: Boolean(conDip),
+      // Dal 2026-10-28: quanti dipendenti (dalla rosa del censimento, null
+      // prima del primo giro con la rosa) e la stima oraria, qui sotto.
+      dipendenti: nDip ?? null, ptsOra: null, salariOra: null,
+    };
+    g.aziende.push(azienda);
+    if (conDip && !disabilitata) conDipendenti.push(azienda);
+  }
+
+  // Quanto lavoro va all'estero, ADESSO: la stima oraria del gioco
+  // (employee.getCompanyEstimate, ~120 byte ad azienda, dal proxy del
+  // cache-server con la chiave). Salari pagati là = reddito tassato dalla
+  // nazione ospite con la SUA aliquota: è la tassa che non incassiamo noi.
+  // Tetto di aziende per non trasformare una nazione con mille aziende
+  // fuori in quaranta batch a ogni lettura (la memoria è di 30 minuti, in
+  // fonti.js); oltre il tetto i totali sono dichiarati parziali.
+  const TETTO_STIME = 500;
+  const daStimare = conDipendenti.slice(0, TETTO_STIME);
+  let stimate = 0;
+  for (let i = 0; i < daStimare.length; i += 25) {
+    const pezzo = daStimare.slice(i, i + 25);
+    let res = [];
+    try { res = await trpcBatch(pezzo.map((a) => ['employee.getCompanyEstimate', { companyId: a.id }])); }
+    catch { /* il pezzo resta senza stima: i totali lo dicono */ }
+    res.forEach((s, k) => {
+      if (!s) return;
+      pezzo[k].ptsOra = Number(s.production) || 0;
+      pezzo[k].salariOra = (Number(s.wageCost) || 0) + (Number(s.managerCost) || 0);
+      stimate++;
+    });
+  }
+  const paesi = await paesiMappa().catch(() => new Map());
+  let salariGiorno = 0, tasseGiorno = 0;
+  for (const a of daStimare) {
+    if (a.salariOra == null) continue;
+    salariGiorno += a.salariOra * 24;
+    tasseGiorno += a.salariOra * 24 * (Number(paesi.get(a.ospite)?.taxes?.income) || 0) / 100;
+  }
+
+  // Chi il censimento dei cittadini non ha ancora per nome: lo si chiede.
+  const senzaNome = [...giocatori.values()].filter((g) => !g.nome).map((g) => g.id);
+  if (senzaNome.length) {
+    const nomi = await nomiUtenti(senzaNome);
+    for (const id of senzaNome) {
+      const g = giocatori.get(id);
+      g.nome = nomi[id]?.username || null;
+      g.avatar = g.avatar || nomi[id]?.avatarUrl || null;
+    }
+  }
+
+  const elenco = [...giocatori.values()];
+  for (const g of elenco) {
+    g.aziende.sort((a, b) => b.valore - a.valore);
+    g.valore = g.aziende.reduce((s, a) => s + a.valore, 0);
+  }
+  elenco.sort((a, b) => b.aziende.length - a.aziende.length || b.valore - a.valore);
+  return {
+    disponibile: true,
+    giorno: base.day,
+    aggiornatoIl: base.updatedAt,
+    guardati: base.owners ?? null,
+    giocatori: elenco,
+    // null se non c'era niente da stimare o non ha risposto niente.
+    lavoro: stimate ? {
+      salariGiorno: Math.round(salariGiorno * 100) / 100,
+      tasseGiorno: Math.round(tasseGiorno * 100) / 100,
+      ptsOra: Math.round(daStimare.reduce((s, a) => s + (a.ptsOra || 0), 0) * 100) / 100,
+      dipendenti: elenco.reduce((s, g) => s + g.aziende.reduce((t, a) => t + (a.dipendenti || 0), 0), 0) || null,
+      stimate, daStimare: conDipendenti.length,
+    } : null,
+  };
+}
+
+/** Dieci minuti di memoria per nazione: dal 2026-10-28 il quadro chiede
+ *  anche le stime orarie (fino a 20 batch), e la scheda si riapre spesso. */
+const quadroAziendeEsteroMemo = memo(10 * 60_000, quadroAziendeEstero);
+
 async function formaAccessi(countryId) {
   const righe = accessiNazione(countryId);
   const nomi = await nomiUtenti(righe.map((r) => r.war_user_id));
@@ -750,6 +867,21 @@ function buildNazioneRouter({ requireAuth, risolviIdentita, bloccaScrittureSotto
       res.json(await giocatoriNemico(req.params.id));
     } catch (err) {
       console.error('[nazione] giocatori nemici falliti:', err.message);
+      res.status(502).json({ error: 'gioco_non_raggiungibile' });
+    }
+  });
+
+  /** I nostri cittadini con aziende fuori dalle nostre regioni. Chi vede
+   *  la nazione vede anche questo: sono dati pubblici del gioco, messi
+   *  insieme. */
+  router.get('/aziende-estero', async (req, res) => {
+    try {
+      const ctx = await contesto(req);
+      if (!ctx.countryId) return res.status(404).json({ error: 'nazione_sconosciuta' });
+      if (!ctx.accesso) return negato(res, ctx.countryId);
+      res.json(await quadroAziendeEsteroMemo(ctx.countryId));
+    } catch (err) {
+      console.error('[nazione] aziende all\'estero fallite:', err.message);
       res.status(502).json({ error: 'gioco_non_raggiungibile' });
     }
   });

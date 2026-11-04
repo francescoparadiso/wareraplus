@@ -39,23 +39,27 @@ import { escapeHtml, countryName, flagImg, avatarImg, fmtCompact, fmtFull, fmtRe
 import { classifyPlaystyle, WAR_SKILLS, ECO_SKILLS } from '../mu/playstyle.js';
 import { candleChartSvg, attachCandleExplorer } from '../economy/candleChart.js';
 import { ecoT } from '../economy/i18n.js';
+import { plusT } from '../economy/i18nPlus.js';
 import { syncBack } from '../app/backNav.js';
 import { trackEvent } from '../shared/analytics.js';
 import { animationsOn } from '../shared/motion.js';
 import { plyT } from './i18n.js';
+import { setMe, clearMe } from '../shared/me.js';
 // Il versus (righe, conteggio dell'intro, stile) è condiviso con gli altri
 // confronti 1 vs 1: vedi src/shared/versus.js.
 import { vsRow, countUpScore as countUpIn } from '../shared/versus.js';
 import {
   LEADERBOARDS, fetchPlayer, searchPlayers, fetchEquipment, fetchWealthHistory,
-  fetchLeaderboard, fetchNames, fetchPlayerBattles, fetchCompanies, fetchWorkStats,
-  fetchPolitics, fetchNationRanks,
+  fetchLeaderboard, fetchNames, fetchPlayerBattles, fetchCompanies, fetchPointValues, fetchWorkStats,
+  fetchPolitics, fetchNationRanks, fetchWealthParts, fetchUserWealth,
 } from './api.js';
+import { prtT } from './i18nParts.js';
 // WarEra+ (2026-11-04): mancava. Il radar delle abilita' del confronto lo usa
 // (sotto, nel poligono "wp-tip-hit") e senza questo import il versus moriva con
 // un ReferenceError a meta' disegno, lasciando "Caricamento del giocatore…"
 // per sempre. Rotto dal 2026-10-22 ("Grafici esplorabili ovunque").
 import { tipAttr } from '../shared/chartTip.js';
+import { partsChartSvg, PART_COLORS, PART_KEYS } from './partsChart.js';
 
 const APP_BASE = 'https://app.warera.io';
 const MINE_KEY = 'we_my_player';
@@ -90,11 +94,15 @@ let _battles = null;         // risposta di fetchPlayerBattles
 let _battleDays = BATTLE_DAYS[0];
 let _battlesLoading = false;
 let _wealth;                 // undefined = non chiesta, null = non disponibile
+let _parts;                  // idem: { srv, live } — la ricchezza per categoria
+let _wMode = 'total';        // 'total' | 'parts'
+let _wSel = new Set(PART_KEYS);   // parti accese nel grafico
 let _equip;                  // idem
 let _muName = null;
 let _wealthObs = null;
 let _natRanks = null;        // posizione nella sua nazione (fetchNationRanks)
 let _companies;              // undefined = non chiesta, 'loading', null, []
+let _pointValues = null;     // { itemCode: monete per punto }, per il margine
 let _work;                   // idem, statistiche di lavoro a 31 giorni
 let _politics;               // idem
 let _lootOpen = new Set();   // battaglie con la riga del bottino aperta
@@ -170,6 +178,86 @@ async function doSearch() {
   render();
 }
 
+/* ── Ricerca mentre si scrive ─────────────────────────────────────
+   Le tre ricerche (partenza, 1 vs 1, "confronta con" nella scheda) mostrano i
+   risultati MENTRE si scrive, dopo una breve pausa, senza aspettare Invio.
+   Invio e il bottone restano com'erano: lì un solo risultato apre subito il
+   giocatore, mentre scrivendo no — aprirlo da soli a metà parola porterebbe
+   via chi sta ancora digitando.
+
+   ⚠️ render() rifà tutto l'HTML, quindi il campo perderebbe il fuoco a ogni
+   risultato. Si salva quale campo era attivo e dove stava il cursore, e si
+   rimette dopo il disegno. E il testo si copia nello stato a OGNI tasto
+   (_q, _duelQ, _pickQ): un ridisegno che arriva da altro — i nomi della
+   classifica, per dire — non deve cancellare quello che si sta scrivendo. */
+const LIVE_PAUSE_MS = 300;
+const _liveTimers = {};
+const _liveSeq = {};
+
+/** Chi è il form: 'main' | 'pick' | 'duel:a' | 'duel:b' (null se non lo è). */
+function liveKey(form) {
+  if (!form) return null;
+  if (form.id === 'wp-ply-search') return 'main';
+  if (form.id === 'wp-ply-pick') return 'pick';
+  if (form.dataset?.duelForm) return `duel:${form.dataset.duelForm}`;
+  return null;
+}
+function liveInput(key) {
+  const sel = key === 'main' ? '#wp-ply-search' : key === 'pick' ? '#wp-ply-pick' : `[data-duel-form="${key.slice(5)}"]`;
+  return _root?.querySelector(`${sel} input`) || null;
+}
+function liveSetState(key, q, res) {
+  if (key === 'main') { _q = q; _cands = res; _searching = false; }
+  else if (key === 'pick') { _pickQ = q; _pickCands = res && res.filter(c => c.id !== _pid); _pickSearching = false; }
+  else {
+    const slot = key.slice(5);
+    const other = _duel[slot === 'a' ? 'b' : 'a']?.id;
+    _duelQ[slot] = q; _duelCands[slot] = res && res.filter(c => c.id !== other); _duelSearching[slot] = false;
+  }
+}
+
+/** Disegna rimettendo fuoco e cursore sul campo che si stava usando. */
+function renderKeepingFocus(key) {
+  const inp = liveInput(key);
+  const had = inp && document.activeElement === inp;
+  const pos = had ? [inp.selectionStart, inp.selectionEnd] : null;
+  render();
+  if (!had) return;
+  const nuovo = liveInput(key);
+  if (!nuovo) return;
+  nuovo.focus();
+  try { nuovo.setSelectionRange(pos[0], pos[1]); } catch (_) { /* tipo search su alcuni browser */ }
+}
+
+function liveSearch(form) {
+  const key = liveKey(form);
+  if (!key) return;
+  const q = form.querySelector('input')?.value || '';
+  // Il testo nello stato subito, i risultati dopo la pausa.
+  if (key === 'main') _q = q; else if (key === 'pick') _pickQ = q; else _duelQ[key.slice(5)] = q;
+
+  clearTimeout(_liveTimers[key]);
+  const seq = (_liveSeq[key] = (_liveSeq[key] || 0) + 1);
+  if (q.trim().length < 2) {
+    // Sotto le due lettere non c'è niente da cercare: via i risultati vecchi.
+    liveSetState(key, q, null);
+    renderKeepingFocus(key);
+    return;
+  }
+  _liveTimers[key] = setTimeout(async () => {
+    let res;
+    try { res = await searchPlayers(q); }
+    catch (err) { console.warn('WarEra+ giocatori: ricerca fallita:', err.message); res = []; }
+    // Una risposta lenta, di una parola già superata o di un campo che non
+    // dice più quella parola, si butta: vale l'ultima.
+    if (seq !== _liveSeq[key]) return;
+    const inp = liveInput(key);
+    if (!inp || inp.value !== q) return;
+    liveSetState(key, q, res);
+    renderKeepingFocus(key);
+  }, LIVE_PAUSE_MS);
+}
+
 async function loadBoard() {
   const type = _board;
   _boardRows = null;
@@ -218,10 +306,12 @@ export async function openPlayer(id, { tabs = true } = {}) {
   _battles = null;
   _battleDays = BATTLE_DAYS[0];
   _wealth = undefined;
+  _parts = undefined;
   _equip = undefined;
   _muName = null;
   _natRanks = null;
   _companies = undefined;
+  _pointValues = null;
   _work = undefined;
   _politics = undefined;
   _lootOpen = new Set();
@@ -265,6 +355,14 @@ function loadTab(tab) {
     _wealth = 'loading';
     fetchWealthHistory(pid).then(h => { if (_pid === pid) { _wealth = h; render(); } });
   }
+  if (tab === 'wealth' && _parts === undefined) {
+    const pid = _pid;
+    _parts = 'loading';
+    // Il gioco dà la divisione di adesso (getUserById), il server lo storico
+    // e i soldi negli ordini: due fonti indipendenti, nessuna blocca l'altra.
+    Promise.all([fetchWealthParts(pid), fetchUserWealth(pid)])
+      .then(([srv, live]) => { if (_pid === pid) { _parts = { srv, live }; render(); } });
+  }
   if (tab === 'skills' && _equip === undefined) {
     const pid = _pid;
     _equip = 'loading';
@@ -274,7 +372,15 @@ function loadTab(tab) {
     const pid = _pid;
     _companies = 'loading';
     _work = 'loading';
-    fetchCompanies(pid).catch(() => null).then(c => { if (_pid === pid) { _companies = c; render(); } });
+    fetchCompanies(pid).catch(() => null).then(async c => {
+      if (_pid !== pid) return;
+      _companies = c;
+      render();
+      if (c?.length) {
+        const v = await fetchPointValues(c.map(x => x.itemCode));
+        if (_pid === pid) { _pointValues = v; render(); }
+      }
+    });
     fetchWorkStats(pid).then(w => { if (_pid === pid) { _work = w; render(); } });
   }
   if (tab === 'politics' && _politics === undefined) {
@@ -657,47 +763,207 @@ function battlesHtml() {
     <p class="wp-ply-note">${escapeHtml(plyT('btNoSide'))}</p>`;
 }
 
+/* ── Scheda Ricchezza ─────────────────────────────────────────────
+   Dal 2026-10-30 è QUI e non più una scheda di Economia: guarda un
+   giocatore, non il mercato. Prima esistevano due versioni — questa,
+   scarna, e quella di Economia (src/economy/playerWealth.js, tolta) con
+   posizione, variazioni in percentuale, finestre di tempo e giorni
+   migliori e peggiori. Resta la seconda, in questa scheda: la ricerca, il
+   "Sono io" e la testata del giocatore ce li ha già la pagina.
+   Le etichette nuove vengono da economy/i18nPlus.js (plusT), dove sono già
+   tradotte in 9 lingue. */
+
+const W_RANGES = [{ g: 30, key: 'r30' }, { g: 90, key: 'r90' }, { g: 0, key: 'rAll' }];
+let _wGiorni = 90;
+
 /** Variazione fra l'ultimo scatto e quello di `giorni` fa (o il primo
- *  dopo, se quel giorno è un buco) — come in economy/playerWealth.js. */
+ *  dopo, se quel giorno è un buco); 0 = dall'inizio dell'archivio. */
 function change(days, giorni) {
   if (!days || days.length < 2) return null;
   const last = days[days.length - 1];
-  const target = dayNum(last[0]) - giorni;
+  const target = giorni ? dayNum(last[0]) - giorni : -Infinity;
   const first = days.find(r => dayNum(r[0]) >= target);
   if (!first || first === last) return null;
-  return last[1] - first[1];
+  const abs = last[1] - first[1];
+  return { abs, pct: first[1] ? (abs / Math.abs(first[1])) * 100 : null, da: first[0] };
 }
-function deltaHtml(v) {
-  if (v == null || !Number.isFinite(v)) return '<span class="wp-ply-dim">—</span>';
-  const cls = v > 0 ? 'wp-ply-up' : v < 0 ? 'wp-ply-down' : 'wp-ply-dim';
-  return `<span class="${cls}">${v > 0 ? '+' : v < 0 ? '−' : ''}${escapeHtml(fmtMoney(Math.abs(v)))}</span>`;
+function deltaHtml(abs, pct) {
+  if (abs == null || !Number.isFinite(abs)) return '<span class="wp-ply-dim">—</span>';
+  const cls = abs > 0 ? 'wp-ply-up' : abs < 0 ? 'wp-ply-down' : 'wp-ply-dim';
+  const segno = abs > 0 ? '+' : abs < 0 ? '−' : '';
+  const p = pct != null && Number.isFinite(pct)
+    ? ` <small>(${segno}${escapeHtml(new Intl.NumberFormat(lingua(), { maximumFractionDigits: 1 }).format(Math.abs(pct)))}%)</small>` : '';
+  return `<span class="${cls}">${segno}${escapeHtml(fmtMoney(Math.abs(abs)))}${p}</span>`;
+}
+
+/** Le differenze fra due scatti CONSECUTIVI di calendario. Quelle a
+ *  cavallo di un buco coprono più giorni e non sono "un giorno": fuori. */
+function dayChanges(days) {
+  const out = [];
+  for (let i = 1; i < days.length; i++) {
+    if (dayNum(days[i][0]) - dayNum(days[i - 1][0]) !== 1) continue;
+    out.push({ g: days[i][0], d: days[i][1] - days[i - 1][1] });
+  }
+  return out;
+}
+
+/** La serie del grafico: solo la finestra scelta, dall'ultimo scatto. */
+function wealthWindow(days) {
+  if (!days?.length) return [];
+  const from = _wGiorni ? dayNum(days[days.length - 1][0]) - _wGiorni : -Infinity;
+  return days.filter(r => dayNum(r[0]) >= from).map(([g, v]) => [g, v, v, v, v, null]);
+}
+
+/* ── La ricchezza per categoria ───────────────────────────────────
+   `user.getUserById` → `stats.wealth`: aziende, equipaggiamento, armi,
+   oggetti, soldi. Sono le voci del gioco e sommano al totale. I soldi negli
+   ordini d'acquisto NON ne fanno parte (escono dal portafoglio quando
+   l'ordine si piazza): si mostrano a parte. Vedi server/playerParts.js. */
+function partsNow() {
+  const w = _parts && _parts !== 'loading' ? _parts.live : null;
+  if (!w) return null;
+  return {
+    w: Number(w.total),
+    companies: Number(w.companies), equipments: Number(w.equipments), weapons: Number(w.weapons),
+    items: Number(w.items), money: Number(w.money),
+  };
+}
+
+/** Le righe giorno per giorno salvate dal server. */
+function partsSeries() {
+  // Solo le righe nel formato nuovo (7 colonne): un server non ancora
+  // aggiornato manda quello di prima, e leggerlo con questo schema darebbe
+  // numeri sbagliati sotto etichette giuste.
+  const rows = (_parts?.srv?.rows || []).filter(r => r.length >= 7);
+  if (!rows.length) return [];
+  const out = rows.map(([g, c, e, w, i, m]) => ({ g, companies: c, equipments: e, weapons: w, items: i, money: m }));
+  const from = _wGiorni ? dayNum(out[out.length - 1].g) - _wGiorni : -Infinity;
+  return out.filter(r => dayNum(r.g) >= from);
+}
+
+function partsBlockHtml() {
+  const modi = ['total', 'parts'].map(m =>
+    `<button type="button" class="wp-ply-chip${_wMode === m ? ' wp-ply-chip-me' : ''}" data-wmode="${m}">${escapeHtml(prtT(m === 'total' ? 'modeTotal' : 'modeParts'))}</button>`).join('');
+  const now = partsNow();
+  let corpo;
+  if (_parts === 'loading' || _parts === undefined) {
+    corpo = `<p class="wp-ply-note">${escapeHtml(plyT('loading'))}</p>`;
+  } else if (!now) {
+    corpo = `<p class="wp-ply-note">${escapeHtml(prtT('noteNoSplit'))}</p>`;
+  } else {
+    const attiva = (k) => _wMode === 'parts' && _wSel.has(k);
+    const pct = (v) => (now.w > 0 && Number.isFinite(v) ? `${((v / now.w) * 100).toFixed(1)}%` : '—');
+    const ordini = _parts.srv?.ordersNow;
+    corpo = `
+      <div class="wp-ply-pbar" role="group" aria-label="${escapeHtml(prtT('modeParts'))}">
+        ${PART_KEYS.filter(k => now[k] > 0).map(k => `<button type="button" class="wp-ply-pseg${_wMode === 'parts' && !_wSel.has(k) ? ' off' : ''}" data-part="${k}"
+            style="flex:${now[k]};background:${PART_COLORS[k]}" title="${escapeHtml(`${prtT(k)}: ${fmtFull(Math.round(now[k]))} · ${prtT('hint_' + k)}`)}"></button>`).join('')}
+      </div>
+      <div class="wp-ply-plegend">
+        ${PART_KEYS.map(k => `<button type="button" class="wp-ply-chip wp-ply-pchip${attiva(k) ? ' wp-ply-chip-me' : ''}" data-part="${k}" title="${escapeHtml(prtT('hint_' + k))}">
+            <i style="background:${PART_COLORS[k]}"></i>${escapeHtml(prtT(k))}
+            <b>${escapeHtml(fmtMoney(Math.round(now[k])))}</b> <small class="wp-ply-dim">${escapeHtml(pct(now[k]))}</small></button>`).join('')}
+      </div>
+      ${ordini != null && ordini > 0 ? `<p class="wp-ply-note wp-ply-pextra"><b>${escapeHtml(fmtMoney(Math.round(ordini)))}</b> ${escapeHtml(prtT('ordersExtra'))}</p>` : ''}`;
+  }
+
+  let storia = '';
+  if (_wMode === 'parts' && _parts && _parts !== 'loading') {
+    const srv = _parts.srv;
+    if (!srv) storia = prtT('noteNoServer');
+    else if (!srv.rows.length) storia = prtT('noteNone');
+    else if (srv.rows.length === 1) storia = prtT('noteFew', { n: 1 });
+    else storia = prtT('noteSince', { d: fmtDate(srv.rows[0][0]) });
+  }
+
+  return `
+    <div class="wp-ply-parts">
+      <div class="wp-ply-pmodes"><span class="wp-ply-dim">${escapeHtml(prtT('modeLabel'))}</span> ${modi}
+        ${_wMode === 'parts' ? `<span class="wp-ply-dim wp-ply-phint">${escapeHtml(prtT('select'))}</span>` : ''}</div>
+      ${corpo}
+      <p class="wp-ply-note">${escapeHtml(prtT('noteParts'))}${storia ? ' ' + escapeHtml(storia) : ''}</p>
+    </div>`;
 }
 
 function wealthHtml() {
   if (_wealth === undefined || _wealth === 'loading') return `<div class="wp-ply-loading">${escapeHtml(plyT('loading'))}</div>`;
-  const now = _lite?.rankings?.userWealth?.value;
-  const nowCard = `<div class="wp-ply-minor wp-ply-minor-big"><span>${escapeHtml(plyT('wlNow'))} <b>${now != null ? escapeHtml(fmtFull(Math.round(now))) : '—'}</b></span>`;
-  if (!_wealth) return `${nowCard}</div><p class="wp-ply-note">${escapeHtml(plyT('wlNoServer'))}</p>`;
+  const ora = _lite?.rankings?.userWealth;
+  const nowCard = `<span>${escapeHtml(plyT('wlNow'))} <b>${ora?.value != null ? escapeHtml(fmtFull(Math.round(ora.value))) : '—'}</b></span>`;
+  if (!_wealth) return `<div class="wp-ply-minor wp-ply-minor-big">${nowCard}</div><p class="wp-ply-note">${escapeHtml(plyT('wlNoServer'))}</p>`;
   const days = _wealth.days || [];
-  if (!days.length) return `${nowCard}</div><p class="wp-ply-note">${escapeHtml(plyT('wlNotIn'))}</p>`;
+  if (!days.length) return `<div class="wp-ply-minor wp-ply-minor-big">${nowCard}</div><p class="wp-ply-note">${escapeHtml(plyT('wlNotIn'))}</p>`;
+
+  const rank = _wealth.rank, prima = _wealth.rankBefore;
+  const v1 = change(days, 1), v7 = change(days, 7), v30 = change(days, 30), vAll = change(days, 0);
+  const gg = dayChanges(days);
+  const migliori = [...gg].sort((x, y) => y.d - x.d).filter(x => x.d > 0).slice(0, 5);
+  const peggiori = [...gg].sort((x, y) => x.d - y.d).filter(x => x.d < 0).slice(0, 5);
+  const lista = (arr) => arr.length
+    ? arr.map(x => `<li><span>${escapeHtml(fmtDate(x.g))}</span>${deltaHtml(x.d)}</li>`).join('')
+    : `<li class="wp-ply-dim">${escapeHtml(plusT('none'))}</li>`;
+  const posizione = ora?.rank
+    ? `#${escapeHtml(fmtFull(ora.rank))}`
+    : rank ? escapeHtml(plusT('wlRankOf', { p: fmtFull(rank.posizione), n: fmtFull(rank.su) })) : '—';
+  const prec = prima
+    ? `<small class="wp-ply-dim">${escapeHtml(plusT('wlRankMove', { p: fmtFull(prima.posizione), d: fmtDate(prima.slot) }))}</small>` : '';
+
   return `
-    ${nowCard}
-      <span>${escapeHtml(plyT('wl1'))} ${deltaHtml(change(days, 1))}</span>
-      <span>${escapeHtml(plyT('wl7'))} ${deltaHtml(change(days, 7))}</span>
-      <span>${escapeHtml(plyT('wl30'))} ${deltaHtml(change(days, 30))}</span>
+    <div class="wp-ply-minor wp-ply-minor-big">
+      ${nowCard}
+      <span>${escapeHtml(plusT('wlRank'))} <b>${posizione}</b> ${prec}</span>
+      <span>${escapeHtml(plyT('wl1'))} ${deltaHtml(v1?.abs, v1?.pct)}</span>
+      <span>${escapeHtml(plyT('wl7'))} ${deltaHtml(v7?.abs, v7?.pct)}</span>
+      <span>${escapeHtml(plyT('wl30'))} ${deltaHtml(v30?.abs, v30?.pct)}</span>
+      ${vAll ? `<span>${escapeHtml(plusT('wlDAll', { d: fmtDate(vAll.da) }))} ${deltaHtml(vAll.abs, vAll.pct)}</span>` : ''}
+    </div>
+    ${partsBlockHtml()}
+    <div class="wp-ecn-chartbar">
+      ${W_RANGES.map(x => `<button type="button" class="wp-ply-chip${_wGiorni === x.g ? ' wp-ply-chip-me' : ''}" data-wrange="${x.g}">${escapeHtml(plusT(x.key))}</button>`).join('')}
     </div>
     <div class="wp-ecn-chartwrap wp-ply-chart" id="wp-ply-wchart"></div>
+    <div class="wp-ecn-wdays">
+      <div><h4 class="wp-ecn-psec">${escapeHtml(plusT('wlBest'))}</h4><ul>${lista(migliori)}</ul></div>
+      <div><h4 class="wp-ecn-psec">${escapeHtml(plusT('wlWorst'))}</h4><ul>${lista(peggiori)}</ul></div>
+    </div>
     <p class="wp-ply-note">${escapeHtml(plyT('wlNote'))}${_wealth.archiveFrom ? ' ' + escapeHtml(plyT('wlSince', { d: fmtDate(_wealth.archiveFrom) })) : ''}</p>`;
 }
 
 /* Il grafico si disegna alla misura vera del contenitore, e si ridisegna
-   se cambia (stessa regola di economy/playerWealth.js). */
+   se cambia. */
 function drawWealthChart() {
   _wealthObs?.disconnect();
   const wrap = _root?.querySelector('#wp-ply-wchart');
-  const days = _wealth?.days;
-  if (!wrap || !days || days.length < 2) return;
-  const serie = days.map(([g, v]) => [g, v, v, v, v, null]);
+  if (!wrap) return;
+
+  // Vista "Parti": una linea per parte accesa, dai giorni che il server ha
+  // salvato. Con meno di due giorni (o nessuna parte accesa) non c'è una
+  // linea da disegnare, e lo si dice invece di lasciare il riquadro vuoto.
+  if (_wMode === 'parts') {
+    const serie = partsSeries();
+    if (!_wSel.size || serie.length < 2) {
+      const msg = !_wSel.size ? prtT('nothing') : serie.length ? prtT('noteFew', { n: serie.length }) : prtT('noteNone');
+      wrap.innerHTML = `<p class="wp-ply-note">${escapeHtml(msg)}</p>`;
+      return;
+    }
+    const drawParts = () => {
+      const w = Math.max(320, Math.round(wrap.clientWidth || 0));
+      wrap.innerHTML = partsChartSvg(serie, _wSel, {
+        w, h: 280, fmt: fmtMoney, lingua: lingua(), label: (k) => prtT(k),
+      });
+      return w;
+    };
+    let lastP = drawParts();
+    _wealthObs = new ResizeObserver(() => {
+      const w = Math.round(wrap.clientWidth || 0);
+      if (!w || !wrap.isConnected || Math.abs(w - lastP) < 8) return;
+      lastP = drawParts();
+    });
+    _wealthObs.observe(wrap);
+    return;
+  }
+
+  const serie = wealthWindow(_wealth?.days);
+  if (serie.length < 2) return;
   const draw = () => {
     const w = Math.max(320, Math.round(wrap.clientWidth || 0));
     const h = 280;
@@ -797,6 +1063,11 @@ function render() {
 }
 
 function wire() {
+  // Anteprima dei risultati mentre si scrive (vedi liveSearch).
+  _root.addEventListener('input', (e) => {
+    const form = e.target?.closest?.('form.wp-ply-search');
+    if (form && e.target.matches('input')) liveSearch(form);
+  });
   _root.addEventListener('submit', (e) => {
     if (e.target.id === 'wp-ply-pick') {
       e.preventDefault();
@@ -855,10 +1126,24 @@ function wire() {
     const board = t.closest('[data-board]');
     if (board) { if (_board !== board.dataset.board) { _board = board.dataset.board; loadBoard(); } return; }
     if (t.closest('#wp-ply-back')) { _pid = null; render(); return; }
+    const wr = t.closest('[data-wrange]');
+    if (wr) { _wGiorni = Number(wr.dataset.wrange); render(); return; }
+    const wm = t.closest('[data-wmode]');
+    if (wm) { _wMode = wm.dataset.wmode === 'parts' ? 'parts' : 'total'; render(); return; }
+    // Un clic su una parte la accende o la spegne; da "Totale" porta alla
+    // vista "Parti", dove ha senso sceglierle.
+    const pt = t.closest('[data-part]');
+    if (pt && PART_KEYS.includes(pt.dataset.part)) {
+      if (_wMode !== 'parts') _wMode = 'parts';
+      else if (_wSel.has(pt.dataset.part)) _wSel.delete(pt.dataset.part);
+      else _wSel.add(pt.dataset.part);
+      render();
+      return;
+    }
     const ptab = t.closest('[data-ptab]');
     if (ptab) { _ptab = ptab.dataset.ptab; render(); loadTab(_ptab); return; }
-    if (t.closest('[data-mine]')) { safeSet(MINE_KEY, _pid); render(); return; }
-    if (t.closest('[data-forget]')) { safeDel(MINE_KEY); render(); return; }
+    if (t.closest('[data-mine]')) { setMe(_pid, _lite); render(); return; }
+    if (t.closest('[data-forget]')) { clearMe(); render(); return; }
     if (t.closest('#wp-ply-bt-more')) {
       _battleDays = BATTLE_DAYS.find(d => d > (_battles?.days || 0)) || _battleDays;
       loadBattles();
@@ -1202,28 +1487,58 @@ function workHtml() {
   else if (!_companies.length) comp = `<p class="wp-ply-note">${escapeHtml(plyT('wkNone'))}</p>`;
   else {
     const totV = _companies.reduce((t, c) => t + c.value, 0);
-    const totW = _companies.reduce((t, c) => t + c.workers, 0);
     const region = (id) => state.regionData?.[id];
+    // Rosa e stima oraria (fetchCompanies): null dove il proxy non l'ha data.
+    const known = _companies.filter(c => c.workers != null);
+    const active = known.filter(c => !c.disabled);
+    const totW = known.reduce((t, c) => t + c.workers, 0);
+    const totCap = known.reduce((t, c) => t + (c.cap || 0), 0);
+    const totP = active.reduce((t, c) => t + c.pointsHour, 0);
+    const totWage = active.reduce((t, c) => t + c.wageHour + c.managerHour, 0);
+    // Margine a pieno regime, monete al giorno: serve il valore del punto.
+    const marginDay = (c) => (_pointValues && c.workers != null && _pointValues[c.itemCode] != null
+      ? (c.pointsHour * _pointValues[c.itemCode] - c.wageHour - c.managerHour) * 24 : null);
+    const margins = active.map(marginDay).filter(v => v != null);
+    const totM = margins.length ? margins.reduce((t, v) => t + v, 0) : null;
+    const signedMoney = (v) => (v < 0 ? '−' : '+') + fmtMoney(Math.abs(v));
+    const marginCell = (v) => (v == null ? '—'
+      : `<span class="${v >= 0 ? 'wp-ply-pos' : 'wp-ply-neg'}">${escapeHtml(signedMoney(v))}</span>`);
+    const hourly = known.length ? `
+      <div class="wp-ply-minor wp-ply-minor-big">
+        <span>${escapeHtml(plyT('wkStaff'))} <b>${totW}</b>${totCap ? `<small class="wp-ply-dim">/${totCap}</small>` : ''}</span>
+        <span>${escapeHtml(plyT('wkPtsHour'))} <b>${escapeHtml(totP.toFixed(1))}</b></span>
+        <span>${escapeHtml(plyT('wkWageHour'))} <b class="wp-ply-gold">${escapeHtml(fmtMoney(totWage))}</b></span>
+        ${totM != null ? `<span>${escapeHtml(plyT('wkMarginDay'))} <b>${marginCell(totM)}</b></span>` : ''}
+      </div>` : '';
     comp = `
       <p class="wp-ply-summary">${escapeHtml(plyT('wkCompanies', { n: _companies.length }))}
-        <span class="wp-ply-dim">· ${escapeHtml(plyT('wkValue'))} ${escapeHtml(fmtMoney(totV))} · ${escapeHtml(plyT('wkWorkers'))} ${totW}</span></p>
+        <span class="wp-ply-dim">· ${escapeHtml(plyT('wkValue'))} ${escapeHtml(fmtMoney(totV))}</span></p>
+      ${hourly}
       <div class="wp-ply-tablewrap"><table class="wp-ply-table">
         <thead><tr><th>${escapeHtml(plyT('wkProduct'))}</th><th>${escapeHtml(plyT('wkRegion'))}</th>
-          <th class="wp-ply-num">${escapeHtml(plyT('wkWorkers'))}</th><th class="wp-ply-num">${escapeHtml(plyT('wkStock'))}</th>
+          <th class="wp-ply-num">${escapeHtml(plyT('wkWorkers'))}</th>
+          <th class="wp-ply-num">${escapeHtml(plyT('wkPtsHour'))}</th><th class="wp-ply-num">${escapeHtml(plyT('wkWageHour'))}</th>
+          <th class="wp-ply-num">${escapeHtml(plyT('wkMarginDay'))}</th>
+          <th class="wp-ply-num">${escapeHtml(plyT('wkStock'))}</th>
           <th class="wp-ply-num">${escapeHtml(plyT('wkValue'))}</th><th>${escapeHtml(plyT('wkUpgrades'))}</th></tr></thead>
         <tbody>${_companies.map(c => {
           const r = region(c.region);
           const ups = UPGRADES.filter(k => c.upgrades[k]).map(k => `${plyT(`up_${k}`)} ${c.upgrades[k]}`).join(' · ');
+          const has = c.workers != null;
           return `<tr${c.disabled ? ' class="wp-ply-off"' : ''}>
             <td><b>${escapeHtml(c.itemCode || '—')}</b>${c.disabled ? ` <small class="wp-ply-dim">(${escapeHtml(plyT('wkDisabled'))})</small>` : ''}</td>
             <td><span class="wp-ply-who">${r?.country ? flagImg(r.country, 'wp-ply-flag') : ''}<span>${escapeHtml(r?.name || '—')}</span></span></td>
-            <td class="wp-ply-num">${c.workers || '—'}</td>
+            <td class="wp-ply-num">${has ? `${c.workers}${c.cap ? `<small class="wp-ply-dim">/${c.cap}</small>` : ''}` : '—'}</td>
+            <td class="wp-ply-num">${has ? escapeHtml(c.pointsHour.toFixed(2)) : '—'}</td>
+            <td class="wp-ply-num">${has ? escapeHtml(fmtMoney(c.wageHour + c.managerHour)) : '—'}</td>
+            <td class="wp-ply-num">${marginCell(c.disabled ? null : marginDay(c))}</td>
             <td class="wp-ply-num">${escapeHtml(fmtMoney(c.stock))}</td>
             <td class="wp-ply-num">${escapeHtml(fmtMoney(c.value))}</td>
             <td><small class="wp-ply-dim">${escapeHtml(ups || '—')}</small></td>
           </tr>`;
         }).join('')}</tbody>
-      </table></div>`;
+      </table></div>
+      ${known.length ? `<p class="wp-ply-note">${escapeHtml(plyT('wkHourlyNote'))}</p>` : ''}`;
   }
 
   let work;

@@ -45,6 +45,7 @@ import { fetchBilancio, fetchPanoramica, WealthError } from './wealthApi.js';
 import { muT } from './i18n.js';
 import { avatarImg, escapeHtml, fmtCompact, fmtFull } from './ui.js';
 import { trackEvent } from '../shared/analytics.js';
+import { tipAttr } from '../shared/chartTip.js';
 import { syncBack } from '../app/backNav.js';
 
 // Sotto questa soglia, in valore assoluto, un'unità si dichiara "in pari":

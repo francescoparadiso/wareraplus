@@ -42,6 +42,7 @@ import { fetchMuDirectory, getCachedDirectory, getCachedMu } from '../mu/api.js'
 import { trackEvent } from '../shared/analytics.js';
 import { getLang } from '../shared/i18n.js';
 import { getPinned, getMuPinMeta, isPinned, togglePin } from './pins.js';
+import { buildMeBlock } from './meWidget.js';
 
 const FLAG_BASE = 'https://media.warera.io/images/flags';
 
@@ -325,8 +326,31 @@ function buildFavoritesDropdown() {
   renderFavorites(panel);
   return root;
 }
+// WarEra+: "Il mio personaggio" in cima ai Preferiti. Costruito UNA volta
+// (ascolta i propri eventi) e rimesso nel pannello ad ogni ridisegno:
+// rifarlo ad ogni hover accumulerebbe ascoltatori.
+let meBlock = null;
+function getMeBlock() {
+  if (!meBlock) {
+    meBlock = buildMeBlock({
+      cls: { group: 'wp-mb-res-group', row: 'wp-mb-res-row wp-mb-fav-row', img: 'wp-mb-res-img', logo: 'wp-mb-res-logo', name: 'wp-mb-fav-name' },
+      go: (type, id) => {
+        if (type === 'player') {
+          closeAnySubview();
+          openPlayersView(id);
+          trackEvent('me-open', { type });
+          closeAllDropdowns();
+        } else {
+          goToDetail(type, id);
+        }
+      },
+    });
+  }
+  return meBlock;
+}
 function renderFavorites(panel) {
   panel.innerHTML = '';
+  panel.appendChild(getMeBlock());
   const { nation, alliance, mu } = getPinned();
   if (!nation.length && !alliance.length && !mu.length) {
     panel.appendChild(el('div', 'wp-mb-res-empty', { text: mbT('noFavorites') }));
@@ -511,11 +535,9 @@ function buildInsightsDropdown() {
   stats.addEventListener('click', () => { closeAnySubview(); document.getElementById('bloc-stats-btn')?.click(); closeAllDropdowns(); });
   panel.appendChild(stats);
 
-  // Economia (src/economy/*): UNA voce per tre schede — prezzi, rendite
-  // di produzione, ottimizzatore industriale. Erano due voci separate
-  // ("Ottimizzatore industriale" e "Rendite di produzione") per come
-  // erano NATE, non per come si usano: il perché sta in testa a
-  // src/economy/main.js.
+  // Economia (src/economy/*): UNA voce per tre schede — prezzi, produzione,
+  // ottimizzatore industriale. Erano voci separate per come erano NATE,
+  // non per come si usano: il perché sta in testa a src/economy/main.js.
   const ecoItem = el('button', 'wp-mb-item', { type: 'button' });
   ecoItem.appendChild(iconEl('scales'));
   ecoItem.appendChild(regSpan('economy'));

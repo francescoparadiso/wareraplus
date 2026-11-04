@@ -30,7 +30,7 @@ cartella `server/` non esiste. La chiave sta una cartella più in su, in
 `warera/Server/`, da cui il `../` nel percorso.
 
 ```bash
-scp -i ../Server/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/languages.js server/battleArchive.js server/moneyTransfers.js server/damageTimeline.js server/priceHistory.js server/dayHistory.js server/labourHistory.js server/citizenMoves.js server/allianceHistory.js server/politicalHistory.js server/battleTimeline.js server/companyCensus.js server/muBattleDamage.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
+scp -i ../Server/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/languages.js server/battleArchive.js server/moneyTransfers.js server/damageTimeline.js server/priceHistory.js server/orderMoney.js server/playerParts.js server/dayHistory.js server/labourHistory.js server/citizenMoves.js server/allianceHistory.js server/politicalHistory.js server/battleTimeline.js server/companyCensus.js server/muBattleDamage.js server/tournament.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
 ```
 
 Manda **tutti** i moduli, non il solo `warera-cache-server.js`: i loro
@@ -43,7 +43,7 @@ che si ferma alla sintassi: eseguire il server per provarlo aprirebbe la
 porta 3001 e i cron accanto al processo pm2 gia' vivo.
 
 ```bash
-ssh -i ../Server/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && for f in warera-cache-server.js proxyIndex.js languages.js battleArchive.js moneyTransfers.js damageTimeline.js priceHistory.js dayHistory.js labourHistory.js citizenMoves.js allianceHistory.js politicalHistory.js battleTimeline.js companyCensus.js muBattleDamage.js; do node --check \$f || exit 1; done && echo PREFLIGHT-OK"
+ssh -i ../Server/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && for f in warera-cache-server.js proxyIndex.js languages.js battleArchive.js moneyTransfers.js damageTimeline.js priceHistory.js orderMoney.js playerParts.js dayHistory.js labourHistory.js citizenMoves.js allianceHistory.js politicalHistory.js battleTimeline.js companyCensus.js muBattleDamage.js tournament.js; do node --check \$f || exit 1; done && echo PREFLIGHT-OK"
 ```
 
 Solo se stampa `PREFLIGHT-OK`:
@@ -52,9 +52,9 @@ Solo se stampa `PREFLIGHT-OK`:
 ssh -i ../Server/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "pm2 restart warera-cache && sleep 20 && pm2 logs warera-cache --lines 40 --nostream"
 ```
 
-⚠️ **I file da copiare sono tredici, non uno.** `warera-cache-server.js`
-richiede undici moduli (`proxyIndex`, `battleArchive`, `moneyTransfers`,
-`damageTimeline`, `priceHistory`, `dayHistory`, `labourHistory`,
+⚠️ **I file da copiare sono sedici, non uno.** `warera-cache-server.js`
+richiede quattordici moduli (con `tournament`, che qui mancava) (`proxyIndex`, `battleArchive`, `moneyTransfers`,
+`damageTimeline`, `priceHistory`, `orderMoney`, `playerParts`, `dayHistory`, `labourHistory`,
 `citizenMoves`, `allianceHistory`, `politicalHistory`, `battleTimeline`) e `proxyIndex` a sua volta richiede `languages`: se ne manca
 uno il processo non parte proprio, e pm2 lo riavvia in loop. L'elenco qui
 sopra si ricava sempre cosi', invece di fidarsi della memoria:
@@ -410,7 +410,7 @@ mappa in RAM, l'unica aggiunta è non buttare via il valore precedente. Si
 scrive una riga solo quando i numeri di quella nazione **cambiano**
 (delta encoding): salvare 48 fotografie identiche al giorno per 151 nazioni
 gonfierebbe il file senza aggiungere informazione. Formato compatto per
-nazione: `[ts, war, eco, mixed, undecided, known]`, ritenzione 30 giorni —
+nazione: `[ts, war, eco, mixed, undecided, known]`, ritenzione 90 giorni (30 fino al 2026-10-29; il passato già potato non torna) —
 ma l'ultimo campione di ogni nazione si tiene **sempre**, altrimenti una
 nazione ferma da più di un mese sparirebbe invece di risultare "ferma".
 
@@ -741,6 +741,9 @@ etichette malformate.
 - `plusApi/wealth.js` — ~17.000 righe al giorno, **~1,1 GB all'anno** per
   deploy. Misurato su 45 GB di disco con 39 liberi.
 - `priceHistory.js` — meno di 1 MB all'anno.
+- `orderMoney.js` — ~3 KB a campione, un campione all'ora per 14 giorni e poi
+  uno al giorno: qualche MB all'anno. Non si pota: un campione dei soldi fermi
+  negli ordini non si rifà.
 
 **L'unico rimasto con una scadenza è `dayHistory.js` (400 giorni, cioè
 maggio 2027)**, e la ragione è la RAM, non il disco: quel modulo tiene

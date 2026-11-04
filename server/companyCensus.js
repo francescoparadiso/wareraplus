@@ -106,16 +106,60 @@
    del giro prima, si scarta tutto e resta la fotografia di ieri: una
    pagina persa diventerebbe "metà delle aziende di ferro ha chiuso".
    Stessa guardia di citizenMoves.js.
+
+   ── LA ROSA DEI DIPENDENTI (2026-10-28) ───────────────────────────────
+   Il 2026-10-28 WarEra ha aperto ai token `employee.getCompanyRoster`, per
+   qualunque azienda: i dipendenti tornano a vedersi. Il giro la chiede
+   alle sole aziende i cui dipendenti hanno PRODOTTO negli ultimi 7 giorni
+   (le statistiche del passo 4 lo dicono già, gratis): le altre non hanno
+   dipendenti, o ne hanno di fermi da una settimana, e chiederla a ~114.000
+   aziende costerebbe un'altra ora di notte per contare quasi solo zeri.
+   Il prezzo è dichiarato: `coverage.rosterScope = 'active7d'`, e la vista
+   dice "dipendenti delle aziende che hanno prodotto negli ultimi 7 giorni".
+   Una rosa pesa ~2 KB a dipendente: si elabora blocco per blocco e se ne
+   tengono solo i conti.
+
+   Con la rosa tornano:
+   - il numero dei dipendenti per risorsa e per nazione (la terza colonna
+     delle righe, null dalla v0.27): `workersKnown` torna true;
+   - i RIFERIMENTI MONDIALI per risorsa (`staff`, rotta
+     /employee-benchmarks): percentili di costo per punto (salario orario ÷
+     punti orari stimati dal gioco), di punti all'ora e della statistica
+     Produzione, più la frequenza dei tratti. L'Ottimizzatore li usa per
+     dire "costa più dell'80% dei dipendenti del ferro". Il costo per punto
+     si confronta solo dentro la stessa risorsa: fra risorse diverse cambia
+     quanto vale il punto, non quanto è bravo il dipendente.
+   Se meno del 90% delle rose risponde, il giro torna alla forma di prima
+   (conteggio null, nessun riferimento nuovo): un riferimento fatto su
+   mezzo mondo direbbe a metà dei giocatori che stanno pagando troppo.
+
+   ── LE AZIENDE ALL'ESTERO (2026-10-26) ────────────────────────────────
+   Richiesta dell'area riservata: quali cittadini di una nazione hanno
+   aziende in regioni di un'ALTRA nazione (tasse sui salari e produzione
+   vanno a chi ospita). Il giro le ha già in mano tutte — proprietario,
+   azienda, regione — quindi le si mette da parte nello stesso passaggio,
+   in un file a sé (`company-abroad`): zero richieste in più. "Estero" =
+   la regione non è della nazione di cui il proprietario è cittadino
+   secondo il censimento dei cittadini. È una fotografia della notte:
+   un'azienda spostata oggi si vede domani. plusApi ricalcola la nazione
+   ospite sulle regioni di adesso, quindi una nostra regione persa in
+   giornata cambia bandiera subito; una conquistata in giornata, invece,
+   aspetta il giro dopo.
    ═══════════════════════════════════════════════════════════════════════ */
 
 let deps = null;
 
 const FILE = 'company-census';
+const FILE_ESTERO = 'company-abroad';
 const TZ = 'Europe/Rome';
 
 const CHUNK_OWNERS = 50;
 const CHUNK_IDS = 50;
 const CHUNK_STATS = 25;     // ~3 KB ad azienda: 25 per batch tengono la risposta sotto i 100 KB
+const CHUNK_ROSTER = 20;    // ~2 KB a dipendente, 1-3 dipendenti: ~100 KB a batch
+const GIORNI_ROSA = 7;      // si chiede la rosa a chi ha prodotto in questi giorni
+const MIN_ROSE = 0.9;       // quota di rose che deve rispondere per fidarsi del conteggio
+const PERCENTILI = [10, 25, 50, 75, 90];
 const PAUSA_MS = 700;       // fra un blocco e l'altro: un giro lento, non un picco
 const PER_PAGE = 100;       // aziende per proprietario: il tetto è ben sotto (skills.companies ≤ 12)
 
@@ -163,7 +207,22 @@ function _vuoto() {
     wages: {},             // giornoUtc → {code: {cid: [salari, tasse]}}
     measured: {},          // giornoUtc → giorno italiano in cui è stato misurato
     rates: {},             // cid → aliquota sul reddito all'ultimo giro (percentuale)
+    staff: null,           // riferimenti mondiali dalla rosa (vedi testata), dell'ultimo giro buono
   };
+}
+
+/** Percentili PERCENTILI di un array di numeri (lo ordina sul posto).
+ *  Interpolazione lineare fra i due vicini: con pochi dipendenti in una
+ *  risorsa il p90 non salta all'ultimo valore. */
+function _percentili(valori) {
+  if (!valori.length) return null;
+  valori.sort((a, b) => a - b);
+  return PERCENTILI.map((p) => {
+    const x = (p / 100) * (valori.length - 1);
+    const lo = Math.floor(x), hi = Math.ceil(x);
+    const v = valori[lo] + (valori[hi] - valori[lo]) * (x - lo);
+    return Math.round(v * 10000) / 10000;
+  });
 }
 
 function _read() {
@@ -185,11 +244,12 @@ function _write(store) {
 }
 
 // ── I dati che servono e ci sono già ───────────────────────────────────
-function _proprietari() {
+/** id → nazione di cui è cittadino, dal censimento dei cittadini. */
+function _cittadinanze() {
   const c = deps.readCache(deps.citizensFile, null);
-  const ids = new Set();
-  for (const v of Object.values(c?.data || {})) for (const id of v.ids || []) ids.add(id);
-  return [...ids];
+  const out = new Map();
+  for (const [cid, v] of Object.entries(c?.data || {})) for (const id of v.ids || []) out.set(id, cid);
+  return out;
 }
 
 function _regioni() {
@@ -236,7 +296,8 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
   const oggi = giornoDi();
   if (!forza && store.day === oggi) return;   // già fatto oggi
 
-  const proprietari = _proprietari();
+  const cittadinanza = _cittadinanze();
+  const proprietari = [...cittadinanza.keys()];
   if (!proprietari.length) { console.log('[company-census] nessun cittadino in censimento, salto'); return; }
 
   _inCorso = true;
@@ -248,10 +309,14 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
       proprietari.map((userId) => ({ userId, perPage: PER_PAGE })), CHUNK_OWNERS);
     let risposte = 0;
     const idAziende = [];
-    elenchi.forEach((r) => {
+    const proprietarioDi = new Map();   // azienda → proprietario (per le aziende all'estero)
+    elenchi.forEach((r, i) => {
       if (!r?.items) return;
       risposte++;
-      for (const id of r.items) idAziende.push(id);
+      for (const id of r.items) {
+        idAziende.push(id);
+        proprietarioDi.set(id, proprietari[i]);
+      }
     });
     if (risposte < proprietari.length * MIN_RISPOSTE) {
       console.warn(`[company-census] solo ${risposte}/${proprietari.length} proprietari hanno risposto: giro scartato`);
@@ -296,6 +361,8 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
     const oggiUtc = giornoUtc();
     const perGiorno = {};        // giornoUtc → code → cid → salari
     const prodottoIeri = new Set();   // id delle aziende i cui dipendenti hanno prodotto ieri
+    const prodottoSettimana = new Set();   // ...negli ultimi GIORNI_ROSA giorni: a loro la rosa
+    const dalRosa = giornoMeno(giornoUtc(), GIORNI_ROSA);
     let statsOk = 0;
     await _perBlocchi('work.getStatsByCompany',
       daInterrogare.map((x) => ({ companyId: x.id })), CHUNK_STATS, (res, inizio) => {
@@ -306,6 +373,7 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
           for (const r of righe) {
             const g = r?.dailyDate;
             if (g === ieriUtc && Number(r?.employeeProd) > 0) prodottoIeri.add(id);
+            if (g && g >= dalRosa && Number(r?.employeeProd) > 0) prodottoSettimana.add(id);
             const wage = Number(r?.wage) || 0;
             // Oggi è una giornata a metà: entra domani, intera.
             if (!cid || !g || g >= oggiUtc || wage <= 0) continue;
@@ -316,20 +384,56 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
         });
       });
 
+    // 4b. La rosa, alle sole aziende che hanno prodotto in settimana (vedi
+    //     testata). Se ne tengono i conti: quanti per azienda, e per risorsa
+    //     i valori di cui fare i percentili. Niente rose in memoria.
+    const daRosa = conteggioNoto ? [] : daInterrogare.filter((x) => prodottoSettimana.has(x.id));
+    const dipendentiDi = new Map();   // azienda → dipendenti
+    const rifPerCode = {};            // code → { cost: [], pts: [], stat: [] }
+    const tratti = {};
+    let conAttrezzo = 0, dipendentiVisti = 0;
+    let roseOk = 0;
+    await _perBlocchi('employee.getCompanyRoster',
+      daRosa.map((x) => ({ companyId: x.id })), CHUNK_ROSTER, (res, inizio) => {
+        res.forEach((r, j) => {
+          if (!Array.isArray(r?.employees)) return;
+          roseOk++;
+          const { id, code } = daRosa[inizio + j];
+          dipendentiDi.set(id, r.employees.length);
+          const rif = rifPerCode[code] || (rifPerCode[code] = { cost: [], pts: [], stat: [] });
+          for (const e of r.employees) {
+            dipendentiVisti++;
+            const pts = Number(e?.estimate?.production) || 0;
+            const wage = Number(e?.estimate?.wage ?? e?.wage) || 0;
+            if (pts > 0) { rif.pts.push(pts); rif.cost.push(wage / pts); }
+            const stat = Number(e?.breakdown?.production?.total);
+            if (Number.isFinite(stat)) rif.stat.push(stat);
+            if (e?.toolItem) conAttrezzo++;
+            for (const t of e?.traits || []) if (t?.code && t.revealed !== false) tratti[t.code] = (tratti[t.code] || 0) + 1;
+          }
+        });
+      });
+    // Il conteggio vale solo se ha risposto quasi tutto: vedi testata.
+    const rosaValida = daRosa.length > 0 && roseOk >= daRosa.length * MIN_ROSE;
+    const contaDip = conteggioNoto || rosaValida;
+    const dipendentiAzienda = (c) => (conteggioNoto ? Number(c.workerCount) || 0 : dipendentiDi.get(c._id) || 0);
+
     // 5. La fotografia: per risorsa e per nazione dove opera l'azienda.
     //    [aziende, conDipendenti, dipendenti] — il terzo null senza conteggio.
     const items = {};
     const countries = {};
-    let conDipendenti = 0, dipendenti = conteggioNoto ? 0 : null;
+    let conDipendenti = 0, dipendenti = contaDip ? 0 : null;
     const conta = (riga, conDip, w) => {
       riga[0]++;
       if (conDip) riga[1]++;
-      riga[2] = conteggioNoto ? riga[2] + w : null;
+      riga[2] = contaDip ? riga[2] + w : null;
     };
     for (const c of aziende) {
       const code = c.itemCode;
-      const w = Number(c.workerCount) || 0;
-      const conDip = conteggioNoto ? w > 0 : prodottoIeri.has(c._id);
+      const w = contaDip ? dipendentiAzienda(c) : 0;
+      // Con la rosa, "con dipendenti" = ne ha in rosa adesso; senza, la
+      // forma v0.27 di prima (dipendenti che hanno prodotto ieri).
+      const conDip = contaDip ? w > 0 : prodottoIeri.has(c._id);
       const cid = nazioneDi(c.region);
       conta(items[code] || (items[code] = [0, 0, 0]), conDip, w);
       if (cid) {
@@ -338,7 +442,7 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
       }
       if (conDip) {
         conDipendenti++;
-        if (conteggioNoto) dipendenti += w;
+        if (contaDip) dipendenti += w;
       }
     }
 
@@ -366,18 +470,54 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
       giorniScritti++;
     }
 
+    // 6. Le aziende all'estero, per nazione del proprietario (vedi testata).
+    //    [userId, companyId, itemCode, regionId, nazioneOspite, valore,
+    //     disabilitata 0/1, con dipendenti 0/1]
+    const estero = {};
+    for (const c of aziende) {
+      const uid = proprietarioDi.get(c._id);
+      const suo = uid && cittadinanza.get(uid);
+      const ospite = nazioneDi(c.region);
+      if (!suo || !c.region || ospite === suo) continue;
+      const nDip = contaDip ? dipendentiAzienda(c) : null;
+      const conDip = contaDip ? nDip > 0 : prodottoIeri.has(c._id);
+      // Dal 2026-10-28 la riga porta anche quanti dipendenti (null senza
+      // rosa): plusApi ci somma punti e salari dell'ora per nazione ospite.
+      (estero[suo] || (estero[suo] = [])).push([uid, c._id, c.itemCode, c.region, ospite || null,
+        Math.round(Number(c.estimatedValue) || 0), c.disabledAt ? 1 : 0, conDip ? 1 : 0, nDip]);
+    }
+    const proprietariPer = {};
+    for (const cid of cittadinanza.values()) proprietariPer[cid] = (proprietariPer[cid] || 0) + 1;
+    deps.writeCache(FILE_ESTERO, { day: oggi, updatedAt: Date.now(), owners: proprietariPer, byCountry: estero }, { compact: true });
+
     store.latest = { items, countries };
     store.counts[oggi] = items;
     store.rates = aliquote;
+    if (rosaValida) {
+      const perCode = {};
+      for (const [code, v] of Object.entries(rifPerCode)) {
+        perCode[code] = { n: v.stat.length, cost: _percentili(v.cost), pts: _percentili(v.pts), stat: _percentili(v.stat) };
+      }
+      store.staff = {
+        day: oggi, updatedAt: Date.now(), scope: 'active7d',
+        companies: roseOk, employees: dipendentiVisti, withTool: conAttrezzo,
+        percentiles: PERCENTILI, items: perCode, traits: tratti,
+      };
+    }
     store.coverage = {
       owners: proprietari.length,
       ownersOk: risposte,
       companies: aziende.length,
       withWorkers: conDipendenti,
       workers: dipendenti,
-      // false dalla v0.27: "con dipendenti" = dipendenti che hanno prodotto
-      // ieri, e il numero dei dipendenti non si conosce (vedi sopra).
-      workersKnown: conteggioNoto,
+      // false dalla v0.27 al 2026-10-27: "con dipendenti" = dipendenti che
+      // hanno prodotto ieri, e il numero non si conosceva. Torna true con
+      // la rosa (`rosterScope`), che però guarda solo chi ha prodotto in
+      // settimana: vedi testata.
+      workersKnown: contaDip,
+      rosterScope: !conteggioNoto && rosaValida ? 'active7d' : null,
+      rosterAsked: daRosa.length,
+      rosterOk: roseOk,
       statsAsked: daInterrogare.length,
       statsOk,
       seconds: Math.round((Date.now() - t0) / 1000),
@@ -387,7 +527,8 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
     if (!store.startedAt) store.startedAt = store.updatedAt;
     _write(store);
     console.log(`[company-census] ${aziende.length} aziende (${conDipendenti} con dipendenti, ${dipendenti ?? '?'} dipendenti), `
-      + `${statsOk}/${daInterrogare.length} statistiche, ${giorniScritti} giorni di salari scritti, ${store.coverage.seconds}s`);
+      + `${statsOk}/${daInterrogare.length} statistiche, ${roseOk}/${daRosa.length} rose${rosaValida ? '' : ' (scartate)'}, `
+      + `${giorniScritti} giorni di salari scritti, ${store.coverage.seconds}s`);
   } catch (err) {
     console.error('[company-census] giro fallito:', err.message);
   } finally {
@@ -518,6 +659,30 @@ function readCompanyCensus({ item = null, countryId = null, days = 30 } = {}) {
   return out;
 }
 
+/** Le aziende dei cittadini di `countryId` in regioni di altre nazioni.
+ *  Righe compatte, vedi il passo 6 del giro. */
+function readCompanyAbroad(countryId) {
+  const f = deps.readCache(FILE_ESTERO, null);
+  if (!f?.byCountry) return { available: false };
+  return {
+    available: true,
+    day: f.day,
+    updatedAt: f.updatedAt,
+    countryId,
+    owners: f.owners?.[countryId] ?? 0,   // cittadini attivi guardati
+    rows: f.byCountry[countryId] || [],
+  };
+}
+
+/** I riferimenti mondiali dalla rosa (vedi testata): per risorsa i
+ *  percentili PERCENTILI di costo per punto, punti all'ora e statistica
+ *  Produzione dei dipendenti, più tratti e attrezzi. Pochi KB. */
+function readEmployeeBenchmarks() {
+  const s = _read().staff;
+  if (!s) return { available: false };
+  return { available: true, ...s };
+}
+
 /** Per /health. */
 function statoCompanyCensus() {
   const store = _read();
@@ -530,6 +695,7 @@ function statoCompanyCensus() {
     salariDal: giorni[0] || null,
     salariAl: giorni[giorni.length - 1] || null,
     fotografie: Object.keys(store.counts).length,
+    rosa: store.staff ? { giorno: store.staff.day, dipendenti: store.staff.employees, aziende: store.staff.companies } : null,
   };
 }
 
@@ -538,5 +704,7 @@ module.exports = {
   runCompanyCensus,
   companyCensusDovuto,
   readCompanyCensus,
+  readCompanyAbroad,
+  readEmployeeBenchmarks,
   statoCompanyCensus,
 };

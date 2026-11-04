@@ -54,7 +54,7 @@
 import { state } from '../diplomacy/state.js';
 import { getLang, setLang, getSupportedLangs } from '../shared/i18n.js';
 import { animationsOn, setAnimationsOn } from '../shared/motion.js';
-import { setUserApiKey, userApiKeyStatus } from '../shared/trpcProxy.js';
+import { setUserApiKey, userApiKeyStatus, userKeyCall } from '../shared/trpcProxy.js';
 import { pauseMapBackgroundWork, resumeMapBackgroundWork } from './mapIdle.js';
 
 const HINT_KEY = 'we_wallpaper_hint_seen';
@@ -123,6 +123,9 @@ const DICT = {
     key_rejected: 'WarEra rejected your API key, so the wallpaper is using the shared server. Check the key in the wallpaper properties.',
     by: 'Made by frappa10',
     support: 'Support the project',
+    work_title: "Your companies — open WarEra",
+    work_line: "👷 {n} · {p} pts/h · wages {w}/h",
+    work_events: "{n} employee event(s) to choose",
   },
   it: {
     title: 'Sfondo WarEra+',
@@ -135,6 +138,9 @@ const DICT = {
     key_rejected: 'WarEra ha rifiutato la tua chiave API, quindi lo sfondo usa il server condiviso. Controlla la chiave nelle proprietà dello sfondo.',
     by: 'Creato da frappa10',
     support: 'Sostieni il progetto',
+    work_title: "Le tue aziende — apri WarEra",
+    work_line: "👷 {n} · {p} pt/h · salari {w}/h",
+    work_events: "{n} evento/i dei dipendenti da scegliere",
   },
   es: {
     title: 'Fondo de WarEra+',
@@ -147,6 +153,9 @@ const DICT = {
     key_rejected: 'WarEra rechazó tu clave API, así que el fondo usa el servidor compartido. Revisa la clave en las propiedades del fondo.',
     by: 'Creado por frappa10',
     support: 'Apoya el proyecto',
+    work_title: "Tus empresas — abrir WarEra",
+    work_line: "👷 {n} · {p} pts/h · salarios {w}/h",
+    work_events: "{n} evento(s) de empleados por elegir",
   },
   de: {
     title: 'WarEra+ Hintergrund',
@@ -159,6 +168,9 @@ const DICT = {
     key_rejected: 'WarEra hat deinen API-Schlüssel abgelehnt, daher nutzt der Hintergrund den gemeinsamen Server. Prüfe den Schlüssel in den Eigenschaften.',
     by: 'Erstellt von frappa10',
     support: 'Projekt unterstützen',
+    work_title: "Deine Firmen — WarEra öffnen",
+    work_line: "👷 {n} · {p} Pkt/h · Löhne {w}/h",
+    work_events: "{n} Angestellten-Ereignis(se) zu wählen",
   },
   fr: {
     title: 'Fond d’écran WarEra+',
@@ -171,6 +183,9 @@ const DICT = {
     key_rejected: 'WarEra a refusé ta clé API, le fond d’écran utilise donc le serveur partagé. Vérifie la clé dans les propriétés.',
     by: 'Créé par frappa10',
     support: 'Soutenir le projet',
+    work_title: "Tes entreprises — ouvrir WarEra",
+    work_line: "👷 {n} · {p} pts/h · salaires {w}/h",
+    work_events: "{n} événement(s) d’employés à choisir",
   },
   nl: {
     title: 'WarEra+ achtergrond',
@@ -183,6 +198,9 @@ const DICT = {
     key_rejected: 'WarEra heeft je API-sleutel geweigerd, dus de achtergrond gebruikt de gedeelde server. Controleer de sleutel in de eigenschappen.',
     by: 'Gemaakt door frappa10',
     support: 'Steun het project',
+    work_title: "Je bedrijven — WarEra openen",
+    work_line: "👷 {n} · {p} pt/u · lonen {w}/u",
+    work_events: "{n} werknemersgebeurtenis(sen) om te kiezen",
   },
   sv: {
     title: 'WarEra+ bakgrund',
@@ -195,6 +213,9 @@ const DICT = {
     key_rejected: 'WarEra avvisade din API-nyckel, så bakgrunden använder den delade servern. Kontrollera nyckeln i egenskaperna.',
     by: 'Skapad av frappa10',
     support: 'Stöd projektet',
+    work_title: "Dina företag — öppna WarEra",
+    work_line: "👷 {n} · {p} p/h · löner {w}/h",
+    work_events: "{n} händelse(r) för anställda att välja",
   },
   pt: {
     title: 'Papel de parede WarEra+',
@@ -207,6 +228,9 @@ const DICT = {
     key_rejected: 'O WarEra recusou a tua chave API, por isso o papel de parede usa o servidor partilhado. Verifica a chave nas propriedades.',
     by: 'Criado por frappa10',
     support: 'Apoiar o projeto',
+    work_title: "As tuas empresas — abrir o WarEra",
+    work_line: "👷 {n} · {p} pts/h · salários {w}/h",
+    work_events: "{n} evento(s) de empregados por escolher",
   },
   ar: {
     title: 'خلفية WarEra+',
@@ -219,6 +243,9 @@ const DICT = {
     key_rejected: 'رفض WarEra مفتاح API الخاص بك، لذلك تستخدم الخلفية الخادم المشترك. تحقق من المفتاح في الخصائص.',
     by: 'من إنشاء frappa10',
     support: 'ادعم المشروع',
+    work_title: "شركاتك — افتح WarEra",
+    work_line: "👷 {n} · {p} نقطة/ساعة · أجور {w}/ساعة",
+    work_events: "{n} حدث للموظفين بانتظار اختيارك",
   },
 };
 
@@ -347,8 +374,62 @@ export function startWallpaperMode() {
   buildInfoUi();
   applyProps();
   window.addEventListener('wareraplus:apikey-status', paintKeyStatus);
-  window.addEventListener('wareraplus:langchange', () => { if (_infoEl) renderInfo(); });
+  window.addEventListener('wareraplus:apikey-status', refreshWork);
+  window.addEventListener('wareraplus:langchange', () => { if (_infoEl) renderInfo(); paintWork(); });
   startVersionWatch();
+  startWorkWatch();
+}
+
+/* ── Le TUE aziende (dal 2026-10-28) ──
+   Con la chiave di chi guarda, WarEra dà i dati del SUO account:
+   employee.getMyWorkforceSummary (dipendenti, punti e salari dell'ora) ed
+   employeeEvent.getPendingCount (gli eventi dei dipendenti in attesa di una
+   scelta, che altrimenti si scoprono solo aprendo il gioco). Una targhetta
+   accanto alla "i", solo a chiave CONFERMATA (userKeyCall), che porta al
+   gioco col clic. Due richieste ogni 5 minuti, sul limite della chiave di
+   chi guarda; ferma in pausa e a pagina nascosta. */
+const WORK_POLL_MS = 5 * 60 * 1000;
+let _workEl = null;
+let _workTimer = null;
+let _work = null;
+
+function startWorkWatch() {
+  if (_workTimer) return;
+  _workEl = document.createElement('a');
+  _workEl.className = 'wp-wallpaper-work';
+  _workEl.href = 'https://app.warera.io/';
+  _workEl.target = '_blank';
+  _workEl.rel = 'noopener';
+  _workEl.hidden = true;
+  document.body.appendChild(_workEl);
+  _workTimer = setInterval(refreshWork, WORK_POLL_MS);
+  refreshWork();
+}
+
+async function refreshWork() {
+  if (!_workEl || _paused || document.hidden) return;
+  if (userApiKeyStatus() !== 'ok') { _work = null; paintWork(); return; }
+  const [summary, pending] = await Promise.all([
+    userKeyCall('employee.getMyWorkforceSummary'),
+    userKeyCall('employeeEvent.getPendingCount'),
+  ]);
+  _work = summary ? { ...summary, pending: Number(pending) || 0 } : null;
+  paintWork();
+}
+
+function paintWork() {
+  if (!_workEl) return;
+  // Chi non ha dipendenti non ha niente da leggere qui.
+  const w = _work;
+  if (!w || !(w.employeeCount > 0 || w.pending > 0)) { _workEl.hidden = true; return; }
+  const fill = (s, v) => Object.entries(v).reduce((t, [k, x]) => t.replaceAll(`{${k}}`, x), s);
+  const wages = (Number(w.wageCost) || 0) + (Number(w.managerCost) || 0);
+  _workEl.innerHTML = `
+    <span>${fill(tw('work_line'), { n: w.employeeCount, p: (Number(w.production) || 0).toFixed(1), w: wages.toFixed(2) })}</span>
+    ${w.pending > 0 ? `<b class="wp-wallpaper-work-ev">${fill(tw('work_events'), { n: w.pending })}</b>` : ''}`;
+  _workEl.title = tw('work_title');
+  _workEl.classList.toggle('pending', w.pending > 0);
+  _workEl.hidden = false;
 }
 
 /* ── Aggiornamento automatico ──
@@ -472,7 +553,7 @@ function setPaused(paused) {
   if (paused === _paused) return;
   _paused = paused;
   if (paused) pauseMapBackgroundWork();
-  else { resumeMapBackgroundWork(); checkVersion(); }
+  else { resumeMapBackgroundWork(); checkVersion(); refreshWork(); }
 }
 
 /* ── Fascia informativa + "i" ── */

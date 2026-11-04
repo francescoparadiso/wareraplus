@@ -50,6 +50,45 @@ body.wp-wallpaper #wp-bottom-credits { bottom: 80px; }
 .wp-wallpaper-info-btn:hover,
 .wp-wallpaper-info-btn.active { opacity: 1; }
 
+/* ── Le tue aziende: targhetta sopra la "i" ──
+   Solo con la chiave API di chi guarda (wallpaperMode.js: refreshWork).
+   Discreta come la "i"; si accende quando ci sono eventi da scegliere.
+   Sopra e non accanto: accanto, su un monitor stretto, finiva addosso ai
+   crediti e alle pill in basso al centro. A fascia aperta sparisce: la
+   fascia occupa lo stesso angolo (ed è nel DOM prima di lei). */
+.wp-wallpaper-work {
+  position: fixed;
+  right: 16px;
+  bottom: 124px; /* sopra la riga dei crediti (bottom 80px, alta ~32px) */
+  z-index: 8000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(11, 14, 20, 0.55);
+  color: rgba(255, 255, 255, 0.8);
+  font: 500 12px/1 'Inter', -apple-system, sans-serif;
+  text-decoration: none;
+  white-space: nowrap;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+.wp-wallpaper-work[hidden],
+.wp-wallpaper-info:not([hidden]) ~ .wp-wallpaper-work { display: none; }
+.wp-wallpaper-work:hover,
+.wp-wallpaper-work.pending { opacity: 1; }
+.wp-wallpaper-work.pending { border-color: rgba(227, 179, 65, 0.6); }
+.wp-wallpaper-work-ev { color: #e3b341; font-weight: 700; }
+body.light-theme .wp-wallpaper-work {
+  background: rgba(244, 234, 213, 0.75);
+  color: #5c4a33;
+  border-color: rgba(120, 92, 56, 0.35);
+}
+body.light-theme .wp-wallpaper-work-ev { color: #8a6410; }
+
 /* ── La fascia ── */
 .wp-wallpaper-info {
   position: fixed;

@@ -40,7 +40,7 @@ export function initEconomyOverlay() {
 }
 
 /**
- * @param {{ tab?: 'prices'|'yields'|'optimizer' }} opts la scheda da
+ * @param {{ tab?: 'prices'|'production'|'optimizer' }} opts la scheda da
  *   aprire. Le voci di menù la passano, così "Ottimizzatore industriale"
  *   continua a portare dove portava prima invece di far cercare la
  *   linguetta giusta a chi conosceva la vecchia voce.

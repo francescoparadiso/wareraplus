@@ -1,0 +1,174 @@
+/* ══════════════════════════════════════════════════════════════
+   WarEra+ — Riquadro "Novità" (src/app/whatsNew.js) — stile
+   ------------------------------------------------------------------
+   Namespace `wp-wn-*`. Sta sopra a tutto tranne il caricamento: la
+   scheda di una battaglia arriva a 9400, questo a 9500. Fuori dagli
+   overlay di sezione, quindi i token --wp-ov-* non sono definiti: ogni
+   colore ha il suo valore di ricaduta, e il tema chiaro (body.light-theme)
+   li ridefinisce qui.
+   ══════════════════════════════════════════════════════════════ */
+
+.wp-wn {
+  --wn-bg: #0d1117;
+  --wn-surface: #161b22;
+  --wn-border: #30363d;
+  --wn-text: #e6edf3;
+  --wn-dim: #8b949e;
+  --wn-accent: #ec4899;
+  --wn-new: #3fb950;
+  --wn-improved: #58a6ff;
+  --wn-fix: #e3b341;
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  color: var(--wn-text);
+  font-family: inherit;
+  animation: wp-wn-in .22s ease-out;
+}
+body.light-theme .wp-wn {
+  --wn-bg: #ffffff;
+  --wn-surface: #f4f6fa;
+  --wn-border: #d0d7de;
+  --wn-text: #1f2328;
+  --wn-dim: #57606a;
+  --wn-new: #1a7f37;
+  --wn-improved: #0969da;
+  --wn-fix: #9a6700;
+}
+.wp-wn.wp-wn-out { animation: wp-wn-out .18s ease-in forwards; }
+
+.wp-wn-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(1, 4, 9, .62);
+  backdrop-filter: blur(3px);
+}
+
+.wp-wn-card {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: min(680px, calc(100vh - 32px));
+  display: flex;
+  flex-direction: column;
+  background: var(--wn-bg);
+  border: 1px solid var(--wn-border);
+  border-top: 3px solid var(--wn-accent);
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .55);
+  overflow: hidden;
+}
+
+.wp-wn-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 10px;
+}
+.wp-wn-kicker {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--wn-accent);
+}
+.wp-wn-head h2 { margin: 2px 0 0; font-size: 24px; font-weight: 800; }
+.wp-wn-x {
+  appearance: none;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--wn-dim);
+  font: inherit;
+  font-size: 22px;
+  line-height: 1;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+}
+.wp-wn-x:hover { color: var(--wn-text); border-color: var(--wn-border); }
+
+.wp-wn-body {
+  overflow-y: auto;
+  padding: 4px 20px 12px;
+  min-height: 0;
+}
+.wp-wn-entry + .wp-wn-entry {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--wn-border);
+}
+.wp-wn-entry h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.wp-wn-entry time { font-size: 12px; font-weight: 500; color: var(--wn-dim); white-space: nowrap; }
+.wp-wn-entry ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.wp-wn-entry li { display: flex; align-items: flex-start; gap: 9px; font-size: 13.5px; line-height: 1.45; }
+
+.wp-wn-tag {
+  flex: none;
+  min-width: 74px;
+  text-align: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--wn-dim);
+  border: 1px solid currentColor;
+  margin-top: 1px;
+}
+.wp-wn-tag-new { color: var(--wn-new); }
+.wp-wn-tag-improved { color: var(--wn-improved); }
+.wp-wn-tag-fix { color: var(--wn-fix); }
+
+.wp-wn-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--wn-border);
+  background: var(--wn-surface);
+}
+.wp-wn-ok {
+  appearance: none;
+  background: var(--wn-accent);
+  border: 0;
+  border-radius: 9px;
+  color: #fff;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 9px 22px;
+  cursor: pointer;
+}
+.wp-wn-ok:hover { filter: brightness(1.1); }
+.wp-wn-ok:focus-visible, .wp-wn-x:focus-visible { outline: 2px solid var(--wn-accent); outline-offset: 2px; }
+
+@keyframes wp-wn-in { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes wp-wn-out { to { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) {
+  .wp-wn, .wp-wn.wp-wn-out { animation: none; }
+  .wp-wn.wp-wn-out { display: none; }
+}
+
+@media (max-width: 520px) {
+  .wp-wn { padding: 10px; align-items: flex-end; }
+  .wp-wn-card { max-height: calc(100vh - 20px); }
+  .wp-wn-head { padding: 16px 16px 8px; }
+  .wp-wn-body { padding: 4px 16px 10px; }
+  .wp-wn-foot { padding: 10px 16px 14px; }
+  .wp-wn-foot .wp-wn-ok { width: 100%; }
+  .wp-wn-tag { min-width: 66px; }
+}
