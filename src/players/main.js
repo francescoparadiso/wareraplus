@@ -1290,11 +1290,24 @@ const CMP_GEAR_SUM = (it) => it?.skills ? Object.values(it.skills).reduce((t, v)
  *  locale di serie come prima. */
 const duelRow = (label, va, vb, opts = {}) => vsRow(label, va, vb, { fmt: (v) => fmtFull(v), ...opts });
 
-/* Radar delle undici abilità (guerra in alto, economia in basso), SVG a
+/* WarEra+ (2026-11-04): le abilità da mostrare nel confronto. Imprenditoria
+   e Leadership non esistono più (v0.27 / v0.27.3: valgono 0 per tutti) e
+   restavano come due raggi morti sul radar, uno col nome grezzo
+   "sk_leadership". Si tengono solo se almeno uno dei due le ha a livello > 0
+   (profili che arrivano da dati vecchi), altrimenti spariscono dal radar e
+   dall'elenco. */
+const DEAD_SKILLS = ['entrepreneurship', 'leadership'];
+function cmpSkillKeys(a, b) {
+  const lv = (p, k) => Number(p.skills?.[k]?.level) || 0;
+  return [...WAR_SKILLS, ...ECO_SKILLS]
+    .filter(k => !DEAD_SKILLS.includes(k) || lv(a, k) > 0 || lv(b, k) > 0);
+}
+
+/* Radar delle abilità (guerra in alto, economia in basso), SVG a
    mano. Scala sul livello massimo dei due (almeno 10): un giocatore
    piccolo contro uno piccolo resta leggibile. */
 function radarSvg(a, b) {
-  const keys = [...WAR_SKILLS, ...ECO_SKILLS];
+  const keys = cmpSkillKeys(a, b);
   const lv = (p, k) => Number(p.skills?.[k]?.level) || 0;
   const max = Math.max(10, ...keys.map(k => Math.max(lv(a, k), lv(b, k))));
   const S = 340, C = S / 2, R = 118;
@@ -1403,7 +1416,7 @@ function compareHtml(intro = false) {
       </div>`;
     }).join('');
 
-  const skillDuels = [...WAR_SKILLS, ...ECO_SKILLS]
+  const skillDuels = cmpSkillKeys(a, b)
     .map(k => duelRow(plyT(`sk_${k}`), a.skills?.[k]?.level ?? 0, b.skills?.[k]?.level ?? 0).html).join('');
 
   return `
