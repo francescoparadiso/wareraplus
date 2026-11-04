@@ -61,15 +61,34 @@ export async function fetchPlayer(userId) {
   return data || null;
 }
 
+/* WarEra+ (2026-11-04): la ricerca parte mentre si scrive (vedi main.js,
+   liveSearch), quindi la stessa parola torna spesso — cancellare una lettera
+   e riscriverla, o aprire un risultato e tornare indietro. Una cache breve in
+   memoria evita di rifare le due richieste ogni volta. 60 secondi: il livello
+   e l'avatar cambiano di rado, e un risultato vecchio di un minuto non inganna
+   nessuno. Si cacha la PROMESSA, così due richieste identiche in volo ne
+   fanno una. */
+const SEARCH_TTL_MS = 60_000;
+const _searchCache = new Map();   // testo minuscolo → { at, p }
+
 /** Ricerca per nome: due richieste, mai una per candidato. */
-export async function searchPlayers(text) {
+export function searchPlayers(text) {
   const q = String(text || '').trim();
-  if (q.length < 2) return [];
-  const [ids] = await trpcBatchManual([['search.searchUsers', { searchText: q }]]);
-  const list = (Array.isArray(ids) ? ids : []).slice(0, MAX_CANDIDATES);
-  if (!list.length) return [];
-  const lite = await trpcBatchManual(list.map(id => ['user.getUserLite', { userId: id }]));
-  return list.map((id, i) => ({ id, lite: lite[i] })).filter(c => c.lite);
+  if (q.length < 2) return Promise.resolve([]);
+  const key = q.toLowerCase();
+  const hit = _searchCache.get(key);
+  if (hit && Date.now() - hit.at < SEARCH_TTL_MS) return hit.p;
+  const p = (async () => {
+    const [ids] = await trpcBatchManual([['search.searchUsers', { searchText: q }]]);
+    const list = (Array.isArray(ids) ? ids : []).slice(0, MAX_CANDIDATES);
+    if (!list.length) return [];
+    const lite = await trpcBatchManual(list.map(id => ['user.getUserLite', { userId: id }]));
+    return list.map((id, i) => ({ id, lite: lite[i] })).filter(c => c.lite);
+  })();
+  _searchCache.set(key, { at: Date.now(), p });
+  // Un errore non resta in cache: la prossima lettera riprova davvero.
+  p.catch(() => { if (_searchCache.get(key)?.p === p) _searchCache.delete(key); });
+  return p;
 }
 
 export async function fetchEquipment(userId) {

@@ -173,6 +173,86 @@ async function doSearch() {
   render();
 }
 
+/* ── Ricerca mentre si scrive ─────────────────────────────────────
+   Le tre ricerche (partenza, 1 vs 1, "confronta con" nella scheda) mostrano i
+   risultati MENTRE si scrive, dopo una breve pausa, senza aspettare Invio.
+   Invio e il bottone restano com'erano: lì un solo risultato apre subito il
+   giocatore, mentre scrivendo no — aprirlo da soli a metà parola porterebbe
+   via chi sta ancora digitando.
+
+   ⚠️ render() rifà tutto l'HTML, quindi il campo perderebbe il fuoco a ogni
+   risultato. Si salva quale campo era attivo e dove stava il cursore, e si
+   rimette dopo il disegno. E il testo si copia nello stato a OGNI tasto
+   (_q, _duelQ, _pickQ): un ridisegno che arriva da altro — i nomi della
+   classifica, per dire — non deve cancellare quello che si sta scrivendo. */
+const LIVE_PAUSE_MS = 300;
+const _liveTimers = {};
+const _liveSeq = {};
+
+/** Chi è il form: 'main' | 'pick' | 'duel:a' | 'duel:b' (null se non lo è). */
+function liveKey(form) {
+  if (!form) return null;
+  if (form.id === 'wp-ply-search') return 'main';
+  if (form.id === 'wp-ply-pick') return 'pick';
+  if (form.dataset?.duelForm) return `duel:${form.dataset.duelForm}`;
+  return null;
+}
+function liveInput(key) {
+  const sel = key === 'main' ? '#wp-ply-search' : key === 'pick' ? '#wp-ply-pick' : `[data-duel-form="${key.slice(5)}"]`;
+  return _root?.querySelector(`${sel} input`) || null;
+}
+function liveSetState(key, q, res) {
+  if (key === 'main') { _q = q; _cands = res; _searching = false; }
+  else if (key === 'pick') { _pickQ = q; _pickCands = res && res.filter(c => c.id !== _pid); _pickSearching = false; }
+  else {
+    const slot = key.slice(5);
+    const other = _duel[slot === 'a' ? 'b' : 'a']?.id;
+    _duelQ[slot] = q; _duelCands[slot] = res && res.filter(c => c.id !== other); _duelSearching[slot] = false;
+  }
+}
+
+/** Disegna rimettendo fuoco e cursore sul campo che si stava usando. */
+function renderKeepingFocus(key) {
+  const inp = liveInput(key);
+  const had = inp && document.activeElement === inp;
+  const pos = had ? [inp.selectionStart, inp.selectionEnd] : null;
+  render();
+  if (!had) return;
+  const nuovo = liveInput(key);
+  if (!nuovo) return;
+  nuovo.focus();
+  try { nuovo.setSelectionRange(pos[0], pos[1]); } catch (_) { /* tipo search su alcuni browser */ }
+}
+
+function liveSearch(form) {
+  const key = liveKey(form);
+  if (!key) return;
+  const q = form.querySelector('input')?.value || '';
+  // Il testo nello stato subito, i risultati dopo la pausa.
+  if (key === 'main') _q = q; else if (key === 'pick') _pickQ = q; else _duelQ[key.slice(5)] = q;
+
+  clearTimeout(_liveTimers[key]);
+  const seq = (_liveSeq[key] = (_liveSeq[key] || 0) + 1);
+  if (q.trim().length < 2) {
+    // Sotto le due lettere non c'è niente da cercare: via i risultati vecchi.
+    liveSetState(key, q, null);
+    renderKeepingFocus(key);
+    return;
+  }
+  _liveTimers[key] = setTimeout(async () => {
+    let res;
+    try { res = await searchPlayers(q); }
+    catch (err) { console.warn('WarEra+ giocatori: ricerca fallita:', err.message); res = []; }
+    // Una risposta lenta, di una parola già superata o di un campo che non
+    // dice più quella parola, si butta: vale l'ultima.
+    if (seq !== _liveSeq[key]) return;
+    const inp = liveInput(key);
+    if (!inp || inp.value !== q) return;
+    liveSetState(key, q, res);
+    renderKeepingFocus(key);
+  }, LIVE_PAUSE_MS);
+}
+
 async function loadBoard() {
   const type = _board;
   _boardRows = null;
@@ -978,6 +1058,11 @@ function render() {
 }
 
 function wire() {
+  // Anteprima dei risultati mentre si scrive (vedi liveSearch).
+  _root.addEventListener('input', (e) => {
+    const form = e.target?.closest?.('form.wp-ply-search');
+    if (form && e.target.matches('input')) liveSearch(form);
+  });
   _root.addEventListener('submit', (e) => {
     if (e.target.id === 'wp-ply-pick') {
       e.preventDefault();
