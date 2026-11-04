@@ -23,6 +23,8 @@
    a prezzo zero, e disegnarlo come tale inventa un crollo mai avvenuto.
    ══════════════════════════════════════════════════════════════ */
 
+import { trendLineSvg } from '../shared/trendLine.js';
+
 const PAD_L = 52, PAD_R = 8, PAD_T = 10, PAD_B = 22;
 
 /** Un giorno 'YYYY-MM-DD' come numero di giorni dall'epoca: le candele
@@ -90,7 +92,8 @@ export function candleChartSvg(serie, { w = 880, h = 320, fmt = (v) => String(v)
   let corpo = '';
   if (mode === 'line') {
     // Le chiusure. Un buco spezza la linea: `d` riparte con M.
-    let d = '', staccato = true;
+    const pts = [];
+    let staccato = true;
     serie.forEach((r, i) => {
       const c = r[4];
       if (!Number.isFinite(c)) { staccato = true; return; }
@@ -98,10 +101,11 @@ export function candleChartSvg(serie, { w = 880, h = 320, fmt = (v) => String(v)
       // stacca anche qui, altrimenti la linea lo attraverserebbe dritta
       // facendo sembrare misurato quello che non lo è.
       if (i > 0 && gio[i] - gio[i - 1] > 1) staccato = true;
-      d += `${staccato ? 'M' : 'L'}${X(gio[i]).toFixed(1)},${Y(c).toFixed(1)}`;
+      pts.push({ x: X(gio[i]), y: Y(c), v: c, gap: staccato });
       staccato = false;
     });
-    corpo = `<path d="${d}" class="wp-ecn-line"/>`;
+    // WarEra+ (2026-11-04): verde dove sale, rosso dove scende (trendLine.js).
+    corpo = trendLineSvg(pts, 'wp-ecn-line');
   } else {
     // Larghezza della candela: lo spazio disponibile diviso i giorni del
     // periodo, con un minimo di 1px e un massimo che eviti i mattoni.

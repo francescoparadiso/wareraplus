@@ -20,6 +20,7 @@
 
 import { escapeHtml } from '../mu/ui.js';
 import { tipAttr } from '../shared/chartTip.js';
+import { trendLineSvg, trendLast } from '../shared/trendLine.js';
 
 const W = 320, H = 88, PAD_T = 6, PAD_B = 14, PAD_X = 2;
 
@@ -78,7 +79,7 @@ export function priceChartSvg(serie, { fmt = (v) => String(v) } = {}) {
   for (const r of serie) {
     const gx = x(r[0]);
     const salto = precedente && (Date.parse(`${r[0]}T12:00:00Z`) - Date.parse(`${precedente}T12:00:00Z`)) > 2.5 * 86400_000;
-    linea.push(`${(!precedente || salto) ? 'M' : 'L'}${gx.toFixed(1)},${y(r[4]).toFixed(1)}`);
+    linea.push({ x: gx, y: y(r[4]), v: r[4], gap: !precedente || salto });
     if (Number.isFinite(r[2]) && Number.isFinite(r[3])) {
       banda.push({ gx, alto: y(r[2]), basso: y(r[3]), salto: !precedente || salto });
     }
@@ -123,8 +124,8 @@ export function priceChartSvg(serie, { fmt = (v) => String(v) } = {}) {
     <svg class="wp-mkt-chart" viewBox="0 0 ${W} ${H}" role="img"
          aria-label="${escapeHtml(`${fmt(min)} – ${fmt(max)}`)}">
       ${areaPath}
-      <path d="${linea.join('')}" class="wp-mkt-line"/>
-      <circle cx="${x(giorni[giorni.length - 1]).toFixed(1)}" cy="${y(ultimaChiusura).toFixed(1)}" r="2.5" class="wp-mkt-dot"/>
+      ${trendLineSvg(linea, 'wp-mkt-line')}
+      <circle cx="${x(giorni[giorni.length - 1]).toFixed(1)}" cy="${y(ultimaChiusura).toFixed(1)}" r="2.5" class="wp-mkt-dot wp-trend-dot-${trendLast(linea)}"/>
       <text x="${PAD_X}" y="${(PAD_T + 7).toFixed(0)}" class="wp-mkt-clab">${escapeHtml(fmt(max))}</text>
       <text x="${PAD_X}" y="${(H - PAD_B + 2).toFixed(0)}" class="wp-mkt-clab">${escapeHtml(fmt(min))}</text>
       <text x="${PAD_X}" y="${H - 2}" class="wp-mkt-clab wp-mkt-cday">${escapeHtml(etichetteX[0])}</text>

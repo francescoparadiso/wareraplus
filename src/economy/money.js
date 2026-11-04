@@ -38,6 +38,7 @@ import { escapeHtml } from '../mu/ui.js';
 import { ecoT } from './i18n.js';
 import { moneyT } from './i18nMoney.js';
 import { fetchOrderMoneyViaCache, fetchPlayerMoneyViaCache } from '../diplomacy/cacheClient.js';
+import { trendLineSvg, trendLast } from '../shared/trendLine.js';
 import { getAllCountries, getCountryById } from '../shared/countries.js';
 import { fetchMuDirectory } from '../mu/api.js';
 
@@ -109,11 +110,10 @@ function graficoHtml(punti) {
   const y = (v) => T + (1 - (v - min) / (max - min)) * (H - T - B);
 
   const orario = Date.now() - 14 * 24 * ORA;
-  let d = '';
-  punti.forEach((p, i) => {
+  const pts = punti.map((p, i) => {
     const prec = punti[i - 1];
     const salto = prec && (p.t - prec.t) > (prec.t >= orario ? 3 * ORA : 50 * ORA);
-    d += `${(!prec || salto) ? 'M' : 'L'}${x(p.t).toFixed(1)},${y(p.y).toFixed(1)}`;
+    return { x: x(p.t), y: y(p.y), v: p.y, gap: !prec || salto };
   });
 
   const guide = [0, 1, 2, 3].map(i => {
@@ -135,8 +135,8 @@ function graficoHtml(punti) {
   const ultimo = punti[punti.length - 1];
   return `<svg class="wp-ecn-mchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escapeHtml(`${compatto(min)} – ${compatto(max)}`)}">
       ${guide}
-      <path d="${d}" class="wp-ecn-line"/>
-      <circle cx="${x(ultimo.t).toFixed(1)}" cy="${y(ultimo.y).toFixed(1)}" r="3" fill="var(--wp-ov-accent, #3fb950)"/>
+      ${trendLineSvg(pts, 'wp-ecn-line')}
+      <circle cx="${x(ultimo.t).toFixed(1)}" cy="${y(ultimo.y).toFixed(1)}" r="3" class="wp-trend-dot-${trendLast(pts)}"/>
       <text class="wp-ecn-axis" x="${L}" y="${H - 8}">${escapeHtml(giorno(x0))}</text>
       <text class="wp-ecn-axis" x="${W - R}" y="${H - 8}" text-anchor="end">${escapeHtml(giorno(x1))}</text>
       ${colonne}

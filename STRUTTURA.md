@@ -1141,6 +1141,12 @@ wareraPlus/
     │   │                          impulsi, battiti, ping, navi e particelle; restano
     │   │                          frecce e colori. Tutti i moduli animati chiedono
     │   │                          animationsOn(). Il replay battaglia NO (è a mano).
+    │   ├── trendLine.js        ← NUOVO (2026-11-04) — linee dei grafici a UNA serie nel
+    │   │                          tempo colorate per direzione: tratto verde se sale, rosso
+    │   │                          se scende, grigio se uguale (stessi colori delle
+    │   │                          variazioni in %). Usato da economy/candleChart.js (modo
+    │   │                          linea), market/priceChart.js e economy/money.js. NON per i
+    │   │                          grafici a più serie, dove il colore dice chi è.
     │   ├── chartTip.js         ← NUOVO — tooltip comune dei grafici: ogni elemento con
     │   │                          data-tip (tipAttr) lo mostra al passaggio o al tocco, e i
     │   │                          <title> nativi degli SVG diventano tooltip istantanei

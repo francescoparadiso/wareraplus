@@ -664,3 +664,23 @@ button.wp-ecn-pth:hover { color: var(--wp-ov-text, #e6edf3); }
 .wp-ecn-mcap { text-transform: capitalize; }
 .wp-ecn-mdim { opacity: .7; font-style: italic; }
 .wp-ecn-mrow[title] { cursor: help; }
+
+/* ── Linee che cambiano colore con la direzione (src/shared/trendLine.js) ──
+   Verde se il valore sale, rosso se scende, grigio se non cambia: gli stessi
+   colori delle variazioni in percentuale. Le variabili --wp-ecn-* esistono
+   solo dentro la sezione Economia: negli altri overlay (Giocatori) valgono i
+   colori di ricaduta. In coda al foglio, e con la classe base nel selettore
+   dove serve, per battere la regola `stroke` del grafico che le ospita. */
+.wp-trend-up { stroke: var(--wp-ecn-up, #3fb950); }
+.wp-trend-down { stroke: var(--wp-ecn-down, #f85149); }
+.wp-trend-flat { stroke: var(--wp-ecn-flat, #8b949e); }
+body.light-theme .wp-trend-up { stroke: var(--wp-ecn-up, #1a7f37); }
+body.light-theme .wp-trend-down { stroke: var(--wp-ecn-down, #cf222e); }
+body.light-theme .wp-trend-flat { stroke: var(--wp-ecn-flat, #6e7781); }
+.wp-ecn-spark .wp-mkt-line.wp-trend-up { stroke: var(--wp-ecn-up, #3fb950); }
+.wp-ecn-spark .wp-mkt-line.wp-trend-down { stroke: var(--wp-ecn-down, #f85149); }
+.wp-ecn-spark .wp-mkt-line.wp-trend-flat { stroke: var(--wp-ecn-flat, #8b949e); }
+/* Il punto finale prende il colore dell'ultimo tratto. */
+.wp-trend-dot-up, .wp-ecn-spark .wp-mkt-dot.wp-trend-dot-up { fill: var(--wp-ecn-up, #3fb950); }
+.wp-trend-dot-down, .wp-ecn-spark .wp-mkt-dot.wp-trend-dot-down { fill: var(--wp-ecn-down, #f85149); }
+.wp-trend-dot-flat, .wp-ecn-spark .wp-mkt-dot.wp-trend-dot-flat { fill: var(--wp-ecn-flat, #8b949e); }
