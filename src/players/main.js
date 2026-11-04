@@ -51,6 +51,11 @@ import {
   fetchLeaderboard, fetchNames, fetchPlayerBattles, fetchCompanies, fetchWorkStats,
   fetchPolitics, fetchNationRanks,
 } from './api.js';
+// WarEra+ (2026-11-04): mancava. Il radar delle abilita' del confronto lo usa
+// (sotto, nel poligono "wp-tip-hit") e senza questo import il versus moriva con
+// un ReferenceError a meta' disegno, lasciando "Caricamento del giocatore…"
+// per sempre. Rotto dal 2026-10-22 ("Grafici esplorabili ovunque").
+import { tipAttr } from '../shared/chartTip.js';
 
 const APP_BASE = 'https://app.warera.io';
 const MINE_KEY = 'we_my_player';
