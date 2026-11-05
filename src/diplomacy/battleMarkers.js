@@ -60,11 +60,15 @@ let clusterMarkers = new Map();
 // allineato: è quello che il resto del file legge come "stato visibile".
 // NB: Marker.addTo() chiama this.remove() come prima cosa, quindi è
 // idempotente — riattaccare un marker già attaccato è sicuro.
+// WarEra+ fix: idempotente sì, ma addTo() STACCA e riattacca il nodo, e
+// _declutterMarkers lo chiamava a ogni moveend su tutti i marker già
+// visibili — un clic premuto in quell'istante andava perso (vedi
+// updateMarkerEl). Se il nodo è già nel documento si lascia dov'è.
 function _setMarkerVisible(entry, visible) {
   if (!entry) return;
   entry.el.style.display = visible ? '' : 'none';
   if (visible) {
-    if (state.map) entry.marker.addTo(state.map);
+    if (state.map && !entry.el.isConnected) entry.marker.addTo(state.map);
   } else {
     try { entry.marker.remove(); } catch (e) {}
   }
@@ -1542,9 +1546,19 @@ function buildMarkerMarkup(battle, regionName, liveData, totalAttackerDmg, total
 // I dati correnti vivono su el._battleData: i listener (agganciati una volta
 // sola alla creazione) li leggono da li', altrimenti resterebbero legati alla
 // battaglia catturata nella closure al primo render.
+// WarEra+ fix (segnalato: "non mi fa più cliccare le battaglie"): il
+// contenuto si riscrive SOLO se è cambiato. Prima ogni moveend riscriveva
+// l'innerHTML di tutti i marker visibili anche a dati identici, e se capitava
+// fra la pressione e il rilascio del mouse (il clic stesso ferma un'inerzia
+// o uno zoom a rotella ancora in corso, e la mappa spara moveend) il nodo
+// premuto spariva: Chrome allora NON manda il click (verificato), il marker
+// sembrava "trasparente" e restava il tooltip della nazione sotto.
 function updateMarkerEl(el, battle, regionName, liveData, totalAttackerDmg, totalDefenderDmg, zoom, trend) {
   el._battleData = { battle, regionName, liveData, totalAttackerDmg, totalDefenderDmg, trend };
-  el.innerHTML = buildMarkerMarkup(battle, regionName, liveData, totalAttackerDmg, totalDefenderDmg, zoom, trend);
+  const markup = buildMarkerMarkup(battle, regionName, liveData, totalAttackerDmg, totalDefenderDmg, zoom, trend);
+  if (el._markup === markup) return;
+  el._markup = markup;
+  el.innerHTML = markup;
 }
 
 function buildMarkerEl(battle, regionName, liveData, totalAttackerDmg, totalDefenderDmg, zoom, trend) {
@@ -1576,7 +1590,50 @@ function buildMarkerEl(battle, regionName, liveData, totalAttackerDmg, totalDefe
   el.addEventListener('click', (e) => {
     e.stopPropagation();
     e.preventDefault();
+    el._clickSeen = true;
+    // Già aperta dalla rete di sicurezza qui sotto: un secondo giro la
+    // richiuderebbe (stessa battaglia = esci dalla heatmap).
+    if (el._fallbackAt && Date.now() - el._fallbackAt < 800) return;
+    _activateMarker(el);
+  });
 
+  // WarEra+ rete di sicurezza per lo stesso bug di updateMarkerEl: il
+  // contenuto CAMBIA davvero ogni ~30 s (numeri nuovi), e se succede fra
+  // pressione e rilascio il click non arriva. Se il rilascio cade sullo
+  // stesso marker, quasi fermo, e il click non è arrivato entro il turno
+  // successivo, si apre da qui. Con un click normale non fa niente.
+  el.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    el._clickSeen = false;
+    el._downAt = { x: e.clientX, y: e.clientY };
+  });
+  el.addEventListener('pointerup', (e) => {
+    const down = el._downAt;
+    el._downAt = null;
+    if (!down || e.button !== 0) return;
+    if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
+    // Col mouse il click segue subito il rilascio; col tocco il browser può
+    // mandarlo un po' dopo, quindi si aspetta di più prima di supplire.
+    setTimeout(() => {
+      if (el._clickSeen) return;
+      el._fallbackAt = Date.now();
+      _activateMarker(el);
+    }, e.pointerType === 'mouse' ? 0 : 400);
+  });
+
+  // Nota: niente hack di padding/margin negativo sull'elemento radice per
+  // allargare l'area di tocco — maplibre calcola l'ancoraggio del marker
+  // sulla dimensione di questo stesso elemento, e alterarla rischierebbe di
+  // disallineare il marker dal punto geografico reale. L'area di tocco resta
+  // comunque piu' grande su mobile grazie alla fascia di zoom minima
+  // "medium" forzata sopra (minWidth/padding piu' generosi).
+  Object.assign(el.style, { pointerEvents: 'auto', zIndex: 2000 });
+  return el;
+}
+
+// Click handler: legge i dati correnti da el._battleData, non dalla closure
+// (che resterebbe ferma ai valori del primo render).
+function _activateMarker(el) {
     const d = el._battleData;
     if (!d) return;
     const battleId = d.battle._id;
@@ -1608,16 +1665,6 @@ function buildMarkerEl(battle, regionName, liveData, totalAttackerDmg, totalDefe
         });
       }
     }
-  });
-
-  // Nota: niente hack di padding/margin negativo sull'elemento radice per
-  // allargare l'area di tocco — maplibre calcola l'ancoraggio del marker
-  // sulla dimensione di questo stesso elemento, e alterarla rischierebbe di
-  // disallineare il marker dal punto geografico reale. L'area di tocco resta
-  // comunque piu' grande su mobile grazie alla fascia di zoom minima
-  // "medium" forzata sopra (minWidth/padding piu' generosi).
-  Object.assign(el.style, { pointerEvents: 'auto', zIndex: 2000 });
-  return el;
 }
 
 // ==================== WarEra+: il marcatore che reagisce al sorpasso ====
