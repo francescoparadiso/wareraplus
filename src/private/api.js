@@ -87,8 +87,25 @@ export async function logout() {
   clearToken();
 }
 
+/* WarEra+ sfondo (2026-11-07): il server rimanda a `<origin>/#wp_auth=…`
+   e la query si perde, `?wallpaper=1` compreso. Lo sfondo di Wallpaper
+   Engine ripartiva così come sito NORMALE, con i <select> accesi e il
+   service worker, e il browser di WE andava in crash
+   (STATUS_ILLEGAL_INSTRUCTION) appena tornato da Discord. Si mette da
+   parte la query qui, alla partenza, e lo script in linea in testa a
+   index.html la rimette prima di qualunque altra cosa. sessionStorage come
+   gli altri ritorni (accordi, votazioni): vale per la sola scheda, e non è
+   il localStorage che può essere pieno. Viene chiamata al clic, mai in
+   anticipo: i tre bottoni fanno `location.href = loginUrl()`. */
+const RITORNO_QUERY_KEY = 'wp_auth_query';
+
 /** URL a cui mandare il browser per iniziare il giro OAuth. */
 export function loginUrl() {
+  try {
+    if (/[?&]wallpaper=1(&|$)/.test(location.search)) {
+      sessionStorage.setItem(RITORNO_QUERY_KEY, JSON.stringify({ q: location.search, t: Date.now() }));
+    }
+  } catch { /* senza storage lo sfondo torna come sito normale, come prima */ }
   return `${WARERA_PLUS_API_BASE}/auth/discord/start?origin=${encodeURIComponent(location.origin)}`;
 }
 

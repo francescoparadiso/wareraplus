@@ -11,6 +11,23 @@
        overlay, filtri), e il primo è nel markup: la regola deve valere
        PRIMA del primo layout, quindi script classico e stile in linea, non
        il modulo (che arriva a parsing finito). Vedi src/app/wallpaperMode.js. -->
+  <!-- WarEra+ sfondo: il ritorno da Discord atterra su `/#wp_auth=…` SENZA
+       la query, quindi senza ?wallpaper=1, e lo sfondo ripartiva come sito
+       normale e mandava in crash Wallpaper Engine (2026-11-07). La query
+       l'ha messa da parte loginUrl() (src/private/api.js) alla partenza; qui
+       si rimette con replaceState, senza ricaricare, PRIMA del controllo qui
+       sotto. Dieci minuti come lo state firmato del server. -->
+  <script>
+    try {
+      if (/(^#|&)wp_auth(_error)?=/.test(location.hash)) {
+        var r = JSON.parse(sessionStorage.getItem('wp_auth_query') || 'null');
+        sessionStorage.removeItem('wp_auth_query');
+        if (r && typeof r.q === 'string' && r.q.charAt(0) === '?' && Date.now() - r.t < 600000 && !location.search) {
+          history.replaceState(null, '', location.pathname + r.q + location.hash);
+        }
+      }
+    } catch (e) {}
+  </script>
   <script>if (/[?&]wallpaper=1(&|$)/.test(location.search)) document.documentElement.classList.add('wp-wallpaper');</script>
   <!-- WarEra+ sfondo: NIENTE service worker nello sfondo. Uno sfondo resta
        acceso per giorni senza ricaricarsi, e il service worker del live
