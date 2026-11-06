@@ -67,6 +67,26 @@ export { canHover as fundingCanHover };
 
 let _timer = null;
 
+/* WarEra+ (2026-11-07): un errore restava a schermo fino al giro
+   successivo, dieci minuti, con "riapri la vista per riprovare". Nello
+   sfondo di Wallpaper Engine la vista non si riapre (la sceglie una
+   proprietà) e lo sfondo parte all'avvio di Windows, spesso prima che la
+   rete ci sia: restava "non disponibili" per dieci minuti su un server
+   che rispondeva benissimo. Si riprova da soli, a passi che si allungano
+   (15 s, 30 s, 1 min… fino al giro normale), finché la vista è questa. */
+let _retryTimer = null;
+let _retryStep = 0;
+
+function scheduleRetry() {
+  clearTimeout(_retryTimer);
+  const delay = Math.min(15000 * 2 ** _retryStep, TTL_MS);
+  _retryStep++;
+  _retryTimer = setTimeout(() => {
+    _retryTimer = null;
+    if (state.coloringMode === 'funding' && fund().error) loadFunding({ force: true });
+  }, delay);
+}
+
 export async function loadFunding({ force = false } = {}) {
   const s = fund();
   if (!force && s.data && Date.now() - s.at < TTL_MS) return;
@@ -78,9 +98,11 @@ export async function loadFunding({ force = false } = {}) {
     s.data = data;
     s.at = Date.now();
     s.error = null;
+    _retryStep = 0;
   } catch (err) {
     console.warn('[funding] bonifici non disponibili:', err.message);
     s.error = 'unreachable';
+    scheduleRetry();
   } finally {
     s.loading = false;
   }
