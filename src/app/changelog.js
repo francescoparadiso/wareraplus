@@ -38,6 +38,17 @@
 
 export const CHANGELOG = [
   {
+    id: '2026-11-06',
+    title: { en: 'Map fix', it: 'Correzione della mappa' },
+    items: [
+      {
+        tag: 'fix',
+        en: 'Clicking a battle on the map opens it again, even right after moving or zooming the map, instead of selecting the nation underneath.',
+        it: 'Cliccare una battaglia sulla mappa la apre di nuovo, anche subito dopo aver spostato o zoomato la mappa, invece di selezionare la nazione sotto.',
+      },
+    ],
+  },
+  {
     id: '2026-11-04',
     title: { en: 'November 2026 update', it: 'Aggiornamento di novembre 2026' },
     items: [
