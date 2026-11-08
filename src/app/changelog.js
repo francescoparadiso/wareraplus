@@ -38,6 +38,32 @@
 
 export const CHANGELOG = [
   {
+    id: '2026-11-08',
+    title: { en: 'Ready for the 7 November game update', it: 'Pronto per l\'aggiornamento del gioco del 7 novembre' },
+    items: [
+      {
+        tag: 'new',
+        en: 'Nation panel: a Strategic resources section shows the skill bonuses every citizen gets, shared across the alliance, with the level of each resource and how many copies are missing for the next one.',
+        it: 'Pannello nazione: la sezione Risorse strategiche mostra i bonus di abilità che prende ogni cittadino, condivisi nell\'alleanza, col livello di ogni risorsa e quante copie mancano al successivo.',
+      },
+      {
+        tag: 'improved',
+        en: 'Governments show every minister (up to 20), with the titles the president gave them, in the nation panel, Political and the player profile.',
+        it: 'I governi mostrano tutti i ministri (fino a 20), coi titoli dati dal presidente, nel pannello nazione, in Political e nel profilo del giocatore.',
+      },
+      {
+        tag: 'improved',
+        en: 'Income by government type follows the new rules: Plutocracy doubles wage and manager taxes, and Nationalist and Mercenary State are gone. Party pages show the favourite government type.',
+        it: 'Le entrate per tipo di governo seguono le regole nuove: la Plutocrazia raddoppia le tasse su salari e manager, e Stato nazionalista e Stato mercenario non ci sono più. Le pagine dei partiti mostrano il tipo di governo preferito.',
+      },
+      {
+        tag: 'fix',
+        en: 'War/eco playstyle, attack and critical columns, health and food bars and player skills are back: the game stopped sending them where the tool read them.',
+        it: 'Tornano lo stile di gioco guerra/eco, le colonne attacco e critico, le barre di vita e cibo e le abilità dei giocatori: il gioco aveva smesso di mandarli dove il tool li leggeva.',
+      },
+    ],
+  },
+  {
     id: '2026-11-06',
     title: { en: 'Map fix', it: 'Correzione della mappa' },
     items: [
