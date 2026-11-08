@@ -13,6 +13,10 @@ import { bT } from './blocStatsI18n.js';
 import { vsRow, vsGroup, vsTally, vsFighter, vsHero, countUpScore } from '../shared/versus.js';
 import { animationsOn } from '../shared/motion.js';
 import { ensureDailyDamage, sumCountryDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
+// WarEra+ 2026-11-08 — risorse strategiche: dal 7 novembre danno abilità a
+// tutti i cittadini dell'alleanza (src/shared/strategicResources.js).
+import { groupStrategic } from '../shared/strategicResources.js';
+import { t as tShared } from '../shared/i18n.js';
 
 // WarEra+ — tasto Indietro: chiude il popup in cima (prima il menu/dialogo
 // del builder, poi la scheda nazione/alleanza) invece di uscire dal tool.
@@ -434,6 +438,9 @@ function buildBlocStat(displayName, internalId, idSet, color, isMerged = false, 
     // non e' un dato di gioco ma la simulazione del bonus che avrebbero
     // una volta uniti — che e' esattamente la domanda del builder.
     bonus: blocDamageBonus(totalCore),
+    // Bonus di abilità dalle risorse strategiche dei membri (2026-11-08): per
+    // i blocchi fusi del Builder è di nuovo la simulazione dell'unione.
+    strategic: isUnaligned ? null : groupStrategic(members.map(m => state.nationMap.get(m.id))),
     // Derivate: sviluppo medio e danno settimanale per cittadino dell'alleanza.
     avgDev: countryCount ? totalDev / countryCount : 0,
     dpc: totalPop ? totalDmg / totalPop : 0,
@@ -1266,6 +1273,7 @@ function renderBlocDetail() {
       <div class="bs-popup-item" title="${bT('Weekly damage per point of core development')}">${bT('Dmg / Core Dev')} <span style="color:#58a6ff">${bloc.totalCore ? fmt(bloc.dpd) : '—'}</span></div>
       <div class="bs-popup-item">${bT('Core Dev Share')} <span>${bloc.isUnaligned || !bloc.bonus ? '—' : bloc.bonus.share.toFixed(2) + '%'}</span></div>
     </div>`, closed)}
+    ${(() => { try { return secHtml('bonuses', bT('Alliance bonuses'), bonusSectionHtml(bloc), closed); } catch (err) { console.warn('WarEra+ bonus d\u2019alleanza:', err); return ''; } })()}
     ${secHtml('mobilization', bT('Mobilization'), '', closed, 'bloc-popup-ps')}
     ${secHtml('trend', bT('Players over time'), '', closed, 'bloc-detail-trend')}
     ${secHtml('curves', bT('Hourly damage & pilled players'), '', closed, 'bloc-popup-curves')}
@@ -2221,7 +2229,7 @@ function aggFaction(ids) {
   const vuota = { name: '', countryCount: 0, totalPop: 0, totalDmg: 0, totalAbsoluteDmg: 0, totalMoney: 0, totalWars: 0, totalAllies: 0,
     totalBounty: 0, totalDev: 0, totalRegDiff: 0, totalSworn: 0, totalCore: 0, members: [] };
   if (!ids.length) return vuota;
-  return allStats.filter(b => ids.includes(b.id)).reduce((a, b) => ({
+  const f = allStats.filter(b => ids.includes(b.id)).reduce((a, b) => ({
     name: a.name ? `${a.name} + ${b.name}` : b.name,
     countryCount: a.countryCount + b.countryCount, totalPop: a.totalPop + b.totalPop,
     totalDmg: a.totalDmg + b.totalDmg, totalAbsoluteDmg: a.totalAbsoluteDmg + b.totalAbsoluteDmg,
@@ -2232,6 +2240,46 @@ function aggFaction(ids) {
     totalCore: a.totalCore + b.totalCore,
     members: a.members.concat(b.members),
   }), vuota);
+  // WarEra+ 2026-11-08 — i bonus d'alleanza della fazione. Una fazione di
+  // una sola alleanza ha i suoi; una di più alleanze si misura COME SE
+  // fosse un'alleanza sola (quota di sviluppo sommata, copie sommate), ed
+  // è scritto sotto il confronto.
+  f.blocCount = allStats.filter(b => ids.includes(b.id) && !b.isUnaligned).length;
+  f.bonus = f.blocCount ? blocDamageBonus(f.totalCore) : null;
+  f.strategic = f.blocCount ? groupStrategic(f.members.map(m => state.nationMap.get(m.id))) : null;
+  return f;
+}
+
+/* WarEra+ 2026-11-08 — la sezione "Bonus d'alleanza" della scheda: bonus
+   danno (quota dello sviluppo core mondiale) e le sei risorse strategiche,
+   con livello, abilità che danno, copie che mancano al livello dopo e
+   QUALI nazioni portano le copie — la domanda subito dopo "che livello
+   abbiamo" è "chi ce lo dà". */
+function bonusSectionHtml(bloc) {
+  if (bloc.isUnaligned) return `<p class="bs-srb-note">${bT('Unaligned nations share no alliance bonus.')}</p>`;
+  const dmg = bloc.bonus
+    ? `<div class="bs-srb-dmg" title="${escapeHtml(curveTooltip())}">
+        <span>${bT('Damage bonus')}</span>
+        <b style="color:${isPenalty(bloc.bonus.bonus) ? '#f85149' : '#3fb950'}">${formatBonus(bloc.bonus.bonus)}</b>
+        <em>${bT('{p}% of the world core development', { p: bloc.bonus.share.toFixed(2) })}</em>
+      </div>` : '';
+  const s = bloc.strategic;
+  if (!s) return dmg;
+  const dots = (l) => `<span class="wp-sr-dots">${[1, 2, 3].map(i => `<i class="${i <= l ? 'on' : ''}"></i>`).join('')}</span>`;
+  const rows = s.rows.map(r => {
+    const next = r.toNext == null ? tShared('sr_max') : tShared('sr_next', { n: r.toNext, l: r.level + 1 });
+    const who = r.holders.map(h => `<span class="bs-srb-holder" title="${escapeHtml(h.nation.name)}">${flagImg(h.nation.code, '12px')}${h.n > 1 ? `<b>×${h.n}</b>` : ''}</span>`).join('');
+    return `<tr class="${r.level ? '' : 'bs-srb-off'}">
+      <td>${r.icon} ${escapeHtml(tShared('sr_res_' + r.key))}<div class="bs-srb-sub">×${r.copies} · ${escapeHtml(next)}</div></td>
+      <td>${dots(r.level)}</td>
+      <td class="bs-srb-val${r.bonus ? ' up' : ''}">${r.bonus ? `+${r.bonus}` : '0'} ${escapeHtml(tShared('sr_sk_' + r.skill))}</td>
+      <td class="bs-srb-who">${who || '<span class="bs-srb-none">—</span>'}</td>
+    </tr>`;
+  }).join('');
+  return `${dmg}
+    <div class="bs-srb-title">${bT('Strategic resources')} <span>${bT('{n} levels of 18', { n: s.levels })}</span></div>
+    <table class="bs-srb-table"><tbody>${rows}</tbody></table>
+    <p class="bs-srb-note">${bT('Every citizen of the member nations gets these skill bonuses. 1, 4 and 9 copies give level 1, 2 and 3; suspended members neither give nor receive, and are not known here.')}</p>`;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -2282,6 +2330,26 @@ function factionFighter(f, ids, side, leader) {
 function factionPlaystyle(f) {
   if (!psByCountry || !f.members.length) return null;
   return blocPlaystyle({ members: f.members });
+}
+
+/* WarEra+ 2026-11-08 — righe del gruppo "Bonus d'alleanza" del 1 vs 2.
+   In una funzione a parte con il suo try: un errore qui toglie il gruppo,
+   non il confronto intero. */
+function factionBonusRows(f1, f2, R, fi) {
+  try {
+    return [
+      (f1.bonus && f2.bonus) ? R(f1.bonus.bonus, f2.bonus.bonus, 'Damage bonus', v => formatBonus(v)) : null,
+      R(f1.strategic.levels, f2.strategic.levels, 'Strategic levels', fi),
+      ...f1.strategic.rows.map((r, i) => {
+        const r2 = f2.strategic.rows[i];
+        if (!r.bonus && !r2.bonus) return null;
+        return vsRow(`${r.icon} ${tShared('sr_sk_' + r.skill)}`, r.bonus, r2.bonus, { fmt: v => (v ? `+${v}` : '0') });
+      }),
+    ];
+  } catch (err) {
+    console.warn('WarEra+ bonus d’alleanza (1 vs 2):', err);
+    return [];
+  }
 }
 
 function cmpStats(f1, f2) {
@@ -2342,6 +2410,11 @@ function cmpStats(f1, f2) {
       R(perCit(f1, 'totalMoney'), perCit(f2, 'totalMoney'), 'Wealth / Citizen'),
       R(media(f1, 'totalDev'), media(f2, 'totalDev'), 'Avg Development'),
     ] },
+    // WarEra+ 2026-11-08 — i bonus d'alleanza: bonus danno e le abilità che
+    // le risorse strategiche danno a ogni cittadino. Di più è meglio.
+    { title: bT('Alliance bonuses'), icon: '✨', rows: (f1.strategic && f2.strategic) ? factionBonusRows(f1, f2, R, fi) : [],
+      body: (f1.blocCount > 1 || f2.blocCount > 1)
+        ? `<p class="wp-vs-note">${bT('A faction of several alliances is measured as if it were one alliance.')}</p>` : '' },
     { title: bT('Territory & bounty'), icon: '🗺', rows: [
       R(f1.totalRegDiff, f2.totalRegDiff, 'Regions Gained', segnato),
       R(f1.totalSworn, f2.totalSworn, 'Sworn Enemies', fi, 0),

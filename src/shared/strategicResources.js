@@ -73,6 +73,31 @@ function buildRows(total, own) {
   });
 }
 
+/** Le risorse di un GRUPPO qualunque di nazioni, come se fosse un'alleanza
+ *  sola: le alleanze di Statistiche alleanze, quelle fuse nel Builder, le
+ *  fazioni del 1 vs 2. Per ogni risorsa anche chi porta le copie
+ *  (`holders`: [{ nation, n }], dal più grande). Non sa dei membri
+ *  sospesi, che in gioco non danno e non prendono. */
+export function groupStrategic(nations) {
+  const total = {};
+  const holders = {};
+  for (const n of nations || []) {
+    if (!n) continue;
+    for (const [k, v] of Object.entries(countRes(n.strategicResources?.resources))) {
+      if (!v) continue;
+      total[k] = (total[k] || 0) + v;
+      (holders[k] || (holders[k] = [])).push({ nation: n, n: v });
+    }
+  }
+  const rows = buildRows(total, {});
+  for (const r of rows) r.holders = (holders[r.key] || []).sort((a, b) => b.n - a.n);
+  return {
+    rows,
+    levels: rows.reduce((s, r) => s + r.level, 0),
+    skills: Object.fromEntries(rows.map(r => [r.skill, r.bonus])),
+  };
+}
+
 /** Il calcolo locale (vedi testata). `nations` = state.nazioniGlobal. */
 export function localStrategic(nation, nations) {
   if (!nation) return null;

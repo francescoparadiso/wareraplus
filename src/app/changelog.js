@@ -38,6 +38,17 @@
 
 export const CHANGELOG = [
   {
+    id: '2026-11-08d',
+    title: { en: 'Alliance bonuses', it: 'Bonus d\'alleanza' },
+    items: [
+      {
+        tag: 'new',
+        en: 'Alliance statistics: each alliance page has an "Alliance bonuses" section with the damage bonus and the six strategic resources (level, skill bonus for every citizen, copies missing for the next level, which nations hold them). Faction 1 vs 2 compares these bonuses too.',
+        it: 'Statistiche alleanze: la pagina di ogni alleanza ha la sezione "Bonus d\'alleanza" col bonus danno e le sei risorse strategiche (livello, bonus di abilità per ogni cittadino, copie che mancano al livello dopo, quali nazioni le portano). Anche Fazione 1 vs 2 confronta questi bonus.',
+      },
+    ],
+  },
+  {
     id: '2026-11-08c',
     title: { en: 'Governments of past terms', it: 'I governi dei mandati passati' },
     items: [
