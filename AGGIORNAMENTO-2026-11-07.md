@@ -85,6 +85,16 @@ Nuovo: **sezione "Risorse strategiche"** nel pannello nazione (copie
 dell'alleanza e proprie, livello, bonus, copie che mancano al livello dopo),
 e il **tipo di governo preferito** nella scheda partito di Political.
 
+**Secondo giro (8 novembre, pomeriggio):** il riquadro del governo nel
+senato si compatta oltre quattro persone (facce + "Tutti"); in Political il
+governo è rifatto (`src/political/governmentView.js`: presidente e vice,
+composizione per partito, ministri con portafoglio, partito, giorni in
+carica, distintivo e poteri) e anche i risultati presidenziali
+(`presRaceHtml`/`presCompare` in `presidential.js`, testi in
+`presI18n.js`). ⚠️ `appointedAt` di tutti i ministri migrati è l'ora
+dell'aggiornamento (7 nov 15:19 UTC), non la nomina vera: per qualche
+giorno i "giorni in carica" partono tutti da lì.
+
 ## 4. Da fare / non verificabile ancora
 
 - **Elezioni del congresso a liste**: l'ultima (Italia, 6 novembre) è ancora
