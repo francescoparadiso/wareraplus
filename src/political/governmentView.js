@@ -137,7 +137,7 @@ function compositionHtml(people) {
  * Disegna il governo dentro `grid` e scrive il conteggio nel badge.
  * `gov` è quello di getGovernmentWithDetails (membersData, partyOf).
  */
-export function renderGovernmentPanel(gov, grid, badge) {
+export function renderGovernmentPanel(gov, grid, badge, { note = '' } = {}) {
   const members = (gov.membersData || []);
   const partyOf = gov.partyOf || new Map();
   const raw = new Map((Array.isArray(gov.ministers) ? gov.ministers : []).map(m => [m.user, m]));
@@ -162,7 +162,7 @@ export function renderGovernmentPanel(gov, grid, badge) {
   const parties = new Set(people.map(p => p.party).filter(Boolean));
 
   grid.className = 'wp-gv';
-  grid.innerHTML = `
+  grid.innerHTML = `${note ? `<div class="wp-gv-note">${note}</div>` : ''}
     <div class="wp-gv-top">
       ${headCard(pres, { big: true, since: pres ? presidentSince(pres.user) : null })}
       ${headCard(vp, { big: false })}
@@ -180,3 +180,103 @@ export function renderGovernmentPanel(gov, grid, badge) {
   }
 }
 
+
+/* ── Il governo di un mandato passato ─────────────────────────────
+   Per una presidenziale vecchia il governo "di oggi" non c'entra: serve
+   quello di allora. L'archivio dei governi del cache-server
+   (/political-history → governments, server/politicalHistory.js) ha una
+   riga ogni volta che il governo cambia, dal 29 settembre 2026: prima di
+   quella data il dato non esiste da nessuna parte, e la vista lo dice.
+
+   · Il MANDATO va dalla fine di quell'elezione alla fine della
+     presidenziale successiva (o a oggi).
+   · Dentro il mandato si mostra la formazione rimasta in carica PIÙ A
+     LUNGO: la prima riga dopo un'elezione è spesso il solo presidente,
+     coi ministri che arrivano nelle ore dopo, e l'ultima può essere un
+     rimpasto dell'ultimo giorno.
+   · Il PARTITO è quello di allora: si parte da quello di oggi e si
+     disfano i cambi di casacca avvenuti dopo (switches dello stesso
+     archivio, 180 giorni).
+   · Le righe fra il 7 novembre e il deploy che leggevano i tre campi
+     spariti (ministri tutti null, senza `m`) si saltano: il server le
+     toglie alla prima lettura, ma il client può vederle prima. */
+
+const _histCache = new Map();   // countryId → Promise
+const PHANTOM_FROM = Date.UTC(2026, 10, 7);
+
+function _isPhantom(row, prev) {
+  return prev && !row.m && row.a >= PHANTOM_FROM && row.r.slice(2).every(v => !v)
+    && prev.r.slice(2).some(Boolean) && row.r[0] === prev.r[0] && row.r[1] === prev.r[1];
+}
+
+/** Il governo come oggetto della forma di government.getByCountryId. */
+function _govFromRow(row) {
+  const g = { president: row.r[0] || null, vicePresident: row.r[1] || null };
+  if (Array.isArray(row.m)) g.ministers = row.m.map(([user, title]) => ({ user, title }));
+  else { g.minOfDefense = row.r[2]; g.minOfForeignAffairs = row.r[3]; g.minOfEconomy = row.r[4]; }
+  return g;
+}
+
+/**
+ * Disegna in `grid` il governo del mandato vinto con `election`.
+ * deps: { fetchPoliticalHistory, fetchUsersLite, loadParties, governmentMembers, nextEnd }
+ */
+export async function renderTermGovernment(election, grid, badge, deps) {
+  const countryId = election.country;
+  if (!_histCache.has(countryId)) {
+    _histCache.set(countryId, deps.fetchPoliticalHistory(countryId, { days: 180 }).catch(() => null));
+  }
+  grid.className = 'wp-gv';
+  grid.innerHTML = `<p class="wp-gv-empty">…</p>`;
+  if (badge) badge.textContent = '';
+  const [hist, parties] = await Promise.all([_histCache.get(countryId), deps.loadParties(countryId).catch(() => [])]);
+  const gov = hist?.governments;
+  if (!gov) { grid.innerHTML = `<p class="wp-gv-empty">${escapeHtml(prT('gv_term_unavailable'))}</p>`; return; }
+
+  const start = Date.parse(election.votesEndAt);
+  const end = deps.nextEnd || Date.now();
+  const raw = [...(gov.rows || [])].sort((a, b) => a.a - b.a);
+  const rows = raw.filter((r, i) => !_isPhantom(r, raw[i - 1]));
+  const cov = gov.coverageFrom || rows[0]?.a || null;
+
+  // Formazione più lunga dentro il mandato (intervalli tagliati al mandato).
+  let best = null, bestLen = 0, lineups = 0;
+  rows.forEach((r, i) => {
+    const from = Math.max(r.a, start), to = Math.min(rows[i + 1]?.a ?? Date.now(), end);
+    if (to <= from) return;
+    lineups++;
+    if (to - from > bestLen) { best = r; bestLen = to - from; }
+  });
+  if (!best) {
+    grid.innerHTML = `<p class="wp-gv-empty">${escapeHtml(prT('gv_term_none', { d: cov ? fmtDay(cov) : '—' }))}</p>`;
+    return;
+  }
+
+  const g = _govFromRow(best);
+  const members = deps.governmentMembers(g);
+  const ids = [...new Set(members.map(m => m.user))];
+  let users = new Map();
+  try { users = await deps.fetchUsersLite(ids); } catch (_) { /* restano i nomi dell'archivio */ }
+  g.membersData = members.map(m => ({
+    ...m,
+    data: users.get(m.user) || (hist.usernames?.[m.user] ? { username: hist.usernames[m.user] } : null),
+  }));
+
+  // Partito di allora: oggi, poi si disfano i cambi successivi al momento
+  // della formazione (dal più recente al più vecchio).
+  const T = Math.max(best.a, start);
+  const partyOf = new Map();
+  for (const p of parties || []) for (const uid of p.members || []) partyOf.set(uid, p._id);
+  const sw = [...(hist.switches?.rows || [])].sort((a, b) => b.a - a.a);
+  for (const s of sw) {
+    if (s.a <= T) break;
+    if (ids.includes(s.u)) partyOf.set(s.u, s.f || null);
+  }
+  for (const id of [...partyOf.keys()]) if (!partyOf.get(id)) partyOf.delete(id);
+  g.partyOf = partyOf;
+
+  const notes = [prT('gv_term_note', { d: fmtDay(best.a) })];
+  if (lineups > 1) notes.push(prT('gv_term_changes', { n: lineups }));
+  if (cov && cov > start) notes.push(prT('gv_term_partial', { d: fmtDay(cov) }));
+  renderGovernmentPanel(g, grid, badge, { note: notes.map(escapeHtml).join(' · ') });
+}

@@ -38,6 +38,17 @@
 
 export const CHANGELOG = [
   {
+    id: '2026-11-08c',
+    title: { en: 'Governments of past terms', it: 'I governi dei mandati passati' },
+    items: [
+      {
+        tag: 'new',
+        en: 'Opening an older presidential election in Political now shows the government of that term, with the parties its members belonged to at the time (the archive starts on 29 September 2026).',
+        it: 'Aprendo una presidenziale vecchia in Political ora si vede il governo di quel mandato, coi partiti di cui i membri facevano parte allora (l\'archivio parte dal 29 settembre 2026).',
+      },
+    ],
+  },
+  {
     id: '2026-11-08b',
     title: { en: 'Presidential results and governments, redesigned', it: 'Risultati presidenziali e governi, rifatti' },
     items: [

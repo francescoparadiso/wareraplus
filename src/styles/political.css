@@ -3428,6 +3428,10 @@ html[data-theme="light"] #wp-political-root .senate-stage {
   border-radius: 6px; background: var(--s3); font-size: .72rem; cursor: help;
 }
 #wp-political-root .wp-gv-empty { color: var(--text3); font-size: .8rem; }
+#wp-political-root .wp-gv-note {
+  font-size: .74rem; color: var(--text2); padding: 7px 10px; border-radius: var(--r2);
+  background: rgba(232,201,122,.06); border: 1px dashed rgba(232,201,122,.28);
+}
 
 @media (max-width: 900px) {
   #wp-political-root .wp-gv-top { grid-template-columns: 1fr 1fr; }

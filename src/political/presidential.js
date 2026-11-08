@@ -35,7 +35,11 @@ import { prT, prLocale } from './presI18n.js';
 import { localFetch } from './api.js';
 import { startHeavyOperation, endHeavyOperation } from './loading.js';
 import { showView, resetStats, fillStat, safeDestroy } from './ui.js';
-import { getGovernmentWithDetails, renderGovernment } from './congress.js';
+import { getGovernmentWithDetails, renderGovernment, loadPartiesForCountry } from './congress.js';
+import { renderTermGovernment } from './governmentView.js';
+import { fetchPoliticalHistory } from './plusApi.js';
+import { fetchUsersLiteViaCache } from '../diplomacy/cacheClient.js';
+import { governmentMembers } from '../shared/government.js';
 
 // Dipendenze cross-modulo iniettate da main.js (Stage 8).
 let _loadElection = null;
@@ -155,12 +159,33 @@ export async function loadPresidentialElection(election, isLatestPresidential) {
   renderPresSimulator(candidates, totalVotes, election);
   document.getElementById('badgeCount').textContent = t('badge_presidential', { n: totalVotes });
 
+  // WarEra+ 2026-11-08: per una presidenziale vecchia il governo "di oggi"
+  // non c'entra: si mostra quello di quel mandato, dall'archivio dei
+  // governi (governmentView.js: renderTermGovernment). Prima il pannello
+  // si chiudeva e basta.
+  const govPanel = document.getElementById('presGovernmentPanel');
+  const govTitle = govPanel?.querySelector('summary h2');
   if (isLatestPresidential) {
+    if (govTitle) govTitle.textContent = prT('gv_title_now');
     const govData = await getGovernmentWithDetails(election.country || currentCountryId);
     renderGovernment(govData);
-  } else {
-    const panel = document.getElementById('presGovernmentPanel');
-    if (panel) panel.open = false;
+  } else if (govPanel) {
+    govPanel.open = true;
+    if (govTitle) govTitle.textContent = prT('gv_title_term');
+    const next = (electionHistory || [])
+      .filter(e => e.type === 'president' && Date.parse(e.createdAt) > Date.parse(election.createdAt))
+      .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))[0];
+    renderTermGovernment(
+      { ...election, country: election.country || currentCountryId },
+      document.getElementById('governmentGrid'), document.getElementById('govBadge'),
+      {
+        fetchPoliticalHistory,
+        fetchUsersLite: fetchUsersLiteViaCache,
+        loadParties: loadPartiesForCountry,
+        governmentMembers,
+        nextEnd: next?.votesEndAt ? Date.parse(next.votesEndAt) : null,
+      },
+    ).catch(err => console.warn('WarEra+ governo del mandato:', err));
   }
   endHeavyOperation();
 }
