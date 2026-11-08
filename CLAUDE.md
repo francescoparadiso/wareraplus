@@ -198,6 +198,18 @@ nel tool, misurato su apidev prima del rilascio, sta in
 **`AGGIORNAMENTO-v0.27.md`**. Leggilo prima di toccare Ottimizzatore,
 censimento aziende o la vista Bonus produzione.
 
+⚠️ **Aggiornamento di gioco del 7 novembre 2026** (ministri a elenco,
+risorse strategiche come abilità, via Stato nazionalista e mercenario):
+sta in **`AGGIORNAMENTO-2026-11-07.md`**. Le due trappole da ricordare:
+- `user.getUserLite` **non porta più `skills`**: chi ne ha bisogno (stile
+  di gioco, colpo, barre vita/fame, profilo) usa `user.getUserById`, a
+  blocchi da 50 se in GET (100 → 414). `skills.<x>.level` non contiene più
+  il livello regalato dal prestigio (`skills.<x>.prestige`).
+- `government.getByCountryId` → **`ministers: [{user, title, customTitle,
+  rights}]`**, fino a 20, titoli ripetibili. Mai più `gov.minOfDefense`:
+  si passa da `src/shared/government.js` (client) o
+  `server/plusApi/governo.js` (area riservata, coi diritti di gioco).
+
 ⚠️ **Attenzione ai nomi duplicati tra le due varianti di Political**:
 `config.js`, `main.js`, `ui.js`, `i18n.js`, `api.js`, `loading.js`,
 `ticker.js`, `parliament.js`, `senate.js`, `congress.js`, `presidential.js`,

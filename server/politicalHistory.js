@@ -315,11 +315,36 @@ function recordGovernments(countries, results, now = Date.now()) {
   countries.forEach((c, i) => {
     const g = results[i];
     if (!g || !c?._id) return;   // chiamata fallita: non è "governo vuoto"
-    const r = [g.president || null, g.vicePresident || null, g.minOfDefense || null, g.minOfForeignAffairs || null, g.minOfEconomy || null];
+    // WarEra+ 2026-11-08: dal 7 novembre i ministri sono un ELENCO
+    // (`ministers`, fino a 20, titoli ripetibili) e i tre campi fissi
+    // spariscono. `r` resta com'era per chi lo legge (presidente, vice, e il
+    // PRIMO ministro di ciascuno dei tre titoli storici); `m` è l'elenco
+    // intero, [utente, titolo] in ordine di nomina. Senza `m` un cambio fra
+    // il secondo e il terzo ministro della difesa non si vedrebbe, e coi
+    // campi fissi letti e basta il 7 novembre sarebbe sembrato che tutti i
+    // ministri del mondo fossero usciti insieme.
+    const elenco = Array.isArray(g.ministers)
+      ? g.ministers.filter(x => x?.user).map(x => [x.user, x.title || 'advisor'])
+      : null;
+    const primo = t => (elenco ? elenco.find(x => x[1] === t)?.[0] : g[t]) || null;
+    const r = [g.president || null, g.vicePresident || null, primo('minOfDefense'), primo('minOfForeignAffairs'), primo('minOfEconomy')];
     const rows = store.byCountry[c._id] || (store.byCountry[c._id] = []);
+    // Le righe scritte fra il 7 novembre e il deploy di questa versione
+    // leggevano i tre campi spariti: ministri tutti `null`, un'uscita in
+    // massa che non è mai avvenuta. Si tolgono (una volta, alla prima
+    // lettura nuova di quella nazione) invece di lasciarle nella storia.
+    while (elenco && rows.length >= 2) {
+      const x = rows.at(-1), y = rows.at(-2);
+      const fantasma = !x.m && x.a >= Date.UTC(2026, 10, 7) && x.r.slice(2).every(v => !v)
+        && y.r.slice(2).some(Boolean) && x.r[0] === y.r[0] && x.r[1] === y.r[1];
+      if (!fantasma) break;
+      rows.pop();
+      changed++;
+    }
     const last = rows.at(-1);
-    if (last && last.r.every((x, k) => x === r[k])) return;
-    rows.push({ a: now, r });
+    const stessiMinistri = !elenco || JSON.stringify(last?.m || null) === JSON.stringify(elenco);
+    if (last && last.r.every((x, k) => x === r[k]) && stessiMinistri) return;
+    rows.push(elenco ? { a: now, r, m: elenco } : { a: now, r });
     changed++;
   });
   writeCache(GOV_FILE, store, { compact: true });

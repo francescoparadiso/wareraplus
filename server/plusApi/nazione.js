@@ -72,13 +72,23 @@ const { estrai, riferimento } = require('./istantanee');
 
 const FINESTRA_BONIFICI_MS = 72 * 3600_000;
 
-const CARICHE = [
-  ['president', 'presidente'],
-  ['vicePresident', 'vice'],
-  ['minOfDefense', 'difesa'],
-  ['minOfForeignAffairs', 'esteri'],
-  ['minOfEconomy', 'economia'],
-];
+const { membriGoverno } = require('./governo');
+
+// Carica di gioco → chiave della vista (src/private/i18nNazione.js).
+// WarEra+ 2026-11-08: i ministri sono un elenco (fino a 20, vedi
+// governo.js); le cariche nuove hanno chiavi nuove, e il client che non
+// le conosce mostra il titolo personalizzato o la chiave stessa.
+const CARICHE = {
+  president: 'presidente',
+  vicePresident: 'vice',
+  minOfDefense: 'difesa',
+  minOfForeignAffairs: 'esteri',
+  minOfEconomy: 'economia',
+  minOfInterior: 'interno',
+  minOfCommunication: 'comunicazione',
+  chiefOfStaff: 'gabinetto',
+  advisor: 'consigliere',
+};
 
 const rk = (r) => (r ? { valore: r.value ?? null, rank: r.rank ?? null, tier: r.tier ?? null } : null);
 
@@ -156,13 +166,15 @@ function formaPaese(n, paesi) {
 async function formaGoverno(countryId) {
   const g = await governo(countryId);
   if (!g) return null;
-  const ids = CARICHE.map(([k]) => g[k]).filter(Boolean);
-  const nomi = await nomiUtenti(ids);
+  const membri = membriGoverno(g);
+  const nomi = await nomiUtenti([...new Set(membri.map((m) => m.user))]);
   const persona = (id) => (id ? { id, nome: nomi[id]?.username || null, avatar: nomi[id]?.avatarUrl || null } : null);
-  return {
-    cariche: CARICHE.map(([k, chiave]) => ({ carica: chiave, persona: persona(g[k]) })),
-    congresso: (g.congressMembers || []).length,
-  };
+  const cariche = membri.map((m) => ({ carica: CARICHE[m.carica] || m.carica, titolo: m.customTitle || null, persona: persona(m.user) }));
+  // Presidente e vice restano sempre in elenco, anche vuoti: "carica
+  // vacante" è un'informazione, un ministro che non c'è no (sono a scelta).
+  if (!g.president) cariche.unshift({ carica: 'presidente', titolo: null, persona: null });
+  if (!g.vicePresident) cariche.splice(1, 0, { carica: 'vice', titolo: null, persona: null });
+  return { cariche, congresso: (g.congressMembers || []).length };
 }
 
 /** Le battaglie in corso in cui la nazione è uno dei due schieramenti. */
@@ -752,7 +764,7 @@ async function formaAccessi(countryId) {
 async function idGoverno(countryId) {
   try {
     const g = await governo(countryId);
-    return new Set(CARICHE.map(([k]) => g?.[k]).filter(Boolean));
+    return new Set(membriGoverno(g).map((m) => m.user));
   } catch { return new Set(); }
 }
 

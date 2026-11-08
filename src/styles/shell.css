@@ -3633,6 +3633,18 @@ body.light-theme .wp-ship-tip {
 }
 .wp-govinc-tag-best { color: #3fb950; border-color: rgba(63, 185, 80, .45); background: rgba(63, 185, 80, .1); }
 .wp-govinc-warn { cursor: help; }
+
+/* Risorse strategiche nel pannello nazione (2026-11-08,
+   src/shared/strategicResources.js). Stessa scatola e tabella delle entrate. */
+.wp-sr-table td { vertical-align: middle; }
+.wp-sr-sub { font-size: 10.5px; color: var(--wp-ov-text-dim, #8b949e); margin-top: 1px; }
+.wp-sr-off td:first-child { opacity: .6; }
+.wp-sr-dots { display: inline-flex; gap: 3px; vertical-align: middle; }
+.wp-sr-dots i {
+  width: 7px; height: 7px; border-radius: 50%;
+  border: 1px solid var(--wp-ov-text-dim, #8b949e); opacity: .5;
+}
+.wp-sr-dots i.on { background: #3fb950; border-color: #3fb950; opacity: 1; }
 .wp-govinc-sub { font-weight: 700; margin-top: 4px; }
 .wp-govinc-bar {
   position: relative; height: 8px; border-radius: 999px;

@@ -28,6 +28,7 @@
 
 import { classifyPlaystyle } from '../mu/playstyle.js';
 import { fetchMuBriefs } from '../mu/api.js';
+import { fetchUsersLiteViaCache } from '../diplomacy/cacheClient.js';
 import { escapeHtml, APP_BASE } from './config.js';
 import { pT } from './plusI18n.js';
 
@@ -62,8 +63,32 @@ export function initPoliticalLinks() {
 
 const PS_KEYS = { war: 'ps_war', eco: 'ps_eco', mixed: 'ps_mixed', undecided: 'ps_undecided' };
 
+// WarEra+ 2026-11-08: dal 7 novembre `user.getUserLite` (quello che
+// Political scarica per ogni iscritto) non porta più `skills`. Lo stile
+// arriva allora già calcolato dal cache-server (/users-lite, campo `ps`,
+// dal giro che rilegge tutti i giocatori ogni ora): `primePlaystyles` lo
+// chiede per un gruppo di id in UNA richiesta, prima di disegnare.
+const _psById = new Map();
+
 export function playstyleOf(user) {
-  return user?.skills ? classifyPlaystyle(user).mode : null;
+  if (user?.skills) return classifyPlaystyle(user).mode;
+  return _psById.get(user?._id) || null;
+}
+
+/** Carica lo stile di gioco di questi giocatori dal cache-server. Non
+ *  lancia mai: senza server i pallini semplicemente non compaiono, com'era
+ *  quando un giocatore non aveva skill lette. Tetto di 2,5 s per non
+ *  trattenere il disegno della scheda. */
+export async function primePlaystyles(userIds) {
+  const want = [...new Set((userIds || []).filter(id => id && !_psById.has(id)))];
+  if (!want.length) return;
+  try {
+    const map = await Promise.race([
+      fetchUsersLiteViaCache(want.slice(0, 400)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2500)),
+    ]);
+    map.forEach((v, id) => { if (v?.ps) _psById.set(id, v.ps); });
+  } catch (_) { /* niente stile: i pallini non compaiono */ }
 }
 
 /** Pallino colorato (per le card fitte). */
@@ -103,6 +128,7 @@ function _fmt(n) {
  *  getUserLite (già in cache di Political quasi sempre). */
 export async function fillPlayerCardPlus(slot, user) {
   if (!slot || !user) { if (slot) slot.remove(); return; }
+  if (!user.skills) await primePlaystyles([user._id]);
   const mode = playstyleOf(user);
   let brief = null;
   if (user.mu) {
@@ -144,6 +170,7 @@ export async function renderPartyComposition(container, members) {
   const list = (members || []).filter(Boolean);
   if (!list.length) { container.innerHTML = `<p class="wp-pol-dim">${escapeHtml(pT('no_members'))}</p>`; return; }
 
+  await primePlaystyles(list.filter(u => !u.skills).map(u => u._id));
   const counts = { war: 0, eco: 0, mixed: 0, undecided: 0 };
   let known = 0, lvSum = 0, lvN = 0, dmg = 0;
   const byMu = new Map();

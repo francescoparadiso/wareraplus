@@ -90,8 +90,9 @@ const VISIBILITA = new Set(['istituzioni', 'pubblico']);
 const MAGGIORANZE = new Set(['semplice', 'assoluta', 'due_terzi']);
 const SCELTE = new Set(['si', 'no', 'astenuto', 'nulla']);
 
-// Le cariche di governo, dalla più alta (le stesse di roles.js).
-const CARICHE = ['president', 'vicePresident', 'minOfDefense', 'minOfForeignAffairs', 'minOfEconomy'];
+// Le cariche di governo: governo.js (presidente, vice e i ministri, che dal
+// 2026-11-08 sono un elenco di fino a 20 con titolo).
+const { membriGoverno } = require('./governo');
 
 const MIN_LIVELLO = 10;
 const MAX_TITOLO = 120;
@@ -328,7 +329,7 @@ async function fotografa(v) {
   if (!gov) throw new Error('governo_non_leggibile');
   const ruoli = new Map();
   if (v.electorate === 'istituzioni') {
-    for (const k of CARICHE) if (gov[k] && !ruoli.has(gov[k])) ruoli.set(gov[k], k);
+    for (const m of membriGoverno(gov)) if (!ruoli.has(m.user)) ruoli.set(m.user, m.carica);
   }
   for (const id of gov.congressMembers || []) if (!ruoli.has(id)) ruoli.set(id, 'congress');
   const ids = [...ruoli.keys()];

@@ -773,25 +773,21 @@ function _renderGovernmentRow() {
   if (!gov || !gov.presidentData) return '';
 
   // All roles in display order: president first, then all others
-  const allRoles = [
-    ['vicePresidentData',       t('senate_role_vp')],
-    ['minOfDefenseData',        t('senate_role_defense')],
-    ['minOfEconomyData',        t('senate_role_economy')],
-    ['minOfForeignAffairsData', t('senate_role_foreign')],
-  ];
-
-  // Additional roles that may exist in the gov object but aren't named above
-  const knownKeys = new Set(['presidentData', 'vicePresidentData', 'minOfDefenseData', 'minOfEconomyData', 'minOfForeignAffairsData']);
-  Object.keys(gov).forEach(k => {
-    if (!knownKeys.has(k) && gov[k] && gov[k].username) {
-      // Humanise the key: e.g. "minOfJusticeData" → "Min. of Justice"
-      const label = k.replace(/Data$/, '').replace(/([A-Z])/g, ' $1').replace(/^min of /i, 'Min. of ').trim();
-      allRoles.push([k, label]);
-    }
-  });
+  // WarEra+ 2026-11-08: con i ministri a elenco (fino a 20, vedi
+  // src/shared/government.js) il governo intero sta in `membersData`,
+  // preparato da getGovernmentWithDetails; i campi fissi restano il
+  // ripiego per un oggetto costruito alla vecchia maniera.
+  const allRoles = Array.isArray(gov.membersData)
+    ? gov.membersData.filter(m => m.role !== 'president' && m.data).map(m => [m.data, m.label])
+    : [
+      ['vicePresidentData',       t('senate_role_vp')],
+      ['minOfDefenseData',        t('senate_role_defense')],
+      ['minOfEconomyData',        t('senate_role_economy')],
+      ['minOfForeignAffairsData', t('senate_role_foreign')],
+    ];
 
   const memberHtml = (key, label, isBig = false) => {
-    const user = gov[key];
+    const user = typeof key === 'string' ? gov[key] : key;
     if (!user) return '';
     const sizeClass = isBig ? 'scb-gov-avatar scb-gov-avatar-president' : 'scb-gov-avatar';
     const avatarHtml = user.avatarUrl

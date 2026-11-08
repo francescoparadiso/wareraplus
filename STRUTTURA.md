@@ -1121,12 +1121,23 @@ wareraPlus/
     │   │                          patto) e il totale come somma.
     │   ├── allianceBonus.js    ← ricalcola il bonus danno d'alleanza (l'API non lo espone)
     │   ├── govIncome.js        ← NUOVO (2026-10-27) — entrate per tipo di governo
-    │   │                          (Repubblica / Plutocrazia / Autocrazia / Stato
-    │   │                          nazionalista) e soglia di tasse perché la
-    │   │                          Plutocrazia batta la Repubblica. Zero richieste:
-    │   │                          `income` di nazione e regioni. Regole dalle note,
-    │   │                          verificate sul tipo attuale (`income.govType`).
-    │   │                          ⚠️ Repubblica con conquiste non ancora verificabile.
+    │   │                          (Repubblica / Plutocrazia / Autocrazia) e soglia di
+    │   │                          tasse perché la Plutocrazia batta la Repubblica. Zero
+    │   │                          richieste: `income` di nazione e regioni. Regole dalle
+    │   │                          note, verificate sul tipo attuale (`income.govType`).
+    │   │                          Dal 2026-11-07: Plutocrazia +100% tasse, Stato
+    │   │                          nazionalista e mercenario tolti dal gioco.
+    │   ├── government.js       ← NUOVO (2026-11-08) — chi siede in governo: presidente,
+    │   │                          vice e i ministri a ELENCO (`ministers`, fino a 20,
+    │   │                          titoli ripetibili e personalizzati), con ripiego sui
+    │   │                          tre campi fissi di prima. Etichette in 9 lingue. Lo
+    │   │                          usano pannello, Political, Giocatori. Gemello server:
+    │   │                          server/plusApi/governo.js (anche i DIRITTI di gioco).
+    │   ├── strategicResources.js ← NUOVO (2026-11-08) — risorse strategiche come
+    │   │                          abilità dei cittadini (1/4/9 copie = liv. 1/2/3,
+    │   │                          condivise nell'alleanza): country.
+    │   │                          getStrategicResourceBonuses (pubblica) col calcolo
+    │   │                          locale come ripiego. Sezione nel pannello nazione.
     │   ├── dailyDamage.js      ← "danno di oggi" per nazioni/alleanze/unità, dalla
     │   │                          differenza fra due snapshot del cumulato settimanale
     │   ├── analytics.js        ← wrapper su Umami (trackEvent)

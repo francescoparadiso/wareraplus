@@ -140,7 +140,11 @@ function inFila(fn) {
 
 async function batchUtenti(base, ids) {
   const input = Object.fromEntries(ids.map((userId, k) => [k, { userId }]));
-  const url = `${base}/${ids.map(() => 'user.getUserLite').join(',')}?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`;
+  // WarEra+ 2026-11-08: getUserById, perché dal 7 novembre getUserLite non
+  // porta più `skills` (attacco, precisione, critici: il colpo). Stessi
+  // campi di prima più le skills, ~6 KB a giocatore; i blocchi da 30
+  // restano sotto il tetto di URL (a 100 è 414, a 50 passa).
+  const url = `${base}/${ids.map(() => 'user.getUserById').join(',')}?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`;
   const res = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const body = await res.json();
@@ -194,7 +198,7 @@ function colpi(attaccoPulito, fattore, pillola, cfg) {
   return { perColpo: Math.round(adesso), perColpoMax: Math.round(massimo) };
 }
 
-/** Un giocatore letto in diretta con getUserLite. */
+/** Un giocatore letto in diretta con getUserById. */
 function daLive(u, cfg, ora) {
   const s = u.skills || {};
   const a = s.attack || {};

@@ -58,6 +58,7 @@ import { SenateView } from './senate.js';
 // volatilità storica della nazione (vedi il blocco in testa al modulo).
 import { volatilityK, seatIntervals } from './simUncertainty.js';
 import { pT } from './plusI18n.js';
+import { governmentMembers, governmentMinisters } from '../shared/government.js';
 
 // Dipendenze cross-modulo iniettate da main.js (Stage 8) — vedi header.
 let _loadElection = null;
@@ -435,13 +436,23 @@ async function loadCurrentGovernment(countryId) {
 export async function getGovernmentWithDetails(countryId) {
   const gov = await loadCurrentGovernment(countryId);
   if (!gov) return null;
-  const roleKeys = ['president', 'vicePresident', 'minOfDefense', 'minOfEconomy', 'minOfForeignAffairs'];
-  const userIds = roleKeys.map(k => gov[k]).filter(Boolean);
+  // WarEra+ 2026-11-08: i ministri sono un elenco (`ministers`, fino a 20,
+  // vedi src/shared/government.js). `membersData` è il governo intero, in
+  // ordine; i vecchi `<carica>Data` restano per chi li legge ancora (il
+  // senato), col PRIMO ministro di ciascuno dei tre titoli storici.
+  const members = governmentMembers(gov);
+  const userIds = [...new Set(members.map(m => m.user))];
   if (!userIds.length) return gov;
   const users = await Promise.all(userIds.map(uid => localFetch('/user', { id: uid }).catch(() => null)));
   const userMap = {};
   userIds.forEach((uid, idx) => { if (users[idx]?.username) userMap[uid] = users[idx]; });
-  roleKeys.forEach(key => { if (gov[key] && userMap[gov[key]]) gov[key + 'Data'] = userMap[gov[key]]; });
+  gov.membersData = members.map(m => ({ ...m, data: userMap[m.user] || null }));
+  if (gov.president && userMap[gov.president]) gov.presidentData = userMap[gov.president];
+  if (gov.vicePresident && userMap[gov.vicePresident]) gov.vicePresidentData = userMap[gov.vicePresident];
+  for (const title of ['minOfDefense', 'minOfEconomy', 'minOfForeignAffairs']) {
+    const first = governmentMinisters(gov).find(m => m.title === title);
+    if (first && userMap[first.user]) gov[title + 'Data'] = userMap[first.user];
+  }
   return gov;
 }
 export function renderGovernment(gov) {
@@ -449,16 +460,12 @@ export function renderGovernment(gov) {
   const grid = document.getElementById('governmentGrid');
   if (!gov || !gov.presidentData) { if (panel) panel.open = false; return; }
   panel.open = true;
-  const roles = [
-    { key: 'president', label: 'President', dataKey: 'presidentData' },
-    { key: 'vicePresident', label: 'Vice President', dataKey: 'vicePresidentData' },
-    { key: 'minOfDefense', label: 'Minister of Defense', dataKey: 'minOfDefenseData' },
-    { key: 'minOfEconomy', label: 'Minister of Economy', dataKey: 'minOfEconomyData' },
-    { key: 'minOfForeignAffairs', label: 'Minister of Foreign Affairs', dataKey: 'minOfForeignAffairsData' },
-  ];
+  // WarEra+ 2026-11-08: tutto il governo (fino a 20 ministri), coi titoli
+  // personalizzati del presidente — vedi getGovernmentWithDetails.
+  const roles = (gov.membersData || []).filter(m => m.data);
   grid.innerHTML = roles.map(role => {
-    const userId = gov[role.key];
-    const user = gov[role.dataKey];
+    const userId = role.user;
+    const user = role.data;
     if (!userId || !user) return '';
     const avatarHtml = user.avatarUrl
       ? `<img src="${user.avatarUrl}" class="gov-avatar" alt="" loading="lazy">`
@@ -467,7 +474,7 @@ export function renderGovernment(gov) {
       <div class="gov-card">
         ${avatarHtml}
         <div class="gov-info">
-          <div class="gov-role">${role.label}</div>
+          <div class="gov-role">${escapeHtml(role.label)}</div>
           <div class="gov-name"><a href="${APP_BASE}/user/${userId}" target="_blank">${escapeHtml(user.username || userId)}</a></div>
         </div>
       </div>

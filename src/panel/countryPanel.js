@@ -29,6 +29,7 @@ import { isPinned, togglePin } from '../app/pins.js';
 import { ensureDailyDamage, sumCountryDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
 import { allianceDamageBonus, formatBonus, isPenalty, curveTooltip } from '../shared/allianceBonus.js';
 import { govIncomeModel, GOV_NEUTRAL_TYPES } from '../shared/govIncome.js';
+import { fetchStrategic } from '../shared/strategicResources.js';
 // getFlagUrl/getNationCode vivevano qui: spostate in nationFlag.js perche'
 // le usa anche viewOverview.js (import circolare, altrimenti).
 import { getFlagUrl, getNationCode } from './nationFlag.js';
@@ -580,6 +581,7 @@ function buildPanelHtml(nation) {
     </div>
 
     <div id="wp-panel-ethics"></div>
+    <div id="wp-panel-strategic"></div>
 
     ${swornEnemyName ? `
       <div class="wp-panel-section-title">${t('sworn_enemy_label')}</div>
@@ -602,6 +604,50 @@ function buildPanelHtml(nation) {
   `;
 }
 
+/* WarEra+ 2026-11-08 — risorse strategiche: dal 7 novembre non pagano più
+   soldi ma danno abilità a ogni cittadino, condivise nell'alleanza (regole
+   e fonti in src/shared/strategicResources.js). Una richiesta pubblica
+   (api6) quando il pannello si apre, col calcolo locale come ripiego: il
+   pannello resta quello di prima se non arriva niente. */
+function strategicHtml(s) {
+  // Tutte e sei, anche a zero copie: "cosa ci manca" è metà della risposta.
+  const rows = s.rows;
+  const any = rows.some(r => r.copies > 0);
+  const who = s.allianceId && s.countryIds.length > 1
+    ? t('sr_alliance', { n: s.countryIds.length })
+    : t('sr_solo');
+  if (!any) {
+    return `<div class="wp-panel-section-title">${t('sr_title')}</div>
+      <div class="wp-eth-box"><div class="wp-eth-spec">${escapeHtml(t('sr_none'))}</div></div>`;
+  }
+  const dots = (l) => `<span class="wp-sr-dots" aria-label="${l}/3">${[1, 2, 3].map(i => `<i class="${i <= l ? 'on' : ''}"></i>`).join('')}</span>`;
+  const body = rows.map(r => {
+    const own = s.allianceId && s.countryIds.length > 1 && r.own > 0 && r.own !== r.copies ? ` · ${t('sr_own', { n: r.own })}` : '';
+    const next = r.toNext == null ? t('sr_max') : t('sr_next', { n: r.toNext, l: r.level + 1 });
+    return `<tr class="${r.level ? '' : 'wp-sr-off'}">
+      <td>${r.icon} ${escapeHtml(t('sr_res_' + r.key))}<div class="wp-sr-sub">×${r.copies}${escapeHtml(own)} · ${escapeHtml(next)}</div></td>
+      <td>${dots(r.level)}</td>
+      <td class="wp-govinc-num${r.bonus ? ' up' : ''}">${r.bonus ? `+${r.bonus}` : '0'} ${escapeHtml(t('sr_sk_' + r.skill))}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="wp-panel-section-title">${t('sr_title')}</div>
+    <div class="wp-eth-box wp-govinc-box">
+      <table class="wp-govinc-table wp-sr-table"><tbody>${body}</tbody></table>
+      <div class="wp-eth-spec">${escapeHtml(who)} ${escapeHtml(t('sr_levels'))}</div>
+      ${s.source === 'local' ? `<div class="wp-eth-spec">${escapeHtml(t('sr_local'))}</div>` : ''}
+    </div>`;
+}
+
+function paintStrategic(nation) {
+  const host = document.getElementById('wp-panel-strategic');
+  if (!host) return;
+  fetchStrategic(nation, state.nazioniGlobal).then(s => {
+    if (currentNationId !== nation._id || !s) return;
+    const el = document.getElementById('wp-panel-strategic');
+    if (el) el.innerHTML = strategicHtml(s);
+  }).catch(() => {});
+}
+
 /* WarEra+ — etiche del partito al governo. Due chiamate, solo quando il
    pannello si apre davvero, e in fondo alla griglia: il pannello resta
    utile anche se non arrivano (o se la nazione non ha un governo). Vedi
@@ -611,7 +657,11 @@ function paintEthics(nation) {
   if (!host) return;
   // WarEra+ v0.27 — le etiche non contano più (il dato `party.ethics` c'è
   // ancora, ma il gioco non lo usa): al loro posto il tipo di governo.
-  if (nation?.income) { host.innerHTML = govTypeHtml(nation) + govCompareHtml(nation); return; }
+  if (nation?.income) {
+    host.innerHTML = govTypeHtml(nation) + govCompareHtml(nation);
+    paintStrategic(nation);
+    return;
+  }
   fetchCountryEthics(nation._id).then(info => {
     // Pannello già passato a un'altra nazione mentre la richiesta era in
     // volo: non si scrive niente.

@@ -214,8 +214,10 @@ async function citizensDirect(countryId) {
   }
 
   const slice = ids.slice(0, FALLBACK_MAX);
+  // WarEra+ 2026-11-08: getUserById — getUserLite non porta più `skills`
+  // (attacco e stile di gioco qui sotto).
   const users = await Promise.all(
-    slice.map(id => trpcCall('user.getUserLite', { userId: id }).catch(() => null)),
+    slice.map(id => trpcCall('user.getUserById', { userId: id }).catch(() => null)),
   );
 
   const rows = users.filter(Boolean).map(u => ({

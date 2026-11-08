@@ -40,6 +40,7 @@ import { trpcBatchManual, trpcCall } from '../shared/trpcClient.js';
 import { fetchPlayerWealthViaCache, fetchPlayerPartsViaCache, fetchUsersLiteViaCache } from '../diplomacy/cacheClient.js';
 import { getBattleArchive, getLiveBattles } from '../battles/api.js';
 import { fetchCountryCitizens } from '../nations/api.js';
+import { governmentMembers } from '../shared/government.js';
 
 export const LEADERBOARDS = ['weeklyUserDamages', 'userDamages', 'userWealth', 'userBounty'];
 
@@ -56,7 +57,10 @@ const LITE_TTL_MS = 2 * 60 * 1000;
 export async function fetchPlayer(userId) {
   const hit = _lite.get(userId);
   if (hit && Date.now() - hit.at < LITE_TTL_MS) return hit.data;
-  const [data] = await trpcBatchManual([['user.getUserLite', { userId }]]);
+  // WarEra+ 2026-11-08: getUserById — dal 7 novembre getUserLite non porta
+  // più `skills`, e il profilo ne vive (abilità, radar, duello, pillola).
+  // Stessi campi di prima più skills, equipaggiamento e partito.
+  const [data] = await trpcBatchManual([['user.getUserById', { userId }]]);
   if (data) _lite.set(userId, { at: Date.now(), data });
   return data || null;
 }
@@ -356,6 +360,18 @@ export async function fetchWorkStats(userId) {
 
 const GOV_ROLES = ['president', 'vicePresident', 'minOfDefense', 'minOfForeignAffairs', 'minOfEconomy'];
 
+/** Le cariche che `userId` aveva in una riga dell'archivio governi.
+ *  WarEra+ 2026-11-08: dal 7 novembre i ministri sono un elenco (`m`,
+ *  [utente, titolo]); le righe di prima hanno solo i tre campi fissi. */
+function rolesInRow(row, userId) {
+  const out = new Set();
+  if (row?.r?.[0] === userId) out.add('president');
+  if (row?.r?.[1] === userId) out.add('vicePresident');
+  if (Array.isArray(row?.m)) row.m.forEach(([u, title]) => { if (u === userId) out.add(title); });
+  else for (let k = 2; k < GOV_ROLES.length; k++) if (row?.r?.[k] === userId) out.add(GOV_ROLES[k]);
+  return out;
+}
+
 /**
  * Partito, cariche di adesso e storia politica di un giocatore.
  * · partito: getUserById (getUserLite non lo porta) + party.getById;
@@ -386,7 +402,7 @@ export async function fetchPolitics(userId, countryId) {
   }
   const roles = [];
   if (gov) {
-    for (const r of GOV_ROLES) if (gov[r] === userId) roles.push(r);
+    for (const m of governmentMembers(gov)) if (m.user === userId && !roles.includes(m.role)) roles.push(m.role);
     if ((gov.congressMembers || []).includes(userId)) roles.push('congress');
   }
 
@@ -400,11 +416,13 @@ export async function fetchPolitics(userId, countryId) {
       // dalla riga in cui compare fino alla prima in cui non c'è più.
       const govRows = h.governments?.rows || [];
       const terms = [];
-      for (let ri = 0; ri < GOV_ROLES.length; ri++) {
+      const held = govRows.map(g => rolesInRow(g, userId));
+      const allHeld = new Set(held.flatMap(s => [...s]));
+      for (const role of allHeld) {
         let open = null;
         govRows.forEach((g, i) => {
-          const holds = g.r?.[ri] === userId;
-          if (holds && !open) open = { role: GOV_ROLES[ri], from: g.a, to: null };
+          const holds = held[i].has(role);
+          if (holds && !open) open = { role, from: g.a, to: null };
           if (!holds && open) { open.to = g.a; terms.push(open); open = null; }
           if (holds && i === govRows.length - 1) terms.push(open);
         });

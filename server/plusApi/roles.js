@@ -38,6 +38,7 @@
 const express = require('express');
 const { nazioneAmmessa, etichette: etichetteNazioni, alleanzaAmmessa } = require('./nazioni');
 const { trpcGet, trpcBatch } = require('./wareraApi');
+const { caricaDi, haDiritto, ministroDi, eCaricaDiGoverno, TITOLI_MINISTRO } = require('./governo');
 const {
   getAccountById, listRoleOverrides, setRoleOverride, removeRoleOverride,
   listAccounts, setAdmin, audit,
@@ -46,14 +47,15 @@ const {
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const _cache = new Map(); // warUserId → { at, dati }
 
-// Le cariche di governo, dalla più alta. L'ordine conta solo per
-// mostrarne UNA quando una persona ne ricopre più d'una.
-const CARICHE = ['president', 'vicePresident', 'minOfDefense', 'minOfForeignAffairs', 'minOfEconomy'];
-
-// Chi può APPROVARE un contratto per la propria nazione. Il ministro
-// della difesa è quello che lo fa davvero; presidente e vice ci sono
-// perché in pratica lo fanno quando il ministro non c'è.
+// Chi può APPROVARE un contratto per la propria nazione.
+// WarEra+ 2026-11-08: dai DIRITTI di gioco, non più dal titolo. Coi
+// ministri a elenco (vedi governo.js) il presidente decide chi gestisce i
+// contratti mercenari (`manageMercenaryContracts`): può essere il ministro
+// della difesa, quello dell'economia o un consigliere. Presidente e vice
+// li hanno tutti. Questo insieme resta per le DEROGHE, che si concedono
+// per nome di carica.
 const CARICHE_APPROVAZIONE = new Set(['president', 'vicePresident', 'minOfDefense']);
+const DIRITTO_CONTRATTI = 'manageMercenaryContracts';
 
 // Chi può CHIEDERE un contratto per la propria unità.
 const RUOLI_MU_RICHIESTA = new Set(['owner', 'commander', 'manager']);
@@ -62,9 +64,9 @@ const RUOLI_MU_RICHIESTA = new Set(['owner', 'commander', 'manager']);
 // Tutto il governo, non solo chi approva: è una scelta politica, e
 // limitarla al ministro della difesa bloccherebbe tutto quando manca.
 // Il congresso no: è parlamento, non governo.
-const CARICHE_GOVERNO = new Set([
-  'president', 'vicePresident', 'minOfDefense', 'minOfForeignAffairs', 'minOfEconomy',
-]);
+// WarEra+ 2026-11-08: tutti i ministri, qualunque titolo (fino a 20): li
+// nomina il presidente, e il gioco dà a tutti lo stesso distintivo.
+const CARICHE_GOVERNO = new Set(['president', 'vicePresident', ...TITOLI_MINISTRO]);
 
 /**
  * Ruoli DERIVATI dai dati di gioco, senza deroghe.
@@ -88,12 +90,12 @@ async function calcolaDerivati(warUserId, { forzaRicalcolo = false } = {}) {
   const governo = countryId ? risposte[i++] : null;
   const mu = muId ? risposte[i++] : null;
 
-  let carica = null;
-  if (governo) {
-    carica = CARICHE.find((k) => governo[k] === warUserId) || null;
-    // Il congresso è l'unico ruolo di governo che sta in un elenco.
-    if (!carica && (governo.congressMembers || []).includes(warUserId)) carica = 'congress';
-  }
+  // WarEra+ 2026-11-08: i ministri sono un elenco con titolo e diritti
+  // (governo.js legge anche la forma vecchia a tre campi).
+  const carica = governo ? caricaDi(governo, warUserId) : null;
+  const ministro = governo ? ministroDi(governo, warUserId) : null;
+  const approvaContratti = Boolean(governo && eCaricaDiGoverno(carica)
+    && haDiritto(governo, warUserId, DIRITTO_CONTRATTI));
 
   let ruoloMu = null;
   if (mu) {
@@ -108,6 +110,9 @@ async function calcolaDerivati(warUserId, { forzaRicalcolo = false } = {}) {
     username: lite?.username || null,
     countryId,
     carica,                                   // null se semplice cittadino
+    // Il titolo scelto dal presidente ("Vice Ministro degli Esteri"), se c'è.
+    titoloCarica: ministro?.customTitle || null,
+    approvaContratti,
     muId,
     muNome: mu?.name || null,
     // Serve alla card profilo: mostrare stemma e nome dell'unita' accanto
@@ -153,7 +158,7 @@ async function calcolaEffettivi(account, opzioni) {
   const chiedePer = new Set();
   const gestisceNazione = new Set();
 
-  if (derivati?.carica && CARICHE_APPROVAZIONE.has(derivati.carica)
+  if (derivati?.carica && derivati.approvaContratti
       && !revocato('country', derivati.countryId, derivati.carica)) {
     approvaPer.add(derivati.countryId);
   }

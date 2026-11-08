@@ -26,6 +26,20 @@ import { membersChartHtml, wireMembersChart, disposeMembersChart } from './membe
 
 const DAY_MS = 864e5;
 const ROLE_KEYS = ['role_president', 'role_vice', 'role_defense', 'role_foreign', 'role_economy'];
+// WarEra+ 2026-11-08: i ministri sono un elenco con titolo (fino a 20).
+const TITLE_KEYS = {
+  minOfDefense: 'role_defense', minOfForeignAffairs: 'role_foreign', minOfEconomy: 'role_economy',
+  minOfInterior: 'role_interior', minOfCommunication: 'role_communication',
+  chiefOfStaff: 'role_chief', advisor: 'role_advisor',
+};
+const LEGACY_TITLES = ['minOfDefense', 'minOfForeignAffairs', 'minOfEconomy'];
+
+/** I ministri di una riga dell'archivio come [utente, titolo]: `m` se c'è
+ *  (dal 2026-11-08), altrimenti i tre campi fissi di `r`. */
+function _ministers(row) {
+  if (Array.isArray(row?.m)) return row.m;
+  return LEGACY_TITLES.map((t, k) => [row?.r?.[k + 2], t]).filter(([u]) => u);
+}
 
 let _renderSeq = 0;
 
@@ -247,10 +261,24 @@ function governmentsPanel(gov, users) {
     const out = [];
     for (let i = rows.length - 1; i >= 0 && out.length < 25; i--) {
       const cur = rows[i], prev = rows[i - 1];
-      const changes = cur.r.map((u, k) => ({ k, u, before: prev?.r?.[k] }))
+      // Presidente e vice si confrontano per posto; i ministri per persona
+      // (entrati, usciti, titolo cambiato), perché con un elenco il
+      // "terzo posto" non vuol dire niente.
+      const changes = cur.r.slice(0, 2).map((u, k) => ({ label: ROLE_KEYS[k], u, before: prev?.r?.[k] }))
         .filter(c => !prev || c.u !== c.before);
-      const items = changes.map(c => `<div class="wp-pol-gov-ch"><span class="wp-pol-dim">${escapeHtml(pT(ROLE_KEYS[c.k]))}</span>
-          ${prev && c.before ? `<s>${_user(c.before, users)}</s> → ` : ''}${c.u ? _user(c.u, users) : `<em class="wp-pol-dim">${escapeHtml(pT('vacant'))}</em>`}</div>`).join('');
+      const curM = _ministers(cur), prevM = prev ? _ministers(prev) : [];
+      const prevBy = new Map(prevM.map(([u, t]) => [u, t]));
+      const curBy = new Map(curM.map(([u, t]) => [u, t]));
+      for (const [u, t] of curM) {
+        if (!prev || prevBy.get(u) !== t) changes.push({ label: TITLE_KEYS[t] || 'role_advisor', u, before: null });
+      }
+      for (const [u, t] of prevM) {
+        if (!curBy.has(u)) changes.push({ label: TITLE_KEYS[t] || 'role_advisor', u: null, before: u, left: true });
+      }
+      if (!changes.length) continue;
+      const items = changes.map(c => `<div class="wp-pol-gov-ch"><span class="wp-pol-dim">${escapeHtml(pT(c.label))}</span>
+          ${c.left ? `<s>${_user(c.before, users)}</s> <em class="wp-pol-dim">${escapeHtml(pT('gov_left'))}</em>`
+            : `${prev && c.before ? `<s>${_user(c.before, users)}</s> → ` : ''}${c.u ? _user(c.u, users) : `<em class="wp-pol-dim">${escapeHtml(pT('vacant'))}</em>`}`}</div>`).join('');
       out.push(`<div class="wp-pol-gov-row">
           <div class="wp-pol-gov-date">${escapeHtml(fmtDate(cur.a, true))}${prev ? '' : ` <span class="wp-pol-tag">${escapeHtml(pT('first_reading'))}</span>`}</div>
           <div>${items}</div>

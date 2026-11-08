@@ -30,6 +30,7 @@ import {
   fetchElectionsForCountriesViaCache, fetchElectionDetailsViaCache, fetchUsersLiteViaCache,
 } from '../diplomacy/cacheClient.js';
 import { t } from '../shared/i18n.js';
+import { governmentMembers } from '../shared/government.js';
 
 // Cache leggera per country: evita di rifare tutte le fetch se l'utente
 // riseleziona la stessa nazione più volte nella stessa sessione.
@@ -105,10 +106,11 @@ async function fetchParliamentSeatsData(countryId) {
     };
   });
 
-  const govRoleKeys = ['president', 'vicePresident', 'minOfDefense', 'minOfEconomy', 'minOfForeignAffairs'];
-  const govRoleIds = gov ? Object.fromEntries(govRoleKeys.map(k => [k, gov[k] || null])) : null;
+  // WarEra+ 2026-11-08: i ministri sono un elenco (fino a 20) e non più
+  // tre campi fissi — vedi src/shared/government.js.
+  const govMembers = gov ? governmentMembers(gov) : null;
 
-  return { seats, govRoleIds, electionDate: latestCongress?.createdAt || null };
+  return { seats, govMembers, electionDate: latestCongress?.createdAt || null };
 }
 
 /* ── FETCH DATI — FASE 2: avatar/nomi dei player (candidati eletti +
@@ -117,7 +119,7 @@ async function fetchParliamentSeatsData(countryId) {
    countryPanel.js: pannello blocco). ── */
 async function fetchParliamentUserData(seatsResult) {
   const candidateUserIds = seatsResult.seats.map(s => s.userId).filter(Boolean);
-  const govUserIds = seatsResult.govRoleIds ? Object.values(seatsResult.govRoleIds).filter(Boolean) : [];
+  const govUserIds = (seatsResult.govMembers || []).map(m => m.user).filter(Boolean);
   const allUserIds = [...new Set([...candidateUserIds, ...govUserIds])];
   if (!allUserIds.length) return new Map();
   return fetchSeatUsers(allUserIds);
@@ -150,18 +152,12 @@ function _mergeUserData(seatsResult, userMap) {
   });
 
   let government = null;
-  if (seatsResult.govRoleIds) {
-    const roleDataKeys = {
-      president: 'presidentData',
-      vicePresident: 'vicePresidentData',
-      minOfDefense: 'minOfDefenseData',
-      minOfEconomy: 'minOfEconomyData',
-      minOfForeignAffairs: 'minOfForeignAffairsData',
+  if (seatsResult.govMembers) {
+    const members = seatsResult.govMembers.map(m => ({ ...m, data: userMap.get(m.user) || null }));
+    government = {
+      presidentData: members.find(m => m.role === 'president')?.data || null,
+      members,
     };
-    government = {};
-    Object.entries(seatsResult.govRoleIds).forEach(([role, uid]) => {
-      government[roleDataKeys[role]] = uid ? (userMap.get(uid) || null) : null;
-    });
   }
 
   return { seats, government };
@@ -276,7 +272,6 @@ export async function fetchGroupSeatsData(countryIds) {
   const partyMap = partyIdsArr.length ? await fetchPartiesDetailViaCache(partyIdsArr) : new Map();
 
   // 4) costruisce e salva in cache il risultato per OGNI nazione del gruppo
-  const govRoleKeys = ['president', 'vicePresident', 'minOfDefense', 'minOfEconomy', 'minOfForeignAffairs'];
   idsToFetch.forEach(id => {
     const candidates = candidatesByCountry.get(id) || [];
     const seats = candidates.map(c => {
@@ -292,9 +287,9 @@ export async function fetchGroupSeatsData(countryIds) {
       };
     });
     const gov = govByCountry.get(id);
-    const govRoleIds = gov ? Object.fromEntries(govRoleKeys.map(k => [k, gov[k] || null])) : null;
+    const govMembers = gov ? governmentMembers(gov) : null;
     const latest = latestCongressByCountry.get(id);
-    _cacheSeats.set(id, { seats, govRoleIds, electionDate: latest?.createdAt || null });
+    _cacheSeats.set(id, { seats, govMembers, electionDate: latest?.createdAt || null });
   });
 }
 
@@ -312,7 +307,7 @@ export async function fetchGroupUserData(countryIds) {
   seatsPairs.forEach(([, sr]) => {
     if (!sr) return;
     sr.seats.forEach(s => { if (s.userId) allUserIds.add(s.userId); });
-    if (sr.govRoleIds) Object.values(sr.govRoleIds).forEach(uid => { if (uid) allUserIds.add(uid); });
+    (sr.govMembers || []).forEach(m => { if (m.user) allUserIds.add(m.user); });
   });
 
   const idsArr = [...allUserIds];
@@ -535,13 +530,8 @@ function _pieWedgePath(cx, cy, r, a0, a1, color) {
 /* ── GOVERNO (box nativo, non riusa DOM/CSS di Political) ── */
 function buildGovernmentHtml(gov) {
   if (!gov || !gov.presidentData) return '';
-  const roles = [
-    ['presidentData', t('role_president'), true],
-    ['vicePresidentData', t('role_vp'), false],
-    ['minOfDefenseData', t('role_defense'), false],
-    ['minOfEconomyData', t('role_economy'), false],
-    ['minOfForeignAffairsData', t('role_foreign'), false],
-  ];
+  // WarEra+ 2026-11-08: tutto il governo, coi titoli del presidente.
+  const roles = (gov.members || []).map(m => [m.data, m.label, m.role === 'president']);
   const memberHtml = (user, label, big) => {
     if (!user) return '';
     const avatar = user.avatarUrl
@@ -558,7 +548,7 @@ function buildGovernmentHtml(gov) {
   };
   return `
     <div class="wp-gov-box">
-      ${roles.map(([key, label, big]) => memberHtml(gov[key], label, big)).join('')}
+      ${roles.map(([user, label, big]) => memberHtml(user, escapeHtml(label), big)).join('')}
     </div>
   `;
 }

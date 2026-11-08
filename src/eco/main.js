@@ -631,11 +631,13 @@ async function run() {
     const gd = makeGameData(await loadGameData());
     const [owned, me, bench] = await Promise.all([
       loadOwnedCompanies(gd, userId),
-      ecoCall('user.getUserLite', { userId }),
+      // WarEra+ 2026-11-08: getUserById — getUserLite non porta più le
+      // skills, e la scheda Competenze parte dai livelli di adesso.
+      ecoCall('user.getUserById', { userId }),
       // Sul mondo di prova (apidev) i riferimenti del live non c'entrano.
       isDevApi() ? null : loadEmployeeBenchmarks(),
     ]);
-    if (!me) throw new EcoProxyUnavailableError('user.getUserLite null');
+    if (!me) throw new EcoProxyUnavailableError('user.getUserById null');
 
     const companies = computeCompanies(gd, owned, { bench });
     const skills = computeSkills(gd, me, companies);

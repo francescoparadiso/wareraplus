@@ -25,13 +25,14 @@ import { localFetch } from './api.js';
 // resta nella risposta, fermo): lo dice il dato delle nazioni, vedi
 // src/diplomacy/productionHeatmap.js.
 import { isRevenueEra } from '../diplomacy/productionHeatmap.js';
+import { t as tShared } from '../shared/i18n.js';
 import { startHeavyOperation, endHeavyOperation } from './loading.js';
 import { showSkeletonPartyView, hideSkeletonPartyView } from './ui.js';
 import { loadPartiesForCountry } from './congress.js';
 import { initMemberOrganizer } from './organizer.js';
 // WarEra+: composizione del partito e pallino guerra/eco sulle card, dai
 // membri già scaricati qui sotto — zero chiamate in più (src/political/links.js).
-import { renderPartyComposition, psDot, playstyleOf } from './links.js';
+import { renderPartyComposition, psDot, playstyleOf, primePlaystyles } from './links.js';
 
 /* ── PARTY SELECTOR ── */
 export async function loadPartiesForSelector() {
@@ -141,6 +142,9 @@ export async function loadPartyDetails(partyId) {
           Industrialism: ${partyData.ethics.industrialism ?? '—'}
         </span></div>
       ` : ''}
+      ${partyData.favoriteGovType ? `
+        <div class="party-overview-item"><span class="party-overview-label">${t('party_fav_gov')}</span><span title="${escapeHtml(t('party_fav_gov_note'))}">${escapeHtml(tShared('gov_' + partyData.favoriteGovType))}</span></div>
+      ` : ''}
     `;
 
     /* MEMBERS + LEADERSHIP — le due liste di utenti non dipendono l'una dall'altra: le scarichiamo insieme */
@@ -160,6 +164,10 @@ export async function loadPartyDetails(partyId) {
     const threeDays = 3 * 24 * 60 * 60 * 1000;
     const activeMembers = members.filter(m => m.dates && (now - new Date(m.dates.lastConnectionAt)) < threeDays);
     const inactiveMembers = members.filter(m => !activeMembers.includes(m));
+
+    // WarEra+ 2026-11-08: lo stile di gioco dei pallini viene dal
+    // cache-server (getUserLite non ha più le skills): vedi links.js.
+    await primePlaystyles(members.map(m => m._id));
 
     document.getElementById('partyMembersContainer').innerHTML = `
       <div style="display:flex;flex-direction:column;gap:4px;">

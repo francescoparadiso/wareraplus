@@ -28,6 +28,19 @@
                        tutte le 44 nazioni che li hanno)
    Proprie/conquistate: `country` contro `initialCountry` della regione.
 
+   ── Aggiornamento del 7 novembre 2026 (riverificato l'8 sul live) ──
+   · Stato nazionalista e Stato mercenario NON esistono più: le nazioni
+     che li avevano tornano Provvisorie. Spariscono dal confronto; la
+     regola resta in `effectOf` solo per leggere un dato vecchio.
+   · Le risorse strategiche non rendono più soldi (danno abilità ai
+     cittadini, vedi strategicResources.js): `strategicResourcesBonus` è 0
+     su 181 nazioni, e la parte "+50% risorse" della Plutocrazia vale 0.
+   · Plutocrazia: + 100% delle tasse su salari e manager (era 40%). Su 18
+     plutocrazie, 14 tornano entro l'1%; le altre (Rep. Ceca al 50%,
+     Georgia al 98%) sono letture a metà ora, e il controllo qui sotto le
+     segna da sé.
+   · Repubblica e Autocrazia invariate (proprie − conquistate; + 25%).
+
    ⚠️ Punto aperto: la Repubblica con regioni conquistate. Al 27 ottobre le
    due Repubbliche non ne hanno, quindi "le conquistate non rendono" è solo
    la regola delle note. Non è chiaro se perdano anche la rendita delle
@@ -41,13 +54,18 @@
    non deve diventare un numero sbagliato detto con sicurezza.
    ══════════════════════════════════════════════════════════════ */
 
-/** I tipi con un effetto sulle entrate, in ordine di lettura. */
-export const GOV_INCOME_TYPES = ['republic', 'plutocracy', 'autocracy', 'nationalistState'];
-/** Quelli che sulle entrate non fanno niente. */
-export const GOV_NEUTRAL_TYPES = ['federation', 'homelandFront', 'mercenaryState'];
+/** I tipi con un effetto sulle entrate, in ordine di lettura.
+ *  (Stato nazionalista tolto dal gioco il 2026-11-07.) */
+export const GOV_INCOME_TYPES = ['republic', 'plutocracy', 'autocracy'];
+/** Quelli che sulle entrate non fanno niente. (Stato mercenario tolto
+ *  dal gioco il 2026-11-07.) */
+export const GOV_NEUTRAL_TYPES = ['federation', 'homelandFront'];
+/** I tipi che il gioco ha tolto il 2026-11-07: le nazioni che li avevano
+ *  sono tornate Provvisorie. Solo per riconoscerli in un dato vecchio. */
+export const GOV_REMOVED_TYPES = ['nationalistState', 'mercenaryState'];
 
 const PLUTO_STRATEGIC = 0.5;
-const PLUTO_TAX = 0.4;
+const PLUTO_TAX = 1.0;   // 0,4 fino al 2026-11-07
 const AUTOCRACY_DEV = 0.25;
 const NATIONALIST_DEV = -0.3;
 

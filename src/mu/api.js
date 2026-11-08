@@ -304,8 +304,13 @@ export async function fetchMuBriefs(muIds) {
  *  non una per membro — il massimo osservato è 25 membri per unità.
  *  Un utente che fallisce non fa fallire gli altri: torna null al suo posto. */
 export function fetchUsersLite(userIds) {
+  // WarEra+ 2026-11-08: getUserById e non più getUserLite. Dal 7 novembre
+  // getUserLite non porta più `skills`, e la scheda unità ne vive (colonne
+  // attacco e critico, stile di gioco, barre di vita e fame). getUserById
+  // ha tutto quello di prima più le skills (~6 KB contro ~2,7 a membro);
+  // il batch è un POST, quindi niente tetto di URL.
   return Promise.all(userIds.map(id =>
-    trpcCall('user.getUserLite', { userId: id }).catch(() => null)
+    trpcCall('user.getUserById', { userId: id }).catch(() => null)
   ));
 }
 

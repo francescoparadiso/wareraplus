@@ -558,13 +558,16 @@ const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_BASE_MS = 1200;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function trpcBatch(calls, { useWorker = false, _attempt = 1 } = {}) {
+// `maxBatch`: per le procedure con input lunghi. 100 `user.getUserById` in
+// un GET superano gli ~8 KB di URL e WarEra risponde 414; a 50 passano
+// (misurato il 2026-11-08: 4,1 KB di URL, 300 KB di risposta).
+async function trpcBatch(calls, { useWorker = false, maxBatch = MAX_BATCH, _attempt = 1 } = {}) {
   if (!calls || !calls.length) return [];
-  if (calls.length > MAX_BATCH) {
+  if (calls.length > maxBatch) {
     const chunks = [];
-    for (let i = 0; i < calls.length; i += MAX_BATCH) chunks.push(calls.slice(i, i + MAX_BATCH));
+    for (let i = 0; i < calls.length; i += maxBatch) chunks.push(calls.slice(i, i + maxBatch));
     const results = [];
-    for (const chunk of chunks) results.push(...(await trpcBatch(chunk, { useWorker })));
+    for (const chunk of chunks) results.push(...(await trpcBatch(chunk, { useWorker, maxBatch })));
     return results;
   }
   try {
@@ -580,7 +583,7 @@ async function trpcBatch(calls, { useWorker = false, _attempt = 1 } = {}) {
         const retryAfterHeader = parseFloat(res.headers.get('Retry-After'));
         const waitMs = !isNaN(retryAfterHeader) ? retryAfterHeader * 1000 : RETRY_BASE_MS * Math.pow(2, _attempt - 1);
         await sleep(waitMs);
-        return trpcBatch(calls, { useWorker, _attempt: _attempt + 1 });
+        return trpcBatch(calls, { useWorker, maxBatch, _attempt: _attempt + 1 });
       }
       console.warn('trpcBatch: 429 dopo i tentativi massimi');
       return calls.map(() => null);
@@ -984,6 +987,14 @@ const skillCost = n => (n * (n + 1)) / 2;
 /** 'w' | 'e' | 'm' | 'u' — una lettera sola perché finisce in 16k voci di
  *  un file che viene riletto e riscritto ad ogni poll. */
 function classifyPlaystyle(user) {
+  // WarEra+ 2026-11-08: senza `skills` lo stile NON si sa — non è "nessun
+  // punto speso". Dal 7 novembre `user.getUserLite` non le porta più, e
+  // per un giorno ogni giocatore riletto è diventato 'u'. null = tieni
+  // quello di prima (vedi pollMuDirectory).
+  if (!user?.skills) return null;
+  // `level` dal 7 novembre NON contiene più il livello regalato dal
+  // prestigio (sta in `skills.<x>.prestige`): sono i soli punti spesi,
+  // che è proprio quello che questo indice vuole misurare.
   const pts = key => skillCost(user?.skills?.[key]?.level || 0);
   const war = WAR_SKILLS.reduce((s, k) => s + pts(k), 0);
   const eco = ECO_SKILLS.reduce((s, k) => s + pts(k), 0);
@@ -1046,10 +1057,28 @@ const MU_PLAYSTYLE_HISTORY_MAX_IDS = 60;
 /** Aggiunge allo storico le nazioni i cui conteggi sono cambiati rispetto
  *  all'ultimo campione salvato. Formato compatto per nazione:
  *  [ts, war, eco, mixed, undecided, known]. */
+// WarEra+ 2026-11-08: dal 7 novembre ~15:20 UTC (aggiornamento del gioco)
+// `getUserLite` non porta più le skills e ogni giocatore riletto finiva
+// "indeciso": i campioni da allora fino a un giro completo dopo il deploy
+// che passa a getUserById (REFRESH_WINDOW_MS, più margine) raccontano un
+// crollo che nel gioco non c'è stato. Si tolgono. Il guardiano sulla data
+// di avvio fa sì che un riavvio qualunque, più avanti, non tocchi niente.
+const SERVER_STARTED_AT = Date.now();
+const PLAYSTYLE_GAP_FROM = Date.UTC(2026, 10, 7, 15, 0);
+const PLAYSTYLE_GAP_TO = SERVER_STARTED_AT < Date.UTC(2026, 10, 12)
+  ? SERVER_STARTED_AT + REFRESH_WINDOW_MS + 15 * 60 * 1000 : 0;
+
 function appendPlaystyleHistory(byCountry, now) {
   const history = readCache(MU_PLAYSTYLE_HISTORY_FILE, { data: {} }).data || {};
   const cutoff = now - PLAYSTYLE_HISTORY_RETENTION_MS;
   let changed = 0;
+  if (now < PLAYSTYLE_GAP_TO) return 0;   // stile ancora in ricostruzione: non si scrive
+  if (PLAYSTYLE_GAP_TO) {
+    for (const [countryId, series] of Object.entries(history)) {
+      const kept = series.filter(row => row[0] < PLAYSTYLE_GAP_FROM || row[0] >= PLAYSTYLE_GAP_TO);
+      if (kept.length && kept.length !== series.length) history[countryId] = kept;
+    }
+  }
 
   for (const [countryId, c] of Object.entries(byCountry)) {
     const series = history[countryId] || (history[countryId] = []);
@@ -1226,9 +1255,24 @@ async function pollMuDirectory() {
 
     const toResolve = [...new Set([...unknown, ...dueBatch])].slice(0, MU_USER_LOOKUP_BUDGET);
     if (toResolve.length) {
-      const users = await trpcBatch(toResolve.map(id => ['user.getUserLite', { userId: id }]), { useWorker: true });
+      // WarEra+ 2026-11-08: getUserById, non più getUserLite. Dal 7
+      // novembre getUserLite non porta più `skills`, e senza skills non
+      // c'è né stile di gioco né colpo dei nemici (citizenStats [8],
+      // [13..16]). getUserById ha tutto quello che aveva getUserLite
+      // (buffs per le pillole compresi) più le skills; pesa ~6 KB contro
+      // ~2,7, e va a blocchi da 50 (vedi `maxBatch` in trpcBatch).
+      const users = await trpcBatch(toResolve.map(id => ['user.getUserById', { userId: id }]), { useWorker: true, maxBatch: 50 });
       toResolve.forEach((id, i) => {
         const u = users[i];
+        if (u?.country && !u.skills) {
+          // Risposta senza skills (non dovrebbe più capitare): si tengono
+          // stile e colpo di prima invece di cancellarli.
+          const prev = userCountries[id];
+          const stats = citizenStats(u);
+          if (prev?.[4]) { stats[8] = prev[4][8] ?? null; for (let k = 13; k <= 16; k++) stats[k] = prev[4][k] ?? null; }
+          userCountries[id] = [u.country, now, prev?.[2] || 'u', u.dates?.lastSkillsResetAt || null, stats];
+          return;
+        }
         // Quinto elemento (aggiunto dopo): la fotografia statistica del
         // cittadino, per l'elenco cittadini di Statistiche nazioni
         // (/country-citizens). getUserLite la porta GIA' con se' — prima
@@ -1253,6 +1297,7 @@ async function pollMuDirectory() {
       if (!currentMembers.has(id) && !censusMap.has(id)) delete userCountries[id];
     }
     writeCache(MU_USER_COUNTRIES_FILE, { fetchedAt: now, data: userCountries }, { compact: true });
+    refreshPlaystyleIndex(userCountries);
 
     const data = mus.map(m => {
       const lean = leanMu(m);
@@ -2858,11 +2903,37 @@ app.get('/elections-detail', (req, res) => {
 });
 
 // Nome e avatar dei giocatori indicati — vedi resolveUsersLite.
+// WarEra+ 2026-11-08: lo stile di gioco ('war' | 'eco' | 'mixed' |
+// 'undecided') viaggia con nome e avatar. Political lo disegnava dalle
+// skills di `getUserLite`, che dal 7 novembre non le porta più; rileggere
+// getUserById per ogni iscritto di un partito sarebbe ~6 KB a testa per un
+// pallino. Qui c'è già, calcolato dal giro di pollMuDirectory: una mappa
+// userId → lettera, ~17.000 voci, rifatta a ogni giro (non il file intero
+// in RAM, che porta anche le statistiche).
+let _psIndex = null;
+function refreshPlaystyleIndex(userCountries) {
+  const m = new Map();
+  for (const [id, e] of Object.entries(userCountries || {})) if (e?.[2]) m.set(id, e[2]);
+  _psIndex = m;
+}
+function playstyleIndex() {
+  if (!_psIndex) refreshPlaystyleIndex(readCache(MU_USER_COUNTRIES_FILE, { data: {} }).data);
+  return _psIndex;
+}
+
 app.get('/users-lite', async (req, res) => {
   const ids = String(req.query.ids || '').split(',').map(s => s.trim()).filter(Boolean);
   if (!ids.length) return res.json({ data: {} });
   try {
-    res.json({ data: await resolveUsersLite(ids) });
+    const data = await resolveUsersLite(ids);
+    const ps = playstyleIndex();
+    // Solo su chi ha già nome e avatar: una voce senza nome farebbe credere
+    // ai client (fetchNames di Giocatori) che il nome sia stato risolto.
+    for (const id of ids) {
+      const code = ps.get(id);
+      if (code && data[id]) data[id].ps = PS_CODE[code] || null;
+    }
+    res.json({ data });
   } catch (err) {
     console.error('[users-lite] richiesta fallita:', err.message);
     res.json({ data: {} });
@@ -3507,7 +3578,10 @@ app.get('/political-history', async (req, res) => {
     const ids = new Set();
     out.presidents.forEach(p => ids.add(p.u));
     out.switches.rows.forEach(r => ids.add(r.u));
-    out.governments.rows.forEach(g => g.r.forEach(u => { if (u) ids.add(u); }));
+    out.governments.rows.forEach(g => {
+      g.r.forEach(u => { if (u) ids.add(u); });
+      (g.m || []).forEach(([u]) => { if (u) ids.add(u); });   // ministri a elenco (2026-11-08)
+    });
     // Con un tetto: i cambi di casacca di una nazione grande in 180 giorni
     // possono essere migliaia, e i nomi mancanti si mostrano come id.
     const list = [...ids].slice(0, 400);

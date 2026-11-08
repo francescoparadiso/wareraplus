@@ -233,7 +233,12 @@ async function resolveLocales(userIds) {
    presidente. */
 function governmentMembers(gov) {
   if (!gov) return { all: [], president: null, congress: [] };
-  const executive = [gov.president, gov.vicePresident, gov.minOfDefense, gov.minOfForeignAffairs, gov.minOfEconomy].filter(Boolean);
+  // WarEra+ 2026-11-08: i ministri sono un elenco (`ministers`, fino a 20);
+  // i tre campi fissi restano solo come ripiego per il dato vecchio.
+  const ministers = Array.isArray(gov.ministers)
+    ? gov.ministers.map(m => m?.user)
+    : [gov.minOfDefense, gov.minOfForeignAffairs, gov.minOfEconomy];
+  const executive = [gov.president, gov.vicePresident, ...ministers].filter(Boolean);
   const congress = (gov.congressMembers || []).filter(Boolean);
   return {
     all: [...new Set([...executive, ...congress])],

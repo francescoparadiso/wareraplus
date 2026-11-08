@@ -51,6 +51,17 @@ const OSTILI = new Set(['guerra', 'nemico_giurato']);
 const ORDINE_RELAZIONI = ['nemico_giurato', 'guerra', 'neutrale', 'nap', 'patto', 'alleato'];
 const MAX_EVENTI = 20;
 
+/** L'etichetta di una carica di governo. WarEra+ 2026-11-08: il presidente
+ *  può dare a un ministro un titolo suo ("Vice Ministro degli Esteri"), che
+ *  vince sul nome della carica; una carica che il dizionario non conosce
+ *  (server più nuovo del client) mostra la sua chiave invece di sparire. */
+function etichettaCarica(c) {
+  if (c?.titolo) return c.titolo;
+  const k = `gov_${c?.carica}`;
+  const s = nzT(k);
+  return s === k ? String(c?.carica || '') : s;
+}
+
 /** nzT con variabili fra graffe: t('hdWars', { n: 2 }). */
 function t(key, vars) {
   let s = nzT(key);
@@ -1400,8 +1411,8 @@ export function creaQuadroNazione(ctx) {
     if (persone.length) {
       card.appendChild(el('p', 'wp-pv-note', nzT('natDeniedAsk')));
       const lista = el('div', 'wp-pv-nz-chips');
-      for (const { carica, persona } of persone) {
-        lista.appendChild(personaEl(persona.avatar, persona.nome, nzT(`gov_${carica}`)));
+      for (const c of persone) {
+        lista.appendChild(personaEl(c.persona.avatar, c.persona.nome, etichettaCarica(c)));
       }
       card.appendChild(lista);
     }
@@ -1420,8 +1431,8 @@ export function creaQuadroNazione(ctx) {
     const carica = el('div', 'wp-pv-nz-sezione');
     carica.appendChild(el('h3', 'wp-pv-h3', nzT('accByOffice')));
     const chips = el('div', 'wp-pv-nz-chips');
-    for (const { carica: c, persona } of dati.governo?.cariche || []) {
-      if (persona) chips.appendChild(personaEl(persona.avatar, persona.nome, nzT(`gov_${c}`)));
+    for (const c of dati.governo?.cariche || []) {
+      if (c.persona) chips.appendChild(personaEl(c.persona.avatar, c.persona.nome, etichettaCarica(c)));
     }
     carica.appendChild(chips);
     card.appendChild(carica);
@@ -1546,9 +1557,10 @@ export function creaQuadroNazione(ctx) {
     const box = el('div', 'wp-pv-nz-governo');
     box.appendChild(el('h3', 'wp-pv-h3', nzT('govTitle')));
     const lista = el('div', 'wp-pv-nz-gov-lista');
-    for (const { carica, persona } of g.cariche) {
+    for (const c of g.cariche) {
+      const { persona } = c;
       const r = el('div', 'wp-pv-nz-gov-riga');
-      r.appendChild(el('span', 'wp-pv-label', nzT(`gov_${carica}`)));
+      r.appendChild(el('span', 'wp-pv-label', etichettaCarica(c)));
       const chi = el('span', 'wp-pv-nz-gov-chi');
       if (persona?.avatar) {
         const a = el('img', 'wp-pv-nz-avatar'); a.src = persona.avatar; a.alt = ''; a.loading = 'lazy';

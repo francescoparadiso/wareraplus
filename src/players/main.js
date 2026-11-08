@@ -629,7 +629,9 @@ function playerHtml() {
   if (!p) return `${back}<p class="wp-ply-note">${escapeHtml(plyT('notFound'))}</p>`;
 
   const lv = p.leveling || {};
-  const prestige = Number(lv.prestigeLevel || lv.prestige) || 0;
+  // WarEra+ 2026-11-08: `leveling.prestige` sono ora i punti prestigio NON
+  // spesi; quante volte ha fatto il prestigio è solo `prestigeLevel`.
+  const prestige = Number(lv.prestigeLevel) || 0;
   const ps = classifyPlaystyle(p);
   const mine = safeGet(MINE_KEY) === _pid;
   const rk = p.rankings || {};
@@ -993,10 +995,13 @@ function skillsHtml(p, ps) {
         <h4>${escapeHtml(title)}</h4>
         ${items.map(k => {
           const lvl = sk[k].level || 0;
+          // WarEra+ 2026-11-08: i livelli regalati dal prestigio non stanno
+          // più dentro `level` ma in `prestige`: si mostrano accanto.
+          const pr = Number(sk[k].prestige) || 0;
           return `<div class="wp-ply-skill">
             <span>${escapeHtml(plyT(`sk_${k}`))}</span>
             <span class="wp-ply-skbar"><i style="width:${Math.min(100, lvl * 10)}%"></i></span>
-            <b>${escapeHtml(lvl)}</b>
+            <b>${escapeHtml(lvl)}${pr ? ` <small class="wp-ply-prestige" title="${escapeHtml(plyT('prestige'))}">+${escapeHtml(pr)}★</small>` : ''}</b>
             <small class="wp-ply-dim">${escapeHtml(fmtFull(Math.round(sk[k].total ?? sk[k].value ?? 0)))}</small>
           </div>`;
         }).join('')}
