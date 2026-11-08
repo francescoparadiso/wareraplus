@@ -1188,10 +1188,15 @@ html[data-theme="light"] #wp-political-root .party-color-bar {
   width: 4px; /* Leggermente più spesso per migliore visibilità */
 }
 
-#wp-political-root .government-grid {
+#wp-political-root .government-grid,
+/* WarEra+ 2026-11-08: la griglia sta dentro un <details class="panel">, e
+   `details.panel > :not(summary) { display: block }` la batteva: col
+   governo a tre ministri si notava poco, coi ministri fino a 20 diventava
+   una colonna di card a tutta larghezza in cima alla pagina. */
+#wp-political-root details.panel > .government-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
 }
 #wp-political-root .gov-card {
   background: var(--s2);

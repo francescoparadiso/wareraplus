@@ -73,6 +73,7 @@ let _sortDir = -1;
 let _chromeBuilt = false;
 let _countryCodesMap = new Map(); // countryId -> ISO code (minuscolo), per le bandiere
 let _govData = null;        // { presidentData, vicePresidentData, ... } per currentCountryId
+let _govExpanded = false;   // WarEra+: elenco completo del governo aperto (riquadro sull'emiciclo)
 let _govDataCountryId = null;
 let _totalPartiesCount = null; // n. totale partiti registrati nel paese (non solo quelli in senato)
 let _totalPartiesCountryId = null;
@@ -798,20 +799,47 @@ function _renderGovernmentRow() {
         ${avatarHtml}
         <div class="scb-gov-member-info">
           <div class="scb-gov-member-name">${escapeHtml(user.username || '—')}</div>
-          <div class="scb-gov-member-role">${escapeHtml(label)}</div>
+          <div class="scb-gov-member-role" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
         </div>
       </div>`;
   };
 
+  // WarEra+ 2026-11-08: con i ministri fino a 20 il riquadro (che sta
+  // SOPRA l'emiciclo) diventava una colonna che copriva i seggi. Oltre
+  // GOV_CARDS persone si mostrano per esteso vice e primo ministro, gli
+  // altri come facce (nome e carica nel tooltip), e "Tutti" apre l'elenco
+  // completo in una lista compatta a scorrimento.
+  const GOV_CARDS = 4;
+  const facesHtml = (key, label) => {
+    const user = typeof key === 'string' ? gov[key] : key;
+    if (!user) return '';
+    const tip = escapeHtml(`${label}: ${user.username || '—'}`);
+    return user.avatarUrl
+      ? `<img src="${user.avatarUrl}" class="scb-gov-face" alt="" title="${tip}" loading="lazy">`
+      : `<span class="scb-gov-face scb-gov-avatar-fallback" title="${tip}">👤</span>`;
+  };
+  const many = allRoles.length > GOV_CARDS;
+  const shown = many ? allRoles.slice(0, 2) : allRoles;
+  const rest = many ? allRoles.slice(2) : [];
+
   return `
-    <div class="scb-gov-box">
-      <div class="scb-gov-title">⚖️ ${t('senate_government_label') || 'Government'}</div>
+    <div class="scb-gov-box${many ? ' scb-gov-many' : ''}${_govExpanded ? ' scb-gov-expanded' : ''}">
+      <div class="scb-gov-title">⚖️ ${t('senate_government_label') || 'Government'}${many ? ` <span class="scb-gov-count">${allRoles.length + 1}</span>` : ''}</div>
       <div class="scb-gov-president-row">
         ${memberHtml('presidentData', t('senate_role_president') || 'President', true)}
       </div>
       <div class="scb-gov-members-grid">
-        ${allRoles.map(([key, label]) => memberHtml(key, label)).join('')}
+        ${shown.map(([key, label]) => memberHtml(key, label)).join('')}
       </div>
+      ${many ? `
+      <div class="scb-gov-faces">
+        ${rest.map(([key, label]) => facesHtml(key, label)).join('')}
+        <button type="button" class="scb-gov-more" data-gov-toggle>${escapeHtml(t('senate_gov_all', { n: allRoles.length + 1 }))}</button>
+      </div>
+      <div class="scb-gov-list">
+        ${allRoles.map(([key, label]) => memberHtml(key, label)).join('')}
+        <button type="button" class="scb-gov-more" data-gov-toggle>${escapeHtml(t('senate_gov_less'))}</button>
+      </div>` : ''}
     </div>
   `;
 }
@@ -872,6 +900,14 @@ function _renderCountryBox(seats) {
     document.querySelector('.senate-stage')?.appendChild(govBox);
   }
   govBox.innerHTML = _renderGovernmentRow();
+  if (!govBox._wpToggle) {
+    govBox._wpToggle = true;
+    govBox.addEventListener('click', (e) => {
+      if (!e.target.closest('[data-gov-toggle]')) return;
+      _govExpanded = !_govExpanded;
+      govBox.querySelector('.scb-gov-box')?.classList.toggle('scb-gov-expanded', _govExpanded);
+    });
+  }
 }
 
 // ── RIGHT SIDEBAR: every party, every member, every vote count — all
@@ -1130,6 +1166,38 @@ function _injectStyles() {
       background: rgba(197,150,74,.15);
       font-size: .8rem;
     }
+    /* WarEra+ 2026-11-08: governo con molti ministri (fino a 20). */
+    #wp-political-root .scb-gov-count {
+      display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 999px;
+      background: rgba(232,201,122,.12); color: #e8c97a; font-size: .6rem;
+    }
+    #wp-political-root .scb-gov-member-role {
+      max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+    }
+    #wp-political-root .scb-gov-faces {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px;
+    }
+    #wp-political-root .scb-gov-face {
+      width: 24px; height: 24px; border-radius: 50%; object-fit: cover;
+      box-shadow: 0 0 0 1px rgba(255,255,255,.15); cursor: help;
+      display: inline-flex; align-items: center; justify-content: center; font-size: .7rem;
+    }
+    #wp-political-root .scb-gov-more {
+      margin-left: 4px; padding: 3px 10px; border-radius: 999px; cursor: pointer;
+      border: 1px solid rgba(232,201,122,.3); background: rgba(232,201,122,.08);
+      color: #e8c97a; font: 600 .62rem "Sora", sans-serif; text-transform: uppercase; letter-spacing: .04em;
+    }
+    #wp-political-root .scb-gov-more:hover { background: rgba(232,201,122,.16); }
+    #wp-political-root .scb-gov-list {
+      display: none; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 8px;
+      max-height: min(34vh, 260px); overflow-y: auto; padding-right: 4px;
+    }
+    #wp-political-root .scb-gov-list .scb-gov-more { grid-column: 1 / -1; justify-self: center; margin: 4px 0 0; }
+    #wp-political-root .scb-gov-list .scb-gov-member-name { max-width: 120px; }
+    #wp-political-root .scb-gov-list .scb-gov-member-role { max-width: 130px; }
+    #wp-political-root .scb-gov-expanded .scb-gov-list { display: grid; }
+    #wp-political-root .scb-gov-expanded .scb-gov-members-grid,
+    #wp-political-root .scb-gov-expanded .scb-gov-faces { display: none; }
     #wp-political-root .scb-gov-avatar-president {
       width: 44px;
       height: 44px;
