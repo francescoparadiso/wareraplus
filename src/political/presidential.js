@@ -199,6 +199,26 @@ const _pct = (v, tot) => (tot ? (v / tot) * 100 : 0);
 const _pctTxt = (v, tot) => `${_pct(v, tot).toLocaleString(prLocale(), { maximumFractionDigits: 1, minimumFractionDigits: 1 })}%`;
 const _day = (d) => new Date(d).toLocaleDateString(prLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
 
+/** Testo scuro su un colore chiaro: i colori dei partiti vengono dal CSV
+ *  o da stringToColor, e alcuni sono quasi bianchi (MOS MAIORVM è #fff),
+ *  col nome bianco sopra che spariva. Accetta #rgb, #rrggbb, rgb() e hsl(). */
+function _inkOn(color) {
+  const s = String(color || '').trim();
+  let r, g, b;
+  let m = s.match(/^#([0-9a-f]{3})$/i);
+  if (m) [r, g, b] = m[1].split('').map(x => parseInt(x + x, 16));
+  else if ((m = s.match(/^#([0-9a-f]{6})/i))) [r, g, b] = [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16));
+  else if ((m = s.match(/^rgba?\(\s*(\d+)[ ,]+(\d+)[ ,]+(\d+)/i))) [r, g, b] = m.slice(1, 4).map(Number);
+  else if ((m = s.match(/^hsla?\(\s*([\d.]+)[ ,]+([\d.]+)%[ ,]+([\d.]+)%/i))) {
+    const h = Number(m[1]) / 360, sat = Number(m[2]) / 100, l = Number(m[3]) / 100;
+    const q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat, p = 2 * l - q;
+    const f = (t) => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+    [r, g, b] = [f(h + 1 / 3), f(h), f(h - 1 / 3)].map(v => v * 255);
+  } else return '#fff';
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return lum > 0.62 ? '#0d1117' : '#fff';
+}
+
 function _prAvatar(c, cls) {
   const u = c.userData || {};
   if (u.avatarUrl) return `<img src="${escapeHtml(u.avatarUrl)}" class="${cls}" alt="" loading="lazy">`;
@@ -237,7 +257,7 @@ function presRaceHtml(candidates, totalVotes, election, phase, winner) {
     <div class="wp-pr-share" role="img" aria-label="${escapeHtml(candidates.map(c => `${c.userData?.username || '—'} ${_pctTxt(c.votes, totalVotes)}`).join(', '))}">
       ${candidates.filter(c => c.votes > 0).map(c => {
         const p = _pct(c.votes, totalVotes);
-        return `<span style="flex:${c.votes};background:${c.color}" title="${escapeHtml(`${c.userData?.username || '—'}: ${_num(c.votes)} (${_pctTxt(c.votes, totalVotes)})`)}">${p >= 9 ? escapeHtml(c.userData?.username || '') : ''}</span>`;
+        return `<span style="flex:${c.votes};background:${c.color};color:${_inkOn(c.color)};text-shadow:${_inkOn(c.color) === '#fff' ? '0 1px 2px rgba(0,0,0,.55)' : 'none'}" title="${escapeHtml(`${c.userData?.username || '—'}: ${_num(c.votes)} (${_pctTxt(c.votes, totalVotes)})`)}">${p >= 9 ? escapeHtml(c.userData?.username || '') : ''}</span>`;
       }).join('')}
       <i class="wp-pr-half" title="${escapeHtml(prT('pr_half'))}"></i>
     </div>` : '';
