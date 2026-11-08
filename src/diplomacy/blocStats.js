@@ -46,6 +46,21 @@ function fmt(n, d = 1, full = false) {
   return Math.round(n).toLocaleString();
 }
 
+/* WarEra+ 2026-11-08 — il logo dell'alleanza (`avatarUrl` di alliance.*, già
+   in memoria in state.allianceMap: lo usa il pannello alleanza). Le
+   alleanze del Builder, quelle fuse e i Non allineati non ne hanno: lì resta
+   il pallino col colore. Se l'immagine non si carica torna il pallino. */
+function blocAvatarUrl(name) {
+  const info = state.externalBlocsInfo?.find(b => b.name === name);
+  return info ? state.allianceMap?.get(info.id)?.avatarUrl || null : null;
+}
+function blocMarkHtml(bloc, size = 18) {
+  const url = bloc && !bloc.isMerged ? blocAvatarUrl(bloc.name) : null;
+  const dot = `<div class="bs-dot" style="background:${bloc?.color};${size > 18 ? `width:${size * 0.6}px;height:${size * 0.6}px;` : ''}${url ? 'display:none;' : ''}"></div>`;
+  if (!url) return dot;
+  return `<img class="bs-bavatar" src="${escapeHtml(url)}" alt="" style="width:${size}px;height:${size}px;box-shadow:0 0 0 2px ${bloc.color}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">${dot}`;
+}
+
 function flagImg(code, h = '14px') {
   if (!code) return '';
   return `<img src="https://media.warera.io/images/flags/${code.toLowerCase()}.svg?v=16" style="height:${h};width:auto;border-radius:2px;vertical-align:middle;flex-shrink:0;" onerror="this.style.display='none'">`;
@@ -1254,7 +1269,9 @@ function renderBlocDetail() {
   c.innerHTML = `<div class="bsw bs-detail">
     <button type="button" class="bs-back" id="bs-detail-back">← ${bT('Back to alliances')}</button>
     <div class="bs-popup-header">
-      <div style="width:16px;height:16px;border-radius:50%;background:${bloc.color};flex-shrink:0;box-shadow:0 0 12px ${withAlpha(bloc.color, .53)}"></div>
+      ${blocAvatarUrl(bloc.name) && !bloc.isMerged
+        ? blocMarkHtml(bloc, 40)
+        : `<div style="width:16px;height:16px;border-radius:50%;background:${bloc.color};flex-shrink:0;box-shadow:0 0 12px ${withAlpha(bloc.color, .53)}"></div>`}
       <div style="flex:1">
         <div class="bs-detail-name">${bloc.name}</div>
         <div style="font-size:12px;color:#8b949e">${bT('{n} nations', { n: bloc.countryCount })}${bloc.isMerged ? ' · ' + bT('MERGED') : ''}</div>
@@ -2213,7 +2230,7 @@ function factionSel(n, fst) {
       const biCls = selfSel.includes(b.id) ? selCls : otherSel.includes(b.id) ? 'taken' : '';
       return `
       <div class="bs-bi ${biCls}" data-bloc="${b.id}" data-faction="${n}">
-        <div class="bs-dot" style="background:${b.color}"></div>
+        ${blocMarkHtml(b, 18)}
         <span style="flex:1">${b.name}</span>
         <span style="color:#8b949e;font-size:11px">${b.countryCount}</span>
         <button class="bs-addbtn ${cls}" data-bloc="${b.id}" data-faction="${n}" style="padding:2px 6px;font-size:10px;margin-left:4px">+</button>
@@ -2262,6 +2279,7 @@ function bonusSectionHtml(bloc) {
         <span>${bT('Damage bonus')}</span>
         <b style="color:${isPenalty(bloc.bonus.bonus) ? '#f85149' : '#3fb950'}">${formatBonus(bloc.bonus.bonus)}</b>
         <em>${bT('{p}% of the world core development', { p: bloc.bonus.share.toFixed(2) })}</em>
+        <p class="bs-srb-do">${escapeHtml(tShared('sr_do_damage'))}</p>
       </div>` : '';
   const s = bloc.strategic;
   if (!s) return dmg;
@@ -2270,7 +2288,7 @@ function bonusSectionHtml(bloc) {
     const next = r.toNext == null ? tShared('sr_max') : tShared('sr_next', { n: r.toNext, l: r.level + 1 });
     const who = r.holders.map(h => `<span class="bs-srb-holder" title="${escapeHtml(h.nation.name)}">${flagImg(h.nation.code, '12px')}${h.n > 1 ? `<b>×${h.n}</b>` : ''}</span>`).join('');
     return `<tr class="${r.level ? '' : 'bs-srb-off'}">
-      <td>${r.icon} ${escapeHtml(tShared('sr_res_' + r.key))}<div class="bs-srb-sub">×${r.copies} · ${escapeHtml(next)}</div></td>
+      <td>${r.icon} ${escapeHtml(tShared('sr_res_' + r.key))}<div class="bs-srb-sub">×${r.copies} · ${escapeHtml(next)}</div><div class="bs-srb-do">${escapeHtml(tShared('sr_do_' + r.skill))}</div></td>
       <td>${dots(r.level)}</td>
       <td class="bs-srb-val${r.bonus ? ' up' : ''}">${r.bonus ? `+${r.bonus}` : '0'} ${escapeHtml(tShared('sr_sk_' + r.skill))}</td>
       <td class="bs-srb-who">${who || '<span class="bs-srb-none">—</span>'}</td>
@@ -2316,9 +2334,11 @@ function factionFighter(f, ids, side, leader) {
   }
   const first = blocs[0];
   const sigla = String(first.name || '?').replace(/[^\p{L}\p{N}]/gu, '').slice(0, 2).toUpperCase() || '?';
+  // Il logo dell'alleanza sopra le iniziali: se non si carica restano quelle.
+  const logo = !first.isMerged ? blocAvatarUrl(first.name) : null;
   return vsFighter({
     side, leader,
-    avatar: `<span class="wp-vs-av" style="background:${first.color};color:#fff;font-size:30px">${escapeHtml(sigla)}${blocs.length > 1 ? `<b class="wp-vs-av-count">${blocs.length}</b>` : ''}</span>`,
+    avatar: `<span class="wp-vs-av" style="background:${first.color};color:#fff;font-size:30px">${escapeHtml(sigla)}${logo ? `<img src="${escapeHtml(logo)}" alt="" onerror="this.remove()">` : ''}${blocs.length > 1 ? `<b class="wp-vs-av-count">${blocs.length}</b>` : ''}</span>`,
     name: `<span class="wp-vs-name">${escapeHtml(f.name)}</span>`,
     lines: [blocs.length > 1 ? `<div class="wp-vs-flags">${blocs.map(b => `<span class="bs-dot" style="background:${b.color}" title="${escapeHtml(b.name)}"></span>`).join('')}</div>` : ''],
     tags: [`<span class="wp-vs-lv">${bT('{n} nations', { n: f.countryCount })}</span>`],
@@ -2349,6 +2369,22 @@ function factionBonusRows(f1, f2, R, fi) {
   } catch (err) {
     console.warn('WarEra+ bonus d’alleanza (1 vs 2):', err);
     return [];
+  }
+}
+
+/* Cosa fa ogni bonus del gruppo qui sopra: una riga per voce mostrata
+   (bonus danno sempre, le abilità solo se almeno una fazione le ha). */
+function factionBonusHelp(f1, f2) {
+  try {
+    const items = [`<li><b>${bT('Damage bonus')}</b> — ${escapeHtml(tShared('sr_do_damage'))}</li>`];
+    f1.strategic.rows.forEach((r, i) => {
+      if (!r.bonus && !f2.strategic.rows[i]?.bonus) return;
+      items.push(`<li><b>${r.icon} ${escapeHtml(tShared('sr_sk_' + r.skill))}</b> (${escapeHtml(tShared('sr_res_' + r.key))}) — ${escapeHtml(tShared('sr_do_' + r.skill))}</li>`);
+    });
+    return `<ul class="bs-srb-help">${items.join('')}</ul>
+      <p class="wp-vs-note">${bT('Every citizen of the member nations gets these skill bonuses. 1, 4 and 9 copies give level 1, 2 and 3; suspended members neither give nor receive, and are not known here.')}</p>`;
+  } catch (err) {
+    return '';
   }
 }
 
@@ -2413,8 +2449,8 @@ function cmpStats(f1, f2) {
     // WarEra+ 2026-11-08 — i bonus d'alleanza: bonus danno e le abilità che
     // le risorse strategiche danno a ogni cittadino. Di più è meglio.
     { title: bT('Alliance bonuses'), icon: '✨', rows: (f1.strategic && f2.strategic) ? factionBonusRows(f1, f2, R, fi) : [],
-      body: (f1.blocCount > 1 || f2.blocCount > 1)
-        ? `<p class="wp-vs-note">${bT('A faction of several alliances is measured as if it were one alliance.')}</p>` : '' },
+      body: (f1.strategic && f2.strategic ? factionBonusHelp(f1, f2) : '') + ((f1.blocCount > 1 || f2.blocCount > 1)
+        ? `<p class="wp-vs-note">${bT('A faction of several alliances is measured as if it were one alliance.')}</p>` : '') },
     { title: bT('Territory & bounty'), icon: '🗺', rows: [
       R(f1.totalRegDiff, f2.totalRegDiff, 'Regions Gained', segnato),
       R(f1.totalSworn, f2.totalSworn, 'Sworn Enemies', fi, 0),

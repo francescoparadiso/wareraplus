@@ -38,6 +38,17 @@
 
 export const CHANGELOG = [
   {
+    id: '2026-11-08e',
+    title: { en: 'Alliance logos', it: 'Loghi delle alleanze' },
+    items: [
+      {
+        tag: 'improved',
+        en: 'Alliance statistics show each alliance\'s logo in Faction 1 vs 2 and on its page, and every alliance bonus now says what it does.',
+        it: 'Statistiche alleanze mostrano il logo di ogni alleanza in Fazione 1 vs 2 e nella sua pagina, e ogni bonus d\'alleanza ora spiega cosa fa.',
+      },
+    ],
+  },
+  {
     id: '2026-11-08d',
     title: { en: 'Alliance bonuses', it: 'Bonus d\'alleanza' },
     items: [

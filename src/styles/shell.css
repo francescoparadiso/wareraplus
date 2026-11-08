@@ -4286,3 +4286,11 @@ body.wp-no-motion .wp-num-delta { animation: none; }
 @media (max-width: 560px) {
   .bs-srb-who { display: none; }
 }
+
+/* Logo delle alleanze in Statistiche alleanze e spiegazione dei bonus
+   (2026-11-08, blocMarkHtml / factionBonusHelp in blocStats.js). */
+.bs-bavatar { border-radius: 50%; object-fit: cover; flex-shrink: 0; background: #21262d; }
+.bs-srb-do { font-size: 11px; color: #6e7681; margin: 2px 0 0; line-height: 1.35; }
+.bs-srb-dmg .bs-srb-do { flex-basis: 100%; }
+.bs-srb-help { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #8b949e; line-height: 1.4; }
+.bs-srb-help b { color: #e6edf3; font-weight: 600; }
