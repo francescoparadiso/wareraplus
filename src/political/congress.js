@@ -59,6 +59,7 @@ import { SenateView } from './senate.js';
 import { volatilityK, seatIntervals } from './simUncertainty.js';
 import { pT } from './plusI18n.js';
 import { governmentMembers, governmentMinisters } from '../shared/government.js';
+import { renderGovernmentPanel } from './governmentView.js';
 
 // Dipendenze cross-modulo iniettate da main.js (Stage 8) — vedi header.
 let _loadElection = null;
@@ -443,7 +444,14 @@ export async function getGovernmentWithDetails(countryId) {
   const members = governmentMembers(gov);
   const userIds = [...new Set(members.map(m => m.user))];
   if (!userIds.length) return gov;
-  const users = await Promise.all(userIds.map(uid => localFetch('/user', { id: uid }).catch(() => null)));
+  // Il partito di ognuno: `members` della lista partiti, che Political
+  // carica comunque e tiene in cache (nessuna richiesta nuova a regime).
+  const [users, parties] = await Promise.all([
+    Promise.all(userIds.map(uid => localFetch('/user', { id: uid }).catch(() => null))),
+    loadPartiesForCountry(countryId).catch(() => []),
+  ]);
+  gov.partyOf = new Map();
+  for (const p of parties || []) for (const uid of p.members || []) gov.partyOf.set(uid, p._id);
   const userMap = {};
   userIds.forEach((uid, idx) => { if (users[idx]?.username) userMap[uid] = users[idx]; });
   gov.membersData = members.map(m => ({ ...m, data: userMap[m.user] || null }));
@@ -461,7 +469,16 @@ export function renderGovernment(gov) {
   if (!gov || !gov.presidentData) { if (panel) panel.open = false; return; }
   panel.open = true;
   // WarEra+ 2026-11-08: tutto il governo (fino a 20 ministri), coi titoli
-  // personalizzati del presidente — vedi getGovernmentWithDetails.
+  // personalizzati del presidente, partiti e poteri — src/political/
+  // governmentView.js. Il disegno di prima resta sotto come ripiego se il
+  // modulo nuovo dovesse fallire.
+  try {
+    renderGovernmentPanel(gov, grid, document.getElementById('govBadge'));
+    return;
+  } catch (err) {
+    console.warn('WarEra+ governo: disegno nuovo fallito, torno a quello semplice:', err);
+    grid.className = 'government-grid';
+  }
   const roles = (gov.membersData || []).filter(m => m.data);
   grid.innerHTML = roles.map(role => {
     const userId = role.user;

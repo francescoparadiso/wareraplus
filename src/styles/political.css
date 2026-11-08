@@ -3357,3 +3357,183 @@ html[data-theme="light"] #wp-political-root .senate-stage {
     line-height: 1.2;
   }
 }
+
+/* ══ WarEra+ 2026-11-08 — governo in carica (src/political/governmentView.js)
+   Presidente e vice in evidenza, composizione per partito, ministri in card
+   ordinate per portafoglio. Il colore del partito arriva in --pc. ══ */
+#wp-political-root .wp-gv { display: flex; flex-direction: column; gap: 14px; padding-top: 6px; }
+#wp-political-root .wp-gv-top {
+  display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px; align-items: stretch;
+}
+#wp-political-root .wp-gv-head {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  background: var(--s2); border: 1px solid var(--bd); border-radius: var(--r);
+}
+#wp-political-root .wp-gv-head-pres {
+  border-color: rgba(197,150,74,.35);
+  background: linear-gradient(135deg, rgba(197,150,74,.10), var(--s2) 70%);
+}
+#wp-political-root .wp-gv-head-txt, #wp-political-root .wp-gv-card-txt { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#wp-political-root .wp-gv-av {
+  width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex: 0 0 auto; background: var(--s3);
+  box-shadow: 0 0 0 1px var(--bd2);
+}
+#wp-political-root .wp-gv-av-mid { width: 44px; height: 44px; }
+#wp-political-root .wp-gv-av-big { width: 58px; height: 58px; box-shadow: 0 0 0 2px var(--gold2), 0 0 16px -4px rgba(232,201,122,.6); }
+#wp-political-root .wp-gv-av-none { display: inline-flex; align-items: center; justify-content: center; color: var(--text2); font-weight: 700; }
+#wp-political-root .wp-gv-role {
+  font-size: .64rem; font-weight: 600; color: var(--gold2); text-transform: uppercase; letter-spacing: .05em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#wp-political-root .wp-gv-role-game { color: var(--text3); font-weight: 500; }
+#wp-political-root .wp-gv-card .wp-gv-role {
+  white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.25;
+}
+#wp-political-root .wp-gv-name { font-weight: 700; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#wp-political-root .wp-gv-head-pres .wp-gv-name { font-family: 'Playfair Display', serif; font-size: 1.2rem; }
+#wp-political-root .wp-gv-name a { color: var(--text); text-decoration: none; }
+#wp-political-root .wp-gv-name a:hover { color: var(--gold2); }
+#wp-political-root .wp-gv-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: .7rem; color: var(--text2); min-width: 0; }
+#wp-political-root .wp-gv-party {
+  display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text);
+}
+#wp-political-root .wp-gv-party i { width: 8px; height: 8px; border-radius: 50%; background: var(--pc); flex: 0 0 auto; }
+#wp-political-root .wp-gv-party-none { color: var(--text3); font-style: italic; }
+#wp-political-root .wp-gv-badge { font-size: .8rem; cursor: help; }
+
+#wp-political-root .wp-gv-comp {
+  padding: 12px 14px; background: var(--s2); border: 1px solid var(--bd); border-radius: var(--r);
+  display: flex; flex-direction: column; gap: 8px; justify-content: center; min-width: 0;
+}
+#wp-political-root .wp-gv-comp-title { font-size: .64rem; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+#wp-political-root .wp-gv-comp-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; gap: 2px; background: var(--s3); }
+#wp-political-root .wp-gv-comp-bar span { min-width: 4px; }
+#wp-political-root .wp-gv-comp-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .7rem; color: var(--text2); }
+#wp-political-root .wp-gv-comp-legend span { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+#wp-political-root .wp-gv-comp-legend i { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
+#wp-political-root .wp-gv-comp-legend b { color: var(--text); }
+#wp-political-root .wp-gv-comp-legend em { color: var(--text3); font-style: normal; }
+
+#wp-political-root .wp-gv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+#wp-political-root .wp-gv-card {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px;
+  background: var(--s2); border: 1px solid var(--bd); border-left: 3px solid var(--pc); border-radius: var(--r2);
+  transition: border-color .15s;
+}
+#wp-political-root .wp-gv-card:hover { border-color: var(--bd2); border-left-color: var(--pc); }
+#wp-political-root .wp-gv-powers { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+#wp-political-root .wp-gv-powers span {
+  display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+  border-radius: 6px; background: var(--s3); font-size: .72rem; cursor: help;
+}
+#wp-political-root .wp-gv-empty { color: var(--text3); font-size: .8rem; }
+
+@media (max-width: 900px) {
+  #wp-political-root .wp-gv-top { grid-template-columns: 1fr 1fr; }
+  #wp-political-root .wp-gv-comp { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  #wp-political-root .wp-gv-top { grid-template-columns: 1fr; }
+  #wp-political-root .wp-gv-grid { grid-template-columns: 1fr; }
+}
+
+/* ══ WarEra+ 2026-11-08 — risultati presidenziali (presRaceHtml in
+   src/political/presidential.js) e storico dei vincitori. Colore del
+   candidato (quello del partito) in --pc. ══ */
+#wp-political-root .wp-pr { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+#wp-political-root .wp-pr-hero {
+  display: flex; align-items: center; gap: 14px; padding: 14px 16px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--pc) 14%, transparent), var(--s2) 75%);
+  border: 1px solid color-mix(in srgb, var(--pc) 40%, var(--bd)); border-radius: var(--r);
+}
+#wp-political-root .wp-pr-hero-done { box-shadow: inset 3px 0 0 var(--gold2); }
+#wp-political-root .wp-pr-hero-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#wp-political-root .wp-pr-kicker { font-size: .66rem; font-weight: 600; color: var(--gold2); text-transform: uppercase; letter-spacing: .06em; }
+#wp-political-root .wp-pr-hero-name { font-family: 'Playfair Display', serif; font-size: 1.45rem; font-weight: 700; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#wp-political-root .wp-pr-hero-name a, #wp-political-root .wp-pr-row-name { color: var(--text); text-decoration: none; }
+#wp-political-root .wp-pr-hero-name a:hover, #wp-political-root .wp-pr-row-name:hover { color: var(--gold2); }
+#wp-political-root .wp-pr-hero-num { text-align: right; flex: 0 0 auto; }
+#wp-political-root .wp-pr-big { font-size: 2rem; font-weight: 700; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
+#wp-political-root .wp-pr-sub { font-size: .74rem; color: var(--text2); margin-top: 4px; }
+#wp-political-root .wp-pr-av {
+  width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex: 0 0 auto; background: var(--s3);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--pc, var(--bd3)) 70%, transparent);
+}
+#wp-political-root .wp-pr-av-big { width: 64px; height: 64px; box-shadow: 0 0 0 3px var(--pc), 0 0 18px -4px var(--pc); }
+#wp-political-root .wp-pr-av-none { display: inline-flex; align-items: center; justify-content: center; font-weight: 700; color: var(--text); }
+#wp-political-root .wp-pr-party {
+  display: inline-flex; align-items: center; gap: 5px; font-size: .72rem; color: var(--text2);
+  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#wp-political-root .wp-pr-party i { width: 8px; height: 8px; border-radius: 50%; background: var(--pc); flex: 0 0 auto; }
+#wp-political-root .wp-pr-party-none { font-style: italic; color: var(--text3); }
+
+#wp-political-root .wp-pr-share {
+  position: relative; display: flex; height: 26px; border-radius: 8px; overflow: hidden; gap: 2px; background: var(--s3);
+}
+#wp-political-root .wp-pr-share span {
+  min-width: 3px; display: flex; align-items: center; padding: 0 8px; overflow: hidden; white-space: nowrap;
+  font-size: .7rem; font-weight: 600; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.55);
+}
+#wp-political-root .wp-pr-half {
+  position: absolute; left: 50%; top: 0; bottom: 0; width: 0;
+  border-left: 2px dashed rgba(255,255,255,.75); cursor: help;
+}
+html[data-theme="light"] #wp-political-root .wp-pr-half { border-left-color: rgba(0,0,0,.55); }
+#wp-political-root .wp-pr-margin { font-size: .82rem; color: var(--text2); }
+
+#wp-political-root .wp-pr-rows { display: flex; flex-direction: column; gap: 6px; }
+#wp-political-root .wp-pr-row-extra { display: none !important; }
+#wp-political-root .wp-pr-rows-open .wp-pr-row-extra { display: flex !important; }
+#wp-political-root .wp-pr-row, #wp-political-root .wp-ph-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  background: var(--s2); border: 1px solid var(--bd); border-radius: var(--r2);
+}
+#wp-political-root .wp-pr-row-win { border-color: color-mix(in srgb, var(--gold2) 45%, var(--bd)); }
+#wp-political-root .wp-pr-rank { width: 18px; text-align: center; font-size: .72rem; font-weight: 700; color: var(--text3); flex: 0 0 auto; }
+#wp-political-root .wp-pr-row-win .wp-pr-rank { color: var(--gold2); }
+#wp-political-root .wp-pr-row-main, #wp-political-root .wp-ph-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+#wp-political-root .wp-pr-row-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#wp-political-root .wp-pr-row-name { font-weight: 600; font-size: .86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; }
+#wp-political-root .wp-pr-chip {
+  font-size: .58rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 1px 6px;
+  border-radius: 999px; color: var(--gold2); background: rgba(232,201,122,.12); border: 1px solid rgba(232,201,122,.35); flex: 0 0 auto;
+}
+#wp-political-root .wp-pr-track { height: 6px; border-radius: 999px; background: var(--s3); overflow: hidden; }
+#wp-political-root .wp-pr-track i { display: block; height: 100%; background: var(--pc); border-radius: 999px; }
+#wp-political-root .wp-pr-row-num { text-align: right; display: flex; flex-direction: column; gap: 1px; flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+#wp-political-root .wp-pr-row-num b { font-size: .92rem; }
+#wp-political-root .wp-pr-row-num span { font-size: .7rem; color: var(--text2); }
+#wp-political-root .wp-pr-row-num em { color: var(--red); font-style: normal; }
+#wp-political-root .wp-pr-more {
+  align-self: center; padding: 5px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--bd2); background: var(--s2); color: var(--text2); font: 600 .72rem 'Sora', sans-serif;
+}
+#wp-political-root .wp-pr-more:hover { color: var(--gold2); border-color: var(--gold); }
+
+#wp-political-root .wp-pr-compare { padding: 10px 12px; background: var(--s2); border: 1px dashed var(--bd2); border-radius: var(--r2); }
+#wp-political-root .wp-pr-compare-title { font-size: .64rem; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+#wp-political-root .wp-pr-compare ul { list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: .8rem; }
+#wp-political-root .wp-pr-compare li { display: flex; gap: 8px; align-items: baseline; }
+#wp-political-root .wp-pr-compare li.up { color: var(--green); }
+#wp-political-root .wp-pr-compare li.down { color: var(--red); }
+#wp-political-root .wp-pr-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .72rem; color: var(--text2); }
+#wp-political-root .wp-pr-meta b { color: var(--text); }
+#wp-political-root .wp-pr-meta a { color: var(--gold2); text-decoration: none; margin-left: auto; }
+
+#wp-political-root .wp-ph { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
+#wp-political-root .wp-ph-row { border-left: 3px solid var(--pc); }
+#wp-political-root .wp-ph-date { width: 92px; flex: 0 0 auto; font-size: .7rem; color: var(--text3); }
+#wp-political-root .wp-ph-vs { color: var(--text3) !important; }
+#wp-political-root .wp-ph-loading, #wp-political-root .wp-ph-empty { color: var(--text3); font-size: .8rem; padding: 8px 0; }
+
+@media (max-width: 560px) {
+  #wp-political-root .wp-pr-hero { flex-wrap: wrap; }
+  #wp-political-root .wp-pr-hero-num { text-align: left; width: 100%; display: flex; align-items: baseline; gap: 10px; }
+  #wp-political-root .wp-pr-big { font-size: 1.6rem; }
+  #wp-political-root .wp-pr-row-head { flex-wrap: wrap; row-gap: 2px; }
+  #wp-political-root .wp-ph-row { flex-wrap: wrap; }
+  #wp-political-root .wp-ph-date { width: 100%; }
+  #wp-political-root .wp-pr-meta a { margin-left: 0; }
+}

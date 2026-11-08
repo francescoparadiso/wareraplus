@@ -38,6 +38,27 @@
 
 export const CHANGELOG = [
   {
+    id: '2026-11-08b',
+    title: { en: 'Presidential results and governments, redesigned', it: 'Risultati presidenziali e governi, rifatti' },
+    items: [
+      {
+        tag: 'improved',
+        en: 'Presidential results in Political: the winner with their party, one vote-share bar with the 50% line, the margin in plain words, party colours for every candidate, and a comparison with the previous presidential (turnout, outgoing president, party). The past winners are listed again.',
+        it: 'Risultati presidenziali in Political: il vincitore col suo partito, una barra unica delle quote con la linea del 50%, il margine detto in chiaro, i colori dei partiti per ogni candidato e il confronto con le presidenziali precedenti (affluenza, presidente uscente, partito). Torna l\'elenco dei vincitori passati.',
+      },
+      {
+        tag: 'improved',
+        en: 'The current government shows president and vice president in front, the government split by party, and every minister with their portfolio, party, days in office and in-game powers.',
+        it: 'Il governo in carica mostra in evidenza presidente e vice, il governo diviso per partito, e ogni ministro col suo portafoglio, partito, giorni in carica e poteri di gioco.',
+      },
+      {
+        tag: 'fix',
+        en: 'With many ministers the Senate government box no longer covers the seats: extra ministers show as faces, with "All" to open the full list.',
+        it: 'Con molti ministri il riquadro del governo nel Senato non copre più i seggi: i ministri in più compaiono come facce, e "Tutti" apre l\'elenco completo.',
+      },
+    ],
+  },
+  {
     id: '2026-11-08',
     title: { en: 'Ready for the 7 November game update', it: 'Pronto per l\'aggiornamento del gioco del 7 novembre' },
     items: [

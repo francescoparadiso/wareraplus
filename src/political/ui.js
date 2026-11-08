@@ -40,7 +40,10 @@ export function showView(which) {
   // Mostra stats e timeline solo se siamo in una vista elettorale
   const statsRow = document.querySelector('.stats-row');
   const timelinePanel = document.getElementById('timelinePanel');
-  if (statsRow) statsRow.style.display = '';
+  // WarEra+ 2026-11-08: nelle presidenziali le schede erano quelle del
+  // congresso (seggi, maggioranza, "primo partito per seggi" col nome del
+  // presidente): i numeri che servono stanno ora nel riquadro dei risultati.
+  if (statsRow) statsRow.style.display = which === 'president' ? 'none' : '';
   // Il timeline lo mostriamo solo per il congresso, non per il presidente
   if (timelinePanel) {
     timelinePanel.style.display = which === 'congress' ? '' : 'none';

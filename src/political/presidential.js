@@ -29,8 +29,9 @@ import { t } from './i18n.js';
 import {
   csvColorMap, PALETTE, electionHistory, currentCountryId,
   chartTheme, getTheme, APP_BASE, CACHE_TTL_LONG,
-  partyNamesMap, setPresidentChart,
+  partyNamesMap, setPresidentChart, escapeHtml, getPartyColor,
 } from './config.js';
+import { prT, prLocale } from './presI18n.js';
 import { localFetch } from './api.js';
 import { startHeavyOperation, endHeavyOperation } from './loading.js';
 import { showView, resetStats, fillStat, safeDestroy } from './ui.js';
@@ -85,140 +86,67 @@ export async function loadPresidentialElection(election, isLatestPresidential) {
 
   fillStat('stat-totalvotes', totalVotes.toLocaleString());
 
-  /* STATUS BADGE */
+  /* WarEra+ 2026-11-08 — RISULTATI RIFATTI.
+     Prima: banner del vincitore, una barra per candidato con colori a caso
+     (non quelli dei partiti), e sotto un grafico a barre che ripeteva gli
+     stessi numeri; testi metà in inglese e metà in italiano. Ora un solo
+     riquadro: chi vince (o chi è in testa) col partito, una barra unica
+     delle quote con la linea del 50%, il margine detto in chiaro, i
+     candidati coi colori dei partiti e il confronto con le presidenziali
+     precedenti (affluenza, presidente uscente, partito). Il grafico
+     doppione non si disegna più. */
   const now = new Date(), end = new Date(election.votesEndAt), start = new Date(election.votesStartAt);
-  let statusText = '', statusClass = '';
-  if (now < start)      { statusText = t('status_candidacy'); statusClass = 'pres-badge-pending'; }
-  else if (now <= end)  { statusText = '🔴 In progress'; statusClass = 'pres-badge-live'; }
-  else                  { statusText = '✅ Concluded';   statusClass = 'pres-badge-done'; }
+  const phase = now < start ? 'candidacy' : now <= end ? 'live' : 'done';
+
+  // Colore: quello del partito (lo stesso di tutto Political); gli
+  // indipendenti prendono la tavolozza, così due indipendenti si distinguono.
+  candidates.forEach((c, i) => { c.color = c.partyId ? getPartyColor(c.partyId) : PALETTE[i % PALETTE.length]; });
+
+  /* STATUS BADGE */
   const sb = document.getElementById('pres-status-badge');
-  sb.textContent = statusText; sb.className = 'badge-count ' + statusClass;
+  sb.textContent = prT(phase === 'candidacy' ? 'pr_candidacy' : phase === 'live' ? 'pr_live' : 'pr_done');
+  sb.className = 'badge-count ' + (phase === 'candidacy' ? 'pres-badge-pending' : phase === 'live' ? 'pres-badge-live' : 'pres-badge-done');
 
   /* COUNTDOWN */
   if (presCountdown) { clearInterval(presCountdown); presCountdown = null; }
   const countdownEl = document.getElementById('presCountdown');
-  if (now <= end && now >= start) {
+  if (phase === 'live') {
     const tick = () => {
       const remaining = new Date(election.votesEndAt) - new Date();
-      if (remaining <= 0) { clearInterval(presCountdown); if (countdownEl) countdownEl.textContent = 'Voting ended'; return; }
+      if (remaining <= 0) { clearInterval(presCountdown); if (countdownEl) countdownEl.textContent = prT('pr_closed'); return; }
       const h = Math.floor(remaining / 3600000);
       const m = Math.floor((remaining % 3600000) / 60000);
       const s = Math.floor((remaining % 60000) / 1000);
-      if (countdownEl) countdownEl.textContent = `Closes in ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      if (countdownEl) countdownEl.textContent = prT('pr_closes', { t: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` });
     };
     tick();
     presCountdown = setInterval(tick, 1000);
-  } else {
-    if (countdownEl) countdownEl.textContent = '';
+  } else if (countdownEl) {
+    countdownEl.textContent = '';
   }
 
-  /* WINNER BANNER */
-  const banner = document.getElementById('pres-winner-banner');
-  if (winner && now > end) {
-    const username = winner.userData?.username || 'Unknown';
-    const av = winner.userData?.avatarUrl
-      ? `<img src="${winner.userData.avatarUrl}" class="pres-winner-avatar" alt="">`
-      : `<div class="pres-winner-avatar pres-winner-initials">${username[0]?.toUpperCase() || '?'}</div>`;
-    banner.style.display = '';
-    banner.innerHTML = `
-      <div class="pres-winner-left">${av}<div>
-        <div class="pres-winner-label">🏆 Presidente eletto</div>
-        <div class="pres-winner-name">${username}</div>
-      </div></div>
-      <div class="pres-winner-votes">
-        <div class="pres-winner-vcount">${winner.votes.toLocaleString()}</div>
-        <div class="pres-winner-vsub">${t('col_votes').toLowerCase()} · ${totalVotes ? ((winner.votes / totalVotes) * 100).toFixed(1) + '%' : '—'}</div>
-      </div>
-    `;
-    fillStat('stat-leader', username);
-  } else {
-    banner.style.display = 'none';
-  }
+  // Il banner e il margine di prima stanno ora dentro #pres-race.
+  document.getElementById('pres-winner-banner').style.display = 'none';
+  const oldMargin = document.getElementById('presMargin');
+  if (oldMargin) oldMargin.style.display = 'none';
+  if (winner) fillStat('stat-leader', winner.userData?.username || '—');
 
-  /* MARGIN */
-  const marginEl = document.getElementById('presMargin');
-  if (marginEl && now > end && candidates.length >= 2) {
-    const marginVotes = candidates[0].votes - candidates[1].votes;
-    const marginPct   = totalVotes ? ((marginVotes / totalVotes) * 100).toFixed(1) : null;
-    marginEl.style.display = '';
-    marginEl.innerHTML = `
-      <span class="margin-label">Margin of victory</span>
-      <span class="margin-val">${marginVotes.toLocaleString()} ${t('votes_suffix')}</span>
-      <span class="margin-pct">${marginPct}%</span>
-      <span class="margin-vs">over ${candidates[1].userData?.username || 'Unknown'}</span>
-    `;
-  } else if (marginEl) {
-    marginEl.style.display = 'none';
-  }
+  document.getElementById('pres-race').innerHTML = presRaceHtml(candidates, totalVotes, election, phase, winner);
+  const raceDiv = document.getElementById('pres-race');
+  raceDiv.querySelector('[data-pr-more]')?.addEventListener('click', (e) => {
+    const box = raceDiv.querySelector('.wp-pr-rows');
+    const open = box.classList.toggle('wp-pr-rows-open');
+    e.currentTarget.textContent = open ? prT('pr_less') : prT('pr_more', { n: candidates.length });
+  });
+  presCompare(candidates, totalVotes, election, phase).then(html => {
+    const slot = raceDiv.querySelector('.wp-pr-compare');
+    if (slot && html && lastPresData?.election?._id === election._id) { slot.innerHTML = html; slot.hidden = false; }
+  }).catch(() => {});
 
-  /* RACE */
-  document.getElementById('pres-race').innerHTML = candidates.map((c, i) => {
-    const username = c.userData?.username || 'Unknown';
-    const votes = c.votes || 0;
-    const pct   = totalVotes ? ((votes / totalVotes) * 100).toFixed(1) : 0;
-    const barW  = maxVotes   ? ((votes / maxVotes)   * 100).toFixed(1) : 0;
-    const av    = c.userData?.avatarUrl
-      ? `<img src="${c.userData.avatarUrl}" class="race-avatar" alt="">`
-      : `<div class="race-avatar race-initials" style="background:${c.color}33;color:${c.color}">${username[0]?.toUpperCase() || '?'}</div>`;
-    const partyChip = c.partyInfo ? `<span class="race-party-chip" style="background:${c.partyInfo.color}22;border-color:${c.partyInfo.color}55;color:${c.partyInfo.color}">${c.partyInfo.name}</span>` : '';
-    const gapStr    = i > 0 && candidates[0].votes > 0 ? `<span class="race-gap">-${(candidates[0].votes - votes).toLocaleString()}</span>` : '';
-    const barColor  = c.isElected ? 'linear-gradient(90deg,#c5964a,#e8c97a)' : c.color;
-    const rankClass = i === 0 ? 'race-rank-badge first' : 'race-rank-badge';
-    return `<div class="race-row${c.isElected ? ' race-winner' : ''}">
-      <div class="${rankClass}">${i + 1}</div>${av}
-      <div class="race-info">
-        <div class="race-name">${username}${c.isElected ? ' <span class="race-win-chip">Elected</span>' : ''}${gapStr}${partyChip}</div>
-        <div class="race-bar-wrap"><div class="race-bar" style="width:${barW}%;background:${barColor}"></div></div>
-      </div>
-      <div class="race-stats">
-        <div class="race-votes">${votes.toLocaleString()}</div>
-        <div class="race-pct">${pct}%</div>
-      </div>
-    </div>`;
-  }).join('');
-
-  /* COLLAPSE extra candidates */
-  const threshold = 6;
-  const raceDiv   = document.getElementById('pres-race');
-  if (candidates.length > threshold) {
-    raceDiv.querySelectorAll('.race-row').forEach((row, i) => {
-      if (i >= threshold) { row.style.display = 'none'; row.classList.add('collapsed-candidate'); }
-    });
-    const btn = document.createElement('button');
-    btn.className   = 'race-toggle-btn';
-    btn.textContent = `Show more (${candidates.length})`;
-    btn.addEventListener('click', () => {
-      const hidden   = raceDiv.querySelectorAll('.collapsed-candidate');
-      const areHidden = hidden[0]?.style.display === 'none';
-      hidden.forEach(r => r.style.display = areHidden ? '' : 'none');
-      btn.textContent = areHidden ? 'Show less' : `Show more (${candidates.length})`;
-    });
-    raceDiv.appendChild(btn);
-  }
-
-  /* CHART */
+  /* CHART — non più: il pannello "Distribuzione voti" ripeteva la barra. */
   safeDestroy('presidentChart');
-  const T = chartTheme();
-  setPresidentChart(new Chart(document.getElementById('presidentChart').getContext('2d'), {
-    type: 'bar',
-    data: {
-      labels: candidates.map(c => c.userData?.username || 'Unknown'),
-      datasets: [{ data: candidates.map(c => c.votes || 0), backgroundColor: candidates.map(c => c.color + 'cc'), borderColor: getTheme() === 'light' ? 'rgba(0,0,0,0.2)' : candidates.map(c => c.color), borderWidth: 1.5, borderRadius: 6, borderSkipped: false }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { ...T.tt, callbacks: { title: i => candidates[i[0].dataIndex].userData?.username || 'Unknown', label: i => ` ${i.raw.toLocaleString()} ${t('col_votes').toLowerCase()} (${totalVotes ? ((i.raw / totalVotes) * 100).toFixed(1) + '%' : '—'})` } } },
-      scales: { y: { beginAtZero: true, ticks: { color: T.tick }, grid: { color: T.grid } }, x: { ticks: { color: T.tick2 }, grid: { display: false } } },
-    },
-  }));
-
-  /* META */
-  document.getElementById('pres-meta').innerHTML = `
-    <span>📅 Inizio: <strong>${new Date(election.votesStartAt).toLocaleDateString('it')}</strong></span>
-    <span>⏱ Fine: <strong>${new Date(election.votesEndAt).toLocaleDateString('it')}</strong></span>
-    <span>${t('votes_total_label', { n: totalVotes.toLocaleString() })}</span>
-    <a href="${APP_BASE}/country/${election.country}/election/${election._id}" target="_blank" class="pres-meta-link">Vai all'elezione →</a>
-  `;
+  const distPanel = document.getElementById('presVotesChartPanel');
+  if (distPanel) distPanel.style.display = 'none';
 
   renderPresidentialTurnoutChart(election._id);
   renderPresidentialHistoricWinners(election._id);
@@ -237,6 +165,158 @@ export async function loadPresidentialElection(election, isLatestPresidential) {
   endHeavyOperation();
 }
 
+/* ── WarEra+ 2026-11-08 — RISULTATI PRESIDENZIALI ──────────────────
+   Il riquadro unico che sostituisce banner, margine, righe e grafico a
+   barre (vedi il commento dentro loadPresidentialElection). */
+
+const _num = (n) => Number(n || 0).toLocaleString(prLocale());
+const _pct = (v, tot) => (tot ? (v / tot) * 100 : 0);
+const _pctTxt = (v, tot) => `${_pct(v, tot).toLocaleString(prLocale(), { maximumFractionDigits: 1, minimumFractionDigits: 1 })}%`;
+const _day = (d) => new Date(d).toLocaleDateString(prLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
+
+function _prAvatar(c, cls) {
+  const u = c.userData || {};
+  if (u.avatarUrl) return `<img src="${escapeHtml(u.avatarUrl)}" class="${cls}" alt="" loading="lazy">`;
+  return `<span class="${cls} wp-pr-av-none" style="--pc:${c.color}">${escapeHtml((u.username || '?')[0].toUpperCase())}</span>`;
+}
+
+function _prParty(c) {
+  if (!c.partyId) return `<span class="wp-pr-party wp-pr-party-none">${escapeHtml(prT('pr_independent'))}</span>`;
+  const name = c.partyInfo?.name || partyNamesMap.get(c.partyId) || '—';
+  return `<span class="wp-pr-party" style="--pc:${c.color}"><i></i>${escapeHtml(name)}</span>`;
+}
+
+function presRaceHtml(candidates, totalVotes, election, phase, winner) {
+  const top = candidates[0];
+  const second = candidates[1];
+  const done = phase === 'done';
+  const lead = done ? winner : top;
+  const leadVotes = lead?.votes || 0;
+  const hero = lead ? `
+    <div class="wp-pr-hero${done ? ' wp-pr-hero-done' : ''}" style="--pc:${lead.color}">
+      ${_prAvatar(lead, 'wp-pr-av wp-pr-av-big')}
+      <div class="wp-pr-hero-txt">
+        <div class="wp-pr-kicker">${done ? '🏆 ' : ''}${escapeHtml(prT(done ? 'pr_elected' : 'pr_leading'))}</div>
+        <div class="wp-pr-hero-name"><a href="${APP_BASE}/user/${escapeHtml(lead.user || lead.userId)}" target="_blank" rel="noopener">${escapeHtml(lead.userData?.username || '—')}</a></div>
+        ${_prParty(lead)}
+      </div>
+      <div class="wp-pr-hero-num">
+        <div class="wp-pr-big">${_pctTxt(leadVotes, totalVotes)}</div>
+        <div class="wp-pr-sub">${escapeHtml(prT('pr_votes', { n: _num(leadVotes) }))}</div>
+      </div>
+    </div>` : '';
+
+  // Barra unica delle quote: un segmento per candidato, linea al 50%.
+  // Sotto il 4% il nome non ci sta e resta nel tooltip.
+  const bar = totalVotes > 0 ? `
+    <div class="wp-pr-share" role="img" aria-label="${escapeHtml(candidates.map(c => `${c.userData?.username || '—'} ${_pctTxt(c.votes, totalVotes)}`).join(', '))}">
+      ${candidates.filter(c => c.votes > 0).map(c => {
+        const p = _pct(c.votes, totalVotes);
+        return `<span style="flex:${c.votes};background:${c.color}" title="${escapeHtml(`${c.userData?.username || '—'}: ${_num(c.votes)} (${_pctTxt(c.votes, totalVotes)})`)}">${p >= 9 ? escapeHtml(c.userData?.username || '') : ''}</span>`;
+      }).join('')}
+      <i class="wp-pr-half" title="${escapeHtml(prT('pr_half'))}"></i>
+    </div>` : '';
+
+  let margin = '';
+  if (candidates.length === 1) margin = prT('pr_unopposed');
+  else if (top && second && totalVotes > 0) {
+    const gap = top.votes - second.votes;
+    const pts = (_pct(gap, totalVotes)).toLocaleString(prLocale(), { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+    const name = second.userData?.username || '—';
+    margin = gap === 0 ? prT('pr_tie', { name }) : prT(done ? 'pr_win_by' : 'pr_lead_by', { n: _num(gap), p: pts, name });
+  }
+
+  const SHOW = 6;
+  const rows = candidates.map((c, i) => {
+    const p = _pct(c.votes, totalVotes);
+    const gap = i > 0 && top ? top.votes - c.votes : 0;
+    return `<div class="wp-pr-row${c.isElected ? ' wp-pr-row-win' : ''}${i >= SHOW ? ' wp-pr-row-extra' : ''}" style="--pc:${c.color}">
+      <span class="wp-pr-rank">${i + 1}</span>
+      ${_prAvatar(c, 'wp-pr-av')}
+      <div class="wp-pr-row-main">
+        <div class="wp-pr-row-head">
+          <a class="wp-pr-row-name" href="${APP_BASE}/user/${escapeHtml(c.user || c.userId)}" target="_blank" rel="noopener">${escapeHtml(c.userData?.username || '—')}</a>
+          ${c.isElected ? `<span class="wp-pr-chip">${escapeHtml(prT('pr_elected_chip'))}</span>` : ''}
+          ${_prParty(c)}
+        </div>
+        <div class="wp-pr-track"><i style="width:${Math.max(p, c.votes ? 0.8 : 0).toFixed(1)}%"></i></div>
+      </div>
+      <div class="wp-pr-row-num">
+        <b>${_pctTxt(c.votes, totalVotes)}</b>
+        <span>${_num(c.votes)}${gap > 0 ? ` <em>−${_num(gap)}</em>` : ''}</span>
+      </div>
+    </div>`;
+  }).join('');
+  const more = candidates.length > SHOW
+    ? `<button type="button" class="wp-pr-more" data-pr-more>${escapeHtml(prT('pr_more', { n: candidates.length }))}</button>` : '';
+
+  const meta = `
+    <div class="wp-pr-meta">
+      <span>📅 ${escapeHtml(prT('pr_start'))} <b>${escapeHtml(_day(election.votesStartAt))}</b></span>
+      <span>⏱ ${escapeHtml(prT('pr_end'))} <b>${escapeHtml(_day(election.votesEndAt))}</b></span>
+      <span>🗳 ${escapeHtml(prT('pr_votes', { n: _num(totalVotes) }))}</span>
+      <a href="${APP_BASE}/country/${escapeHtml(election.country)}/election/${escapeHtml(election._id)}" target="_blank" rel="noopener">${escapeHtml(prT('pr_open'))}</a>
+    </div>`;
+
+  return `<div class="wp-pr">
+    ${hero}
+    ${bar}
+    ${margin ? `<div class="wp-pr-margin">${escapeHtml(margin)}</div>` : ''}
+    <div class="wp-pr-rows">${rows}</div>
+    ${more}
+    <div class="wp-pr-compare" hidden></div>
+    ${meta}
+  </div>`;
+}
+
+/** Il confronto con la presidenziale precedente della stessa nazione:
+ *  affluenza, cosa è successo al presidente uscente, il partito della
+ *  presidenza. Due richieste in cache (dettaglio dell'elezione precedente,
+ *  nome del suo vincitore); null se non c'è una presidenziale prima. */
+async function presCompare(candidates, totalVotes, election, phase) {
+  const prevMeta = (electionHistory || [])
+    .filter(e => e.type === 'president' && e._id !== election._id && Date.parse(e.createdAt) < Date.parse(election.createdAt))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+  if (!prevMeta) return null;
+  const prev = await localFetch('/election', { id: prevMeta._id }, { useCache: true, ttl: CACHE_TTL_LONG }).catch(() => null);
+  if (!prev?.candidates) return null;
+  const votesOf = (c) => (prev.votes ? (prev.votes[String(c.user || c.userId)] ?? c.voteCount ?? 0) : (c.voteCount ?? 0));
+  const prevWin = prev.candidates.find(c => c.isElected) || [...prev.candidates].sort((a, b) => votesOf(b) - votesOf(a))[0];
+  const prevTotal = prev.votesCount || prev.candidates.reduce((s, c) => s + votesOf(c), 0);
+  const lines = [];
+
+  const delta = totalVotes - prevTotal;
+  const deltaTxt = `${delta > 0 ? '+' : delta < 0 ? '−' : '±'}${_num(Math.abs(delta))}`;
+  lines.push(['🗳', prT('pr_turnout', { n: _num(totalVotes), delta: deltaTxt, prev: _num(prevTotal) }), delta > 0 ? 'up' : delta < 0 ? 'down' : '']);
+
+  if (prevWin && phase !== 'candidacy') {
+    const incId = prevWin.user || prevWin.userId;
+    const incUser = await localFetch('/user', { id: incId }, { useCache: true, ttl: CACHE_TTL_LONG }).catch(() => null);
+    const name = incUser?.username || '—';
+    const idx = candidates.findIndex(c => (c.user || c.userId) === incId);
+    const done = phase === 'done';
+    let key;
+    if (idx < 0) key = 'pr_inc_absent';
+    else if (idx === 0) key = done ? 'pr_inc_reelected' : 'pr_inc_ahead';
+    else key = done ? 'pr_inc_defeated' : 'pr_inc_behind';
+    lines.push(['👑', prT(key, { name, rank: idx + 1 }), key === 'pr_inc_reelected' || key === 'pr_inc_ahead' ? 'up' : key === 'pr_inc_absent' ? '' : 'down']);
+
+    const nowParty = candidates[0]?.partyId || null;
+    const prevParty = prevWin.party || prevWin.partyId || null;
+    const pName = (pid) => (pid ? partyNamesMap.get(pid) || '—' : prT('pr_independent'));
+    // Il partito solo a urne chiuse: durante il voto "passa a" sarebbe
+    // una previsione detta come un fatto.
+    if (done && candidates[0] && (nowParty || prevParty)) {
+      lines.push(['🏛️', nowParty === prevParty
+        ? prT('pr_party_kept', { party: pName(nowParty) })
+        : prT('pr_party_change', { a: pName(prevParty), b: pName(nowParty) }), '']);
+    }
+  }
+
+  return `<div class="wp-pr-compare-title">${escapeHtml(prT('pr_vs_prev', { d: _day(prev.votesEndAt || prevMeta.createdAt) }))}</div>
+    <ul>${lines.map(([ico, txt, cls]) => `<li class="${cls}"><span>${ico}</span>${escapeHtml(txt)}</li>`).join('')}</ul>`;
+}
+
 /* ── PRESIDENTIAL TURNOUT CHART ── */
 export function renderPresidentialTurnoutChart(currentElectionId = null) {
   const presidentialElections = electionHistory.filter(e => e.type === 'president').sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
@@ -247,7 +327,7 @@ export function renderPresidentialTurnoutChart(currentElectionId = null) {
   const existing = Chart.getChart(canvas);
   if (existing) existing.destroy();
 
-  const labels      = presidentialElections.map(e => new Date(e.createdAt).toLocaleDateString('it', { month: 'short', year: '2-digit' }));
+  const labels      = presidentialElections.map(e => new Date(e.createdAt).toLocaleDateString(prLocale(), { month: 'short', year: '2-digit' }));
   const data        = presidentialElections.map(e => e.votesCount || 0);
   const electionIds = presidentialElections.map(e => e._id);
   const pointRadii  = presidentialElections.map(e => (currentElectionId && e._id === currentElectionId) ? 8 : 4);
@@ -259,8 +339,8 @@ export function renderPresidentialTurnoutChart(currentElectionId = null) {
     data: {
       labels,
       datasets: [
-        { label: 'Total votes', data, borderColor: '#e8c97a', backgroundColor: 'rgba(232,201,122,0.1)', borderWidth: 2, pointRadius: pointRadii, pointHoverRadius: pointRadii.map(r => r + 4), pointHitRadius: 15, pointBackgroundColor: '#e8c97a', tension: 0.3, fill: true },
-        { label: 'Moving average (2)', data: movingAvg, borderColor: '#60a5fa', backgroundColor: 'transparent', borderWidth: 2, borderDash: [6, 3], pointRadius: 0, pointHoverRadius: 3, tension: 0.3, fill: false },
+        { label: prT('pr_total_votes'), data, borderColor: '#e8c97a', backgroundColor: 'rgba(232,201,122,0.1)', borderWidth: 2, pointRadius: pointRadii, pointHoverRadius: pointRadii.map(r => r + 4), pointHitRadius: 15, pointBackgroundColor: '#e8c97a', tension: 0.3, fill: true },
+        { label: prT('pr_avg'), data: movingAvg, borderColor: '#60a5fa', backgroundColor: 'transparent', borderWidth: 2, borderDash: [6, 3], pointRadius: 0, pointHoverRadius: 3, tension: 0.3, fill: false },
       ]
     },
     options: {
@@ -268,7 +348,7 @@ export function renderPresidentialTurnoutChart(currentElectionId = null) {
       interaction: { mode: 'nearest', intersect: false, axis: 'x' },
       plugins: {
         legend: { display: false },
-        tooltip: { ...T.tt, callbacks: { title: items => `Election ${items[0].label}`, label: item => ` ${item.dataset.label}: ${item.parsed.y.toLocaleString()} votes` } },
+        tooltip: { ...T.tt, callbacks: { title: items => prT('pr_turnout_title', { d: items[0].label }), label: item => ` ${item.dataset.label}: ${item.parsed.y.toLocaleString(prLocale())}` } },
       },
       scales: {
         x: { ticks: { color: T.tick, font: { size: 11 } }, grid: { color: T.grid }, border: { color: T.border } },
@@ -322,7 +402,7 @@ export function renderPresSimulator(candidates, totalVotes, election) {
       const colorDot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.color};margin-right:6px;vertical-align:middle;"></span>`;
       const partyStr = c.partyInfo ? `<span style="color:var(--text3);font-size:.75em"> · ${c.partyInfo.name}</span>` : '';
       const stillNeedStr = c.isElected
-        ? `<span style="color:#22c55e;font-weight:600">✓ Won</span>`
+        ? `<span style="color:#22c55e;font-weight:600">✓ ${escapeHtml(prT('pr_won'))}</span>`
         : stillNeed === 0
           ? `<span style="color:#22c55e">0</span>`
           : `<span style="color:#e8c97a">${stillNeed.toLocaleString()}</span>`;
@@ -350,9 +430,11 @@ export async function renderPresidentialHistoricWinners(currentElectionId) {
   if (presidentialElections.length < 2) { panel.open = false; return; }
   panel.open = true;
 
-  const tbody = document.getElementById('presHistoricBody');
-  if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text3);padding:8px;">Loading…</td></tr>';
+  // WarEra+ 2026-11-08: elenco visivo (colore del partito, quota in barra,
+  // secondo classificato) al posto della tabella, nel contenitore intero.
+  const host = document.getElementById('presHistoricPanel');
+  if (!host) return;
+  host.innerHTML = `<div class="wp-ph-loading">…</div>`;
 
   // Fase 1: elezioni da mostrare (esclusa quella corrente), fetch dei dettagli tutti in parallelo (un unico batch)
   const targetElections = presidentialElections.slice(0, 8).filter(e => e._id !== currentElectionId);
@@ -390,16 +472,35 @@ export async function renderPresidentialHistoricWinners(currentElectionId) {
     const pct       = totalV > 0 ? ((winVotes / totalV) * 100).toFixed(1) : '—';
     const runnerUpName = runnerUpUsers[i]?.username || '—';
     const partyInfo = winner.party ? { name: partyNamesMap.get(winner.party) || '' } : null;
-    return { date: new Date(e.createdAt).toLocaleDateString('en', { month: 'short', year: 'numeric' }), username: userData?.username || '—', partyInfo, winVotes, pct, totalV, runnerUpName };
+    return {
+      date: new Date(e.votesEndAt || e.createdAt).toLocaleDateString(prLocale(), { day: 'numeric', month: 'short', year: 'numeric' }),
+      username: userData?.username || '—', avatarUrl: userData?.avatarUrl || null, userId: winner.user || winner.userId,
+      partyId: winner.party || winner.partyId || null, partyInfo, winVotes, pct, totalV, runnerUpName,
+    };
   });
 
-  if (!rows.length) { panel.style.display = 'none'; return; }
-  tbody.innerHTML = rows.map(r => `
-    <tr>
-      <td style="color:var(--text3)">${r.date}</td>
-      <td style="font-weight:600">👤 ${r.username}</td>
-      <td>${r.partyInfo?.name ? `<span style="color:var(--text2)">${r.partyInfo.name}</span>` : '—'}</td>
-      <td>${r.winVotes.toLocaleString()} <span class="party-pct">(${r.pct}%)</span></td>
-      <td style="color:var(--text3)">${r.runnerUpName}</td>
-    </tr>`).join('');
+  if (!rows.length) { host.innerHTML = `<p class="wp-ph-empty">${escapeHtml(prT('ph_empty'))}</p>`; return; }
+  // Il pannello nasce `display:none` nel modello e prima nessuno lo
+  // scopriva: ora che si legge, si mostra quando c'è qualcosa da mostrare.
+  panel.style.display = '';
+  host.innerHTML = `<div class="wp-ph">${rows.map(r => {
+    const color = r.partyId ? getPartyColor(r.partyId) : 'var(--bd3)';
+    const av = r.avatarUrl
+      ? `<img src="${escapeHtml(r.avatarUrl)}" class="wp-pr-av" alt="" loading="lazy">`
+      : `<span class="wp-pr-av wp-pr-av-none">${escapeHtml(r.username[0] || '?')}</span>`;
+    const party = r.partyId
+      ? `<span class="wp-pr-party" style="--pc:${color}"><i></i>${escapeHtml(r.partyInfo?.name || partyNamesMap.get(r.partyId) || '—')}</span>`
+      : `<span class="wp-pr-party wp-pr-party-none">${escapeHtml(prT('pr_independent'))}</span>`;
+    return `<div class="wp-ph-row" style="--pc:${color}">
+      <span class="wp-ph-date">${escapeHtml(r.date)}</span>
+      ${av}
+      <div class="wp-ph-main">
+        <div class="wp-pr-row-head"><a class="wp-pr-row-name" href="${APP_BASE}/user/${escapeHtml(r.userId)}" target="_blank" rel="noopener">${escapeHtml(r.username)}</a>${party}</div>
+        <div class="wp-pr-track"><i style="width:${r.pct === '—' ? 0 : r.pct}%"></i></div>
+      </div>
+      <div class="wp-pr-row-num"><b>${r.pct === '—' ? '—' : `${Number(r.pct).toLocaleString(prLocale(), { minimumFractionDigits: 1 })}%`}</b>
+        <span>${escapeHtml(prT('pr_votes', { n: r.winVotes.toLocaleString(prLocale()) }))}</span>
+        ${r.runnerUpName !== '—' ? `<span class="wp-ph-vs">${escapeHtml(prT('ph_vs', { name: r.runnerUpName }))}</span>` : ''}</div>
+    </div>`;
+  }).join('')}</div>`;
 }
