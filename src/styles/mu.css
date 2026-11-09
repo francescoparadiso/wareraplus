@@ -500,7 +500,8 @@ body.light-theme .wp-mu-viewswitch button.active { background: #eef1f5; color: #
    scorre in orizzontale su schermi stretti invece di comprimersi
    illeggibile. */
 .wp-mu-mtable-wrap { overflow-x: auto; }
-.wp-mu-mtable { --wp-mu-mcols: minmax(190px, 1.6fr) 52px 60px 92px repeat(7, minmax(78px, .8fr)); min-width: 1080px; }
+.wp-mu-mtable { --wp-mu-mcols: minmax(190px, 1.6fr) 52px 60px 92px 104px 104px repeat(7, minmax(78px, .8fr)); min-width: 1300px; }
+.wp-mu-mt-row > span:has(> .wp-res-bar) { overflow: visible; }
 .wp-mu-mt-head, .wp-mu-mt-row {
   display: grid;
   grid-template-columns: var(--wp-mu-mcols);

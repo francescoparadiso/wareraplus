@@ -47,6 +47,37 @@ export function groupPills(users, now = Date.now()) {
   return groups;
 }
 
+/* ── Barre vita / fame con riempimento ────────────────────────────
+   Per chi deve capire SE un giocatore ha ancora colpi da dare (assalto alla
+   classifica di una battaglia, dove i drop dipendono dalla posizione): un
+   numero "21,8 / 160" da solo si legge male, la barra dice a colpo d'occhio
+   quanto è carico. Usata dall'elenco membri delle unità (lista e card) e
+   dalla scheda giocatore. Stessi dati di pillRow: `skills.health` /
+   `skills.hunger` di getUserById, quindi la lettura del momento — la
+   rigenerazione oraria (`hourlyBarRegen`) è nel tooltip, non proiettata. */
+
+function fmtBar(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '—';
+  return String(n >= 100 ? Math.round(n) : Math.round(n * 10) / 10);
+}
+
+/** Una barra: `kind` = 'hp' | 'food' (colore), `s` = skills.health/hunger,
+ *  `label` = nome nel tooltip. Senza dati, un trattino. */
+export function resourceBarHtml(s, kind, label) {
+  if (s?.total == null) return '<span class="wp-res-bar wp-res-empty">—</span>';
+  const cur = Number(s.currentBarValue ?? s.value ?? 0);
+  const tot = Number(s.total) || 0;
+  const pct = tot > 0 ? Math.max(0, Math.min(100, (cur / tot) * 100)) : 0;
+  const regen = Number(s.hourlyBarRegen);
+  const tip = `${label}: ${fmtBar(cur)} / ${fmtBar(tot)}${Number.isFinite(regen) && regen > 0 ? ` (+${fmtBar(regen)}/h)` : ''}`;
+  return `
+    <span class="wp-res-bar wp-res-${kind}" title="${escapeHtml(tip)}">
+      <i style="width:${pct.toFixed(1)}%"></i>
+      <b>${fmtBar(cur)}<small>/${fmtBar(tot)}</small></b>
+    </span>`;
+}
+
 function rowHtml({ u, st }, now, labels) {
   const bar = (label, icon, s) => `
     <span class="wp-mu-pill-bar" title="${escapeHtml(label)}">

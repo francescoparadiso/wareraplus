@@ -23,7 +23,7 @@ import { muT, muPillLabels } from './i18n.js';
 import { isPinned, togglePin } from '../app/pins.js';
 import { classifyPlaystyle, countPlaystyles, playstyleBarHtml } from './playstyle.js';
 import { trackEvent } from '../shared/analytics.js';
-import { pillColumnsHtml } from '../shared/pillStatus.js';
+import { pillColumnsHtml, resourceBarHtml } from '../shared/pillStatus.js';
 import { avatarImg, countryName, dominantCountry, escapeHtml, flagImg, fmtCompact, fmtDate, fmtFull, fmtRelative, tierBadge } from './ui.js';
 import { ensureDailyDamage, muDamageToday, dailyDamageLabel } from '../shared/dailyDamage.js';
 // L'etichetta della finestra ("Oggi" / "Dalle HH:MM") vive nel dizionario
@@ -373,6 +373,10 @@ const MEMBER_SORTS = [
   { key: 'wealth',   label: 'colWealth', get: u => u.rankings?.userWealth?.value ?? 0 },
   { key: 'bounty',   label: 'colBounty', get: u => u.rankings?.userBounty?.value ?? 0 },
   { key: 'lastSeen', label: 'lastSeen',  get: u => Date.parse(u.dates?.lastConnectionAt) || 0 },
+  // WarEra+ 2026-11-09: vita e fame rimaste (valore di adesso, non il
+  // massimo), per capire chi ha ancora colpi da dare.
+  { key: 'hp',       label: 'pillHealth', get: u => u.skills?.health?.currentBarValue ?? 0 },
+  { key: 'food',     label: 'pillFood',   get: u => u.skills?.hunger?.currentBarValue ?? 0 },
   // Il nome è l'unico criterio crescente e alfabetico: gestito a parte
   // in sortMembers(), gli altri sono tutti "dal più grande al più piccolo".
   { key: 'name',     label: 'sortName',  get: u => u.username || '' },
@@ -459,7 +463,9 @@ const MEMBER_COLS = [
   { key: 'level',    label: 'level',     num: true },
   { key: null,       label: 'mrank',     num: true, get: u => u.militaryRank ?? '—' },
   { key: null,       label: 'playstyle', get: u => psPill(u) },
-  { key: 'weekly',   label: 'colWeekly', num: true, get: u => fmtCompact(u.rankings?.weeklyUserDamages?.value ?? 0), cls: 'wk' },
+  { key: 'hp',       label: 'pillHealth', get: u => resourceBarHtml(u.skills?.health, 'hp', muT('pillHealth')) },
+  { key: 'food',     label: 'pillFood',   get: u => resourceBarHtml(u.skills?.hunger, 'food', muT('pillFood')) },
+  { key: 'weekly',  label: 'colWeekly', num: true, get: u => fmtCompact(u.rankings?.weeklyUserDamages?.value ?? 0), cls: 'wk' },
   { key: 'total',    label: 'colTotal',  num: true, get: u => fmtCompact(u.rankings?.userDamages?.value ?? u.stats?.damagesCount ?? 0) },
   { key: 'wealth',   label: 'colWealth', num: true, get: u => fmtCompact(u.rankings?.userWealth?.value ?? 0), cls: 'money' },
   { key: 'bounty',   label: 'colBounty', num: true, get: u => fmtCompact(u.rankings?.userBounty?.value ?? 0) },
@@ -565,6 +571,8 @@ function memberCard(u) {
         ${cell(muT('colBounty'), bounty != null ? escapeHtml(fmtCompact(bounty)) : '—')}
         ${cell(muT('atk'), atk != null ? escapeHtml(fmtCompact(atk)) : '—')}
         ${cell(muT('crit'), crit != null ? `${escapeHtml(fmtCompact(crit))}%` : '—')}
+        ${cell(muT('pillHealth'), resourceBarHtml(u.skills?.health, 'hp', muT('pillHealth')))}
+        ${cell(muT('pillFood'), resourceBarHtml(u.skills?.hunger, 'food', muT('pillFood')))}
         ${cell(muT('lastSeen'), escapeHtml(fmtRelative(lastSeen)), 'when')}
       </div>
     </a>`;

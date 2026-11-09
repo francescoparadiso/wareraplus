@@ -54,6 +54,7 @@ import {
   fetchPolitics, fetchNationRanks, fetchWealthParts, fetchUserWealth,
 } from './api.js';
 import { prtT } from './i18nParts.js';
+import { resourceBarHtml } from '../shared/pillStatus.js';
 // WarEra+ (2026-11-04): mancava. Il radar delle abilita' del confronto lo usa
 // (sotto, nel poligono "wp-tip-hit") e senza questo import il versus moriva con
 // un ReferenceError a meta' disegno, lasciando "Caricamento del giocatore…"
@@ -670,6 +671,11 @@ function playerHtml() {
           ${p.createdAt ? `<span class="wp-ply-dim">${escapeHtml(plyT('joined'))} ${escapeHtml(fmtDate(p.createdAt))}</span>` : ''}
           ${pillHtml(p)}
         </div>
+        ${p.skills?.health || p.skills?.hunger ? `
+        <div class="wp-ply-pmeta">
+          <span class="wp-res-pair">${resourceBarHtml(p.skills?.health, 'hp', plyT('sk_health'))}${resourceBarHtml(p.skills?.hunger, 'food', plyT('sk_hunger'))}</span>
+          <span class="wp-ply-dim">${escapeHtml(plyT('barsNow'))}</span>
+        </div>` : ''}
       </div>
       <div class="wp-ply-pactions">
         ${mine
