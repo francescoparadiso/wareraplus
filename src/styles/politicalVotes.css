@@ -131,6 +131,7 @@
 #wp-political-root .wp-vt-ballot-wait { border-color: rgba(197, 150, 74, .35); }
 #wp-political-root .wp-vt-ballot-msg { font-size: .88rem; color: var(--text); }
 #wp-political-root .wp-vt-ballot-q { font-family: 'Playfair Display', serif; font-size: 1.1rem; color: var(--gold2); }
+#wp-political-root .wp-vt-voting-as { font-size: .82rem; opacity: .75; margin: 2px 0 8px; }
 #wp-political-root .wp-vt-choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 #wp-political-root .wp-vt-choice {
   display: flex; flex-direction: column; align-items: center; gap: 6px;

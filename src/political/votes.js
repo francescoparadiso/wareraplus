@@ -572,7 +572,12 @@ function _renderBallot(v, f) {
     el.innerHTML = box(`<div class="wp-vt-ballot-msg">${escapeHtml(vT(`not_elector_${v.corpo}`, { nation: nomeNazione(v.nazione) }))}</div>${chiudi}`);
     return;
   }
+  // WarEra+: il nome del personaggio con cui si vota, in vista PRIMA di
+  // scegliere. Chi entra da un altro dispositivo con un altro Discord
+  // vota con un altro personaggio, e non c'era modo di accorgersene.
+  const comeChi = _account.warUsername || _account.discordUsername || '';
   el.innerHTML = box(`<div class="wp-vt-ballot-q">${escapeHtml(vT('ballot_question'))}</div>
+    ${comeChi ? `<div class="wp-vt-voting-as">${escapeHtml(vT('voting_as', { who: comeChi }))}</div>` : ''}
     <div class="wp-vt-choices">
       ${SCELTE.map((s) => `<button class="wp-vt-choice wp-vt-c-${s}" data-act="choose" data-scelta="${s}" aria-pressed="false">
         <span class="wp-vt-choice-ico">${({ si: '✓', no: '✗', astenuto: '○', nulla: '⊘' })[s]}</span>${escapeHtml(vT(`scelta_${s}`))}</button>`).join('')}
