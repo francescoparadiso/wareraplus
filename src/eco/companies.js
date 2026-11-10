@@ -190,7 +190,20 @@ export function computeCompanies(gd, companies, { today = todayUtc(), now = Date
 
     const perDay = x => (n ? x / n : 0);
     const recentWin = win.slice(-RECENT_DAYS);
-    const employees = {
+    // WarEra+ 2026-11-10: senza le statistiche misurate (work.getStatsByCompany
+    // oggi chiede Premium) i dipendenti si stimano dalla rosa: punti e salari
+    // ORARI del gioco × 24. È una stima, non una misura: il segnale `noStats`
+    // resta acceso e lo dice.
+    const est = !n && staff && oc.roster
+      ? { points: oc.roster.production * 24, wages: (oc.roster.wageCost + oc.roster.managerCost) * 24 }
+      : null;
+    const employees = est ? {
+      pointsDay: est.points,
+      recentPointsDay: est.points,
+      wageDay: est.wages,
+      costPerPoint: est.points > 0 ? est.wages / est.points : null,
+      marginDay: est.points * value - est.wages,
+    } : {
       pointsDay: perDay(empPoints),
       // Gli ultimi RECENT_DAYS giorni: con la rosa, skills.js pesa la
       // Gestione su questi e non sulla settimana, che può ancora contenere

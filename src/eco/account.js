@@ -130,7 +130,12 @@ export async function loadOwnedCompanies(gd, userId) {
   // Nessuna statistica arrivata per nessuna azienda = il proxy non sta
   // mettendo la chiave (o il VPS è giù): senza quelle il tool non ha niente
   // da dire, ed è lo stato "setup", non un "zero".
-  if (companyIds.every(cid => !Array.isArray(statsById[cid]))) {
+  // WarEra 2026-11-10: `work.getStatsByCompany` risponde 403 "Premium
+  // required" anche con la chiave giusta. Se però la rosa (employee.*,
+  // aperta ai token) arriva, il tool NON è in setup: va avanti sulla stima
+  // oraria del gioco (vedi computeCompanies) e lo dice con il segnale
+  // `noStats`. Si ferma solo quando non arriva né l'una né l'altra.
+  if (companyIds.every(cid => !Array.isArray(statsById[cid]) && !rosterById[cid])) {
     throw new EcoProxyUnavailableError('work.getStatsByCompany non raggiungibile');
   }
 
