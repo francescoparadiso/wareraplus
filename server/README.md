@@ -807,3 +807,28 @@ per il deploy dev: è un dato pubblico in sola lettura e il database dev la
 classifica mondiale non ce l'ha. Quindi servono **due deploy**: questo
 file e `server/plusApi/` (vedi il suo README). Con uno solo dei due la
 rotta risponde 404/502 e la scheda mostra la sola ricchezza di adesso.
+
+## Round 9 — mercato dell'equipaggiamento (`gearMarket.js`, `/gear-market`)
+
+Alimenta la scheda **Crafting** di Economia (ROI di un craft casuale, valore
+delle casse). Da `transaction.getPaginatedTransactions` (token-gated: la
+chiave del VPS, come i bonifici) legge quattro tipi — `itemMarket` (prezzo +
+codice + tiri del pezzo), `craftItem`, `openCase`, `dismantleItem` — e ne
+ricava le **curve prezzo(tiro)** di ogni pezzo e le frequenze di uscita.
+
+- Un giro ogni 10 minuti (`:08,:18,…`), ~45 richieste: vendite e craft si
+  leggono TUTTI (si ferma al segno già visto), le casse e gli smontaggi si
+  campionano. Il tetto dell'API è 100 righe a pagina (200 → errore).
+- **Primo avvio**: se non c'è nessuna vendita sfoglia ~450 pagine (400 ms
+  l'una, qualche minuto, senza bloccare l'avvio) = tutto quello che l'API
+  ricorda (oltre un giorno, ~1.260 vendite l'ora il 2026-11-11). Il modello
+  ha la sua finestra piena (7 giorni) dopo una settimana.
+- Archivio: `cache/gear-market.sqlite`, su disco, **escluso dal tar di
+  `backup.sh`** (dato derivato). ⚠️ Le vendite grezze si potano a 14 giorni,
+  a differenza degli altri archivi: un prezzo di tre settimane fa non è storia,
+  è un dato sbagliato. I contatori `events` (craft, casse) non si potano.
+- Senza redeploy `/gear-market` risponde 404 e la scheda dice che il server non
+  c'è, senza ripiego (il gioco non pubblica i tiri delle vendite altrove).
+  `/health` → `gearMarket` (vendite, primo/ultimo istante, eventi).
+- ⚠️ Il numero di acciaio per craft non sta nelle transazioni (solo le scraps):
+  è una costante in `src/economy/craftingModel.js`.

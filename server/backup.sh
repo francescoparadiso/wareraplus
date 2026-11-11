@@ -57,6 +57,7 @@ if [ -d "$CACHE_DIR" ]; then
   tar -czf "$WORK/cache.tar.gz" \
       --exclude='bootstrap-raw-battles.json' \
       --exclude='player-parts.sqlite*' \
+      --exclude='gear-market.sqlite*' \
       -C "$(dirname "$CACHE_DIR")" "$(basename "$CACHE_DIR")"
   echo "[backup] cache.tar.gz $(du -h "$WORK/cache.tar.gz" | cut -f1)"
 else

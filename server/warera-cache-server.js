@@ -217,6 +217,14 @@ const {
 const {
   initPlayerParts, sweepSeDovuto, sweepAlPrimoAvvio, readPlayerParts, readPlayerMoney, statoPlayerParts,
 } = require('./playerParts');
+// WarEra+ mercato dell'equipaggiamento: vendite vere (con i tiri del pezzo),
+// craft e casse aperte, da `transaction.getPaginatedTransactions` (chiave del
+// VPS). Alimenta la scheda Crafting di Economia: ROI di un craft casuale e
+// valore atteso delle casse. sqlite su disco. Vedi il blocco in testa a
+// server/gearMarket.js.
+const {
+  initGearMarket, pollGearMarket, bootstrapGearMarket, readGearMarket, statoGearMarket,
+} = require('./gearMarket');
 // WarEra+ lavoro e tasse: ogni pagamento di salario del gioco, aggregato per
 // nazione. Archivio CHIUSO (29 lug - 17 set 2026) e senza poll: sono ~550.000
 // pagamenti al giorno, sfogliarli vorrebbe dire undicimila pagine al giorno.
@@ -487,6 +495,15 @@ initPlayerParts({
   trpcBatch: (...args) => trpcBatch(...args),
   readCache, writeCache, cacheDir: CACHE_DIR,
   ordersByUser: () => orderMoneyByUser(),
+});
+
+// Mercato dell'equipaggiamento: gameConfig pubblica via trpcBatch, le
+// transazioni con la chiave del VPS (come i bonifici), archivio sqlite.
+initGearMarket({
+  trpcBatch: (...args) => trpcBatch(...args),
+  cacheDir: CACHE_DIR,
+  get apiToken() { return WARERA_API_TOKEN; },
+  get trpcUpstream() { return TRPC_UPSTREAM; },
 });
 
 // Tornei: richieste pubbliche. In cache le fotografie della classifica
@@ -2671,6 +2688,12 @@ cron.schedule('27 * * * *', pollPrices);
 // di getTopOrders, una procedura per risorsa.
 cron.schedule('42 * * * *', pollOrderMoney);
 
+// WarEra+ mercato dell'equipaggiamento: ogni 10 minuti, ai minuti :08 (fuori
+// dai bonifici :11/:31/:51, dai prezzi :27 e dagli ordini :42). ~45 richieste a
+// giro: vendite e craft si leggono tutti, le casse e gli smontaggi si
+// campionano (vedi server/gearMarket.js).
+cron.schedule('8,18,28,38,48,58 * * * *', () => { pollGearMarket().catch(err => console.error('[gear-market] giro:', err.message)); });
+
 // WarEra+ ricchezza per categoria: il giro su tutta la classifica (~17.000
 // getUserById, ~12 minuti) parte fra le 05:00 e le 06:59 italiane, dopo il
 // censimento aziende che tiene occupata la chiave fino a li'. Ogni dieci
@@ -2766,6 +2789,9 @@ cron.schedule('* * * * *', () => {
   // Ricchezza per categoria: solo se l'archivio e' vuoto, e senza await (12
   // minuti). Con l'archivio gia' avviato aspetta la finestra notturna.
   sweepAlPrimoAvvio().catch(err => console.error('[player-parts] avvio:', err.message));
+  // Mercato dell'equipaggiamento: senza await, il primo avvio sfoglia ~450
+  // pagine con calma (qualche minuto); con l'archivio gia' pieno non fa niente.
+  bootstrapGearMarket().catch(err => console.error('[gear-market] avvio:', err.message));
   // Tornei: senza await, la prima classifica settimanale pesa 2 MB e non
   // deve ritardare il resto dell'avvio.
   pollTournament().catch(err => console.error('[tournament] avvio:', err.message));
@@ -3451,6 +3477,19 @@ app.get('/order-money', (req, res) => {
   const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 3650);
   const id = (v) => (/^[a-f0-9]{24}$/.test(String(v || '')) ? String(v) : null);
   res.json(readOrderMoney({ days, country: id(req.query.country), mu: id(req.query.mu) }));
+});
+
+// Mercato dell'equipaggiamento (server/gearMarket.js): le curve prezzo(tiro)
+// per ogni pezzo, dalle vendite vere degli ultimi giorni, piu' le frequenze di
+// uscita dei craft e delle casse. Il ROI lo calcola il client coi prezzi di
+// adesso: qui non ci sono prezzi, solo quello che il gioco non pubblica.
+app.get('/gear-market', async (req, res) => {
+  try {
+    res.json(await readGearMarket());
+  } catch (err) {
+    console.error('[gear-market] richiesta fallita:', err.message);
+    res.status(502).json({ available: false, error: err.message });
+  }
 });
 
 app.get('/price-history', (req, res) => {
@@ -4178,6 +4217,7 @@ app.get('/health', (req, res) => res.json({
   priceHistory: statoPriceHistory(),
   orderMoney: statoOrderMoney(),
   playerParts: statoPlayerParts(),
+  gearMarket: statoGearMarket(),
   // Quanti giorni di diplomazia e di battaglie storiche ci sono. Se
   // `primo` e' recente l'import non e' mai stato fatto (import/diplomazia.js,
   // import/battaglie.js) e la time machine mostra la fascia "fuori portata"

@@ -100,6 +100,17 @@ wareraPlus/
 │   │                              soldi negli ordini stanno FUORI dalla ricchezza dei
 │   │                              giocatori (il gioco li toglie dal portafoglio).
 │   │                              Endpoint: /order-money?days=N[&country=|&mu=].
+│   ├── gearMarket.js           ← NUOVO (2026-11-11) — mercato dell'equipaggiamento:
+│   │                              vendite VERE (prezzo + tiri del pezzo), craft e casse
+│   │                              aperte, da transaction.getPaginatedTransactions
+│   │                              (chiave del VPS) ogni 10 minuti. Archivio sqlite su
+│   │                              DISCO (cache/gear-market.sqlite, escluso dal tar del
+│   │                              backup: l'API lo rifà in un giorno). Costruisce le
+│   │                              curve prezzo(tiro) per ogni pezzo (mediana pesata con
+│   │                              nucleo gaussiano, PAV sulle armature) e le frequenze di
+│   │                              uscita. ⚠️ Vendite grezze potate a 14 giorni di
+│   │                              proposito (un prezzo vecchio è un dato sbagliato); i
+│   │                              contatori di craft e casse no. Endpoint: /gear-market.
 │   ├── playerParts.js          ← NUOVO (2026-11-03, rifatto 2026-11-04) — la
 │   │                              ricchezza dei giocatori DIVISA per categoria
 │   │                              (aziende, equipaggiamento, armi, oggetti, soldi:
@@ -560,7 +571,9 @@ wareraPlus/
     ├── players/                  ← NUOVO (2026-10-14) — Giocatori: voce di Approfondimenti
     │   │                            (2026-11-03: la scheda Ricchezza si divide nelle cinque
     │   │                            CATEGORIE del gioco, selezionabili — partsChart.js,
-    │   │                            i18nParts.js)
+    │   │                            i18nParts.js; 2026-11-11: vista "Potere d'acquisto",
+    │   │                            valore ÷ indice dei prezzi di pillole, cibo e
+    │   │                            proiettili, in monete di oggi — purchasingPower.js)
     │   │                            e destinazione del clic su un cittadino (Statistiche
     │   │                            nazioni → Cittadini; Ctrl/clic centrale aprono ancora il
     │   │                            profilo sul gioco). Partenza: ricerca, "Sono io" (stessa
@@ -634,6 +647,16 @@ wareraPlus/
     │   │                            e soldi negli ordini d'acquisto (/order-money), per
     │   │                            nazione / unità. NESSUN ripiego. Dizionario in
     │   │                            economy/i18nMoney.js.
+    │   ├── crafting.js           ← NUOVO (2026-11-11) — scheda CRAFTING: ROI di un
+    │   │                            craft casuale per rarità (costo, valore atteso,
+    │   │                            probabilità di profitto, pezzo per pezzo, lotti) e
+    │   │                            valore delle casse (quattro strategie). Prezzi da
+    │   │                            getPrices (market/api.js: loadSpotPrices), valore dei
+    │   │                            tiri da /gear-market; senza server niente ripiego.
+    │   │                            Matematica pura in craftingModel.js (provata contro
+    │   │                            una dashboard di terzi), dizionario i18nCraft.js.
+    │   │                            ⚠️ L'acciaio per craft (1,2,4,8,16,32) non è nei
+    │   │                            registri del gioco: dichiarato in nota.
     │   ├── production.js         ← NUOVO (2026-10-08) — scheda PRODUZIONE: per
     │   │                          risorsa aziende, dipendenti, salari e tasse sui
     │   │                          salari al giorno, filtro per nazione, e per ogni

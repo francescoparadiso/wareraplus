@@ -526,6 +526,44 @@ niente". `/health` di plusApi riporta `ricchezza` con i giorni in archivio.
 uscite fra due scatti. Chiamarlo "quanto costa la guerra" sarebbe la
 stessa trappola di `rankings.countryBounty` — la vista lo dice in testa.
 
+La scheda **Crafting** di Economia (`src/economy/crafting.js` +
+`craftingModel.js` + `server/gearMarket.js`, dal 2026-11-11) dipende dal
+redeploy del **cache-server**: finché non lo fai `/gear-market` risponde 404
+e la scheda dice che il server non c'è (nessun ripiego: il gioco non pubblica
+i tiri delle vendite da nessun'altra parte). Cosa sapere prima di crederla
+rotta o sbagliata:
+
+- le **curve dei valori** si costruiscono dalle vendite vere (`itemMarket`,
+  con i tiri del pezzo) degli ultimi 7 giorni. Il primo avvio prende quello
+  che l'API ricorda (oltre un giorno, ~1.260 vendite l'ora) in qualche minuto,
+  poi si accumula; i pezzi con poche vendite portano `conf` bassa e la vista
+  lo dice. Le vendite grezze si potano a 14 giorni **di proposito**: sono
+  l'eccezione alla regola "non potare" perché un prezzo vecchio è un dato
+  sbagliato, non storia. Il VPS tiene solo `cache/gear-market.sqlite`, fuori
+  dal backup (l'API lo rifà in un giorno);
+- ⚠️ **l'acciaio di un craft non è misurabile**: `craftItem` registra solo le
+  scraps (6·3^(k−1) per rarità, coincide con lo smontaggio). L'acciaio
+  (1, 2, 4, 8, 16, 32) viene da una dashboard di terzi con cui il ROI è stato
+  confrontato (epico +1,0% contro +2,0%, margini per pezzo entro un'unità) e
+  sta in `CRAFT_STEEL`: se il gioco lo cambia si sposta lì. La tassa di mercato
+  è un parametro dell'utente (default 1%), non un dato;
+- le **probabilità di uscita** si misurano sui craft veri (si fidano da 500
+  craft per rarità, prima valgono quelle nominali: 30% arma, 14% per slot);
+  i tiri sono uniformi nell'intervallo di `dynamicStats` (verificato), quindi
+  il valore atteso è la media della curva sull'intera griglia;
+- la **cassa di legno** non ha `item`: il suo contenuto sono le righe
+  `openCase` senza pezzo (risorsa + quantità), valutate all'ultimo prezzo.
+
+La vista **Potere d'acquisto** della scheda Ricchezza di Giocatori
+(`src/players/purchasingPower.js`) è solo client: divide per un indice dei
+prezzi di pillole, cibo e proiettili (`/price-history`) la ricchezza SENZA
+aziende (equipaggiamento + armi + oggetti + soldi, da `/player-parts`).
+⚠️ L'indice è sui rapporti di prezzo, non sui prezzi (la pillola costa ~37 e
+il proiettile ~0,2: una media sarebbe un indice della pillola) ed è in monete
+di oggi. Lo storico per categoria esiste dal 2026-11-04 e la vista lo dichiara.
+Dal 4 al 11 novembre il paniere si è mosso dello −0,8%: la deflazione che si
+sente è su equipaggiamento e oggetti, non su ciò che si consuma.
+
 **La mia nazione** nell'area riservata (`src/private/nazione.js` +
 `server/plusApi/{nazione,confini,nemici,fonti}.js`) dipende anch'essa dal
 redeploy di **warera-plus-api**: finché non lo fai `/nazione` risponde 404

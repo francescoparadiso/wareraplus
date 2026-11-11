@@ -88,6 +88,23 @@ export async function loadMarketData({ force = false } = {}) {
   return { gameConfig, items, prices: _mem.prices, book: _mem.book, pricesTs: _mem.pricesTs };
 }
 
+/**
+ * Solo i prezzi di adesso, senza i ventuno libri ordini: una richiesta
+ * pubblica. Serve alla scheda Crafting, che non guarda il libro ma ha
+ * bisogno anche di scraps e casse (non sono risorse producibili, quindi
+ * `loadMarketData` non le considera ma `getPrices` le porta lo stesso).
+ * Condivide la cache di processo con `loadMarketData`: se i prezzi sono
+ * freschi non parte nessuna richiesta.
+ */
+export async function loadSpotPrices({ force = false } = {}) {
+  if (force || !_mem.prices || (Date.now() - _mem.pricesTs) > PRICE_TTL_MS) {
+    const [prices] = await trpcBatchManual([['itemTrading.getPrices', {}]]);
+    if (!prices) throw new Error('prezzi non disponibili');
+    _mem.prices = prices; _mem.pricesTs = Date.now();
+  }
+  return { prices: _mem.prices, pricesTs: _mem.pricesTs };
+}
+
 /** Quanto sono vecchi i prezzi adesso (ms). -1 se non ce ne sono. */
 export function priceAgeMs() {
   return _mem.pricesTs ? Date.now() - _mem.pricesTs : -1;

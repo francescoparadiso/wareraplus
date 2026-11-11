@@ -61,6 +61,10 @@ import { resourceBarHtml } from '../shared/pillStatus.js';
 // per sempre. Rotto dal 2026-10-22 ("Grafici esplorabili ovunque").
 import { tipAttr } from '../shared/chartTip.js';
 import { partsChartSvg, PART_COLORS, PART_KEYS } from './partsChart.js';
+// WarEra+ 2026-11-11: vista "Potere d'acquisto" della ricchezza (vedi la
+// testata di purchasingPower.js). Lo storico prezzi arriva da market/api.js.
+import * as PP from './purchasingPower.js';
+import { loadPriceHistory, priceSeries } from '../market/api.js';
 
 const APP_BASE = 'https://app.warera.io';
 const MINE_KEY = 'we_my_player';
@@ -96,7 +100,10 @@ let _battleDays = BATTLE_DAYS[0];
 let _battlesLoading = false;
 let _wealth;                 // undefined = non chiesta, null = non disponibile
 let _parts;                  // idem: { srv, live } — la ricchezza per categoria
-let _wMode = 'total';        // 'total' | 'parts'
+let _wMode = 'total';        // 'total' | 'parts' | 'real'
+let _wMetric = 'ex';         // vista 'real': 'ex' | 'cash' | 'gear' (PP.METRICS)
+let _ppWeights = PP.loadWeights();   // pesi del paniere dei prezzi
+let _ppPrices;               // storico prezzi: undefined = non chiesto, 'loading', true, null = assente
 let _wSel = new Set(PART_KEYS);   // parti accese nel grafico
 let _equip;                  // idem
 let _muName = null;
@@ -850,8 +857,8 @@ function partsSeries() {
 }
 
 function partsBlockHtml() {
-  const modi = ['total', 'parts'].map(m =>
-    `<button type="button" class="wp-ply-chip${_wMode === m ? ' wp-ply-chip-me' : ''}" data-wmode="${m}">${escapeHtml(prtT(m === 'total' ? 'modeTotal' : 'modeParts'))}</button>`).join('');
+  const modi = ['total', 'parts', 'real'].map(m =>
+    `<button type="button" class="wp-ply-chip${_wMode === m ? ' wp-ply-chip-me' : ''}" data-wmode="${m}">${escapeHtml(prtT({ total: 'modeTotal', parts: 'modeParts', real: 'modeReal' }[m]))}</button>`).join('');
   const now = partsNow();
   let corpo;
   if (_parts === 'loading' || _parts === undefined) {
@@ -889,7 +896,54 @@ function partsBlockHtml() {
       <div class="wp-ply-pmodes"><span class="wp-ply-dim">${escapeHtml(prtT('modeLabel'))}</span> ${modi}
         ${_wMode === 'parts' ? `<span class="wp-ply-dim wp-ply-phint">${escapeHtml(prtT('select'))}</span>` : ''}</div>
       ${corpo}
+      ${_wMode === 'real' ? ppBlockHtml() : ''}
       <p class="wp-ply-note">${escapeHtml(prtT('noteParts'))}${storia ? ' ' + escapeHtml(storia) : ''}</p>
+    </div>`;
+}
+
+/* ── Potere d'acquisto ────────────────────────────────────────────
+   Il valore reale (valore ÷ indice dei prezzi, in monete di oggi) sulle
+   stesse righe giornaliere della vista "Parti". Vedi purchasingPower.js. */
+function ppBuild() {
+  return PP.buildRealSeries(partsSeries(), (code) => priceSeries(code), _ppWeights);
+}
+
+function ppBlockHtml() {
+  if (_parts === 'loading' || _parts === undefined || !_parts?.srv) return '';
+  const rows = partsSeries();
+  if (rows.length < 2) return `<p class="wp-ply-note">${escapeHtml(prtT('ppFew'))}</p>`;
+  const built = ppBuild();
+  const sum = PP.summarize(built.series);
+  const tot = PP.GROUPS.reduce((s, g) => s + (_ppWeights[g] || 0), 0) || 1;
+  const chips = PP.METRICS.map(m => `<button type="button" class="wp-ply-chip${_wMetric === m ? ' wp-ply-chip-me' : ''}" data-ppm="${m}">${
+    escapeHtml(prtT({ ex: 'ppEx', cash: 'ppCash', gear: 'ppGear' }[m]))}</button>`).join('');
+  const pesi = PP.GROUPS.map(g => `<label class="wp-ply-ppw">${escapeHtml(prtT({ pill: 'ppPill', food: 'ppFood', ammo: 'ppAmmo' }[g]))}
+      <input type="number" min="0" max="100" step="5" value="${Math.round(((_ppWeights[g] || 0) / tot) * 100)}" data-ppw="${g}"> %</label>`).join('');
+
+  let tabella = '';
+  if (sum) {
+    const riga = (m) => {
+      const x = sum.metrics[m];
+      return `<tr><th>${escapeHtml(prtT({ ex: 'ppEx', cash: 'ppCash', gear: 'ppGear' }[m]))}</th>
+        <td>${deltaHtml(x.nomAbs, x.nomPct)}</td><td>${deltaHtml(x.realAbs, x.realPct)}</td></tr>`;
+    };
+    const dal = fmtDate(sum.from);
+    tabella = `<table class="wp-ply-pptab">
+        <thead><tr><th>${escapeHtml(prtT('ppSince', { d: dal }))}</th><th>${escapeHtml(prtT('ppColNom'))}</th><th>${escapeHtml(prtT('ppColReal'))}</th></tr></thead>
+        <tbody>${PP.METRICS.map(riga).join('')}
+          ${sum.prices != null ? `<tr class="wp-ply-dim"><th>${escapeHtml(prtT('ppPrices', { d: dal }))}</th><td colspan="2">${escapeHtml((sum.prices > 0 ? '+' : sum.prices < 0 ? '−' : '') + new Intl.NumberFormat(lingua(), { maximumFractionDigits: 1 }).format(Math.abs(sum.prices * 100)))}%</td></tr>` : ''}
+        </tbody></table>`;
+  }
+  const senzaPrezzi = _ppPrices === null || (_ppPrices === true && !built.priced);
+  return `
+    <div class="wp-ply-pp">
+      <div class="wp-ply-pmodes">${chips}
+        <span class="wp-ply-ppkey"><i class="wp-ply-ppnom"></i>${escapeHtml(prtT('ppNominal'))} <i class="wp-ply-ppreal"></i>${escapeHtml(prtT('ppReal'))}</span></div>
+      <div class="wp-ply-pmodes"><span class="wp-ply-dim">${escapeHtml(prtT('ppWeights'))}</span> ${pesi}</div>
+      ${tabella}
+      ${_ppPrices === 'loading' ? `<p class="wp-ply-note">${escapeHtml(plyT('loading'))}</p>` : ''}
+      ${senzaPrezzi ? `<p class="wp-ply-note">${escapeHtml(prtT('ppNoPrices'))}</p>` : ''}
+      <p class="wp-ply-note">${escapeHtml(prtT('ppNote'))}</p>
     </div>`;
 }
 
@@ -965,6 +1019,31 @@ function drawWealthChart() {
       const w = Math.round(wrap.clientWidth || 0);
       if (!w || !wrap.isConnected || Math.abs(w - lastP) < 8) return;
       lastP = drawParts();
+    });
+    _wealthObs.observe(wrap);
+    return;
+  }
+
+  // Vista "Potere d'acquisto": nominale e reale della categoria scelta.
+  if (_wMode === 'real') {
+    const built = ppBuild();
+    if (built.series.filter(s => s.nom[_wMetric] != null).length < 2) {
+      wrap.innerHTML = `<p class="wp-ply-note">${escapeHtml(prtT('ppFew'))}</p>`;
+      return;
+    }
+    const drawReal = () => {
+      const w = Math.max(320, Math.round(wrap.clientWidth || 0));
+      wrap.innerHTML = PP.realChartSvg(built.series, _wMetric, {
+        w, h: 280, fmt: fmtMoney, lingua: lingua(),
+        labels: { nominal: prtT('ppNominal'), real: prtT('ppReal'), index: prtT('ppIndex') },
+      });
+      return w;
+    };
+    let lastR = drawReal();
+    _wealthObs = new ResizeObserver(() => {
+      const w = Math.round(wrap.clientWidth || 0);
+      if (!w || !wrap.isConnected || Math.abs(w - lastR) < 8) return;
+      lastR = drawReal();
     });
     _wealthObs.observe(wrap);
     return;
@@ -1099,6 +1178,16 @@ function wire() {
     doSearch();
   });
   _root.addEventListener('change', (e) => {
+    // Pesi del paniere dei prezzi (vista "Potere d'acquisto"): tre percentuali
+    // che si rinormalizzano da sole. Tutti a zero tornano al default.
+    if (e.target.dataset?.ppw) {
+      const w = {};
+      _root.querySelectorAll('[data-ppw]').forEach(i => { w[i.dataset.ppw] = Math.max(0, Number(i.value) || 0); });
+      _ppWeights = PP.GROUPS.some(g => w[g] > 0) ? w : { ...PP.DEFAULT_WEIGHTS };
+      PP.saveWeights(_ppWeights);
+      render();
+      return;
+    }
     if (e.target.id !== 'wp-ply-board-country') return;
     _boardCountry = e.target.value;
     render();
@@ -1140,7 +1229,19 @@ function wire() {
     const wr = t.closest('[data-wrange]');
     if (wr) { _wGiorni = Number(wr.dataset.wrange); render(); return; }
     const wm = t.closest('[data-wmode]');
-    if (wm) { _wMode = wm.dataset.wmode === 'parts' ? 'parts' : 'total'; render(); return; }
+    if (wm) {
+      _wMode = ['parts', 'real'].includes(wm.dataset.wmode) ? wm.dataset.wmode : 'total';
+      // Lo storico dei prezzi serve solo qui: si chiede alla prima apertura
+      // (e se manca, la vista lo dichiara invece di fingere un indice piatto).
+      if (_wMode === 'real' && _ppPrices === undefined) {
+        _ppPrices = 'loading';
+        loadPriceHistory(400).then(h => { _ppPrices = h ? true : null; render(); });
+      }
+      render();
+      return;
+    }
+    const ppm = t.closest('[data-ppm]');
+    if (ppm && PP.METRICS.includes(ppm.dataset.ppm)) { _wMetric = ppm.dataset.ppm; render(); return; }
     // Un clic su una parte la accende o la spegne; da "Totale" porta alla
     // vista "Parti", dove ha senso sceglierle.
     const pt = t.closest('[data-part]');

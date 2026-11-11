@@ -684,3 +684,80 @@ body.light-theme .wp-trend-flat { stroke: var(--wp-ecn-flat, #6e7781); }
 .wp-trend-dot-up, .wp-ecn-spark .wp-mkt-dot.wp-trend-dot-up { fill: var(--wp-ecn-up, #3fb950); }
 .wp-trend-dot-down, .wp-ecn-spark .wp-mkt-dot.wp-trend-dot-down { fill: var(--wp-ecn-down, #f85149); }
 .wp-trend-dot-flat, .wp-ecn-spark .wp-mkt-dot.wp-trend-dot-flat { fill: var(--wp-ecn-flat, #8b949e); }
+
+/* ── Scheda Crafting ──────────────────────────────────────────── */
+.wp-crf .wp-crf-pos { color: var(--wp-ecn-up, #3fb950); }
+.wp-crf .wp-crf-neg { color: var(--wp-ecn-down, #f85149); }
+.wp-crf .wp-crf-dim { color: var(--wp-ov-text-dim, #8b949e); }
+
+.wp-crf-opts {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px;
+  margin-top: 10px; font-size: 12.5px;
+}
+.wp-crf-opts label { display: inline-flex; align-items: center; gap: 6px; }
+.wp-crf-num { min-width: 0; width: 76px; padding: 5px 8px; }
+
+.wp-crf-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.wp-crf-card {
+  appearance: none; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  display: flex; flex-direction: column; gap: 3px;
+  background: var(--wp-ov-surface-2, #161b22);
+  border: 1px solid var(--wp-ov-border, #30363d);
+  border-radius: 10px; padding: 11px 12px; min-width: 0;
+  transition: border-color .15s;
+}
+.wp-crf-card:hover { border-color: var(--wp-ov-accent, #3fb950); }
+.wp-crf-card.active { border-color: var(--wp-ov-accent, #3fb950); box-shadow: 0 0 0 1px var(--wp-ov-accent, #3fb950) inset; }
+.wp-crf-rname { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--wp-ov-text-dim, #8b949e); }
+.wp-crf-best {
+  font-size: 9.5px; padding: 1px 5px; border-radius: 6px; margin-left: 4px;
+  background: var(--wp-ecn-up, #3fb950); color: #0d1117; letter-spacing: .02em;
+}
+.wp-crf-roi { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.wp-crf-line { font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.wp-crf-table { margin-top: 12px; font-variant-numeric: tabular-nums; overflow-x: auto; }
+.wp-crf-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.5fr) repeat(4, minmax(56px, .7fr)) minmax(86px, 1fr) 118px;
+  gap: 8px; align-items: center; min-width: 640px;
+  padding: 6px 4px; font-size: 13px;
+  border-bottom: 1px solid var(--wp-ov-border-soft, rgba(110, 118, 129, .18));
+}
+.wp-crf-row.wp-crf-head, .wp-crf-crow.wp-crf-head {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--wp-ov-text-dim, #8b949e);
+}
+.wp-crf-piece small { margin-left: 4px; }
+.wp-crf-spark { width: 112px; height: 30px; display: block; }
+.wp-crf-spk-line { stroke: var(--wp-ov-accent, #3fb950); stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+.wp-crf-spk-cost { stroke: var(--wp-ecn-down, #f85149); stroke-width: 1; stroke-dasharray: 3 3; opacity: .85; }
+
+.wp-crf-batch { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; font-size: 13px; }
+.wp-crf-batch label { display: inline-flex; align-items: center; gap: 8px; }
+#wp-crf-batch-out { display: flex; flex-wrap: wrap; gap: 6px 22px; font-variant-numeric: tabular-nums; }
+
+.wp-crf-cases {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-top: 12px;
+}
+.wp-crf-case {
+  border: 1px solid var(--wp-ov-border, #30363d); border-radius: 10px;
+  background: var(--wp-ov-surface-2, #161b22); padding: 12px 14px; min-width: 0;
+}
+.wp-crf-case header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.wp-crf-case h3 { margin: 0; font-size: 14px; font-weight: 700; }
+.wp-crf-verdict { font-size: 10.5px; font-weight: 800; letter-spacing: .05em; }
+.wp-crf-mini { margin-top: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.wp-crf-mini .wp-ecn-kpi strong { font-size: 19px; }
+.wp-crf-crow {
+  display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(56px, .7fr) minmax(70px, .9fr);
+  gap: 8px; padding: 5px 2px; font-size: 12.5px; font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--wp-ov-border-soft, rgba(110, 118, 129, .18));
+}
+.wp-crf-custom { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.wp-crf-crar { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }

@@ -60,6 +60,9 @@ const TABS = [
   { id: 'prices', key: 'tabPrices' },
   { id: 'production', key: 'tabProduction' },
   { id: 'money', key: 'tabMoney' },
+  // WarEra+ 2026-11-11: "Crafting" — ROI di un craft casuale e valore delle
+  // casse, dalle vendite vere (server/gearMarket.js). Vedi crafting.js.
+  { id: 'crafting', key: 'tabCrafting' },
   { id: 'optimizer', key: 'tabOptimizer' },
 ];
 
@@ -133,6 +136,10 @@ async function apri(id) {
       const m = await loadModule(() => import('./money.js'), 'economy');
       await m.initMoneyTab(host);
       _montate.set(id, { stop: m.stopMoneyTab, retranslate: m.retranslateMoneyTab });
+    } else if (id === 'crafting') {
+      const m = await loadModule(() => import('./crafting.js'), 'economy');
+      await m.initCraftingTab(host);
+      _montate.set(id, { stop: m.stopCraftingTab, retranslate: m.retranslateCraftingTab });
     } else if (id === 'prices') {
       const m = await loadModule(() => import('./prices.js'), 'economy');
       await m.initPricesTab(host);

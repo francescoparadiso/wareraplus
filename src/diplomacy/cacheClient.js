@@ -661,6 +661,23 @@ export async function fetchOrderMoneyViaCache(days = 30) {
   }
 }
 
+/** WarEra+ — il mercato dell'equipaggiamento (`/gear-market`, vedi
+ *  server/gearMarket.js): curve prezzo(tiro) per ogni pezzo dalle vendite vere
+ *  degli ultimi giorni, frequenze di uscita di craft e casse, rese di
+ *  smontaggio. null se il server non risponde o non ha ancora la rotta: la
+ *  scheda Crafting non ha ripieghi, il gioco non pubblica i tiri delle
+ *  vendite da nessun'altra parte. */
+export async function fetchGearMarketViaCache() {
+  try {
+    const json = await _fetchCacheJsonRaw('/gear-market');
+    if (!json || json.available !== true || typeof json.curves !== 'object') return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /gear-market non disponibile:', err.message);
+    return null;
+  }
+}
+
 /** WarEra+ — i portafogli dei giocatori sommati (`/player-money`, vedi
  *  server/playerParts.js): il mondo giorno per giorno e, per l'ultimo giorno,
  *  per nazione e per unità. null se il server non risponde o non ha ancora la
