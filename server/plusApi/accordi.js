@@ -69,6 +69,15 @@
    anche da alleato di una terza nazione. Tetto alle battaglie lette per
    ogni controllo (MAX_BATTAGLIE), dichiarato nella risposta.
 
+   ── LA COPERTURA ──────────────────────────────────────────────────────
+   Dal 2026-11-11 un patto dice cosa copre (`copertura`, colonna `scope`):
+     · 'core' — solo le regioni ORIGINALI delle nazioni nel patto
+       (`initialCountry` della regione in una delle due parti);
+     · 'all'  — anche le regioni che queste hanno occupato a una terza.
+   I patti scritti prima valgono 'all': è ciò che il controllo faceva già.
+   Col 'core' il controllo salta le battaglie in regioni occupate e ne dice
+   il numero (`fuoriCopertura`). Regione sconosciuta = battaglia tenuta.
+
    ⚠️ Il giorno di una battaglia conclusa è quello della FINE (`e`
    dell'archivio): una battaglia cominciata prima del patto e finita dopo
    rientra. L'archivio non porta l'inizio.
@@ -76,7 +85,7 @@
 
 const express = require('express');
 const { calcolaEffettivi } = require('./roles');
-const { paesiMappa, battaglieVive, archivioBattaglie, dalCache, memo } = require('./fonti');
+const { paesiMappa, regioniMappa, battaglieVive, archivioBattaglie, dalCache, memo } = require('./fonti');
 const { trpcGet, trpcBatch } = require('./wareraApi');
 const {
   listaAccordi, contaAccordi, getAccordo, creaAccordo, aggiornaAccordo, eliminaAccordo,
@@ -86,6 +95,9 @@ const {
 const ID_GIOCO = /^[a-f0-9]{24}$/i;
 const TIPI_PARTE = new Set(['nazione', 'alleanza']);
 const LATI_TETTO = new Set(['a', 'b', 'entrambi']);
+// Cosa copre il patto: 'core' = le regioni ORIGINALI (initialCountry) delle
+// nazioni nel patto; 'all' = anche le regioni che queste hanno occupato.
+const COPERTURE = new Set(['core', 'all']);
 
 // Tetti larghi per l'uso, stretti per l'abuso.
 const MAX_ACCORDI = 2000;
@@ -206,6 +218,14 @@ function muEscluse(v) {
   return out.length ? JSON.stringify(out) : null;
 }
 
+/** Cosa copre il patto. Assente = 'all': è quello che facevano tutti i
+ *  patti prima che il campo esistesse. */
+function copertura(v) {
+  if (v == null || v === '') return 'all';
+  if (!COPERTURE.has(v)) throw new Rifiuto('copertura_non_valida');
+  return v;
+}
+
 function tetto(v) {
   if (v == null || v === '' || v.danni == null || v.danni === '') return { limit_damage: null, limit_side: null };
   const danni = Math.round(Number(v.danni));
@@ -242,6 +262,7 @@ async function campiAccordo(body) {
     starts_at: inizio,
     ends_at: fine,
     excluded_mus: muEscluse(b.muEscluse),
+    scope: copertura(b.copertura),
     ...tetto(b.tetto),
   };
 }
@@ -308,6 +329,7 @@ function forma(r) {
     inizio: r.starts_at,
     fine: r.ends_at,
     muEscluse: mu,
+    copertura: r.scope === 'core' ? 'core' : 'all',
     tetto: r.limit_damage ? { danni: r.limit_damage, lato: r.limit_side } : null,
     // Il nome di gioco di chi l'ha scritto: è un archivio pubblico, e "chi
     // l'ha messo qui" è la prima cosa da sapere di un patto che si legge.
@@ -496,6 +518,22 @@ async function calcolaControllo(acc) {
   if (!conTetto || acc.limit_side === 'a' || acc.limit_side === 'entrambi') direzioni.push(['a', A, B]);
   if (!conTetto || acc.limit_side === 'b' || acc.limit_side === 'entrambi') direzioni.push(['b', B, A]);
 
+  // Copertura 'core': contano solo le battaglie in una regione ORIGINALE di
+  // una nazione del patto (initialCountry in A o B). Quelle in regioni che
+  // una nazione del patto ha occupato a una terza restano fuori. Se la
+  // mappa delle regioni non si legge, o la regione non c'è, la battaglia si
+  // tiene: meglio un controllo di troppo che una violazione nascosta.
+  const soloCore = acc.scope === 'core';
+  let regioni = null;
+  if (soloCore) regioni = await regioniMappa().catch(() => null);
+  const scartate = new Set();
+  const dentroCopertura = (bt) => {
+    if (!soloCore) return true;
+    const origine = regioni?.[bt.regione]?.initialCountry;
+    if (!origine) return true;
+    return A.has(origine) || B.has(origine);
+  };
+
   const candidati = [];
   for (const bt of battaglie) {
     for (const [chi, X, Y] of direzioni) {
@@ -505,6 +543,7 @@ async function calcolaControllo(acc) {
       const altro = yAttacca ? bt.dc : bt.ac;
       // Senza tetto conta solo lo scontro diretto fra le due parti.
       if (!conTetto && !X.has(altro)) continue;
+      if (!dentroCopertura(bt)) { scartate.add(bt.id); continue; }
       candidati.push({
         ...bt, chi, X,
         lato: yAttacca ? 'defender' : 'attacker',
@@ -601,6 +640,10 @@ async function calcolaControllo(acc) {
     calcolatoIl: ora,
     periodo: { dal, al },
     tetto: conTetto ? { danni: acc.limit_damage, lato: acc.limit_side } : null,
+    copertura: soloCore ? 'core' : 'all',
+    // Battaglie che il controllo avrebbe letto ma che stanno in una regione
+    // fuori copertura (solo 'core'): si contano, non si leggono.
+    fuoriCopertura: scartate.size,
     // Da quando in qua l'archivio delle battaglie concluse arriva: un patto
     // più vecchio ha un buco che va detto, non spacciato per "niente".
     coperturaDal: archivioOk && Number.isFinite(coperturaDal) ? coperturaDal : null,

@@ -249,6 +249,7 @@ body.light-theme #wp-accordi-root input[type="datetime-local"] { color-scheme: l
 .wp-ac-titolo { font-size: 1.02rem; font-weight: 600; }
 .wp-ac-periodo { font-size: .86rem; color: var(--ac-ink-soft); font-variant-numeric: tabular-nums; }
 .wp-ac-tetto { font-size: .88rem; }
+.wp-ac-copertura { font-size: .84rem; opacity: .8; }
 .wp-ac-mu { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
 .wp-ac-testo {
   white-space: pre-wrap;

@@ -605,6 +605,13 @@ Accordi sono l'unica fonte (richiesta dell'utente). Tre cose da sapere:
   un patto ha due parti e la controparte deve poterlo scrivere;
 - live e dev hanno **database separati**: un patto scritto sul dev non
   compare sulla mappa del live;
+- la **copertura** (`copertura: 'core' | 'all'`, colonna `scope`, dal
+  2026-11-11) dice se il patto vale solo per le regioni ORIGINALI delle
+  nazioni coinvolte o anche per quelle che hanno occupato; i patti già in
+  archivio valgono `all`. Agisce solo sul **controllo** (le battaglie in
+  regioni occupate non contano, `fuoriCopertura` le conta): la mappa resta
+  a livello di nazione, un NAP lì è fra due nazioni e non fra regioni. Un
+  server non ancora rideployato ignora il campo e salva `all`;
 - il **controllo** del tetto ai danni somma il danno per NAZIONALITÀ
   (`battleRanking` per country) sullo schieramento opposto all'altra parte;
   le unità escluse si tolgono con la classifica per unità, quindi è una stima

@@ -76,6 +76,10 @@ function applica() {
           fromName: state.nationMap.get(x)?.name || x,
           toName: state.nationMap.get(y)?.name || y,
           source: 'accordi', accordoId: a.id,
+          // 'core' | 'all': la mappa resta a livello di nazione (un NAP è
+          // fra due nazioni, non fra due regioni), ma la copertura viaggia
+          // con la voce per chi la vuole leggere.
+          copertura: a.copertura === 'core' ? 'core' : 'all',
         });
       }
     }

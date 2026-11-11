@@ -404,6 +404,8 @@ function schedaAccordo(a, ora) {
     ? acT('period', { from: fmtData(a.inizio), to: fmtData(a.fine) })
     : acT('periodOpen', { from: fmtData(a.inizio) })));
 
+  card.appendChild(el('div', 'wp-ac-copertura', a.copertura === 'core' ? acT('scopeShortCore') : acT('scopeShortAll')));
+
   const tetto = testoTetto(a);
   if (tetto) card.appendChild(el('div', 'wp-ac-tetto', `⚔ ${tetto}`));
 
@@ -509,6 +511,11 @@ function vistaControllo(a, ctl) {
   const d = ctl.dati;
   box.appendChild(el('p', 'wp-ac-note', acT('checkLead')));
   if (d.tetto) box.appendChild(el('p', 'wp-ac-note', acT('checkLeadCap')));
+  if (d.copertura === 'core') {
+    box.appendChild(el('p', 'wp-ac-note', d.fuoriCopertura
+      ? acT('checkScopeCoreN', { n: d.fuoriCopertura })
+      : acT('checkScopeCore')));
+  }
 
   const esito = el('p', `wp-ac-esito ${d.violazioni ? 'wp-ac-esito-ko' : 'wp-ac-esito-ok'}`,
     d.violazioni ? acT('violations', { n: d.violazioni }) : acT('noViolations'));
@@ -719,6 +726,15 @@ function apriModulo(a) {
   rigaDate.append(campo(acT('startField'), inizio), campo(acT('endField'), fine, acT('endHint')));
   f.appendChild(rigaDate);
 
+  // ── Copertura: solo core o anche le regioni occupate ─────────────────
+  const copertura = el('select', 'wp-ac-input');
+  for (const [k, lbl] of [['all', 'scopeAll'], ['core', 'scopeCore']]) {
+    const o = el('option', null, acT(lbl)); o.value = k;
+    if (k === (a?.copertura === 'core' ? 'core' : 'all')) o.selected = true;
+    copertura.appendChild(o);
+  }
+  f.appendChild(campo(acT('scopeField'), copertura, acT('scopeHint')));
+
   // ── Unità escluse ───────────────────────────────────────────────────
   const boxMu = el('div', 'wp-ac-campo');
   boxMu.appendChild(el('span', 'wp-ac-etichetta', acT('musField')));
@@ -802,6 +818,7 @@ function apriModulo(a) {
       inizio: daInput(inizio.value),
       fine: daInput(fine.value),
       muEscluse: [...escluse].map(([id, nome]) => ({ id, nome })),
+      copertura: copertura.value,
       tetto: danni.value ? { danni: Number(danni.value), lato: lato.value } : null,
     };
     // I controlli che il server farebbe comunque, detti prima e meglio.
