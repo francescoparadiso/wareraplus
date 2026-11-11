@@ -250,6 +250,13 @@ body.light-theme #wp-accordi-root input[type="datetime-local"] { color-scheme: l
 .wp-ac-periodo { font-size: .86rem; color: var(--ac-ink-soft); font-variant-numeric: tabular-nums; }
 .wp-ac-tetto { font-size: .88rem; }
 .wp-ac-copertura { font-size: .84rem; opacity: .8; }
+.wp-ac-limite {
+  font-size: .86rem; line-height: 1.55;
+  padding: .6rem .8rem;
+  border-left: 2px solid var(--ac-accent);
+  background: var(--ac-surface-2);
+  border-radius: 0 6px 6px 0;
+}
 .wp-ac-mu { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
 .wp-ac-testo {
   white-space: pre-wrap;

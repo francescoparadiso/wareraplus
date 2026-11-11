@@ -56,8 +56,15 @@
    non c'era mai, e toglierlo — come faceva la prima versione, col danno
    intero dell'unità — dava un netto più BASSO del vero, cioè un tetto
    superato che risultava rispettato.
-   ⚠️ Unità e nazionalità sono quelle di ADESSO: il gioco non dice in che
-   unità stava un giocatore il giorno della battaglia. La vista lo dice.
+   La NAZIONALITÀ è quella del giorno della battaglia (dal 2026-11-11): il
+   cache-server tiene ogni cambio di nazione (`/citizen-moves-log`) e il
+   `da` del primo spostamento DOPO la battaglia è dove il giocatore stava.
+   Prima dell'inizio di quell'archivio (`coverageFrom`, 100 giorni di
+   retention) non si sa, e vale quella di adesso: `nazDiOggi` sulla riga.
+   ⚠️ L'UNITÀ resta quella di ADESSO: il gioco non dice in che unità stava un
+   giocatore il giorno della battaglia, e nessun archivio lo registra.
+   Le classifiche (per nazione, per unità, per giocatore) si leggono fino in
+   fondo, pagina per pagina: niente più "primi 100".
    Le pagine per giocatore si leggono solo nelle battaglie in cui la
    classifica per unità mostra danno di un'unità esclusa (o è tagliata ai
    primi 100). Se una lettura fallisce, quella riga ricade sulla vecchia
@@ -365,11 +372,34 @@ function fresca(v) {
   return v && (v.chiusa || Date.now() - v.at < VIVA_MS);
 }
 
+// Pagine che si seguono per una classifica per nazione o per unità: 100 voci
+// l'una, quindi 6000 voci. Una battaglia ha al più qualche centinaio di unità.
+const MAX_PAGINE_CLASSIFICA = 60;
+
+/** Somma nei `valori` le pagine DOPO la prima. Ritorna true se si è fermata
+ *  al tetto con altre pagine ancora da leggere. */
+async function paginaAvanti(r, valori, cursor) {
+  let pagine = 0;
+  while (cursor && pagine < MAX_PAGINE_CLASSIFICA) {
+    const d = await trpcGet('battleRanking.getRanking', {
+      battleId: r.battaglia, type: r.tipo, side: r.lato, dataType: 'damage', limit: 100, cursor,
+    });
+    for (const it of d?.items || []) {
+      const id = it[r.tipo];
+      if (id) valori.set(id, (valori.get(id) || 0) + (Number(it.value) || 0));
+    }
+    cursor = d?.nextCursor || null;
+    pagine++;
+  }
+  return Boolean(cursor);
+}
+
 /** Legge in batch le classifiche mancanti. `richieste`: [{ battaglia,
  *  tipo: 'country'|'mu', lato, chiusa }]. Una richiesta fallita resta
  *  senza voce: la riga dirà "non letta" invece di "zero danni". */
 async function leggiClassifiche(richieste) {
   const chiave = (r) => `${r.battaglia}|${r.tipo}|${r.lato}`;
+  const seguiti = [];
   const mancanti = richieste.filter((r) => !fresca(_classifiche.get(chiave(r))));
   for (let i = 0; i < mancanti.length; i += PEZZO_BATCH) {
     const pezzo = mancanti.slice(i, i + PEZZO_BATCH);
@@ -389,9 +419,20 @@ async function leggiClassifiche(richieste) {
         const id = it[r.tipo];
         if (id) valori.set(id, (valori.get(id) || 0) + (Number(it.value) || 0));
       }
-      _classifiche.set(chiave(r), { at: Date.now(), chiusa: r.chiusa, valori, tagliata: Boolean(res.nextCursor) });
+      const voce = { at: Date.now(), chiusa: r.chiusa, valori, tagliata: Boolean(res.nextCursor) };
+      _classifiche.set(chiave(r), voce);
+      if (res.nextCursor) seguiti.push({ r, voce, cursor: res.nextCursor });
     });
   }
+  // Una classifica che continua oltre la prima pagina (le unità: ce ne sono
+  // centinaia) si legge fino in fondo: `tagliata` resta vera solo se si è
+  // arrivati al tetto di pagine o una pagina non risponde.
+  await aGruppi(seguiti, PARALLELO_GIOCATORI, async ({ r, voce, cursor }) => {
+    try { voce.tagliata = await paginaAvanti(r, voce.valori, cursor); } catch (err) {
+      console.warn('[accordi] classifica non completata:', r.battaglia, err.message);
+      voce.tagliata = true;
+    }
+  });
   // Le più vecchie fuori per prime: una Map ricorda l'ordine di inserimento.
   while (_classifiche.size > MAX_VOCI_CLASSIFICHE) _classifiche.delete(_classifiche.keys().next().value);
   return (r) => _classifiche.get(chiave(r)) || null;
@@ -404,9 +445,10 @@ async function leggiClassifiche(richieste) {
 // per nazione (centinaia di voci), quindi un tetto più basso.
 const _perGiocatore = new Map();
 const MAX_VOCI_GIOCATORI = 400;
-// Una battaglia enorme ha qualche migliaio di giocatori per lato: 50 pagine
-// sono 5000. Oltre, la lettura si dichiara incompleta invece di continuare.
-const MAX_PAGINE_GIOCATORI = 50;
+// Una battaglia enorme ha qualche migliaio di giocatori per lato: 150 pagine
+// sono 15000, più dell'intera popolazione attiva del gioco. Oltre, la
+// lettura si dichiara incompleta invece di continuare.
+const MAX_PAGINE_GIOCATORI = 150;
 // Quante battaglie si sfogliano insieme: abbastanza da non far aspettare
 // minuti il primo controllo, poche abbastanza da non sembrare un attacco.
 const PARALLELO_GIOCATORI = 4;
@@ -467,6 +509,44 @@ async function membriEsclusi(muIds) {
     console.warn('[accordi] membri delle unità escluse non letti:', err.message);
     return null;
   }
+}
+
+// ── La nazionalità il giorno della battaglia ────────────────────────────
+// Il cache-server tiene ogni cambio di nazione (/citizen-moves-log, dal
+// censimento orario): [utente, da, a, quando]. Chi ha cambiato nazione DOPO
+// una battaglia ci stava combattendo con la nazionalità di PRIMA, che è il
+// `da` del primo spostamento successivo. Senza spostamenti dopo la
+// battaglia vale quella di adesso.
+
+const logMigrazioni = memo(10 * 60_000, (da) => dalCache(`/citizen-moves-log?since=${da}`, 30_000));
+
+/** Gli spostamenti di `utenti` dall'inizio del patto, per utente e in ordine
+ *  di tempo. `coperturaDal` è il primo istante di cui l'archivio sa: prima,
+ *  la nazionalità di allora non si può ricostruire (si dichiara). */
+async function registroMigrazioni(dal, utenti) {
+  try {
+    const giorno = 24 * 3600_000;
+    const d = await logMigrazioni(Math.floor(dal / giorno) * giorno);
+    if (!Array.isArray(d?.rows) || !Number.isFinite(d.coverageFrom)) throw new Error('registro senza copertura');
+    const righe = new Map();
+    for (const [u, f, t, a] of d.rows) {
+      if (!utenti.has(u)) continue;
+      if (!righe.has(u)) righe.set(u, []);
+      righe.get(u).push([f, t, a]);
+    }
+    for (const r of righe.values()) r.sort((x, y) => x[2] - y[2]);
+    return { ok: true, coperturaDal: d.coverageFrom, righe };
+  } catch (err) {
+    // Cache-server non ancora rideployato o giù: ricade sulla nazionalità
+    // di adesso, e la risposta lo dice.
+    console.warn('[accordi] registro migrazioni non letto:', err.message);
+    return { ok: false, coperturaDal: null, righe: new Map() };
+  }
+}
+
+function nazionalitaAl(utente, quando, oggi, righe) {
+  for (const [da, , a] of righe.get(utente) || []) if (a > quando) return da;
+  return oggi;
 }
 
 /** fn su ogni elemento, al più `n` alla volta. */
@@ -571,6 +651,9 @@ async function calcolaControllo(acc) {
     const mu = leggi({ battaglia: c.id, tipo: 'mu', lato: c.lato });
     return !mu || mu.tagliata || [...setEscluse].some((id) => (mu.valori.get(id) || 0) > 0);
   }) : [];
+  const registro = membri && daSfogliare.length
+    ? await registroMigrazioni(dal, membri)
+    : { ok: false, coperturaDal: null, righe: new Map() };
   const giocatori = new Map();
   await aGruppi(daSfogliare, PARALLELO_GIOCATORI, async (c) => {
     try { giocatori.set(`${c.id}|${c.lato}`, await classificaGiocatori(c.id, c.lato, !c.inCorso)); }
@@ -591,14 +674,21 @@ async function calcolaControllo(acc) {
     let dannoEscluse = 0;
     let escluseStima = false;
     let escluseIncomplete = false;
+    // true dove la nazionalità del giocatore è quella di ADESSO perché
+    // l'archivio migrazioni non arriva fin lì (o non risponde).
+    let nazDiOggi = false;
     if (setEscluse.size) {
       const g = giocatori.get(`${c.id}|${c.lato}`);
       const sfogliata = daSfogliare.includes(c);
       if (membri && !sfogliata) {
         dannoEscluse = 0; // nessuna unità esclusa ha fatto danno qui
       } else if (membri && g) {
+        const quando = c.fine || Date.now();
+        nazDiOggi = !registro.ok || quando < registro.coperturaDal;
         for (const [uid, v] of g.valori) {
-          if (membri.has(uid) && c.X.has(membri.get(uid))) dannoEscluse += v;
+          if (!membri.has(uid)) continue;
+          const nat = nazDiOggi ? membri.get(uid) : nazionalitaAl(uid, quando, membri.get(uid), registro.righe);
+          if (c.X.has(nat)) dannoEscluse += v;
         }
         escluseIncomplete = !g.completa;
       } else if (mu) {
@@ -628,6 +718,7 @@ async function calcolaControllo(acc) {
       dannoEscluse: setEscluse.size ? dannoEscluse : 0,
       escluseStima,
       escluseIncomplete,
+      nazDiOggi,
       netto,
       attaccoDiretto: c.attaccoDiretto,
       sforato: Boolean(limiteQui && netto != null && netto > acc.limit_damage),
@@ -651,6 +742,12 @@ async function calcolaControllo(acc) {
     // Come si sono tolte le unità escluse: 'giocatori' (esatto, sui membri
     // di adesso), 'stima' (unità intera: membri non letti), null (nessuna).
     escluse: setEscluse.size ? { metodo: membri ? 'giocatori' : 'stima', membri: membri ? membri.size : null } : null,
+    // L'archivio delle migrazioni, se è servito (c'erano unità escluse con
+    // danno da attribuire): `letto` false = non ha risposto, e la nazionalità
+    // è quella di adesso; `coperturaDal` = da quando sa dov'era ciascuno.
+    migrazioni: membri && daSfogliare.length
+      ? { letto: registro.ok, coperturaDal: registro.coperturaDal }
+      : null,
     battaglieControllate: letti.length,
     battaglieCandidate: candidati.length,
     violazioni: righe.filter((r) => r.attaccoDiretto || r.sforato).length,

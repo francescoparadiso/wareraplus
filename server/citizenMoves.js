@@ -65,10 +65,15 @@ let deps = null;
 const SNAP_FILE = 'citizen-snapshot';   // { at, map: { userId: countryId } }
 const MOVES_FILE = 'citizen-moves';     // { startedAt, data: [ {u, f, t, a} ] }
 
-// Trenta giorni: la vista ne chiede sette, ma un mese permette di
-// allargare la finestra senza dover riaccumulare da zero. Le righe sono
-// poche decine al giorno, lo spazio non è un problema.
-const RETENTION_DAYS = 30;
+// Cento giorni. Trenta bastavano alla vista (ne chiede sette), ma dal
+// 2026-11-11 l'archivio serve anche al CONTROLLO DEGLI ACCORDI, che deve
+// sapere di che nazionalità era un giocatore il giorno di una battaglia, e
+// l'archivio delle battaglie arriva a novanta giorni (`/citizen-moves-log`).
+// Costo misurato l'11 nov: ~790 righe e ~70 KB al giorno (quasi tutte uscite
+// dal censimento), quindi ~7 MB a cento giorni. ⚠️ Non si recuperano i
+// giorni già potati con la vecchia soglia: la copertura vera sta in
+// `coverageFrom` della rotta, e il controllo la dichiara.
+const RETENTION_DAYS = 100;
 
 // Sotto queste soglie il censimento nuovo è considerato monco e il giro si
 // butta. 0.90 sul totale mondiale (una pagina persa di una nazione grande
@@ -229,6 +234,31 @@ function readCitizenMoves(countryId, days) {
     retentionDays: RETENTION_DAYS,
     arrivals,
     departures,
+  };
+}
+
+/**
+ * Tutte le righe da `since` in poi, grezze, per chi deve ricostruire dove
+ * stava un giocatore in un dato momento (il controllo degli accordi, in
+ * warera-plus-api). Forma compatta [u, f, t, a]: ~70 KB al giorno.
+ *
+ * `coverageFrom` è il primo istante di cui questo archivio sa DAVVERO: il
+ * più tardo fra quando ha cominciato a guardare e la soglia di potatura.
+ * Prima di quel momento una lista vuota non vuol dire «non si è mosso».
+ */
+function readMovesLog(since) {
+  const store = _readMoves();
+  const rows = [];
+  for (const r of store.data) {
+    if (r.a < since) break;   // ordinato dal più recente
+    rows.push([r.u, r.f, r.t, r.a]);
+  }
+  const floor = (store.fetchedAt || Date.now()) - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  return {
+    fetchedAt: store.fetchedAt,
+    coverageFrom: store.startedAt ? Math.max(store.startedAt, floor) : null,
+    retentionDays: RETENTION_DAYS,
+    rows,
   };
 }
 
@@ -401,6 +431,7 @@ module.exports = {
   initCitizenMoves,
   recordCensus,
   readCitizenMoves,
+  readMovesLog,
   readMigrationFlows,
   statoCitizenMoves,
 };

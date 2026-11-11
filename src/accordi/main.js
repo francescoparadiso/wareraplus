@@ -521,6 +521,23 @@ function vistaControllo(a, ctl) {
     d.violazioni ? acT('violations', { n: d.violazioni }) : acT('noViolations'));
   box.appendChild(esito);
 
+  // Come leggere il controllo, in chiaro: una riga rossa è un allarme da
+  // andare a leggere, non una sentenza. Le classifiche si leggono per intero
+  // e la nazionalità è quella del giorno della battaglia (archivio delle
+  // migrazioni): restano da dire solo l'unità di adesso e, per le battaglie
+  // più vecchie dell'archivio migrazioni, la nazionalità di adesso.
+  const limite = el('div', 'wp-ac-limite');
+  const testiLimite = [acT('checkLimit')];
+  if ((a.muEscluse || []).length) {
+    testiLimite.push(acT('checkLimitUnits'));
+    if (d.migrazioni && !d.migrazioni.letto) testiLimite.push(acT('checkMigDown'));
+    else if (d.migrazioni?.coperturaDal && d.righe.some(r => r.nazDiOggi)) {
+      testiLimite.push(acT('checkMigFrom', { date: fmtData(d.migrazioni.coperturaDal) }));
+    }
+  }
+  limite.append(el('strong', null, `${acT('checkLimitTitle')} `), document.createTextNode(testiLimite.join(' ')));
+  box.appendChild(limite);
+
   if (!d.archivioOk) box.appendChild(el('p', 'wp-ac-note', acT('archiveDown')));
   else if (d.coperturaDal && d.periodo.dal < d.coperturaDal) {
     box.appendChild(el('p', 'wp-ac-note', acT('coverage', { date: fmtData(d.coperturaDal) })));

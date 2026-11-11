@@ -656,10 +656,20 @@ Accordi sono l'unica fonte (richiesta dell'utente). Tre cose da sapere:
   a livello di nazione, un NAP lì è fra due nazioni e non fra regioni. Un
   server non ancora rideployato ignora il campo e salva `all`;
 - il **controllo** del tetto ai danni somma il danno per NAZIONALITÀ
-  (`battleRanking` per country) sullo schieramento opposto all'altra parte;
-  le unità escluse si tolgono con la classifica per unità, quindi è una stima
-  (dichiarata). Copre i 90 giorni dell'archivio battaglie, 120 battaglie per
-  controllo al massimo.
+  (`battleRanking` per country) sullo schieramento opposto all'altra parte.
+  Dal 2026-11-11 non ha più i due limiti vecchi: le classifiche (per nazione,
+  unità, giocatore) si leggono **fino in fondo**, non più i primi 100, e le
+  unità escluse si tolgono giocatore per giocatore con la **nazionalità del
+  giorno della battaglia**, ricostruita dal `da` del primo spostamento
+  successivo in `/citizen-moves-log` (cache-server, archivio dei movimenti,
+  ora 100 giorni invece di 30). Restano due cose dichiarate dalla vista:
+  l'**unità** di un giocatore è quella di adesso (il gioco non la storicizza),
+  e per le battaglie prima dell'inizio dell'archivio migrazioni
+  (`migrazioni.coperturaDal`, oggi 12 ott 2026: i giorni potati a 30 non si
+  recuperano) vale la nazionalità di adesso (`nazDiOggi` sulla riga). Senza il
+  rideploy del cache-server `/citizen-moves-log` risponde 404 e il controllo
+  ricade su quella di adesso, dichiarandolo. Copre i 90 giorni dell'archivio
+  battaglie, 120 battaglie per controllo al massimo.
 
 Le **Votazioni** (`server/plusApi/votazioni.js` + `src/political/votes.js`,
 bottone "Votazioni" di Political, dal 2026-10-23) fanno votare congresso,

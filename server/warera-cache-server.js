@@ -161,7 +161,7 @@ const {
 // e' per forza una differenza fra due fotografie. ⚠️ accumula e non
 // recupera, come i bonifici. Vedi il blocco in testa a server/citizenMoves.js.
 const {
-  initCitizenMoves, recordCensus, readCitizenMoves, readMigrationFlows, statoCitizenMoves,
+  initCitizenMoves, recordCensus, readCitizenMoves, readMovesLog, readMigrationFlows, statoCitizenMoves,
 } = require('./citizenMoves');
 // WarEra+ storico politico: elezioni riassunte e presidenti nel tempo
 // (completi dal lancio, sono gia' in `elections-by-country`), piu' tre
@@ -3349,6 +3349,20 @@ app.get('/citizen-moves', async (req, res) => {
   } catch (err) {
     console.error('[citizen-moves] richiesta fallita:', err.message);
     res.status(500).json({ error: 'citizen-moves non disponibile' });
+  }
+});
+
+// WarEra+ le righe grezze dell'archivio dei movimenti da `since` (ms) in poi,
+// per ricostruire la nazionalità di un giocatore a una data (controllo degli
+// accordi in warera-plus-api). Forma [u, f, t, a]; vedi readMovesLog.
+app.get('/citizen-moves-log', (req, res) => {
+  const since = Number(req.query.since);
+  if (!Number.isFinite(since) || since < 0) return res.status(400).json({ error: 'since mancante' });
+  try {
+    res.json(readMovesLog(since));
+  } catch (err) {
+    console.error('[citizen-moves-log] richiesta fallita:', err.message);
+    res.status(500).json({ error: 'citizen-moves-log non disponibile' });
   }
 });
 
