@@ -541,12 +541,17 @@ rotta o sbagliata:
   l'eccezione alla regola "non potare" perché un prezzo vecchio è un dato
   sbagliato, non storia. Il VPS tiene solo `cache/gear-market.sqlite`, fuori
   dal backup (l'API lo rifà in un giorno);
-- ⚠️ **l'acciaio di un craft non è misurabile**: `craftItem` registra solo le
-  scraps (6·3^(k−1) per rarità, coincide con lo smontaggio). L'acciaio
-  (1, 2, 4, 8, 16, 32) viene da una dashboard di terzi con cui il ROI è stato
-  confrontato (epico +1,0% contro +2,0%, margini per pezzo entro un'unità) e
-  sta in `CRAFT_STEEL`: se il gioco lo cambia si sposta lì. La tassa di mercato
-  è un parametro dell'utente (default 1%), non un dato;
+- il **costo del craft**: `craftItem` registra solo le scraps (6·3^(k−1) per
+  rarità, coincide con lo smontaggio); l'acciaio (1, 2, 4, 8, 16, 32) sta nella
+  schermata «Craft items» del gioco (verificato il 2026-11-11) e in
+  `CRAFT_STEEL`, da aggiornare se il gioco cambia i costi. Il ROI torna con
+  quello di una dashboard di terzi (epico +1,0% contro +2,0%, margini per pezzo
+  entro un'unità). La tassa di mercato invece è un parametro dell'utente
+  (default 1%), non un dato;
+- i pezzi si mostrano come «Elmo T5»: il numero in fondo al codice di gioco è
+  il TIER (1 comune … 6 mitico); le icone sono quelle del gioco
+  (`media.warera.io/images/items/<slot>.png`, una per slot e per arma, uguale a
+  ogni tier: il tier lo dice il colore della cornice);
 - le **probabilità di uscita** si misurano sui craft veri (si fidano da 500
   craft per rarità, prima valgono quelle nominali: 30% arma, 14% per slot);
   i tiri sono uniformi nell'intervallo di `dynamicStats` (verificato), quindi

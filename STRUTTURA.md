@@ -655,8 +655,8 @@ wareraPlus/
     │   │                            tiri da /gear-market; senza server niente ripiego.
     │   │                            Matematica pura in craftingModel.js (provata contro
     │   │                            una dashboard di terzi), dizionario i18nCraft.js.
-    │   │                            ⚠️ L'acciaio per craft (1,2,4,8,16,32) non è nei
-    │   │                            registri del gioco: dichiarato in nota.
+    │   │                            Pezzi mostrati come «Elmo T5» (numero = tier) con le
+    │   │                            icone del gioco (media.warera.io/images/items/).
     │   ├── production.js         ← NUOVO (2026-10-08) — scheda PRODUZIONE: per
     │   │                          risorsa aziende, dipendenti, salari e tasse sui
     │   │                          salari al giorno, filtro per nazione, e per ogni

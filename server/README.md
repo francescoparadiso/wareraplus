@@ -830,5 +830,6 @@ ricava le **curve prezzo(tiro)** di ogni pezzo e le frequenze di uscita.
 - Senza redeploy `/gear-market` risponde 404 e la scheda dice che il server non
   c'è, senza ripiego (il gioco non pubblica i tiri delle vendite altrove).
   `/health` → `gearMarket` (vendite, primo/ultimo istante, eventi).
-- ⚠️ Il numero di acciaio per craft non sta nelle transazioni (solo le scraps):
-  è una costante in `src/economy/craftingModel.js`.
+- Le transazioni `craftItem` registrano solo le scraps: l'acciaio per craft
+  (dalla schermata «Craft items» del gioco) è una costante in
+  `src/economy/craftingModel.js`.

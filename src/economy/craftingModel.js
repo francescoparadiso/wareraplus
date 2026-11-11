@@ -16,12 +16,14 @@
    sceglie il meglio: max(prezzo di mercato, scraps rese × prezzo scraps).
    Le due strade pagano la stessa tassa di mercato (`tax`).
 
-   ── ⚠️ DUE COSE NON MISURABILI, DICHIARATE ─────────────────────────
-   · L'ACCIAIO di un craft: le transazioni registrano solo le scraps. Il
-     numero di acciaio per rarità (1, 2, 4, 8, 16, 32) viene dalla
-     dashboard di terzi che per prima ha pubblicato il ROI, e con quel
-     numero il costo torna al millesimo. Se il gioco lo cambiasse, si
-     sposta qui (`CRAFT_STEEL`) e la vista lo dice in nota.
+   ── COSTO DEL CRAFT ────────────────────────────────────────────────
+   Le transazioni `craftItem` registrano solo le scraps (6·3^(k-1)); l'acciaio
+   (1, 2, 4, 8, 16, 32) sta nella schermata «Craft items» del gioco, che
+   mostra per ogni rarità scraps e acciaio (verificato il 2026-11-11 con la
+   schermata: mitico 1,46k + 32, epico 162 + 8, comune 6 + 1). Se il gioco
+   cambiasse i costi si aggiorna `CRAFT_STEEL`.
+
+   ── ⚠️ UNA COSA NON MISURABILE, DICHIARATA ─────────────────────────
    · La TASSA di mercato dipende dal paese: è un parametro dell'utente
      (default 1%), non un dato.
 
@@ -32,7 +34,8 @@
 export const RARITIES = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
 export const SLOTS = ['helmet', 'chest', 'pants', 'boots', 'gloves'];
 
-/** Acciaio per craft, per indice di rarità (1 = common). Vedi la testata. */
+/** Acciaio per craft, per indice di rarità (1 = common): quello della
+ *  schermata «Craft items» del gioco. Vedi la testata. */
 export const CRAFT_STEEL = [0, 1, 2, 4, 8, 16, 32];
 /** Scraps per craft e rese di smontaggio nominali: 6·3^(k-1). Misurate sulle
  *  transazioni (craftItem e dismantleItem coincidono); qui solo come ripiego

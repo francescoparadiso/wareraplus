@@ -761,3 +761,29 @@ body.light-theme .wp-trend-flat { stroke: var(--wp-ecn-flat, #6e7781); }
 }
 .wp-crf-custom { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .wp-crf-crar { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+
+/* ── Crafting: immagini e colori di rarità (tier) ─────────────── */
+.wp-crf-ico {
+  width: 28px; height: 28px; object-fit: contain; flex: none;
+  border-radius: 6px; padding: 2px;
+  background: rgba(110, 118, 129, .14); border: 1px solid transparent;
+}
+.wp-crf-piece { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.wp-crf-piece b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-crf-h3 { display: inline-flex; align-items: center; gap: 8px; }
+.wp-crf-costrow { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.wp-crf-costrow .wp-crf-ico { width: 22px; height: 22px; padding: 1px; margin-left: 2px; }
+.wp-crf-r1 { border-color: #9ca3af; } .wp-crf-r2 { border-color: #4ade80; } .wp-crf-r3 { border-color: #60a5fa; }
+.wp-crf-r4 { border-color: #a78bfa; } .wp-crf-r5 { border-color: #fbbf24; } .wp-crf-r6 { border-color: #f87171; }
+.wp-crf-rname.wp-crf-t1, .wp-crf-crar .wp-crf-t1 { color: #9ca3af; }
+.wp-crf-rname.wp-crf-t2, .wp-crf-crar .wp-crf-t2 { color: #4ade80; }
+.wp-crf-rname.wp-crf-t3, .wp-crf-crar .wp-crf-t3 { color: #60a5fa; }
+.wp-crf-rname.wp-crf-t4, .wp-crf-crar .wp-crf-t4 { color: #a78bfa; }
+.wp-crf-rname.wp-crf-t5, .wp-crf-crar .wp-crf-t5 { color: #fbbf24; }
+.wp-crf-rname.wp-crf-t6, .wp-crf-crar .wp-crf-t6 { color: #f87171; }
+body.light-theme .wp-crf-rname.wp-crf-t1, body.light-theme .wp-crf-crar .wp-crf-t1 { color: #6b7280; }
+body.light-theme .wp-crf-rname.wp-crf-t2, body.light-theme .wp-crf-crar .wp-crf-t2 { color: #15803d; }
+body.light-theme .wp-crf-rname.wp-crf-t3, body.light-theme .wp-crf-crar .wp-crf-t3 { color: #1d4ed8; }
+body.light-theme .wp-crf-rname.wp-crf-t4, body.light-theme .wp-crf-crar .wp-crf-t4 { color: #6d28d9; }
+body.light-theme .wp-crf-rname.wp-crf-t5, body.light-theme .wp-crf-crar .wp-crf-t5 { color: #b45309; }
+body.light-theme .wp-crf-rname.wp-crf-t6, body.light-theme .wp-crf-crar .wp-crf-t6 { color: #b91c1c; }

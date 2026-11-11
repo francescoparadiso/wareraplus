@@ -92,10 +92,25 @@ function giorno(iso) {
   return new Intl.DateTimeFormat(lingua(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 }
 
-const nomePezzo = (code) => {
-  const m = /^(helmet|chest|pants|boots|gloves)(\d)$/.exec(code);
-  return m ? craftT(m[1]) : craftT('weapon');
-};
+// ── Nomi e immagini dei pezzi ───────────────────────────────────────
+// Il numero in fondo al codice del gioco (helmet5) è il TIER: 1 comune …
+// 6 mitico. Si mostra «Elmo T5» e non il codice. Le immagini sono quelle del
+// gioco (media.warera.io/images/items/<slot>.png): una per slot e per arma,
+// uguale a ogni tier — il tier lo dice il colore della cornice.
+const IMG_BASE = 'https://media.warera.io/images/items';
+const SLOT_RE = /^(helmet|chest|pants|boots|gloves)(\d)$/;
+
+function iconaHtml(img, tier = 0) {
+  return `<img class="wp-crf-ico${tier ? ` wp-crf-r${tier}` : ''}" src="${IMG_BASE}/${escapeHtml(img)}.png" alt="" width="28" height="28" loading="lazy" onerror="this.style.visibility='hidden'">`;
+}
+
+/** { img, nome, tier } di un codice: l'armatura porta il tier nel codice,
+ *  l'arma (una per rarità) lo prende da quella del craft aperto. */
+function pezzo(code, tierArma) {
+  const m = SLOT_RE.exec(code);
+  if (m) return { img: m[1], nome: `${craftT(m[1])} T${m[2]}`, tier: Number(m[2]) };
+  return { img: code, nome: `${craftT('w_' + code)} T${tierArma}`, tier: tierArma };
+}
 
 // ── Il piccolo grafico "valore per tiro" ────────────────────────────
 function sparkSvg(valori, costo) {
@@ -121,12 +136,18 @@ function sparkSvg(valori, costo) {
 }
 
 // ── Pezzi del disegno ───────────────────────────────────────────────
-function kpiHtml(etichetta, valore, nota, cls = '') {
+function kpiHtml(etichetta, valore, nota, cls = '', notaHtml = '') {
   return `<div class="wp-ecn-kpi">
       <em>${escapeHtml(etichetta)}</em>
       <strong class="${cls}">${escapeHtml(valore)}</strong>
-      ${nota ? `<small>${escapeHtml(nota)}</small>` : ''}
+      ${notaHtml ? `<small class="wp-crf-costrow">${notaHtml}</small>` : nota ? `<small>${escapeHtml(nota)}</small>` : ''}
     </div>`;
+}
+
+/** Il costo come nel gioco: icona scraps + quantità, icona acciaio + quantità. */
+function costoHtml(scraps, steel) {
+  const q = (n) => new Intl.NumberFormat(lingua()).format(n);
+  return `${iconaHtml('scraps')}${escapeHtml(q(scraps))}${steel ? ` ${iconaHtml('steel')}${escapeHtml(q(steel))}` : ''}`;
 }
 
 const confLabel = (c) => craftT({ high: 'confHigh', mid: 'confMid', low: 'confLow' }[c] || 'confNone');
@@ -143,7 +164,7 @@ function craftHtml() {
 
   const carte = rois.map(r => `
       <button type="button" class="wp-crf-card${r.rarityIdx === _rar ? ' active' : ''}" data-rar="${r.rarityIdx}">
-        <span class="wp-crf-rname">${escapeHtml(craftT(r.rarity))}${migliore && r.rarityIdx === migliore.rarityIdx
+        <span class="wp-crf-rname wp-crf-t${r.rarityIdx}">${escapeHtml(craftT(r.rarity))}${migliore && r.rarityIdx === migliore.rarityIdx
     ? ` <b class="wp-crf-best">${escapeHtml(craftT('best'))}</b>` : ''}</span>
         <strong class="wp-crf-roi${segno(r.roi)}">${escapeHtml(pctFirmato(r.roi))}</strong>
         <span class="wp-crf-line${segno(r.margin)}">${escapeHtml(firmato(r.margin))} ${escapeHtml(craftT('perCraft'))}</span>
@@ -153,7 +174,7 @@ function craftHtml() {
 
   const righe = sel.outcomes.map(o => `
       <div class="wp-crf-row">
-        <span class="wp-crf-piece"><b>${escapeHtml(nomePezzo(o.code))}</b> <small class="wp-crf-dim">${escapeHtml(o.code)}</small></span>
+        ${(() => { const p = pezzo(o.code, sel.rarityIdx); return `<span class="wp-crf-piece wp-crf-t${p.tier}" title="${escapeHtml(o.code)}">${iconaHtml(p.img, p.tier)}<b>${escapeHtml(p.nome)}</b></span>`; })()}
         <span class="wp-ecn-num">${escapeHtml(pct(o.p, 1))}</span>
         <span class="wp-ecn-num">${escapeHtml(o.ev != null ? prezzo(o.ev) : '—')}</span>
         <span class="wp-ecn-num${segno(o.margin)}">${escapeHtml(firmato(o.margin))}</span>
@@ -170,7 +191,7 @@ function craftHtml() {
     <section class="wp-ecn-msec">
       <h3>${escapeHtml(craftT('detailTitle', { r: craftT(sel.rarity) }))}</h3>
       <div class="wp-ecn-kpis">
-        ${kpiHtml(craftT('kCost'), prezzo(sel.cost), `${sel.scraps} scraps${sel.steel ? ` + ${sel.steel} steel` : ''}`)}
+        ${kpiHtml(craftT('kCost'), prezzo(sel.cost), '', '', costoHtml(sel.scraps, sel.steel))}
         ${kpiHtml(craftT('kEv'), sel.ev != null ? prezzo(sel.ev) : '—', sel.measured ? craftT('noteMeasured', { n: sel.crafts }) : craftT('noteNominal', { n: sel.crafts }))}
         ${kpiHtml(craftT('kMargin'), firmato(sel.margin), pctFirmato(sel.roi) + ' ROI', segno(sel.margin))}
         ${kpiHtml(craftT('pWin'), pct(sel.pProfit, 0), craftT('kCover') + ': ' + pct(sel.covered, 0))}
@@ -223,7 +244,7 @@ function caseCard(code) {
     custom: M.caseEv(_model, _prices, code, 'custom', _custom, _tax),
   };
   if (!strat.opt) {
-    return `<div class="wp-crf-case"><h3>${escapeHtml(nome)}</h3>
+    return `<div class="wp-crf-case"><h3 class="wp-crf-h3">${iconaHtml(code)}${escapeHtml(nome)}</h3>
       <p class="wp-ecn-note">${escapeHtml(craftT('casePrice'))}: ${escapeHtml(prezzo(prezzoCassa))} · ${escapeHtml(craftT('caseFew'))}</p></div>`;
   }
   const apri = strat.opt.ev > venditaChiusa;
@@ -234,7 +255,7 @@ function caseCard(code) {
     </div>`;
   return `<div class="wp-crf-case">
       <header>
-        <h3>${escapeHtml(nome)}</h3>
+        <h3 class="wp-crf-h3">${iconaHtml(code)}${escapeHtml(nome)}</h3>
         <span class="wp-crf-verdict ${apri ? 'wp-crf-pos' : 'wp-crf-neg'}">${escapeHtml(craftT(apri ? 'verdictOpen' : 'verdictSell'))}</span>
       </header>
       <div class="wp-ecn-kpis wp-crf-mini">
@@ -257,7 +278,7 @@ function woodCard() {
   const apri = w.ev > p * (1 - _tax);
   return `<div class="wp-crf-case">
       <header>
-        <h3>${escapeHtml(craftT('woodenCase'))}</h3>
+        <h3 class="wp-crf-h3">${iconaHtml('woodenCase')}${escapeHtml(craftT('woodenCase'))}</h3>
         <span class="wp-crf-verdict ${apri ? 'wp-crf-pos' : 'wp-crf-neg'}">${escapeHtml(craftT(apri ? 'verdictOpen' : 'verdictSell'))}</span>
       </header>
       <div class="wp-ecn-kpis wp-crf-mini">
@@ -269,8 +290,8 @@ function woodCard() {
 }
 
 function casesHtml() {
-  const custom = M.RARITIES.map(r => `
-      <span class="wp-crf-crar">${escapeHtml(craftT(r))}
+  const custom = M.RARITIES.map((r, i) => `
+      <span class="wp-crf-crar"><b class="wp-crf-t${i + 1}">${escapeHtml(craftT(r))}</b>
         <button type="button" class="wp-ecn-chip${_custom[r] === 'sell' ? ' active' : ''}" data-cust="${r}:sell">${escapeHtml(craftT('optSell'))}</button>
         <button type="button" class="wp-ecn-chip${_custom[r] === 'scrap' ? ' active' : ''}" data-cust="${r}:scrap">${escapeHtml(craftT('optScrap'))}</button>
       </span>`).join('');
@@ -292,8 +313,7 @@ function noteHtml() {
   const m = _model;
   return `
     <p class="wp-ecn-note">${escapeHtml(craftT('noteSales', { n: new Intl.NumberFormat(lingua()).format(m.sales), d: m.windowDays, a: giorno(m.salesFrom), b: giorno(m.salesTo) }))}</p>
-    <p class="wp-ecn-note">${escapeHtml(craftT('noteCurve'))}</p>
-    ${_steel && _view === 'craft' ? `<p class="wp-ecn-note">${escapeHtml(craftT('noteSteel'))}</p>` : ''}`;
+    <p class="wp-ecn-note">${escapeHtml(craftT('noteCurve'))}</p>`;
 }
 
 // ── Disegno ─────────────────────────────────────────────────────────
