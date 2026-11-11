@@ -254,9 +254,16 @@ function readMovesLog(since) {
     rows.push([r.u, r.f, r.t, r.a]);
   }
   const floor = (store.fetchedAt || Date.now()) - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  // ⚠️ `startedAt` da solo mente: fino a ieri la potatura era a 30 giorni, e
+  // l'archivio ha già buttato via i primi (parte dal 20 set, le righe dal 12
+  // ott). Se la riga più vecchia è ben dopo l'inizio, quella è la copertura.
+  let oldest = Infinity;
+  for (const r of store.data) if (r.a < oldest) oldest = r.a;
+  const potato = store.startedAt && oldest !== Infinity && oldest - store.startedAt > 2 * 24 * 60 * 60 * 1000;
+  const inizio = potato ? oldest : store.startedAt;
   return {
     fetchedAt: store.fetchedAt,
-    coverageFrom: store.startedAt ? Math.max(store.startedAt, floor) : null,
+    coverageFrom: inizio ? Math.max(inizio, floor) : null,
     retentionDays: RETENTION_DAYS,
     rows,
   };
