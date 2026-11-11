@@ -38,6 +38,27 @@
 
 export const CHANGELOG = [
   {
+    id: '2026-11-11',
+    title: { en: 'Crafting, cases and purchasing power', it: 'Crafting, casse e potere d\'acquisto' },
+    items: [
+      {
+        tag: 'new',
+        en: 'Economy has a new "Crafting" tab: for every rarity it shows what a random craft costs, what it is worth on average, the chance of profit and the value of each piece, measured on real market sales. It also tells you whether a case is worth opening or better sold closed. You set your own market tax.',
+        it: 'Economia ha una nuova scheda "Crafting": per ogni rarità mostra quanto costa un craft casuale, quanto vale in media, la probabilità di profitto e il valore di ogni pezzo, misurato su vendite vere del mercato. Dice anche se una cassa conviene aprirla o venderla chiusa. La tassa di mercato la imposti tu.',
+      },
+      {
+        tag: 'new',
+        en: 'Players → Wealth has a "Purchasing power" view: your wealth without companies, divided by the price of pills, food and ammo, so you can tell whether it is falling because you spend more or because prices and your gear lost value.',
+        it: 'Giocatori → Ricchezza ha la vista "Potere d\'acquisto": la ricchezza senza aziende, divisa per il prezzo di pillole, cibo e proiettili, per capire se cala perché spendi di più o perché prezzi ed equipaggiamento hanno perso valore.',
+      },
+      {
+        tag: 'improved',
+        en: 'Agreements: each pact now says whether it covers only the nations\' original regions or also the ones they occupy.',
+        it: 'Accordi: ogni patto ora dice se copre solo le regioni originali delle nazioni o anche quelle che hanno occupato.',
+      },
+    ],
+  },
+  {
     id: '2026-11-08e',
     title: { en: 'Alliance logos', it: 'Loghi delle alleanze' },
     items: [
