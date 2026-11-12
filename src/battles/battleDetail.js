@@ -276,18 +276,61 @@ function sideTable(rows, sideKey, battle, opts) {
    Il confronto è con la media del PROPRIO schieramento, non con un costo
    "di pareggio": quello richiede il costo di un colpo, che non è ancora
    calibrato. Sopra la media = pagato meglio degli altri sullo stesso lato. ── */
-function payPerK(sideKey) {
+function payPerK(sideKey, live = false) {
   const byCountry = new Map();
   let totContracts = 0;
   let unresolved = 0;
+  const add = (country, v) => byCountry.set(country, (byCountry.get(country) || 0) + v);
   for (const c of _detail?.contracts || []) {
     if (c.side !== sideKey) continue;
     totContracts += c.payout;
-    const country = _muInfo.get(c.mu)?.country;
-    if (!country) { unresolved += c.payout; continue; }
-    byCountry.set(country, (byCountry.get(country) || 0) + c.payout);
+    // ⚠️ 2026-11-12: il compenso va a chi ha COLPITO, cioè alla cittadinanza
+    // dei membri, non alla nazione in cui l'unità è registrata. Libano–Siria:
+    // un'unità "italiana" fatta di cittadini del Liechtenstein portava 4.100
+    // di contratti all'Italia (16.664 contro 13.792 incassati) e zero al
+    // Liechtenstein, che li aveva incassati davvero. La composizione per
+    // cittadinanza viene dalla directory (server di cache); senza, o per
+    // un'unità fuori directory, si ricade sulla nazione dell'unità.
+    const shares = muCountryShares(c.mu);
+    if (!shares.length) { unresolved += c.payout; continue; }
+    for (const s of shares) add(s.country, c.payout * s.w);
+  }
+  // Il compenso di una nazione non può superare quel che i suoi cittadini
+  // hanno incassato (la classifica "money" lo contiene già). Le quote per
+  // composizione sono stime sui membri iscritti, non su chi ha combattuto:
+  // l'eccedenza si dichiara non attribuita invece di mostrare un "di cui"
+  // più grande del totale. Su una battaglia in corso no: i contratti sono
+  // pattuiti ma non ancora consegnati, quindi sopra l'incassato è normale.
+  if (!live) {
+    const earned = new Map((_detail?.sides?.[sideKey] || []).map(r => [r.id, r.money || 0]));
+    for (const [country, v] of byCountry) {
+      const cap = earned.get(country) || 0;
+      if (v > cap) { unresolved += v - cap; byCountry.set(country, cap); }
+    }
   }
   return { byCountry, totContracts, unresolved };
+}
+
+// Directory indicizzata per id, ricostruita solo se _dir è cambiata.
+let _dirIdx = null;
+let _dirIdxFor = null;
+function dirMu(id) {
+  if (_dirIdxFor !== _dir) {
+    _dirIdx = new Map((_dir || []).map(m => [m._id, m]));
+    _dirIdxFor = _dir;
+  }
+  return _dirIdx.get(id);
+}
+
+/** Come si divide il compenso di un'unità fra le cittadinanze: per numero
+ *  di membri (`composition.top`, le prime 5 nazioni), altrimenti tutto alla
+ *  nazione in cui l'unità è registrata. */
+function muCountryShares(muId) {
+  const top = dirMu(muId)?.composition?.top;
+  const tot = (top || []).reduce((s, x) => s + (x.n || 0), 0);
+  if (tot > 0) return top.filter(x => x.country && x.n > 0).map(x => ({ country: x.country, w: x.n / tot }));
+  const country = _muInfo.get(muId)?.country || dirMu(muId)?.country;
+  return country ? [{ country, w: 1 }] : [];
 }
 
 function perK(money, damage) {
@@ -684,8 +727,8 @@ export function renderBattleDetail(battle) {
   const sentDef = sentTotals(battle.defender.countryId, wFrom, wTo);
   const sentAtk = sentTotals(battle.attacker.countryId, wFrom, wTo);
   const anySent = sentDef.size || sentAtk.size;
-  const payDef = payPerK('defender');
-  const payAtk = payPerK('attacker');
+  const payDef = payPerK('defender', Boolean(battle.live));
+  const payAtk = payPerK('attacker', Boolean(battle.live));
   const anyCtr = payDef.totContracts > 0 || payAtk.totContracts > 0;
 
   // Due schede dalla stessa registrazione: "Timeline battaglia" (danno) e
@@ -888,8 +931,21 @@ export async function loadBattleDetail(battle, repaint) {
       .then(d => { _spend = d; }).catch(() => {}),
     fetchBattleTimeline(battle.id, { live: Boolean(battle.live) }).then(d => { _tl = d; }),
     loadAllianceRegistry(),
+    loadMuComposition(),
   ]);
   repaint();
+}
+
+/** La directory unità serve qui solo per la cittadinanza dei membri (vedi
+ *  payPerK). Dal solo server di cache: la paginazione diretta di ripiego
+ *  costa ~14 richieste e non porta la composizione, quindi per questo uso
+ *  non vale la pena. Senza, i contratti ricadono sulla nazione dell'unità. */
+async function loadMuComposition() {
+  if (_dir || !(_detail?.contracts || []).length) return;
+  try {
+    const dir = await import('../mu/api.js').then(m => m.fetchMuDirectoryFromServer());
+    if (dir && !_dir) _dir = dir;
+  } catch (_) { /* resta la nazione dell'unità */ }
 }
 
 /* ── Battaglia IN CORSO con la scheda aperta ──

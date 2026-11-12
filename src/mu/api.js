@@ -81,6 +81,21 @@ export function fetchMuDirectory() {
   return _directoryPromise;
 }
 
+/** La directory, ma SOLO dal server di cache: niente paginazione diretta di
+ *  ripiego (quella non porta la composizione per cittadinanza ed è la
+ *  strada costosa). Per chi vuole la composizione e non il resto: se il
+ *  server non risponde lancia, e chi chiama ricade su altro. */
+export async function fetchMuDirectoryFromServer() {
+  if (_directory) return _directory;
+  const json = await _fetchCacheJson('/mu-directory');
+  if (!Array.isArray(json.data) || !json.data.length) throw new Error('cache /mu-directory: forma inattesa o vuota');
+  if (!_directory) {
+    _directory = json.data;
+    _fetchedAt = json.fetchedAt ?? Date.now();
+  }
+  return _directory;
+}
+
 async function _fetchCacheJson(path) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), CACHE_TIMEOUT_MS);

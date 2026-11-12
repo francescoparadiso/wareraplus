@@ -212,6 +212,13 @@ export async function fetchBattleSpending(battleId) {
 
   const won = await _drainAuctions(battleId, 'won', wonPage);
   const active = await _drainAuctions(battleId, 'active', activePage);
+  // ⚠️ 2026-11-12: la classifica unità si ferma a 100 righe ma ha un cursore
+  // (Libano–Siria: 370 unità da un lato). Provato a seguirlo: la taglia non
+  // si muove (16.266 → 16.264), perché le unità oltre la pagina non hanno
+  // incassato niente. Lo scarto dalla sottrazione semplice (~14.800) è un
+  // altro: contratti PATTUITI e non pagati (unità sotto il danno minimo,
+  // 1.110 di contratti con zero incassato). La taglia stimata è giusta, è
+  // il "contratti" che è il pattuito — non il pagato.
 
   // "earned": la classifica così com'è (taglia + paga dei contratti) —
   // resta la colonna per nazione. `total` diventa invece la TAGLIA stimata
