@@ -39,8 +39,18 @@
 export const CHANGELOG = [
   {
     id: '2026-11-12',
-    title: { en: 'Agreements: orders and a fuller check', it: 'Accordi: gli ordini e un controllo più completo' },
+    title: { en: 'Wars tab, agreements and battle costs', it: 'Scheda Guerre, accordi e costi delle battaglie' },
     items: [
+      {
+        tag: 'new',
+        en: 'Battles: a new "Wars" tab groups the battles of each war and adds up what it cost: bounties, contracts, damage and battles won, nation by nation. Open a war to see its battles. It fills in over the first night after the update, because the archive has to learn which war each past battle belongs to.',
+        it: 'Battaglie: una nuova scheda "Guerre" raggruppa le battaglie di ogni guerra e ne somma i costi: taglie, contratti, danno e battaglie vinte, nazione per nazione. Aprendo una guerra si vedono le sue battaglie. Si riempie nella prima notte dopo l\'aggiornamento, perché l\'archivio deve ricostruire a quale guerra appartiene ogni battaglia passata.',
+      },
+      {
+        tag: 'fix',
+        en: 'Battle details: the "of which contracts" column no longer exceeds what a nation earned. A contract goes to the citizenship of the unit\'s members, not to the nation the unit is registered in, and on a battle still running it shows what has been paid so far, not the agreed amount.',
+        it: 'Dettaglio battaglia: la colonna "di cui contratti" non supera più quanto una nazione ha incassato. Un contratto va alla cittadinanza dei membri dell\'unità e non alla nazione in cui l\'unità è registrata, e su una battaglia in corso mostra quanto è stato pagato finora, non il pattuito.',
+      },
       {
         tag: 'new',
         en: 'Agreements: the check now looks at national orders too. For each battle it shows whether a nation gave an order against the other party, whether it was later removed, and flags damage that came with no order, which probably wasn\'t intended. Orders are recorded from 12 November: the game throws them away once a battle ends, so older battles show "n/a".',
