@@ -723,6 +723,21 @@ export async function fetchWarExpensesViaCache() {
   }
 }
 
+/** WarEra+ — chi PAGA e chi INCASSA i contratti mercenari (server/
+ *  battleArchive.js: readWarFlows). Gemella di fetchWarExpensesViaCache:
+ *  se il rotta non c'è (deploy non fatto) o l'archivio è vuoto torna null e
+ *  la scheda Spese di guerra resta com'era, senza colonna "incassato". */
+export async function fetchWarFlowsViaCache() {
+  try {
+    const json = await _fetchCacheJsonRaw('/war-flows');
+    if (!json || typeof json.byDay !== 'object' || !Object.keys(json.byDay).length) return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /war-flows non disponibile:', err.message);
+    return null;
+  }
+}
+
 // ══════════════════════════════════════════════════════════════
 // FALLBACK time machine — sorgente esterna spywarera.com (via worker)
 // ------------------------------------------------------------------

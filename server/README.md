@@ -531,6 +531,17 @@ una nazione al giorno per combattere. Endpoint nuovi:
 - `GET /war-expenses` — serie giornaliera `byDay[YYYY-MM-DD][countryId]`.
   Derivata al momento della richiesta dai due archivi: costa niente e resta
   sempre coerente con l'ultimo giro di poll.
+- `GET /war-flows` — chi INCASSA i contratti (dal 2026-11-13):
+  `byDay[giorno][nazione che paga][nazione dell'unità vincitrice] = [monete, contratti]`,
+  più `coverageFrom` (primo giorno completo) e `complete`. L'unità si traduce in
+  nazione in LETTURA, con `mu-directory` di adesso: maggioranza vera (≥ 50% su ≥ 3
+  membri noti) altrimenti la nazione di registrazione. Archivio `merc-mu-archive`
+  e cursore `merc-mu-archive-state` PROPRI: quello dei contratti ha già finito il
+  bootstrap e il suo `seen` impedirebbe di rileggere le aste vecchie. Il giro
+  incrementale alimenta entrambi dalle stesse pagine (nessuna richiesta in più);
+  i giorni vecchi li recupera `pollMercMuBootstrap`, di notte, una notte sola.
+  Senza deploy risponde 404: la scheda Spese di guerra perde le colonne
+  «Incassato»/«Saldo» e lo dichiara. `/health` → `battleArchive.flows`.
 - `GET /battle-archive/status` — stato dei due bootstrap (anche in `/health`).
 
 ### Il bootstrap gira SOLO di notte

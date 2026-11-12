@@ -1214,3 +1214,48 @@ body.light-theme .wp-btl-bonus-cell.best strong { color: #1a7f37; }
 .wp-war-exp-in { padding: 4px 14px 14px; }
 body.light-theme .wp-war-row:hover { background: rgba(0,0,0,.04); }
 body.light-theme .wp-war-exp > td { background: rgba(0,0,0,.025); }
+/* ══════════════════════════════════════════════════════════════
+   Spese di guerra: vista per alleanza e flusso dei contratti
+   (WarEra+, 2026-11-13). Verde = entra, rosso = esce: il verde NON è
+   uno dei due colori di spesa (ambra/viola), così una cifra incassata non
+   si confonde con una spesa. Stessa tinta per colonna, carta e barre.
+   ══════════════════════════════════════════════════════════════ */
+.wp-btl { --wp-btl-in: #3fb950; --wp-btl-out: #f85149; }
+body.light-theme .wp-btl { --wp-btl-in: #1a7f37; --wp-btl-out: #cf222e; }
+
+.wp-btl-earned { color: var(--wp-btl-in); }
+.wp-btl-pos { color: var(--wp-btl-in); font-weight: 600; }
+.wp-btl-neg { color: var(--wp-btl-out); font-weight: 600; }
+.wp-btl-card-in strong { color: var(--wp-btl-in); }
+
+.wp-btl-aswatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+  background: var(--wp-ov-text-dim, #8b949e);
+}
+
+.wp-btl-flows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 6px 26px;
+  margin: 6px 0 18px;
+}
+.wp-btl-flowlist { list-style: none; margin: 0; padding: 0; }
+.wp-btl-flowrow {
+  display: grid;
+  grid-template-columns: minmax(110px, 1.1fr) minmax(40px, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.wp-btl-flowrow:hover { background: var(--wp-ov-surface, rgba(255, 255, 255, .05)); }
+.wp-btl-flowrow b { font-variant-numeric: tabular-nums; font-weight: 600; }
+.wp-btl-flowbar { height: 6px; border-radius: 3px; background: var(--wp-ov-surface, rgba(255, 255, 255, .06)); overflow: hidden; }
+.wp-btl-flowbar i { display: block; height: 100%; background: var(--wp-btl-contracts); border-radius: 3px; }
+.wp-btl-flowcol:nth-child(2) .wp-btl-flowbar i { background: var(--wp-btl-in); }

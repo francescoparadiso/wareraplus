@@ -21,7 +21,9 @@ wareraPlus/
 │   │                              Bootstrap SOLO fra le 02:00 e le 06:59 italiane
 │   │                              (gioco vuoto), giro incrementale tutto il giorno.
 │   │                              Endpoint: /battle-archive, /war-expenses,
-│   │                              /battle-archive/status.
+│   │                              /battle-archive/status, /war-flows (chi INCASSA i
+│   │                              contratti: pagante → nazione dell'unità vincitrice,
+│   │                              giorno per giorno; archivio e bootstrap propri).
 │   ├── muBattleDamage.js       ← NUOVO — danni di OGNI unità giorno per giorno, sommati
 │   │                              battaglia per battaglia dalla classifica per unità
 │   │                              (battleRanking type 'mu'). Giro incrementale ogni 20
@@ -814,6 +816,9 @@ wareraPlus/
     │   │                            per nazione), riga espandibile → battaglie → dettaglio.
     │   │                            Dipende da `wr` nell'archivio del server (vedi CLAUDE.md)
     │   ├── main.js, battleList.js, warExpenses.js, i18n.js (9 lingue)
+    │   │                       warExpenses.js: vista per nazione o per ALLEANZA (somma sui
+    │   │                       membri, state.nationAlliancesMap) + colonne Incassato/Saldo
+    │   │                       dal flusso /war-flows (aggregateFlows in api.js).
     ├── tournament/               ← NUOVO (2026-10-25) — Tornei: voce di Approfondimenti,
     │   │                            schede Unità militari / Nazioni, ognuna dal torneo
     │   │                            più recente del suo tipo (menù per i precedenti).

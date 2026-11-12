@@ -287,7 +287,7 @@ serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`
 `/ticker` + `/ticker/summary`,
 `/region-history/{at,range,events,contested,war-intensity}`, `/alliances`,
 `/battles`, `/elections`, `/parties`, `/users-lite`, `/credit-profiles`,
-`/mu-damage-history`, `/tournament`,
+`/mu-damage-history`, `/war-flows`, `/tournament`,
 `/visits`, `/health`.
 
 Espone inoltre **`/trpc/*`**: un proxy passthrough verso `api2.warera.io`
@@ -494,6 +494,24 @@ sopra il pagato (Siria–Libano: 48.270 contro ~15.400): nel dettaglio battaglia
 la colonna "di cui contratti" mostra il **pagato finora** per unità
 (`min(incasso, pattuito)`) diviso per cittadinanza dei membri
 (`payPerK` in `battleDetail.js`), mai oltre l'incassato della nazione.
+Le **Spese di guerra** hanno la vista **per alleanza** (somma sui membri, senza server)
+e le colonne **Incassato / Saldo** (`src/battles/warExpenses.js`, `aggregateFlows` in
+`api.js`, dal 2026-11-13): quanto hanno incassato le UNITÀ di una nazione dai contratti
+mercenari, il lato opposto della spesa. Dipendono dal redeploy del **cache-server**
+(`/war-flows`, `server/battleArchive.js`): finché non lo fai la rotta risponde 404 e la
+scheda resta com'era, con un avviso. Dopo il deploy servono due cose:
+
+- il giro incrementale riempie subito i primi ~600 contratti (1-2 giorni); il resto lo
+  recupera il bootstrap notturno (02:00-06:59 italiane, una notte). `coverageFrom` dice
+  da che giorno gli incassi sono completi e la vista lo dichiara, e il **saldo si calcola
+  sullo stesso periodo** (contratti pagati dal `coverageFrom` in poi), mai su tutta la
+  finestra;
+- ⚠️ l'incasso è attribuito alla nazione **de facto** dell'unità vincitrice (maggioranza
+  vera dei membri, altrimenti registrazione) e ricalcolato in lettura: è dove i soldi
+  arrivano per primi, perché poi l'unità li divide fra membri di ogni nazionalità. Non
+  presentarlo come "guadagno della nazione" senza questa nota (è nella vista).
+- Una nazione in più alleanze conta in ciascuna; nel saldo di un'alleanza i soldi fra
+  membri si annullano da soli.
 
 I **finanziatori** nel dettaglio battaglia dipendono da `/money-transfers`:
 finché non rideployi funzionano lo stesso, ma sulla sola finestra che l'API

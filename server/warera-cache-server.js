@@ -129,8 +129,8 @@ const { initProxyIndex, pollProxyIndex, readProxyIndex } = require('./proxyIndex
 const {
   initBattleArchive,
   pollBattleArchive, pollBattleArchiveBootstrap, pollBattleWarBackfill,
-  pollMercArchive, pollMercArchiveBootstrap,
-  readBattleArchive, readWarExpenses, readArchiveStatus,
+  pollMercArchive, pollMercArchiveBootstrap, pollMercMuBootstrap,
+  readBattleArchive, readWarExpenses, readWarFlows, readArchiveStatus,
   BOOT_TZ: BOOT_ARCHIVE_TZ,
 } = require('./battleArchive');
 // WarEra+ danni delle unita' giorno per giorno, sommati battaglia per
@@ -467,6 +467,9 @@ initProxyIndex({
 initBattleArchive({
   trpcBatch: (...args) => trpcBatch(...args),
   readCache, writeCache,
+  // WarEra+: /war-flows incrocia l'archivio dei contratti con mu-directory
+  // (1 MB): parsato una volta per versione invece che a ogni richiesta.
+  readCacheShared,
 });
 
 // Danni per unita': classifiche pubbliche (api6, niente chiave), e la rotta
@@ -2666,6 +2669,9 @@ cron.schedule('* 2-6 * * *', pollMercArchiveBootstrap, { timezone: BOOT_ARCHIVE_
 // Guerra delle righe d'archivio scritte prima di `wr` (scheda "Guerre"): una
 // nottata, solo pagine di battle.getBattles, poi non fa piu' niente.
 cron.schedule('*/2 2-6 * * *', pollBattleWarBackfill, { timezone: BOOT_ARCHIVE_TZ });
+// Chi INCASSA i contratti (unita' vincitrice), dal 2026-11-13: stesso schema,
+// archivio e cursore suoi. Vedi la sezione "FLUSSO" di battleArchive.js.
+cron.schedule('* 2-6 * * *', pollMercMuBootstrap, { timezone: BOOT_ARCHIVE_TZ });
 // Danni per unita' (server/muBattleDamage.js): il giro incrementale tre
 // minuti dopo quello dell'archivio, da cui prende le battaglie nuove; il
 // recupero di notte come i bootstrap qui sopra, al secondo :30 per non
@@ -3255,6 +3261,10 @@ app.get('/mu-damage-history', (req, res) => {
 // costa niente e resta sempre coerente con l'ultimo giro di poll.
 app.get('/battle-archive', (req, res) => res.json(readBattleArchive()));
 app.get('/war-expenses', (req, res) => res.json(readWarExpenses()));
+// Chi paga e chi incassa i contratti mercenari: pagante -> nazione dell'unita'
+// vincitrice, giorno per giorno. Senza deploy risponde 404 e la scheda Spese
+// di guerra resta com'era, senza colonna "incassato".
+app.get('/war-flows', (req, res) => res.json(readWarFlows()));
 app.get('/battle-archive/status', (req, res) => res.json(readArchiveStatus()));
 
 // Finanziamenti fra nazioni (server/moneyTransfers.js). `coverageFrom` nella

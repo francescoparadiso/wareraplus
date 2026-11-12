@@ -55,12 +55,19 @@
 let trpcBatch = null;
 let readCache = null;
 let writeCache = null;
+let readShared = null;   // readCacheShared: oggetto CONDIVISO, mai modificarlo
 
 // ── File su disco ──
 const ARCHIVE_FILE = 'battle-archive';            // battaglie + costi
 const ARCHIVE_STATE_FILE = 'battle-archive-state';// cursore del bootstrap battaglie
 const MERC_FILE = 'merc-archive';                 // aggregato aste per giorno/nazione
 const MERC_STATE_FILE = 'merc-archive-state';     // cursore del bootstrap aste
+// Chi INCASSA i contratti (dal 2026-11-13): giorno -> pagante -> unita' vincitrice.
+// File e cursore PROPRI e non un campo in piu' di merc-archive: quell'archivio
+// ha gia' finito il suo bootstrap e il suo `seen` impedirebbe di rileggere le
+// aste vecchie per aggiungerci l'unita'. Vedi la sezione "FLUSSO" piu' sotto.
+const MERC_MU_FILE = 'merc-mu-archive';
+const MERC_MU_STATE_FILE = 'merc-mu-archive-state';
 
 // ── Parametri ──
 // Novanta giorni: scelta esplicita dell'utente. Copre tutta la fase recente
@@ -119,6 +126,7 @@ function initBattleArchive(tools) {
   trpcBatch = tools.trpcBatch;
   readCache = tools.readCache;
   writeCache = tools.writeCache;
+  readShared = tools.readCacheShared || tools.readCache;
 }
 
 // ---------------------------------------------------------------------------
@@ -488,12 +496,99 @@ function _applyMercToArchive() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// FLUSSO: chi PAGA e chi INCASSA i contratti (WarEra+, 2026-11-13)
+// ---------------------------------------------------------------------------
+//
+// Ogni asta vinta ha un pagante (`country`) e un'unita' vincitrice
+// (`currentWinner`): la meta' del giro di denaro che le Spese di guerra non
+// mostravano. Si tiene muMerc.byDay[giorno][pagante][unita] = {c, n}: al
+// massimo una cella per asta (~400 al giorno), quindi 90 giorni sono ~1 MB
+// anche senza aggregare. L'unita' si traduce in nazione SOLO in lettura
+// (readWarFlows), con la directory di adesso: una unita' che cambia
+// nazionalita' de facto non obbliga a riscrivere l'archivio.
+//
+// ⚠️ File e bootstrap propri, non un campo in piu' di merc-archive: quell'archivio
+// ha gia' scaricato i suoi novanta giorni e il suo `seen` impedirebbe di
+// rileggere le aste vecchie per aggiungerci l'unita'. Il giro incrementale
+// alimenta entrambi dalle stesse pagine (nessuna richiesta in piu'); il
+// recupero dei giorni vecchi lo fa pollMercMuBootstrap, di notte.
+
+function _readMercMu() {
+  return readCache(MERC_MU_FILE, { fetchedAt: null, byDay: {}, seen: [] });
+}
+
+function _foldMuInto(store, items) {
+  const seen = new Set(store.seen || []);
+  let added = 0;
+  for (const a of items) {
+    if (!a?._id || seen.has(a._id)) continue;
+    const payer = a.country;
+    const mu = a.currentWinner;
+    const amount = Number(a.currentPayout);
+    const at = _ts(a.createdAt);
+    if (!payer || !mu || !Number.isFinite(amount) || !at) continue;
+    seen.add(a._id);
+    added++;
+    const day = store.byDay[_day(at)] = store.byDay[_day(at)] || {};
+    const row = day[payer] = day[payer] || {};
+    const cell = row[mu] = row[mu] || { c: 0, n: 0 };
+    cell.c += amount; cell.n += 1;
+  }
+  store.seen = [...seen];
+  return added;
+}
+
+function _writeMercMu(store) {
+  store.fetchedAt = Date.now();
+  const cutoffDay = _day(Date.now() - RETENTION_MS);
+  for (const d of Object.keys(store.byDay)) if (d < cutoffDay) delete store.byDay[d];
+  if (store.seen.length > 60000) store.seen = store.seen.slice(-60000);
+  writeCache(MERC_MU_FILE, store, { compact: true });
+}
+
+/** BOOTSTRAP dell'archivio degli incassi: stessa discesa all'indietro di
+ *  pollMercArchiveBootstrap, solo di notte, con cursore suo. */
+async function pollMercMuBootstrap() {
+  if (!trpcBatch) return;
+  if (!_inQuietHours()) return;
+  const st = readCache(MERC_MU_STATE_FILE, { cursor: null, done: false, pages: 0, oldestSeen: null });
+  if (st.done) return;
+  if (st.pages >= MAX_BOOT_PAGES) {
+    console.error(`[war-flows] bootstrap: limite di sicurezza (${MAX_BOOT_PAGES} pagine), mi fermo`);
+    st.done = true; writeCache(MERC_MU_STATE_FILE, st);
+    return;
+  }
+  const cutoff = Date.now() - RETENTION_MS;
+  try {
+    const store = _readMercMu();
+    for (let n = 0; n < BOOT_MERC_PAGES_PER_TICK; n++) {
+      const { items, nextCursor } = await _fetchWonAuctionsPage(st.cursor);
+      if (!items.length) { st.done = true; break; }
+      _foldMuInto(store, items);
+      const oldest = _ts(items[items.length - 1].createdAt);
+      if (oldest) st.oldestSeen = oldest;
+      st.pages++;
+      st.cursor = nextCursor;
+      if (!nextCursor || (st.oldestSeen && st.oldestSeen < cutoff)) { st.done = true; break; }
+      await sleep(600);
+    }
+    _writeMercMu(store);
+    writeCache(MERC_MU_STATE_FILE, st);
+    if (st.done) console.log(`[war-flows] bootstrap COMPLETATO: ${st.pages} pagine di aste`);
+    else console.log(`[war-flows] bootstrap pagina ${st.pages}, indietro fino a ${st.oldestSeen ? new Date(st.oldestSeen).toISOString().slice(0, 10) : '—'}`);
+  } catch (err) {
+    console.error('[war-flows] bootstrap pagina fallita, ritento:', err.message);
+  }
+}
+
 /** GIRO INCREMENTALE aste: dalla più recente all'indietro finché non si
  *  incontra una pagina interamente già vista. */
 async function pollMercArchive() {
   if (!trpcBatch) return;
   try {
     const store = _readMerc();
+    const muStore = _readMercMu();
     let cursor = null;
     let added = 0;
 
@@ -501,14 +596,16 @@ async function pollMercArchive() {
       const { items, nextCursor } = await _fetchWonAuctionsPage(cursor);
       if (!items.length) break;
       const n = _foldAuctionsInto(store, items);
+      const m = _foldMuInto(muStore, items);
       added += n;
-      if (n === 0) break; // pagina tutta nota: sotto è tutto vecchio
+      if (n === 0 && m === 0) break; // pagina tutta nota: sotto è tutto vecchio
       cursor = nextCursor;
       if (!cursor) break;
       await sleep(400);
     }
 
     _writeMerc(store);
+    _writeMercMu(muStore);
     if (added) {
       _applyMercToArchive();
       console.log(`[war-expenses] +${added} contratti aggiudicati`);
@@ -638,6 +735,69 @@ function readWarExpenses() {
   };
 }
 
+/** Nazione "de facto" di una unita' per attribuire cio' che incassa: quella
+ *  prevalente fra i membri (`composition.top`) se e' una maggioranza vera su
+ *  almeno tre membri noti, altrimenti quella in cui e' registrata. Piu'
+ *  severa del marchio "de facto" della directory (che scatta anche a quota
+ *  bassa): qui un'attribuzione sbagliata sposta soldi fra nazioni. */
+function _muNation(m) {
+  const c = m.composition;
+  if (c && c.known >= 3 && c.top?.length && c.top[0].n / c.known >= 0.5) return c.top[0].country;
+  return m.country || null;
+}
+
+let _flowsMemo = null;   // { muStore, dir, out }
+
+/** Flusso dei contratti: giorno -> nazione che paga -> nazione dell'unita'
+ *  che incassa -> [monete, contratti]. Derivato in lettura dall'archivio per
+ *  unita' e dalla directory di adesso; memorizzato finche' nessuno dei due
+ *  file cambia (readShared restituisce lo stesso oggetto).
+ *
+ *  `coverageFrom` e' il primo giorno di cui ci sono TUTTE le aste: finche'
+ *  il bootstrap notturno non ha finito, i giorni piu' vecchi sono parziali e
+ *  il client non li fa passare per un "non ha incassato niente". */
+function readWarFlows() {
+  const muStore = readShared(MERC_MU_FILE, { fetchedAt: null, byDay: {}, seen: [] });
+  const dir = readShared('mu-directory', { data: [] });
+  if (_flowsMemo && _flowsMemo.muStore === muStore && _flowsMemo.dir === dir) return _flowsMemo.out;
+
+  const nation = new Map();
+  for (const m of dir.data || []) nation.set(m._id, _muNation(m));
+
+  const byDay = {};
+  for (const [d, byPayer] of Object.entries(muStore.byDay || {})) {
+    const outDay = byDay[d] = {};
+    for (const [payer, byMu] of Object.entries(byPayer)) {
+      const row = outDay[payer] = {};
+      for (const [mu, v] of Object.entries(byMu)) {
+        const to = nation.get(mu) || '?';
+        const cell = row[to] = row[to] || [0, 0];
+        cell[0] += v.c; cell[1] += v.n;
+      }
+    }
+  }
+
+  const st = readCache(MERC_MU_STATE_FILE, { cursor: null, done: false, pages: 0, oldestSeen: null });
+  const days = Object.keys(byDay).sort();
+  const plusDay = (iso) => _day(Date.parse(iso + 'T00:00:00Z') + 24 * 60 * 60 * 1000);
+  let coverageFrom = null;
+  if (days.length) {
+    if (st.done) coverageFrom = days[0];
+    else coverageFrom = plusDay(st.oldestSeen ? _day(st.oldestSeen) : days[0]);
+  }
+
+  const out = {
+    fetchedAt: muStore.fetchedAt || null,
+    retentionDays: RETENTION_DAYS,
+    tz: 'UTC',
+    complete: Boolean(st.done),
+    coverageFrom,
+    byDay,
+  };
+  _flowsMemo = { muStore, dir, out };
+  return out;
+}
+
 /** Stato dei due bootstrap, per /health e per la diagnostica. */
 function readArchiveStatus() {
   const bs = readCache(ARCHIVE_STATE_FILE, { cursor: null, done: false, pages: 0, oldestSeen: null });
@@ -659,6 +819,14 @@ function readArchiveStatus() {
       fetchedAt: merc.fetchedAt,
       bootstrap: { done: ms.done, pages: ms.pages, oldestSeen: ms.oldestSeen },
     },
+    // Chi incassa i contratti (/war-flows): bootstrap suo.
+    flows: {
+      days: Object.keys(readCache(MERC_MU_FILE, { byDay: {} }).byDay || {}).length,
+      bootstrap: (() => {
+        const s = readCache(MERC_MU_STATE_FILE, { done: false, pages: 0, oldestSeen: null });
+        return { done: s.done, pages: s.pages, oldestSeen: s.oldestSeen };
+      })(),
+    },
   };
 }
 
@@ -670,7 +838,9 @@ module.exports = {
   pollBattleWarBackfill,
   pollMercArchive,
   pollMercArchiveBootstrap,
+  pollMercMuBootstrap,
   readBattleArchive,
   readWarExpenses,
+  readWarFlows,
   readArchiveStatus,
 };
