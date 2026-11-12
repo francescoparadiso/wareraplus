@@ -22,7 +22,7 @@
    tempo a evitare. Su richiesta di una riga sola, invece, sono due.
    ══════════════════════════════════════════════════════════════ */
 
-import { splitArchiveBounty } from '../diplomacy/battleSpending.js';
+import { splitArchiveBounty, splitArchiveContracts } from '../diplomacy/battleSpending.js';
 import { trpcBatch } from '../diplomacy/utils.js';
 import {
   fetchBattleArchiveViaCache,
@@ -55,14 +55,19 @@ function _expand(r) {
   // ab/db sono l'incasso di ogni lato, che contiene anche la paga dei
   // contratti: la taglia vera si ricava togliendoli (splitArchiveBounty).
   const bounty = splitArchiveBounty(r);
+  const ctr = splitArchiveContracts(r);
   return {
     id: r.i,
     type: r.t,
     endedAt: r.e,
     wonBy: r.w,
     regionId: r.r,
-    attacker: { countryId: r.ac, damages: r.ad || 0, bounty: bounty.atk },
-    defender: { countryId: r.dc, damages: r.dd || 0, bounty: bounty.def },
+    // Guerra (scheda "Guerre"). `warKnown` false = riga scritta prima di
+    // `wr`, non ancora recuperata dal server: diverso da "nessuna guerra".
+    warId: r.wr || null,
+    warKnown: r.wr !== undefined,
+    attacker: { countryId: r.ac, damages: r.ad || 0, bounty: bounty.atk, contracts: ctr.atk },
+    defender: { countryId: r.dc, damages: r.dd || 0, bounty: bounty.def, contracts: ctr.def },
     contracts: r.mc || 0,
     contractCount: r.mn || 0,
     // Il fallback non conosce i contratti né, all'inizio, le taglie: la
@@ -80,6 +85,8 @@ function _fromRaw(b) {
     endedAt: _ts(b.endedAt) || _ts(b.updatedAt),
     wonBy: b.wonBy || null,
     regionId: b.defender?.region || b.attacker?.region || null,
+    warId: b.war || null,
+    warKnown: true,
     attacker: { countryId: b.attacker?.country || null, damages: b.attacker?.damages || 0, bounty: null },
     defender: { countryId: b.defender?.country || null, damages: b.defender?.damages || 0, bounty: null },
     contracts: null,
@@ -185,6 +192,8 @@ function _fromLive(b) {
     startedAt: _ts(b.createdAt) || _ts(b.startedAt) || null,
     wonBy: null,
     regionId: b.regionId || b.defender?.region || b.attacker?.region || null,
+    warId: b.war || null,
+    warKnown: true,
     attacker: {
       countryId: b.attacker?.country || null,
       damages: (b.attacker?.damages || 0) + (cur.attacker?.damages || 0),

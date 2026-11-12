@@ -117,6 +117,18 @@ export function splitArchiveBounty({ ab, db, mc, mca, mcd }) {
   };
 }
 
+/** Contratti per lato dalla riga compatta dell'archivio: stessa regola di
+ *  splitArchiveBounty (esatti se il server li ha divisi per lato, altrimenti
+ *  in proporzione all'incasso). Serve alla scheda "Guerre", che somma la
+ *  spesa PER NAZIONE (taglia del lato + contratti ingaggiati per quel lato). */
+export function splitArchiveContracts({ ab, db, mc, mca, mcd }) {
+  if (mc == null) return { atk: null, def: null };
+  const a = ab || 0, d = db || 0, c = mc || 0;
+  const exact = mca != null && mcd != null && Math.abs((mca + mcd) - c) < 0.01;
+  if (exact) return { atk: mca, def: mcd };
+  return { atk: a + d > 0 ? c * a / (a + d) : 0, def: a + d > 0 ? c * d / (a + d) : 0 };
+}
+
 function _sumRanking(res) {
   const items = res?.items;
   if (!Array.isArray(items)) return null;
@@ -243,7 +255,13 @@ export async function fetchBattleSpending(battleId) {
   const bountyAtk = withBounty(earnedAtk, muAtk, 'attacker');
   const bountyDef = withBounty(earnedDef, muDef, 'defender');
 
+  // Incasso per unità (prima pagina della classifica "money"), per chi deve
+  // sapere quanto di un contratto è stato PAGATO finora: vedi payPerK in
+  // src/battles/battleDetail.js. Su una battaglia in corso il pattuito è
+  // molto sopra il pagato (Siria–Libano: 48.270 pattuiti, ~15.400 pagati).
+  const unitMoney = (res) => new Map((res?.items || []).map(x => [x.mu, Number(x.value) || 0]));
   const data = {
+    muMoney: { attacker: unitMoney(muAtk), defender: unitMoney(muDef) },
     bounty: { attacker: bountyAtk, defender: bountyDef },
     merc: { won: _foldAuctions(won.items), pending: _foldAuctions(active.items) },
     truncated: Boolean(bountyAtk?.truncated || bountyDef?.truncated || won.truncated || active.truncated),

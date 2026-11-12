@@ -188,7 +188,7 @@ function sideTable(rows, sideKey, battle, opts) {
   const totDmg = rows.reduce((s, r) => s + r.damage, 0);
   const totMoney = rows.reduce((s, r) => s + r.money, 0);
   // Solo per le nazioni (vedi payPerK): contratti incassati + prezzo per 1k.
-  const withContracts = pay && pay.totContracts > 0;
+  const withContracts = pay && (pay.shownTotal ?? pay.totContracts) > 0;
   // L'ordine scelto, se questa tabella ha quella colonna; se no il danno
   // (le unità militari non hanno contratti né prezzo per 1k).
   const has = { name: true, damage: true, money: true, ctr: withContracts, perk: Boolean(pay) };
@@ -243,7 +243,7 @@ function sideTable(rows, sideKey, battle, opts) {
           <td class="wp-btl-num">${fmtNum(totDmg)}</td>
           <td class="wp-btl-num wp-btl-pct">100%</td>
           <td class="wp-btl-num wp-btl-bounty">${fmtMoney(totMoney)}</td>
-          ${withContracts ? `<td class="wp-btl-num wp-btl-contracts wp-btl-col-ctr">${fmtMoney(pay.totContracts)}</td>` : ''}
+          ${withContracts ? `<td class="wp-btl-num wp-btl-contracts wp-btl-col-ctr">${fmtMoney(pay.shownTotal ?? pay.totContracts)}</td>` : ''}
           ${pay ? `<td class="wp-btl-num wp-btl-perk">${fmtPerK(avgK)}</td>` : ''}
         </tr></tfoot>
       </table>
@@ -279,11 +279,28 @@ function sideTable(rows, sideKey, battle, opts) {
 function payPerK(sideKey, live = false) {
   const byCountry = new Map();
   let totContracts = 0;
+  let shownTotal = 0;
   let unresolved = 0;
   const add = (country, v) => byCountry.set(country, (byCountry.get(country) || 0) + v);
+  // ⚠️ 2026-11-12, battaglia in corso (Siria–Libano): il compenso si paga
+  // man mano che l'unità consegna il danno, quindi il PATTUITO sta molto
+  // sopra l'incassato (48.270 contro 16.166 sul lato siriano) e la colonna
+  // "di cui contratti" contraddiceva "incassato" riga per riga. Sul vivo si
+  // mostra il PAGATO FINORA per unità, cioè il minimo fra quanto l'unità ha
+  // incassato e quanto aveva pattuito (Saudi Arabia: 9.015 contro 9.017
+  // incassati). Il pattuito resta nella testata e nel dettaglio contratti.
+  // Senza l'incasso per unità (_spend non ancora arrivato) si ricade sul
+  // pattuito, come prima.
+  const unitMoney = live ? _spend?.muMoney?.[sideKey] : null;
+  const agreedByMu = new Map();
   for (const c of _detail?.contracts || []) {
-    if (c.side !== sideKey) continue;
-    totContracts += c.payout;
+    if (c.side === sideKey) agreedByMu.set(c.mu, (agreedByMu.get(c.mu) || 0) + c.payout);
+  }
+  for (const [mu, agreed] of agreedByMu) {
+    totContracts += agreed;
+    const amount = unitMoney ? Math.min(unitMoney.get(mu) || 0, agreed) : agreed;
+    shownTotal += amount;
+    if (!amount) continue;
     // ⚠️ 2026-11-12: il compenso va a chi ha COLPITO, cioè alla cittadinanza
     // dei membri, non alla nazione in cui l'unità è registrata. Libano–Siria:
     // un'unità "italiana" fatta di cittadini del Liechtenstein portava 4.100
@@ -291,29 +308,33 @@ function payPerK(sideKey, live = false) {
     // Liechtenstein, che li aveva incassati davvero. La composizione per
     // cittadinanza viene dalla directory (server di cache); senza, o per
     // un'unità fuori directory, si ricade sulla nazione dell'unità.
-    const shares = muCountryShares(c.mu);
-    if (!shares.length) { unresolved += c.payout; continue; }
-    for (const s of shares) add(s.country, c.payout * s.w);
+    const shares = muCountryShares(mu);
+    if (!shares.length) { unresolved += amount; continue; }
+    for (const s of shares) add(s.country, amount * s.w);
   }
   // Il compenso di una nazione non può superare quel che i suoi cittadini
   // hanno incassato (la classifica "money" lo contiene già). Le quote per
   // composizione sono stime sui membri iscritti, non su chi ha combattuto:
   // l'eccedenza si dichiara non attribuita invece di mostrare un "di cui"
-  // più grande del totale. Su una battaglia in corso no: i contratti sono
-  // pattuiti ma non ancora consegnati, quindi sopra l'incassato è normale.
-  if (!live) {
+  // più grande del totale. Sul vivo non serve niente di più: lì già si parte
+  // dal pagato finora, non dal pattuito (vedi sopra).
+  {
     const earned = new Map((_detail?.sides?.[sideKey] || []).map(r => [r.id, r.money || 0]));
     for (const [country, v] of byCountry) {
       const cap = earned.get(country) || 0;
       if (v > cap) { unresolved += v - cap; byCountry.set(country, cap); }
     }
   }
-  return { byCountry, totContracts, unresolved };
+  return { byCountry, totContracts, shownTotal, unresolved };
 }
 
 // Directory indicizzata per id, ricostruita solo se _dir è cambiata.
-let _dirIdx = null;
-let _dirIdxFor = null;
+// ⚠️ Partono entrambi da `undefined`, non da null: _dir vale null finché la
+// directory non è arrivata, e con `null` il confronto sotto risultava già
+// "uguale", l'indice non veniva mai creato e dirMu() andava in errore al
+// primo disegno del dettaglio (visto il 2026-11-12 su una battaglia viva).
+let _dirIdx;
+let _dirIdxFor;
 function dirMu(id) {
   if (_dirIdxFor !== _dir) {
     _dirIdx = new Map((_dir || []).map(m => [m._id, m]));

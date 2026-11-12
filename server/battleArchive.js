@@ -191,6 +191,11 @@ function _toRow(b, bounty) {
     e: endedAt,
     w: b.wonBy || null,
     r: b.defender?.region || b.attacker?.region || null,
+    // Guerra a cui appartiene la battaglia (dal 2026-11-12, scheda "Guerre":
+    // i costi sommati per guerra). null = nessuna guerra (torneo); le righe
+    // scritte prima NON hanno la chiave (undefined), e la recupera di notte
+    // pollBattleWarBackfill — distinguere "manca" da "nessuna" è il punto.
+    wr: b.war || null,
     ac: b.attacker?.country || null,
     ad: b.attacker?.damages || 0,
     ab: bounty?.atk ?? null,
@@ -236,7 +241,7 @@ function _mergeRows(existing, incoming) {
     const prev = byId.get(r.i);
     // Una battaglia già archiviata non cambia più: si conservano i contratti
     // già attribuiti (mc/mn) invece di azzerarli con la riga nuova.
-    if (prev) byId.set(r.i, { ...r, mc: prev.mc || r.mc, mn: prev.mn || r.mn, mca: prev.mca, mcd: prev.mcd });
+    if (prev) byId.set(r.i, { ...r, wr: r.wr ?? prev.wr, mc: prev.mc || r.mc, mn: prev.mn || r.mn, mca: prev.mca, mcd: prev.mcd });
     else byId.set(r.i, r);
   }
   return [...byId.values()];
@@ -337,6 +342,52 @@ async function pollBattleArchiveBootstrap() {
   } catch (err) {
     // Cursore non avanzato: il prossimo tick ritenta la stessa pagina.
     console.error('[battle-archive] bootstrap pagina fallita, ritento:', err.message);
+  }
+}
+
+/** RECUPERO DELLA GUERRA per le righe d'archivio scritte prima che esistesse
+ *  `wr`. Costa una richiesta per pagina da 50 e NESSUNA classifica (la
+ *  guerra sta già in `battle.getBattles`), quindi ~72 richieste per tutto
+ *  l'archivio — ma, come il bootstrap, gira solo di notte (richiesta
+ *  esplicita: mai sfogliare l'archivio col gioco pieno). Cursore su disco.
+ *  Finito il giro, le righe che non sono più nell'elenco del gioco restano
+ *  con `wr: null` ("nessuna guerra nota"): meglio che riprovare ogni notte. */
+const WAR_STATE_FILE = 'battle-archive-wars-state';
+const WAR_BACKFILL_PAGES_PER_TICK = 6;
+async function pollBattleWarBackfill() {
+  if (!trpcBatch) return;
+  if (!_inQuietHours()) return;
+  try {
+    const archive = _readArchive();
+    const byId = new Map(archive.data.filter(r => r.wr === undefined).map(r => [r.i, r]));
+    if (!byId.size) return;
+
+    const st = readCache(WAR_STATE_FILE, { cursor: null, pages: 0 });
+    let touched = 0;
+    let exhausted = false;
+    for (let n = 0; n < WAR_BACKFILL_PAGES_PER_TICK; n++) {
+      const { items, nextCursor } = await _fetchFinishedPage(st.cursor);
+      for (const b of items) {
+        const row = byId.get(b._id);
+        if (row) { row.wr = b.war || null; byId.delete(b._id); touched++; }
+      }
+      st.pages++;
+      st.cursor = nextCursor;
+      if (!nextCursor || !items.length) { exhausted = true; break; }
+      if (!byId.size) break;
+      await sleep(1000);
+    }
+    if (exhausted) {
+      // Fine dell'elenco: chi manca ancora non c'è più nel gioco.
+      for (const row of byId.values()) row.wr = null;
+      touched += byId.size;
+      st.cursor = null;
+    }
+    if (touched) _writeArchive(archive.data);
+    writeCache(WAR_STATE_FILE, st);
+    console.log(`[battle-archive] guerra recuperata per ${touched} battaglie, ${exhausted ? 'giro finito' : `${byId.size} ancora da cercare`}`);
+  } catch (err) {
+    console.error('[battle-archive] recupero guerre fallito, ritento:', err.message);
   }
 }
 
@@ -597,6 +648,8 @@ function readArchiveStatus() {
     retentionDays: RETENTION_DAYS,
     battles: {
       archived: archive.data.length,
+      // Quante righe non hanno ancora la guerra (scheda "Guerre"): 0 = recupero finito.
+      withoutWar: archive.data.filter(r => r.wr === undefined).length,
       fetchedAt: archive.fetchedAt,
       bootstrap: { done: bs.done, pages: bs.pages, oldestSeen: bs.oldestSeen },
     },
@@ -614,6 +667,7 @@ module.exports = {
   BOOT_TZ,
   pollBattleArchive,
   pollBattleArchiveBootstrap,
+  pollBattleWarBackfill,
   pollMercArchive,
   pollMercArchiveBootstrap,
   readBattleArchive,

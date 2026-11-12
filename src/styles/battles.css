@@ -1205,3 +1205,12 @@ body.light-theme .wp-btl-bonus-cell.best strong { color: #1a7f37; }
 @media (max-width: 760px) {
   .wp-btl-bonus-sides, .wp-btl-bonus-cells { grid-template-columns: 1fr; }
 }
+
+/* ── Scheda "Guerre" (src/battles/wars.js) ── */
+.wp-war-row:hover { background: rgba(255,255,255,.03); }
+.wp-war-row.open td { border-bottom-color: transparent; }
+.wp-war-row .wp-btl-livetag { margin-left: 8px; }
+.wp-war-exp > td { padding: 0; background: rgba(255,255,255,.02); }
+.wp-war-exp-in { padding: 4px 14px 14px; }
+body.light-theme .wp-war-row:hover { background: rgba(0,0,0,.04); }
+body.light-theme .wp-war-exp > td { background: rgba(0,0,0,.025); }

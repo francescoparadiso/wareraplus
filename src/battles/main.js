@@ -32,11 +32,12 @@ import { getBattleArchive, getWarExpenses, getLiveBattles } from './api.js';
 import { renderBattleList, wireBattleList } from './battleList.js';
 import { renderBattleDetail, wireBattleDetail, loadBattleDetail, resetBattleDetail, refreshBattleDetail } from './battleDetail.js';
 import { renderWarExpenses, wireWarExpenses } from './warExpenses.js';
+import { renderWars, wireWars } from './wars.js';
 import { trackEvent } from '../shared/analytics.js';
 import { syncBack } from '../app/backNav.js';
 
 let _container = null;
-let _tab = 'archive';       // 'archive' | 'expenses'
+let _tab = 'archive';       // 'archive' | 'wars' | 'expenses'
 let _archive = null;
 let _expenses = null;
 // Nazione scelta nella scheda spese: la si passa all'archivio quando si
@@ -50,8 +51,15 @@ let _pendingBattleId = null; // WarEra+: da aprire appena c'è l'archivio (link 
 
 const TABS = [
   { id: 'archive', key: 'tabArchive' },
+  { id: 'wars', key: 'tabWars' },
   { id: 'expenses', key: 'tabExpenses' },
 ];
+
+// Archivio e Guerre leggono lo STESSO oggetto (battaglie + in corso): la
+// scheda Guerre è l'archivio raggruppato, e il dettaglio di una battaglia si
+// apre da entrambe. Tutto ciò che prima diceva "_tab === 'archive'" per
+// questo scopo passa da qui.
+const onArchiveData = () => _tab === 'archive' || _tab === 'wars';
 
 function shellHtml() {
   return `
@@ -81,7 +89,7 @@ function paintBody() {
   // WarEra+: battaglia chiesta da un link (?section=battles&battle=), aperta
   // appena l'archivio è in memoria. Se non c'è (più vecchia di 90 giorni)
   // resta l'elenco.
-  if (_tab === 'archive' && _pendingBattleId && _archive) {
+  if (onArchiveData() && _pendingBattleId && _archive) {
     const id = _pendingBattleId;
     _pendingBattleId = null;
     const found = (_archive.live || []).find(x => x.id === id) || _archive.battles.find(x => x.id === id);
@@ -90,11 +98,11 @@ function paintBody() {
 
   // WarEra+: con la scheda di una battaglia aperta, Indietro torna
   // all'archivio invece di chiudere la sezione (vedi app/backNav.js).
-  syncBack('battles/detail', _tab === 'archive' && !!_openBattle,
+  syncBack('battles/detail', onArchiveData() && !!_openBattle,
     () => { _openBattle = null; resetBattleDetail(); paintBody(); },
-    () => _tab === 'archive' && !!_openBattle, { battle: _openBattle?.id });
+    () => onArchiveData() && !!_openBattle, { battle: _openBattle?.id });
 
-  if (_tab === 'archive') {
+  if (onArchiveData()) {
     if (!_archive) { body.innerHTML = `<div class="wp-btl-loading">${btlT('loading')}</div>`; return; }
 
     // Dettaglio di una battaglia: sostituisce l'elenco, non ci si affianca
@@ -105,6 +113,20 @@ function paintBody() {
         onBack: () => { _openBattle = null; resetBattleDetail(); paintBody(); },
         repaint: () => paintBody(),
       });
+      return;
+    }
+
+    // Scheda Guerre: le battaglie raggruppate per guerra. Il dettaglio di una
+    // battaglia (sopra) è lo stesso, e Indietro torna qui.
+    if (_tab === 'wars') {
+      body.innerHTML = renderWars(_archive);
+      wireWars(body, () => paintBody(),
+        (battle) => {
+          _openBattle = battle;
+          loadBattleDetail(battle, () => paintBody());
+          trackEvent('battles-open-detail');
+        },
+        (id) => (_archive.live || []).find(x => x.id === id) || _archive.battles.find(x => x.id === id));
       return;
     }
 
@@ -146,7 +168,7 @@ function switchTab(id) {
   paintBody();
   ensureData();
   // Il giro delle battaglie in corso serve solo alla scheda archivio.
-  if (id === 'archive') startLiveRefresh(); else stopBattlesAutoRefresh();
+  if (onArchiveData()) startLiveRefresh(); else stopBattlesAutoRefresh();
   trackEvent('battles-tab', { tab: id });
 }
 
@@ -154,20 +176,20 @@ function switchTab(id) {
  *  l'archivio hanno due sorgenti diverse: chi apre solo l'archivio non
  *  deve pagare anche la serie giornaliera. */
 async function ensureData() {
-  if (_tab === 'archive' && !_archive) {
+  if (onArchiveData() && !_archive) {
     _archive = await getBattleArchive();
     // Le battaglie in corso si attaccano all'oggetto archivio invece di
     // essere un secondo stato parallelo: l'elenco le disegna come un
     // blocco in cima, e il resto della vista non deve sapere che sono
     // arrivate da un'altra chiamata.
     await refreshLive();
-    if (_tab === 'archive') paintBody();
-  } else if (_tab === 'archive') {
+    if (onArchiveData()) paintBody();
+  } else if (onArchiveData()) {
     // Archivio già in memoria (riapertura della vista): le concluse non si
     // muovono, le vive sì. getLiveBattles ha il suo TTL, quindi riaprire
     // dieci volte in un minuto resta una richiesta sola.
     await refreshLive();
-    if (_tab === 'archive') paintBody();
+    if (onArchiveData()) paintBody();
   } else if (_tab === 'expenses' && !_expenses) {
     _expenses = await getWarExpenses();
     if (_tab === 'expenses') paintBody();
@@ -210,7 +232,7 @@ async function refreshLive({ force = false } = {}) {
 function startLiveRefresh() {
   if (_liveTimer) return;
   _liveTimer = setInterval(async () => {
-    if (_tab !== 'archive' || document.hidden) return;
+    if (!onArchiveData() || document.hidden) return;
     if (_openBattle) {
       const b = _openBattle;
       if (!b.live) return;   // una battaglia finita non cambia più
@@ -220,7 +242,7 @@ function startLiveRefresh() {
     // Il timer batte ogni 2 minuti per la scheda aperta; l'elenco resta a 4.
     if (_archive?.liveAt && Date.now() - _archive.liveAt < LIVE_REFRESH_MS - 5000) return;
     await refreshLive({ force: true });
-    if (_tab === 'archive' && !_openBattle) paintBody();
+    if (onArchiveData() && !_openBattle) paintBody();
   }, OPEN_LIVE_REFRESH_MS);
 }
 
@@ -265,6 +287,6 @@ export async function initBattlesView(container) {
   }
 
   await ensureData();
-  if (_tab === 'archive') startLiveRefresh();
+  if (onArchiveData()) startLiveRefresh();
   trackEvent('battles-view-open');
 }

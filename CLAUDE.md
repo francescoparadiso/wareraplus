@@ -479,6 +479,22 @@ mai sfogliare l'archivio mentre il gioco è pieno di gente), e in quelle cinque
 ore copre tutti e novanta i giorni. `/health` riporta `battleArchive` con lo
 stato dei due bootstrap.
 
+La scheda **Guerre** (`src/battles/wars.js`, dal 2026-11-12) raggruppa
+l'archivio per guerra e dipende dal campo `wr` (id della guerra) che
+`server/battleArchive.js` scrive in ogni riga: **finché non rideployi il
+server** nessuna riga lo ha, e la scheda dice quante battaglie sono "senza
+guerra assegnata" invece di mostrare totali bassi. Dopo il deploy le righe
+nuove lo portano subito; le ~3.600 già salvate le recupera
+`pollBattleWarBackfill`, **una notte** (02:00–06:59 italiane, solo pagine di
+`battle.getBattles`, nessuna classifica); `/health` →
+`battleArchive.battles.withoutWar` scende a 0. ⚠️ I costi per nazione sono
+taglia del lato + contratti ingaggiati per quel lato (`splitArchiveContracts`);
+i contratti sono il PATTUITO. Su una battaglia in corso il pattuito sta molto
+sopra il pagato (Siria–Libano: 48.270 contro ~15.400): nel dettaglio battaglia
+la colonna "di cui contratti" mostra il **pagato finora** per unità
+(`min(incasso, pattuito)`) diviso per cittadinanza dei membri
+(`payPerK` in `battleDetail.js`), mai oltre l'incassato della nazione.
+
 I **finanziatori** nel dettaglio battaglia dipendono da `/money-transfers`:
 finché non rideployi funzionano lo stesso, ma sulla sola finestra che l'API
 espone da sé (~3 giorni), quindi una battaglia più vecchia dice "fuori

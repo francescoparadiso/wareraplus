@@ -809,6 +809,10 @@ wareraPlus/
     │   │                  Due stage (danno | soldi) con lo STESSO intervallo, e
     │   │                  legenda a interruttori (localStorage wp_btl_tl_hidden):
     │   │                  nei soldi voce × lato, colore = lato, tratto = voce.
+    │   ├── wars.js               ← NUOVO (2026-11-12) — scheda "Guerre": le battaglie
+    │   │                            dell'archivio raggruppate per `war` (costi, danno, vittorie
+    │   │                            per nazione), riga espandibile → battaglie → dettaglio.
+    │   │                            Dipende da `wr` nell'archivio del server (vedi CLAUDE.md)
     │   ├── main.js, battleList.js, warExpenses.js, i18n.js (9 lingue)
     ├── tournament/               ← NUOVO (2026-10-25) — Tornei: voce di Approfondimenti,
     │   │                            schede Unità militari / Nazioni, ognuna dal torneo

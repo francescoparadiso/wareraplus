@@ -128,7 +128,7 @@ const { initProxyIndex, pollProxyIndex, readProxyIndex } = require('./proxyIndex
 // suo, e non tocca nessun poll esistente. Vedi server/battleArchive.js.
 const {
   initBattleArchive,
-  pollBattleArchive, pollBattleArchiveBootstrap,
+  pollBattleArchive, pollBattleArchiveBootstrap, pollBattleWarBackfill,
   pollMercArchive, pollMercArchiveBootstrap,
   readBattleArchive, readWarExpenses, readArchiveStatus,
   BOOT_TZ: BOOT_ARCHIVE_TZ,
@@ -2663,6 +2663,9 @@ cron.schedule('16,36,56 * * * *', pollMercArchive);         // ogni 20 min, :16
 // di un riavvio pm2 in pieno giorno (il primo giro non passa dal cron).
 cron.schedule('* 2-6 * * *', pollBattleArchiveBootstrap, { timezone: BOOT_ARCHIVE_TZ });
 cron.schedule('* 2-6 * * *', pollMercArchiveBootstrap, { timezone: BOOT_ARCHIVE_TZ });
+// Guerra delle righe d'archivio scritte prima di `wr` (scheda "Guerre"): una
+// nottata, solo pagine di battle.getBattles, poi non fa piu' niente.
+cron.schedule('*/2 2-6 * * *', pollBattleWarBackfill, { timezone: BOOT_ARCHIVE_TZ });
 // Danni per unita' (server/muBattleDamage.js): il giro incrementale tre
 // minuti dopo quello dell'archivio, da cui prende le battaglie nuove; il
 // recupero di notte come i bootstrap qui sopra, al secondo :30 per non
