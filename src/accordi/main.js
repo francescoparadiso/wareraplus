@@ -511,6 +511,7 @@ function vistaControllo(a, ctl) {
   const d = ctl.dati;
   box.appendChild(el('p', 'wp-ac-note', acT('checkLead')));
   if (d.tetto) box.appendChild(el('p', 'wp-ac-note', acT('checkLeadCap')));
+  if (d.ordini) box.appendChild(el('p', 'wp-ac-note', acT('checkLeadOrders')));
   if (d.copertura === 'core') {
     box.appendChild(el('p', 'wp-ac-note', d.fuoriCopertura
       ? acT('checkScopeCoreN', { n: d.fuoriCopertura })
@@ -520,6 +521,24 @@ function vistaControllo(a, ctl) {
   const esito = el('p', `wp-ac-esito ${d.violazioni ? 'wp-ac-esito-ko' : 'wp-ac-esito-ok'}`,
     d.violazioni ? acT('violations', { n: d.violazioni }) : acT('noViolations'));
   box.appendChild(esito);
+
+  // Gli ordini nazionali: quanti, quanti tolti, quanto danno era senza
+  // ordine. Il registro si accumula dal deploy (il gioco butta gli ordini a
+  // battaglia finita): dove manca la colonna dice «n/d», e qui si dice da
+  // quando in qua esiste. Un server senza il campo è quello vecchio.
+  if (d.ordini) {
+    if (!d.ordini.letto) {
+      box.appendChild(el('p', 'wp-ac-note', acT('checkOrdersDown')));
+    } else {
+      const o = d.ordini;
+      if (o.conOrdine || o.rimossi || o.dannoSenzaOrdine) {
+        box.appendChild(el('p', 'wp-ac-note', acT('checkOrdersSummary', { a: o.conOrdine, r: o.rimossi, n: o.dannoSenzaOrdine })));
+      }
+      if (o.nonSo && o.registroDal) {
+        box.appendChild(el('p', 'wp-ac-note', acT('checkOrdersFrom', { date: fmtData(o.registroDal) })));
+      }
+    }
+  }
 
   // Come leggere il controllo, in chiaro: una riga rossa è un allarme da
   // andare a leggere, non una sentenza. Le classifiche si leggono per intero
@@ -552,12 +571,13 @@ function vistaControllo(a, ctl) {
     const conEscluse = (a.muEscluse || []).length > 0;
     const colonne = ['colBattle', 'colWhen', 'colWho', 'colDmg'];
     if (conEscluse) colonne.push('colExcl', 'colNet');
+    if (d.ordini) colonne.push('colOrder');
     colonne.push('colEsito');
     for (const c of colonne) th.appendChild(el('th', null, acT(c)));
     const thead = el('thead'); thead.appendChild(th); t.appendChild(thead);
     const tbody = el('tbody');
     for (const r of d.righe) {
-      const tr = el('tr', r.sforato || r.attaccoDiretto ? 'wp-ac-riga-ko' : '');
+      const tr = el('tr', r.sforato || r.attaccoDiretto || r.ordineContro ? 'wp-ac-riga-ko' : '');
       // Battaglia: chi contro chi, la regione, il tipo.
       const tdB = el('td', 'wp-ac-cella-battaglia');
       const link = el('button', 'wp-ac-link', `${nomeNazione(r.attaccante)} → ${nomeNazione(r.difensore)}`);
@@ -565,7 +585,10 @@ function vistaControllo(a, ctl) {
       link.addEventListener('click', () => apriBattaglia(r));
       tdB.appendChild(link);
       const reg = state.regionData?.[r.regione]?.name;
-      const sotto = [reg, r.tipo === 'resistance' ? acT('revolt') : null].filter(Boolean).join(' · ');
+      // Core = regione originale di una delle due parti; occupata = di una
+      // terza, presa da una delle due.
+      const sotto = [reg, r.inCore === true ? acT('regionCore') : r.inCore === false ? acT('regionOccupied') : null,
+        r.tipo === 'resistance' ? acT('revolt') : null].filter(Boolean).join(' · ');
       if (sotto) tdB.appendChild(el('div', 'wp-ac-sub', sotto));
       tr.appendChild(tdB);
       tr.appendChild(el('td', 'wp-ac-cella-quando', r.inCorso ? acT('live') : fmtDataOra(r.fine)));
@@ -581,11 +604,14 @@ function vistaControllo(a, ctl) {
         tr.appendChild(tdX);
         tr.appendChild(el('td', 'wp-ac-num', fmtNum(r.netto)));
       }
+      if (d.ordini) tr.appendChild(cellaOrdine(r));
       const tdE = el('td', 'wp-ac-cella-esito');
       if (r.attaccoDiretto) tdE.appendChild(el('span', 'wp-ac-pill wp-ac-pill-ko', acT('directAttack')));
       if (r.sforato) tdE.appendChild(el('span', 'wp-ac-pill wp-ac-pill-ko', acT('overCap')));
+      if (r.ordineContro) tdE.appendChild(el('span', 'wp-ac-pill wp-ac-pill-ko', acT('orderAgainst')));
+      if (r.dannoSenzaOrdine) tdE.appendChild(el('span', 'wp-ac-pill wp-ac-pill-no-ordine', acT('orderNoDamage')));
       const limitata = d.tetto && (d.tetto.lato === 'entrambi' || d.tetto.lato === r.chi);
-      if (!r.attaccoDiretto && !r.sforato) tdE.appendChild(el('span', 'wp-ac-pill', limitata ? acT('ok') : acT('info')));
+      if (!r.attaccoDiretto && !r.sforato && !r.ordineContro && !r.dannoSenzaOrdine) tdE.appendChild(el('span', 'wp-ac-pill', limitata ? acT('ok') : acT('info')));
       if (r.tagliata) tdE.title = acT('truncated');
       tr.appendChild(tdE);
       tbody.appendChild(tr);
@@ -612,6 +638,39 @@ function vistaControllo(a, ctl) {
   piede.push(acT('checkedAt', { time: new Date(d.calcolatoIl).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) }));
   box.appendChild(el('p', 'wp-ac-note', piede.join(' ')));
   return box;
+}
+
+/**
+ * La cella «Ordine nazionale» di una riga: lo stato e, nel tooltip, chi ha
+ * dato l'ordine e da quando a quando. «≈» davanti a un'ora vuol dire che è
+ * l'istante in cui l'abbiamo visto, non quello dato dal gioco.
+ */
+function cellaOrdine(r) {
+  const td = el('td', 'wp-ac-cella-ordine');
+  const o = r.ordine || { stato: 'nonLetto', voci: [] };
+  const ora = (ms, esatta) => `${esatta ? '' : '≈ '}${fmtDataOra(ms)}`;
+  const prio = { high: 'prioHigh', medium: 'prioMedium', low: 'prioLow' };
+  const testo = {
+    attivo: ['orderActive', 'wp-ac-pill-ko'],
+    rimosso: ['orderRemoved', 'wp-ac-pill-warn'],
+    nessuno: ['orderNone', ''],
+    ignoto: ['orderUnknown', 'wp-ac-pill-nd'],
+    nonRegistrata: ['orderUnknown', 'wp-ac-pill-nd'],
+    nonLetto: ['orderUnknown', 'wp-ac-pill-nd'],
+  }[o.stato] || ['orderUnknown', 'wp-ac-pill-nd'];
+  const pill = el('span', `wp-ac-pill ${testo[1]}`.trim(), acT(testo[0]));
+  const righe = o.voci.map((v) => {
+    const vars = { nation: nomeNazione(v.nazione), prio: v.priorita ? acT(prio[v.priorita] || 'prioMedium') : '—', from: ora(v.da, v.daEsatto) };
+    if (v.a != null && !v.conLaBattaglia) return acT('orderTipOff', { ...vars, to: fmtDataOra(v.a) });
+    return acT(v.conLaBattaglia ? 'orderTipEnd' : 'orderTipOn', vars);
+  });
+  const spiegazione = {
+    nessuno: 'orderTipNone', ignoto: 'orderTipUnknown', nonRegistrata: 'orderTipNotRecorded', nonLetto: 'orderTipNotRead',
+  }[o.stato];
+  if (spiegazione) righe.push(acT(spiegazione));
+  pill.title = righe.join('\n');
+  td.appendChild(pill);
+  return td;
 }
 
 async function apriBattaglia(r) {

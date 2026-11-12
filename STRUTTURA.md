@@ -161,6 +161,18 @@ wareraPlus/
 │   │                              LAVORATORE (salari incassati, tasse trattenute) e per
 │   │                              nazione dove OPERA l'azienda (il gettito vero, che è
 │   │                              chi incassa davvero). Endpoint: /labour-history.
+│   ├── battleOrders.js         ← NUOVO (2026-11-12) — registro degli ORDINI NAZIONALI
+│   │                              nelle battaglie: quale nazione ha dato un ordine su
+│   │                              quale lato, da quando a quando, anche se TOLTO. Il
+│   │                              gioco li butta a battaglia finita e non tiene quelli
+│   │                              tolti: si accumula dal deploy. Legge gli
+│   │                              `countryOrders` dell'elenco che battleTimeline già
+│   │                              scarica ogni minuto (zero richieste in più) e chiede
+│   │                              getByBattle solo per l'ora esatta dei nuovi. Aperte in
+│   │                              cache/battle-orders.json, chiuse in
+│   │                              cache/battle-orders-closed.jsonl, mai potate.
+│   │                              Endpoint: /battle-orders?ids=. Lo usa il controllo
+│   │                              dei patti (Accordi).
 │   ├── battleTimeline.js       ← NUOVO — l'andamento di ogni battaglia: un campione
 │   │                              AL MINUTO (danno e punti del round per lato, una
 │   │                              pagina di getBattles per tutte) e il danno PER

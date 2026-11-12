@@ -30,7 +30,7 @@ cartella `server/` non esiste. La chiave sta una cartella più in su, in
 `warera/Server/`, da cui il `../` nel percorso.
 
 ```bash
-scp -i ../Server/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/languages.js server/battleArchive.js server/moneyTransfers.js server/damageTimeline.js server/priceHistory.js server/orderMoney.js server/playerParts.js server/dayHistory.js server/labourHistory.js server/citizenMoves.js server/allianceHistory.js server/politicalHistory.js server/battleTimeline.js server/companyCensus.js server/muBattleDamage.js server/tournament.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
+scp -i ../Server/ssh-key-2026-08-18.key server/warera-cache-server.js server/proxyIndex.js server/languages.js server/battleArchive.js server/moneyTransfers.js server/damageTimeline.js server/priceHistory.js server/orderMoney.js server/playerParts.js server/dayHistory.js server/labourHistory.js server/citizenMoves.js server/allianceHistory.js server/politicalHistory.js server/battleTimeline.js server/battleOrders.js server/gearMarket.js server/companyCensus.js server/muBattleDamage.js server/tournament.js server/package.json ubuntu@79.72.45.17:/home/ubuntu/warera-cache-server/
 ```
 
 Manda **tutti** i moduli, non il solo `warera-cache-server.js`: i loro
@@ -43,7 +43,7 @@ che si ferma alla sintassi: eseguire il server per provarlo aprirebbe la
 porta 3001 e i cron accanto al processo pm2 gia' vivo.
 
 ```bash
-ssh -i ../Server/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && for f in warera-cache-server.js proxyIndex.js languages.js battleArchive.js moneyTransfers.js damageTimeline.js priceHistory.js orderMoney.js playerParts.js dayHistory.js labourHistory.js citizenMoves.js allianceHistory.js politicalHistory.js battleTimeline.js companyCensus.js muBattleDamage.js tournament.js; do node --check \$f || exit 1; done && echo PREFLIGHT-OK"
+ssh -i ../Server/ssh-key-2026-08-18.key ubuntu@79.72.45.17 "cd warera-cache-server && for f in warera-cache-server.js proxyIndex.js languages.js battleArchive.js moneyTransfers.js damageTimeline.js priceHistory.js orderMoney.js playerParts.js dayHistory.js labourHistory.js citizenMoves.js allianceHistory.js politicalHistory.js battleTimeline.js battleOrders.js gearMarket.js companyCensus.js muBattleDamage.js tournament.js; do node --check \$f || exit 1; done && echo PREFLIGHT-OK"
 ```
 
 Solo se stampa `PREFLIGHT-OK`:

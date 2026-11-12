@@ -655,6 +655,20 @@ Accordi sono l'unica fonte (richiesta dell'utente). Tre cose da sapere:
   regioni occupate non contano, `fuoriCopertura` le conta): la mappa resta
   a livello di nazione, un NAP lì è fra due nazioni e non fra regioni. Un
   server non ancora rideployato ignora il campo e salva `all`;
+- il controllo guarda anche gli **ordini nazionali** (dal 2026-11-12, colonna
+  «Ordine nazionale»): per ogni riga gli ordini che le nazioni della parte hanno
+  dato su quella battaglia, sul lato contro l'altra, con stato `attivo` /
+  `rimosso` / `nessuno` / `n/d`; un ordine contro l'altra parte conta come
+  violazione anche senza danno, e il danno SENZA ordine è segnalato come "non
+  voluto" (non per l'attacco diretto: aprire la battaglia è una scelta). Dipende
+  dal redeploy del **cache-server** (`/battle-orders`, `server/battleOrders.js`)
+  e **si accumula dal deploy**: il gioco butta gli ordini a battaglia finita e
+  non conserva quelli tolti, quindi a ritroso non esiste e le battaglie prima
+  dicono `n/d` (`nonRegistrata`), mai "nessun ordine". Una battaglia vista più
+  di tre minuti dopo l'apertura è `ignoto` se non ha ordini: uno messo e tolto
+  prima non lo sappiamo. Si registrano solo gli ordini NAZIONALI, non quelli
+  delle unità. ⚠️ Non "riempirlo" con un'ipotesi: sarebbe un "nessun ordine"
+  inventato. Ogni riga dice anche se la regione è core o occupata (`inCore`);
 - il **controllo** del tetto ai danni somma il danno per NAZIONALITÀ
   (`battleRanking` per country) sullo schieramento opposto all'altra parte.
   Dal 2026-11-11 non ha più i due limiti vecchi: le classifiche (per nazione,

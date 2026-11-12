@@ -240,6 +240,12 @@ const {
 const {
   initBattleTimeline, pollBattleTimeline, readBattleTimeline, statoBattleTimeline,
 } = require('./battleTimeline');
+// WarEra+ ordini nazionali nelle battaglie: quali nazioni hanno dato un ordine
+// su quale lato, da quando e fino a quando (anche se tolto). Il gioco li butta
+// a battaglia finita: si accumulano dal deploy. Vedi server/battleOrders.js.
+const {
+  initBattleOrders, observeBattleOrders, readBattleOrders, statoBattleOrders,
+} = require('./battleOrders');
 // WarEra+ censimento aziende: per risorsa quante aziende, quanti dipendenti
 // e quante tasse sui salari incassa lo Stato dove operano. Un giro al
 // giorno di notte, partendo dai cittadini attivi del censimento. Vedi il
@@ -544,9 +550,19 @@ initDamageTimeline({
 
 // Andamento battaglie: riceve anche fetchActiveBattles (paginazione con la
 // chiave del server, stessa di pollBattles) invece di rifarsela.
+// Gli ordini nazionali (battleOrders.js) si leggono dallo STESSO elenco, un
+// giro al minuto, senza una richiesta in più: per questo lo osservano qui.
+initBattleOrders({
+  trpcBatch: (...args) => trpcBatch(...args),
+  readCache, writeCache,
+});
 initBattleTimeline({
   trpcBatch: (...args) => trpcBatch(...args),
-  fetchActiveBattles: () => fetchActiveBattles(),
+  fetchActiveBattles: async () => {
+    const battles = await fetchActiveBattles();
+    observeBattleOrders(battles);
+    return battles;
+  },
   readCache, writeCache,
 });
 
@@ -3429,6 +3445,15 @@ app.get('/damage-pulse', (req, res) => {
 // archivio non l'ha mai vista — aperta e chiusa prima del deploy — e il
 // client in quel caso non mostra la sezione: non c'è una curva da
 // ricostruire, il gioco non la conserva.
+// Ordini nazionali di un gruppo di battaglie (server/battleOrders.js), per il
+// controllo dei patti. `ids` = fino a 200 id separati da virgola; quelle mai
+// viste dal registro mancano da `battles` (non registrate, non "senza ordini").
+app.get('/battle-orders', (req, res) => {
+  const ids = String(req.query.ids || '').split(',').filter((v) => /^[a-f0-9]{24}$/i.test(v)).slice(0, 200);
+  if (!ids.length) return res.status(400).json({ error: 'ids mancanti' });
+  res.json(readBattleOrders(ids));
+});
+
 app.get('/battle-timeline', (req, res) => {
   const data = readBattleTimeline(String(req.query.battleId || ''));
   if (!data) return res.status(404).json({ error: 'battaglia non registrata', coverage: statoBattleTimeline() });
@@ -4252,6 +4277,7 @@ app.get('/health', (req, res) => res.json({
   // Andamento battaglie: da quando registra, quante vive in memoria e
   // quante chiuse su disco. Accumula dal deploy, non si recupera.
   battleTimeline: statoBattleTimeline(),
+  battleOrders: statoBattleOrders(),
 }));
 
 app.listen(PORT, '127.0.0.1', () => {

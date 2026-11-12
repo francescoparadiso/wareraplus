@@ -308,6 +308,13 @@ body.light-theme #wp-accordi-root input[type="datetime-local"] { color-scheme: l
   white-space: nowrap;
 }
 .wp-ac-pill-ko { border-color: var(--ac-danger); color: var(--ac-danger); }
+/* Ordine tolto: c'era, ma non fino alla fine. Ambra, fra il rosso e il neutro. */
+.wp-ac-pill-warn { border-color: #c98a1b; color: #c98a1b; }
+/* Danno che nessun governo ha chiesto: informativo, non un'accusa. */
+.wp-ac-pill-no-ordine { border-style: dashed; opacity: .9; }
+/* «n/d»: non lo sappiamo, e va letto come tale (spento, non verde). */
+.wp-ac-pill-nd { opacity: .6; }
+.wp-ac-cella-ordine { white-space: nowrap; }
 
 @media (max-width: 640px) {
   .wp-ac { padding: 1.5rem 1rem 4rem; }

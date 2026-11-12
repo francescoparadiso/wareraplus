@@ -85,6 +85,28 @@
    Col 'core' il controllo salta le battaglie in regioni occupate e ne dice
    il numero (`fuoriCopertura`). Regione sconosciuta = battaglia tenuta.
 
+   ── GLI ORDINI (dal 2026-11-12) ──────────────────────────────────────
+   Il danno da solo non dice se era VOLUTO: i giocatori colpiscono una
+   nazione amica senza che il loro governo l'abbia chiesto. Per ogni riga il
+   controllo guarda anche gli ORDINI NAZIONALI (`battleOrder`) che le
+   nazioni della parte hanno dato su quella battaglia, SUL LATO contro
+   l'altra parte:
+     · 'attivo'   — l'ordine c'era fino alla fine (o c'è ancora);
+     · 'rimosso'  — c'era ed è stato tolto prima della fine (con da/a);
+     · 'nessuno'  — la battaglia era osservata da subito e non c'è mai stato:
+                    danno senza ordine = `dannoSenzaOrdine`, "non voluto"
+                    (non per l'attacco diretto: aprire la battaglia È voluto);
+     · 'ignoto'   — vista troppo tardi, un ordine messo e tolto prima non lo
+                    sappiamo; 'nonRegistrata' — finita prima del registro;
+                    'nonLetto' — il cache-server non risponde.
+   Un ordine contro l'altra parte conta come violazione anche senza danno:
+   è l'intenzione. ⚠️ Il gioco butta gli ordini a battaglia finita e non
+   tiene quelli tolti: il registro (cache-server, `/battle-orders`, vedi
+   server/battleOrders.js) si accumula dal deploy e a ritroso non esiste.
+   Si registrano solo gli ordini NAZIONALI, non quelli delle unità.
+   Ogni riga porta anche `inCore`: la regione è ORIGINALE di una delle due
+   parti (true), occupata a una terza (false), o non si sa (null).
+
    ⚠️ Il giorno di una battaglia conclusa è quello della FINE (`e`
    dell'archivio): una battaglia cominciata prima del patto e finita dopo
    rientra. L'archivio non porta l'inizio.
@@ -559,6 +581,50 @@ async function aGruppi(elementi, n, fn) {
   return out;
 }
 
+/**
+ * Gli ordini nazionali registrati dal cache-server per queste battaglie.
+ * `ok` false = non risponde (404 se non rideployato): le righe dicono
+ * 'nonLetto' invece di fingere che nessuno abbia dato ordini.
+ */
+async function registroOrdini(ids) {
+  if (!ids.length) return { ok: true, dal: null, battaglie: {} };
+  try {
+    const pezzi = [];
+    for (let i = 0; i < ids.length; i += 100) pezzi.push(ids.slice(i, i + 100));
+    const risposte = await Promise.all(pezzi.map((p) => dalCache(`/battle-orders?ids=${p.join(',')}`, 20_000)));
+    const battaglie = {};
+    for (const r of risposte) Object.assign(battaglie, r?.battles || {});
+    return { ok: true, dal: risposte[0]?.startedAt || null, battaglie };
+  } catch (err) {
+    console.warn('[accordi] registro ordini non letto:', err.message);
+    return { ok: false, dal: null, battaglie: {} };
+  }
+}
+
+/** Gli ordini delle nazioni X, sul lato di c, per una riga del controllo. */
+function ordiniDellaRiga(c, reg) {
+  if (!reg.ok) return { stato: 'nonLetto', voci: [] };
+  const rec = reg.battaglie[c.id];
+  if (!rec) return { stato: 'nonRegistrata', voci: [] };
+  const k = c.lato === 'attacker' ? 'a' : 'd';
+  const voci = (rec.o || [])
+    .filter((o) => o.s === k && c.X.has(o.c))
+    .map((o) => ({
+      nazione: o.c,
+      da: o.f,
+      daEsatto: Boolean(o.fx),
+      a: o.t == null ? null : o.t,
+      // Finito con la battaglia: non è stato tolto da nessuno.
+      conLaBattaglia: Boolean(o.te),
+      priorita: o.p || null,
+    }));
+  if (voci.length) {
+    const finoAllaFine = voci.some((v) => v.a == null || v.conLaBattaglia);
+    return { stato: finoAllaFine ? 'attivo' : 'rimosso', voci };
+  }
+  return { stato: rec.g ? 'ignoto' : 'nessuno', voci: [] };
+}
+
 async function calcolaControllo(acc) {
   const A = new Set(await nazioniLato(acc, 'a'));
   const B = new Set(await nazioniLato(acc, 'b'));
@@ -604,8 +670,9 @@ async function calcolaControllo(acc) {
   // mappa delle regioni non si legge, o la regione non c'è, la battaglia si
   // tiene: meglio un controllo di troppo che una violazione nascosta.
   const soloCore = acc.scope === 'core';
-  let regioni = null;
-  if (soloCore) regioni = await regioniMappa().catch(() => null);
+  // La mappa serve sempre: oltre alla copertura, dice a ogni riga se la
+  // regione è core (originale di una delle due parti) o occupata.
+  const regioni = await regioniMappa().catch(() => null);
   const scartate = new Set();
   const dentroCopertura = (bt) => {
     if (!soloCore) return true;
@@ -634,6 +701,7 @@ async function calcolaControllo(acc) {
   // In corso prima, poi dalla più recente.
   candidati.sort((x, y) => (y.inCorso - x.inCorso) || ((y.fine || 0) - (x.fine || 0)));
   const letti = candidati.slice(0, MAX_BATTAGLIE);
+  const ordini = await registroOrdini([...new Set(letti.map((c) => c.id))]);
 
   const richieste = [];
   for (const c of letti) {
@@ -701,7 +769,8 @@ async function calcolaControllo(acc) {
     const netto = danno == null ? null : Math.max(0, danno - (dannoEscluse || 0));
     // Una battaglia in cui la parte non ha fatto niente e che nessuno ha
     // aperto contro l'altra è rumore: si conta, non si elenca.
-    if (!c.attaccoDiretto && netto === 0) continue;
+    const ordine = ordiniDellaRiga(c, ordini);
+    if (!c.attaccoDiretto && netto === 0 && !ordine.voci.length) continue;
     const limiteQui = conTetto && (acc.limit_side === 'entrambi' || acc.limit_side === c.chi);
     righe.push({
       battaglia: c.id,
@@ -721,6 +790,17 @@ async function calcolaControllo(acc) {
       nazDiOggi,
       netto,
       attaccoDiretto: c.attaccoDiretto,
+      // La regione è originale di una delle due parti (true), occupata a una
+      // terza (false) o sconosciuta (null).
+      inCore: (() => {
+        const origine = regioni?.[c.regione]?.initialCountry;
+        return origine ? (A.has(origine) || B.has(origine)) : null;
+      })(),
+      ordine,
+      ordineContro: ordine.voci.length > 0,
+      // Danno senza che il governo l'abbia chiesto. L'attacco diretto no:
+      // aprire la battaglia è una scelta del governo anche senza un ordine.
+      dannoSenzaOrdine: Boolean(netto > 0 && ordine.stato === 'nessuno' && !c.attaccoDiretto),
       sforato: Boolean(limiteQui && netto != null && netto > acc.limit_damage),
       tagliata: Boolean(naz?.tagliata),
     });
@@ -750,7 +830,17 @@ async function calcolaControllo(acc) {
       : null,
     battaglieControllate: letti.length,
     battaglieCandidate: candidati.length,
-    violazioni: righe.filter((r) => r.attaccoDiretto || r.sforato).length,
+    // Il registro degli ordini nazionali: `letto` false = il cache-server non
+    // risponde; `registroDal` = da quando in qua esiste (prima, 'nonRegistrata').
+    ordini: {
+      letto: ordini.ok,
+      registroDal: ordini.dal,
+      conOrdine: righe.filter((r) => r.ordine.stato === 'attivo').length,
+      rimossi: righe.filter((r) => r.ordine.stato === 'rimosso').length,
+      dannoSenzaOrdine: righe.filter((r) => r.dannoSenzaOrdine).length,
+      nonSo: righe.filter((r) => ['ignoto', 'nonRegistrata'].includes(r.ordine.stato)).length,
+    },
+    violazioni: righe.filter((r) => r.attaccoDiretto || r.sforato || r.ordineContro).length,
     righe,
   };
 }
