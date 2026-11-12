@@ -1,15 +1,14 @@
 /* ══════════════════════════════════════════════════════════════
    WarEra+ — Radar dei proxy
    ------------------------------------------------------------------
-   Le sfere d'influenza della vista Sphere vengono da un CSV compilato a
-   mano (src/diplomacy/sphereOfInfluence.js: EXTERNAL_SPHERE_URL): sono
-   raccolte chiedendo in giro nel gioco, quindi affidabili ma inevitabilmente
-   incomplete e soggette a invecchiare senza che si veda.
+   Le sfere d'influenza della vista Sphere sono SOLO quelle di questo radar.
+   Fino al 2026-11-12 c'era anche un CSV compilato a mano
+   (SphereOfInfluence.csv): è stato tolto perché non era più affidabile,
+   invecchiava senza che si vedesse.
 
-   Questo modulo affianca a quella lista una stima calcolata dai dati
-   pubblici: per ogni nazione, QUALE altra nazione la controlla e con che
-   sicurezza. Non sostituisce il CSV — lo affianca. Nella vista una riga
-   marcata CSV resta CSV, una calcolata porta la sua percentuale.
+   Il modulo stima dai dati pubblici, per ogni nazione, QUALE altra nazione
+   la controlla e con che sicurezza. Ogni riga porta la sua percentuale: è
+   una stima, mai una fonte.
 
    ── Perché serve un modello e non una soglia ──────────────────────
    Un proxy cancella il dato che lo identificherebbe: chi si trasferisce in
@@ -44,8 +43,9 @@
    cui ogni pezzo resta LEGGIBILE: la vista mostra le stesse evidenze che
    il calcolo ha usato, non un numero che esce da una scatola.
 
-   I moltiplicatori sono tarati sul CSV come verità di riferimento (30
-   proxy noti contro le altre 150 nazioni, dati del 25 agosto 2026):
+   I moltiplicatori sono stati tarati sul CSV delle sfere (poi tolto, il
+   2026-11-12) come verità di riferimento (30 proxy noti contro le altre
+   150 nazioni, dati del 25 agosto 2026):
 
      · quota in unità straniere ≥ 90%  →  proxy 17%, altre nazioni 3%
      · legame diplomatico presente     →  proxy 80%, altre nazioni 42%
@@ -259,8 +259,8 @@ function scoreNation(nation, mix, medianDamage, nationById) {
  * mezz'ora lato server e nulla qui giustifica di rifarlo più spesso.
  *
  * Non lancia MAI: se la directory non arriva (server di cache giù, rete
- * lenta) il radar resta vuoto e la vista Sphere continua a funzionare
- * esattamente com'era prima, col solo CSV. Stessa regola di
+ * lenta) il radar resta vuoto e la vista Sphere resta senza sfere, senza
+ * rompere il resto. Stessa regola di
  * src/diplomacy/cacheClient.js — questo è un potenziamento, non un nuovo
  * punto di rottura.
  */
@@ -280,7 +280,7 @@ export function runRadar() {
       const fromServer = await fetchServerIndex();
       if (fromServer?.length) {
         _radar = new Map(fromServer
-          .filter(row => row?.countryId && typeof row.p === 'number' && !state.spherePrimaries.has(row.countryId))
+          .filter(row => row?.countryId && typeof row.p === 'number')
           .map(row => [row.countryId, { ...row, source: 'server' }]));
         return _radar;
       }
@@ -295,10 +295,6 @@ export function runRadar() {
 
       const out = new Map();
       for (const nation of nations) {
-        // Una potenza che è già primaria di una sfera nel CSV non viene
-        // proposta come proxy di qualcun altro: l'Italia ha cittadini in
-        // unità straniere come chiunque, ma non è quello che stiamo cercando.
-        if (state.spherePrimaries.has(nation._id)) continue;
         const hit = scoreNation(nation, mix, medianDamage, nationById);
         // Stesso taglio del server (server/proxyIndex.js): vedi lì la nota
         // sulla ritaratura contro i cluster di migrazione.
@@ -307,7 +303,7 @@ export function runRadar() {
       _radar = out;
       return out;
     } catch (err) {
-      console.warn('WarEra+ radar proxy: calcolo non riuscito, resta il solo CSV:', err.message);
+      console.warn('WarEra+ radar proxy: calcolo non riuscito, nessuna sfera:', err.message);
       _radar = new Map();
       return _radar;
     }
@@ -333,78 +329,56 @@ export function applyServerIndex(rows) {
   }
 }
 
-/** Nazioni rilevate che vanno DISEGNATE, dato lo stato del toggle. Il CSV
- *  non passa da qui: quello si disegna sempre. */
+/** Nazioni rilevate che vanno DISEGNATE, dato lo stato del toggle. */
 export function detectionsForMap() {
   const all = getDetections();
   return state.showAllDetectedProxies ? all : all.filter(d => d.p >= MAP_THRESHOLD);
 }
 
 /**
- * Le sfere come vanno MOSTRATE: quelle del CSV più quelle che il radar ha
- * trovato, fuse in un unico elenco.
+ * Le sfere come vanno MOSTRATE: quelle che il radar ha trovato, raggruppate
+ * per potenza.
  *
- * Regole della fusione, in ordine:
- *   · il CSV vince sempre. Una nazione già schedata a mano resta dov'è,
- *     anche se il radar la assegna a un altro patrono — il disaccordo non
- *     si nasconde però: finisce in `conflictWith`, ed è il modo in cui una
- *     riga invecchiata si fa notare invece di restare lì per sempre.
- *   · un patrono che esiste SOLO per il radar crea un gruppo nuovo. È il
- *     caso interessante: sfere che nel CSV non ci sono affatto.
+ * Una potenza con proxy suoi (sopra la soglia) non compare come proxy di
+ * qualcun altro: dal 2026-11-12, tolto il CSV che lo garantiva, è questa
+ * regola a impedire che l'Italia — che ha cittadini in unità straniere come
+ * chiunque — finisca nella sfera di un'altra.
  *
  * @param {{forMap?: boolean}} opts  forMap applica la soglia del 75% e il
  *   toggle; l'elenco del pannello invece mostra tutto, con le percentuali.
  */
 export function mergedSphereGroups({ forMap = false } = {}) {
+  const detections = forMap ? detectionsForMap() : getDetections();
+  const patrons = new Set(detections.filter(d => d.p >= MAP_THRESHOLD).map(d => d.patronId));
   const groups = new Map();
-  const groupFor = (primaryId) => {
-    let g = groups.get(primaryId);
+  for (const d of detections) {
+    if (patrons.has(d.countryId)) continue;
+    let g = groups.get(d.patronId);
     if (!g) {
-      groups.set(primaryId, g = {
-        primaryId,
-        primaryName: state.nationMap.get(primaryId)?.name || '',
+      groups.set(d.patronId, g = {
+        primaryId: d.patronId,
+        primaryName: state.nationMap.get(d.patronId)?.name || '',
         proxies: [],
-        fromCsv: false,
       });
     }
-    return g;
-  };
-
-  for (const info of state.sphereInfo) {
-    const g = groupFor(info.primaryId);
-    g.fromCsv = true;
-    g.labelLng = info.labelLng;
-    g.labelLat = info.labelLat;
-    for (const id of info.proxyIds) {
-      const detection = _radar?.get(id);
-      g.proxies.push({
-        id,
-        source: 'csv',
-        p: null,
-        // Il radar punta altrove con convinzione: riga da rivedere.
-        conflictWith: detection && detection.patronId !== info.primaryId && detection.p >= MAP_THRESHOLD
-          ? detection.patronId
-          : null,
-      });
-    }
+    g.proxies.push({ id: d.countryId, source: 'radar', p: d.p });
   }
-
-  for (const d of (forMap ? detectionsForMap() : getDetections())) {
-    if (state.sphereMap.has(d.countryId) || state.spherePrimaries.has(d.countryId)) continue;
-    groupFor(d.patronId).proxies.push({ id: d.countryId, source: 'radar', p: d.p, conflictWith: null });
-  }
-
-  return [...groups.values()].filter(g => g.proxies.length);
+  return [...groups.values()];
 }
 
-/** I proxy di UNA potenza, CSV e rilevati insieme. */
+/** I proxy di UNA potenza. */
 export function proxiesOfPrimary(primaryId, opts) {
   return mergedSphereGroups(opts).find(g => g.primaryId === primaryId)?.proxies || [];
 }
 
-/** La potenza di riferimento di una nazione, guardando prima il CSV e poi
- *  il radar: serve al click sulla mappa e nel pannello, che devono aprire
- *  la sfera giusta anche per un proxy solo rilevato. */
+/** Una nazione è una potenza se ha almeno un proxy rilevato. */
+export function isSpherePrimary(nationId, opts) {
+  return mergedSphereGroups(opts).some(g => g.primaryId === nationId);
+}
+
+/** La potenza di riferimento di una nazione, dal radar: serve al click sulla
+ *  mappa e nel pannello, che devono aprire la sfera giusta anche per un
+ *  proxy con una sicurezza bassa. */
 export function patronOf(nationId) {
-  return state.sphereMap.get(nationId) || _radar?.get(nationId)?.patronId || null;
+  return _radar?.get(nationId)?.patronId || null;
 }

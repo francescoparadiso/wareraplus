@@ -15,7 +15,7 @@
 
    Tre sezioni:
 
-   1. SFERA — i proxy di questa nazione, CSV e rilevati dal radar
+   1. SFERA — i proxy di questa nazione, rilevati dal radar
       insieme, ognuno col suo marchio di provenienza (vedi
       src/proxy/radar.js). E, se invece è lei a orbitare intorno a
       qualcuno, chi è il patrono. Costo: zero, è tutto già in memoria.
@@ -56,12 +56,6 @@ const FETCH_TIMEOUT_MS = 4000;
 /* ── Sezione 1: la sfera ──────────────────────────────────────── */
 
 function proxyBadge(proxy) {
-  if (proxy.source === 'csv') {
-    const conflict = proxy.conflictWith
-      ? ` <span class="wp-proxy-conflict" title="${escapeHtml((t('radar_conflict_title') || '').replace('{patron}', state.nationMap.get(proxy.conflictWith)?.name || '?'))}">≠</span>`
-      : '';
-    return `<span class="wp-proxy-badge csv" title="${escapeHtml(t('radar_csv_title'))}">${t('radar_csv_badge')}</span>${conflict}`;
-  }
   const pct = Math.round(proxy.p * 100);
   const weak = proxy.p < MAP_THRESHOLD ? ' weak' : '';
   return `<span class="wp-proxy-badge radar${weak}" title="${escapeHtml(t('radar_detected_title'))}">${pct}%</span>`;
@@ -96,11 +90,9 @@ function sphereSectionHtml(nationId) {
     // si legge dal più pesante, non in ordine alfabetico.
     const pop = id => state.nationMap.get(id)?.rankings?.countryActivePopulation?.value || 0;
     const sorted = [...proxies].sort((a, b) => pop(b.id) - pop(a.id));
-    const csvN = sorted.filter(p => p.source === 'csv').length;
     html += `
       <div class="wp-watch-sub">${t('watch_proxies_label')}
         <span class="wp-panel-ps-count">${sorted.length}</span>
-        <span class="wp-watch-split">${t('watch_proxies_split', { csv: csvN, radar: sorted.length - csvN })}</span>
       </div>
       ${sorted.map(p => nationRow(p.id, proxyBadge(p))).join('')}`;
   }

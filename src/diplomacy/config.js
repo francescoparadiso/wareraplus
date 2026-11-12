@@ -195,5 +195,5 @@ export const LAYER_IDS = {
 // WarEra+ (2026-10-23): EXTERNAL_NAPS_URL (warera_naps.csv) rimossa: i NAP
 // arrivano solo dalla sezione Accordi, vedi src/diplomacy/accordiNaps.js.
 
-export const EXTERNAL_SPHERE_URL =
-  'https://raw.githubusercontent.com/francescoparadiso/warera-tactical-diplomacy-os/refs/heads/main/SphereOfInfluence.csv';
+// WarEra+ (2026-11-12): EXTERNAL_SPHERE_URL (SphereOfInfluence.csv) rimossa:
+// non era più affidabile. Le sfere vengono solo dal radar, src/proxy/radar.js.

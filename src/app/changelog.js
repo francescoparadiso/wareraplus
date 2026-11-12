@@ -38,6 +38,27 @@
 
 export const CHANGELOG = [
   {
+    id: '2026-11-12',
+    title: { en: 'Agreements: orders and a fuller check', it: 'Accordi: gli ordini e un controllo più completo' },
+    items: [
+      {
+        tag: 'new',
+        en: 'Agreements: the check now looks at national orders too. For each battle it shows whether a nation gave an order against the other party, whether it was later removed, and flags damage that came with no order, which probably wasn\'t intended. Orders are recorded from 12 November: the game throws them away once a battle ends, so older battles show "n/a".',
+        it: 'Accordi: il controllo guarda anche gli ordini nazionali. Per ogni battaglia dice se una nazione ha dato un ordine contro l\'altra parte, se è stato tolto dopo, e segnala il danno arrivato senza nessun ordine, che probabilmente non era voluto. Gli ordini si registrano dal 12 novembre: il gioco li butta a battaglia finita, quindi per le battaglie prima c\'è scritto "n/d".',
+      },
+      {
+        tag: 'improved',
+        en: 'Agreements: the check reads the full battle rankings, not just the top 100, and uses each player\'s nationality on the day of the battle (from the migration archive, which starts on 12 October). Every battle also says whether its region is a core one or an occupied one.',
+        it: 'Accordi: il controllo legge le classifiche delle battaglie per intero, non solo i primi 100, e usa la nazionalità che ogni giocatore aveva il giorno della battaglia (dall\'archivio delle migrazioni, che parte dal 12 ottobre). Ogni battaglia dice anche se la regione è core o occupata.',
+      },
+      {
+        tag: 'improved',
+        en: 'Spheres of influence: the hand-made list is gone, it was no longer reliable. The map now shows only what the proxy radar detects from public data, each with its confidence.',
+        it: 'Sfere d\'influenza: la lista fatta a mano non c\'è più, non era più affidabile. La mappa mostra solo ciò che il radar dei proxy rileva dai dati pubblici, ognuno con la sua sicurezza.',
+      },
+    ],
+  },
+  {
     id: '2026-11-11',
     title: { en: 'Crafting, cases and purchasing power', it: 'Crafting, casse e potere d\'acquisto' },
     items: [

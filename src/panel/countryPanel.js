@@ -38,8 +38,8 @@ import { buildViewOverviewHtml, hasViewOverview, trendDaysLabel } from './viewOv
 // proxy, guerra/eco, chi entra e chi esce). Vedi il blocco in testa a
 // nationWatch.js per il perché sta in CIMA e non in fondo.
 import { nationWatchHtml, paintNationWatch, wireNationWatch, refreshSphereWatch } from './nationWatch.js';
-// WarEra+ radar dei proxy: le sfere mostrate non sono più solo quelle del CSV.
-import { mergedSphereGroups, proxiesOfPrimary, patronOf, runRadar, isRadarReady, MAP_THRESHOLD } from '../proxy/radar.js';
+// WarEra+ radar dei proxy: le sfere mostrate sono solo le sue (il CSV è stato tolto).
+import { mergedSphereGroups, proxiesOfPrimary, isSpherePrimary, patronOf, runRadar, isRadarReady, MAP_THRESHOLD } from '../proxy/radar.js';
 import { IS_WALLPAPER } from '../shared/wallpaper.js';
 import { syncBack, dropBack } from '../app/backNav.js';
 
@@ -955,8 +955,7 @@ function formatSwitchPct(pct) {
    sfera), poi i proxy uno per riga con i loro numeri. Ogni riga proxy è
    cliccabile e apre il pannello di quella nazione.
 
-   Dati: solo `state` (sphereInfo/sphereMap li ha già riempiti
-   src/diplomacy/sphereOfInfluence.js dal CSV) — zero fetch.
+   Dati: il radar dei proxy (src/proxy/radar.js) — zero fetch in più.
    ══════════════════════════════════════════════════════════════ */
 // WarEra+: modalità di cui il pannello sta mostrando il riepilogo
 // (viewOverview.js), oppure null. Vale per le viste elencate in
@@ -991,25 +990,16 @@ function sphereStats(nation) {
 /** La sfera a cui appartiene una nazione: se stessa se è una potenza,
  *  altrimenti la potenza di cui è proxy. null se sta fuori da ogni sfera. */
 export function getSphereOf(nationId) {
-  if (state.spherePrimaries.has(nationId)) return nationId;
-  // WarEra+: patronOf guarda prima il CSV e poi il radar, così cliccare un
-  // proxy soltanto RILEVATO apre comunque la sfera del suo patrono.
+  if (isSpherePrimary(nationId)) return nationId;
+  // patronOf guarda il radar, così cliccare un proxy con una sicurezza bassa
+  // apre comunque la sfera del suo patrono.
   return patronOf(nationId);
 }
 
-/* ── Marchio di provenienza di una riga (WarEra+) ──
-   Ogni proxy nell'elenco dice da dove salta fuori: CSV se è nel file
-   compilato a mano, altrimenti la sicurezza del radar. Le due cose non si
-   mescolano mai in un unico numero — una è una fonte, l'altra una stima.
-   `conflictWith` compare quando il radar contraddice il CSV: è il modo in
-   cui una riga vecchia si fa notare. */
+/* ── Marchio di una riga (WarEra+) ──
+   Ogni proxy nell'elenco porta la sicurezza del radar: è una stima, non una
+   fonte, e la percentuale lo dice. */
 function proxyBadgeHtml(proxy) {
-  if (proxy.source === 'csv') {
-    const conflict = proxy.conflictWith
-      ? ` <span class="wp-proxy-conflict" title="${escapeHtml(t('radar_conflict_title').replace('{patron}', state.nationMap.get(proxy.conflictWith)?.name || '?'))}">≠</span>`
-      : '';
-    return `<span class="wp-proxy-badge csv" title="${escapeHtml(t('radar_csv_title'))}">${t('radar_csv_badge')}</span>${conflict}`;
-  }
   const pct = Math.round(proxy.p * 100);
   const weak = proxy.p < MAP_THRESHOLD ? ' weak' : '';
   return `<span class="wp-proxy-badge radar${weak}" title="${escapeHtml(t('radar_detected_title'))}">${pct}%</span>`;
@@ -1017,9 +1007,7 @@ function proxyBadgeHtml(proxy) {
 
 function buildSpherePanelHtml(primaryId) {
   const primary = state.nationMap.get(primaryId);
-  // WarEra+: i proxy non arrivano più da state.sphereInfo ma dalla fusione
-  // CSV + radar, così una potenza che il CSV non conosce affatto (Egitto,
-  // Indonesia, Finlandia nei dati di oggi) ha comunque la sua scheda.
+  // I proxy sono quelli che il radar ha rilevato per questa potenza.
   const entries = proxiesOfPrimary(primaryId)
     .map(meta => ({ meta, nation: state.nationMap.get(meta.id) }))
     .filter(e => e.nation)
@@ -1056,7 +1044,7 @@ function buildSpherePanelHtml(primaryId) {
         <div class="wp-sphere-row-head">
           ${flag ? `<img class="wp-sphere-flag" src="${flag}" alt="" onerror="this.style.display='none'">` : ''}
           <span class="wp-sphere-name">${escapeHtml(nation.name)}</span>
-          ${isPrimary ? '' : proxyBadgeHtml(metaById.get(nation._id) || { source: 'csv' })}
+          ${isPrimary ? '' : proxyBadgeHtml(metaById.get(nation._id) || { p: 0 })}
           <span class="wp-sphere-share">${share.toFixed(0)}%</span>
         </div>
         <div class="wp-sphere-row-stats">
@@ -1156,8 +1144,7 @@ function renderSpherePanel(primaryId) {
   if (backBtn) backBtn.addEventListener('click', () => renderSphereOverviewPanel());
 
   renderSpherePlaystyle(primaryId);
-  const info = state.sphereInfo.find(s => s.primaryId === primaryId);
-  const sphereNations = [primaryId, ...(info?.proxyIds || [])].map(id => state.nationMap.get(id)).filter(Boolean);
+  const sphereNations = [primaryId, ...proxiesOfPrimary(primaryId).map(p => p.id)].map(id => state.nationMap.get(id)).filter(Boolean);
   paintDailyDamage(sphereNations, () => currentSphereId === primaryId);
   paintCitizens(sphereNations.map(n => n._id), () => currentSphereId === primaryId);
 }
@@ -1176,20 +1163,14 @@ function renderSpherePanel(primaryId) {
    nel disclaimer serve a dire chi ha raccolto i dati, e a chi scrivere se
    una sfera è sbagliata o vecchia. La traduzione contiene {author}: il nome
    è l'unico pezzo di markup, il resto resta testo tradotto. */
-const AUTHOR_PROFILE_URL = 'https://app.warera.io/user/69d2ed249f38d300d59a2af1';
-const AUTHOR_NAME = 'frappa10';
 
 function sphereDisclaimerHtml() {
-  const link = `<a href="${AUTHOR_PROFILE_URL}" target="_blank" rel="noopener" class="wp-sphere-author">${AUTHOR_NAME}</a>`;
-  // Chiamata SENZA variabili: così il segnaposto {author} sopravvive
-  // all'escape (il testo tradotto va trattato come testo, non come markup)
-  // e solo dopo diventa il link.
-  return escapeHtml(t('sphere_disclaimer')).replace('{author}', link);
+  return escapeHtml(t('sphere_disclaimer'));
 }
 
 function buildSphereOverviewHtml() {
-  // WarEra+: l'elenco è la fusione CSV + radar. Il conteggio dei rilevati
-  // serve al testo del toggle, che deve dire quanti ne sta nascondendo.
+  // Il conteggio dei rilevati serve al testo del toggle, che deve dire
+  // quanti ne sta nascondendo.
   const groups = mergedSphereGroups();
   if (!groups.length) {
     return `<div class="wp-panel-empty">${t('sphere_none')}</div>`;
@@ -1319,8 +1300,8 @@ export function renderSphereOverviewPanel() {
 
   // WarEra+: il radar si calcola la prima volta che si entra in vista Sphere
   // (una fetch della directory MU per sessione, condivisa con la vista Unità
-  // Militari). Finché non è pronto la vista mostra il solo CSV, esattamente
-  // com'era prima; quando finisce, pannello, mappa e legenda si ridisegnano.
+  // Militari). Finché non è pronto la vista non ha sfere da mostrare; quando
+  // finisce, pannello, mappa e legenda si ridisegnano.
   if (!isRadarReady()) {
     runRadar().then(detections => {
       if (!detections?.size) return;
@@ -1547,9 +1528,9 @@ export function isViewOverviewOpen() {
  *  (vedi renderBlocPlaystyle), sommata su potenza + proxy. */
 async function renderSpherePlaystyle(primaryId) {
   const host = document.getElementById('wp-panel-sphere-playstyle');
-  const info = state.sphereInfo.find(s => s.primaryId === primaryId);
-  if (!host || !info) return;
-  const memberIds = [primaryId, ...info.proxyIds];
+  const proxies = proxiesOfPrimary(primaryId);
+  if (!host || !proxies.length) return;
+  const memberIds = [primaryId, ...proxies.map(p => p.id)];
 
   const { fetchPlaystyleByCountry, fetchPlaystyleHistoryMany } = await import('../mu/api.js');
   const { sumPlaystyleCounts, sumPlaystyleDeltas } = await import('../mu/playstyle.js');

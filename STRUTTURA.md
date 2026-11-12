@@ -259,7 +259,7 @@ wareraPlus/
     │   │                          ECO_PROXY_BASE, COLORS, THEMES, LAYER_IDS
     │   ├── map.js                ← MapLibre: layer, sorgenti, rendering
     │   ├── ui.js, diplomacy.js, labels.js, patterns.js
-    │   ├── alliances.js, naps.js (solo NAP manuali), sphereOfInfluence.js, blocs.js (dead, vedi sotto)
+    │   ├── alliances.js, naps.js (solo NAP manuali), sphereOfInfluence.js (solo il colore: il CSV delle sfere è stato tolto il 2026-11-12, restano i rilevamenti del radar), blocs.js (dead, vedi sotto)
     │   ├── accordiNaps.js       ← NUOVO — gli Accordi in vigore come NAP sulla mappa: si
     │   │                          aggiungono a externalNapsSet/List (source 'accordi'),
     │   │                          alleanze espanse nei membri di adesso, riletti ogni 10'.
@@ -319,13 +319,13 @@ wareraPlus/
     │   │                        `wareraplus:ticker-data`: prima del primo giro del
     │   │                        ticker non c'è niente da disegnare.
     │   ├── sphereLinks.js     ← NUOVO — in vista Sfera: fili potenza → proxy nel
-    │   │                        colore della sfera, pieni dal CSV e tratteggiati
-    │   │                        dal radar (gli stessi gruppi che tingono la mappa),
+    │   │                        colore della sfera, tratteggiati perché stimati dal
+    │   │                        radar (gli stessi gruppi che tingono la mappa),
     │   │                        con un impulso di luce che corre verso il proxy.
     │   │                        Di partenza SOLO la sfera aperta nel pannello
     │   │                        (state.selectedSphereId): tutte insieme erano ~60
     │   │                        fili. Comandi nel pannello: sfera aperta / tutte /
-    │   │                        nessuno, CSV / radar / entrambe (`we_sphere_links`).
+    │   │                        nessuno (`we_sphere_links`).
     │   ├── bonusView.js       ← NUOVO — vista mappa "Bonus battaglia": si clicca
     │   │                        una battaglia e ogni nazione prende il colore del
     │   │                        bonus PIÙ ALTO dei suoi cittadini lì — blu se le
@@ -927,7 +927,7 @@ wareraPlus/
     ├── panel/                   ← NUOVO
     │   ├── countryPanel.js      ← pannello laterale nazione (+ riepilogo sfere e viste)
     │   ├── nationWatch.js       ← NUOVO — il blocco "sotto osservazione" in CIMA al
-    │   │                          pannello: proxy (CSV + rilevati dal radar), guerra/eco
+    │   │                          pannello: proxy (rilevati dal radar), guerra/eco
     │   │                          col travaso a 24h, e chi e' arrivato/partito in 7
     │   │                          giorni. Richiesta dell'utente: e' un problema di
     │   │                          ORDINE — il pannello apriva col grafico del

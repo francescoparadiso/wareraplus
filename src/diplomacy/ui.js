@@ -485,16 +485,11 @@ export function updateDynamicLegend() {
 
   if (state.coloringMode === 'sphereOfInfluence') {
     let html = '';
-    // WarEra+: la legenda deve descrivere quello che la mappa sta davvero
-    // disegnando, cioè CSV + rilevamenti sopra soglia (o tutti, col toggle) —
-    // non il solo CSV. Ogni riga distingue le due provenienze.
+    // WarEra+: la legenda descrive quello che la mappa sta davvero
+    // disegnando, cioè i rilevamenti del radar sopra soglia (o tutti, col toggle).
     mergedSphereGroups({ forMap: true }).forEach(group => {
       const color = state.nationBaseColorMap.get(group.primaryId) || COLORS.DEFAULT_LAND;
-      const fromCsv = group.proxies.filter(p => p.source === 'csv').length;
-      const detected = group.proxies.length - fromCsv;
-      const parts = [];
-      if (fromCsv) parts.push(`${fromCsv} listed`);
-      if (detected) parts.push(`${detected} detected`);
+      const parts = [`${group.proxies.length} detected`];
       html += `
         <div class="legend-item">
           <div class="legend-bar" style="background:${color};"></div>

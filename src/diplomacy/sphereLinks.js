@@ -2,15 +2,16 @@
    WarEra+ — I fili delle sfere d'influenza
    ------------------------------------------------------------------
    Richiesta dell'utente: in vista Sfera d'influenza, fili dalla potenza
-   ai suoi proxy — pieni se il legame viene dal CSV compilato a mano,
-   tratteggiati se è stimato dal radar (src/proxy/radar.js).
+   ai suoi proxy, tratteggiati perché stimati dal radar (src/proxy/radar.js).
+   Fino al 2026-11-12 quelli del CSV compilato a mano erano pieni: il CSV è
+   stato tolto, non era più affidabile.
 
    Prima la sfera si vedeva solo come colore: potenza e proxy nella
    stessa tinta. Per due sfere vicine di colore simile, o per un proxy
    dall'altra parte del mondo, non si capiva CHI tirava i fili di chi.
 
    Zero fetch: gli stessi gruppi che tingono la mappa
-   (mergedSphereGroups({ forMap: true }) — CSV sempre, radar solo sopra
+   (mergedSphereGroups({ forMap: true }) — i rilevamenti del radar sopra
    la soglia di sicurezza o col toggle "anche i rilevamenti incerti"),
    così un filo c'è esattamente dove c'è il colore. Capitali da
    flowGeometry.js. Colore = quello della potenza, schiarito: le tinte
@@ -23,7 +24,7 @@
    riepilogo di tutte le sfere resta pulito, e cliccando una potenza o un
    suo proxy compaiono i suoi. Due comandi nel pannello (riepilogo e
    scheda della sfera) cambiano la scelta: quali fili (sfera aperta /
-   tutte / nessuno) e da che fonte (CSV / radar / entrambi). La scelta sta
+   tutte / nessuno). La scelta sta
    in localStorage (`we_sphere_links`), è una comodità di chi guarda.
 
    Animazione, diversa da quelle delle altre viste: un IMPULSO di luce
@@ -42,7 +43,6 @@ import { animationsOn } from '../shared/motion.js';
 
 const SRC = 'wp-sphere-links-src';
 const SRC_FX = 'wp-sphere-links-fx-src';
-const LYR_CSV = 'wp-sphere-links-csv';
 const LYR_RADAR = 'wp-sphere-links-radar';
 const LYR_HUB = 'wp-sphere-links-hub';
 const LYR_PULSE_GLOW = 'wp-sphere-links-pulse-glow';
@@ -55,16 +55,14 @@ const FRAME_MS = 40;
 /* ── Preferenze ── */
 const PREFS_KEY = 'we_sphere_links';
 const MODES = ['selected', 'all', 'off'];
-const SOURCES = ['both', 'csv', 'radar'];
 let _prefs = null;
 
 export function sphereLinkPrefs() {
   if (!_prefs) {
-    _prefs = { mode: 'selected', source: 'both' };
+    _prefs = { mode: 'selected' };
     try {
       const saved = JSON.parse(localStorage.getItem(PREFS_KEY) || 'null');
       if (MODES.includes(saved?.mode)) _prefs.mode = saved.mode;
-      if (SOURCES.includes(saved?.source)) _prefs.source = saved.source;
     } catch { /* storage bloccato: valgono i valori di partenza */ }
   }
   return _prefs;
@@ -81,8 +79,6 @@ const T = {
   'Open sphere': ['Sfera aperta', 'Esfera abierta', 'Offene Sphäre', 'Sphère ouverte', 'Open sfeer', 'Öppen sfär', 'Esfera aberta', 'النطاق المفتوح'],
   'All': ['Tutte', 'Todas', 'Alle', 'Toutes', 'Alle', 'Alla', 'Todas', 'الكل'],
   'None': ['Nessuno', 'Ninguno', 'Keine', 'Aucun', 'Geen', 'Inga', 'Nenhum', 'لا شيء'],
-  'Source': ['Fonte', 'Fuente', 'Quelle', 'Source', 'Bron', 'Källa', 'Fonte', 'المصدر'],
-  'Both': ['Entrambe', 'Ambas', 'Beide', 'Les deux', 'Beide', 'Båda', 'Ambas', 'كلاهما'],
   'Click a sphere to see its links.': ['Clicca una sfera per vederne i fili.', 'Haz clic en una esfera para ver sus hilos.', 'Klicke auf eine Sphäre, um ihre Fäden zu sehen.', 'Clique sur une sphère pour voir ses fils.', 'Klik op een sfeer om de draden te zien.', 'Klicka på en sfär för att se dess trådar.', 'Clica numa esfera para ver os seus fios.', 'انقر على نطاق لترى خيوطه.'],
 };
 function sT(k) {
@@ -101,7 +97,6 @@ export function sphereLinksControlHtml({ inOverview = false } = {}) {
     </div>`;
   return `<div class="wp-sphere-links-ctl">
     ${seg(sT('Links on the map'), 'sphere-links-mode', [['selected', sT('Open sphere')], ['all', sT('All')], ['off', sT('None')]], p.mode)}
-    ${p.mode === 'off' ? '' : seg(sT('Source'), 'sphere-links-src', [['both', sT('Both')], ['csv', 'CSV'], ['radar', 'Radar']], p.source)}
     ${inOverview && p.mode === 'selected' ? `<div class="wp-mig-hint">${escapeHtml(sT('Click a sphere to see its links.'))}</div>` : ''}
   </div>`;
 }
@@ -109,12 +104,11 @@ export function sphereLinksControlHtml({ inOverview = false } = {}) {
 /** Collega i comandi; `rerender` ridisegna il pannello che li contiene
  *  (per aggiornare i bottoni accesi). */
 export function wireSphereLinkControls(root, rerender) {
-  root.querySelectorAll('[data-sphere-links-mode], [data-sphere-links-src]').forEach(btn => {
+  root.querySelectorAll('[data-sphere-links-mode]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const p = sphereLinkPrefs();
       if (btn.dataset.sphereLinksMode) p.mode = btn.dataset.sphereLinksMode;
-      if (btn.dataset.sphereLinksSrc) p.source = btn.dataset.sphereLinksSrc;
       savePrefs();
       syncSphereLinks();
       rerender?.();
@@ -143,12 +137,10 @@ function features() {
     const color = brightenColor(state.nationBaseColorMap.get(g.primaryId), 0.35);
     let drawn = 0;
     for (const px of g.proxies) {
-      const isCsv = px.source === 'csv';
-      if ((p.source === 'csv' && !isCsv) || (p.source === 'radar' && isCsv)) continue;
       const to = countryAnchor(px.id);
       if (!to || Math.hypot(to[0] - home[0], to[1] - home[1]) < MIN_ARC_DEG) continue;
       const { coords } = arc(home, to);
-      feats.push({ type: 'Feature', properties: { c: color, src: isCsv ? 'csv' : 'radar' }, geometry: { type: 'LineString', coordinates: coords } });
+      feats.push({ type: 'Feature', properties: { c: color, src: 'radar' }, geometry: { type: 'LineString', coordinates: coords } });
       _arcs.push({ coords, color, phase: (k++ * 0.37) % 1 });
       drawn++;
     }
@@ -162,11 +154,6 @@ function ensureLayers(map) {
   map.addSource(SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   map.addSource(SRC_FX, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   const isLine = ['==', ['geometry-type'], 'LineString'];
-  map.addLayer({
-    id: LYR_CSV, type: 'line', source: SRC, filter: ['all', isLine, ['==', ['get', 'src'], 'csv']],
-    layout: { 'line-cap': 'round', 'line-join': 'round' },
-    paint: { 'line-color': ['get', 'c'], 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 1.4, 5, 2.6], 'line-opacity': 0.75 },
-  });
   map.addLayer({
     id: LYR_RADAR, type: 'line', source: SRC, filter: ['all', isLine, ['==', ['get', 'src'], 'radar']],
     layout: { 'line-cap': 'butt', 'line-join': 'round' },

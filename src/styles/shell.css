@@ -3029,12 +3029,10 @@ body.light-theme .wp-sphere-group-head { color: #1a1a1a; }
 body.light-theme .wp-sphere-chip { border-color: #e0e0e0; color: #3e2f1c; background: rgba(0, 0, 0, .04); }
 
 /* ── Radar dei proxy (WarEra+, src/proxy/radar.js) ──
-   Due provenienze, due letture a colpo d'occhio: il CSV è una FONTE (blu
-   come il resto della vista, nessuna incertezza da comunicare), il radar è
-   una STIMA (verde, con la sua percentuale). I rilevamenti sotto la soglia
-   del 75% — quelli che sulla mappa non entrano finché non si accende il
-   toggle — sono gli stessi elementi smorzati, non elementi diversi: si deve
-   vedere che sono la stessa cosa più debole. */
+   Il radar è una STIMA (verde, con la sua percentuale). I rilevamenti sotto
+   la soglia del 75% — quelli che sulla mappa non entrano finché non si
+   accende il toggle — sono gli stessi elementi smorzati, non elementi
+   diversi: si deve vedere che sono la stessa cosa più debole. */
 .wp-proxy-badge {
   flex-shrink: 0;
   padding: 1px 5px;
@@ -3046,17 +3044,9 @@ body.light-theme .wp-sphere-chip { border-color: #e0e0e0; color: #3e2f1c; backgr
   font-variant-numeric: tabular-nums;
   cursor: help;
 }
-.wp-proxy-badge.csv { background: rgba(88, 166, 255, .16); color: #58a6ff; }
 .wp-proxy-badge.radar { background: rgba(63, 185, 80, .16); color: #3fb950; }
 .wp-proxy-badge.radar.weak { background: rgba(139, 148, 158, .14); color: #8b949e; }
 .wp-sphere-chip.weak { opacity: .62; border-style: dashed; }
-.wp-proxy-conflict {
-  color: #d29922;
-  font-weight: 700;
-  font-size: 11px;
-  cursor: help;
-}
-body.light-theme .wp-proxy-badge.csv { background: rgba(47, 111, 181, .14); color: #2f6fb5; }
 body.light-theme .wp-proxy-badge.radar { background: rgba(31, 122, 51, .14); color: #1f7a33; }
 body.light-theme .wp-proxy-badge.radar.weak { background: rgba(0, 0, 0, .06); color: #6b5a47; }
 body.light-theme .wp-proxy-conflict { color: #8a6100; }

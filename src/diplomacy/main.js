@@ -6,7 +6,6 @@ import { showToast, updateDynamicLegend } from './ui.js';
 import { initMap, renderMap, setupMapLayers, cercaNazione, resetDiplomazia, setMapSource, setColoringMode } from './map.js';
 //import { loadExternalBlocs } from './blocs.js';
 import { aggiungiNap } from './naps.js';
-import { loadSphereOfInfluence } from './sphereOfInfluence.js';
 import { syncUIToState, toggleNapSection, updateExternalNapsUI } from './ui.js';
 import { buildOriginalLabels, loadFlagImage } from './labels.js';
 import { API_BASE_URL } from './config.js';
@@ -231,7 +230,6 @@ async function refreshData(boot = _startBootFetches()) {
     import('./accordiNaps.js').then(m => m.loadAccordiNaps()).catch(() => {});
     updateExternalNapsUI();
     syncUIToState();
-    loadSphereOfInfluence();
 
     // ==================== BATTLE MARKERS ====================
     await updateBattleMarkers();
