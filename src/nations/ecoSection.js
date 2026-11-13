@@ -8,27 +8,25 @@
         server scatta ogni giorno (/country-treasury);
      2. i BONIFICI fra tesori in entrata e in uscita (l'archivio dei
         finanziamenti, lo stesso del dettaglio battaglia) e da chi/a chi;
-     3. i PAGAMENTI «donation» del gioco, giorno per giorno: quanto ha
-        dato ai giocatori il tesoro della nazione e quanto le sue unità
-        militari (/donations);
+     3. le DONAZIONI dei giocatori, giorno per giorno: quanto ha ricevuto
+        il tesoro della nazione e quanto le sue unità militari
+        (/donations);
      4. il raffronto fra le due cose, in una ciambella;
-     5. quanto ha pagato CIASCUNA unità della nazione, con destinatari e
+     5. quanto ha ricevuto CIASCUNA unità della nazione, con donatori e
         andamento giornaliero.
 
-   ── ⚠️ DONAZIONI: LA DIREZIONE È L'OPPOSTA DI QUELLA CHE SI CREDE ───
-   Verificato sul vivo (2026-11-13): una `donation` va sempre da un TESORO
-   (nazione, unità o partito) a un GIOCATORE, mai il contrario. Per questo la
-   scheda non parla di «donazioni dei cittadini» ma di soldi PAGATI ai
-   giocatori, e lo dichiara (donWhat). Vedi server/donations.js.
+   Una `donation` va da un giocatore (`buyerId`) a una nazione, un'unità o
+   un partito (`seller*Id`): vedi server/donations.js. Non si filtra per
+   nazionalità del donatore, che la riga non porta.
 
    ── COSA NON SI SA, E LA SCHEDA LO DICE ──────────────────────────────
    · il tesoro è `countryWealth`, MAI `country.money` (fermo da mesi: somma
      54 mila contro i 4,4 milioni della classifica);
-   · bonifici e pagamenti si ACCUMULANO dal giorno in cui il server ha
+   · bonifici e donazioni si ACCUMULANO dal giorno in cui il server ha
      cominciato a guardare: l'API ne ricorda poco. Prima di `coverageFrom`
-     l'assenza di una riga NON è «nessun pagamento», e un giorno prima di
+     l'assenza di una riga NON è «nessuna donazione», e un giorno prima di
      quella data si lascia fuori dal grafico invece di disegnarlo a zero;
-   · i pagamenti dei partiti restano in archivio ma non si mostrano: la riga
+   · le donazioni ai partiti restano in archivio ma non si mostrano: la riga
      non porta la nazione del partito.
    ══════════════════════════════════════════════════════════════ */
 
@@ -280,14 +278,12 @@ function list(titolo, righe, colore) {
     </div>`;
 }
 
-/* ── 3-4. soldi pagati ai giocatori (transazioni «donation») ───── */
+/* ── 3-4. donazioni dei giocatori (transazioni «donation») ─────── */
 
-/* ⚠️ Verificato sul vivo il 2026-11-13: una `donation` va SEMPRE da un
-   tesoro (nazione, unità o partito) a un giocatore. Non esistono, nei dati,
-   donazioni da un giocatore a un'unità o a una nazione: la scheda mostra
-   quello che c'è — cosa paga lo Stato ai giocatori e cosa pagano le sue
-   unità — e lo dichiara in chiaro (donWhat) invece di chiamarle «donazioni
-   dei cittadini». Vedi la testata di server/donations.js. */
+/* Una `donation` ha `buyerId` (il giocatore che DONA) e `sellerCountryId` /
+   `sellerMuId` / `sellerPartyId` (chi RICEVE: il verso del gioco, vedi la
+   testata di server/donations.js). Qui: cosa ha ricevuto il tesoro della
+   nazione e cosa le sue unità, giorno per giorno. */
 
 /** Il server ha righe ma non ha capito chi dà o chi riceve? */
 function unreadable(d) {
@@ -314,7 +310,7 @@ function donationsHtml(d) {
   const tiles = [
     tile(ecoT('donFromTreasury'), oro(fromTre), ecoT('donCount', { n: d.treasury?.n ?? 0 })),
     tile(ecoT('donFromUnits'), oro(fromMu), ecoT('donCount', { n: d.byMu.reduce((s, m) => s + m.n, 0) })),
-    tile(ecoT('colRecipients'), String(d.treasury?.recipients ?? 0), ecoT('donFromTreasury')),
+    tile(ecoT('colRecipients'), String(d.treasury?.donors ?? 0), ecoT('donFromTreasury')),
   ].join('');
 
   // Giorni mostrati: dall'inizio della finestra, ma mai prima di quando
@@ -397,7 +393,7 @@ function unitsHtml(d) {
       <a class="wp-nat-ecot-row" href="#" data-mu="${escapeHtml(m.id)}">
         <span class="wp-nat-cname"><span class="wp-nat-cnick">${escapeHtml(m.name)}</span></span>
         <span class="wp-nat-num money wp-nat-ecot-bar"><i style="width:${((m.money / max) * 100).toFixed(1)}%"></i><b>${escapeHtml(oro(m.money))}</b></span>
-        <span class="wp-nat-num">${m.recipients}</span>
+        <span class="wp-nat-num">${m.donors}</span>
         <span class="wp-nat-num">${m.n}</span>
         <span class="wp-nat-num">${escapeHtml(oro(m.n ? m.money / m.n : 0))}</span>
         <span>${sparkHtml(days, m.daily, m.name)}</span>

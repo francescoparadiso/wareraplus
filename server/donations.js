@@ -4,22 +4,26 @@
    Alimenta la scheda «Economia» di Statistiche nazioni. Rotta:
    /donations?country=ID&days=N.
 
-   ── ⚠️ COSA SONO DAVVERO LE DONAZIONI (verificato sul vivo, 2026-11-13) ──
-   Una riga `donation` ha sempre la stessa forma:
+   ── LA FORMA DELLA RIGA E IL SUO VERSO ──────────────────────────────────
+   Una riga `donation` ha sempre la stessa forma (verificato sul vivo,
+   2026-11-13, su 22.800 righe):
        { money, buyerId, sellerCountryId | sellerMuId | sellerPartyId }
-   Come per i bonifici fra tesori, `seller` è chi PAGA e `buyer` chi
-   incassa: sono pagamenti da un TESORO (di una nazione, di un'unità
-   militare, di un partito) a un GIOCATORE. Su 6.000 righe lette (17 ore):
-   59% dal tesoro di una nazione, 40% da quello di un'unità, 1% da un
-   partito; il destinatario è sempre un utente. Non esiste, in quei dati,
-   una donazione DA un giocatore verso un'unità o una nazione: chi si
-   aspetta «cosa donano i cittadini» trova invece «cosa distribuisce lo
-   Stato ai cittadini e cosa le unità ai loro membri». La scheda lo dice.
+   ⚠️ Il verso è quello del GIOCO, non quello che i nomi farebbero pensare
+   per analogia coi bonifici fra tesori: i giocatori donano a nazioni, unità
+   e partiti, e le nazioni non pagano i giocatori (lo fanno solo comprando
+   sul mercato o coi contratti). Quindi `buyerId` è il DONATORE (un
+   giocatore) e `seller*Id` è CHI RICEVE: nome «venditore» perché è il lato
+   che incassa, come in ogni altra transazione di soldi.
+   (Per un po' questo modulo ha letto il verso al contrario, dedotto per
+   analogia con `countryMoneyTransfer` invece che dal gioco: non rifarlo.)
+   Su 6.000 righe: 59% a una nazione, 40% a un'unità, 1% a un partito.
 
-   Quindi per una nazione X si leggono due cose:
-     · quanto il tesoro di X ha dato ai giocatori (sellerCountryId = X);
-     · quanto hanno dato le unità REGISTRATE in X (sellerMuId nella
-       directory, con `country` = X), unità per unità.
+   Per una nazione X si leggono due cose:
+     · quanto ha ricevuto il tesoro di X (sellerCountryId = X);
+     · quanto hanno ricevuto le unità REGISTRATE in X (sellerMuId nella
+       directory con `country` = X), unità per unità.
+   I donatori sono contati qualunque sia la loro nazione: la riga non la
+   porta, e la mappa utente → nazione copre solo chi sta in un'unità.
    Il partito resta in archivio (`sellerPartyId`) ma non si espone: i
    partiti non hanno la nazione nella riga.
 
@@ -194,8 +198,8 @@ function _contesto() {
 const _giorno = (ts) => new Date(ts).toISOString().slice(0, 10);
 
 /**
- * Quanto ha dato il tesoro di una nazione ai giocatori e quanto hanno dato
- * le sue unità militari, negli ultimi `days` giorni (UTC).
+ * Quanto hanno donato i giocatori al tesoro di una nazione e alle sue unità
+ * militari, negli ultimi `days` giorni (UTC).
  */
 function readDonations(countryId, days = 30) {
   if (!db) return null;
@@ -209,8 +213,10 @@ function readDonations(countryId, days = 30) {
   const righe = db.prepare('SELECT ts, money, ids FROM don WHERE ts >= ?').all(dal);
 
   const tesoro = new Map();      // giorno → { money, n }
-  const riceventiTesoro = new Set();
-  const perMu = new Map();       // muId → { money, n, recipients:Set, daily:Map }
+  const donatoriTesoro = new Set();
+  const perMu = new Map();       // muId → { money, n, donors:Set, daily:Map }
+  // giver = righe con un donatore (buyerId), receiver = righe con un
+  // destinatario (nazione, unità o partito): se uno dei due è 0 la forma è cambiata.
   const conti = { rows: righe.length, giver: 0, receiver: 0 };
 
   for (const r of righe) {
@@ -219,8 +225,8 @@ function readDonations(countryId, days = 30) {
     const soldi = Number(r.money) || 0;
     const nazione = ids.sellerCountryId || null;
     const mu = ids.sellerMuId || null;
-    if (nazione || mu || ids.sellerPartyId) conti.giver++;
-    if (ids.buyerId) conti.receiver++;
+    if (ids.buyerId) conti.giver++;
+    if (nazione || mu || ids.sellerPartyId) conti.receiver++;
     if (!(soldi > 0)) continue;
     const g = _giorno(r.ts);
 
@@ -228,11 +234,11 @@ function readDonations(countryId, days = 30) {
       const d = tesoro.get(g) || { money: 0, n: 0 };
       d.money += soldi; d.n++;
       tesoro.set(g, d);
-      if (ids.buyerId) riceventiTesoro.add(ids.buyerId);
+      if (ids.buyerId) donatoriTesoro.add(ids.buyerId);
     } else if (mu && ctx.muCountry.get(mu) === countryId) {
-      const m = perMu.get(mu) || { money: 0, n: 0, recipients: new Set(), daily: new Map() };
+      const m = perMu.get(mu) || { money: 0, n: 0, donors: new Set(), daily: new Map() };
       m.money += soldi; m.n++;
-      if (ids.buyerId) m.recipients.add(ids.buyerId);
+      if (ids.buyerId) m.donors.add(ids.buyerId);
       m.daily.set(g, (m.daily.get(g) || 0) + soldi);
       perMu.set(mu, m);
     }
@@ -248,16 +254,16 @@ function readDonations(countryId, days = 30) {
     coverageFrom: Number(_meta('startedAt')) || null,
     lastPoll: Number(_meta('lastPoll')) || null,
     classified: conti,
-    // [giorno, daTesoro, daUnita, nDaTesoro]
+    // [giorno, alTesoro, alleUnita, nAlTesoro]
     daily: giorni.map(g => [g, Math.round(tesoro.get(g)?.money || 0), Math.round(unitaPerGiorno.get(g) || 0), tesoro.get(g)?.n || 0]),
     treasury: {
       money: Math.round([...tesoro.values()].reduce((a, d) => a + d.money, 0)),
       n: [...tesoro.values()].reduce((a, d) => a + d.n, 0),
-      recipients: riceventiTesoro.size,
+      donors: donatoriTesoro.size,
     },
     byMu: [...perMu.entries()].map(([id, m]) => ({
       id, name: ctx.muName.get(id) || id,
-      money: Math.round(m.money), n: m.n, recipients: m.recipients.size,
+      money: Math.round(m.money), n: m.n, donors: m.donors.size,
       daily: [...m.daily.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([g, v]) => [g, Math.round(v)]),
     })).sort((a, b) => b.money - a.money),
   };

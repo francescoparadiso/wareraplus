@@ -565,13 +565,13 @@ Le schede **Economia** e **Unità militari** di Statistiche nazioni
 dipende da nessun deploy (directory MU già in cache). Economia sì, dal
 **cache-server**: `/country-treasury` (storia del tesoro, da dayHistory) e
 `/donations` (`server/donations.js`). Senza rideploy il tesoro di adesso e i
-bonifici si vedono comunque, la curva dice che manca lo storico e i pagamenti
-dicono che il server non ha l'archivio. ⚠️ **Una transazione `donation` va
-sempre da un TESORO (`sellerCountryId` / `sellerMuId` / `sellerPartyId`) a un
-GIOCATORE (`buyerId`)**, mai da un giocatore a un'unità o a una nazione
-(verificato su 6.000 righe il 2026-11-13: 59% nazioni, 40% unità, 1% partiti):
-la scheda parla di soldi PAGATI ai giocatori, non di «donazioni dei cittadini».
-Si accumulano dal deploy come i bonifici; il primo giro scende fin dove arriva
+bonifici si vedono comunque, la curva dice che manca lo storico e le donazioni
+dicono che il server non ha l'archivio. ⚠️ **In una transazione `donation` il
+DONATORE è `buyerId` (un giocatore) e chi RICEVE è `sellerCountryId` /
+`sellerMuId` / `sellerPartyId`**: nel gioco i giocatori donano a nazioni e unità,
+e le nazioni non pagano i giocatori (solo mercato e contratti). I nomi
+«seller/buyer» non vanno letti per analogia con i bonifici fra tesori: per un
+giorno questo repo ha letto il verso al contrario. Si accumulano dal deploy come i bonifici; il primo giro scende fin dove arriva
 il cursore dell'API (`bootstrap` in `/health` → `donations`).
 
 La scheda **Crafting** di Economia (`src/economy/crafting.js` +

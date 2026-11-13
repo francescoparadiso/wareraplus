@@ -35,8 +35,8 @@ wareraPlus/
 │   ├── donations.js         ← NUOVO (2026-11-13) — archivio sqlite delle donazioni
 │   │                          (transactionType 'donation'); /donations?country=&days=.
 │   │                          Righe {money, buyerId, sellerCountryId|sellerMuId|
-│   │                          sellerPartyId}: da un TESORO a un giocatore. Salva gli id
-│   │                          grezzi e classifica in lettura. /health → donations.
+│   │                          sellerPartyId}: buyerId DONA, seller*Id RICEVE (verso del
+│   │                          gioco). Salva gli id grezzi e classifica in lettura.
 │   ├── moneyTransfers.js    ← NUOVO — archivio dei finanziamenti fra nazioni
 │   │                              (bonifici da tesoro a tesoro), retention 90 gg.
 │   │                              ⚠️ NIENTE bootstrap e non è una dimenticanza:
@@ -566,12 +566,12 @@ wareraPlus/
     │   ├── ecoSection.js        ← NUOVO (2026-11-13) — scheda ECONOMIA della nazione:
     │   │                          tesoro (countryWealth, mai `country.money`) con storia
     │   │                          e variazione 7/30 giorni, bonifici fra tesori in
-    │   │                          entrata/uscita, PAGAMENTI «donation» ai giocatori giorno
-    │   │                          per giorno (dal tesoro della nazione / dalle sue
-    │   │                          unità), e quanto ha pagato ogni unità.
+    │   │                          entrata/uscita, DONAZIONI dei giocatori giorno per
+    │   │                          giorno (al tesoro della nazione / alle sue unità), e
+    │   │                          quanto ha ricevuto ogni unità.
     │   │                          Dati: /country-treasury, /money-transfers, /donations.
-    │   │                          ⚠️ una donation va SEMPRE da un tesoro a un giocatore,
-    │   │                          mai da un giocatore a un'unità: vedi server/donations.js.
+    │   │                          ⚠️ una donation va da un giocatore (buyerId) a chi
+    │   │                          riceve (seller*Id), non viceversa: vedi server/donations.js.
     │   ├── muSection.js         ← NUOVO (2026-11-13) — scheda UNITÀ MILITARI della
     │   │                          nazione (registrate lì): membri, danno, ricchezza,
     │   │                          guerra/eco. Zero richieste nuove: directory MU.
