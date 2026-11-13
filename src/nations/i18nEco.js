@@ -63,6 +63,8 @@ const DICT = {
     cmpRank: "{name} is #{r} of {n} on this measure.",
     cmpNoRank: "{name} has fewer than {n} active citizens: no rank on the ratios.",
     colNation: "Nation",
+    r1: "24 hours", r3: "3 days",
+    cmpCoverage: "The donation archive only goes back to {d} ({n} days): longer periods show the same data.",
     total: 'Total',
   },
   it: {
@@ -115,6 +117,8 @@ const DICT = {
     cmpRank: "{name} è #{r} su {n} in questa misura.",
     cmpNoRank: "{name} ha meno di {n} cittadini attivi: niente posizione sui rapporti.",
     colNation: "Nazione",
+    r1: "24 ore", r3: "3 giorni",
+    cmpCoverage: "L'archivio delle donazioni parte dal {d} ({n} giorni): i periodi più lunghi mostrano gli stessi dati.",
     total: 'Totale',
   },
   es: {
@@ -167,6 +171,8 @@ const DICT = {
     cmpRank: "{name} es #{r} de {n} en esta medida.",
     cmpNoRank: "{name} tiene menos de {n} ciudadanos activos: sin puesto en los ratios.",
     colNation: "Nación",
+    r1: "24 horas", r3: "3 días",
+    cmpCoverage: "El archivo de donaciones solo llega hasta el {d} ({n} días): los periodos más largos muestran los mismos datos.",
     total: 'Total',
   },
   de: {
@@ -219,6 +225,8 @@ const DICT = {
     cmpRank: "{name} ist #{r} von {n} bei diesem Maß.",
     cmpNoRank: "{name} hat weniger als {n} aktive Bürger: kein Rang bei den Verhältnissen.",
     colNation: "Nation",
+    r1: "24 Stunden", r3: "3 Tage",
+    cmpCoverage: "Das Spendenarchiv reicht nur bis {d} zurück ({n} Tage): längere Zeiträume zeigen dieselben Daten.",
     total: 'Gesamt',
   },
   fr: {
@@ -271,6 +279,8 @@ const DICT = {
     cmpRank: "{name} est #{r} sur {n} pour cette mesure.",
     cmpNoRank: "{name} a moins de {n} citoyens actifs : pas de rang sur les ratios.",
     colNation: "Nation",
+    r1: "24 heures", r3: "3 jours",
+    cmpCoverage: "L'archive des dons ne remonte qu'au {d} ({n} jours) : les périodes plus longues montrent les mêmes données.",
     total: 'Total',
   },
 };

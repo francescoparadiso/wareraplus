@@ -47,7 +47,9 @@ const C_TREASURY = '#e3b341';
 const C_IN = '#3fb950';
 const C_OUT = '#e5484d';
 const C_DON = ['#e3b341', '#58a6ff'];   // dal tesoro · dalle unità
-const RANGES = [7, 30, 90];
+// 24 ore e 3 giorni esistono perché l'archivio delle donazioni è giovane (parte
+// dal 10 novembre): 7, 30 e 90 giorni danno lo STESSO dato finché non cresce.
+const RANGES = [1, 3, 7, 30, 90];
 const DAY_MS = 86400_000;
 
 const RANGE_KEY = 'we_nat_eco_range';
@@ -144,8 +146,9 @@ async function load() {
   body.querySelector('#wp-nat-cmp-sort')?.addEventListener('change', (e) => {
     _cmpSort = e.target.value;
     const slot = body.querySelector('#wp-nat-cmp-body');
-    if (slot) slot.innerHTML = compareBodyHtml();
+    if (slot) { slot.innerHTML = compareBodyHtml(); revealMe(slot); }
   });
+  revealMe(body.querySelector('#wp-nat-cmp-body'));
 }
 
 /* ── 1. tesoro + tessere ───────────────────────────────────────── */
@@ -470,9 +473,10 @@ function sparkHtml(days, daily, name) {
    tutte le nazioni.
    ⚠️ Una nazione con pochissimi cittadini attivi farebbe un rapporto enorme
    con una donazione sola: i rapporti classificano solo chi ne ha almeno
-   MIN_POP, e la scheda lo dice. */
+   MIN_POP, e la scheda lo dice. Le nazioni senza rapporto restano in elenco,
+   in fondo e senza posizione. La tabella le mostra TUTTE in un riquadro che
+   scorre, con la nazione aperta già in vista. */
 const MIN_POP = 10;
-const CMP_TOP = 15;
 const CMP_SORTS = [
   { key: 'perCit', label: 'cmpPerCit' },
   { key: 'perDev', label: 'cmpPerDev' },
@@ -524,7 +528,33 @@ function compareHtml(data) {
       </div>
     </h3>
     <p class="wp-nat-curve-note">${escapeHtml(ecoT('cmpNatSub'))} ${escapeHtml(ecoT('cmpMinPop', { n: MIN_POP }))}</p>
+    ${coverageNote(data)}
     <div id="wp-nat-cmp-body">${compareBodyHtml()}</div>`;
+}
+
+/** Dentro il riquadro che scorre, porta la riga della nazione aperta in vista
+ *  (di solito è a metà classifica e senza questo resterebbe fuori schermo).
+ *  Si scorre il riquadro e NON la pagina: scrollIntoView avrebbe mosso anche
+ *  quella. */
+function revealMe(slot) {
+  const box = slot?.querySelector('.wp-nat-cmpt-scroll');
+  const me = box?.querySelector('.wp-nat-cmpt-me');
+  if (!box || !me) return;
+  const head = box.querySelector('.wp-nat-mut-head')?.offsetHeight || 0;
+  // Posizione della riga DENTRO il riquadro, dai rettangoli a schermo:
+  // offsetTop è relativo al primo antenato posizionato, che qui non è il riquadro.
+  const top = me.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+  box.scrollTop = Math.max(0, top - head - (box.clientHeight - head) / 2 + me.offsetHeight / 2);
+}
+
+/** Se il periodo scelto è più lungo di quello che l'archivio copre, dice che il
+ *  dato è lo stesso di quello più corto: senza, cambiare periodo e vedere gli
+ *  stessi numeri sembra un guasto. */
+function coverageNote(data) {
+  if (!data.coverageFrom) return '';
+  const have = Math.max(1, Math.ceil((Date.now() - data.coverageFrom) / DAY_MS));
+  if (have >= data.days) return '';
+  return `<p class="wp-nat-notice">${escapeHtml(ecoT('cmpCoverage', { d: fmtData(dayOf(data.coverageFrom)), n: have }))}</p>`;
 }
 
 function compareBodyHtml() {
@@ -538,8 +568,6 @@ function compareBodyHtml() {
   const meId = _nation._id;
   const me = rows.find(r => r.id === meId);
 
-  const shown = ranked.slice(0, CMP_TOP);
-  const meOutside = me && !shown.includes(me);
   const rowHtml = (r) => {
     const rk = rankOf.get(r.id);
     return `
@@ -561,10 +589,9 @@ function compareBodyHtml() {
     : (me ? `<p class="wp-nat-lab-note">${escapeHtml(ecoT('cmpNoRank', { name: me.name, n: MIN_POP }))}</p>` : '');
 
   return `${line}
-    <div class="wp-nat-mut-wrap"><div class="wp-nat-cmpt">
+    <div class="wp-nat-mut-wrap wp-nat-cmpt-scroll"><div class="wp-nat-cmpt">
       <div class="wp-nat-cmpt-row wp-nat-mut-head">${head}</div>
-      ${shown.map(rowHtml).join('')}
-      ${meOutside ? `<div class="wp-nat-cmpt-gap">…</div>${rowHtml(me)}` : ''}
+      ${rows.map(rowHtml).join('')}
     </div></div>`;
 }
 

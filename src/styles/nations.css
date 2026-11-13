@@ -887,5 +887,7 @@ body.light-theme .wp-nat-cmpt-row > :first-child { background: var(--wp-ov-bg-li
 .wp-nat-cmpt-me { background: color-mix(in srgb, var(--wp-ov-accent, #39d0d8) 13%, transparent); font-weight: 700; }
 .wp-nat-cmpt-me > :first-child { background: color-mix(in srgb, var(--wp-ov-accent, #39d0d8) 13%, var(--wp-ov-bg, #0d1117)); }
 .wp-nat-cmpt-key.on { color: var(--wp-ov-accent, #39d0d8); font-weight: 700; }
-.wp-nat-cmpt-gap { padding: 2px 8px; color: var(--wp-ov-text-dim, #8b949e); letter-spacing: .3em; }
+/* Tutte le nazioni, in un riquadro che scorre: l'intestazione resta ferma in
+   alto (sticky, vale la regola di .wp-nat-mut-head) e il nome a sinistra. */
+.wp-nat-cmpt-scroll { max-height: 560px; overflow: auto; border: 1px solid var(--wp-ov-border, #30363d); border-radius: 10px; }
 .wp-nat-rank { min-width: 28px; color: var(--wp-ov-text-dim, #8b949e); font-variant-numeric: tabular-nums; }
