@@ -65,6 +65,9 @@ const CITIZEN_SORTS = [
   // cioè quasi sempre, il prestigio è 0 o 1 — decide il livello.
   { key: 'pr',   label: 'prestigeShort', get: c => Number(c.pr) || 0, then: c => c.lv || 0 },
   { key: 'mr',   label: 'mrank',    get: c => c.mr || 0 },
+  // Lo stile di gioco è una categoria, non una scala: si ordina A→Z sul nome
+  // della categoria (eco, guerra, misto, indeciso), così i simili stanno insieme.
+  { key: 'ps',   label: 'playstyle', get: c => c.ps || (c.skills ? classifyPlaystyle(c).mode : '') || '', text: true },
   { key: 'seen', label: 'lastSeen', get: c => c.seen || 0 },
   { key: 'u',    label: 'citizen',  get: c => c.u || '', text: true },
 ];
@@ -451,8 +454,8 @@ function renderCitizens() {
 }
 
 // `sort` = chiave in CITIZEN_SORTS: le colonne che ce l'hanno diventano
-// intestazioni cliccabili. Lo stile di gioco non ne ha: è una categoria,
-// non una scala, e ordinarla direbbe solo "prima le rosse".
+// intestazioni cliccabili. Anche lo stile di gioco (2026-11-13: «tutte le
+// colonne ordinabili»): raggruppa per categoria, non è una scala.
 const CITIZEN_COLS = [
   { label: 'citizen',  sort: 'u' },
   { label: 'level',    num: true, sort: 'lv',   get: c => c.lv ?? '—' },
@@ -461,7 +464,7 @@ const CITIZEN_COLS = [
   // stessa riga. Nelle CARD, che non hanno colonne, resta accanto al nome.
   { label: 'prestigeShort', head: '★', titleKey: 'prestige', num: true, sort: 'pr', get: c => prestigeStar(c) || '—' },
   { label: 'mrank',    num: true, sort: 'mr',   get: c => c.mr ?? '—' },
-  { label: 'playstyle', get: c => psPill(c) },
+  { label: 'playstyle', sort: 'ps', get: c => psPill(c) },
   { label: 'weekly',   num: true, sort: 'wk',   get: c => fmtCompact(c.wk || 0), cls: 'wk' },
   { label: 'total',    num: true, sort: 'dmg',  get: c => fmtCompact(c.dmg || 0) },
   { label: 'wealth',   num: true, sort: 'w',    get: c => fmtCompact(c.w || 0), cls: 'money' },

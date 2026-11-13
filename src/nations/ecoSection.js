@@ -252,7 +252,7 @@ function lineChartHtml(points) {
 /* ── 2. bonifici fra tesori ────────────────────────────────────── */
 
 function transfersHtml(data) {
-  const title = `<h3 class="wp-nat-section-title">${escapeHtml(ecoT('trTitle'))}</h3>`;
+  const title = `<h3 class="wp-nat-section-title" data-sec="eco-transfers">${escapeHtml(ecoT('trTitle'))}</h3>`;
   if (!data) return `${title}<p class="wp-nat-notice">${escapeHtml(ecoT('trServer'))}</p>`;
 
   const id = _nation._id;
@@ -334,7 +334,7 @@ function unreadable(d) {
 }
 
 function donationsHtml(d) {
-  const title = `<h3 class="wp-nat-section-title">${escapeHtml(ecoT('donTitle'))}</h3>
+  const title = `<h3 class="wp-nat-section-title" data-sec="eco-donations">${escapeHtml(ecoT('donTitle'))}</h3>
     <p class="wp-nat-curve-note">${escapeHtml(ecoT('donSub'))}</p>`;
   if (!d) return `${title}<p class="wp-nat-notice">${escapeHtml(ecoT('donNoServer'))}</p>`;
   if (!d.classified?.rows) return `${title}<p class="wp-nat-notice">${escapeHtml(ecoT('donNotYet'))}</p>`;
@@ -421,7 +421,7 @@ function stackedBarsHtml(series, labels) {
 
 function unitsHtml(d, directory) {
   if (!d || !d.classified?.rows || unreadable(d)) return '';
-  const title = `<h3 class="wp-nat-section-title">${escapeHtml(ecoT('cmpTitle'))}</h3>
+  const title = `<h3 class="wp-nat-section-title" data-sec="eco-units">${escapeHtml(ecoT('cmpTitle'))}</h3>
     <p class="wp-nat-curve-note">${escapeHtml(ecoT('cmpSub'))}</p>`;
   if (!d.byMu?.length) return `${title}<div class="wp-nat-empty">${escapeHtml(ecoT('cmpNone'))}</div>`;
 
@@ -517,7 +517,7 @@ function compareHtml(data) {
   if (!data?.countries?.length) return '';
   _cmpData = data;
   return `
-    <h3 class="wp-nat-section-title">
+    <h3 class="wp-nat-section-title" data-sec="eco-compare">
       ${escapeHtml(ecoT('cmpNatTitle'))}
       <div class="wp-nat-tools">
         <label class="wp-nat-sort">

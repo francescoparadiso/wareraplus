@@ -84,6 +84,7 @@ import { initMotion } from './shared/motion.js';
 import { initChartTips } from './shared/chartTip.js';
 // WarEra+: numeri che contano e grafici che si disegnano (un osservatore solo)
 import { initReveal } from './shared/reveal.js';
+import { initViewTools } from './shared/viewTools.js';
 import { applyTranslations, initLangButton } from './shared/i18n.js';
 import { updateDynamicLegend } from './diplomacy/ui.js';
 import { state } from './diplomacy/state.js';
@@ -242,6 +243,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initMotion();
   initChartTips();
   initReveal();
+  // Colonne ordinabili in tutte le tabelle e sezioni che si chiudono e si
+  // spostano: riconosciute dalla struttura, vedi shared/viewTools.js.
+  initViewTools();
   initPoliticalOverlay();
   initEconomyOverlay();
   initNewsOverlay();

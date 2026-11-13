@@ -380,6 +380,26 @@ punto di fallimento. Vedi il ⚠️ in fondo per cosa degrada e come.
 - **Niente barre di scorrimento di sistema**: mai le native grigie — regola
   globale in `shell.css`, cursore nella tinta della sezione.
 
+## Tabelle e sezioni: ordinamento e riordino GENERICI
+
+Dal 2026-11-13 ogni colonna di ogni tabella si ordina con un clic e ogni
+sezione si chiude e si sposta, **senza che le viste lo sappiano**: lo fa
+`src/shared/viewTools.js` (osservatore) con `tableSort.js` e `sections.js`, che
+riconoscono tabelle e titoli dalla struttura. Quando scrivi una vista nuova:
+
+- una tabella a griglia ha la riga di intestazione come PRIMO figlio, con una
+  classe che finisce in `head`/`thead`/`hdr`, e righe con lo stesso numero di
+  celle; un titolo di sezione usa una delle classi in `FLOW` di `sections.js`
+  (o è un `<h3>`/`<h4>` primo figlio del suo riquadro);
+- se la tabella ha già un suo ordinamento (intestazioni con pulsanti) il modulo
+  la lascia stare: dai un ordinamento a TUTTE le colonne, non a metà;
+- se mostri solo una parte dell'elenco (top N, pagina) e hai un tuo selettore,
+  metti `data-nosort` sul contenitore: ordinare le righe già tagliate direbbe
+  una cosa falsa;
+- sulle sezioni che compaiono solo a volte metti `data-sec="nome-stabile"` sul
+  titolo, altrimenti la chiave (classe + ordinale) si sposta e lo stato salvato
+  finisce sulla sezione sbagliata.
+
 ## Novità per gli utenti (`src/app/changelog.js`)
 
 Ogni release che porta qualcosa di visibile a chi usa il tool ha una voce in

@@ -1203,6 +1203,24 @@ wareraPlus/
     │   ├── dailyDamage.js      ← "danno di oggi" per nazioni/alleanze/unità, dalla
     │   │                          differenza fra due snapshot del cumulato settimanale
     │   ├── analytics.js        ← wrapper su Umami (trackEvent)
+    │   ├── viewTools.js        ← NUOVO (2026-11-13) — UN MutationObserver (solo dentro gli
+    │   │                          overlay, il pannello nazione e Political) che passa i nodi
+    │   │                          nuovi a tableSort.js e sections.js. Timer, non rAF: in una
+    │   │                          scheda in secondo piano rAF si ferma.
+    │   ├── tableSort.js        ← NUOVO — colonne ordinabili in TUTTE le tabelle, riconosciute
+    │   │                          dalla struttura (<table> con intestazione, o griglia con
+    │   │                          prima riga "…head/hdr"). Si lasciano stare le tabelle che
+    │   │                          hanno già un ordinamento proprio (intestazioni con
+    │   │                          pulsanti) e quelle con `data-nosort`. ⚠️ ordina le righe
+    │   │                          MOSTRATE: in un elenco paginato o tagliato non è un
+    │   │                          ordinamento globale — lì serve quello della vista.
+    │   ├── sections.js         ← NUOVO — sezioni chiudibili e spostabili (maniglia ⠿:
+    │   │                          trascinamento a puntatore, o ↑/↓ da tastiera). Titoli
+    │   │                          elencati in FLOW/CARD in testa al file; stato in
+    │   │                          localStorage `we_layout`. Chiave di una sezione:
+    │   │                          `data-sec` sul titolo, altrimenti classe + ordinale —
+    │   │                          per le sezioni che compaiono solo a volte conviene
+    │   │                          `data-sec`. `data-nosections` su un antenato la esclude.
     │   ├── reveal.js           ← NUOVO — numeri che contano e grafici che si disegnano,
     │   │                          con UN MutationObserver su <body>: nessuna vista è
     │   │                          toccata, si riconoscono dai selettori (NUM_SELECTOR,
