@@ -154,7 +154,7 @@ const {
 // riga non e' stata verificata prima di scriverlo: vedi la testata di
 // server/donations.js e /health -> donations.fields.
 const {
-  initDonations, pollDonations, readDonations, readDonationsStatus,
+  initDonations, pollDonations, readDonations, readDonationsByCountry, readDonationsStatus,
 } = require('./donations');
 // WarEra+ storia delle alleanze (bilaterali fino al 10 giugno 2026, poi a
 // blocco) dal registro eventi del gioco, per la time machine. Vedi il
@@ -3302,6 +3302,14 @@ app.get('/donations', (req, res) => {
   const country = String(req.query.country || '');
   if (!/^[0-9a-f]{24}$/i.test(country)) return res.status(400).json({ error: 'country' });
   const out = readDonations(country, req.query.days);
+  if (!out) return res.status(404).json({ error: 'donations non disponibile' });
+  res.json(out);
+});
+
+// Le donazioni ricevute da ogni nazione (tesoro + unita'), per il confronto
+// fra nazioni nella scheda Economia: donazioni per cittadino e per sviluppo.
+app.get('/donations-by-country', (req, res) => {
+  const out = readDonationsByCountry(req.query.days);
   if (!out) return res.status(404).json({ error: 'donations non disponibile' });
   res.json(out);
 });

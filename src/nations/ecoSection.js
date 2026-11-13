@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════
    WarEra+ — Statistiche nazioni: economia della nazione
    ------------------------------------------------------------------
-   Cinque cose, dalla più generale alla più fine:
+   Sei cose, dalla più generale alla più fine:
 
      1. il TESORO di adesso (già in memoria: `rankings.countryWealth`) con
         la variazione a 7 e 30 giorni e la sua curva, dallo storico che il
@@ -13,7 +13,9 @@
         (/donations);
      4. il raffronto fra le due cose, in una ciambella;
      5. quanto ha ricevuto CIASCUNA unità della nazione, con donatori e
-        andamento giornaliero.
+        andamento giornaliero;
+     6. il CONFRONTO con le altre nazioni: donazioni ricevute per cittadino
+        attivo e per punto di sviluppo (/donations-by-country).
 
    Una `donation` va da un giocatore (`buyerId`) a una nazione, un'unità o
    un partito (`seller*Id`): vedi server/donations.js. Non si filtra per
@@ -36,7 +38,8 @@ import { fetchMoneyTransfers } from '../battles/moneyTransfers.js';
 import { state } from '../diplomacy/state.js';
 import { donutHtml } from './charts.js';
 import { fetchMuDirectory } from '../mu/api.js';
-import { fetchDonations, fetchTreasury } from './api.js';
+import { fetchDonations, fetchDonationsByCountry, fetchTreasury, getNations } from './api.js';
+import { metricValue } from './metrics.js';
 import { ecoT } from './i18nEco.js';
 
 const W = 640, H = 150, PAD_T = 10, PAD_B = 4;
@@ -119,13 +122,14 @@ function paintShell() {
 async function load() {
   const nation = _nation;
   const range = _range;
-  const [treasury, donations, transfers, directory] = await Promise.all([
+  const [treasury, donations, transfers, directory, byCountry] = await Promise.all([
     fetchTreasury(nation._id).catch(() => null),
     fetchDonations(nation._id, range).catch(() => null),
     fetchMoneyTransfers().catch(() => null),
     // Per i soldi in cassa di ogni unità: la directory è già in memoria se
     // si è aperta la scheda Unità militari, e comunque è una fetch per sessione.
     fetchMuDirectory().catch(() => null),
+    fetchDonationsByCountry(range).catch(() => null),
   ]);
   // Nazione o intervallo cambiati mentre si aspettava: questo disegno è vecchio.
   if (_nation?._id !== nation._id || _range !== range || !_host?.isConnected) return;
@@ -134,8 +138,14 @@ async function load() {
   body.innerHTML = tilesAndTreasury(treasury, transfers)
     + transfersHtml(transfers)
     + donationsHtml(donations)
-    + unitsHtml(donations, directory);
+    + unitsHtml(donations, directory)
+    + compareHtml(byCountry);
   body.querySelector('#wp-nat-eco-units')?.addEventListener('click', openUnit);
+  body.querySelector('#wp-nat-cmp-sort')?.addEventListener('change', (e) => {
+    _cmpSort = e.target.value;
+    const slot = body.querySelector('#wp-nat-cmp-body');
+    if (slot) slot.innerHTML = compareBodyHtml();
+  });
 }
 
 /* ── 1. tesoro + tessere ───────────────────────────────────────── */
@@ -450,6 +460,112 @@ function sparkHtml(days, daily, name) {
     ? `<rect x="${(i * w).toFixed(2)}" y="${(20 - (v / max) * 20).toFixed(2)}" width="${Math.max(0.6, w - 0.4).toFixed(2)}" height="${((v / max) * 20).toFixed(2)}" fill="${C_DON[1]}"/>`
     : '').join('');
   return `<svg class="wp-nat-spark" viewBox="0 0 100 20" preserveAspectRatio="none"${tipAttr(name, `${ecoT('colPerDay')}\t${oro(vals.reduce((a, b) => a + b, 0) / days.length)}`)}>${bars}</svg>`;
+}
+
+/* ── 6. confronto con le altre nazioni ─────────────────────────── */
+
+/* Donazioni ricevute (tesoro + unità registrate lì) rapportate ai cittadini
+   attivi e al development: «quanto doniamo rispetto a quanto siamo». Il
+   periodo è quello scelto in cima alla scheda e la finestra è la stessa per
+   tutte le nazioni.
+   ⚠️ Una nazione con pochissimi cittadini attivi farebbe un rapporto enorme
+   con una donazione sola: i rapporti classificano solo chi ne ha almeno
+   MIN_POP, e la scheda lo dice. */
+const MIN_POP = 10;
+const CMP_TOP = 15;
+const CMP_SORTS = [
+  { key: 'perCit', label: 'cmpPerCit' },
+  { key: 'perDev', label: 'cmpPerDev' },
+  { key: 'total', label: 'cmpTotal' },
+  { key: 'tre', label: 'cmpTre' },
+  { key: 'uni', label: 'cmpUni' },
+];
+let _cmpSort = 'perCit';
+let _cmpData = null;
+
+/** Un rapporto piccolo ha bisogno dei decimali, uno grande no. */
+function ratio(v) {
+  if (v == null) return '—';
+  if (v >= 100) return oro(v);
+  if (v >= 10) return v.toFixed(1);
+  return v.toFixed(2);
+}
+
+function cmpRows(data) {
+  const byId = new Map(data.countries.map(r => [r[0], r]));
+  const out = [];
+  for (const n of getNations()) {
+    const r = byId.get(n._id);
+    const tre = r?.[1] || 0, uni = r?.[2] || 0, total = tre + uni;
+    if (!total && n._id !== _nation._id) continue;
+    const pop = metricValue(n, 'pop'), dev = metricValue(n, 'dev');
+    const ok = pop >= MIN_POP;
+    out.push({
+      id: n._id, name: n.name || n._id, tre, uni, total, donors: r?.[5] || 0, pop, dev,
+      perCit: ok ? total / pop : null,
+      perDev: ok && dev > 0 ? total / dev : null,
+    });
+  }
+  return out;
+}
+
+function compareHtml(data) {
+  if (!data?.countries?.length) return '';
+  _cmpData = data;
+  return `
+    <h3 class="wp-nat-section-title">
+      ${escapeHtml(ecoT('cmpNatTitle'))}
+      <div class="wp-nat-tools">
+        <label class="wp-nat-sort">
+          <span>${escapeHtml(ecoT('muSortBy'))}</span>
+          <select id="wp-nat-cmp-sort">${CMP_SORTS.map(s =>
+            `<option value="${s.key}"${s.key === _cmpSort ? ' selected' : ''}>${escapeHtml(ecoT(s.label))}</option>`).join('')}</select>
+        </label>
+      </div>
+    </h3>
+    <p class="wp-nat-curve-note">${escapeHtml(ecoT('cmpNatSub'))} ${escapeHtml(ecoT('cmpMinPop', { n: MIN_POP }))}</p>
+    <div id="wp-nat-cmp-body">${compareBodyHtml()}</div>`;
+}
+
+function compareBodyHtml() {
+  const rows = cmpRows(_cmpData);
+  const key = _cmpSort;
+  const val = (r) => r[key];
+  // Chi non ha il rapporto (pochi cittadini) va in fondo e non ha posizione.
+  rows.sort((a, b) => (val(b) ?? -1) - (val(a) ?? -1));
+  const ranked = rows.filter(r => val(r) != null);
+  const rankOf = new Map(ranked.map((r, i) => [r.id, i + 1]));
+  const meId = _nation._id;
+  const me = rows.find(r => r.id === meId);
+
+  const shown = ranked.slice(0, CMP_TOP);
+  const meOutside = me && !shown.includes(me);
+  const rowHtml = (r) => {
+    const rk = rankOf.get(r.id);
+    return `
+      <div class="wp-nat-cmpt-row${r.id === meId ? ' wp-nat-cmpt-me' : ''}">
+        <span class="wp-nat-cname"><span class="wp-nat-rank">${rk ? `#${rk}` : '—'}</span>${flagImg(r.id, 'wp-nat-lab-flag')}<span class="wp-nat-cnick">${escapeHtml(r.name)}</span></span>
+        <span class="wp-nat-num">${escapeHtml(oro(r.total))}</span>
+        <span class="wp-nat-num">${escapeHtml(oro(r.tre))}</span>
+        <span class="wp-nat-num">${escapeHtml(oro(r.uni))}</span>
+        <span class="wp-nat-num wp-nat-cmpt-key${key === 'perCit' ? ' on' : ''}">${escapeHtml(ratio(r.perCit))}</span>
+        <span class="wp-nat-num wp-nat-cmpt-key${key === 'perDev' ? ' on' : ''}">${escapeHtml(ratio(r.perDev))}</span>
+        <span class="wp-nat-num">${r.donors}</span>
+      </div>`;
+  };
+  const head = ['colNation', 'cmpTotal', 'cmpTre', 'cmpUni', 'cmpPerCit', 'cmpPerDev', 'colRecipients']
+    .map((k, i) => `<span class="${i ? 'wp-nat-num' : ''}">${escapeHtml(ecoT(k))}</span>`).join('');
+
+  const line = rankOf.has(meId)
+    ? `<p class="wp-nat-lab-note">${escapeHtml(ecoT('cmpRank', { name: me.name, r: rankOf.get(meId), n: ranked.length }))}</p>`
+    : (me ? `<p class="wp-nat-lab-note">${escapeHtml(ecoT('cmpNoRank', { name: me.name, n: MIN_POP }))}</p>` : '');
+
+  return `${line}
+    <div class="wp-nat-mut-wrap"><div class="wp-nat-cmpt">
+      <div class="wp-nat-cmpt-row wp-nat-mut-head">${head}</div>
+      ${shown.map(rowHtml).join('')}
+      ${meOutside ? `<div class="wp-nat-cmpt-gap">…</div>${rowHtml(me)}` : ''}
+    </div></div>`;
 }
 
 async function openUnit(e) {

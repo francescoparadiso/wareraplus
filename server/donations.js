@@ -271,6 +271,51 @@ function readDonations(countryId, days = 30) {
   return json;
 }
 
+/**
+ * Le donazioni ricevute da OGNI nazione (tesoro e unità registrate lì) negli
+ * ultimi `days` giorni: serve al confronto fra nazioni (donazioni per
+ * cittadino, per punto di sviluppo). Una passata sull'archivio, memoria per
+ * cinque minuti. `countries`: [[countryId, alTesoro, alleUnita, nAlTesoro,
+ * nAlleUnita, donatoriDistinti]] — i donatori sono contati una volta per
+ * nazione anche se hanno donato sia al tesoro sia a un'unità.
+ */
+function readDonationsByCountry(days = 30) {
+  if (!db) return null;
+  days = Math.max(1, Math.min(400, Math.floor(Number(days)) || 30));
+  const key = `*|${days}`;
+  const hit = _cache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.json;
+
+  const ctx = _contesto();
+  const dal = Date.now() - days * 86400_000;
+  const righe = db.prepare('SELECT money, ids FROM don WHERE ts >= ?').all(dal);
+  const per = new Map();   // countryId → { tre, uni, nTre, nUni, donors:Set }
+  let letti = 0;
+  for (const r of righe) {
+    let ids;
+    try { ids = JSON.parse(r.ids); } catch { continue; }
+    const soldi = Number(r.money) || 0;
+    if (!(soldi > 0)) continue;
+    const viaMu = ids.sellerMuId ? ctx.muCountry.get(ids.sellerMuId) : null;
+    const cid = ids.sellerCountryId || viaMu;
+    if (!cid) continue;
+    letti++;
+    const e = per.get(cid) || { tre: 0, uni: 0, nTre: 0, nUni: 0, donors: new Set() };
+    if (ids.sellerCountryId) { e.tre += soldi; e.nTre++; } else { e.uni += soldi; e.nUni++; }
+    if (ids.buyerId) e.donors.add(ids.buyerId);
+    per.set(cid, e);
+  }
+  const json = {
+    available: true,
+    days,
+    coverageFrom: Number(_meta('startedAt')) || null,
+    classified: { rows: righe.length, read: letti },
+    countries: [...per.entries()].map(([c, e]) => [c, Math.round(e.tre), Math.round(e.uni), e.nTre, e.nUni, e.donors.size]),
+  };
+  _cache.set(key, { at: Date.now(), json });
+  return json;
+}
+
 function readDonationsStatus() {
   if (!db) return { attivo: false };
   const v = db.prepare('SELECT COUNT(*) AS n, MIN(ts) AS min, MAX(ts) AS max FROM don').get();
@@ -290,4 +335,4 @@ function readDonationsStatus() {
   };
 }
 
-module.exports = { initDonations, pollDonations, readDonations, readDonationsStatus };
+module.exports = { initDonations, pollDonations, readDonations, readDonationsByCountry, readDonationsStatus };

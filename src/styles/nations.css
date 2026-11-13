@@ -869,3 +869,23 @@ body.light-theme .wp-nat-trlog-row { border-bottom-color: #e3e7ee; }
   .wp-nat-trlog-who { grid-column: 1; }
   .wp-nat-trlog-amt { grid-column: 2; grid-row: 1 / span 3; }
 }
+
+/* Confronto fra nazioni (ecoSection.js: compareHtml). Stessa meccanica
+   delle altre tabelle della scheda; la riga della nazione aperta e' evidenziata. */
+.wp-nat-cmpt { min-width: 760px; --wp-nat-mcols: minmax(190px, 1.6fr) repeat(3, minmax(84px, .9fr)) repeat(2, minmax(96px, 1fr)) 84px; }
+.wp-nat-cmpt-row {
+  display: grid; grid-template-columns: var(--wp-nat-mcols); align-items: center; gap: 8px;
+  padding: 7px 8px; border-bottom: 1px solid #21262d; font-size: 13px;
+}
+body.light-theme .wp-nat-cmpt-row { border-bottom-color: #e3e7ee; }
+.wp-nat-cmpt-row > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.wp-nat-cmpt-row > :first-child {
+  position: sticky; left: 0; z-index: 1; background: var(--wp-ov-bg, #0d1117);
+  box-shadow: 6px 0 6px -6px rgba(0, 0, 0, .6);
+}
+body.light-theme .wp-nat-cmpt-row > :first-child { background: var(--wp-ov-bg-light, #f4f6fa); box-shadow: 6px 0 6px -6px rgba(0, 0, 0, .18); }
+.wp-nat-cmpt-me { background: color-mix(in srgb, var(--wp-ov-accent, #39d0d8) 13%, transparent); font-weight: 700; }
+.wp-nat-cmpt-me > :first-child { background: color-mix(in srgb, var(--wp-ov-accent, #39d0d8) 13%, var(--wp-ov-bg, #0d1117)); }
+.wp-nat-cmpt-key.on { color: var(--wp-ov-accent, #39d0d8); font-weight: 700; }
+.wp-nat-cmpt-gap { padding: 2px 8px; color: var(--wp-ov-text-dim, #8b949e); letter-spacing: .3em; }
+.wp-nat-rank { min-width: 28px; color: var(--wp-ov-text-dim, #8b949e); font-variant-numeric: tabular-nums; }

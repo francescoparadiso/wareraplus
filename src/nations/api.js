@@ -216,6 +216,30 @@ export function fetchDonations(countryId, days = 90) {
   return p;
 }
 
+const _donByCountry = new Map();   // giorni → { at, p }
+
+/**
+ * Le donazioni ricevute da OGNI nazione (tesoro + unità), per il confronto
+ * fra nazioni (/donations-by-country). `null` se il server non ha la rotta:
+ * il confronto non compare, il resto della scheda resta.
+ */
+export function fetchDonationsByCountry(days = 30) {
+  const hit = _donByCountry.get(days);
+  if (hit && Date.now() - hit.at < TIMELINE_TTL_MS) return hit.p;
+  const p = (async () => {
+    try {
+      const json = await cacheJson(`/donations-by-country?days=${days}`);
+      return json && json.available ? json : null;
+    } catch (err) {
+      console.warn('WarEra+ nations: /donations-by-country non disponibile:', err.message);
+      return null;
+    }
+  })();
+  _donByCountry.set(days, { at: Date.now(), p });
+  p.then(v => { if (!v && _donByCountry.get(days)?.p === p) _donByCountry.delete(days); });
+  return p;
+}
+
 /* ── Elenco cittadini di una nazione ─────────────────────────── */
 
 const _citizensByCountry = new Map();   // countryId → { rows, total, known, partial }
