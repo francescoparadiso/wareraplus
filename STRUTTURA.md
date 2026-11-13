@@ -32,6 +32,11 @@ wareraPlus/
 │   │                              minuto, ~una notte. ⚠️ il giorno è quello in cui la
 │   │                              battaglia FINISCE (UTC): settimane e cumulati sì,
 │   │                              barre giornaliere no. Endpoint: /mu-damage-history.
+│   ├── donations.js         ← NUOVO (2026-11-13) — archivio sqlite delle donazioni
+│   │                          (transactionType 'donation'); /donations?country=&days=.
+│   │                          Salva TUTTI i campi-id grezzi e classifica in lettura per
+│   │                          valore, perché la forma della riga non era verificata.
+│   │                          /health → donations.fields dice cosa porta davvero.
 │   ├── moneyTransfers.js    ← NUOVO — archivio dei finanziamenti fra nazioni
 │   │                              (bonifici da tesoro a tesoro), retention 90 gg.
 │   │                              ⚠️ NIENTE bootstrap e non è una dimenticanza:
@@ -558,6 +563,19 @@ wareraPlus/
     │   │                          gettito NON si sommano: le prime le incassa la
     │   │                          nazione dove opera l'azienda. Archivio chiuso, e la
     │   │                          fascia in cima lo dichiara.
+    │   ├── ecoSection.js        ← NUOVO (2026-11-13) — scheda ECONOMIA della nazione:
+    │   │                          tesoro (countryWealth, mai `country.money`) con storia
+    │   │                          e variazione 7/30 giorni, bonifici fra tesori in
+    │   │                          entrata/uscita, DONAZIONI dei cittadini giorno per
+    │   │                          giorno per destinazione (tesoro / unità / giocatori),
+    │   │                          e donazioni ricevute da ogni unità della nazione.
+    │   │                          Dati: /country-treasury, /money-transfers, /donations.
+    │   │                          ⚠️ /donations non è stata verificata su una risposta
+    │   │                          vera dell'API: vedi server/donations.js.
+    │   ├── muSection.js         ← NUOVO (2026-11-13) — scheda UNITÀ MILITARI della
+    │   │                          nazione (registrate lì): membri, danno, ricchezza,
+    │   │                          guerra/eco. Zero richieste nuove: directory MU.
+    │   ├── i18nEco.js           ← dizionario delle due schede (EN/IT/ES/DE/FR)
     │   ├── damageCurves.js      ← NUOVO — nella scheda nazione: il danno ORA PER ORA
     │   │                          con sopra, sullo stesso riquadro e su un secondo
     │   │                          asse, la linea dei giocatori PILLATI (item `cocain`,

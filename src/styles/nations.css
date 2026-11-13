@@ -796,3 +796,56 @@ body.light-theme .wp-nat-dtab-n { background: rgba(0, 0, 0, .07); }
   cursor: pointer;
 }
 .wp-nat-more:hover { color: var(--wp-ov-text, #e6edf3); border-color: var(--wp-ov-accent, #39d0d8); }
+
+/* ══ Schede «Unità militari» ed «Economia» (muSection.js, ecoSection.js) ═══
+   Le due tabelle riusano la meccanica di quella dei cittadini (griglia a
+   colonne, nome fermo a sinistra, scorrimento orizzontale): cambiano solo
+   le colonne. Stesso trattino per le variazioni: verde su, rosso giù. */
+.wp-nat-up { color: #3fb950; }
+.wp-nat-down { color: #e5484d; }
+body.light-theme .wp-nat-up { color: #1a7f37; }
+body.light-theme .wp-nat-down { color: #cf222e; }
+
+.wp-nat-mut-wrap { overflow-x: auto; }
+.wp-nat-mut { min-width: 820px; --wp-nat-mcols: minmax(170px, 1.6fr) 70px 56px repeat(4, minmax(86px, .9fr)) 110px; }
+.wp-nat-ecot { min-width: 780px; --wp-nat-mcols: minmax(150px, 1.4fr) minmax(130px, 1.4fr) repeat(2, minmax(80px, .8fr)) 70px 84px 110px; }
+.wp-nat-mut-row, .wp-nat-ecot-row {
+  display: grid; grid-template-columns: var(--wp-nat-mcols);
+  align-items: center; gap: 8px;
+  padding: 7px 8px; border-bottom: 1px solid #21262d;
+  font-size: 13px; text-decoration: none; color: inherit;
+}
+body.light-theme .wp-nat-mut-row, body.light-theme .wp-nat-ecot-row { border-bottom-color: #e3e7ee; }
+a.wp-nat-mut-row:hover, a.wp-nat-ecot-row:hover { background: color-mix(in srgb, var(--wp-ov-accent, #39d0d8) 10%, transparent); }
+.wp-nat-mut-row > span, .wp-nat-ecot-row > span {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums;
+}
+.wp-nat-mut-row > :first-child, .wp-nat-ecot-row > :first-child {
+  position: sticky; left: 0; z-index: 1; background: var(--wp-ov-bg, #0d1117);
+  box-shadow: 6px 0 6px -6px rgba(0, 0, 0, .6);
+}
+body.light-theme .wp-nat-mut-row > :first-child, body.light-theme .wp-nat-ecot-row > :first-child {
+  background: var(--wp-ov-bg-light, #f4f6fa); box-shadow: 6px 0 6px -6px rgba(0, 0, 0, .18);
+}
+.wp-nat-mut-head {
+  position: sticky; top: 0; z-index: 2;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--wp-ov-text-dim, #8b949e);
+  background: var(--wp-ov-bg, #0d1117); border-bottom: 1px solid var(--wp-ov-border, #30363d);
+}
+body.light-theme .wp-nat-mut-head { background: var(--wp-ov-bg-light, #f4f6fa); }
+.wp-nat-mut-row .wk { color: #58a6ff; font-weight: 700; }
+.wp-nat-mut-row .money, .wp-nat-ecot-row .money { color: #3fb950; }
+
+/* Guerra / misto / eco: una barra sola, stessi colori delle pastiglie dello
+   stile di gioco (rosso, giallo, verde). */
+.wp-nat-mut-split { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--wp-ov-bg, #0d1117); }
+.wp-nat-mut-war { background: #e5484d; }
+.wp-nat-mut-mix { background: #e3b341; }
+.wp-nat-mut-eco { background: #3fb950; }
+
+/* Importo ricevuto: barra proporzionale al massimo dietro al numero. */
+.wp-nat-ecot-bar { position: relative; display: block; }
+.wp-nat-ecot-bar i { position: absolute; left: 0; top: 2px; bottom: 2px; background: currentColor; opacity: .16; border-radius: 3px; }
+.wp-nat-ecot-bar b { position: relative; font-weight: 600; }
+.wp-nat-spark { display: block; width: 100%; height: 20px; }

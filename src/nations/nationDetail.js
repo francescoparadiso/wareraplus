@@ -33,6 +33,9 @@ import { renderLevelPlaystyle } from './levelPlaystyle.js';
 import { renderDamageCurves } from './damageCurves.js';
 import { renderPlaystyleTrend } from './playstyleTrend.js';
 import { renderLabour } from './labourSection.js';
+import { renderMuSection } from './muSection.js';
+import { renderEco } from './ecoSection.js';
+import { ecoT } from './i18nEco.js';
 import { avatarImg, escapeHtml, flagImg, fmtCompact, fmtRelative } from '../mu/ui.js';
 import { countryDamageToday, dailyDamageLabel, ensureDailyDamage } from '../shared/dailyDamage.js';
 import { t as sharedT } from '../shared/i18n.js';
@@ -79,6 +82,8 @@ const NAT_TABS = [
   { id: 'style',    label: 'playstyle' },
   { id: 'damage',   label: 'tabDamage' },
   { id: 'labour',   label: 'tabLabour' },
+  { id: 'eco',      label: 'tabEco',  dict: 'eco' },
+  { id: 'mu',       label: 'tabMu',   dict: 'eco' },
   { id: 'citizens', label: 'citizenList' },
 ];
 let _ntab = 'style';
@@ -123,7 +128,7 @@ export function renderNationDetail(host, nation, ctx) {
 
     <nav class="wp-nat-dtabs" id="wp-nat-dtabs" role="tablist">
       ${NAT_TABS.map(t => `<button type="button" role="tab" class="wp-nat-dtab${_ntab === t.id ? ' active' : ''}"
-        aria-selected="${_ntab === t.id}" data-ntab="${t.id}">${escapeHtml(natT(t.label))}${
+        aria-selected="${_ntab === t.id}" data-ntab="${t.id}">${escapeHtml(t.dict === 'eco' ? ecoT(t.label) : natT(t.label))}${
         t.id === 'citizens' ? '<span class="wp-nat-dtab-n" id="wp-nat-dtab-cit"></span>' : ''}</button>`).join('')}
     </nav>
 
@@ -136,6 +141,10 @@ export function renderNationDetail(host, nation, ctx) {
     <section class="wp-nat-curves" id="wp-nat-curves" data-npanel="damage"${_ntab === 'damage' ? '' : ' hidden'}></section>
 
     <section class="wp-nat-labour" id="wp-nat-labour" data-npanel="labour"${_ntab === 'labour' ? '' : ' hidden'}></section>
+
+    <section class="wp-nat-labour" id="wp-nat-eco" data-npanel="eco"${_ntab === 'eco' ? '' : ' hidden'}></section>
+
+    <section class="wp-nat-labour" id="wp-nat-mu" data-npanel="mu"${_ntab === 'mu' ? '' : ' hidden'}></section>
 
     <section class="wp-nat-citizens" data-npanel="citizens"${_ntab === 'citizens' ? '' : ' hidden'}>
       <h3 class="wp-nat-section-title">
@@ -212,6 +221,8 @@ function paintTab(id) {
   if (id === 'style') { _painted.add(id); paintTrend(_nation); }
   else if (id === 'damage') { _painted.add(id); paintCurves(_nation); }
   else if (id === 'labour') { _painted.add(id); paintLabour(_nation); }
+  else if (id === 'eco') { _painted.add(id); paintEco(_nation); }
+  else if (id === 'mu') { _painted.add(id); paintMu(_nation); }
 }
 
 /* Se il server non ha quella sezione il modulo la lascia vuota (degrado
@@ -290,6 +301,28 @@ function paintLabour(nation) {
   if (!el) return;
   renderLabour(el, nation).catch(err => {
     console.warn('WarEra+ nations: sezione lavoro non disegnata:', err.message);
+    el.innerHTML = '';
+  }).then(() => markIfEmpty(el));
+}
+
+/* Economia e Unità militari: come Lavoro, alla prima apertura della scheda
+   (le curve misurano il contenitore, e chi non le apre non scarica
+   /donations né la directory delle unità). Gli errori restano dentro la
+   scheda: una sezione che si rompe non deve portarsi dietro la pagina. */
+function paintEco(nation) {
+  const el = _host?.querySelector('#wp-nat-eco');
+  if (!el) return;
+  renderEco(el, nation).catch(err => {
+    console.warn('WarEra+ nations: sezione economia non disegnata:', err.message);
+    el.innerHTML = '';
+  }).then(() => markIfEmpty(el));
+}
+
+function paintMu(nation) {
+  const el = _host?.querySelector('#wp-nat-mu');
+  if (!el) return;
+  renderMuSection(el, nation).catch(err => {
+    console.warn('WarEra+ nations: sezione unità non disegnata:', err.message);
     el.innerHTML = '';
   }).then(() => markIfEmpty(el));
 }

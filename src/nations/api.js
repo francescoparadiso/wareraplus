@@ -161,6 +161,61 @@ export async function fetchLabour(countryId) {
   return p;
 }
 
+/* ── Economia: tesoro e donazioni ────────────────────────────── */
+
+const _treasury = new Map();    // countryId → Promise<[[giorno, valore]] | null>
+const _donations = new Map();   // "countryId|giorni" → { at, p }
+
+/**
+ * Il tesoro di una nazione giorno per giorno (countryWealth, scatto delle
+ * 02:05 italiane), dal server (/country-treasury, che legge dayHistory).
+ * `null` se il server non ce l'ha: la scheda mostra il tesoro di adesso
+ * (già in memoria) e dichiara che la storia manca. Nessun ripiego: ieri non
+ * esiste da nessuna parte, vedi server/dayHistory.js.
+ */
+export function fetchTreasury(countryId) {
+  if (!countryId) return Promise.resolve(null);
+  if (_treasury.has(countryId)) return _treasury.get(countryId);
+  const p = (async () => {
+    try {
+      const json = await cacheJson(`/country-treasury?country=${encodeURIComponent(countryId)}&days=120`);
+      return json && Array.isArray(json.days) && json.days.length ? json.days : null;
+    } catch (err) {
+      console.warn('WarEra+ nations: /country-treasury non disponibile:', err.message);
+      return null;
+    }
+  })();
+  _treasury.set(countryId, p);
+  p.then(v => { if (!v && _treasury.get(countryId) === p) _treasury.delete(countryId); });
+  return p;
+}
+
+/**
+ * Donazioni dei cittadini di una nazione e ricevute dalle sue unità
+ * militari (/donations, server/donations.js). `null` se il server non ha la
+ * rotta: la sezione lo dice, nessun ripiego (l'API tiene poche ore di
+ * donazioni e vuole la chiave). Dieci minuti di memoria: il server aggiorna
+ * l'archivio ogni dieci minuti.
+ */
+export function fetchDonations(countryId, days = 90) {
+  if (!countryId) return Promise.resolve(null);
+  const key = `${countryId}|${days}`;
+  const hit = _donations.get(key);
+  if (hit && Date.now() - hit.at < TIMELINE_TTL_MS) return hit.p;
+  const p = (async () => {
+    try {
+      const json = await cacheJson(`/donations?country=${encodeURIComponent(countryId)}&days=${days}`);
+      return json && json.available ? json : null;
+    } catch (err) {
+      console.warn('WarEra+ nations: /donations non disponibile:', err.message);
+      return null;
+    }
+  })();
+  _donations.set(key, { at: Date.now(), p });
+  p.then(v => { if (!v && _donations.get(key)?.p === p) _donations.delete(key); });
+  return p;
+}
+
 /* ── Elenco cittadini di una nazione ─────────────────────────── */
 
 const _citizensByCountry = new Map();   // countryId → { rows, total, known, partial }

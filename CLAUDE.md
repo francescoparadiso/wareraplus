@@ -560,6 +560,20 @@ niente". `/health` di plusApi riporta `ricchezza` con i giorni in archivio.
 uscite fra due scatti. Chiamarlo "quanto costa la guerra" sarebbe la
 stessa trappola di `rankings.countryBounty` — la vista lo dice in testa.
 
+Le schede **Economia** e **Unità militari** di Statistiche nazioni
+(`src/nations/ecoSection.js`, `muSection.js`, dal 2026-11-13): Unità militari non
+dipende da nessun deploy (directory MU già in cache). Economia sì, dal
+**cache-server**: `/country-treasury` (storia del tesoro, da dayHistory) e
+`/donations` (`server/donations.js`). Senza rideploy il tesoro di adesso e i
+bonifici si vedono comunque, la curva dice che manca lo storico e le donazioni
+dicono che il server non ha l'archivio. ⚠️ **La forma di una riga `donation` non
+è stata verificata** (serve la chiave, che il PC non ha): il server salva tutti i
+campi-id grezzi e classifica in lettura per valore. Dopo il primo deploy guarda
+`/health` → `donations.fields` e `/donations?country=…` → `classified`: se
+`donor` o `receiver` sono 0 con righe in archivio la forma è diversa e va
+corretta `_classifica` (la scheda lo dichiara da sola, non mostra "nessuna
+donazione"). Le donazioni si accumulano dal deploy come i bonifici.
+
 La scheda **Crafting** di Economia (`src/economy/crafting.js` +
 `craftingModel.js` + `server/gearMarket.js`, dal 2026-11-11) dipende dal
 redeploy del **cache-server**: finché non lo fai `/gear-market` risponde 404

@@ -149,6 +149,13 @@ const {
   initMoneyTransfers, pollMoneyTransfers,
   readMoneyTransfers, readMoneyTransfersStatus,
 } = require('./moneyTransfers');
+// WarEra+ donazioni (transactionType 'donation'): quanto donano i cittadini
+// di una nazione e quanto ricevono le sue unita' militari. ⚠️ la forma della
+// riga non e' stata verificata prima di scriverlo: vedi la testata di
+// server/donations.js e /health -> donations.fields.
+const {
+  initDonations, pollDonations, readDonations, readDonationsStatus,
+} = require('./donations');
 // WarEra+ storia delle alleanze (bilaterali fino al 10 giugno 2026, poi a
 // blocco) dal registro eventi del gioco, per la time machine. Vedi il
 // blocco in testa a server/allianceHistory.js.
@@ -200,7 +207,7 @@ const {
 // nient'altro era mai stato salvato nel tempo. Adesso questi quattro campi
 // lo sono. Zero fetch: legge le cache che il server riempie gia'.
 const {
-  initDayHistory, snapshotDay, readDay, statoDayHistory, treasuryByDay,
+  initDayHistory, snapshotDay, readDay, statoDayHistory, treasuryByDay, treasuryOfCountry,
 } = require('./dayHistory');
 // WarEra+ soldi bloccati negli ordini d'acquisto, per risorsa, unita' e
 // nazione del compratore, piu' il totale dei tesori. Il gioco non dice quanti
@@ -539,6 +546,15 @@ initMoneyTransfers({
   // Come proxyIndex: le transazioni vogliono la chiave del VPS, e non
   // basta quella del Worker (401 verificato). Getter per riferimento
   // tardivo, le costanti sono dichiarate piu' in basso.
+  get apiToken() { return WARERA_API_TOKEN; },
+  get trpcUpstream() { return TRPC_UPSTREAM; },
+});
+
+// Donazioni: transazioni con la chiave del VPS (come i bonifici), archivio
+// sqlite su disco; per classificare legge le cache mu-directory, countries e
+// mu-user-countries.
+initDonations({
+  cacheDir: CACHE_DIR, readCache, readCacheShared,
   get apiToken() { return WARERA_API_TOKEN; },
   get trpcUpstream() { return TRPC_UPSTREAM; },
 });
@@ -2682,6 +2698,9 @@ cron.schedule('30 * 2-6 * * *', pollMuBattleDamageBackfill, { timezone: MU_DAMAG
 // ferma al primo id gia' visto — cioe' quasi sempre UNA richiesta. Offset
 // :11 per non cadere addosso ai due giri dell'archivio (:06 e :16).
 cron.schedule('11,31,51 * * * *', pollMoneyTransfers);
+// Donazioni: come i bonifici (l'API ne ricorda una finestra corta), ma sono
+// molte di piu': un giro ogni 10 minuti, a :07 per non cadere sugli altri.
+cron.schedule('7,17,27,37,47,57 * * * *', pollDonations);
 cron.schedule('4,34 * * * *', refreshPoliticalHistory);     // ogni 30 min: riassunti elezioni + nomi dei presidenti
 cron.schedule('48 * * * *', pollAllianceHistory);           // ogni ora, :48       // ogni 20 min, :11
 cron.schedule('45 */6 * * *', pollProxyIndex);               // ogni 6 ore, :45 (radar dei proxy)
@@ -2805,6 +2824,9 @@ cron.schedule('* * * * *', () => {
   // minuto in cui questo modulo non guarda è un pezzo di storico che si
   // perde per sempre (vedi il blocco in testa a moneyTransfers.js).
   await pollMoneyTransfers();
+  // Donazioni: stesso motivo, la finestra dell'API scorre. Senza await: il
+  // primo giro sfoglia fino a 60 pagine e non deve ritardare l'avvio.
+  pollDonations().catch(err => console.error('[donations] avvio:', err.message));
   // Prezzi: un campione subito. Costa una richiesta pubblica, e su un
   // riavvio a meta' pomeriggio evita che la candela di oggi si apra solo
   // alle :27 successive.
@@ -3271,6 +3293,27 @@ app.get('/battle-archive/status', (req, res) => res.json(readArchiveStatus()));
 // risposta dice da quando questo archivio guarda: prima di quella data una
 // lista vuota NON vuol dire "nessun finanziamento", e il client lo dichiara.
 app.get('/money-transfers', (req, res) => res.json(readMoneyTransfers()));
+
+// Donazioni dei cittadini di una nazione e ricevute dalle sue unita'
+// (server/donations.js). `classified` dice quante righe la lettura ha capito:
+// se resta a zero con righe in archivio la forma del dato e' diversa da quella
+// attesa, e il client lo dichiara invece di mostrare "nessuna donazione".
+app.get('/donations', (req, res) => {
+  const country = String(req.query.country || '');
+  if (!/^[0-9a-f]{24}$/i.test(country)) return res.status(400).json({ error: 'country' });
+  const out = readDonations(country, req.query.days);
+  if (!out) return res.status(404).json({ error: 'donations non disponibile' });
+  res.json(out);
+});
+
+// Il tesoro di una nazione giorno per giorno (countryWealth, scatto delle
+// 02:05 italiane), da dayHistory.
+app.get('/country-treasury', (req, res) => {
+  const country = String(req.query.country || '');
+  if (!/^[0-9a-f]{24}$/i.test(country)) return res.status(400).json({ error: 'country' });
+  const days = Math.max(1, Math.min(400, Math.floor(Number(req.query.days)) || 90));
+  res.json({ country, days: treasuryOfCountry(country, days) });
+});
 
 // Storia delle alleanze per la time machine (server/allianceHistory.js).
 app.get('/alliance-history', (req, res) => res.json(readAllianceHistory()));
@@ -4255,6 +4298,7 @@ app.get('/health', (req, res) => res.json({
   // Quanto indietro arrivano i finanziamenti. Subito dopo un deploy copre
   // i ~3 giorni che l'API ricorda, e da li' cresce da solo.
   moneyTransfers: readMoneyTransfersStatus(),
+  donations: readDonationsStatus(),
   allianceHistory: statoAllianceHistory(),
   citizenMoves: statoCitizenMoves(),
   // Quante ore di danno orario sono in archivio (accumulano da qui in

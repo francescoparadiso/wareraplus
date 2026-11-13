@@ -275,6 +275,25 @@ function treasuryByDay(giorni = 90) {
   return out.sort((a, b) => (a[0] < b[0] ? -1 : 1));
 }
 
+/**
+ * Il tesoro di UNA nazione giorno per giorno: `[[giorno, valore]]` dal più
+ * vecchio. Serve alla scheda Economia di Statistiche nazioni. Stesso dato di
+ * treasuryByDay (countryWealth, mai `money`), ma una nazione sola: un giorno
+ * in cui la nazione non c'è o non ha il valore semplicemente non compare.
+ */
+function treasuryOfCountry(countryId, giorni = 90) {
+  const store = _read(FILE_DIPL);
+  const da = giornoMeno(giornoDi(), Math.max(1, giorni));
+  const out = [];
+  for (const [giorno, righe] of Object.entries(store.days)) {
+    if (giorno < da) continue;
+    const r = (righe || []).find(x => x?.[0] === countryId);
+    const v = r?.[4];
+    if (Number.isFinite(v)) out.push([giorno, Math.round(v)]);
+  }
+  return out.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+}
+
 /** Per /health. */
 function statoDayHistory() {
   const storeD = _read(FILE_DIPL);
@@ -312,5 +331,6 @@ module.exports = {
   readDay,
   statoDayHistory,
   treasuryByDay,
+  treasuryOfCountry,
   forgetDayHistoryCache,
 };
