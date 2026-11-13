@@ -565,14 +565,14 @@ Le schede **Economia** e **Unità militari** di Statistiche nazioni
 dipende da nessun deploy (directory MU già in cache). Economia sì, dal
 **cache-server**: `/country-treasury` (storia del tesoro, da dayHistory) e
 `/donations` (`server/donations.js`). Senza rideploy il tesoro di adesso e i
-bonifici si vedono comunque, la curva dice che manca lo storico e le donazioni
-dicono che il server non ha l'archivio. ⚠️ **La forma di una riga `donation` non
-è stata verificata** (serve la chiave, che il PC non ha): il server salva tutti i
-campi-id grezzi e classifica in lettura per valore. Dopo il primo deploy guarda
-`/health` → `donations.fields` e `/donations?country=…` → `classified`: se
-`donor` o `receiver` sono 0 con righe in archivio la forma è diversa e va
-corretta `_classifica` (la scheda lo dichiara da sola, non mostra "nessuna
-donazione"). Le donazioni si accumulano dal deploy come i bonifici.
+bonifici si vedono comunque, la curva dice che manca lo storico e i pagamenti
+dicono che il server non ha l'archivio. ⚠️ **Una transazione `donation` va
+sempre da un TESORO (`sellerCountryId` / `sellerMuId` / `sellerPartyId`) a un
+GIOCATORE (`buyerId`)**, mai da un giocatore a un'unità o a una nazione
+(verificato su 6.000 righe il 2026-11-13: 59% nazioni, 40% unità, 1% partiti):
+la scheda parla di soldi PAGATI ai giocatori, non di «donazioni dei cittadini».
+Si accumulano dal deploy come i bonifici; il primo giro scende fin dove arriva
+il cursore dell'API (`bootstrap` in `/health` → `donations`).
 
 La scheda **Crafting** di Economia (`src/economy/crafting.js` +
 `craftingModel.js` + `server/gearMarket.js`, dal 2026-11-11) dipende dal
