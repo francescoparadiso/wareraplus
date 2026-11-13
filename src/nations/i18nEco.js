@@ -50,6 +50,8 @@ const DICT = {
     cmpNone: 'No unit of this nation received a donation in this period.',
     cmpVsTreasury: 'Comparison: donations to the nation\'s treasury vs to its units',
     colUnit: 'Unit', colGiven: 'Received', colRecipients: 'Donors', colCount: 'Donations', colAvg: 'Average', colPerDay: 'Per day',
+    trLogTitle: "Transfers, latest first ({n})", trIn: "received from", trOut: "sent to",
+    colTreasuryNow: "In the treasury now", colTreasuryHint: "The unit's wealth now, as the game ranks it (not the value at the end of the chosen period).",
     total: 'Total',
   },
   it: {
@@ -89,6 +91,8 @@ const DICT = {
     cmpNone: 'Nessuna unità di questa nazione ha ricevuto donazioni in questo periodo.',
     cmpVsTreasury: 'Confronto: donazioni al tesoro della nazione e alle sue unità',
     colUnit: 'Unità', colGiven: 'Ricevuto', colRecipients: 'Donatori', colCount: 'Donazioni', colAvg: 'Media', colPerDay: 'Al giorno',
+    trLogTitle: "Bonifici, dal più recente ({n})", trIn: "ricevuto da", trOut: "inviato a",
+    colTreasuryNow: "In cassa ora", colTreasuryHint: "La ricchezza dell'unità adesso, come la classifica il gioco (non il valore a fine periodo scelto).",
     total: 'Totale',
   },
   es: {
@@ -128,6 +132,8 @@ const DICT = {
     cmpNone: 'Ninguna unidad de esta nación recibió donaciones en este periodo.',
     cmpVsTreasury: 'Comparación: donaciones al tesoro de la nación y a sus unidades',
     colUnit: 'Unidad', colGiven: 'Recibido', colRecipients: 'Donantes', colCount: 'Donaciones', colAvg: 'Media', colPerDay: 'Por día',
+    trLogTitle: "Transferencias, la más reciente primero ({n})", trIn: "recibido de", trOut: "enviado a",
+    colTreasuryNow: "En caja ahora", colTreasuryHint: "La riqueza de la unidad ahora, según el ranking del juego (no el valor al final del periodo elegido).",
     total: 'Total',
   },
   de: {
@@ -167,6 +173,8 @@ const DICT = {
     cmpNone: 'Keine Einheit dieser Nation erhielt in diesem Zeitraum Spenden.',
     cmpVsTreasury: 'Vergleich: Spenden an die Staatskasse der Nation und an ihre Einheiten',
     colUnit: 'Einheit', colGiven: 'Erhalten', colRecipients: 'Spender', colCount: 'Spenden', colAvg: 'Durchschnitt', colPerDay: 'Pro Tag',
+    trLogTitle: "Überweisungen, neueste zuerst ({n})", trIn: "erhalten von", trOut: "gesendet an",
+    colTreasuryNow: "Jetzt in der Kasse", colTreasuryHint: "Das aktuelle Vermögen der Einheit laut Spielranking (nicht der Wert am Ende des gewählten Zeitraums).",
     total: 'Gesamt',
   },
   fr: {
@@ -206,6 +214,8 @@ const DICT = {
     cmpNone: 'Aucune unité de cette nation n\'a reçu de dons sur cette période.',
     cmpVsTreasury: 'Comparaison : dons au trésor de la nation et à ses unités',
     colUnit: 'Unité', colGiven: 'Reçu', colRecipients: 'Donateurs', colCount: 'Dons', colAvg: 'Moyenne', colPerDay: 'Par jour',
+    trLogTitle: "Virements, du plus récent ({n})", trIn: "reçu de", trOut: "envoyé à",
+    colTreasuryNow: "En caisse maintenant", colTreasuryHint: "La richesse actuelle de l'unité selon le classement du jeu (pas la valeur à la fin de la période choisie).",
     total: 'Total',
   },
 };

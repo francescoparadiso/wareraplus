@@ -35,6 +35,7 @@ import { tipAttr } from '../shared/chartTip.js';
 import { fetchMoneyTransfers } from '../battles/moneyTransfers.js';
 import { state } from '../diplomacy/state.js';
 import { donutHtml } from './charts.js';
+import { fetchMuDirectory } from '../mu/api.js';
 import { fetchDonations, fetchTreasury } from './api.js';
 import { ecoT } from './i18nEco.js';
 
@@ -118,10 +119,13 @@ function paintShell() {
 async function load() {
   const nation = _nation;
   const range = _range;
-  const [treasury, donations, transfers] = await Promise.all([
+  const [treasury, donations, transfers, directory] = await Promise.all([
     fetchTreasury(nation._id).catch(() => null),
     fetchDonations(nation._id, range).catch(() => null),
     fetchMoneyTransfers().catch(() => null),
+    // Per i soldi in cassa di ogni unità: la directory è già in memoria se
+    // si è aperta la scheda Unità militari, e comunque è una fetch per sessione.
+    fetchMuDirectory().catch(() => null),
   ]);
   // Nazione o intervallo cambiati mentre si aspettava: questo disegno è vecchio.
   if (_nation?._id !== nation._id || _range !== range || !_host?.isConnected) return;
@@ -130,7 +134,7 @@ async function load() {
   body.innerHTML = tilesAndTreasury(treasury, transfers)
     + transfersHtml(transfers)
     + donationsHtml(donations)
-    + unitsHtml(donations);
+    + unitsHtml(donations, directory);
   body.querySelector('#wp-nat-eco-units')?.addEventListener('click', openUnit);
 }
 
@@ -260,7 +264,32 @@ function transfersHtml(data) {
   const lists = (from.length || to.length)
     ? `<div class="wp-nat-lab-cols">${list(ecoT('trFrom'), from, C_IN)}${list(ecoT('trTo'), to, C_OUT)}</div>`
     : `<div class="wp-nat-empty">${escapeHtml(ecoT('trNone'))}</div>`;
-  return title + cov + lists;
+  return title + cov + lists + transferLogHtml(rows, id);
+}
+
+/** Ogni bonifico col suo orario, dal più recente: «quando sono arrivati».
+ *  Ora locale di chi guarda, come il resto del tool. Dentro un riquadro con
+ *  altezza massima: in 90 giorni sono centinaia di righe. */
+function transferLogHtml(rows, id) {
+  if (!rows.length) return '';
+  const lang = document.documentElement.lang || undefined;
+  const items = rows.slice().sort((a, b) => b.at - a.at).map(t => {
+    const incoming = t.to === id;
+    const other = incoming ? t.from : t.to;
+    const when = new Date(t.at).toLocaleString(lang, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return `
+      <li class="wp-nat-trlog-row">
+        <time datetime="${new Date(t.at).toISOString()}">${escapeHtml(when)}</time>
+        <span class="wp-nat-trlog-dir ${incoming ? 'wp-nat-up' : 'wp-nat-down'}">${escapeHtml(ecoT(incoming ? 'trIn' : 'trOut'))}</span>
+        <span class="wp-nat-trlog-who">${flagImg(other, 'wp-nat-lab-flag')}${escapeHtml(nomeDi(other))}</span>
+        <b class="wp-nat-trlog-amt ${incoming ? 'wp-nat-up' : 'wp-nat-down'}">${incoming ? '+' : '−'}${escapeHtml(oro(t.money))}</b>
+      </li>`;
+  }).join('');
+  return `
+    <div class="wp-nat-lab-col wp-nat-trlog">
+      <h4 class="wp-nat-chart-title">${escapeHtml(ecoT('trLogTitle', { n: rows.length }))}</h4>
+      <ul class="wp-nat-trlog-list">${items}</ul>
+    </div>`;
 }
 
 function list(titolo, righe, colore) {
@@ -377,7 +406,7 @@ function stackedBarsHtml(series, labels) {
 
 /* ── 5. quanto ha pagato ciascuna unità ────────────────────────── */
 
-function unitsHtml(d) {
+function unitsHtml(d, directory) {
   if (!d || !d.classified?.rows || unreadable(d)) return '';
   const title = `<h3 class="wp-nat-section-title">${escapeHtml(ecoT('cmpTitle'))}</h3>
     <p class="wp-nat-curve-note">${escapeHtml(ecoT('cmpSub'))}</p>`;
@@ -385,14 +414,19 @@ function unitsHtml(d) {
 
   const cover = d.coverageFrom ? dayOf(d.coverageFrom) : null;
   const days = lastDays(d.days).filter(g => !cover || g >= cover);
-  const head = ['colUnit', 'colGiven', 'colRecipients', 'colCount', 'colAvg', 'colPerDay']
-    .map((k, i) => `<span class="${i && i < 5 ? 'wp-nat-num' : ''}">${escapeHtml(ecoT(k))}</span>`).join('');
+  // «In cassa ora» = `rankings.muWealth` della directory, il valore di
+  // ricchezza dell'unità secondo il gioco (l'oggetto unità non ha un campo
+  // tesoro a parte). È il valore di ADESSO, non quello del periodo scelto.
+  const wealthOf = new Map((directory || []).map(m => [m._id, m.rankings?.muWealth?.value]));
+  const head = ['colUnit', 'colGiven', 'colTreasuryNow', 'colRecipients', 'colCount', 'colAvg', 'colPerDay']
+    .map((k, i) => `<span class="${i && i < 6 ? 'wp-nat-num' : ''}"${k === 'colTreasuryNow' ? ` title="${escapeHtml(ecoT('colTreasuryHint'))}"` : ''}>${escapeHtml(ecoT(k))}</span>`).join('');
 
   const max = d.byMu[0].money || 1;
   const body = d.byMu.map(m => `
       <a class="wp-nat-ecot-row" href="#" data-mu="${escapeHtml(m.id)}">
         <span class="wp-nat-cname"><span class="wp-nat-cnick">${escapeHtml(m.name)}</span></span>
         <span class="wp-nat-num money wp-nat-ecot-bar"><i style="width:${((m.money / max) * 100).toFixed(1)}%"></i><b>${escapeHtml(oro(m.money))}</b></span>
+        <span class="wp-nat-num">${Number.isFinite(wealthOf.get(m.id)) ? escapeHtml(oro(wealthOf.get(m.id))) : '—'}</span>
         <span class="wp-nat-num">${m.donors}</span>
         <span class="wp-nat-num">${m.n}</span>
         <span class="wp-nat-num">${escapeHtml(oro(m.n ? m.money / m.n : 0))}</span>

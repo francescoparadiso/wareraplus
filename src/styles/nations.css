@@ -808,7 +808,7 @@ body.light-theme .wp-nat-down { color: #cf222e; }
 
 .wp-nat-mut-wrap { overflow-x: auto; }
 .wp-nat-mut { min-width: 820px; --wp-nat-mcols: minmax(170px, 1.6fr) 70px 56px repeat(4, minmax(86px, .9fr)) 110px; }
-.wp-nat-ecot { min-width: 780px; --wp-nat-mcols: minmax(150px, 1.4fr) minmax(130px, 1.4fr) repeat(2, minmax(80px, .8fr)) 70px 84px 110px; }
+.wp-nat-ecot { min-width: 860px; --wp-nat-mcols: minmax(150px, 1.4fr) minmax(120px, 1.3fr) minmax(86px, .9fr) 70px 84px 80px 110px; }
 .wp-nat-mut-row, .wp-nat-ecot-row {
   display: grid; grid-template-columns: var(--wp-nat-mcols);
   align-items: center; gap: 8px;
@@ -849,3 +849,23 @@ body.light-theme .wp-nat-mut-head { background: var(--wp-ov-bg-light, #f4f6fa); 
 .wp-nat-ecot-bar i { position: absolute; left: 0; top: 2px; bottom: 2px; background: currentColor; opacity: .16; border-radius: 3px; }
 .wp-nat-ecot-bar b { position: relative; font-weight: 600; }
 .wp-nat-spark { display: block; width: 100%; height: 20px; }
+
+/* Elenco dei bonifici con l'orario (ecoSection.js: transferLogHtml). */
+.wp-nat-trlog { margin-top: 12px; }
+.wp-nat-trlog-list { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow-y: auto; }
+.wp-nat-trlog-row {
+  display: grid; grid-template-columns: 118px 112px 1fr auto; align-items: center; gap: 10px;
+  padding: 6px 2px; border-bottom: 1px solid #21262d; font-size: 12.5px;
+}
+body.light-theme .wp-nat-trlog-row { border-bottom-color: #e3e7ee; }
+.wp-nat-trlog-row time { color: var(--wp-ov-text-dim, #8b949e); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wp-nat-trlog-dir { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.wp-nat-trlog-who { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-nat-trlog-amt { font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) {
+  .wp-nat-trlog-row { grid-template-columns: 1fr auto; row-gap: 2px; }
+  .wp-nat-trlog-row time { grid-column: 1; }
+  .wp-nat-trlog-dir { grid-column: 1; }
+  .wp-nat-trlog-who { grid-column: 1; }
+  .wp-nat-trlog-amt { grid-column: 2; grid-row: 1 / span 3; }
+}
