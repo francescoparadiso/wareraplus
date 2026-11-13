@@ -8,29 +8,28 @@
         server scatta ogni giorno (/country-treasury);
      2. i BONIFICI fra tesori in entrata e in uscita (l'archivio dei
         finanziamenti, lo stesso del dettaglio battaglia) e da chi/a chi;
-     3. le DONAZIONI dei cittadini, giorno per giorno, divise per
-        destinazione: tesoro di una nazione, unità militari, altri giocatori
-        (/donations);
-     4. il raffronto fra quello che i cittadini danno al tesoro e quello che
-        danno alle unità, in una ciambella;
-     5. le donazioni RICEVUTE da ciascuna unità della nazione, con la quota
-        che viene dai suoi stessi cittadini.
+     3. i PAGAMENTI «donation» del gioco, giorno per giorno: quanto ha
+        dato ai giocatori il tesoro della nazione e quanto le sue unità
+        militari (/donations);
+     4. il raffronto fra le due cose, in una ciambella;
+     5. quanto ha pagato CIASCUNA unità della nazione, con destinatari e
+        andamento giornaliero.
+
+   ── ⚠️ DONAZIONI: LA DIREZIONE È L'OPPOSTA DI QUELLA CHE SI CREDE ───
+   Verificato sul vivo (2026-11-13): una `donation` va sempre da un TESORO
+   (nazione, unità o partito) a un GIOCATORE, mai il contrario. Per questo la
+   scheda non parla di «donazioni dei cittadini» ma di soldi PAGATI ai
+   giocatori, e lo dichiara (donWhat). Vedi server/donations.js.
 
    ── COSA NON SI SA, E LA SCHEDA LO DICE ──────────────────────────────
    · il tesoro è `countryWealth`, MAI `country.money` (fermo da mesi: somma
      54 mila contro i 4,4 milioni della classifica);
-   · bonifici e donazioni si ACCUMULANO dal giorno in cui il server ha
-     cominciato a guardare: l'API ne ricorda poche ore. Prima di
-     `coverageFrom` l'assenza di una riga NON è «nessuna donazione», e un
-     giorno prima di quella data si lascia fuori dal grafico invece di
-     disegnarlo a zero;
-   · una donazione conta per una nazione se chi dona è NOTO come suo
-     cittadino (chi milita in un'unità lo è sempre): le altre non entrano;
-   · ⚠️ la forma di una riga `donation` non era stata verificata quando il
-     server è stato scritto (vedi server/donations.js). Se il server ha
-     righe ma non è riuscito a leggere chi dà e chi riceve lo dichiara
-     (`classified`) e QUI si dichiara a sua volta, invece di mostrare
-     «nessuna donazione».
+   · bonifici e pagamenti si ACCUMULANO dal giorno in cui il server ha
+     cominciato a guardare: l'API ne ricorda poco. Prima di `coverageFrom`
+     l'assenza di una riga NON è «nessun pagamento», e un giorno prima di
+     quella data si lascia fuori dal grafico invece di disegnarlo a zero;
+   · i pagamenti dei partiti restano in archivio ma non si mostrano: la riga
+     non porta la nazione del partito.
    ══════════════════════════════════════════════════════════════ */
 
 import { escapeHtml, flagImg } from '../mu/ui.js';
@@ -45,7 +44,7 @@ const W = 640, H = 150, PAD_T = 10, PAD_B = 4;
 const C_TREASURY = '#e3b341';
 const C_IN = '#3fb950';
 const C_OUT = '#e5484d';
-const C_DON = ['#e3b341', '#58a6ff', '#a371f7'];   // tesoro · unità · giocatori
+const C_DON = ['#e3b341', '#58a6ff'];   // dal tesoro · dalle unità
 const RANGES = [7, 30, 90];
 const DAY_MS = 86400_000;
 
@@ -281,12 +280,19 @@ function list(titolo, righe, colore) {
     </div>`;
 }
 
-/* ── 3-4. donazioni dei cittadini ──────────────────────────────── */
+/* ── 3-4. soldi pagati ai giocatori (transazioni «donation») ───── */
+
+/* ⚠️ Verificato sul vivo il 2026-11-13: una `donation` va SEMPRE da un
+   tesoro (nazione, unità o partito) a un giocatore. Non esistono, nei dati,
+   donazioni da un giocatore a un'unità o a una nazione: la scheda mostra
+   quello che c'è — cosa paga lo Stato ai giocatori e cosa pagano le sue
+   unità — e lo dichiara in chiaro (donWhat) invece di chiamarle «donazioni
+   dei cittadini». Vedi la testata di server/donations.js. */
 
 /** Il server ha righe ma non ha capito chi dà o chi riceve? */
 function unreadable(d) {
   const c = d?.classified;
-  return !!c && c.rows > 0 && (c.donor === 0 || c.receiver === 0);
+  return !!c && c.rows > 0 && (c.giver === 0 || c.receiver === 0);
 }
 
 function donationsHtml(d) {
@@ -296,9 +302,9 @@ function donationsHtml(d) {
   if (!d.classified?.rows) return `${title}<p class="wp-nat-notice">${escapeHtml(ecoT('donNotYet'))}</p>`;
   if (unreadable(d)) return `${title}<p class="wp-nat-notice">${escapeHtml(ecoT('donShape', { n: d.classified.rows }))}</p>`;
 
-  const sum = (i) => d.daily.reduce((s, r) => s + (Number(r[i]) || 0), 0);
-  const tot = sum(1), toTre = sum(2), toMu = sum(3), toUsr = sum(4);
-  const n = sum(5);
+  const sumDaily = (i) => d.daily.reduce((s, r) => s + (Number(r[i]) || 0), 0);
+  const fromTre = d.treasury?.money ?? sumDaily(1);
+  const fromMu = d.byMu.reduce((s, m) => s + m.money, 0);
 
   const tile = (lab, val, sub = '') => `
     <div class="wp-nat-lab-tile">
@@ -306,11 +312,9 @@ function donationsHtml(d) {
       <strong class="wp-nat-lab-val">${escapeHtml(val)}</strong>${sub ? `<span class="wp-nat-lab-note">${escapeHtml(sub)}</span>` : ''}
     </div>`;
   const tiles = [
-    tile(ecoT('ecoDonCit'), oro(tot), ecoT('donCount', { n })),
-    tile(ecoT('donToTreasury'), oro(toTre)),
-    tile(ecoT('donToMu'), oro(toMu)),
-    tile(ecoT('donToPlayers'), oro(toUsr)),
-    tile(ecoT('colDonors'), String(d.donors)),
+    tile(ecoT('donFromTreasury'), oro(fromTre), ecoT('donCount', { n: d.treasury?.n ?? 0 })),
+    tile(ecoT('donFromUnits'), oro(fromMu), ecoT('donCount', { n: d.byMu.reduce((s, m) => s + m.n, 0) })),
+    tile(ecoT('colRecipients'), String(d.treasury?.recipients ?? 0), ecoT('donFromTreasury')),
   ].join('');
 
   // Giorni mostrati: dall'inizio della finestra, ma mai prima di quando
@@ -321,9 +325,9 @@ function donationsHtml(d) {
   const byDay = new Map(d.daily.map(r => [r[0], r]));
   const series = days.map(g => {
     const r = byDay.get(g);
-    return { day: g, parts: [Number(r?.[2]) || 0, Number(r?.[3]) || 0, Number(r?.[4]) || 0] };
+    return { day: g, parts: [Number(r?.[1]) || 0, Number(r?.[2]) || 0] };
   });
-  const labels = [ecoT('donToTreasury'), ecoT('donToMu'), ecoT('donToPlayers')];
+  const labels = [ecoT('donFromTreasury'), ecoT('donFromUnits')];
 
   const note = cover && cover > dayOf(Date.now() - (d.days - 1) * DAY_MS)
     ? `<p class="wp-nat-curve-note">${escapeHtml(ecoT('donCoverage', { d: fmtData(cover) }))}</p>` : '';
@@ -331,9 +335,8 @@ function donationsHtml(d) {
   const donut = donutHtml({
     title: ecoT('cmpVsTreasury'),
     slices: [
-      { label: labels[0], value: toTre, color: C_DON[0] },
-      { label: labels[1], value: toMu, color: C_DON[1] },
-      { label: labels[2], value: toUsr, color: C_DON[2] },
+      { label: labels[0], value: fromTre, color: C_DON[0] },
+      { label: labels[1], value: fromMu, color: C_DON[1] },
     ],
     totalFmt: oro,
   });
@@ -347,7 +350,7 @@ function donationsHtml(d) {
       <div class="wp-nat-curve-slot">${stackedBarsHtml(series, labels)}</div>
     </div>
     <section class="wp-nat-charts">${donut}</section>
-    <p class="wp-nat-lab-note">${escapeHtml(ecoT('donPartial'))}</p>`;
+    <p class="wp-nat-lab-note">${escapeHtml(ecoT('donWhat'))}</p>`;
 }
 
 /** Barre impilate giorno per giorno (UTC). */
@@ -376,7 +379,7 @@ function stackedBarsHtml(series, labels) {
     <div class="wp-nat-lab-axisrow"><span>${escapeHtml(fmtData(series[0].day))}</span><span>${escapeHtml(fmtData(series[series.length - 1].day))}</span></div>`;
 }
 
-/* ── 5. donazioni ricevute da ciascuna unità ───────────────────── */
+/* ── 5. quanto ha pagato ciascuna unità ────────────────────────── */
 
 function unitsHtml(d) {
   if (!d || !d.classified?.rows || unreadable(d)) return '';
@@ -386,24 +389,19 @@ function unitsHtml(d) {
 
   const cover = d.coverageFrom ? dayOf(d.coverageFrom) : null;
   const days = lastDays(d.days).filter(g => !cover || g >= cover);
-  const head = ['colUnit', 'colReceived', 'colCit', 'colOthers', 'colDonors', 'colCount', 'colPerDay']
-    .map((k, i) => `<span class="${i && i < 6 ? 'wp-nat-num' : ''}">${escapeHtml(ecoT(k))}</span>`).join('');
+  const head = ['colUnit', 'colGiven', 'colRecipients', 'colCount', 'colAvg', 'colPerDay']
+    .map((k, i) => `<span class="${i && i < 5 ? 'wp-nat-num' : ''}">${escapeHtml(ecoT(k))}</span>`).join('');
 
   const max = d.byMu[0].money || 1;
-  const body = d.byMu.map(m => {
-    const others = Math.max(0, m.money - m.citizens);
-    const spark = sparkHtml(days, m.daily, m.name);
-    return `
+  const body = d.byMu.map(m => `
       <a class="wp-nat-ecot-row" href="#" data-mu="${escapeHtml(m.id)}">
         <span class="wp-nat-cname"><span class="wp-nat-cnick">${escapeHtml(m.name)}</span></span>
         <span class="wp-nat-num money wp-nat-ecot-bar"><i style="width:${((m.money / max) * 100).toFixed(1)}%"></i><b>${escapeHtml(oro(m.money))}</b></span>
-        <span class="wp-nat-num">${escapeHtml(oro(m.citizens))}</span>
-        <span class="wp-nat-num">${escapeHtml(oro(others))}</span>
-        <span class="wp-nat-num">${m.donors}</span>
+        <span class="wp-nat-num">${m.recipients}</span>
         <span class="wp-nat-num">${m.n}</span>
-        <span>${spark}</span>
-      </a>`;
-  }).join('');
+        <span class="wp-nat-num">${escapeHtml(oro(m.n ? m.money / m.n : 0))}</span>
+        <span>${sparkHtml(days, m.daily, m.name)}</span>
+      </a>`).join('');
 
   return `${title}
     <div class="wp-nat-mut-wrap"><div class="wp-nat-ecot" id="wp-nat-eco-units">

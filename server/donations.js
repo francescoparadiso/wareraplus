@@ -1,46 +1,36 @@
 /* ═══════════════════════════════════════════════════════════════════════
    WarEra+ — Archivio delle donazioni (transactionType: 'donation')
    -----------------------------------------------------------------------
-   Alimenta la scheda «Economia» di Statistiche nazioni: quanto donano
-   ogni giorno i cittadini di una nazione, dove vanno (tesoro, unità
-   militari, altri giocatori) e quanto riceve ciascuna unità militare della
-   nazione. Rotta: /donations?country=ID&days=N.
+   Alimenta la scheda «Economia» di Statistiche nazioni. Rotta:
+   /donations?country=ID&days=N.
 
-   ── ⚠️ LA FORMA DELLA RIGA NON È STATA VERIFICATA ───────────────────────
-   `transaction.getPaginatedTransactions` è token-gated e quando questo
-   modulo è stato scritto non c'era una chiave a portata di mano: i nomi dei
-   campi di una `donation` (chi dà, chi riceve, se è un'unità o una nazione)
-   NON sono stati letti da una risposta vera. L'unica cosa certa è che per i
-   bonifici fra tesori vale `sellerCountryId` (chi manda) / `buyerCountryId`
-   (chi incassa), e che l'API accetta i filtri `userId`, `muId`, `countryId`.
+   ── ⚠️ COSA SONO DAVVERO LE DONAZIONI (verificato sul vivo, 2026-11-13) ──
+   Una riga `donation` ha sempre la stessa forma:
+       { money, buyerId, sellerCountryId | sellerMuId | sellerPartyId }
+   Come per i bonifici fra tesori, `seller` è chi PAGA e `buyer` chi
+   incassa: sono pagamenti da un TESORO (di una nazione, di un'unità
+   militare, di un partito) a un GIOCATORE. Su 6.000 righe lette (17 ore):
+   59% dal tesoro di una nazione, 40% da quello di un'unità, 1% da un
+   partito; il destinatario è sempre un utente. Non esiste, in quei dati,
+   una donazione DA un giocatore verso un'unità o una nazione: chi si
+   aspetta «cosa donano i cittadini» trova invece «cosa distribuisce lo
+   Stato ai cittadini e cosa le unità ai loro membri». La scheda lo dice.
 
-   Quindi il modulo è scritto per NON dipendere da quei nomi:
+   Quindi per una nazione X si leggono due cose:
+     · quanto il tesoro di X ha dato ai giocatori (sellerCountryId = X);
+     · quanto hanno dato le unità REGISTRATE in X (sellerMuId nella
+       directory, con `country` = X), unità per unità.
+   Il partito resta in archivio (`sellerPartyId`) ma non si espone: i
+   partiti non hanno la nazione nella riga.
 
-     · si salvano TUTTI i campi che sembrano un id (24 caratteri esadecimali,
-       `_id` escluso) con il loro nome, così com'è: l'archivio è corretto
-       qualunque sia la forma, e non si perde niente mentre la si scopre;
-     · la CLASSIFICAZIONE (nazione / unità / giocatore, e la nazione di chi
-       dona) si fa in LETTURA, per valore: un id che sta nella directory MU è
-       un'unità, uno che sta fra le nazioni è una nazione, un utente si porta
-       alla nazione con la mappa utente → nazione dei membri delle unità.
-       Il ruolo (chi dà / chi riceve) si legge dal prefisso del nome:
-       `seller*`/`from*`/`donor*` dà, `buyer*`/`to*`/`receiver*` riceve;
-     · `readDonationsStatus` e la risposta riportano i NOMI dei campi visti e
-       quante righe sono state classificate, così dopo il primo deploy si
-       vede se la lettura ha capito la forma o no — e se no si corregge
-       `_classifica` senza dover ri-raccogliere niente.
-
-   ⚠️ Se `classified.donor` o `classified.receiver` restano a zero con righe
-   in archivio, la forma è diversa da quella attesa: guarda `fields` in
-   /health e adatta `_classifica`. Non "riempire" il buco con un'ipotesi: un
-   «nessuna donazione» inventato sarebbe peggio di un buco dichiarato.
-
-   ── COME SI ACCUMULA ────────────────────────────────────────────────────
-   Come i bonifici: l'API ricorda una finestra corta (qualche giorno), non
-   uno storico. Si parte da quello che c'è e si cresce di un giorno al
-   giorno; `coverageFrom` dice da quando l'archivio è affidabile.
-   Archivio: cache/donations.sqlite, su disco e non in RAM (il VPS ha
-   954 MB in tutto). NON si pota: è storia che il gioco non conserva.
+   ── ARCHIVIO ────────────────────────────────────────────────────────────
+   Si salvano i campi-id grezzi con il loro nome (`ids`), non una
+   classificazione: se il gioco aggiunge una forma nuova non si perde niente
+   e si corregge solo la lettura. ~8.000 righe al giorno in tutto il mondo.
+   L'API ne ricorda una finestra limitata e non uno storico: l'archivio si
+   accumula dal primo avvio (il primo giro scende fin dove arriva il
+   cursore), `coverageFrom` dice da quando è affidabile. sqlite su disco
+   (cache/donations.sqlite): il VPS ha 954 MB di RAM in tutto. NON si pota.
    ═══════════════════════════════════════════════════════════════════════ */
 
 const path = require('path');
@@ -54,8 +44,8 @@ let db = null;
 const PAGE = 100;
 // Primo giro (archivio vuoto): si sfoglia fin dove l'API arriva. Dopo, un
 // giro si ferma alla prima pagina interamente già vista.
-const MAX_PAGES_FIRST = 60;
-const MAX_PAGES = 8;
+const MAX_PAGES_FIRST = 400;   // ~40.000 righe: fin dove l'API arriva
+const MAX_PAGES = 25;
 const SAMPLE_MAX = 5;
 const ID_RE = /^[0-9a-f]{24}$/i;
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -117,13 +107,22 @@ function _idFields(t) {
 
 /** Giro incrementale: dal più recente all'indietro, fino a una pagina tutta
  *  già vista. Un giro fallito riparte dagli stessi id: nessun cursore salvato. */
+let _inCorso = false;
 async function pollDonations() {
-  if (!deps || !db) return;
+  if (!deps || !db || _inCorso) return;
+  _inCorso = true;
+  try { await _pollDonations(); } finally { _inCorso = false; }
+}
+
+async function _pollDonations() {
   if (!deps.apiToken) {
     console.warn('[donations] WARERA_API_TOKEN assente: archivio fermo (401 sulle transazioni)');
     return;
   }
-  const primo = !Number(_meta('rows')) && !db.prepare('SELECT 1 FROM don LIMIT 1').get();
+  // Il primo giro non si ferma alla prima pagina già vista: scende finché il
+  // cursore finisce (o al tetto), e solo allora segna `bootstrap`. Le righe
+  // già in archivio si saltano con INSERT OR IGNORE.
+  const primo = !_meta('bootstrap');
   const maxPages = primo ? MAX_PAGES_FIRST : MAX_PAGES;
   const ins = db.prepare('INSERT OR IGNORE INTO don (id, ts, money, item, qty, ids) VALUES (?, ?, ?, ?, ?, ?)');
   let cursor = null;
@@ -158,14 +157,20 @@ async function pollDonations() {
       if (items.length && !_meta('samples')) {
         _setMeta('samples', JSON.stringify(items.slice(0, SAMPLE_MAX)));
       }
-      if (!items.length || !nextCursor || !nuovePagina) break;
+      if (!items.length || !nextCursor) break;
+      if (!primo && !nuovePagina) break;
       cursor = nextCursor;
     }
+    // Arrivati in fondo al cursore o al tetto senza errori: il recupero è
+    // fatto. Un errore lascia il flag spento e il giro dopo riprova.
+    if (primo) _setMeta('bootstrap', Date.now());
   } catch (err) {
     console.error('[donations] giro fallito:', err.message);
   }
 
-  if (!_meta('startedAt')) {
+  // Durante il primo giro l'inizio si riabbassa a ogni passata: è la riga più
+  // vecchia che siamo riusciti a leggere, e il bootstrap può ripartire.
+  if (!_meta('startedAt') || primo) {
     const min = db.prepare('SELECT MIN(ts) AS m FROM don').get().m;
     _setMeta('startedAt', min || Date.now());
   }
@@ -174,60 +179,23 @@ async function pollDonations() {
   if (nuove) console.log(`[donations] +${nuove}`);
 }
 
-// ── Lettura: classificazione per valore ─────────────────────────────────
+// ── Lettura ─────────────────────────────────────────────────────────────
 
 const _cache = new Map();   // "country|days" → { at, json }
-
-const SELLER_RE = /^(seller|from|donor|giver|sender|user)/i;
-const BUYER_RE = /^(buyer|to|receiver|recipient)/i;
 
 function _contesto() {
   const dir = deps.readCache('mu-directory', { data: [] }).data || [];
   const muCountry = new Map();   // muId → countryId
   const muName = new Map();
   for (const m of dir) { muCountry.set(m._id, m.country); muName.set(m._id, m.name); }
-  const cc = deps.readCache('countries', null);
-  const countries = cc?.data?.result?.data || cc?.data || [];
-  const countrySet = new Set(countries.map(c => c._id));
-  const utenti = deps.readCacheShared('mu-user-countries', { data: {} }).data || {};
-  return { muCountry, muName, countrySet, utenti };
-}
-
-/** Chi dà, chi riceve, in valori. Ritorna { donor, donorCountry, rMu, rCountry, rUser }. */
-function _classifica(ids, ctx) {
-  const out = { donor: null, donorCountry: null, rMu: null, rCountry: null, rUser: null };
-  for (const [k, v] of Object.entries(ids)) {
-    const venditore = SELLER_RE.test(k) && !BUYER_RE.test(k);
-    const compratore = BUYER_RE.test(k);
-    const eMu = ctx.muCountry.has(v);
-    const eNaz = ctx.countrySet.has(v);
-
-    if (eMu) {
-      // Un'unità non dà soldi a un giocatore: è sempre la destinataria.
-      if (!out.rMu) out.rMu = v;
-    } else if (eNaz) {
-      if (venditore) { if (!out.donorCountry) out.donorCountry = v; }
-      else if (!out.rCountry) out.rCountry = v;
-    } else if (venditore && !compratore) {
-      if (!out.donor) out.donor = v;
-    } else if (compratore) {
-      if (!out.rUser) out.rUser = v;
-    }
-  }
-  // La nazione di chi dona, se non è scritta: dalla mappa utente → nazione
-  // (solo chi milita in una unità, ma è l'insieme che si conosce).
-  if (!out.donorCountry && out.donor) {
-    const rec = ctx.utenti[out.donor];
-    if (rec?.[0]) out.donorCountry = rec[0];
-  }
-  return out;
+  return { muCountry, muName };
 }
 
 const _giorno = (ts) => new Date(ts).toISOString().slice(0, 10);
 
 /**
- * Le donazioni dei cittadini di una nazione e quelle ricevute dalle sue
- * unità militari, negli ultimi `days` giorni (UTC).
+ * Quanto ha dato il tesoro di una nazione ai giocatori e quanto hanno dato
+ * le sue unità militari, negli ultimi `days` giorni (UTC).
  */
 function readDonations(countryId, days = 30) {
   if (!db) return null;
@@ -237,43 +205,42 @@ function readDonations(countryId, days = 30) {
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.json;
 
   const ctx = _contesto();
-  const mieMu = new Set([...ctx.muCountry].filter(([, c]) => c === countryId).map(([id]) => id));
   const dal = Date.now() - days * 86400_000;
-  const righe = db.prepare('SELECT ts, money, item, ids FROM don WHERE ts >= ?').all(dal);
+  const righe = db.prepare('SELECT ts, money, ids FROM don WHERE ts >= ?').all(dal);
 
-  const cittadini = new Map();   // giorno → { tot, tesoro, mu, utenti, n }
-  const perMu = new Map();       // muId → { money, n, citizens, donors:Set, daily:Map }
-  const donatori = new Set();
-  const conti = { rows: righe.length, donor: 0, receiver: 0, donorOfNation: 0, itemOnly: 0 };
+  const tesoro = new Map();      // giorno → { money, n }
+  const riceventiTesoro = new Set();
+  const perMu = new Map();       // muId → { money, n, recipients:Set, daily:Map }
+  const conti = { rows: righe.length, giver: 0, receiver: 0 };
 
   for (const r of righe) {
     let ids;
     try { ids = JSON.parse(r.ids); } catch { continue; }
-    const c = _classifica(ids, ctx);
-    if (c.donor || c.donorCountry) conti.donor++;
-    if (c.rMu || c.rCountry || c.rUser) conti.receiver++;
     const soldi = Number(r.money) || 0;
-    if (!(soldi > 0)) { conti.itemOnly++; continue; }
+    const nazione = ids.sellerCountryId || null;
+    const mu = ids.sellerMuId || null;
+    if (nazione || mu || ids.sellerPartyId) conti.giver++;
+    if (ids.buyerId) conti.receiver++;
+    if (!(soldi > 0)) continue;
     const g = _giorno(r.ts);
-    const delMioPaese = c.donorCountry === countryId;
-    if (delMioPaese) conti.donorOfNation++;
 
-    if (delMioPaese) {
-      const d = cittadini.get(g) || { tot: 0, tesoro: 0, mu: 0, utenti: 0, n: 0 };
-      d.tot += soldi; d.n++;
-      if (c.rMu) d.mu += soldi; else if (c.rCountry) d.tesoro += soldi; else d.utenti += soldi;
-      cittadini.set(g, d);
-      if (c.donor) donatori.add(c.donor);
-    }
-    if (c.rMu && mieMu.has(c.rMu)) {
-      const m = perMu.get(c.rMu) || { money: 0, n: 0, citizens: 0, donors: new Set(), daily: new Map() };
+    if (nazione === countryId) {
+      const d = tesoro.get(g) || { money: 0, n: 0 };
+      d.money += soldi; d.n++;
+      tesoro.set(g, d);
+      if (ids.buyerId) riceventiTesoro.add(ids.buyerId);
+    } else if (mu && ctx.muCountry.get(mu) === countryId) {
+      const m = perMu.get(mu) || { money: 0, n: 0, recipients: new Set(), daily: new Map() };
       m.money += soldi; m.n++;
-      if (delMioPaese) m.citizens += soldi;
-      if (c.donor) m.donors.add(c.donor);
+      if (ids.buyerId) m.recipients.add(ids.buyerId);
       m.daily.set(g, (m.daily.get(g) || 0) + soldi);
-      perMu.set(c.rMu, m);
+      perMu.set(mu, m);
     }
   }
+
+  const unitaPerGiorno = new Map();
+  for (const m of perMu.values()) for (const [g, v] of m.daily) unitaPerGiorno.set(g, (unitaPerGiorno.get(g) || 0) + v);
+  const giorni = [...new Set([...tesoro.keys(), ...unitaPerGiorno.keys()])].sort();
 
   const json = {
     available: true,
@@ -281,13 +248,16 @@ function readDonations(countryId, days = 30) {
     coverageFrom: Number(_meta('startedAt')) || null,
     lastPoll: Number(_meta('lastPoll')) || null,
     classified: conti,
-    // [giorno, totale, versoTesoro, versoUnita, versoGiocatori, n]
-    daily: [...cittadini.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
-      .map(([g, d]) => [g, Math.round(d.tot), Math.round(d.tesoro), Math.round(d.mu), Math.round(d.utenti), d.n]),
-    donors: donatori.size,
+    // [giorno, daTesoro, daUnita, nDaTesoro]
+    daily: giorni.map(g => [g, Math.round(tesoro.get(g)?.money || 0), Math.round(unitaPerGiorno.get(g) || 0), tesoro.get(g)?.n || 0]),
+    treasury: {
+      money: Math.round([...tesoro.values()].reduce((a, d) => a + d.money, 0)),
+      n: [...tesoro.values()].reduce((a, d) => a + d.n, 0),
+      recipients: riceventiTesoro.size,
+    },
     byMu: [...perMu.entries()].map(([id, m]) => ({
       id, name: ctx.muName.get(id) || id,
-      money: Math.round(m.money), n: m.n, citizens: Math.round(m.citizens), donors: m.donors.size,
+      money: Math.round(m.money), n: m.n, recipients: m.recipients.size,
       daily: [...m.daily.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([g, v]) => [g, Math.round(v)]),
     })).sort((a, b) => b.money - a.money),
   };
@@ -308,6 +278,7 @@ function readDonationsStatus() {
     righe: v.n,
     piuVecchia: v.min ? new Date(v.min).toISOString() : null,
     piuRecente: v.max ? new Date(v.max).toISOString() : null,
+    bootstrap: !!_meta('bootstrap'),
     ultimoGiro: _meta('lastPoll') ? new Date(Number(_meta('lastPoll'))).toISOString() : null,
     fields: [...campi],
   };
