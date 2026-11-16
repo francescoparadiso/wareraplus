@@ -23,7 +23,7 @@
 
 import { pvT, pvErr } from './i18n.js';
 import {
-  leggiTavolo, chiediContratto, approvaRichiesta, rifiutaRichiesta,
+  leggiTavolo, leggiVersioneTavolo, chiediContratto, approvaRichiesta, rifiutaRichiesta,
   segnaAperta, ritiraRichiesta, battaglieInCorso,
   nazioniAmmesse, leggiListaPermessi, aggiungiAllaLista, togliDallaLista,
   leggiCanale, impostaCanale, svuotaTavolo, elencoAlleanze, ApiError,
@@ -50,6 +50,15 @@ function bottone(cls, testo, onClick) {
   return b;
 }
 
+/** Ogni quanto si chiede al server "e' cambiato qualcosa?" a scheda aperta. */
+const AUTO_OGNI_MS = 8000;
+
+/** La "versione" di un elenco di richieste: quante sono e l'ultima modifica.
+ *  ⚠️ Stessa formula di `GET /requests/versione` (server/plusApi/requests.js):
+ *  se cambia una, deve cambiare l'altra, o il tavolo si ricaricherebbe ad ogni
+ *  controllo (o mai). */
+const versioneDi = (righe) => `${righe.length}:${righe.reduce((m, r) => Math.max(m, r.updatedAt || 0), 0)}`;
+
 function quando(ms) {
   if (!ms) return null;
   return new Date(ms).toLocaleString(undefined,
@@ -71,6 +80,12 @@ export function creaTavolo(ctx) {
   // Quando i dati sono stati letti l'ultima volta (a buon fine): accanto al
   // tasto "Aggiorna", cosi' si sa quanto e' vecchio quello che si guarda.
   let aggiornatoIl = null;
+  // Aggiornamento automatico: la versione dei dati che si stanno guardando, il
+  // timer che chiede al server se e' cambiata, e la riga "Aggiorna" disegnata per
+  // ultima (se non e' piu' nella pagina il tavolo non e' piu' visibile: si smette).
+  let versione = null;
+  let timerAuto = null;
+  let rigaAttuale = null;
   let apertaId = null;          // battaglia con il modulo aperto
   let occupato = false;
   // Tre sezioni invece di un elenco di schede tutte uguali: si arriva
@@ -158,8 +173,53 @@ export function creaTavolo(ctx) {
     } finally {
       caricamento = false;
       if (!errore) aggiornatoIl = Date.now();
+      // La versione di CIO' CHE SI VEDE adesso: il prossimo controllo la
+      // confronta con quella del server.
+      if (dati?.richieste) versione = versioneDi(dati.richieste);
       ctx.ridisegna();
     }
+  }
+
+  /**
+   * Il controllo automatico. Ogni pochi secondi chiede al server la versione
+   * delle richieste e, SE E' CAMBIATA, ricarica: una richiesta nuova, una
+   * modifica, un'approvazione, un'asta aperta o chiusa — fatte da chiunque,
+   * dal sito o dal bot Discord — compaiono senza premere "Aggiorna".
+   *
+   * Non ricarica quando farlo farebbe danni:
+   *  · scheda nascosta o overlay chiuso (nessuno guarda);
+   *  · si sta gia' caricando o agendo;
+   *  · un modulo di richiesta e' aperto, o il cursore e' dentro un campo / un
+   *    menu: il ridisegno riscrive la pagina e cancellerebbe cio' che si sta
+   *    digitando. Si riprova al giro dopo.
+   * Un errore di rete non si mostra: e' un controllo di sfondo, e il tasto
+   * "Aggiorna" resta per chi vuole forzare.
+   */
+  async function controllaNovita() {
+    // La riga "Aggiorna" fuori dalla pagina = il tavolo non e' la pagina aperta
+    // (si e' passati ad un'altra scheda dell'area): si ferma il timer.
+    if (!rigaAttuale?.isConnected) { fermaAuto(); return; }
+    if (document.hidden) return;
+    const overlay = document.getElementById('wp-private-overlay');
+    if (overlay && !overlay.classList.contains('open')) return;
+    if (caricamento || occupato || apertaId || !dati || versione == null) return;
+    const attivo = document.activeElement;
+    if (attivo && /^(INPUT|TEXTAREA|SELECT)$/.test(attivo.tagName)) return;
+
+    try {
+      const { versione: nuova } = await leggiVersioneTavolo({ asAccount: ctx.lente() });
+      // Nel frattempo la persona puo' aver cominciato a scrivere o ad agire.
+      if (nuova && nuova !== versione && !caricamento && !occupato && !apertaId) await carica();
+    } catch { /* controllo di sfondo: si riprova al giro dopo */ }
+  }
+
+  function avviaAuto() {
+    if (timerAuto) return;
+    timerAuto = setInterval(() => { controllaNovita(); }, AUTO_OGNI_MS);
+  }
+
+  function fermaAuto() {
+    if (timerAuto) { clearInterval(timerAuto); timerAuto = null; }
   }
 
   /** "Aggiorna": rilegge richieste, battaglie e liste. Il tavolo si riscrive da
@@ -167,8 +227,11 @@ export function creaTavolo(ctx) {
    *  richiesta nuova non ha altro modo di saperlo che ricaricare la pagina. */
   function rigaAggiorna() {
     const riga = el('div', 'wp-pv-aggiorna-riga');
+    // Il tavolo e' sulla pagina: si tiene d'occhio (vedi controllaNovita).
+    rigaAttuale = riga;
+    avviaAuto();
     if (aggiornatoIl) {
-      const ora = new Date(aggiornatoIl).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      const ora = new Date(aggiornatoIl).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       riga.appendChild(el('span', 'wp-pv-note', `${pvT('updatedAt')} ${ora}`));
     }
     const b = bottone('wp-pv-btn-quiet wp-pv-btn-small', caricamento ? '…' : `↻ ${pvT('refreshBoard')}`, () => {

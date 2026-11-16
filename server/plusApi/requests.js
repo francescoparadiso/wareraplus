@@ -294,6 +294,28 @@ function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSott
     }
   });
 
+  // ── "Qualcosa e' cambiato?" ───────────────────────────────────────────
+  // Il tool la chiede ogni pochi secondi a scheda aperta, al posto di
+  // rileggere tutto il tavolo: una riga di SQL e due numeri. La versione e'
+  // calcolata sulle STESSE richieste che `GET /` darebbe a questa identita'
+  // (stesso `listaRichieste`, stessi poteri, sotto lente come il bersaglio), e
+  // con la stessa formula del client (board.js: `versioneDi`) — se cambiano
+  // una, cambia l'altra. Qualunque cosa tocchi una richiesta (richiesta,
+  // modifica, approvazione, apertura, esito del watcher, ritiro, dal sito O dal
+  // bot Discord) ne aggiorna `updated_at`; il conteggio copre le cancellazioni.
+  router.get('/versione', async (req, res) => {
+    try {
+      const cap = await capacita(req);
+      const tutto = Boolean(cap.admin) && !req.lente;
+      const righe = listaRichieste({ muIds: cap.chiedePer, countryIds: cap.approvaPer, tutto });
+      const ultima = righe.reduce((m, r) => Math.max(m, r.updated_at || 0), 0);
+      res.json({ versione: `${righe.length}:${ultima}` });
+    } catch (err) {
+      console.error('[requests] versione fallita:', err.message);
+      res.status(502).json({ error: 'gioco_non_raggiungibile' });
+    }
+  });
+
   // ── Chiedere / decidere / aprire / ritirare ────────────────────────────
   router.post('/', async (req, res) => rispondi(res, await azioneCrea(req.identita, req.body)));
   router.post('/:id/approve', async (req, res) => rispondi(res, await azioneDecidi(req.identita, req.params.id, 'approved')));

@@ -242,6 +242,13 @@ export function leggiTavolo({ asAccount = null } = {}) {
   return getJson(conLente('/requests', asAccount));
 }
 
+/** Una "versione" delle richieste che si vedono: cambia quando cambia qualcosa
+ *  (richiesta, modifica, decisione, apertura, esito, ritiro). Leggerla costa
+ *  una riga di SQL: serve al tavolo per sapere QUANDO ricaricarsi. */
+export function leggiVersioneTavolo({ asAccount = null } = {}) {
+  return getJson(conLente('/requests/versione', asAccount));
+}
+
 export function chiediContratto(dati) {
   return callOrThrow('/requests', dati);
 }
