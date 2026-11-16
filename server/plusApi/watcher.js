@@ -48,7 +48,7 @@ const { trpcGet } = require('./wareraApi');
 const {
   getDb, getRichiesta, aggiornaRichiesta, getWebhook, audit,
 } = require('./db');
-const { avvisa } = require('./notify');
+const { avvisa, avvisaCarta } = require('./notify');
 
 const RAFFICA_MS = 12_000;
 const RAFFICA_DURATA_MS = 3 * 60_000;
@@ -204,10 +204,13 @@ async function allarme(c) {
 
     const inTesta = a.currentWinner || null;
     if (!inTesta) {
-      avvisa('mu', r.mu_id, `**Auction closing in ~15s** — no bid yet on ${r.battle_label || r.battle_id}.`);
+      avvisa('mu', r.mu_id, `**Auction closing in ~15s** — no bid yet on ${r.battle_label || r.battle_id}.`,
+        { tipo: 'allarme', requestId: r.id });
     } else if (inTesta !== r.mu_id) {
-      avvisa('mu', r.mu_id, `**Auction closing in ~15s** — another unit is leading on ${r.battle_label || r.battle_id}.`);
-      avvisa('country', r.country_id, `**Heads up** — the contract on ${r.battle_label || r.battle_id} is being taken by a unit other than the one agreed.`);
+      avvisa('mu', r.mu_id, `**Auction closing in ~15s** — another unit is leading on ${r.battle_label || r.battle_id}.`,
+        { tipo: 'allarme', requestId: r.id });
+      avvisa('country', r.country_id, `**Heads up** — the contract on ${r.battle_label || r.battle_id} is being taken by a unit other than the one agreed.`,
+        { tipo: 'allarme_paese', requestId: r.id });
     }
   } catch (err) {
     console.warn('[watcher] allarme fallito:', err.message);
@@ -265,11 +268,18 @@ async function verdetto(c) {
   togli(r.id);
 
   if (esito === 'altra_unita') {
-    avvisa('country', r.country_id, `**Contract went elsewhere** — ${r.battle_label || r.battle_id}: another unit won the auction agreed with ${r.mu_nome || r.mu_id}.`);
-    avvisa('mu', r.mu_id, `**Lost** — the contract on ${r.battle_label || r.battle_id} was taken by another unit.`);
+    avvisa('country', r.country_id, `**Contract went elsewhere** — ${r.battle_label || r.battle_id}: another unit won the auction agreed with ${r.mu_nome || r.mu_id}.`,
+      { tipo: 'persa_paese', requestId: r.id });
+    avvisa('mu', r.mu_id, `**Lost** — the contract on ${r.battle_label || r.battle_id} was taken by another unit.`,
+      { tipo: 'persa', requestId: r.id });
   } else if (esito === 'conforme') {
-    avvisa('mu', r.mu_id, `**Won** — the contract on ${r.battle_label || r.battle_id} is yours.`);
+    avvisa('mu', r.mu_id, `**Won** — the contract on ${r.battle_label || r.battle_id} is yours.`,
+      { tipo: 'vinta', requestId: r.id });
   }
+  // La carta sul canale della nazione si riscrive con l'esito, qualunque sia
+  // (anche "nessuna offerta" o "parametri diversi", che non hanno un avviso
+  // loro): e' li' che il governo guarda com'e' finita.
+  avvisaCarta(r.country_id, r, 'esito');
 }
 
 // ---------------------------------------------------------------------------

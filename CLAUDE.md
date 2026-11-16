@@ -691,6 +691,31 @@ mezza di richieste e non si lancia di giorno. Solo cittadini ATTIVI (soglia
 del censimento, 3 giorni); la nazione ospite la ricalcola plusApi sulle
 regioni di adesso.
 
+Il **bot Discord dei contratti** (`server/discordBot/` + `server/plusApi/bot.js`,
+dal 2026-11-16) gira sul SECONDO VPS e non decide niente: ritira gli avvisi da
+plusApi e inoltra i bottoni dello sportello (`/contract-desk post` pubblica il
+pannello: richiesta, modifica, ritiro, governo che decide e apre/chiude lo
+sportello), e plusApi applica gli stessi permessi
+della pagina (`azioneCrea/Decidi/Aperta/Ritira` in `requests.js`). Dipende dal
+redeploy di **warera-plus-api** con `BOT_TOKEN` in `ecosystem.config.js` (serve
+`pm2 restart ecosystem.config.js --update-env`, un restart semplice non lo
+legge): senza, `/bot/*` risponde 503 e restano i webhook. Tre cose da sapere:
+
+- si taggano SOLO i ministri che hanno collegato Discord e personaggio al tool
+  (`approvaPer`: diritto `manageMercenaryContracts`, presidente e vice, più
+  deroghe); gli altri compaiono per nome, senza tag. Non aggiungere un elenco di
+  ministri nel bot;
+- un avviso va per UNA strada sola: se il bot ha chiesto negli ultimi 90 s e
+  l'ambito ha un canale del bot (`bot_channel`), il webhook di quell'ambito
+  tace; altrimenti vale il webhook come prima (`avvisa()` in `notify.js`);
+- l'applicazione Discord è la stessa del login ("WarEra+", 1544716064087347242):
+  il bot è un bot user aggiunto ad essa, e non si fa girare in due processi
+  (ognuno riceve ogni interazione). Il VPS 2 è l'istanza `a1-creator`
+  (10.0.0.10, solo dalla rete privata, passando dal VPS 1): lì i servizi sono
+  unit systemd, **non pm2**, e 954 MB sono condivisi con `buzzelle`.
+  ⚠️ Se un altro bot dello stesso processo fa `commands.set([...])` cancella
+  `/contract-desk`. Vedi `server/discordBot/README.md`.
+
 Le **Operazioni** dell'area riservata (`src/private/operazioni.js` +
 `mappaOperazione.js` + `server/plusApi/operazioni.js`, dal 2026-10-22) sono
 la lavagna dei piani: passi in sequenza con orari e frecce, e "Vedi sulla

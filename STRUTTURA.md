@@ -14,6 +14,18 @@ wareraPlus/
 ├── vite.config.js              ← build + PWA
 ├── vercel.json
 ├── server/
+│   ├── discordBot/             ← NUOVO (2026-11-16) — bot Discord dei contratti, sul
+│   │                              SECONDO VPS (a1-creator, systemd: contratti-bot.service).
+│   │                              contratti.js = lo SPORTELLO a bottoni (`/contract-desk
+│   │                              post`: richiesta con menu+modulo, modifica, ritiro,
+│   │                              governo che decide / apre-chiude / vede chi è taggato)
+│   │                              + carte con Approva/Rifiuta; index.js = avvio. Nessun
+│   │                              database: ritira gli avvisi da plusApi (`/bot/eventi`),
+│   │                              li scrive taggando i ministri collegati al tool, e
+│   │                              inoltra i bottoni a plusApi, che decide. Vedi il README.
+│   │                              Lato server: server/plusApi/bot.js (+ notify.js,
+│   │                              requests.js: azioni riusabili). Senza BOT_TOKEN è
+│   │                              spento e restano i webhook.
 │   ├── warera-cache-server.js  ← server di cache su VPS (Node, pm2) — poll periodico
 │   │                              delle API WarEra al posto dei browser utente
 │   ├── battleArchive.js        ← NUOVO — archivio battaglie concluse (90 gg) coi loro

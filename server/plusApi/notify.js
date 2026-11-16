@@ -24,7 +24,7 @@
    mezza banca dati.
    ══════════════════════════════════════════════════════════════════════ */
 
-const { getWebhook } = require('./db');
+const { getWebhook, getBotChannel, registraEventoBot } = require('./db');
 
 const TIMEOUT_MS = 4000;
 
@@ -62,13 +62,57 @@ async function inviaA(url, contenuto) {
  * Manda l'avviso al canale di un ambito, se ne è configurato uno.
  * Non attende: chi chiama non deve rallentare per una notifica.
  */
-function avvisa(scopeType, scopeId, contenuto) {
+function avvisa(scopeType, scopeId, contenuto, meta = null) {
   if (!scopeId) return;
+
+  // ── Il bot Discord, se c'e' e se questo ambito ha un canale suo ──────
+  // Un avviso va per UNA strada sola: se bot e webhook rispondessero
+  // entrambi, ogni evento comparirebbe due volte nello stesso canale.
+  // Il webhook resta il ripiego: se il bot non ha chiesto niente da piu' di
+  // 90 secondi (processo giu', VPS riavviato) si torna a lui, cosi' un
+  // allarme "l'asta sta per essere rubata" non finisce in una coda che
+  // nessuno legge.
+  if (meta?.tipo && botVivo() && getBotChannel(scopeType, scopeId)) {
+    try {
+      registraEventoBot({ scopeType, scopeId, tipo: meta.tipo, requestId: meta.requestId, testo: contenuto });
+      return;
+    } catch (err) {
+      console.warn('[notify] evento bot non registrato:', err.message);
+      // si cade sul webhook
+    }
+  }
+
   const w = getWebhook(scopeType, scopeId);
   if (!w) return;
   // Volutamente senza await: l'esito non cambia niente per il chiamante.
   inviaA(w.url, contenuto).catch(() => {});
 }
+
+/** Aggiorna la carta della richiesta sul canale della nazione, SOLO via bot:
+ *  un evento senza testo da pubblicare, che il bot usa per riscrivere il
+ *  messaggio con i bottoni giusti. Il webhook non lo vede mai. Serve perche'
+ *  chi decide dal SITO (o chi vede chiudersi l'asta) non deve lasciare sul
+ *  canale una carta che chiede ancora "Approva?". */
+function avvisaCarta(countryId, r, tipo) {
+  if (!countryId || !botVivo() || !getBotChannel('country', countryId)) return;
+  try {
+    registraEventoBot({ scopeType: 'country', scopeId: countryId, tipo: `carta_${tipo}`, requestId: r.id, testo: '' });
+  } catch (err) {
+    console.warn('[notify] evento carta non registrato:', err.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Il bot e' vivo?
+// ---------------------------------------------------------------------------
+// bot.js chiama segnaBotVivo() a ogni richiesta del bot. In memoria e non su
+// disco: dopo un restart di plusApi si riparte da "non vivo" e il bot, che
+// chiede ogni pochi secondi, lo riporta vivo da solo.
+let _ultimoContattoBot = 0;
+const BOT_VIVO_MS = 90_000;
+function segnaBotVivo() { _ultimoContattoBot = Date.now(); }
+function botVivo() { return Date.now() - _ultimoContattoBot < BOT_VIVO_MS; }
+function statoBot() { return { ultimoContatto: _ultimoContattoBot || null, vivo: botVivo() }; }
 
 // ---------------------------------------------------------------------------
 // Testi
@@ -163,7 +207,7 @@ function testoConfiniAlleanza(eventi, nomePaese, nomeAlleanza) {
 }
 
 module.exports = {
-  avvisa, urlWebhookValido,
+  avvisa, avvisaCarta, urlWebhookValido, segnaBotVivo, botVivo, statoBot,
   testoNuovaRichiesta, testoApprovata, testoRifiutata, testoAperta,
   testoConfini, testoConfiniAlleanza,
 };
