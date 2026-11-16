@@ -187,7 +187,8 @@ function embedCarta(r, nomePaese) {
   const st = statoCarta(r);
   const e = new EmbedBuilder()
     .setColor(COLORI[st.chiave] || COLORI.attesa)
-    .setTitle(`Contract request #${r.id}`)
+    // Niente numero nel titolo: l'id interno non e' la posizione in coda (resta nel piede).
+    .setTitle('Contract request')
     .setDescription(`**${r.battleLabel || r.battleId}**\n${st.testo}`)
     .addFields(
       { name: 'Unit', value: r.muNome || '?', inline: true },
@@ -198,7 +199,7 @@ function embedCarta(r, nomePaese) {
       { name: 'Per 1,000', value: num(r.perK), inline: true },
       ...(r.burstDamage ? [{ name: 'Burst now', value: num(r.burstDamage), inline: true }] : []),
     )
-    .setFooter({ text: `Request ${r.id}${r.professionalsOnly ? ' · professionals only' : ''}` })
+    .setFooter({ text: r.professionalsOnly ? 'Professionals only' : 'WarEra+ contract desk' })
     .setTimestamp(r.updatedAt || Date.now());
   if (r.note) e.addFields({ name: 'Note', value: String(r.note).slice(0, 300) });
   if (r.esito && (r.apertMinDamage != null || r.apertBudget != null)) {
@@ -258,7 +259,7 @@ function rigaRichiesta(r, conPaese) {
   // bot ha riscritto la riga.
   const quando = r.createdAt ? ` · asked ${quandoDiscord(r.createdAt)}` : '';
   const burst = r.burstDamage ? ` (burst ${corto(r.burstDamage)})` : '';
-  return `${ICONE[st.chiave] || '•'} \`#${r.id}\` **${r.muNome || '?'}** — ${corto(r.minDamage)} dmg${burst} · ${num(r.budget)}${dove}${quando} · _${st.testo}_`;
+  return `${ICONE[st.chiave] || '•'} **${r.muNome || '?'}** — ${corto(r.minDamage)} dmg${burst} · ${num(r.budget)}${dove}${quando} · _${st.testo}_`;
 }
 
 /** Raggruppa per battaglia, la più recente per prima. */
@@ -387,16 +388,24 @@ const ATTESA_LUNGA_MS = 30 * 60_000;
 /** Una riga della coda. Nella vista unita' conta DOVE sei (posizione presso
  *  quella nazione), in quella nazione conta CHI e da quanto. */
 function rigaCoda(r, nazione, nuovoId = null) {
-  const base = `\`#${r.id}\` **${r.muNome || '?'}** — ${corto(r.minDamage)} dmg${r.burstDamage ? ` (burst ${corto(r.burstDamage)})` : ''} · ${num(r.budget)}`;
+  // ⚠️ MAI l'id della richiesta nelle liste. E' il numero interno di TUTTE le
+  // richieste mai fatte (chiuse, ritirate, di prova comprese): "#17" non dice
+  // dove sei in coda, dice quanti contratti ci sono stati, ed era scambiato per
+  // la posizione. L'unico numero che interessa e' la POSIZIONE.
+  const base = `**${r.muNome || '?'}** — ${corto(r.minDamage)} dmg${r.burstDamage ? ` (burst ${corto(r.burstDamage)})` : ''} · ${num(r.budget)}`;
   const dove = !nazione && r.nomePaese ? ` · ${r.nomePaese}` : '';
   const chi = nazione && r.richiedente ? ` · by ${r.richiedente}` : '';
   if (vivaR(r) && r.status === 'pending') {
     const lunga = nazione && r.createdAt && Date.now() - r.createdAt > ATTESA_LUNGA_MS ? '🔥 ' : '⏳ ';
-    const pos = r.posizione ? ` · **${nazione ? `#${r.posizione} in line` : `${r.posizione} of ${r.inCoda} waiting`}**` : '';
+    // Nella coda della nazione la posizione sta DAVANTI ("1."), in quella
+    // dell'unita' in fondo ("2 of 7 waiting"): per un comandante conta quanti
+    // ne ha davanti il suo contratto.
+    const davanti = nazione && r.posizione ? `**${r.posizione}.** ` : '';
+    const dietro = !nazione && r.posizione ? ` · **${r.posizione} of ${r.inCoda} waiting**` : '';
     // "questa": e' la richiesta della carta sopra. Vale per il messaggio appena
     // arrivato e per quando lo si riscrive, dove "NEW" sarebbe diventato falso.
     const nuova = nuovoId != null && r.id === nuovoId ? ' ← **this one**' : '';
-    return `${lunga}${base}${dove}${chi} · asked ${quandoDiscord(r.createdAt)}${pos}${nuova}`;
+    return `${lunga}${davanti}${base}${dove}${chi} · asked ${quandoDiscord(r.createdAt)}${dietro}${nuova}`;
   }
   if (vivaR(r) && !r.openedAt) {
     return `✅ ${base}${dove}${chi} · approved ${quandoDiscord(r.approvedAt)} — _auction not opened yet_`;
@@ -482,13 +491,14 @@ function componentiCoda(d) {
       .filter((r) => vivaR(r) && !(r.status === 'approved' && r.openedAt))
       .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)).slice(0, 25);
     if (decidibili.length) {
+      let inFila = 0;                       // posizione fra le SOLE in attesa (l'ordine e' per arrivo)
       righe.push(new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId(`wp:decideq:country:${d.scopeId}`)
           .setPlaceholder('Decide a request… (oldest first)')
           .addOptions(decidibili.map((r) => ({
-            label: `#${r.id} ${r.muNome || '?'} — ${r.battleLabel || r.battleId}`.slice(0, 100),
+            label: `${r.muNome || '?'} — ${r.battleLabel || r.battleId}`.slice(0, 100),
             description: descrizioneVoce(r, r.status === 'pending'
-              ? [`⏳ waiting ${durata(r.createdAt)}`, dannoConBurst(r), `budget ${num(r.budget)}`]
+              ? [`⏳ #${++inFila} in line`, `waiting ${durata(r.createdAt)}`, dannoConBurst(r), `budget ${num(r.budget)}`]
               : ['✅ approved — open the auction', dannoConBurst(r)]),
             value: String(r.id),
           }))),
@@ -900,7 +910,7 @@ function attach(client, opz = {}) {
     });
     if (!r.ok) return i.editReply(messaggioErrore(r));
     const q = r.json.richiesta;
-    return i.editReply(`Request **#${q.id}** sent: ${num(q.minDamage)} damage${q.burstDamage ? ` (${num(q.burstDamage)} right away)` : ''} for ${num(q.budget)} (${num(q.perK)} per 1,000) on ${q.battleLabel}.\nThe government has been tagged; you will hear back in your unit's channel.`);
+    return i.editReply(`Request **sent**: ${num(q.minDamage)} damage${q.burstDamage ? ` (${num(q.burstDamage)} right away)` : ''} for ${num(q.budget)} (${num(q.perK)} per 1,000) on ${q.battleLabel}.\nThe government has been tagged; you will hear back in your unit's channel.`);
   }
 
   // ── Edit mine / Withdraw mine ─────────────────────────────────────────
@@ -919,7 +929,7 @@ function attach(client, opz = {}) {
       content: modo === 'edit' ? 'Which request do you want to edit?' : 'Which request do you want to withdraw?',
       components: [new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId(`wp:mine:${modo}`).setPlaceholder('Pick one…').addOptions(lista.map((x) => ({
-          label: `#${x.id} ${x.battleLabel || x.battleId}`.slice(0, 100),
+          label: `${x.battleLabel || x.battleId}`.slice(0, 100),
           description: descrizioneVoce(x, [`asked ${durata(x.createdAt)} ago`, dannoConBurst(x), statoCarta(x).testo]),
           value: String(x.id),
         }))))],
@@ -931,14 +941,14 @@ function attach(client, opz = {}) {
     if (modo === 'wd') {
       await i.deferUpdate();
       const r = await api('POST', '/azione', { discordId: i.user.id, azione: 'cancel', requestId: id });
-      return i.editReply({ content: r.ok ? `Request **#${id}** withdrawn.` : messaggioErrore(r), components: [] });
+      return i.editReply({ content: r.ok ? 'Request **withdrawn**.' : messaggioErrore(r), components: [] });
     }
     const r = await api('GET', `/mie?discordId=${i.user.id}`);
     const q = (r.json.richieste || []).find((x) => x.id === id);
     if (!q || q.status !== 'pending') {
       return i.update({ content: ERRORI.gia_decisa, components: [] });
     }
-    return i.showModal(modulo(`wp:ed:${id}`, `Edit request #${id}`, q));
+    return i.showModal(modulo(`wp:ed:${id}`, 'Edit your request', q));
   }
 
   async function onInvioModifica(i) {                    // modulo `wp:ed:<id>`
@@ -956,7 +966,7 @@ function attach(client, opz = {}) {
       note: i.fields.getTextInputValue('note') || '',
     });
     if (!r.ok) return i.editReply(messaggioErrore(r));
-    return i.editReply(`Request **#${id}** updated: ${num(r.json.richiesta.minDamage)} damage for ${num(r.json.richiesta.budget)}.`);
+    return i.editReply(`Request **updated**: ${num(r.json.richiesta.minDamage)} damage for ${num(r.json.richiesta.budget)}.`);
   }
 
   // ── Refresh / Show all ────────────────────────────────────────────────
@@ -988,9 +998,10 @@ function attach(client, opz = {}) {
       components: [new ActionRowBuilder().addComponents(
         // Il menu e' in un messaggio effimero: lo sportello d'origine non si
         // puo' dedurre dal messaggio, quindi viaggia nell'id.
-        new StringSelectMenuBuilder().setCustomId(`wp:decide:${p.scope}:${p.scopeId}`).setPlaceholder('Pick one…').addOptions(lista.map((r) => ({
-          label: `#${r.id} ${r.muNome || '?'} — ${r.battleLabel || r.battleId}`.slice(0, 100),
-          description: descrizioneVoce(r, [`waiting ${durata(r.createdAt)}`, dannoConBurst(r), `budget ${num(r.budget)}`]),
+        new StringSelectMenuBuilder().setCustomId(`wp:decide:${p.scope}:${p.scopeId}`).setPlaceholder('Pick one…').addOptions(lista.map((r, k) => ({
+          label: `${r.muNome || '?'} — ${r.battleLabel || r.battleId}`.slice(0, 100),
+          // `lista` e' in ordine di arrivo e contiene solo le in attesa: la posizione e' k + 1.
+          description: descrizioneVoce(r, [`⏳ #${k + 1} in line`, `waiting ${durata(r.createdAt)}`, dannoConBurst(r), `budget ${num(r.budget)}`]),
           value: String(r.id),
         }))))],
     });

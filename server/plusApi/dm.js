@@ -50,10 +50,10 @@ function testoDM(tipo, r, chi, paese) {
     + `${r.burst_damage ? ` (burst ${num(r.burst_damage)})` : ''} · budget ${num(r.budget)}`
     + `${r.professionals_only ? ' · professionals only' : ''}`;
   if (tipo === 'approvata') {
-    return `✅ **Your contract was approved** — request #${r.id}\n${dove}\n${cifre}\n`
+    return `✅ **Your contract was approved**\n${dove}\n${cifre}\n`
       + `Approved by ${chi}. Wait for the auction to open, then bid.`;
   }
-  return `🔨 **The contract is posted — the auction is open!** — request #${r.id}\n${dove}\n${cifre}\n`
+  return `🔨 **The contract is posted — the auction is open!**\n${dove}\n${cifre}\n`
     + `Opened by ${chi}. The first bid usually lands within ~10 seconds.`;
 }
 
