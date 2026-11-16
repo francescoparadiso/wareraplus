@@ -50,8 +50,10 @@ postarla nel canale):
   (mediana degli ultimi 7 giorni, solo da 3 decisioni in su).
 - **`/contract-queue nation`** — per chi può approvare: tutta la coda della
   nazione dalla più vecchia (in attesa → approvate ma asta non aperta → asta
-  aperta → chiuse nelle ultime 24 h), con 🔥 su chi aspetta da più di 30 minuti.
-  Agli altri risponde che serve un ruolo di governo.
+  aperta), con 🔥 su chi aspetta da più di 30 minuti. Mostra solo ciò che è
+  ancora aperto: le richieste chiuse (vinte, rubate, senza offerte, ritirate) non
+  compaiono né qui né nella lista sotto una richiesta nuova; l'esito resta sulla
+  carta e nello sportello. Agli altri risponde che serve un ruolo di governo.
 
 Sotto la coda ci sono i bottoni: **Request a contract** per tutti (ai comandanti
 anche *Edit mine* / *Withdraw mine*) e **Refresh**; nella coda della nazione un

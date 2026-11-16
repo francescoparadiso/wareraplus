@@ -426,7 +426,10 @@ function renderCoda(d, opz = {}) {
     ['Waiting for a decision', inAttesa],
     ['Approved — the auction is not open yet', vive.filter((r) => r.status === 'approved' && !r.openedAt).sort(ordina)],
     ['Auction open', vive.filter((r) => r.status === 'approved' && r.openedAt).sort(ordina)],
-    ['Closed in the last 24 hours', d.richieste.filter((r) => !vivaR(r)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))],
+    // Le richieste CHIUSE (vinte, rubate, senza offerte, ritirate) non si mostrano
+    // piu' nella coda: la coda e' quello che c'e' ancora da fare, e un elenco di
+    // esiti vecchi di ore la riempiva di righe che non chiedono niente a nessuno.
+    // L'esito resta sulla carta della richiesta e nello sportello.
   ].filter(([, righe]) => righe.length);
 
   const testa = [];
