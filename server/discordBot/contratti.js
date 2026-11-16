@@ -745,11 +745,29 @@ function attach(client, opz = {}) {
       return i.editReply('Done — the desk is removed and the bot stops posting alerts there.');
     }
 
-    const canale = i.options.getChannel('channel') || i.channel;
-    const perm = canale?.permissionsFor?.(client.user);
-    if (!perm?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory])) {
-      return i.editReply(`I cannot work in <#${canale?.id}>: I need View Channel, Send Messages, Embed Links and Read Message History there.`);
+    // ⚠️ Con il solo intent `Guilds` il canale dell'interazione puo' NON essere
+    // nella cache (`i.channel` null), ne' lo e' il membro-bot da cui
+    // `permissionsFor` prenderebbe i permessi: la prima versione rispondeva
+    // "<#undefined>". Si usa l'id (sempre presente) e, per il canale in cui si
+    // e' scritto il comando, i permessi che Discord stesso manda nell'interazione
+    // (`appPermissions`); solo per un canale scelto a mano si calcolano.
+    const PERMESSI = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory];
+    const scelto = i.options.getChannel('channel');
+    const canaleId = scelto?.id || i.channelId;
+    let permessiOk = false;
+    try {
+      if (!scelto) permessiOk = Boolean(i.appPermissions?.has(PERMESSI));
+      else {
+        const io = i.guild?.members?.me || await i.guild?.members?.fetchMe();
+        permessiOk = Boolean(scelto.permissionsFor?.(io)?.has(PERMESSI));
+      }
+    } catch { permessiOk = false; }
+    if (!permessiOk) {
+      return i.editReply(`I cannot work in <#${canaleId}>: I need **View Channel, Send Messages, Embed Links and Read Message History** there. If the channel is private, add the bot's role to it (channel settings → Permissions).`);
     }
+    let canale;
+    try { canale = await canaleDi(canaleId); }
+    catch { return i.editReply(`I cannot see <#${canaleId}>: give the bot's role access to that channel and try again.`); }
     const r = await api('POST', '/canale', { discordId: i.user.id, scope, channelId: canale.id, guildId: i.guildId });
     if (!r.ok) return i.editReply(messaggioErrore(r));
 
