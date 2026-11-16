@@ -390,8 +390,9 @@ function attach(client, opz = {}) {
     if (!d) return;
     try {
       const c = await canaleDi(p.canaleId);
-      const m = await c.messages.fetch(p.messaggioId);
-      await m.edit(renderSportello(d));
+      // Edit per id, senza fetch: riscrivere un proprio messaggio non richiede
+      // "Read Message History", la fetch si'.
+      await c.messages.edit(p.messaggioId, renderSportello(d));
     } catch (err) {
       if (err?.code === 10008 || err?.code === 10003) { delete stato.pannelli[key]; salva(); }
       else console.warn(`[contratti] sportello ${key} non aggiornato:`, err.message);
@@ -441,8 +442,7 @@ function attach(client, opz = {}) {
       if (!k || !r) return;
       try {
         const c = await canaleDi(k.canaleId);
-        const m = await c.messages.fetch(k.messaggioId);
-        await m.edit(cartaPayload(r, ev.nomePaese));
+        await c.messages.edit(k.messaggioId, cartaPayload(r, ev.nomePaese));
       } catch (err) {
         // Messaggio cancellato a mano: la carta non c'e' piu', non e' un guasto.
         if (err?.code === 10008 || err?.code === 10003) delete stato.carte[r.id];
@@ -738,7 +738,7 @@ function attach(client, opz = {}) {
       const k = chiave(scope, r.json.scopeId);
       const p = stato.pannelli[k];
       if (p) {
-        try { const c = await canaleDi(p.canaleId); const m = await c.messages.fetch(p.messaggioId); await m.delete(); } catch { /* gia' sparito */ }
+        try { const c = await canaleDi(p.canaleId); await c.messages.delete(p.messaggioId); } catch { /* gia' sparito */ }
         delete stato.pannelli[k];
         salva();
       }
@@ -751,19 +751,26 @@ function attach(client, opz = {}) {
     // "<#undefined>". Si usa l'id (sempre presente) e, per il canale in cui si
     // e' scritto il comando, i permessi che Discord stesso manda nell'interazione
     // (`appPermissions`); solo per un canale scelto a mano si calcolano.
-    const PERMESSI = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory];
+    // Servono solo questi tre: scrivere lo sportello e le carte. Riscriverli
+    // e cancellarli (propri messaggi, per id) non chiede altro.
+    const PERMESSI = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks];
     const scelto = i.options.getChannel('channel');
     const canaleId = scelto?.id || i.channelId;
-    let permessiOk = false;
+    let mancanti = null;                                   // null = non so dirlo
     try {
-      if (!scelto) permessiOk = Boolean(i.appPermissions?.has(PERMESSI));
+      if (!scelto) mancanti = i.appPermissions ? i.appPermissions.missing(PERMESSI) : null;
       else {
         const io = i.guild?.members?.me || await i.guild?.members?.fetchMe();
-        permessiOk = Boolean(scelto.permissionsFor?.(io)?.has(PERMESSI));
+        const perm = scelto.permissionsFor?.(io);
+        mancanti = perm ? perm.missing(PERMESSI) : null;
       }
-    } catch { permessiOk = false; }
-    if (!permessiOk) {
-      return i.editReply(`I cannot work in <#${canaleId}>: I need **View Channel, Send Messages, Embed Links and Read Message History** there. If the channel is private, add the bot's role to it (channel settings → Permissions).`);
+    } catch { mancanti = null; }
+    if (mancanti === null || mancanti.length) {
+      // Dire QUALE permesso manca: "mi serve tutto" non dice dove guardare.
+      const leggibile = (n) => String(n).replace(/([a-z])([A-Z])/g, '$1 $2');
+      return i.editReply(mancanti === null
+        ? `I cannot tell which permissions I have in <#${canaleId}>. I need **View Channel, Send Messages and Embed Links** there.`
+        : `I cannot work in <#${canaleId}>: I am missing **${mancanti.map(leggibile).join(', ')}** there. Check the channel's permissions (and its category's) for the bot's role: a "deny" on the channel or the category wins over what the invite granted.`);
     }
     let canale;
     try { canale = await canaleDi(canaleId); }
@@ -779,7 +786,7 @@ function attach(client, opz = {}) {
     // Un solo sportello per nazione/unita': se ce n'era un altro, via.
     const vecchio = stato.pannelli[key];
     if (vecchio) {
-      try { const c = await canaleDi(vecchio.canaleId); const m = await c.messages.fetch(vecchio.messaggioId); await m.delete(); } catch { /* gia' sparito */ }
+      try { const c = await canaleDi(vecchio.canaleId); await c.messages.delete(vecchio.messaggioId); } catch { /* gia' sparito */ }
     }
     const m = await canale.send(renderSportello(d));
     stato.pannelli[key] = { scope, scopeId, canaleId: canale.id, messaggioId: m.id };

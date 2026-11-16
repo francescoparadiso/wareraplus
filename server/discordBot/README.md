@@ -50,7 +50,7 @@ aggiunto ad essa, il login OAuth non cambia.
    solo nel file `/etc/contratti-bot.env` del VPS 2 (punto 3).
 2. Nessun intent privilegiato (bastano quelli di base).
 3. **OAuth2 → URL Generator**: scope `bot` + `applications.commands`, permessi
-   *View Channel, Send Messages, Embed Links, Read Message History* → invito nel
+   *View Channel, Send Messages, Embed Links* → invito nel
    server.
 
 ⚠️ Per il **dev** serve l'altra applicazione ("WarEra+ dev"), con il suo token:
