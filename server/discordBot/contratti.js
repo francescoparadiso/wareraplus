@@ -575,7 +575,8 @@ function attach(client, opz = {}) {
   const stateFile = opz.stateFile || path.join(process.cwd(), 'contratti-state.json');
 
   // ── Stato su disco: cursore degli eventi, carte e sportelli ───────────
-  let stato = { cursore: null, carte: {}, pannelli: {} };
+  // `ricordi`: l'ultimo promemoria mandato in ogni canale (la sua coda si riscrive).
+  let stato = { cursore: null, carte: {}, pannelli: {}, ricordi: {} };
   try { stato = { ...stato, ...JSON.parse(fs.readFileSync(stateFile, 'utf-8')) }; } catch { /* prima partenza */ }
   const salva = () => {
     try {
@@ -678,9 +679,35 @@ function attach(client, opz = {}) {
     }, 2500));
   }
 
+  /** La coda del momento, per il promemoria (nessuna richiesta segnata). */
+  function embedCodaCorrente(d) {
+    const attese = d.richieste.filter((x) => vivaR(x) && x.status === 'pending').length;
+    return renderCoda(
+      { vista: 'nation', nome: d.nome, richieste: d.richieste, decisione: {} },
+      { max: 3500, titolo: `Current queue — ${attese} waiting` },
+    );
+  }
+
+  /** Riscrive la coda sull'ultimo promemoria del canale dello sportello della
+   *  nazione: una coda ferma al momento in cui e' stato mandato tornerebbe a
+   *  dare numeri vecchi. */
+  async function aggiornaCodaDelRicordo(countryId, d) {
+    const sp = stato.pannelli[chiave('country', countryId)];
+    const ric = sp && stato.ricordi[sp.canaleId];
+    if (!ric) return;
+    try {
+      const c = await canaleDi(sp.canaleId);
+      await c.messages.edit(ric.messaggioId, { embeds: [embedCodaCorrente(d)] });
+    } catch (err) {
+      if (err?.code === 10008 || err?.code === 10003) { delete stato.ricordi[sp.canaleId]; salva(); }
+      else console.warn('[contratti] coda del promemoria non aggiornata:', err.message);
+    }
+  }
+
   async function aggiornaListeCarte(countryId) {
     const d = await datiSportello('country', countryId);
     if (!d) return;
+    aggiornaCodaDelRicordo(countryId, d);
     const dati = { vista: 'nation', nome: d.nome, richieste: d.richieste, decisione: {} };
     const attese = d.richieste.filter((x) => vivaR(x) && x.status === 'pending').length;
     for (const r of d.richieste) {
@@ -1505,11 +1532,23 @@ function attach(client, opz = {}) {
       if (!attivo) return;
 
       ultimoRicordo.set(canaleId, Date.now());
-      await canale.send({
+      // Insieme alle istruzioni, la CODA di adesso: chi legge vede subito quanto
+      // c'e' davanti. Se i dati non arrivano si manda il promemoria senza: la
+      // coda e' un di piu', non puo' bloccarlo.
+      let embeds = [];
+      if (sportello.scope === 'country') {
+        try {
+          const d = await datiSportello('country', sportello.scopeId);
+          if (d) embeds = [embedCodaCorrente(d)];
+        } catch { /* senza coda */ }
+      }
+      const inviato = await canale.send({
         content: await testoRicordo(canale, sportello),
+        embeds,
         components: [bottoniRicordo()],
         allowedMentions: { parse: [] },
       });
+      if (embeds.length) { stato.ricordi[canaleId] = { messaggioId: inviato.id, at: Date.now() }; salva(); }
     } catch (err) {
       console.warn('[contratti] promemoria non inviato:', err.message);
     }

@@ -100,6 +100,12 @@ Nei canali con uno sportello il bot fa due cose perché non si perda sotto la ch
   canale ci sono due sportelli (nazione e unità) basta che uno sia in vista; il
   link va a quello della nazione. L'emoji `:Behehehehe:` del server viene
   inserita se esiste, altrimenti si omette.
+- Il promemoria porta anche la **coda di adesso** ("Current queue — N waiting",
+  solo posizioni, dalla più vecchia), così chi legge vede subito quanto c'è davanti.
+  La coda si **riscrive** ad ogni cambiamento della nazione (come le liste sotto le
+  carte), sull'ultimo promemoria del canale; testo e bottoni restano. Se i dati
+  non arrivano, il promemoria parte senza coda. Solo nei canali con lo sportello
+  della nazione.
 - Il promemoria ha i **bottoni** sotto: 🔗 *Link my character* (apre il modulo di
   `/register`), 📝 *Request a contract*, *Edit mine*, *Withdraw mine* e 📋 *My
   queue* (la coda della propria unità), così non serve andare allo sportello
