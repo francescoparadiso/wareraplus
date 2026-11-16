@@ -399,6 +399,17 @@ function buildBotRouter() {
     res.json({ richieste: righe.map((r) => ({ ...pubblica(conNomi(r)), nomePaese: naz.get(r.country_id)?.name || null })) });
   });
 
+  // ── Ha collegato l'account? ────────────────────────────────────────────
+  // Per la risposta automatica a chi scrive "10m pro" a mano: serve solo a
+  // scegliere fra "usa lo sportello" e "prima accedi e collega il personaggio".
+  // Niente chiamate al gioco: e' una lettura del database e basta.
+  router.get('/utente', (req, res) => {
+    const d = String(req.query.discordId || '');
+    if (!ID_DISCORD.test(d)) return res.status(400).json({ error: 'parametri_non_validi' });
+    const a = findAccountByDiscordId(d);
+    res.json({ conto: Boolean(a), verificato: Boolean(a?.war_user_id) });
+  });
+
   // ── La coda (/contract-queue) ──────────────────────────────────────────
   // Due viste sugli stessi dati dello sportello, ma per CHI chiede:
   //   unit    le richieste della MIA unita', con la posizione in coda presso

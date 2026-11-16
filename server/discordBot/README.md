@@ -53,6 +53,23 @@ postarla nel canale):
   aperta → chiuse nelle ultime 24 h), con 🔥 su chi aspetta da più di 30 minuti.
   Agli altri risponde che serve un ruolo di governo.
 
+## Risposta automatica a "10m pro"
+
+Se qualcuno scrive a mano "10m pro" (o "5 m pros", "pro 10m"…) nel canale di uno
+sportello, il bot risponde rimandandolo allo sportello (con il link al
+messaggio); se non ha collegato l'account, gli dice prima di accedere a
+`wareraplus.vercel.app` con Discord e collegare il personaggio. Una volta ogni 10
+minuti per persona e canale, solo nei canali con uno sportello, mai ai bot. Serve
+il suffisso (`k`/`m`/`mil`/`b`): "10 pro" da solo non basta.
+
+⚠️ Richiede l'intent **privilegiato** *Message Content*, da abilitare a mano:
+Developer Portal → l'applicazione → **Bot** → *Privileged Gateway Intents* →
+**Message Content Intent** → Save, poi `sudo systemctl restart contratti-bot`.
+Finché non è abilitato il bot **non cade**: `index.js` rifiuta il login con
+l'intent, riprova senza e lo scrive nel log (`journalctl -u contratti-bot`:
+"parto senza" / "connesso (senza lettura dei messaggi)"). Sotto i 100 server non
+serve nessuna verifica.
+
 ## 1. Discord Developer Portal
 
 L'applicazione è la stessa del login, **"WarEra+"**

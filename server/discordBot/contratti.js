@@ -105,6 +105,16 @@ function leggiNumero(testo) {
   return Number.isFinite(v) ? v * molt : NaN;
 }
 
+/** "10m pro", "5 M pros", "pro 10m", "2mil professionals": qualcuno dice di
+ *  avere professionisti scrivendolo a mano. Serve il suffisso (k/m/mil/b):
+ *  "10 pro" da solo e' troppo ambiguo, e una falsa risposta costa piu' di una
+ *  mancata. */
+const SUFFISSO = '(?:k|m|mil|mln|million|b)';
+const PRO = '(?:pro|pros|professional|professionals)';
+const RE_PRO = new RegExp(
+  `\\b\\d+(?:[.,]\\d+)?\\s*${SUFFISSO}\\b\\s*${PRO}\\b|\\b${PRO}\\b\\s*[:=-]?\\s*\\d+(?:[.,]\\d+)?\\s*${SUFFISSO}\\b`, 'i');
+const parlaDiPro = (t) => RE_PRO.test(String(t || ''));
+
 const siNo = (t) => /^(y|yes|s|si|sì|true|1|pro)/i.test(String(t || '').trim());
 
 // ---------------------------------------------------------------------------
@@ -970,6 +980,48 @@ function attach(client, opz = {}) {
     }
   });
 
+  // ═════════════════════════════════════════════════════════════════════
+  // "10m pro" scritto a mano nel canale
+  // ═════════════════════════════════════════════════════════════════════
+  // Succede: invece di premere "Request a contract" qualcuno scrive "10m pro"
+  // per dire che ha 10M di professionisti. Il governo non lo vede nella coda e
+  // nessuno lo traccia. Il bot risponde e rimanda allo sportello.
+  //
+  // ⚠️ Serve l'intent PRIVILEGIATO `MessageContent` (Developer Portal → Bot →
+  // Privileged Gateway Intents). Senza, `msg.content` e' vuoto e questa
+  // funzione non fa niente: index.js riprova senza l'intent invece di cadere.
+  //
+  // Risponde SOLO nei canali dove c'e' uno sportello (non in tutto il server),
+  // e una volta ogni 10 minuti per persona e canale: una risposta automatica
+  // ripetuta a chi sta chiacchierando e' peggio del problema che risolve.
+  const ultimaRisposta = new Map();
+  const RISPOSTA_OGNI_MS = 10 * 60_000;
+
+  client.on(Events.MessageCreate, async (msg) => {
+    try {
+      if (msg.author?.bot || !msg.guildId || !msg.content) return;
+      if (!parlaDiPro(msg.content)) return;
+      const sportello = Object.values(stato.pannelli).find((p) => p.canaleId === msg.channelId);
+      if (!sportello) return;
+      const k = `${msg.channelId}:${msg.author.id}`;
+      if (Date.now() - (ultimaRisposta.get(k) || 0) < RISPOSTA_OGNI_MS) return;
+      ultimaRisposta.set(k, Date.now());
+
+      const r = await api('GET', `/utente?discordId=${msg.author.id}`);
+      const nonCollegato = r.ok && !r.json.verificato;
+      const link = `https://discord.com/channels/${msg.guildId}/${sportello.canaleId}/${sportello.messaggioId}`;
+      const uso = `Please use the **[contract desk](${link})**: press **📝 Request a contract**, pick the battle and fill in the form `
+        + '(minimum damage like `10m`, the bounty per 1,000, and **professionals only: yes**). '
+        + 'The government gets tagged and you can follow your place in the queue with `/contract-queue unit`.';
+      const contenuto = nonCollegato
+        ? `Hi! I can't recognise you yet — you are not signed in to WarEra+. First **sign in with Discord at ${toolUrl}** and link your game character (Private area); that is how I know who you are and tag the government. Then ${uso.charAt(0).toLowerCase()}${uso.slice(1)}`
+        : `Hi! Writing it here won't put it in the queue. ${uso}`;
+      await msg.reply({ content: contenuto, allowedMentions: { repliedUser: true, parse: [] } });
+    } catch (err) {
+      console.warn('[contratti] risposta automatica non inviata:', err.message);
+    }
+  });
+
   // ── Partenza ──────────────────────────────────────────────────────────
   async function registraComandi() {
     // Uno per uno (create = upsert per nome): `set` cancellerebbe i comandi
@@ -994,5 +1046,5 @@ function attach(client, opz = {}) {
 }
 
 module.exports = {
-  attach, definizioniComandi, embedCarta, bottoniCarta, statoCarta, renderSportello, renderCoda, leggiNumero,
+  attach, definizioniComandi, embedCarta, bottoniCarta, statoCarta, renderSportello, renderCoda, leggiNumero, parlaDiPro,
 };
