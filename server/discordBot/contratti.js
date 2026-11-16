@@ -162,7 +162,7 @@ function embedCarta(r, nomePaese) {
     .addFields(
       { name: 'Unit', value: r.muNome || '?', inline: true },
       { name: 'Paid by', value: nomePaese || r.nomePaese || '—', inline: true },
-      { name: 'Asked by', value: r.richiedente || '?', inline: true },
+      { name: 'Asked by', value: `${r.richiedente || '?'}${r.createdAt ? `\n${quandoDiscord(r.createdAt)}` : ''}`, inline: true },
       { name: 'Min damage', value: num(r.minDamage), inline: true },
       { name: 'Budget', value: num(r.budget), inline: true },
       { name: 'Per 1,000', value: num(r.perK), inline: true },
@@ -203,11 +203,30 @@ const cartaPayload = (r, nomePaese) => ({ embeds: [embedCarta(r, nomePaese)], co
 // Lo sportello (il pannello fisso)
 // ---------------------------------------------------------------------------
 
+/** Timestamp relativo di Discord ("12 minutes ago"): lo disegna e lo
+ *  aggiorna il CLIENT di chi guarda, quindi lo sportello non va riscritto
+ *  ogni minuto per tenerlo giusto. */
+const quandoDiscord = (ms) => (ms ? `<t:${Math.floor(ms / 1000)}:R>` : '');
+
+/** "12 min", "2 h 05 min": per i menu, dove i timestamp di Discord non si
+ *  renderizzano e il testo e' scritto una volta sola. */
+function durata(ms) {
+  const min = Math.max(0, Math.floor((Date.now() - ms) / 60_000));
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  return h < 48 ? `${h} h ${String(min % 60).padStart(2, '0')} min` : `${Math.floor(h / 24)} d`;
+}
+
 /** Una riga per richiesta, per lo sportello e per "Show all". */
 function rigaRichiesta(r, conPaese) {
   const st = statoCarta(r);
   const dove = conPaese && r.nomePaese ? ` · ${r.nomePaese}` : '';
-  return `${ICONE[st.chiave] || '•'} \`#${r.id}\` **${r.muNome || '?'}** — ${corto(r.minDamage)} dmg · ${num(r.budget)}${dove} · _${st.testo}_`;
+  // "Da quanto aspetta": il momento della RICHIESTA, non quello dell'ultimo
+  // cambio — un'unita' vuole sapere da quanto e' in coda, non da quanto il
+  // bot ha riscritto la riga.
+  const quando = r.createdAt ? ` · asked ${quandoDiscord(r.createdAt)}` : '';
+  return `${ICONE[st.chiave] || '•'} \`#${r.id}\` **${r.muNome || '?'}** — ${corto(r.minDamage)} dmg · ${num(r.budget)}${dove}${quando} · _${st.testo}_`;
 }
 
 /** Raggruppa per battaglia, la più recente per prima. */
@@ -219,6 +238,8 @@ function perBattaglia(richieste) {
     g.righe.push(r);
     g.ultimo = Math.max(g.ultimo, r.createdAt || 0);
   }
+  // Dentro una battaglia la piu' vecchia per prima: e' quella che aspetta da piu'.
+  for (const g of m.values()) g.righe.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   return [...m.values()].sort((a, b) => b.ultimo - a.ultimo);
 }
 
@@ -618,7 +639,7 @@ function attach(client, opz = {}) {
       components: [new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId(`wp:mine:${modo}`).setPlaceholder('Pick one…').addOptions(lista.map((x) => ({
           label: `#${x.id} ${x.battleLabel || x.battleId}`.slice(0, 100),
-          description: `${x.muNome || '?'} · ${corto(x.minDamage)} dmg · ${statoCarta(x).testo}`.slice(0, 100),
+          description: `asked ${durata(x.createdAt)} ago · ${corto(x.minDamage)} dmg · ${statoCarta(x).testo}`.slice(0, 100),
           value: String(x.id),
         }))))],
     });
@@ -674,7 +695,9 @@ function attach(client, opz = {}) {
     await i.deferReply({ flags: EPHEMERAL });
     const d = await datiSportello(p.scope, p.scopeId);
     if (!d) return i.editReply(ERRORI.gioco_non_raggiungibile);
-    const lista = d.richieste.filter((r) => r.status === 'pending' && !r.esito).slice(0, 25);
+    // La piu' vecchia per prima: e' quella che aspetta da piu'.
+    const lista = d.richieste.filter((r) => r.status === 'pending' && !r.esito)
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)).slice(0, 25);
     if (!lista.length) return i.editReply('No request is waiting for a decision.');
     return i.editReply({
       content: 'Pick a request to decide:',
@@ -683,7 +706,7 @@ function attach(client, opz = {}) {
         // puo' dedurre dal messaggio, quindi viaggia nell'id.
         new StringSelectMenuBuilder().setCustomId(`wp:decide:${p.scope}:${p.scopeId}`).setPlaceholder('Pick one…').addOptions(lista.map((r) => ({
           label: `#${r.id} ${r.muNome || '?'} — ${r.battleLabel || r.battleId}`.slice(0, 100),
-          description: `${corto(r.minDamage)} dmg · budget ${num(r.budget)}`.slice(0, 100),
+          description: `waiting ${durata(r.createdAt)} · ${corto(r.minDamage)} dmg · budget ${num(r.budget)}`.slice(0, 100),
           value: String(r.id),
         }))))],
     });
