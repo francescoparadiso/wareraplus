@@ -73,6 +73,24 @@ menu per **decidere** una richiesta (in attesa → Approve / Reject; approvata �
   Finché la richiesta è in attesa il riquadro si aggiorna con la carta; una volta
   decisa resta la sola carta.
 
+## Tenere lo sportello in vista
+
+Nei canali con uno sportello il bot fa due cose perché non si perda sotto la chat:
+
+- **Lo pinna** (una volta, con successo) se il ruolo del bot ha *Pin Messages* o
+  *Manage Messages*; senza il permesso lo scrive nel log e va avanti.
+- **Manda un promemoria** (istruzioni + link allo sportello) se lo sportello **non è
+  fra gli ultimi 10 messaggi** del canale **e** qualcuno ha scritto negli
+  **ultimi 3 minuti**. Il promemoria conta come "sportello in vista": il
+  prossimo arriva solo dopo altri 10 messaggi, e mai prima di 5 minuti. Se nel
+  canale ci sono due sportelli (nazione e unità) basta che uno sia in vista; il
+  link va a quello della nazione. L'emoji `:Behehehehe:` del server viene
+  inserita se esiste, altrimenti si omette.
+
+Il controllo parte 20 secondi dopo l'ultimo messaggio (una raffica di messaggi è
+un solo controllo) e legge gli ultimi 10 messaggi (serve *Read Message History*).
+Parametri in `attach(..., { ricordo: { debounceMs, ultimiN, attivitaMs, ognigMs } })`.
+
 ## Registrarsi dal bot: `/register`
 
 Collega il personaggio di gioco **senza passare dal sito**. Il modulo chiede il

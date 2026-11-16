@@ -1067,6 +1067,7 @@ function attach(client, opz = {}) {
     const m = await canale.send(renderSportello(d));
     stato.pannelli[key] = { scope, scopeId, canaleId: canale.id, messaggioId: m.id };
     salva();
+    provaAPinnare(key);                                   // se il bot ha il permesso, lo sportello resta in cima
     return i.editReply(`Done — the contract desk is in <#${canale.id}>. Alerts for ${scope === 'country' ? 'your nation' : 'your unit'} go there too.`);
   }
 
@@ -1280,6 +1281,109 @@ function attach(client, opz = {}) {
     }
   });
 
+  // ═════════════════════════════════════════════════════════════════════
+  // Tenere lo sportello in vista
+  // ═════════════════════════════════════════════════════════════════════
+  // In un canale dove si chiacchiera lo sportello finisce sotto decine di
+  // messaggi e nessuno lo ritrova ("si perde"). Due cose:
+  //
+  //  1. si PINNA (se il bot ha il permesso: "Pin Messages" / "Manage Messages",
+  //     che l'invito originale non dava — senza, si prova e si tace);
+  //  2. se NON e' fra gli ultimi 10 messaggi del canale e di recente c'e' stata
+  //     attivita' (qualcuno ha scritto negli ultimi 3 minuti), il bot manda un
+  //     PROMEMORIA con le istruzioni e il link. Il promemoria conta come "sportello
+  //     in vista": un secondo arriva solo dopo che altri 10 messaggi l'hanno
+  //     sepolto, e mai piu' spesso di ogni 5 minuti (in un canale molto vivo
+  //     ripeterlo di continuo sarebbe peggio del problema).
+  //
+  // Si controlla DOPO una breve pausa dall'ultimo messaggio, non ad ogni
+  // messaggio: una raffica di venti messaggi e' un solo controllo, una sola
+  // lettura dei dieci piu' recenti.
+  //
+  // Serve `Read Message History` per leggere gli ultimi messaggi (l'invito lo da').
+  const RICORDO = {
+    debounceMs: 20_000, ultimiN: 10, attivitaMs: 3 * 60_000, ognigMs: 5 * 60_000, ...(opz.ricordo || {}),
+  };
+  const INIZIO_RICORDO = '**Please try using the tool';
+  const ultimoRicordo = new Map();                // canale → quando e' stato mandato l'ultimo
+  const controlliInAttesa = new Map();            // canale → timer del controllo
+
+  async function emojiDelSito(guild, nome) {
+    if (!guild) return '';
+    let e = guild.emojis?.cache?.find((x) => x.name === nome);
+    if (!e) { try { await guild.emojis.fetch(); e = guild.emojis.cache.find((x) => x.name === nome); } catch { /* niente */ } }
+    return e ? e.toString() : '';                 // non c'e': meglio nessuna emoji di ":nome:" scritto in chiaro
+  }
+
+  async function testoRicordo(canale, sportello) {
+    const link = `https://discord.com/channels/${canale.guildId || canale.guild?.id}/${sportello.canaleId}/${sportello.messaggioId}`;
+    const emoji = await emojiDelSito(canale.guild, 'Behehehehe');
+    return `${INIZIO_RICORDO} for better organization** 📋\n`
+      + `The **[contract desk](${link})** is right here.\n\n`
+      + '**How it works**\n'
+      + '1️⃣ Type `/register` to link your account _(once, one minute, no website needed)_\n'
+      + '2️⃣ Press **📝 Request a contract** on the desk, then pick the battle and the side\n'
+      + '3️⃣ Put your **damage**, your **rate** (bounty per 1,000) and **how much damage you can burst** right away\n'
+      + '4️⃣ In the note you can also write **when your UM will take the pill or go in debuff**\n'
+      + '_The government gets tagged, and you can follow your place in line with_ `/contract-queue unit`\n\n'
+      + `Please do not lie, we are trying to make the contract request easier for all of us ${emoji}`.trimEnd();
+  }
+
+  /** Il controllo vero: lo sportello (o un promemoria) e' fra gli ultimi messaggi? */
+  async function controllaVisibilita(canaleId) {
+    try {
+      // In un canale possono esserci DUE sportelli (nazione e unita'): basta che
+      // ne sia in vista uno, e il link del promemoria va a quello della nazione.
+      const sportelli = Object.values(stato.pannelli).filter((p) => p.canaleId === canaleId);
+      if (!sportelli.length) return;
+      const sportello = sportelli.find((p) => p.scope === 'country') || sportelli[0];
+      if (Date.now() - (ultimoRicordo.get(canaleId) || 0) < RICORDO.ognigMs) return;
+
+      const canale = await canaleDi(canaleId);
+      const ultimi = await canale.messages.fetch({ limit: RICORDO.ultimiN });
+      const inVista = ultimi.some((m) => sportelli.some((p) => p.messaggioId === m.id)
+        || (m.author?.id === client.user.id && String(m.content || '').startsWith(INIZIO_RICORDO)));
+      if (inVista) return;
+      // Attivita' recente: un canale fermo non ha bisogno di promemoria, e
+      // scriverci a freddo e' solo rumore.
+      const attivo = ultimi.some((m) => !m.author?.bot && Date.now() - m.createdTimestamp < RICORDO.attivitaMs);
+      if (!attivo) return;
+
+      ultimoRicordo.set(canaleId, Date.now());
+      await canale.send({ content: await testoRicordo(canale, sportello), allowedMentions: { parse: [] } });
+    } catch (err) {
+      console.warn('[contratti] promemoria non inviato:', err.message);
+    }
+  }
+
+  client.on(Events.MessageCreate, (msg) => {
+    if (msg.author?.bot || !msg.guildId) return;
+    if (!Object.values(stato.pannelli).some((p) => p.canaleId === msg.channelId)) return;
+    if (controlliInAttesa.has(msg.channelId)) return;            // c'e' gia' un controllo in arrivo
+    controlliInAttesa.set(msg.channelId, setTimeout(() => {
+      controlliInAttesa.delete(msg.channelId);
+      controllaVisibilita(msg.channelId);
+    }, RICORDO.debounceMs));
+  });
+
+  // Pinnare lo sportello, una volta sola per sportello (con successo): il
+  // messaggio di sistema "ha fissato un messaggio" non va ripetuto ad ogni avvio.
+  let avvisoPin = false;
+  async function provaAPinnare(key) {
+    const p = stato.pannelli[key];
+    if (!p || p.pinnato) return;
+    try {
+      const c = await canaleDi(p.canaleId);
+      await c.messages.pin(p.messaggioId);
+      p.pinnato = true; salva();
+    } catch (err) {
+      if (!avvisoPin) {
+        console.warn('[contratti] non posso pinnare lo sportello (serve il permesso "Pin Messages" o "Manage Messages" al ruolo del bot):', err.message);
+        avvisoPin = true;
+      }
+    }
+  }
+
   // ── Partenza ──────────────────────────────────────────────────────────
   async function registraComandi() {
     // Uno per uno (create = upsert per nome): `set` cancellerebbe i comandi
@@ -1292,6 +1396,8 @@ function attach(client, opz = {}) {
 
   async function avvia() {
     if (opz.registraComandi !== false) await registraComandi();
+    // Gli sportelli gia' pubblicati prima di questa funzione: li si prova a pinnare.
+    for (const k of Object.keys(stato.pannelli)) provaAPinnare(k);
     giro();
     setInterval(giro, POLL_MS).unref?.();
     console.log(`[contratti] in ascolto su ${apiBase}`);
