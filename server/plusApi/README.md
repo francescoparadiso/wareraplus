@@ -281,6 +281,10 @@ come prima, con i webhook.
 - `POST /bot/richiesta` — nazione che paga, etichetta e totale li ricava il server
 - `POST /bot/modifica` — corregge una richiesta ancora `pending`, solo chi l'ha fatta
 - `GET /bot/mie` — le richieste vive di chi chiede ("Edit mine" / "Withdraw mine")
+- `GET /bot/coda?vista=unit|nation` — `/contract-queue`: richieste con posizione
+  in coda (ordine di arrivo fra le `pending` della nazione) e mediana dei tempi
+  di decisione a 7 giorni; `unit` per i comandanti (`chiedePer`), `nation` per
+  chi approva o gestisce la nazione
 - `GET /bot/scrivania?scope&scopeId` — i dati dello sportello (governo che può
   approvare, richieste vive + chiuse nelle ultime 24 h)
 - `POST /bot/scrivania/stato` — apre/chiude lo sportello (solo governo): con lo

@@ -399,6 +399,69 @@ function buildBotRouter() {
     res.json({ richieste: righe.map((r) => ({ ...pubblica(conNomi(r)), nomePaese: naz.get(r.country_id)?.name || null })) });
   });
 
+  // ── La coda (/contract-queue) ──────────────────────────────────────────
+  // Due viste sugli stessi dati dello sportello, ma per CHI chiede:
+  //   unit    le richieste della MIA unita', con la posizione in coda presso
+  //           ogni nazione e quanto ci mette di solito a decidere (comandanti)
+  //   nation  tutta la coda della MIA nazione, dalla piu' vecchia (chi approva)
+  router.get('/coda', async (req, res) => {
+    const vista = req.query.vista === 'nation' ? 'nation' : 'unit';
+    const id = await identitaDaDiscord(req.query.discordId);
+    if (!id.ok) return errore(res, id);
+    const { derivati, capacita } = id.dati;
+
+    let scope; let scopeId;
+    if (vista === 'unit') {
+      scope = 'mu'; scopeId = derivati?.muId;
+      if (!scopeId || !capacita.chiedePer.includes(scopeId)) return res.status(403).json({ error: 'nessuna_unita' });
+    } else {
+      scope = 'country'; scopeId = derivati?.countryId;
+      if (!scopeId || !(capacita.approvaPer.includes(scopeId) || capacita.gestisceNazione.includes(scopeId) || capacita.admin)) {
+        return res.status(403).json({ error: 'non_autorizzato' });
+      }
+    }
+
+    try {
+      const righe = richiesteScrivania(scope, scopeId);
+      const paesi = [...new Set(righe.map((r) => r.country_id))];
+
+      // Posizione in coda: l'ordine di arrivo fra le richieste ANCORA IN ATTESA
+      // di quella nazione (e' l'ordine in cui il governo le vede in "Pending").
+      const posizione = new Map();
+      const inCoda = {};
+      // Tempo tipico di decisione, sugli ultimi 7 giorni: la MEDIANA (una
+      // richiesta dimenticata per un giorno non deve far sembrare lento un
+      // governo che risponde in dieci minuti), e solo da 3 decisioni in su.
+      const decisione = {};
+      const settimana = Date.now() - 7 * GIORNO_MS;
+      for (const cid of paesi) {
+        const att = getDb().prepare("SELECT id FROM request WHERE country_id = ? AND status = 'pending' AND esito IS NULL ORDER BY created_at, id").all(cid);
+        att.forEach((x, k) => posizione.set(x.id, k + 1));
+        inCoda[cid] = att.length;
+        const d = getDb().prepare('SELECT created_at AS c, approved_at AS a FROM request WHERE country_id = ? AND approved_at IS NOT NULL AND approved_at > ?')
+          .all(cid, settimana).map((x) => x.a - x.c).filter((x) => x >= 0).sort((a, b) => a - b);
+        decisione[cid] = d.length >= 3 ? { medianaMs: d[Math.floor(d.length / 2)], n: d.length } : null;
+      }
+
+      const naz = await paesiMappa().catch(() => new Map());
+      res.json({
+        vista, scopeId,
+        nome: scope === 'country' ? (naz.get(scopeId)?.name || null) : (derivati?.muNome || null),
+        richieste: righe.map((r) => ({
+          ...pubblica(conNomi(r)),
+          nomePaese: naz.get(r.country_id)?.name || null,
+          posizione: posizione.get(r.id) || null,
+          inCoda: inCoda[r.country_id] ?? null,
+        })),
+        decisione,
+        paesi: Object.fromEntries(paesi.map((cid) => [cid, naz.get(cid)?.name || null])),
+      });
+    } catch (err) {
+      console.error('[bot] coda fallita:', err.message);
+      res.status(502).json({ error: 'gioco_non_raggiungibile' });
+    }
+  });
+
   router.post('/modifica', async (req, res) => {
     const b = req.body || {};
     const id = await identitaDaDiscord(b.discordId);

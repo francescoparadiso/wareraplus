@@ -39,6 +39,20 @@ Se il bot non chiede nulla per 90 secondi, gli avvisi tornano ai **webhook** (se
 ce n'è uno). Quando un ambito ha un canale del bot, il webhook di quell'ambito
 tace, altrimenti ogni avviso comparirebbe due volte.
 
+## Controllare la coda: `/contract-queue`
+
+Due viste, in risposta visibile solo a chi la chiede (opzione `public` per
+postarla nel canale):
+
+- **`/contract-queue unit`** — per i comandanti: le richieste della propria
+  unità, con la **posizione in coda** presso ogni nazione ("2 of 4 waiting"), da
+  quanto sono in attesa e il **tempo tipico di decisione** di quel governo
+  (mediana degli ultimi 7 giorni, solo da 3 decisioni in su).
+- **`/contract-queue nation`** — per chi può approvare: tutta la coda della
+  nazione dalla più vecchia (in attesa → approvate ma asta non aperta → asta
+  aperta → chiuse nelle ultime 24 h), con 🔥 su chi aspetta da più di 30 minuti.
+  Agli altri risponde che serve un ruolo di governo.
+
 ## 1. Discord Developer Portal
 
 L'applicazione è la stessa del login, **"WarEra+"**

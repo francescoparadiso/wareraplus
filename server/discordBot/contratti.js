@@ -311,14 +311,93 @@ function renderSportello(d) {
 }
 
 // ---------------------------------------------------------------------------
-// Comando (uno solo: pubblica lo sportello)
+// La coda (/contract-queue)
+// ---------------------------------------------------------------------------
+
+/** "~8 min", "~1 h 20 min": un tempo medio, senza il "fa" di `durata`. */
+function tempoTipico(ms) {
+  const min = Math.max(1, Math.round(ms / 60_000));
+  if (min < 60) return `~${min} min`;
+  const h = Math.floor(min / 60);
+  return h < 48 ? `~${h} h ${String(min % 60).padStart(2, '0')} min` : `~${Math.round(h / 24)} d`;
+}
+
+const ATTESA_LUNGA_MS = 30 * 60_000;
+
+/** Una riga della coda. Nella vista unita' conta DOVE sei (posizione presso
+ *  quella nazione), in quella nazione conta CHI e da quanto. */
+function rigaCoda(r, nazione) {
+  const base = `\`#${r.id}\` **${r.muNome || '?'}** — ${corto(r.minDamage)} dmg · ${num(r.budget)}`;
+  const dove = !nazione && r.nomePaese ? ` · ${r.nomePaese}` : '';
+  const chi = nazione && r.richiedente ? ` · by ${r.richiedente}` : '';
+  if (vivaR(r) && r.status === 'pending') {
+    const lunga = nazione && r.createdAt && Date.now() - r.createdAt > ATTESA_LUNGA_MS ? '🔥 ' : '⏳ ';
+    const pos = r.posizione ? ` · **${nazione ? `#${r.posizione} in line` : `${r.posizione} of ${r.inCoda} waiting`}**` : '';
+    return `${lunga}${base}${dove}${chi} · asked ${quandoDiscord(r.createdAt)}${pos}`;
+  }
+  if (vivaR(r) && !r.openedAt) {
+    return `✅ ${base}${dove}${chi} · approved ${quandoDiscord(r.approvedAt)} — _auction not opened yet_`;
+  }
+  if (vivaR(r)) {
+    return `🔨 ${base}${dove}${chi} · auction opened ${quandoDiscord(r.openedAt)} — _checking the result_`;
+  }
+  return rigaRichiesta(r, !nazione);
+}
+
+function renderCoda(d) {
+  const nazione = d.vista === 'nation';
+  const vive = d.richieste.filter(vivaR);
+  const ordina = (a, b) => (a.createdAt || 0) - (b.createdAt || 0);        // la piu' vecchia per prima
+  const gruppi = [
+    ['Waiting for a decision', vive.filter((r) => r.status === 'pending').sort(ordina)],
+    ['Approved — the auction is not open yet', vive.filter((r) => r.status === 'approved' && !r.openedAt).sort(ordina)],
+    ['Auction open', vive.filter((r) => r.status === 'approved' && r.openedAt).sort(ordina)],
+    ['Closed in the last 24 hours', d.richieste.filter((r) => !vivaR(r)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))],
+  ].filter(([, righe]) => righe.length);
+
+  const testa = [];
+  const attesa = gruppi.find(([n]) => n === 'Waiting for a decision')?.[1] || [];
+  if (nazione) {
+    testa.push(attesa.length
+      ? `**${attesa.length}** waiting · the oldest asked ${quandoDiscord(attesa[0].createdAt)}`
+      : '**Nobody is waiting for a decision.**');
+    const dec = Object.values(d.decisione || {})[0];
+    if (dec) testa.push(`Typical decision time: **${tempoTipico(dec.medianaMs)}** (median of ${dec.n} decisions in the last 7 days)`);
+  } else {
+    for (const [cid, dec] of Object.entries(d.decisione || {})) {
+      if (dec) testa.push(`Typical decision time at **${d.paesi?.[cid] || '?'}**: ${tempoTipico(dec.medianaMs)} (last 7 days, ${dec.n} decisions)`);
+    }
+  }
+
+  let corpo = gruppi.map(([titolo, righe]) => `**${titolo}**\n${righe.map((r) => rigaCoda(r, nazione)).join('\n')}`).join('\n\n');
+  if (!corpo) corpo = nazione ? '_The queue is empty._' : '_Your unit has no open requests._';
+  let testo = `${testa.join('\n')}${testa.length ? '\n\n' : ''}${corpo}`;
+  if (testo.length > 4000) testo = `${testo.slice(0, 3940).replace(/\n[^\n]*$/, '')}\n_…and more: press **Show all** on the desk._`;
+
+  return new EmbedBuilder()
+    .setColor(nazione ? 0x23a55a : 0x5865f2)
+    .setTitle(nazione ? `${d.nome || 'Your nation'} — contract queue` : `${d.nome || 'Your unit'} — your requests`)
+    .setDescription(testo)
+    .setFooter({ text: 'WarEra+ contract queue · oldest first' })
+    .setTimestamp(Date.now());
+}
+
+// ---------------------------------------------------------------------------
+// Comandi
 // ---------------------------------------------------------------------------
 
 function definizioniComandi() {
   const ambito = (o) => o.setName('scope').setDescription('Whose desk this is').setRequired(true)
     .addChoices({ name: 'My nation (government)', value: 'country' }, { name: 'My military unit', value: 'mu' });
+  const pubblico = (o) => o.setName('public').setDescription('Post it in the channel instead of showing it only to you');
 
   return [new SlashCommandBuilder()
+    .setName('contract-queue')
+    .setDescription('Check the contract queue')
+    .setDMPermission(false)
+    .addSubcommand((s) => s.setName('unit').setDescription("Commanders: your unit's requests and their place in the queue").addBooleanOption(pubblico))
+    .addSubcommand((s) => s.setName('nation').setDescription('Government: your nation\'s whole queue, oldest first').addBooleanOption(pubblico)),
+  new SlashCommandBuilder()
     .setName('contract-desk')
     .setDescription('Post or remove the contract desk in a channel')
     .setDMPermission(false)
@@ -818,6 +897,23 @@ function attach(client, opz = {}) {
   }
 
   // ═════════════════════════════════════════════════════════════════════
+  // /contract-queue
+  // ═════════════════════════════════════════════════════════════════════
+  async function onCoda(i) {
+    const vista = i.options.getSubcommand();                // 'unit' | 'nation'
+    const pubblica = Boolean(i.options.getBoolean('public'));
+    await i.deferReply(pubblica ? {} : { flags: EPHEMERAL });
+    const r = await api('GET', `/coda?discordId=${i.user.id}&vista=${vista}`);
+    if (!r.ok) {
+      if (vista === 'nation' && r.json?.error === 'non_autorizzato') {
+        return i.editReply('Only government members who can approve contracts can see the nation queue. Commanders can use `/contract-queue unit`.');
+      }
+      return i.editReply(messaggioErrore(r));
+    }
+    return i.editReply({ embeds: [renderCoda(r.json)], allowedMentions: SENZA_MENZIONI });
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
   // Smistamento
   // ═════════════════════════════════════════════════════════════════════
   const SPORTELLO = {
@@ -829,6 +925,7 @@ function attach(client, opz = {}) {
     try {
       if (i.isChatInputCommand()) {
         if (i.commandName === 'contract-desk') await onComandoSportello(i);
+        else if (i.commandName === 'contract-queue') await onCoda(i);
         return;
       }
       const id = i.customId || '';
@@ -897,5 +994,5 @@ function attach(client, opz = {}) {
 }
 
 module.exports = {
-  attach, definizioniComandi, embedCarta, bottoniCarta, statoCarta, renderSportello, leggiNumero,
+  attach, definizioniComandi, embedCarta, bottoniCarta, statoCarta, renderSportello, renderCoda, leggiNumero,
 };
