@@ -68,6 +68,9 @@ export function creaTavolo(ctx) {
   let nomiAlleanze = new Map();
   let caricamento = false;
   let errore = null;
+  // Quando i dati sono stati letti l'ultima volta (a buon fine): accanto al
+  // tasto "Aggiorna", cosi' si sa quanto e' vecchio quello che si guarda.
+  let aggiornatoIl = null;
   let apertaId = null;          // battaglia con il modulo aperto
   let occupato = false;
   // Tre sezioni invece di un elenco di schede tutte uguali: si arriva
@@ -153,8 +156,27 @@ export function creaTavolo(ctx) {
     } catch (err) {
       errore = err instanceof ApiError ? pvErr(err.codice) : pvT('errErrore_server');
     } finally {
-      caricamento = false; ctx.ridisegna();
+      caricamento = false;
+      if (!errore) aggiornatoIl = Date.now();
+      ctx.ridisegna();
     }
+  }
+
+  /** "Aggiorna": rilegge richieste, battaglie e liste. Il tavolo si riscrive da
+   *  solo solo quando si agisce; chi lo tiene aperto per vedere se arriva una
+   *  richiesta nuova non ha altro modo di saperlo che ricaricare la pagina. */
+  function rigaAggiorna() {
+    const riga = el('div', 'wp-pv-aggiorna-riga');
+    if (aggiornatoIl) {
+      const ora = new Date(aggiornatoIl).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      riga.appendChild(el('span', 'wp-pv-note', `${pvT('updatedAt')} ${ora}`));
+    }
+    const b = bottone('wp-pv-btn-quiet wp-pv-btn-small', caricamento ? '…' : `↻ ${pvT('refreshBoard')}`, () => {
+      if (!caricamento && !occupato) carica();
+    });
+    b.disabled = caricamento || occupato;
+    riga.appendChild(b);
+    return riga;
   }
 
   async function azione(fn) {
@@ -188,6 +210,9 @@ export function creaTavolo(ctx) {
       if (caricamento) frag.appendChild(el('p', 'wp-pv-note', '…'));
       return frag;
     }
+
+    // In cima a tutte le sezioni: aggiornare serve ovunque, non solo sul tavolo.
+    frag.appendChild(rigaAggiorna());
 
     const cap = dati.capacita || {};
     const puoChiedere = Boolean(cap.chiedePer?.length) && !dati.lente;

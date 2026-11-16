@@ -648,6 +648,13 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
    ══════════════════════════════════════════════════════════════════ */
 
 /* ── Sezioni ─────────────────────────────────────────────────────── */
+/* "Aggiorna" in cima alla scheda dei contratti: l'ora dell'ultima lettura e il tasto. */
+.wp-pv-aggiorna-riga {
+  display: flex; align-items: center; justify-content: flex-end; gap: .6rem;
+  margin: 0 0 .5rem;
+}
+.wp-pv-aggiorna-riga .wp-pv-btn:disabled { opacity: .55; cursor: default; }
+
 .wp-pv-sezioni {
   display: flex; gap: .25rem; flex-wrap: wrap;
   border-bottom: 1px solid var(--pv-rule);
