@@ -636,6 +636,46 @@ function attach(client, opz = {}) {
     if (!r) return;
     aggiornaSportelloDopo(chiave('country', r.countryId));
     aggiornaSportelloDopo(chiave('mu', r.muId));
+    aggiornaCarteDopo(r.countryId);
+  }
+
+  // ── La lista sotto OGNI carta in attesa ───────────────────────────────
+  // Ogni carta porta il riquadro "Queue right now". Fotografato una volta,
+  // diventava vecchio: una carta di venti minuti fa diceva "5 waiting" quando
+  // ormai erano 8, e il governo non sapeva quale credere. Ad ogni cambiamento di
+  // quella nazione si riscrive la lista su TUTTE le carte ancora in attesa,
+  // ciascuna con la propria richiesta segnata ("← this one"). Una sola lettura
+  // dei dati per giro, e una pausa per accorpare piu' eventi ravvicinati.
+  // Le carte gia' decise non portano piu' la lista: restano la sola carta.
+  const inAttesaCarte = new Map();
+  function aggiornaCarteDopo(countryId) {
+    if (!countryId || inAttesaCarte.has(countryId)) return;
+    inAttesaCarte.set(countryId, setTimeout(() => {
+      inAttesaCarte.delete(countryId);
+      aggiornaListeCarte(countryId).catch((err) => console.warn('[contratti] liste delle carte non aggiornate:', err.message));
+    }, 2500));
+  }
+
+  async function aggiornaListeCarte(countryId) {
+    const d = await datiSportello('country', countryId);
+    if (!d) return;
+    const dati = { vista: 'nation', nome: d.nome, richieste: d.richieste, decisione: {} };
+    const attese = d.richieste.filter((x) => vivaR(x) && x.status === 'pending').length;
+    for (const r of d.richieste) {
+      if (!(vivaR(r) && r.status === 'pending')) continue;
+      const k = stato.carte[r.id];
+      if (!k) continue;
+      try {
+        const c = await canaleDi(k.canaleId);
+        const carta = cartaPayload(r, r.nomePaese);
+        const lista = renderCoda(dati, { evidenzia: r.id, max: 3300, titolo: `Queue right now — ${attese} waiting` });
+        await c.messages.edit(k.messaggioId, { ...carta, embeds: [...carta.embeds, lista] });
+      } catch (err) {
+        // Messaggio cancellato a mano: la carta non c'e' piu', non e' un guasto.
+        if (err?.code === 10008 || err?.code === 10003) delete stato.carte[r.id];
+        else console.warn(`[contratti] carta #${r.id} non aggiornata:`, err.message);
+      }
+    }
   }
 
   // ═════════════════════════════════════════════════════════════════════
@@ -1154,8 +1194,11 @@ function attach(client, opz = {}) {
   // /contract-queue
   // ═════════════════════════════════════════════════════════════════════
   async function onCoda(i) {
-    const vista = i.options.getSubcommand();                // 'unit' | 'nation'
-    const pubblica = Boolean(i.options.getBoolean('public'));
+    return rispondiCoda(i, i.options.getSubcommand(), Boolean(i.options.getBoolean('public')));
+  }
+
+  /** La coda, da `/contract-queue` e dal bottone "My queue" del promemoria. */
+  async function rispondiCoda(i, vista, pubblica) {
     await i.deferReply(pubblica ? {} : { flags: EPHEMERAL });
     const r = await api('GET', `/coda?discordId=${i.user.id}&vista=${vista}`);
     if (!r.ok) {
@@ -1216,6 +1259,8 @@ function attach(client, opz = {}) {
       if (i.isButton()) {
         if (/^wp:(approve|reject|opened|cancel):\d+$/.test(id)) { await onBottoneCarta(i); return; }
         if (id === 'wp:reg:check') { await onRegistraControlla(i); return; }
+        if (id === 'wp:reg:start') { await onRegistra(i); return; }         // dal promemoria: apre il modulo
+        if (id === 'wp:myq') { await rispondiCoda(i, 'unit', false); return; } // dal promemoria: la coda della mia unita'
         if (id.startsWith('wp:qref:')) { await onAggiornaCoda(i); return; }
         if (id === 'wp:req') { await onRichiedi(i); return; }
         if (id === 'wp:edit') { await onMie(i, 'edit'); return; }
@@ -1315,6 +1360,22 @@ function attach(client, opz = {}) {
     return e ? e.toString() : '';                 // non c'e': meglio nessuna emoji di ":nome:" scritto in chiaro
   }
 
+  /**
+   * I bottoni sotto il promemoria: chi legge il messaggio deve poter agire da
+   * li', senza andare a cercare lo sportello pinnato. Sono gli stessi dello
+   * sportello (stessi id, stessi gestori) piu' due scorciatoie: collegare il
+   * personaggio (il primo passo, per chi non l'ha fatto) e "My queue".
+   */
+  function bottoniRicordo() {
+    return new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('wp:reg:start').setLabel('Link my character').setEmoji('🔗').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('wp:req').setLabel('Request a contract').setEmoji('📝').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('wp:edit').setLabel('Edit mine').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('wp:wd').setLabel('Withdraw mine').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('wp:myq').setLabel('My queue').setEmoji('📋').setStyle(ButtonStyle.Secondary),
+    );
+  }
+
   async function testoRicordo(canale, sportello) {
     const link = `https://discord.com/channels/${canale.guildId || canale.guild?.id}/${sportello.canaleId}/${sportello.messaggioId}`;
     const emoji = await emojiDelSito(canale.guild, 'Behehehehe');
@@ -1350,7 +1411,11 @@ function attach(client, opz = {}) {
       if (!attivo) return;
 
       ultimoRicordo.set(canaleId, Date.now());
-      await canale.send({ content: await testoRicordo(canale, sportello), allowedMentions: { parse: [] } });
+      await canale.send({
+        content: await testoRicordo(canale, sportello),
+        components: [bottoniRicordo()],
+        allowedMentions: { parse: [] },
+      });
     } catch (err) {
       console.warn('[contratti] promemoria non inviato:', err.message);
     }

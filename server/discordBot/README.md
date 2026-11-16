@@ -70,8 +70,10 @@ menu per **decidere** una richiesta (in attesa → Approve / Reject; approvata �
 - **La lista sotto ogni richiesta nuova**: la carta con i tag porta con sé un
   secondo riquadro, "Queue right now — N waiting", con tutta la coda della
   nazione in ordine di arrivo e la richiesta della carta segnata "← this one".
-  Finché la richiesta è in attesa il riquadro si aggiorna con la carta; una volta
-  decisa resta la sola carta.
+  Ad ogni cambiamento di quella nazione (richiesta nuova, modifica, decisione,
+  asta, esito) il riquadro si **riscrive su tutte le carte ancora in attesa**, ognuna
+  con la propria richiesta segnata e lo stesso conteggio: una carta di venti minuti
+  fa non resta ferma a "5 waiting". Una volta decisa, la carta resta la sola carta.
 
 ## Tenere lo sportello in vista
 
@@ -86,6 +88,11 @@ Nei canali con uno sportello il bot fa due cose perché non si perda sotto la ch
   canale ci sono due sportelli (nazione e unità) basta che uno sia in vista; il
   link va a quello della nazione. L'emoji `:Behehehehe:` del server viene
   inserita se esiste, altrimenti si omette.
+- Il promemoria ha i **bottoni** sotto: 🔗 *Link my character* (apre il modulo di
+  `/register`), 📝 *Request a contract*, *Edit mine*, *Withdraw mine* e 📋 *My
+  queue* (la coda della propria unità), così non serve andare allo sportello
+  pinnato per chiedere un contratto. Sono gli stessi id e gli stessi gestori dello
+  sportello.
 
 Il controllo parte 20 secondi dopo l'ultimo messaggio (una raffica di messaggi è
 un solo controllo) e legge gli ultimi 10 messaggi (serve *Read Message History*).
