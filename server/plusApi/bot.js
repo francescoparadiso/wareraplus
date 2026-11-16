@@ -532,6 +532,9 @@ function buildBotRouter() {
       budget: (minDamage / 1000) * perK,
       professionalsOnly: Boolean(b.professionalsOnly),
       note: b.note,
+      // Facoltativo; sotto mille si scarta (azioneCrea) invece di rifiutare
+      // la richiesta per un campo accessorio.
+      burstDamage: b.burstDamage,
     });
     res.status(esito.codice).json(esito.corpo);
   });

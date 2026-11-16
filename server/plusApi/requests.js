@@ -57,6 +57,8 @@ function pubblica(r) {
     battleId: r.battle_id, battleLabel: r.battle_label, side: r.side,
     countryId: r.country_id, muId: r.mu_id, muNome: r.mu_nome,
     minDamage: r.min_damage, budget: r.budget, perK: r.per_k,
+    // Danno fattibile SUBITO all'apertura dell'asta (facoltativo).
+    burstDamage: r.burst_damage,
     duration: r.duration, professionalsOnly: Boolean(r.professionals_only),
     note: r.note,
     status: r.status,
@@ -130,6 +132,7 @@ async function azioneCrea(identita, b) {
     duration: Number(b.duration) || null,
     professionalsOnly: Boolean(b.professionalsOnly),
     note: String(b.note || '').slice(0, 500) || null,
+    burstDamage: Number(b.burstDamage) >= 1000 ? Math.round(Number(b.burstDamage)) : null,
   });
   audit(identita.id, 'request.create', `request:${r.id}`, { battleId, muId, countryId });
 
@@ -238,6 +241,9 @@ async function azioneModifica(identita, id, b) {
     budget: (minDamage / 1000) * perK,
     professionals_only: b.professionalsOnly == null ? r.professionals_only : (b.professionalsOnly ? 1 : 0),
     note: b.note === undefined ? r.note : (String(b.note || '').slice(0, 500) || null),
+    // `undefined` = non toccare; vuoto o 0 = toglierlo.
+    burst_damage: b.burstDamage === undefined ? r.burst_damage
+      : (Number(b.burstDamage) >= 1000 ? Math.round(Number(b.burstDamage)) : null),
   });
   audit(identita.id, 'request.edit', `request:${r.id}`, { minDamage, perK });
   // Chi deve decidere vede i numeri nuovi sulla carta, senza un secondo avviso.

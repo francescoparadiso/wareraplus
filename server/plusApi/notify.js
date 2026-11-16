@@ -123,11 +123,13 @@ function statoBot() { return { ultimoContatto: _ultimoContattoBot || null, vivo:
 // (59% dei giocatori, vedi la misura in warera-user-endpoint-fields).
 
 const num = (n) => (n == null ? '?' : Number(n).toLocaleString('en-US'));
+/** " · burst now 500,000": il danno che l'unita' dice di poter fare subito. */
+const burst = (r) => (r.burst_damage ? ` · burst now ${num(r.burst_damage)}` : '');
 
 function testoNuovaRichiesta(r, chi) {
   return `**New contract request** — ${r.mu_nome || r.mu_id}\n`
     + `Battle: ${r.battle_label || r.battle_id}\n`
-    + `Min damage ${num(r.min_damage)} · budget ${num(r.budget)}`
+    + `Min damage ${num(r.min_damage)}${burst(r)} · budget ${num(r.budget)}`
     + `${r.professionals_only ? ' · professionals only' : ''}\n`
     + `Asked by ${chi}${r.note ? `\n> ${r.note.slice(0, 200)}` : ''}`;
 }
@@ -135,7 +137,7 @@ function testoNuovaRichiesta(r, chi) {
 function testoApprovata(r, chi) {
   return `**Approved** — ${r.mu_nome || r.mu_id}\n`
     + `Battle: ${r.battle_label || r.battle_id}\n`
-    + `Min damage ${num(r.min_damage)} · budget ${num(r.budget)}\n`
+    + `Min damage ${num(r.min_damage)}${burst(r)} · budget ${num(r.budget)}\n`
     + `By ${chi}. Wait for the auction to open, then bid.`;
 }
 
@@ -151,7 +153,7 @@ function testoRifiutata(r, chi) {
 function testoAperta(r, chi) {
   return `**Auction opening now** — ${r.mu_nome || r.mu_id}\n`
     + `Battle: ${r.battle_label || r.battle_id}\n`
-    + `Min damage ${num(r.min_damage)} · budget ${num(r.budget)}`
+    + `Min damage ${num(r.min_damage)}${burst(r)} · budget ${num(r.budget)}`
     + `${r.professionals_only ? ' · professionals only' : ''}\n`
     + `Opened by ${chi}. First bid usually lands within ~10 seconds.`;
 }

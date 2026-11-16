@@ -75,6 +75,7 @@ const ERRORI = {
   richiesta_inesistente: 'That request no longer exists.',
   battaglia_non_in_corso: 'That battle is not running any more.',
   nessun_canale: 'This nation has no desk yet: someone from the government must run `/contract-desk post`.',
+  burst_non_valido: 'The burst damage must be a number of at least 1,000 (like `500k`), or leave it empty.',
   parametri_non_validi: 'Some values are not valid. Minimum damage must be at least 1,000 and the bounty between 0.001 and 5 per 1,000 damage.',
   gioco_non_raggiungibile: 'The game did not answer. Try again in a moment.',
   bot_non_configurato: 'The WarEra+ server has no bot token configured.',
@@ -114,6 +115,16 @@ const PRO = '(?:pro|pros|professional|professionals)';
 const RE_PRO = new RegExp(
   `\\b\\d+(?:[.,]\\d+)?\\s*${SUFFISSO}\\b\\s*${PRO}\\b|\\b${PRO}\\b\\s*[:=-]?\\s*\\d+(?:[.,]\\d+)?\\s*${SUFFISSO}\\b`, 'i');
 const parlaDiPro = (t) => RE_PRO.test(String(t || ''));
+
+/** Il campo burst del modulo: vuoto → `null` (nessun burst); un numero ≥ 1.000 →
+ *  il numero; qualunque altra cosa → `false`, cioe' "scrivilo bene" (meglio che
+ *  scartare in silenzio quello che l'utente ha digitato). */
+function leggiBurst(testo) {
+  const t = String(testo || '').trim();
+  if (!t) return null;
+  const v = leggiNumero(t);
+  return v >= 1000 ? Math.round(v) : false;
+}
 
 const siNo = (t) => /^(y|yes|s|si|sì|true|1|pro)/i.test(String(t || '').trim());
 
@@ -176,6 +187,7 @@ function embedCarta(r, nomePaese) {
       { name: 'Min damage', value: num(r.minDamage), inline: true },
       { name: 'Budget', value: num(r.budget), inline: true },
       { name: 'Per 1,000', value: num(r.perK), inline: true },
+      ...(r.burstDamage ? [{ name: 'Burst now', value: num(r.burstDamage), inline: true }] : []),
     )
     .setFooter({ text: `Request ${r.id}${r.professionalsOnly ? ' · professionals only' : ''}` })
     .setTimestamp(r.updatedAt || Date.now());
@@ -236,7 +248,8 @@ function rigaRichiesta(r, conPaese) {
   // cambio — un'unita' vuole sapere da quanto e' in coda, non da quanto il
   // bot ha riscritto la riga.
   const quando = r.createdAt ? ` · asked ${quandoDiscord(r.createdAt)}` : '';
-  return `${ICONE[st.chiave] || '•'} \`#${r.id}\` **${r.muNome || '?'}** — ${corto(r.minDamage)} dmg · ${num(r.budget)}${dove}${quando} · _${st.testo}_`;
+  const burst = r.burstDamage ? ` (burst ${corto(r.burstDamage)})` : '';
+  return `${ICONE[st.chiave] || '•'} \`#${r.id}\` **${r.muNome || '?'}** — ${corto(r.minDamage)} dmg${burst} · ${num(r.budget)}${dove}${quando} · _${st.testo}_`;
 }
 
 /** Raggruppa per battaglia, la più recente per prima. */
@@ -336,14 +349,17 @@ const ATTESA_LUNGA_MS = 30 * 60_000;
 
 /** Una riga della coda. Nella vista unita' conta DOVE sei (posizione presso
  *  quella nazione), in quella nazione conta CHI e da quanto. */
-function rigaCoda(r, nazione) {
-  const base = `\`#${r.id}\` **${r.muNome || '?'}** — ${corto(r.minDamage)} dmg · ${num(r.budget)}`;
+function rigaCoda(r, nazione, nuovoId = null) {
+  const base = `\`#${r.id}\` **${r.muNome || '?'}** — ${corto(r.minDamage)} dmg${r.burstDamage ? ` (burst ${corto(r.burstDamage)})` : ''} · ${num(r.budget)}`;
   const dove = !nazione && r.nomePaese ? ` · ${r.nomePaese}` : '';
   const chi = nazione && r.richiedente ? ` · by ${r.richiedente}` : '';
   if (vivaR(r) && r.status === 'pending') {
     const lunga = nazione && r.createdAt && Date.now() - r.createdAt > ATTESA_LUNGA_MS ? '🔥 ' : '⏳ ';
     const pos = r.posizione ? ` · **${nazione ? `#${r.posizione} in line` : `${r.posizione} of ${r.inCoda} waiting`}**` : '';
-    return `${lunga}${base}${dove}${chi} · asked ${quandoDiscord(r.createdAt)}${pos}`;
+    // "questa": e' la richiesta della carta sopra. Vale per il messaggio appena
+    // arrivato e per quando lo si riscrive, dove "NEW" sarebbe diventato falso.
+    const nuova = nuovoId != null && r.id === nuovoId ? ' ← **this one**' : '';
+    return `${lunga}${base}${dove}${chi} · asked ${quandoDiscord(r.createdAt)}${pos}${nuova}`;
   }
   if (vivaR(r) && !r.openedAt) {
     return `✅ ${base}${dove}${chi} · approved ${quandoDiscord(r.approvedAt)} — _auction not opened yet_`;
@@ -354,12 +370,23 @@ function rigaCoda(r, nazione) {
   return rigaRichiesta(r, !nazione);
 }
 
-function renderCoda(d) {
+/**
+ * @param {object} d  { vista, nome, richieste, decisione?, paesi? }
+ * @param {object} [opz]
+ * @param {number} [opz.evidenzia]  id della richiesta da segnare "this one"
+ * @param {string} [opz.titolo]     al posto del titolo di default
+ * @param {number} [opz.max]        tetto dei caratteri (lo snapshot sotto la carta ne ha meno spazio)
+ */
+function renderCoda(d, opz = {}) {
   const nazione = d.vista === 'nation';
   const vive = d.richieste.filter(vivaR);
   const ordina = (a, b) => (a.createdAt || 0) - (b.createdAt || 0);        // la piu' vecchia per prima
+  // La posizione in coda c'e' se la rotta /coda l'ha calcolata; altrimenti
+  // (i dati dello sportello non la portano) e' l'ordine di arrivo qui.
+  const inAttesa = vive.filter((r) => r.status === 'pending').sort(ordina)
+    .map((r, k) => ({ ...r, posizione: r.posizione ?? k + 1 }));
   const gruppi = [
-    ['Waiting for a decision', vive.filter((r) => r.status === 'pending').sort(ordina)],
+    ['Waiting for a decision', inAttesa],
     ['Approved — the auction is not open yet', vive.filter((r) => r.status === 'approved' && !r.openedAt).sort(ordina)],
     ['Auction open', vive.filter((r) => r.status === 'approved' && r.openedAt).sort(ordina)],
     ['Closed in the last 24 hours', d.richieste.filter((r) => !vivaR(r)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))],
@@ -379,17 +406,56 @@ function renderCoda(d) {
     }
   }
 
-  let corpo = gruppi.map(([titolo, righe]) => `**${titolo}**\n${righe.map((r) => rigaCoda(r, nazione)).join('\n')}`).join('\n\n');
+  let corpo = gruppi.map(([titolo, righe]) => `**${titolo}**\n${righe.map((r) => rigaCoda(r, nazione, opz.evidenzia)).join('\n')}`).join('\n\n');
   if (!corpo) corpo = nazione ? '_The queue is empty._' : '_Your unit has no open requests._';
   let testo = `${testa.join('\n')}${testa.length ? '\n\n' : ''}${corpo}`;
-  if (testo.length > 4000) testo = `${testo.slice(0, 3940).replace(/\n[^\n]*$/, '')}\n_…and more: press **Show all** on the desk._`;
+  const max = opz.max || 4000;
+  if (testo.length > max) testo = `${testo.slice(0, max - 60).replace(/\n[^\n]*$/, '')}\n_…and more: press **Show all** on the desk._`;
 
   return new EmbedBuilder()
     .setColor(nazione ? 0x23a55a : 0x5865f2)
-    .setTitle(nazione ? `${d.nome || 'Your nation'} — contract queue` : `${d.nome || 'Your unit'} — your requests`)
+    .setTitle(opz.titolo || (nazione ? `${d.nome || 'Your nation'} — contract queue` : `${d.nome || 'Your unit'} — your requests`))
     .setDescription(testo)
     .setFooter({ text: 'WarEra+ contract queue · oldest first' })
     .setTimestamp(Date.now());
+}
+
+/** I bottoni sotto la coda: chiedere un contratto per tutti; per il governo
+ *  un menu con le richieste su cui si puo' ancora agire (in attesa, o
+ *  approvate e non ancora aperte). Scegliere una richiesta mostra la sua carta
+ *  con Approve / Reject (o "I opened the auction"), cioe' gli stessi bottoni
+ *  e gli stessi controlli di tutto il resto. */
+function componentiCoda(d) {
+  const nazione = d.vista === 'nation';
+  const bottoni = [new ButtonBuilder().setCustomId('wp:req').setLabel('Request a contract').setEmoji('📝').setStyle(ButtonStyle.Primary)];
+  if (!nazione) {
+    bottoni.push(
+      new ButtonBuilder().setCustomId('wp:edit').setLabel('Edit mine').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('wp:wd').setLabel('Withdraw mine').setStyle(ButtonStyle.Secondary),
+    );
+  }
+  bottoni.push(new ButtonBuilder().setCustomId(`wp:qref:${d.vista}`).setLabel('Refresh').setStyle(ButtonStyle.Secondary));
+  const righe = [new ActionRowBuilder().addComponents(bottoni)];
+
+  if (nazione) {
+    const decidibili = d.richieste
+      .filter((r) => vivaR(r) && !(r.status === 'approved' && r.openedAt))
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)).slice(0, 25);
+    if (decidibili.length) {
+      righe.push(new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId(`wp:decideq:country:${d.scopeId}`)
+          .setPlaceholder('Decide a request… (oldest first)')
+          .addOptions(decidibili.map((r) => ({
+            label: `#${r.id} ${r.muNome || '?'} — ${r.battleLabel || r.battleId}`.slice(0, 100),
+            description: (r.status === 'pending'
+              ? `⏳ waiting ${durata(r.createdAt)} · ${corto(r.minDamage)} dmg · budget ${num(r.budget)}`
+              : `✅ approved — open the auction · ${corto(r.minDamage)} dmg`).slice(0, 100),
+            value: String(r.id),
+          }))),
+      ));
+    }
+  }
+  return righe;
 }
 
 // ---------------------------------------------------------------------------
@@ -541,6 +607,25 @@ function attach(client, opz = {}) {
     return `\n_Can approve but not linked to WarEra+ (so not tagged): ${elenco}._`;
   }
 
+  /**
+   * La LISTA sotto la carta: tutta la coda della nazione, con la richiesta della
+   * carta segnata. Il governo che riceve un avviso deve vedere subito anche
+   * cos'altro aspetta e da quanto — non solo questa richiesta, in isolamento — e
+   * seguire la lista. Se i dati non arrivano si manda la sola carta: la lista e'
+   * un di piu', non puo' bloccare l'avviso.
+   */
+  async function embedListaSotto(r) {
+    try {
+      const d = await datiSportello('country', r.countryId);
+      if (!d) return null;
+      const attese = d.richieste.filter((x) => vivaR(x) && x.status === 'pending').length;
+      return renderCoda(
+        { vista: 'nation', nome: d.nome, richieste: d.richieste, decisione: {} },
+        { evidenzia: r.id, max: 3300, titolo: `Queue right now — ${attese} waiting` },
+      );
+    } catch { return null; }
+  }
+
   async function gestisciEvento(ev) {
     const r = ev.richiesta;
     toccaSportelli(r);                                   // prima del canale: serve anche senza
@@ -552,7 +637,10 @@ function attach(client, opz = {}) {
       if (!k || !r) return;
       try {
         const c = await canaleDi(k.canaleId);
-        await c.messages.edit(k.messaggioId, cartaPayload(r, ev.nomePaese));
+        const carta = cartaPayload(r, ev.nomePaese);
+        // Finche' aspetta una decisione la carta tiene la lista; poi e' solo la carta.
+        const lista = r.status === 'pending' && !r.esito ? await embedListaSotto(r) : null;
+        await c.messages.edit(k.messaggioId, lista ? { ...carta, embeds: [...carta.embeds, lista] } : carta);
       } catch (err) {
         // Messaggio cancellato a mano: la carta non c'e' piu', non e' un guasto.
         if (err?.code === 10008 || err?.code === 10003) delete stato.carte[r.id];
@@ -570,9 +658,12 @@ function attach(client, opz = {}) {
       const testa = tag.length
         ? `${mention(tag)} — a contract is waiting for a decision.`
         : 'A contract is waiting for a decision. _No approver here is linked to WarEra+, so nobody could be tagged._';
+      const carta = cartaPayload(r, ev.nomePaese);
+      const lista = await embedListaSotto(r);               // SEMPRE la lista, ad ogni richiesta nuova
       const m = await canale.send({
         content: `${testa}${rigaSenzaDiscord(ev)}`,
-        ...cartaPayload(r, ev.nomePaese),
+        ...carta,
+        embeds: lista ? [...carta.embeds, lista] : carta.embeds,
         allowedMentions: permessi,
       });
       stato.carte[r.id] = { canaleId: canale.id, messaggioId: m.id, at: Date.now() };
@@ -661,6 +752,9 @@ function attach(client, opz = {}) {
     return new ModalBuilder().setCustomId(customId).setTitle(titolo).addComponents(
       campo('dmg', 'Minimum damage', { obbligatorio: true, segnaposto: 'e.g. 1000000, 1m or 500k', valore: v.minDamage }),
       campo('bounty', 'Bounty per 1,000 damage', { obbligatorio: true, segnaposto: 'e.g. 0.08', valore: v.perK }),
+      // Facoltativo. Discord ammette al massimo 5 campi per modulo: questo e' il quarto
+      // dei cinque (danno, taglia, burst, professionisti, nota).
+      campo('burst', 'Burst damage, done right away (optional)', { segnaposto: 'e.g. 500k — what you can hit as soon as it opens', valore: v.burstDamage }),
       campo('pro', 'Professionals only? (yes / no)', { segnaposto: 'no', valore: v.professionalsOnly ? 'yes' : 'no', max: 5 }),
       campo('note', 'Note for the government (optional)', { lungo: true, max: 300, valore: v.note }),
     );
@@ -700,15 +794,18 @@ function attach(client, opz = {}) {
     const minDamage = leggiNumero(i.fields.getTextInputValue('dmg'));
     const perK = leggiNumero(i.fields.getTextInputValue('bounty'));
     if (!(minDamage >= 1000) || !(perK >= 0.001 && perK <= 5)) return effimero(i, ERRORI.parametri_non_validi);
+    const burst = leggiBurst(i.fields.getTextInputValue('burst'));
+    if (burst === false) return effimero(i, ERRORI.burst_non_valido);
     await i.deferReply({ flags: EPHEMERAL });
     const r = await api('POST', '/richiesta', {
       discordId: i.user.id, battleId, side, minDamage, perK,
+      burstDamage: burst || undefined,
       professionalsOnly: siNo(i.fields.getTextInputValue('pro')),
       note: i.fields.getTextInputValue('note') || undefined,
     });
     if (!r.ok) return i.editReply(messaggioErrore(r));
     const q = r.json.richiesta;
-    return i.editReply(`Request **#${q.id}** sent: ${num(q.minDamage)} damage for ${num(q.budget)} (${num(q.perK)} per 1,000) on ${q.battleLabel}.\nThe government has been tagged; you will hear back in your unit's channel.`);
+    return i.editReply(`Request **#${q.id}** sent: ${num(q.minDamage)} damage${q.burstDamage ? ` (${num(q.burstDamage)} right away)` : ''} for ${num(q.budget)} (${num(q.perK)} per 1,000) on ${q.battleLabel}.\nThe government has been tagged; you will hear back in your unit's channel.`);
   }
 
   // ── Edit mine / Withdraw mine ─────────────────────────────────────────
@@ -754,9 +851,12 @@ function attach(client, opz = {}) {
     const minDamage = leggiNumero(i.fields.getTextInputValue('dmg'));
     const perK = leggiNumero(i.fields.getTextInputValue('bounty'));
     if (!(minDamage >= 1000) || !(perK >= 0.001 && perK <= 5)) return effimero(i, ERRORI.parametri_non_validi);
+    const burst = leggiBurst(i.fields.getTextInputValue('burst'));
+    if (burst === false) return effimero(i, ERRORI.burst_non_valido);
     await i.deferReply({ flags: EPHEMERAL });
     const r = await api('POST', '/modifica', {
       discordId: i.user.id, requestId: id, minDamage, perK,
+      burstDamage: burst,                                   // null = campo svuotato = toglierlo
       professionalsOnly: siNo(i.fields.getTextInputValue('pro')),
       note: i.fields.getTextInputValue('note') || '',
     });
@@ -801,12 +901,21 @@ function attach(client, opz = {}) {
     });
   }
 
-  async function onSceltaDaDecidere(i, p) {              // menu `wp:decide` → carta con i bottoni
+  // `nuovo`: il menu sta sotto la coda (/contract-queue), che deve restare dov'e':
+  // la carta va in un NUOVO messaggio effimero. Dal bottone "Pending" invece il
+  // menu e' un messaggio a parte e lo si sostituisce con la carta.
+  async function onSceltaDaDecidere(i, p, nuovo = false) {
     const id = Number(i.values[0]);
     const d = await datiSportello(p.scope, p.scopeId);
     const r = d?.richieste.find((x) => x.id === id);
-    if (!r) return i.update({ content: ERRORI.richiesta_inesistente, components: [] });
-    return i.update({ content: '', ...cartaPayload(r, r.nomePaese) });
+    if (!r) {
+      return nuovo
+        ? i.reply({ content: ERRORI.richiesta_inesistente, flags: EPHEMERAL })
+        : i.update({ content: ERRORI.richiesta_inesistente, components: [] });
+    }
+    return nuovo
+      ? i.reply({ ...cartaPayload(r, r.nomePaese), flags: EPHEMERAL, allowedMentions: SENZA_MENZIONI })
+      : i.update({ content: '', ...cartaPayload(r, r.nomePaese) });
   }
 
   // ── Open / Close desk ─────────────────────────────────────────────────
@@ -920,7 +1029,17 @@ function attach(client, opz = {}) {
       }
       return i.editReply(messaggioErrore(r));
     }
-    return i.editReply({ embeds: [renderCoda(r.json)], allowedMentions: SENZA_MENZIONI });
+    return i.editReply({ embeds: [renderCoda(r.json)], components: componentiCoda(r.json), allowedMentions: SENZA_MENZIONI });
+  }
+
+  /** "Refresh" sotto la coda: la riscrive con i dati di adesso (dopo aver
+   *  approvato qualcosa la coda sopra sarebbe vecchia). */
+  async function onAggiornaCoda(i) {
+    const vista = i.customId.split(':')[2] === 'nation' ? 'nation' : 'unit';
+    await i.deferUpdate();
+    const r = await api('GET', `/coda?discordId=${i.user.id}&vista=${vista}`);
+    if (!r.ok) return i.followUp({ content: messaggioErrore(r), flags: EPHEMERAL });
+    return i.editReply({ embeds: [renderCoda(r.json)], components: componentiCoda(r.json), allowedMentions: SENZA_MENZIONI });
   }
 
   // ═════════════════════════════════════════════════════════════════════
@@ -950,14 +1069,15 @@ function attach(client, opz = {}) {
         if (id === 'wp:pick') await onScelta(i);
         else if (id === 'wp:mine:edit') await onSceltaMia(i, 'edit');
         else if (id === 'wp:mine:wd') await onSceltaMia(i, 'wd');
-        else if (id.startsWith('wp:decide:')) {
-          const [, , scope, scopeId] = id.split(':');
-          await onSceltaDaDecidere(i, { scope, scopeId });
+        else if (id.startsWith('wp:decide:') || id.startsWith('wp:decideq:')) {
+          const [, tipo, scope, scopeId] = id.split(':');
+          await onSceltaDaDecidere(i, { scope, scopeId }, tipo === 'decideq');
         }
         return;
       }
       if (i.isButton()) {
         if (/^wp:(approve|reject|opened|cancel):\d+$/.test(id)) { await onBottoneCarta(i); return; }
+        if (id.startsWith('wp:qref:')) { await onAggiornaCoda(i); return; }
         if (id === 'wp:req') { await onRichiedi(i); return; }
         if (id === 'wp:edit') { await onMie(i, 'edit'); return; }
         if (id === 'wp:wd') { await onMie(i, 'wd'); return; }
@@ -1046,5 +1166,5 @@ function attach(client, opz = {}) {
 }
 
 module.exports = {
-  attach, definizioniComandi, embedCarta, bottoniCarta, statoCarta, renderSportello, renderCoda, leggiNumero, parlaDiPro,
+  attach, definizioniComandi, embedCarta, bottoniCarta, statoCarta, renderSportello, renderCoda, componentiCoda, leggiNumero, parlaDiPro,
 };

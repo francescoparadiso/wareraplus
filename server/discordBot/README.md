@@ -53,6 +53,24 @@ postarla nel canale):
   aperta → chiuse nelle ultime 24 h), con 🔥 su chi aspetta da più di 30 minuti.
   Agli altri risponde che serve un ruolo di governo.
 
+Sotto la coda ci sono i bottoni: **Request a contract** per tutti (ai comandanti
+anche *Edit mine* / *Withdraw mine*) e **Refresh**; nella coda della nazione un
+menu per **decidere** una richiesta (in attesa → Approve / Reject; approvata →
+*I opened the auction*), che apre la sua carta in un messaggio a parte.
+
+## Burst e lista
+
+- **Burst damage**: un campo facoltativo del modulo di richiesta (e di *Edit
+  mine*) per dichiarare quanto danno l'unità può fare **subito**, all'apertura
+  dell'asta. Compare sulla carta ("Burst now"), nelle righe di sportello e coda
+  ("1M dmg (burst 500k)") e negli avvisi. Svuotando il campo in modifica lo si
+  toglie. Colonna `request.burst_damage` (migrazione automatica).
+- **La lista sotto ogni richiesta nuova**: la carta con i tag porta con sé un
+  secondo riquadro, "Queue right now — N waiting", con tutta la coda della
+  nazione in ordine di arrivo e la richiesta della carta segnata "← this one".
+  Finché la richiesta è in attesa il riquadro si aggiorna con la carta; una volta
+  decisa resta la sola carta.
+
 ## Risposta automatica a "10m pro"
 
 Se qualcuno scrive a mano "10m pro" (o "5 m pros", "pro 10m"…) nel canale di uno

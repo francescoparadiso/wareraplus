@@ -564,7 +564,11 @@ function migrate() {
   // chiesti dice la cosa esatta; ridurre tutto a "conforme / diverso"
   // butterebbe via l'unica informazione utile.
   const colReq = colonne('request');
-  for (const [nome, tipo] of [['apert_min_damage', 'INTEGER'], ['apert_budget', 'REAL']]) {
+  // 2026-11-16 — `burst_damage`: quanto danno l'unita' puo' fare SUBITO, al
+  // momento in cui l'asta apre (facoltativo, dichiarato da chi chiede). Il
+  // governo lo legge accanto al danno minimo: 1M di minimo con 800k pronti
+  // e' un'altra richiesta da 1M di minimo da fare in tre ore.
+  for (const [nome, tipo] of [['apert_min_damage', 'INTEGER'], ['apert_budget', 'REAL'], ['burst_damage', 'INTEGER']]) {
     if (!colReq.includes(nome)) {
       db.exec(`ALTER TABLE request ADD COLUMN ${nome} ${tipo}`);
       console.log(`[plusApi] migrazione: aggiunta request.${nome}`);
@@ -892,11 +896,11 @@ function creaRichiesta(d) {
   const info = getDb().prepare(`
     INSERT INTO request (battle_id, battle_label, side, country_id, mu_id, mu_nome,
       requested_by, min_damage, budget, per_k, duration, professionals_only, note,
-      status, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',?,?)
+      burst_damage, status, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',?,?)
   `).run(d.battleId, d.battleLabel || null, d.side || null, d.countryId, d.muId, d.muNome || null,
          d.requestedBy, d.minDamage || null, d.budget || null, d.perK || null, d.duration || null,
-         d.professionalsOnly ? 1 : 0, d.note || null, ora, ora);
+         d.professionalsOnly ? 1 : 0, d.note || null, d.burstDamage || null, ora, ora);
   return getRichiesta(info.lastInsertRowid);
 }
 
