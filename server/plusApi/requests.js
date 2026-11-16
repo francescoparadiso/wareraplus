@@ -259,6 +259,30 @@ async function azioneModifica(identita, id, b) {
 }
 
 // ---------------------------------------------------------------------------
+// POSIZIONE IN CODA
+// ---------------------------------------------------------------------------
+// La coda e' l'ordine di ARRIVO delle richieste ancora in attesa di ciascuna
+// nazione (`created_at`, poi `id`): e' quello che il governo vede in "Pending" e
+// nel bot. Il tavolo lo mostrava al contrario (dalla piu' recente) e senza
+// posizione: una richiesta riportata davanti dopo un furto scendeva in fondo
+// all'elenco, e chi la cercava non la trovava.
+//
+// Ogni chiamata calcola la posizione sull'INTERA coda della nazione, non sulle
+// sole righe che quella persona vede: un comandante vede solo le sue richieste,
+// ma "sono 3° su 12" ha senso solo contro tutte le altre.
+function posizioniInCoda(righe) {
+  const paesi = [...new Set(righe.filter((r) => r.status === 'pending' && !r.esito).map((r) => r.country_id))];
+  const pos = new Map();
+  const tot = {};
+  for (const cid of paesi) {
+    const att = getDb().prepare("SELECT id FROM request WHERE country_id = ? AND status = 'pending' AND esito IS NULL ORDER BY created_at, id").all(cid);
+    att.forEach((x, k) => pos.set(x.id, k + 1));
+    tot[cid] = att.length;
+  }
+  return { pos, tot };
+}
+
+// ---------------------------------------------------------------------------
 // LE ROTTE
 // ---------------------------------------------------------------------------
 
@@ -285,8 +309,14 @@ function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSott
       const righe = listaRichieste({
         muIds: cap.chiedePer, countryIds: cap.approvaPer, tutto,
       });
+      const { pos, tot } = posizioniInCoda(righe);
       res.json({
-        richieste: righe.map((r) => pubblica(conNomi(r))),
+        richieste: righe.map((r) => ({
+          ...pubblica(conNomi(r)),
+          // Solo per le in attesa: posizione e quante sono nella coda della nazione.
+          posizione: pos.get(r.id) || null,
+          inCoda: pos.has(r.id) ? tot[r.country_id] : null,
+        })),
         capacita: cap,
         lente: req.lente,
       });
@@ -311,7 +341,13 @@ function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSott
       const tutto = Boolean(cap.admin) && !req.lente;
       const righe = listaRichieste({ muIds: cap.chiedePer, countryIds: cap.approvaPer, tutto });
       const ultima = righe.reduce((m, r) => Math.max(m, r.updated_at || 0), 0);
-      res.json({ versione: `${righe.length}:${ultima}` });
+      // Anche la SOMMA delle posizioni: se davanti a te entra o esce qualcuno le
+      // tue richieste non cambiano (un comandante non vede quelle degli altri),
+      // ma la tua posizione si': senza, il numero resterebbe vecchio.
+      const { pos } = posizioniInCoda(righe);
+      let somma = 0;
+      for (const r of righe) somma += pos.get(r.id) || 0;
+      res.json({ versione: `${righe.length}:${ultima}:${somma}` });
     } catch (err) {
       console.error('[requests] versione fallita:', err.message);
       res.status(502).json({ error: 'gioco_non_raggiungibile' });

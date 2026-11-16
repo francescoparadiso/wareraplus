@@ -648,6 +648,14 @@ body.light-theme .wp-pv-id { --pv-bg-sticky: #f4f6f8; }
    ══════════════════════════════════════════════════════════════════ */
 
 /* ── Sezioni ─────────────────────────────────────────────────────── */
+/* La posizione in coda sulla riga di una richiesta in attesa ("In coda 3/12"). */
+.wp-pv-req-pos {
+  font-size: .7rem; font-weight: 600; letter-spacing: .02em;
+  padding: .1rem .5rem; border-radius: 999px;
+  color: var(--pv-accent); background: var(--pv-accent-soft);
+  white-space: nowrap;
+}
+
 /* "Aggiorna" in cima alla scheda dei contratti: l'ora dell'ultima lettura e il tasto. */
 .wp-pv-aggiorna-riga {
   display: flex; align-items: center; justify-content: flex-end; gap: .6rem;

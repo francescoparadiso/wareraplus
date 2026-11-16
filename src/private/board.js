@@ -57,7 +57,21 @@ const AUTO_OGNI_MS = 8000;
  *  ⚠️ Stessa formula di `GET /requests/versione` (server/plusApi/requests.js):
  *  se cambia una, deve cambiare l'altra, o il tavolo si ricaricherebbe ad ogni
  *  controllo (o mai). */
-const versioneDi = (righe) => `${righe.length}:${righe.reduce((m, r) => Math.max(m, r.updatedAt || 0), 0)}`;
+const versioneDi = (righe) => `${righe.length}:${righe.reduce((m, r) => Math.max(m, r.updatedAt || 0), 0)}:${righe.reduce((s, r) => s + (r.posizione || 0), 0)}`;
+
+/**
+ * L'ordine delle righe dentro una battaglia: quello della CODA. Le in attesa per
+ * ordine di arrivo (chi e' primo sta in alto), poi approvate, poi con l'asta
+ * aperta, poi le chiuse (la piu' recente per prima). Prima il server le dava dalla
+ * piu' recente: una richiesta riportata davanti dopo un furto finiva in fondo.
+ */
+const rangoRiga = (r) => (r.status === 'pending' ? 0 : r.status === 'approved' ? (r.openedAt ? 2 : 1) : 3);
+function ordineCoda(a, b) {
+  const ra = rangoRiga(a); const rb = rangoRiga(b);
+  if (ra !== rb) return ra - rb;
+  if (ra === 3) return (b.createdAt || 0) - (a.createdAt || 0);
+  return ((a.createdAt || 0) - (b.createdAt || 0)) || (a.id - b.id);
+}
 
 function quando(ms) {
   if (!ms) return null;
@@ -776,6 +790,7 @@ export function creaTavolo(ctx) {
 
     const gruppi = [...m.values()];
     for (const g of gruppi) {
+      g.righe.sort(ordineCoda);
       g.soldi = soldiDi(g.righe);
       g.ricevuto = ricevutoDi(g.righe);
       g.impegnato = g.soldi.attesa + g.soldi.approvato + g.soldi.aperto;
@@ -928,6 +943,11 @@ export function creaTavolo(ctx) {
     testa.appendChild(el('strong', 'wp-pv-req-mu', r.muNome || r.muId));
     testa.appendChild(el('span', 'wp-pv-req-stato',
       pvT(`st${r.status.charAt(0).toUpperCase()}${r.status.slice(1)}`)));
+    // La POSIZIONE in coda (la stessa del bot): conta quella, non quando e' stata
+    // fatta. Una richiesta riaccodata dopo un furto la mantiene.
+    if (r.posizione) {
+      testa.appendChild(el('span', 'wp-pv-req-pos', `${pvT('queuePos')} ${r.posizione}/${r.inCoda}`));
+    }
     // Dentro un gruppo per battaglia il NOME della battaglia sarebbe
     // ripetuto ad ogni riga; lo SCHIERAMENTO no — due unità sulla stessa
     // battaglia possono servire lati opposti, ed è l'unica cosa che
