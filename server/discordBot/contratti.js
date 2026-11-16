@@ -518,6 +518,18 @@ function definizioniComandi() {
   const pubblico = (o) => o.setName('public').setDescription('Post it in the channel instead of showing it only to you');
 
   return [new SlashCommandBuilder()
+    .setName('contract')
+    .setDescription('Ask for a mercenary contract for your unit')
+    .setDMPermission(false)
+    // Le opzioni obbligatorie vengono prima (lo vuole Discord).
+    .addStringOption((o) => o.setName('battle').setDescription('The battle — start typing to search').setRequired(true).setAutocomplete(true))
+    .addStringOption((o) => o.setName('damage').setDescription('Minimum damage, e.g. 10m or 500k').setRequired(true).setMaxLength(20))
+    .addNumberOption((o) => o.setName('rate').setDescription('Bounty per 1,000 damage, e.g. 0.05').setRequired(true).setMinValue(0.001).setMaxValue(5))
+    .addStringOption((o) => o.setName('side').setDescription('Which side your unit fights on — leave empty if only one is possible').setAutocomplete(true))
+    .addStringOption((o) => o.setName('burst').setDescription('Damage you can do right away, e.g. 5m (optional)').setMaxLength(20))
+    .addBooleanOption((o) => o.setName('pro').setDescription('Professionals only'))
+    .addStringOption((o) => o.setName('note').setDescription('E.g. when your UM takes the pill or goes in debuff').setMaxLength(300)),
+  new SlashCommandBuilder()
     .setName('register')
     .setDescription('Link your WarEra character to your Discord — no website needed')
     .setDMPermission(false),
@@ -902,15 +914,81 @@ function attach(client, opz = {}) {
     const burst = leggiBurst(i.fields.getTextInputValue('burst'));
     if (burst === false) return effimero(i, ERRORI.burst_non_valido);
     await i.deferReply({ flags: EPHEMERAL });
-    const r = await api('POST', '/richiesta', {
-      discordId: i.user.id, battleId, side, minDamage, perK,
-      burstDamage: burst || undefined,
-      professionalsOnly: siNo(i.fields.getTextInputValue('pro')),
+    return inviaRichiesta(i, {
+      battleId, side, minDamage, perK, burst,
+      pro: siNo(i.fields.getTextInputValue('pro')),
       note: i.fields.getTextInputValue('note') || undefined,
+    });
+  }
+
+  /** L'invio vero, comune al modulo e al comando `/contract`: l'interazione e'
+   *  gia' stata "differita" (deferReply), qui si manda al server e si risponde. */
+  async function inviaRichiesta(i, d) {
+    const r = await api('POST', '/richiesta', {
+      discordId: i.user.id, battleId: d.battleId, side: d.side, minDamage: d.minDamage, perK: d.perK,
+      burstDamage: d.burst || undefined,
+      professionalsOnly: Boolean(d.pro),
+      note: d.note || undefined,
     });
     if (!r.ok) return i.editReply(messaggioErrore(r));
     const q = r.json.richiesta;
     return i.editReply(`Request **sent**: ${num(q.minDamage)} damage${q.burstDamage ? ` (${num(q.burstDamage)} right away)` : ''} for ${num(q.budget)} (${num(q.perK)} per 1,000) on ${q.battleLabel}.\nThe government has been tagged; you will hear back in your unit's channel.`);
+  }
+
+  // ── /contract: la stessa richiesta, in una riga ───────────────────────
+  // Per chi sa gia' cosa vuole: battaglia (con ricerca mentre si scrive), danno,
+  // taglia e il resto facoltativo. Il lato si puo' omettere quando ce n'e' uno
+  // solo possibile (di solito: la propria nazione e' alleata di uno solo). Danno e
+  // burst sono TESTO, come nel modulo, cosi' "10m" e "500k" funzionano.
+  const conLimite = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error('timeout')), ms))]);
+
+  async function onAutocompleta(i) {
+    const f = i.options.getFocused(true);
+    try {
+      if (f.name === 'battle') {
+        const r = await conLimite(api('GET', `/battaglie?discordId=${i.user.id}&q=${encodeURIComponent(f.value || '')}`), 2500);
+        const lista = r.ok ? r.json.battaglie || [] : [];
+        return await i.respond(lista.slice(0, 25).map((b) => ({ name: b.etichetta.slice(0, 100), value: b.id })));
+      }
+      if (f.name === 'side') {
+        const id = i.options.getString('battle');
+        if (!id) return await i.respond([]);
+        const r = await conLimite(api('GET', `/battaglie?discordId=${i.user.id}&id=${encodeURIComponent(id)}`), 2500);
+        const b = (r.ok ? r.json.battaglie || [] : [])[0];
+        return await i.respond((b?.lati || []).map((l) => ({ name: `Fight for ${l.nome} (${l.side})`.slice(0, 100), value: l.side })));
+      }
+      return await i.respond([]);
+    } catch {
+      // Un autocompletamento che fallisce non mostra errori: lista vuota.
+      try { await i.respond([]); } catch { /* scaduto o gia' risposto */ }
+    }
+  }
+
+  async function onContratto(i) {
+    const battleId = i.options.getString('battle', true);
+    const minDamage = leggiNumero(i.options.getString('damage', true));
+    const perK = i.options.getNumber('rate', true);
+    const burst = leggiBurst(i.options.getString('burst'));
+    if (!/^[a-f0-9]{24}$/.test(battleId)) return effimero(i, 'Pick the battle from the list that appears while you type in the **battle** box.');
+    if (!(minDamage >= 1000) || !(perK >= 0.001 && perK <= 5)) return effimero(i, ERRORI.parametri_non_validi);
+    if (burst === false) return effimero(i, ERRORI.burst_non_valido);
+    await i.deferReply({ flags: EPHEMERAL });
+
+    let side = i.options.getString('side');
+    if (!side) {
+      // Lato omesso: va bene solo se per la tua unita' ce n'e' uno possibile.
+      const r = await api('GET', `/battaglie?discordId=${i.user.id}&id=${encodeURIComponent(battleId)}`);
+      if (!r.ok) return i.editReply(messaggioErrore(r));
+      const lati = r.json.battaglie?.[0]?.lati || [];
+      if (!lati.length) return i.editReply(ERRORI.battaglia_non_in_corso);
+      if (lati.length > 1) return i.editReply(`Your unit can fight on either side of this battle, so I need to know which nation pays: ${lati.map((l) => `**${l.nome}** (${l.side})`).join(' or ')}. Run the command again and fill in **side**.`);
+      side = lati[0].side;
+    }
+    return inviaRichiesta(i, {
+      battleId, side, minDamage, perK, burst,
+      pro: i.options.getBoolean('pro') || false,
+      note: i.options.getString('note') || undefined,
+    });
   }
 
   // ── Edit mine / Withdraw mine ─────────────────────────────────────────
@@ -1241,8 +1319,13 @@ function attach(client, opz = {}) {
 
   client.on('interactionCreate', async (i) => {
     try {
+      if (i.isAutocomplete()) {
+        if (i.commandName === 'contract') await onAutocompleta(i);
+        return;
+      }
       if (i.isChatInputCommand()) {
-        if (i.commandName === 'contract-desk') await onComandoSportello(i);
+        if (i.commandName === 'contract') await onContratto(i);
+        else if (i.commandName === 'contract-desk') await onComandoSportello(i);
         else if (i.commandName === 'contract-queue') await onCoda(i);
         else if (i.commandName === 'register') await onRegistra(i);
         return;
@@ -1394,7 +1477,7 @@ function attach(client, opz = {}) {
       + `The **[contract desk](${link})** is right here.\n\n`
       + '**How it works**\n'
       + '1️⃣ Type `/register` to link your account _(once, one minute, no website needed)_\n'
-      + '2️⃣ Press **📝 Request a contract** on the desk, then pick the battle and the side\n'
+      + '2️⃣ Press **📝 Request a contract** below, then pick the battle and the side _(or just type_ `/contract`_)_\n'
       + '3️⃣ Put your **damage**, your **rate** (bounty per 1,000) and **how much damage you can burst** right away\n'
       + '4️⃣ In the note you can also write **when your UM will take the pill or go in debuff**\n'
       + '_The government gets tagged, and you can follow your place in line with_ `/contract-queue unit`\n\n'

@@ -39,6 +39,18 @@ Se il bot non chiede nulla per 90 secondi, gli avvisi tornano ai **webhook** (se
 ce n'è uno). Quando un ambito ha un canale del bot, il webhook di quell'ambito
 tace, altrimenti ogni avviso comparirebbe due volte.
 
+## Chiedere un contratto in una riga: `/contract`
+
+La stessa richiesta del bottone *Request a contract*, per chi sa già cosa vuole:
+
+`/contract battle:<cerca mentre scrivi> damage:10m rate:0.05 [side] [burst:5m] [pro] [note]`
+
+- **battle**: si cerca scrivendo (autocompletamento, le battaglie su cui la propria
+  unità può chiedere, le più calde per prime). **side** si può omettere se ne è
+  possibile uno solo; se ne sono possibili due il bot lo chiede.
+- **damage** e **burst** sono testo come nel modulo: `10m`, `500k`, `1,000,000`.
+- Stesse regole di sempre: stesso server, stessi permessi, sportello chiuso → rifiuta.
+
 ## Controllare la coda: `/contract-queue`
 
 Due viste, in risposta visibile solo a chi la chiede (opzione `public` per
