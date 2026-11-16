@@ -46,9 +46,11 @@ const fs = require('fs');
 const path = require('path');
 const { trpcGet } = require('./wareraApi');
 const {
-  getDb, getRichiesta, aggiornaRichiesta, getWebhook, audit,
+  getDb, getRichiesta, aggiornaRichiesta, getWebhook, audit, creaRichiesta, getAccountById,
 } = require('./db');
-const { avvisa, avvisaCarta } = require('./notify');
+const { avvisa, avvisaCarta, testoRiaccodata } = require('./notify');
+const { notificaComandanti } = require('./dm');
+const { battaglieVive } = require('./fonti');
 
 const RAFFICA_MS = 12_000;
 const RAFFICA_DURATA_MS = 3 * 60_000;
@@ -143,6 +145,49 @@ function parametriDiversi(a, r) {
   };
   return fuori(a.minimumDamage, r.min_damage, TOLLERANZA_DANNO)
       || fuori(a.budget, r.budget, TOLLERANZA_COMPENSO);
+}
+
+// ---------------------------------------------------------------------------
+// Rubato: si rimette in coda
+// ---------------------------------------------------------------------------
+
+/**
+ * La richiesta rubata torna in coda come RIGA NUOVA (status `pending`, da
+ * riapprovare) con gli stessi dati e — questo e' il punto — la STESSA ora di
+ * arrivo di quella originale: la posizione in coda e' l'ordine di arrivo, quindi
+ * torna dove stava, di solito davanti. La vecchia resta chiusa con il suo esito
+ * `altra_unita` (e' la storia di cosa e' successo), la nuova porta `requeue_of`.
+ *
+ * Si rimette in coda solo se:
+ *  · non e' gia' stata riaccodata (un verdetto non deve duplicarla);
+ *  · la battaglia e' ANCORA IN CORSO: dopo la fine una richiesta non serve a
+ *    nessuno. Se non si riesce a saperlo (cache-server giu') si riaccoda lo
+ *    stesso: il governo puo' sempre rifiutarla, non puo' riavere una richiesta
+ *    persa in silenzio.
+ * Non lancia mai: un guasto qui non deve toccare il verdetto gia' scritto.
+ */
+async function riaccodaRubata(r) {
+  try {
+    if (getDb().prepare('SELECT 1 FROM request WHERE requeue_of = ?').get(r.id)) return null;
+    try {
+      const vive = await battaglieVive();
+      if (Array.isArray(vive) && vive.length && !vive.some((b) => b?._id === r.battle_id && b.isActive !== false)) return null;
+    } catch { /* non si sa: si riaccoda */ }
+
+    const nuova = creaRichiesta({
+      battleId: r.battle_id, battleLabel: r.battle_label, side: r.side,
+      countryId: r.country_id, muId: r.mu_id, muNome: r.mu_nome,
+      requestedBy: r.requested_by, minDamage: r.min_damage, budget: r.budget, perK: r.per_k,
+      duration: r.duration, professionalsOnly: r.professionals_only, note: r.note,
+      burstDamage: r.burst_damage,
+      createdAt: r.created_at, requeueOf: r.id,
+    });
+    audit(null, 'watcher.riaccodata', `request:${r.id}`, { nuova: nuova.id });
+    return nuova;
+  } catch (err) {
+    console.warn('[watcher] riaccodo fallito:', err.message);
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -268,10 +313,20 @@ async function verdetto(c) {
   togli(r.id);
 
   if (esito === 'altra_unita') {
-    avvisa('country', r.country_id, `**Contract went elsewhere** — ${r.battle_label || r.battle_id}: another unit won the auction agreed with ${r.mu_nome || r.mu_id}.`,
+    // Rubato: l'unita' aveva aspettato ed era stata approvata, e l'asta l'ha
+    // vinta un'altra. Rifarla da capo la metterebbe in fondo, dopo chi e'
+    // arrivato nel frattempo: si rimette in coda da sola, al suo posto.
+    const nuova = await riaccodaRubata(r);
+    avvisa('country', r.country_id, `**Contract went elsewhere** — ${r.battle_label || r.battle_id}: another unit won the auction agreed with ${r.mu_nome || r.mu_id}.${nuova ? ' It was put back in the queue.' : ''}`,
       { tipo: 'persa_paese', requestId: r.id });
-    avvisa('mu', r.mu_id, `**Lost** — the contract on ${r.battle_label || r.battle_id} was taken by another unit.`,
+    avvisa('mu', r.mu_id, `**Lost** — the contract on ${r.battle_label || r.battle_id} was taken by another unit.${nuova ? ' Your request was put back in the queue, in its original place.' : ''}`,
       { tipo: 'persa', requestId: r.id });
+    if (nuova) {
+      const chi = (getAccountById(nuova.requested_by)?.war_username) || '?';
+      // Il governo la vede come una richiesta NUOVA (carta, tag, lista): deve riapprovarla.
+      avvisa('country', nuova.country_id, testoRiaccodata(nuova, chi), { tipo: 'nuova', requestId: nuova.id });
+      notificaComandanti(nuova, 'rubata', 'the watcher', null);
+    }
   } else if (esito === 'conforme') {
     avvisa('mu', r.mu_id, `**Won** — the contract on ${r.battle_label || r.battle_id} is yours.`,
       { tipo: 'vinta', requestId: r.id });
@@ -328,4 +383,4 @@ function initWatcher({ dataDir }) {
   return { segnalaApertura, statoWatcher };
 }
 
-module.exports = { initWatcher, segnalaApertura, statoWatcher, SWEEP_MS };
+module.exports = { initWatcher, segnalaApertura, statoWatcher, SWEEP_MS, riaccodaRubata, verdetto };

@@ -568,7 +568,11 @@ function migrate() {
   // momento in cui l'asta apre (facoltativo, dichiarato da chi chiede). Il
   // governo lo legge accanto al danno minimo: 1M di minimo con 800k pronti
   // e' un'altra richiesta da 1M di minimo da fare in tre ore.
-  for (const [nome, tipo] of [['apert_min_damage', 'INTEGER'], ['apert_budget', 'REAL'], ['burst_damage', 'INTEGER']]) {
+  // 2026-11-16 — `requeue_of`: se il contratto viene RUBATO (l'asta la vince
+  // un'altra unita') il watcher rimette la richiesta in coda come nuova riga e
+  // qui scrive l'id di quella rubata. Serve a non riaccodare due volte la stessa
+  // e a dire "rimessa in coda dopo un furto" sulla carta.
+  for (const [nome, tipo] of [['apert_min_damage', 'INTEGER'], ['apert_budget', 'REAL'], ['burst_damage', 'INTEGER'], ['requeue_of', 'INTEGER']]) {
     if (!colReq.includes(nome)) {
       db.exec(`ALTER TABLE request ADD COLUMN ${nome} ${tipo}`);
       console.log(`[plusApi] migrazione: aggiunta request.${nome}`);
@@ -896,11 +900,15 @@ function creaRichiesta(d) {
   const info = getDb().prepare(`
     INSERT INTO request (battle_id, battle_label, side, country_id, mu_id, mu_nome,
       requested_by, min_damage, budget, per_k, duration, professionals_only, note,
-      burst_damage, status, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',?,?)
+      burst_damage, requeue_of, status, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',?,?)
   `).run(d.battleId, d.battleLabel || null, d.side || null, d.countryId, d.muId, d.muNome || null,
          d.requestedBy, d.minDamage || null, d.budget || null, d.perK || null, d.duration || null,
-         d.professionalsOnly ? 1 : 0, d.note || null, d.burstDamage || null, ora, ora);
+         d.professionalsOnly ? 1 : 0, d.note || null, d.burstDamage || null, d.requeueOf || null,
+         // `createdAt`: una richiesta rimessa in coda dopo un furto CONSERVA l'ora
+         // di arrivo originale, ed e' cosi' che torna davanti (la posizione e'
+         // l'ordine di arrivo).
+         d.createdAt || ora, ora);
   return getRichiesta(info.lastInsertRowid);
 }
 

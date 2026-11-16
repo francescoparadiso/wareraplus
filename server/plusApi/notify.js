@@ -134,6 +134,16 @@ function testoNuovaRichiesta(r, chi) {
     + `Asked by ${chi}${r.note ? `\n> ${r.note.slice(0, 200)}` : ''}`;
 }
 
+/** Per il webhook: una richiesta rimessa in coda dopo che l'asta e' andata a
+ *  un'altra unita'. Con il bot e' la carta a dirlo (`riAccodata`). */
+function testoRiaccodata(r, chi) {
+  return `**Contract stolen — put back in the queue** — ${r.mu_nome || r.mu_id}\n`
+    + `Battle: ${r.battle_label || r.battle_id}\n`
+    + `Min damage ${num(r.min_damage)}${burst(r)} · budget ${num(r.budget)}`
+    + `${r.professionals_only ? ' · professionals only' : ''}\n`
+    + `Asked by ${chi}. It keeps its original place in line: it needs a new approval.`;
+}
+
 function testoApprovata(r, chi) {
   return `**Approved** — ${r.mu_nome || r.mu_id}\n`
     + `Battle: ${r.battle_label || r.battle_id}\n`
@@ -210,6 +220,6 @@ function testoConfiniAlleanza(eventi, nomePaese, nomeAlleanza) {
 
 module.exports = {
   avvisa, avvisaCarta, urlWebhookValido, segnaBotVivo, botVivo, statoBot,
-  testoNuovaRichiesta, testoApprovata, testoRifiutata, testoAperta,
+  testoNuovaRichiesta, testoRiaccodata, testoApprovata, testoRifiutata, testoAperta,
   testoConfini, testoConfiniAlleanza,
 };

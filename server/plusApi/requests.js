@@ -60,6 +60,8 @@ function pubblica(r) {
     minDamage: r.min_damage, budget: r.budget, perK: r.per_k,
     // Danno fattibile SUBITO all'apertura dell'asta (facoltativo).
     burstDamage: r.burst_damage,
+    // Rimessa in coda dal watcher dopo che il contratto e' stato rubato.
+    riAccodata: Boolean(r.requeue_of),
     duration: r.duration, professionalsOnly: Boolean(r.professionals_only),
     note: r.note,
     status: r.status,

@@ -304,6 +304,25 @@ prima. `/health` → `bot` (`token`, `ultimoContatto`, `vivo`) e
 `pm2 restart <nome>` **non** lo legge: serve
 `pm2 restart ecosystem.config.js --update-env` (vedi più sotto).
 
+## Contratto rubato: si rimette in coda (`watcher.js: riaccodaRubata`)
+
+Quando il verdetto è `altra_unita` (l'asta approvata l'ha vinta un'altra unità) il
+watcher crea una **nuova richiesta** `pending` con gli stessi dati (burst, nota,
+taglia…) e la **stessa ora di arrivo** di quella rubata: la posizione in coda è
+l'ordine di arrivo, quindi torna dove stava, di solito in cima. La rubata resta
+chiusa con il suo esito (è la storia); la nuova porta `request.requeue_of` (colonna
+nuova, migrazione automatica) e `riAccodata: true` nella forma pubblica.
+
+- **Da riapprovare**: il governo la vede come una richiesta nuova (carta, tag, lista
+  della coda) con la dicitura "stolen contract put back in the queue".
+- **Avvisi**: canale della nazione e dell'unità (testo con "put back in the queue"),
+  messaggio privato a richiedente + comandanti (`dm.js`, tipo `rubata`).
+- **Condizioni**: non si riaccoda due volte la stessa (`requeue_of`), e non se la
+  **battaglia è finita** (se non si riesce a saperlo, cache-server giù, si riaccoda
+  comunque: il governo può rifiutarla, non può riavere una richiesta persa in silenzio).
+- Solo `altra_unita`: `parametri_diversi`, `nessuna_offerta` e `mai_aperta` non
+  si riaccodano.
+
 ## Aggiornare
 
 ```bash

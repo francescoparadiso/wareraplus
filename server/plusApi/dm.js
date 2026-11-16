@@ -53,13 +53,19 @@ function testoDM(tipo, r, chi, paese) {
     return `✅ **Your contract was approved**\n${dove}\n${cifre}\n`
       + `Approved by ${chi}. Wait for the auction to open, then bid.`;
   }
+  if (tipo === 'rubata') {
+    // `r` e' la richiesta NUOVA, quella rimessa in coda dal watcher.
+    return `⚔️ **Your contract was taken by another unit**\n${dove}\n${cifre}\n`
+      + 'The auction went to someone else, so your request was **put back in the queue in its original place**. '
+      + 'The government has to approve it again.';
+  }
   return `🔨 **The contract is posted — the auction is open!**\n${dove}\n${cifre}\n`
     + `Opened by ${chi}. The first bid usually lands within ~10 seconds.`;
 }
 
 /**
  * @param {object} r      la riga `request` aggiornata
- * @param {'approvata'|'aperta'} tipo
+ * @param {'approvata'|'aperta'|'rubata'} tipo
  * @param {string} chi    nome di chi ha agito
  * @param {number} [escludi]  id account di chi ha agito (non si avvisa)
  * Non lancia mai: un messaggio privato non deve far fallire l'azione che lo genera.

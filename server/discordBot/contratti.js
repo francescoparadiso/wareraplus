@@ -174,6 +174,7 @@ function statoCarta(r) {
   if (r.status === 'approved') {
     return { chiave: 'approvata', testo: `Approved by ${r.approvatore || '?'} — open the auction in game, then press the button` };
   }
+  if (r.riAccodata) return { chiave: 'attesa', testo: 'Waiting for a decision — put back in the queue after the contract was stolen' };
   return { chiave: 'attesa', testo: 'Waiting for a decision' };
 }
 
@@ -798,9 +799,14 @@ function attach(client, opz = {}) {
 
     // La richiesta nuova e' la CARTA con i bottoni, taggando chi decide.
     if (ev.tipo === 'nuova' && r) {
+      // Una richiesta rimessa in coda dopo un furto lo dice: il governo non deve
+      // scambiarla per una richiesta nuova di un'altra unita'.
+      const cosa = r.riAccodata
+        ? 'a **stolen contract was put back in the queue** (it keeps its original place) and needs a new decision'
+        : 'a contract is waiting for a decision';
       const testa = tag.length
-        ? `${mention(tag)} — a contract is waiting for a decision.`
-        : 'A contract is waiting for a decision. _No approver here is linked to WarEra+, so nobody could be tagged._';
+        ? `${mention(tag)} — ${cosa}.`
+        : `${cosa.charAt(0).toUpperCase()}${cosa.slice(1)}. _No approver here is linked to WarEra+, so nobody could be tagged._`;
       const carta = cartaPayload(r, ev.nomePaese);
       const lista = await embedListaSotto(r);               // SEMPRE la lista, ad ogni richiesta nuova
       const m = await canale.send({
