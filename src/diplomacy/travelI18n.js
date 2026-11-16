@@ -63,6 +63,7 @@ const T = {
   'Tap another region to see the trip': ['Tocca un’altra regione per vedere il viaggio', 'Toca otra región para ver el viaje', 'Tippe auf eine andere Region, um die Reise zu sehen', 'Touche une autre région pour voir le trajet', 'Tik op een andere regio om de reis te zien', 'Tryck på en annan region för att se resan', 'Toque noutra região para ver a viagem', 'المس منطقة أخرى لرؤية الرحلة'],
 
   // ── Pianificatore casse
+  'The number in brackets is the running total.': ['Il numero fra parentesi è il totale progressivo.', 'El número entre paréntesis es el total acumulado.', 'Die Zahl in Klammern ist die laufende Summe.', 'Le nombre entre parenthèses est le cumul.', 'Het getal tussen haakjes is het lopende totaal.', 'Talet inom parentes är den löpande summan.', 'O número entre parênteses é o total acumulado.', 'الرقم بين القوسين هو المجموع التراكمي.'],
   'Wooden case route': ['Giro delle casse', 'Ruta de cajas', 'Kistenroute', 'Tournée des caisses', 'Kistenroute', 'Lådrunda', 'Rota das caixas', 'مسار الصناديق'],
   'You are': ['Sei a', 'Estás en', 'Du bist in', 'Tu es à', 'Je bent in', 'Du är i', 'Estás em', 'أنت في'],
   'Home': ['Casa', 'Casa', 'Zuhause', 'Maison', 'Thuis', 'Hem', 'Casa', 'المنزل'],

@@ -38,6 +38,7 @@ import { escapeHtml } from './utils.js';
 import { tT } from './travelI18n.js';
 import { trackEvent } from '../shared/analytics.js';
 import { updateBackParams } from '../app/backNav.js';
+import { loadBonusRules } from '../shared/battleBonus.js';
 
 export const STAMINA_PER_HOP = 10;
 export const STAMINA_MAX = 100;
@@ -160,6 +161,24 @@ export function travelCost(h) {
     staminaLeft: STAMINA_MAX - onBar * STAMINA_PER_HOP,
     barrels: Math.max(0, h - HOPS_PER_BAR) * OIL_PER_EXTRA_HOP,
   };
+}
+
+// ══════════════════ CASSE SULLA MAPPA (v0.28.3) ══════════════════
+
+/* WarEra+ — Dalla v0.28.3 (16 nov 2026) le casse non compaiono più sulla
+   mappa e il ritorno gratis a casa è tolto: gameConfig.mapTravel ha
+   `mapCasesEnabled` e `travelHomeEnabled` a false. Il giro delle casse non
+   serve più a niente, quindi si mostra solo se il gioco le riaccende. La
+   config arriva con la stessa richiesta (una a sessione) dei bonus di
+   battaglia; finché non arriva vale lo stato di oggi: planner nascosto. */
+let _mapCases = false;
+let _flagsAsked = false;
+function ensureTravelFlags() {
+  if (_flagsAsked) return;
+  _flagsAsked = true;
+  loadBonusRules().then(r => {
+    if (r.mapCases !== _mapCases) { _mapCases = !!r.mapCases; refreshAll({ map: false }); }
+  }).catch(() => { /* resta spento */ });
 }
 
 // ══════════════════ STATO DELLA VISTA ══════════════════
@@ -744,7 +763,9 @@ function histogramHtml(s) {
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="wp-vo-about">${escapeHtml(tT('The number in brackets is the running total. Wooden crates: a crate that spawns in a random region is within reach with the probability in the last column.'))}</div>`;
+    <div class="wp-vo-about">${escapeHtml(_mapCases
+      ? tT('The number in brackets is the running total. Wooden crates: a crate that spawns in a random region is within reach with the probability in the last column.')
+      : tT('The number in brackets is the running total.'))}</div>`;
 }
 
 function fieldHtml(label, id, action) {
@@ -759,6 +780,7 @@ function fieldHtml(label, id, action) {
 }
 
 function plannerHtml() {
+  if (!_mapCases) return '';
   const tr = t();
   const route = currentRoute();
   const order = new Map();
@@ -819,6 +841,7 @@ function plannerHtml() {
 
 /** Markup del riepilogo (viewOverview.js lo chiama per mode === 'travel'). */
 export function travelOverviewHtml() {
+  ensureTravelFlags();
   const tr = t();
   const header = (title) => `
     <div class="wp-panel-header"><div><div class="wp-panel-name">${escapeHtml(title)}</div></div></div>`;

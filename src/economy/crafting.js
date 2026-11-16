@@ -31,12 +31,19 @@ import { ecoT } from './i18n.js';
 import { craftT } from './i18nCraft.js';
 import { fetchGearMarketViaCache } from '../diplomacy/cacheClient.js';
 import { loadSpotPrices } from '../market/api.js';
+import { loadBonusRules } from '../shared/battleBonus.js';
 import * as M from './craftingModel.js';
 
 // ── Stato della scheda ──────────────────────────────────────────────
 let _container = null;
 let _model = null;          // risposta di /gear-market, null = non risponde
 let _prices = null;
+// v0.28.3 (16 nov 2026): le casse di legno escono dal mercato e dalla mappa
+// (gameConfig.mapTravel.mapCasesEnabled = false). Il prezzo in getPrices
+// resta l'ULTIMO scambio, congelato, con il libro ordini vuoto: un verdetto
+// "apri o vendi" su un prezzo che non esiste più sarebbe falso. La card si
+// mostra solo se il gioco le riaccende.
+let _woodOnSale = false;
 let _modelTs = 0;
 let _loading = false;
 let _view = 'craft';        // 'craft' | 'cases'
@@ -274,7 +281,7 @@ function caseCard(code) {
 function woodCard() {
   const w = M.woodenCaseEv(_model, _prices, _tax);
   const p = _prices.woodenCase;
-  if (!w || p == null) return '';
+  if (!_woodOnSale || !w || p == null) return '';
   const apri = w.ev > p * (1 - _tax);
   return `<div class="wp-crf-case">
       <header>
@@ -394,6 +401,7 @@ async function carica(forza = false, soloPrezzi = false) {
     _loading = false;
     paint();
   }
+    _woodOnSale = !!(await loadBonusRules().catch(() => null))?.mapCases;
 }
 
 function avviaGiro() {

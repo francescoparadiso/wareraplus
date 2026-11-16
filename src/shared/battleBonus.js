@@ -66,6 +66,10 @@ const DEFAULT_RULES = Object.freeze({
   bunker: [0, 5, 10, 15, 20, 25],   // indice = livello
   base: [0, 5, 10, 15, 20, 25],
   hq: [0, 5, 10, 15, 20],
+  // gameConfig.mapTravel (v0.28.3, 16 nov 2026): le casse sulla mappa e il
+  // ritorno gratis a casa sono spenti. Ripiego = com'è oggi.
+  mapCases: false,
+  travelHome: false,
 });
 
 /* ── Tipo di governo (v0.27, dal 2026-10-26) ────────────────────
@@ -81,7 +85,18 @@ const DEFAULT_RULES = Object.freeze({
      · Stato mercenario: danno degli ordini ×2, normale finché la sua
        capitale è occupata.
    Il bonus sul nemico giurato (Stato nazionalista 5% → 15%) arriva già
-   dal dato della diplomazia, e non si tocca. */
+   dal dato della diplomazia, e non si tocca.
+
+   ⚠️ v0.28.3 (16 nov 2026): Stato mercenario non esiste più (le nazioni
+   tornano Provvisorie), quindi `MERCENARY_ORDER_FACTOR` resta solo per
+   leggere un dato vecchio. I tipi di unità nuovi (Esercito di Stato:
+   +5% al paese e agli alleati, −5% agli altri, ordini del paese ×2;
+   Mercenario Privato: ×2 su HQ e ordini, niente bonus di nazionalità,
+   tetto 70%/75%) NON sono modellati: le API pubbliche non espongono ancora
+   il tipo dell'unità (mu.getManyPaginated non porta nessun campo), e
+   indovinarlo darebbe un bonus preciso e inventato. Si aggiungono quando
+   il campo c'è. La barra di resistenza (cala dello 0,2%/h a casa, sale
+   0,1–0,35%/h sotto occupazione) è già quella che legge `defRegion`. */
 const GOV_PATRIOTIC = Object.freeze({ nationalistState: 30, federation: 15, plutocracy: 10 });
 const FEDERATION_ALLY_BONUS = 5;
 const HOMELAND_BUNKER_BONUS = 5;
@@ -135,6 +150,8 @@ export function loadBonusRules() {
       bunker: levels(up.bunker, 'defenseBonus', DEFAULT_RULES.bunker),
       base: levels(up.base, 'attackBonus', DEFAULT_RULES.base),
       hq: levels(up.headquarters, 'attackBonus', DEFAULT_RULES.hq),
+      mapCases: cfg?.mapTravel?.mapCasesEnabled ?? DEFAULT_RULES.mapCases,
+      travelHome: cfg?.mapTravel?.travelHomeEnabled ?? DEFAULT_RULES.travelHome,
       fromConfig: !!cfg,
     });
     return _rules;
