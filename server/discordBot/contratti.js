@@ -59,8 +59,16 @@ const SENZA_MENZIONI = { parse: [] };
 // ---------------------------------------------------------------------------
 
 const ERRORI = {
-  non_collegato: 'Your Discord account is not linked to WarEra+ yet. Sign in with Discord at {tool} and link your game character in the private area — then try again.',
-  non_verificato: 'Your Discord account is signed in but your game character is not verified yet. Finish the link at {tool} and try again.',
+  non_collegato: 'You have not linked your game character yet. Type `/register` right here — it takes a minute and you do not need the website. Then try again.',
+  non_verificato: 'Your game character is not verified yet. Type `/register` to finish the link, then try again.',
+  personaggio_gia_collegato: 'That character is already linked to another Discord account. If it is yours, ask an admin to unlink it.',
+  personaggio_inesistente: 'I could not find that character in the game.',
+  id_non_valido: 'That character is not valid. Try `/register` again.',
+  nome_troppo_corto: 'Type at least 2 letters of your in-game name.',
+  nessuna_richiesta: 'There is no link in progress. Type `/register` to start.',
+  codice_scaduto: 'The code expired (it lasts 30 minutes). Type `/register` to get a new one.',
+  troppo_presto: 'Not so fast — wait a few seconds and press **Verify** again.',
+  troppi_tentativi: 'Too many attempts with this code. Type `/register` to get a new one.',
   nazione_non_abilitata: 'Your nation is not enabled for the WarEra+ private area.',
   nessuna_unita: 'You do not command a military unit in game, so there is nothing to request a contract for.',
   non_comandi_questa_unita: 'You do not command that unit.',
@@ -497,6 +505,10 @@ function definizioniComandi() {
   const pubblico = (o) => o.setName('public').setDescription('Post it in the channel instead of showing it only to you');
 
   return [new SlashCommandBuilder()
+    .setName('register')
+    .setDescription('Link your WarEra character to your Discord — no website needed')
+    .setDMPermission(false),
+  new SlashCommandBuilder()
     .setName('contract-queue')
     .setDescription('Check the contract queue')
     .setDMPermission(false)
@@ -1056,6 +1068,85 @@ function attach(client, opz = {}) {
   }
 
   // ═════════════════════════════════════════════════════════════════════
+  // /register — collegare il personaggio senza passare dal sito
+  // ═════════════════════════════════════════════════════════════════════
+  // Il sito prova chi sei su Discord con OAuth e chi sei nel gioco con un
+  // codice nel nome di un'azienda. Qui la prima prova e' l'id che Discord firma
+  // in ogni interazione; la seconda e' IDENTICA (plusApi/verify.js, stesse
+  // funzioni): nome → scelta fra gli omonimi → codice WP-XXXXXX → "Verify".
+  //
+  // Il modulo si apre SUBITO (Discord da' tre secondi per rispondere a un
+  // comando): se la persona e' gia' collegata lo si scopre dopo l'invio.
+  const discordNome = (u) => u.globalName || u.username;
+
+  async function onRegistra(i) {
+    await i.showModal(new ModalBuilder().setCustomId('wp:reg:nome').setTitle('Link your WarEra character')
+      .addComponents(campo('nome', 'Your WarEra username', { obbligatorio: true, segnaposto: 'exactly as it appears in the game', max: 40 })));
+  }
+
+  async function onRegistraNome(i) {                      // modulo `wp:reg:nome`
+    await i.deferReply({ flags: EPHEMERAL });
+    const chi = await api('GET', `/utente?discordId=${i.user.id}`);
+    if (chi.ok && chi.json.verificato) {
+      return i.editReply(`You are already linked as **${chi.json.warUsername || '?'}**. Nothing to do — you can use the desk.`);
+    }
+    const r = await api('POST', '/registra/cerca', { discordId: i.user.id, username: i.fields.getTextInputValue('nome') });
+    if (!r.ok) return i.editReply(messaggioErrore(r));
+    const cand = r.json.candidati || [];
+    if (!cand.length) return i.editReply('I found nobody with that name. Check the spelling and type `/register` again.');
+    return i.editReply({
+      content: `Which one is you?${r.json.troncato ? ' (showing the first matches — type more of your name to narrow it down)' : ''}`,
+      components: [new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId('wp:reg:pick').setPlaceholder('Pick your character…').addOptions(cand.map((c) => ({
+          label: c.username.slice(0, 100),
+          description: (c.nomePaese ? `Citizen of ${c.nomePaese}` : 'No country').slice(0, 100),
+          value: c.warUserId,
+        }))))],
+    });
+  }
+
+  async function onRegistraScelta(i) {                    // menu `wp:reg:pick` → codice
+    await i.deferUpdate();
+    const r = await api('POST', '/registra/inizia', {
+      discordId: i.user.id, discordUsername: discordNome(i.user), discordAvatar: i.user.avatar || null,
+      warUserId: i.values[0],
+    });
+    if (!r.ok) return i.editReply({ content: messaggioErrore(r), components: [] });
+    const codice = r.json.code;
+    return i.editReply({
+      content: `Hi **${r.json.warUsername}**! One more step, to prove the character is yours:\n\n`
+        + `**1.** In the game, rename one of your companies so its name contains **\`${codice}\`**\n`
+        + `    _e.g. "My Company ${codice}". You can change it back right after._\n`
+        + '**2.** Wait a few seconds, then press **Verify**.\n\n'
+        + '_The code works for 30 minutes and is tied to your character: nobody else can use it._',
+      components: [new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('wp:reg:check').setLabel('Verify').setEmoji('✅').setStyle(ButtonStyle.Success))],
+    });
+  }
+
+  async function onRegistraControlla(i) {                 // bottone `wp:reg:check`
+    await i.deferUpdate();
+    const r = await api('POST', '/registra/verifica', { discordId: i.user.id });
+    if (r.ok && r.json.ok) {
+      return i.editReply({
+        content: `✅ **Linked!** You are **${r.json.warUsername}** (found the code in _${r.json.azienda}_). You can rename the company back.\n`
+          + 'Now you can use the contract desk, and the bot can tag you and message you.',
+        components: [],
+      });
+    }
+    // Un fallimento NON sostituisce il messaggio: il codice deve restare a
+    // portata di mano per riprovare. Si risponde a parte, in privato.
+    if (r.ok && r.json.motivo === 'nessuna_azienda') {
+      return i.followUp({ flags: EPHEMERAL, content: 'You have no companies in the game, so I cannot check a code. Ask an admin to link you by hand (tell them your Discord and your game name).' });
+    }
+    if (r.ok) {
+      const lista = (r.json.aziende || []).slice(0, 6).map((n) => `_${n}_`).join(', ');
+      return i.followUp({ flags: EPHEMERAL, content: `I cannot see the code yet. Your companies: ${lista || '—'}.\nMake sure one of them contains the code (exactly as shown), wait a few seconds and press **Verify** again.` });
+    }
+    return i.followUp({ flags: EPHEMERAL, content: messaggioErrore(r) });
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
   // /contract-queue
   // ═════════════════════════════════════════════════════════════════════
   async function onCoda(i) {
@@ -1095,18 +1186,21 @@ function attach(client, opz = {}) {
       if (i.isChatInputCommand()) {
         if (i.commandName === 'contract-desk') await onComandoSportello(i);
         else if (i.commandName === 'contract-queue') await onCoda(i);
+        else if (i.commandName === 'register') await onRegistra(i);
         return;
       }
       const id = i.customId || '';
       if (!id.startsWith('wp:')) return;                   // non e' nostro
 
       if (i.isModalSubmit()) {
-        if (id.startsWith('wp:rq:')) await onInvioRichiesta(i);
+        if (id === 'wp:reg:nome') await onRegistraNome(i);
+        else if (id.startsWith('wp:rq:')) await onInvioRichiesta(i);
         else if (id.startsWith('wp:ed:')) await onInvioModifica(i);
         return;
       }
       if (i.isStringSelectMenu()) {
-        if (id === 'wp:pick') await onScelta(i);
+        if (id === 'wp:reg:pick') await onRegistraScelta(i);
+        else if (id === 'wp:pick') await onScelta(i);
         else if (id === 'wp:mine:edit') await onSceltaMia(i, 'edit');
         else if (id === 'wp:mine:wd') await onSceltaMia(i, 'wd');
         else if (id.startsWith('wp:decide:') || id.startsWith('wp:decideq:')) {
@@ -1117,6 +1211,7 @@ function attach(client, opz = {}) {
       }
       if (i.isButton()) {
         if (/^wp:(approve|reject|opened|cancel):\d+$/.test(id)) { await onBottoneCarta(i); return; }
+        if (id === 'wp:reg:check') { await onRegistraControlla(i); return; }
         if (id.startsWith('wp:qref:')) { await onAggiornaCoda(i); return; }
         if (id === 'wp:req') { await onRichiedi(i); return; }
         if (id === 'wp:edit') { await onMie(i, 'edit'); return; }
@@ -1174,7 +1269,7 @@ function attach(client, opz = {}) {
         + '(minimum damage like `10m`, the bounty per 1,000, and **professionals only: yes**). '
         + 'The government gets tagged and you can follow your place in the queue with `/contract-queue unit`.';
       const contenuto = nonCollegato
-        ? `Hi! I can't recognise you yet — you are not signed in to WarEra+. First **sign in with Discord at ${toolUrl}** and link your game character (Private area); that is how I know who you are and tag the government. Then ${uso.charAt(0).toLowerCase()}${uso.slice(1)}`
+        ? `Hi! I can't recognise you yet, because you haven't linked your game character. Type **\`/register\`** right here — it takes a minute and you don't need the website. That is how I know who you are and can tag the government. Then ${uso.charAt(0).toLowerCase()}${uso.slice(1)}`
         : `Hi! Writing it here won't put it in the queue. ${uso}`;
       await msg.reply({ content: contenuto, allowedMentions: { repliedUser: true, parse: [] } });
     } catch (err) {

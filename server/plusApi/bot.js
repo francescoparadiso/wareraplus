@@ -45,7 +45,7 @@
 const crypto = require('crypto');
 const express = require('express');
 const {
-  getRichiesta, findAccountByDiscordId, findAccountByWarUserId, getDb,
+  getRichiesta, findAccountByDiscordId, findAccountByWarUserId, getDb, upsertDiscordAccount,
   getBotChannel, setBotChannel, deleteBotChannel, setBotAperto, eventiBotDopo, ultimoEventoBotId, audit,
 } = require('./db');
 const { calcolaEffettivi } = require('./roles');
@@ -54,6 +54,7 @@ const { puoChiedere } = require('./policy');
 const { idGoverno, haDiritto, membriGoverno } = require('./governo');
 const { governo, paesiMappa, regioniMappa, battaglieVive, nomiUtenti, memo } = require('./fonti');
 const { segnaBotVivo } = require('./notify');
+const { cercaPersonaggi, avviaVerifica, controllaVerifica } = require('./verify');
 const {
   pubblica, conNomi, azioneCrea, azioneDecidi, azioneAperta, azioneRitira, azioneModifica,
 } = require('./requests');
@@ -407,7 +408,63 @@ function buildBotRouter() {
     const d = String(req.query.discordId || '');
     if (!ID_DISCORD.test(d)) return res.status(400).json({ error: 'parametri_non_validi' });
     const a = findAccountByDiscordId(d);
-    res.json({ conto: Boolean(a), verificato: Boolean(a?.war_user_id) });
+    res.json({ conto: Boolean(a), verificato: Boolean(a?.war_user_id), warUsername: a?.war_username || null });
+  });
+
+  // ── Registrarsi dal bot (/register) ────────────────────────────────────
+  // Stessa verifica del sito (verify.js: stesse funzioni), senza passare dal
+  // login OAuth: l'id Discord arriva dal bot, che lo riceve firmato da
+  // Discord in ogni interazione. Il personaggio di gioco si prova come sul
+  // sito, con un codice nel nome di un'azienda. L'account creato qui e'
+  // quello che il sito trovera' al primo login (stesso discord_id).
+  //
+  // Ogni ricerca costa due richieste al gioco: un tetto per persona, in
+  // memoria, per non lasciare un comando senza freno.
+  const ultimaRicerca = new Map();
+  router.post('/registra/cerca', async (req, res) => {
+    const b = req.body || {};
+    if (!ID_DISCORD.test(String(b.discordId || ''))) return res.status(400).json({ error: 'parametri_non_validi' });
+    const testo = String(b.username || '').trim();
+    if (testo.length < 2) return res.status(400).json({ error: 'nome_troppo_corto' });
+    const ora = Date.now();
+    if (ora - (ultimaRicerca.get(b.discordId) || 0) < 3000) return res.status(429).json({ error: 'troppo_presto' });
+    ultimaRicerca.set(b.discordId, ora);
+    try {
+      const r = await cercaPersonaggi(testo);
+      const naz = await paesiMappa().catch(() => new Map());
+      res.json({
+        troncato: r.troncato,
+        candidati: r.candidati.map((c) => ({ ...c, nomePaese: naz.get(c.countryId)?.name || null })),
+      });
+    } catch (err) {
+      console.error('[bot] ricerca personaggio fallita:', err.message);
+      res.status(502).json({ error: 'gioco_non_raggiungibile' });
+    }
+  });
+
+  router.post('/registra/inizia', async (req, res) => {
+    const b = req.body || {};
+    if (!ID_DISCORD.test(String(b.discordId || ''))) return res.status(400).json({ error: 'parametri_non_validi' });
+    // L'account nasce qui, alla prima richiesta di codice (non alla ricerca):
+    // una ricerca a vuoto non deve lasciare righe dietro di se'.
+    const account = upsertDiscordAccount({
+      discordId: String(b.discordId),
+      username: String(b.discordUsername || 'unknown').slice(0, 80),
+      avatar: b.discordAvatar ? String(b.discordAvatar).slice(0, 64) : null,
+    });
+    const esito = await avviaVerifica(account, String(b.warUserId || '').trim());
+    if (esito.codice === 200) audit(account.id, 'verify.via-bot', 'account', { fase: 'start' });
+    res.status(esito.codice).json(esito.corpo);
+  });
+
+  router.post('/registra/verifica', async (req, res) => {
+    const d = String(req.body?.discordId || '');
+    if (!ID_DISCORD.test(d)) return res.status(400).json({ error: 'parametri_non_validi' });
+    const account = findAccountByDiscordId(d);
+    if (!account) return res.status(400).json({ error: 'nessuna_richiesta' });
+    const esito = await controllaVerifica(account);
+    if (esito.collegato) audit(account.id, 'verify.via-bot', 'account', { fase: 'ok' });
+    res.status(esito.codice).json(esito.corpo);
   });
 
   // ── La coda (/contract-queue) ──────────────────────────────────────────

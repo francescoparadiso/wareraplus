@@ -71,6 +71,26 @@ menu per **decidere** una richiesta (in attesa → Approve / Reject; approvata �
   Finché la richiesta è in attesa il riquadro si aggiorna con la carta; una volta
   decisa resta la sola carta.
 
+## Registrarsi dal bot: `/register`
+
+Collega il personaggio di gioco **senza passare dal sito**. Il modulo chiede il
+nome di gioco → si sceglie fra gli omonimi (con la nazione) → il bot dà un codice
+`WP-XXXXXX` da mettere nel nome di una propria azienda → *Verify*. È la **stessa
+verifica del sito** (`plusApi/verify.js`: le tre azioni cerca / inizia / controlla
+sono funzioni usate da entrambi): cambia solo come si prova chi sei su Discord.
+Sul sito con OAuth, dal bot con l'id che Discord firma in ogni interazione, che
+non è una prova più debole. Il personaggio si prova ugualmente col codice
+nell'azienda, quindi nessuno può collegarsi al personaggio di un altro.
+
+- L'account nasce quando si chiede il codice (non alla ricerca) ed è lo stesso
+  che il sito trova al primo login (stesso `discord_id`).
+- Il codice dura 30 minuti, si controlla al massimo ogni 8 secondi; un
+  personaggio può essere collegato a un solo account Discord.
+- Chi non ha aziende non può verificarsi: lo dice, e serve un admin
+  (`/verify/admin-link`), come sul sito.
+- Gli errori "non collegato" di tutti i comandi, e la risposta a "10m pro",
+  ora mandano a `/register` invece che al sito.
+
 ## Messaggi privati al comandante
 
 Quando un contratto viene **approvato** e quando viene **postato** (il governo

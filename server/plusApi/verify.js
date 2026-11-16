@@ -34,6 +34,17 @@
    scritto nell'audit chi l'ha fatto. Scrivere un articolo col codice
    sarebbe stata l'alternativa ovvia, ma costa 3 monete: un meccanismo di
    verifica che si paga è un meccanismo che qualcuno non userà.
+
+   ── DUE PORTE, UNA SOLA VERIFICA (2026-11-16) ──────────────────────────
+   Le tre azioni (cerca, inizia, controlla) sono funzioni che rispondono
+   `{ codice, corpo }`: le rotte qui sotto le servono al SITO, dopo il login
+   Discord (OAuth); il bot Discord (bot.js, `/register`) le serve a chi le
+   chiede da Discord. Cambia solo come si PROVA chi sei su Discord: sul sito
+   con OAuth, dal bot con l'id che Discord stesso firma in ogni interazione
+   — non è una prova più debole. La parte che conta, il personaggio di
+   gioco, è identica: stesso codice nel nome di un'azienda, stesso
+   controllo. Un account creato dal bot è lo stesso che il sito troverà al
+   primo login (stesso `discord_id`).
    ═══════════════════════════════════════════════════════════════════════ */
 
 const crypto = require('crypto');
@@ -67,33 +78,141 @@ function generaCodice() {
 const normalizza = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 // ---------------------------------------------------------------------------
-// Rotte
+// Le tre azioni (usate dal sito e dal bot)
+// ---------------------------------------------------------------------------
+
+/**
+ * 1. Chi sei nel gioco? searchUsers restituisce solo id: senza una seconda
+ * chiamata l'utente dovrebbe scegliere fra stringhe esadecimali. Si risolvono
+ * in nome, avatar e nazione così la scelta è possibile — i nomi non sono
+ * univoci. Lancia se il gioco non risponde.
+ */
+async function cercaPersonaggi(testo) {
+  const ids = (await trpcGet('search.searchUsers', { searchText: testo })) || [];
+  const scelti = ids.slice(0, 8);
+  const utenti = await trpcBatchSame('user.getUserLite', scelti.map((userId) => ({ userId })));
+  return {
+    candidati: scelti.map((id, i) => ({
+      warUserId: id,
+      username: utenti[i]?.username || null,
+      avatarUrl: utenti[i]?.avatarUrl || null,
+      countryId: utenti[i]?.country || null,
+    })).filter((u) => u.username),
+    troncato: ids.length > scelti.length,
+  };
+}
+
+/** 2. Dammi un codice. `account` e' la riga `account` di chi lo chiede. */
+async function avviaVerifica(account, warUserId) {
+  if (!/^[a-f0-9]{24}$/.test(warUserId)) return { codice: 400, corpo: { error: 'id_non_valido' } };
+
+  // Un personaggio, un solo account Discord. Il vincolo c'è anche nel
+  // database (UNIQUE), ma intercettarlo qui permette di spiegare invece
+  // di far esplodere una INSERT alla fine del giro.
+  const altro = findAccountByWarUserId(warUserId);
+  if (altro && altro.id !== account.id) return { codice: 409, corpo: { error: 'personaggio_gia_collegato' } };
+
+  let lite = null;
+  try {
+    lite = await trpcGet('user.getUserLite', { userId: warUserId });
+  } catch (err) {
+    if (err.codiceGioco === 'NOT_FOUND') return { codice: 404, corpo: { error: 'personaggio_inesistente' } };
+    console.error('[verify] lettura personaggio fallita:', err.message);
+    return { codice: 502, corpo: { error: 'gioco_non_raggiungibile' } };
+  }
+  if (!lite?.username) return { codice: 404, corpo: { error: 'personaggio_inesistente' } };
+
+  const codice = generaCodice();
+  const scadenza = Date.now() + CODE_TTL_MS;
+  setClaim({
+    accountId: account.id,
+    warUserId,
+    warUsername: lite.username,
+    code: codice,
+    expiresAt: scadenza,
+  });
+  audit(account.id, 'verify.start', 'account', { warUserId });
+
+  return { codice: 200, corpo: { code: codice, expiresAt: scadenza, warUsername: lite.username } };
+}
+
+/**
+ * 3. Ho messo il codice, controlla. Se va a buon fine `collegato` e' true e
+ * `corpo.azienda` dice in quale azienda l'ha trovato: chi chiama aggiunge da
+ * se' la forma dell'account che gli serve (il sito la pubblica, il bot no).
+ */
+async function controllaVerifica(account) {
+  const claim = getClaim(account.id);
+  if (!claim) return { codice: 400, corpo: { error: 'nessuna_richiesta' } };
+  if (claim.expires_at < Date.now()) {
+    deleteClaim(account.id);
+    return { codice: 410, corpo: { error: 'codice_scaduto' } };
+  }
+
+  // Ogni tentativo costa due richieste a WarEra. Il limite non protegge
+  // da un attacco — protegge dal bottone premuto quaranta volte in un
+  // minuto da chi sta aspettando che il gioco si aggiorni.
+  const ora = Date.now();
+  if (claim.last_check_at && ora - claim.last_check_at < CHECK_MIN_GAP_MS) {
+    return { codice: 429, corpo: { error: 'troppo_presto', riprovaFra: CHECK_MIN_GAP_MS - (ora - claim.last_check_at) } };
+  }
+  if (claim.attempts >= CHECK_MAX_PER_CLAIM) return { codice: 429, corpo: { error: 'troppi_tentativi' } };
+  getDb().prepare('UPDATE verify_claim SET attempts = attempts + 1, last_check_at = ? WHERE account_id = ?')
+    .run(ora, account.id);
+
+  let aziende = [];
+  try {
+    const elenco = await trpcGet('company.getCompanies', { userId: claim.war_user_id, perPage: MAX_COMPANIES });
+    const ids = (elenco?.items || []).slice(0, MAX_COMPANIES);
+    if (!ids.length) return { codice: 200, corpo: { ok: false, motivo: 'nessuna_azienda', aziende: [] } };
+    aziende = (await trpcBatchSame('company.getById', ids.map((companyId) => ({ companyId }))))
+      .filter(Boolean)
+      // Doppio controllo della proprietà: il record dell'azienda porta
+      // `user`, e ci si fida di quello invece che solo dell'elenco.
+      .filter((c) => c.user === claim.war_user_id);
+  } catch (err) {
+    console.error('[verify] lettura aziende fallita:', err.message);
+    return { codice: 502, corpo: { error: 'gioco_non_raggiungibile' } };
+  }
+
+  const atteso = normalizza(claim.code);
+  const trovata = aziende.find((c) => normalizza(c.name).includes(atteso));
+
+  if (!trovata) {
+    return { codice: 200, corpo: { ok: false, motivo: 'codice_non_trovato', aziende: aziende.map((c) => c.name) } };
+  }
+
+  // Ricontrollo dell'unicità: fra lo /start e adesso qualcun altro
+  // potrebbe aver collegato lo stesso personaggio.
+  const altro = findAccountByWarUserId(claim.war_user_id);
+  if (altro && altro.id !== account.id) {
+    deleteClaim(account.id);
+    return { codice: 409, corpo: { error: 'personaggio_gia_collegato' } };
+  }
+
+  setWarIdentity(account.id, claim.war_user_id, claim.war_username);
+  deleteClaim(account.id);
+  audit(account.id, 'verify.ok', 'account', {
+    warUserId: claim.war_user_id, warUsername: claim.war_username, azienda: trovata.name,
+  });
+
+  return { codice: 200, corpo: { ok: true, azienda: trovata.name, warUsername: claim.war_username }, collegato: true };
+}
+
+// ---------------------------------------------------------------------------
+// Rotte (il sito, dopo il login Discord)
 // ---------------------------------------------------------------------------
 
 function buildVerifyRouter({ requireAuth, requireAdmin }) {
   const router = express.Router();
 
   // ── 1. Chi sei nel gioco? ───────────────────────────────────────────────
-  // searchUsers restituisce solo id: senza una seconda chiamata l'utente
-  // dovrebbe scegliere fra stringhe esadecimali. Si risolvono in nome,
-  // avatar e nazione così la scelta è possibile — i nomi non sono univoci.
   router.post('/search', requireAuth, async (req, res) => {
     const testo = String(req.body?.username || '').trim();
     if (testo.length < 2) return res.status(400).json({ error: 'nome_troppo_corto' });
 
     try {
-      const ids = (await trpcGet('search.searchUsers', { searchText: testo })) || [];
-      const scelti = ids.slice(0, 8);
-      const utenti = await trpcBatchSame('user.getUserLite', scelti.map((userId) => ({ userId })));
-      res.json({
-        candidati: scelti.map((id, i) => ({
-          warUserId: id,
-          username: utenti[i]?.username || null,
-          avatarUrl: utenti[i]?.avatarUrl || null,
-          countryId: utenti[i]?.country || null,
-        })).filter((u) => u.username),
-        troncato: ids.length > scelti.length,
-      });
+      res.json(await cercaPersonaggi(testo));
     } catch (err) {
       console.error('[verify] ricerca fallita:', err.message);
       res.status(502).json({ error: 'gioco_non_raggiungibile' });
@@ -102,100 +221,17 @@ function buildVerifyRouter({ requireAuth, requireAdmin }) {
 
   // ── 2. Dammi un codice ──────────────────────────────────────────────────
   router.post('/start', requireAuth, async (req, res) => {
-    const warUserId = String(req.body?.warUserId || '').trim();
-    if (!/^[a-f0-9]{24}$/.test(warUserId)) return res.status(400).json({ error: 'id_non_valido' });
-
-    // Un personaggio, un solo account Discord. Il vincolo c'è anche nel
-    // database (UNIQUE), ma intercettarlo qui permette di spiegare invece
-    // di far esplodere una INSERT alla fine del giro.
-    const altro = findAccountByWarUserId(warUserId);
-    if (altro && altro.id !== req.account.id) {
-      return res.status(409).json({ error: 'personaggio_gia_collegato' });
-    }
-
-    let lite = null;
-    try {
-      lite = await trpcGet('user.getUserLite', { userId: warUserId });
-    } catch (err) {
-      if (err.codiceGioco === 'NOT_FOUND') return res.status(404).json({ error: 'personaggio_inesistente' });
-      console.error('[verify] lettura personaggio fallita:', err.message);
-      return res.status(502).json({ error: 'gioco_non_raggiungibile' });
-    }
-    if (!lite?.username) return res.status(404).json({ error: 'personaggio_inesistente' });
-
-    const codice = generaCodice();
-    const scadenza = Date.now() + CODE_TTL_MS;
-    setClaim({
-      accountId: req.account.id,
-      warUserId,
-      warUsername: lite.username,
-      code: codice,
-      expiresAt: scadenza,
-    });
-    audit(req.account.id, 'verify.start', 'account', { warUserId });
-
-    res.json({ code: codice, expiresAt: scadenza, warUsername: lite.username });
+    const esito = await avviaVerifica(req.account, String(req.body?.warUserId || '').trim());
+    res.status(esito.codice).json(esito.corpo);
   });
 
   // ── 3. Ho messo il codice, controlla ────────────────────────────────────
   router.post('/check', requireAuth, async (req, res) => {
-    const claim = getClaim(req.account.id);
-    if (!claim) return res.status(400).json({ error: 'nessuna_richiesta' });
-    if (claim.expires_at < Date.now()) {
-      deleteClaim(req.account.id);
-      return res.status(410).json({ error: 'codice_scaduto' });
+    const esito = await controllaVerifica(req.account);
+    if (esito.collegato) {
+      return res.json({ ok: true, account: req.publicAccount(getAccountById(req.account.id)), azienda: esito.corpo.azienda });
     }
-
-    // Ogni tentativo costa due richieste a WarEra. Il limite non protegge
-    // da un attacco — protegge dal bottone premuto quaranta volte in un
-    // minuto da chi sta aspettando che il gioco si aggiorni.
-    const ora = Date.now();
-    if (claim.last_check_at && ora - claim.last_check_at < CHECK_MIN_GAP_MS) {
-      return res.status(429).json({ error: 'troppo_presto', riprovaFra: CHECK_MIN_GAP_MS - (ora - claim.last_check_at) });
-    }
-    if (claim.attempts >= CHECK_MAX_PER_CLAIM) {
-      return res.status(429).json({ error: 'troppi_tentativi' });
-    }
-    getDb().prepare('UPDATE verify_claim SET attempts = attempts + 1, last_check_at = ? WHERE account_id = ?')
-      .run(ora, req.account.id);
-
-    let aziende = [];
-    try {
-      const elenco = await trpcGet('company.getCompanies', { userId: claim.war_user_id, perPage: MAX_COMPANIES });
-      const ids = (elenco?.items || []).slice(0, MAX_COMPANIES);
-      if (!ids.length) return res.json({ ok: false, motivo: 'nessuna_azienda', aziende: [] });
-      aziende = (await trpcBatchSame('company.getById', ids.map((companyId) => ({ companyId }))))
-        .filter(Boolean)
-        // Doppio controllo della proprietà: il record dell'azienda porta
-        // `user`, e ci si fida di quello invece che solo dell'elenco.
-        .filter((c) => c.user === claim.war_user_id);
-    } catch (err) {
-      console.error('[verify] lettura aziende fallita:', err.message);
-      return res.status(502).json({ error: 'gioco_non_raggiungibile' });
-    }
-
-    const atteso = normalizza(claim.code);
-    const trovata = aziende.find((c) => normalizza(c.name).includes(atteso));
-
-    if (!trovata) {
-      return res.json({ ok: false, motivo: 'codice_non_trovato', aziende: aziende.map((c) => c.name) });
-    }
-
-    // Ricontrollo dell'unicità: fra lo /start e adesso qualcun altro
-    // potrebbe aver collegato lo stesso personaggio.
-    const altro = findAccountByWarUserId(claim.war_user_id);
-    if (altro && altro.id !== req.account.id) {
-      deleteClaim(req.account.id);
-      return res.status(409).json({ error: 'personaggio_gia_collegato' });
-    }
-
-    setWarIdentity(req.account.id, claim.war_user_id, claim.war_username);
-    deleteClaim(req.account.id);
-    audit(req.account.id, 'verify.ok', 'account', {
-      warUserId: claim.war_user_id, warUsername: claim.war_username, azienda: trovata.name,
-    });
-
-    res.json({ ok: true, account: req.publicAccount(getAccountById(req.account.id)), azienda: trovata.name });
+    res.status(esito.codice).json(esito.corpo);
   });
 
   // ── 4. Lascia perdere ───────────────────────────────────────────────────
@@ -264,4 +300,7 @@ function buildVerifyRouter({ requireAuth, requireAdmin }) {
   return router;
 }
 
-module.exports = { buildVerifyRouter, generaCodice, normalizza };
+module.exports = {
+  buildVerifyRouter, generaCodice, normalizza,
+  cercaPersonaggi, avviaVerifica, controllaVerifica,
+};
