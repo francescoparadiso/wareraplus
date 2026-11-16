@@ -71,6 +71,22 @@ menu per **decidere** una richiesta (in attesa → Approve / Reject; approvata �
   Finché la richiesta è in attesa il riquadro si aggiorna con la carta; una volta
   decisa resta la sola carta.
 
+## Messaggi privati al comandante
+
+Quando un contratto viene **approvato** e quando viene **postato** (il governo
+preme *I opened the auction*), il bot manda un **messaggio privato** a chi ha
+fatto la richiesta e al proprietario e ai comandanti dell'unità (letti dal gioco),
+se hanno collegato Discord al tool — con battaglia, link, cifre (burst compreso)
+e chi ha agito. Non si avvisa chi ha appena compiuto l'azione. Arriva anche se
+l'unità non ha un canale configurato; l'avviso nel canale dell'unità resta.
+`server/plusApi/dm.js` scrive l'evento (`scope_type = 'dm'`), il bot lo consegna.
+Eventi più vecchi di 2 ore si scartano; con i messaggi privati chiusi Discord
+rifiuta (50007) e il bot lo lascia cadere in silenzio.
+
+Nei menu di scelta (*Pending*, sotto la coda, *Edit/Withdraw mine*) ogni voce
+mostra anche il **burst** e la **nota** della richiesta, accorciata con "…" se non
+entra nei 100 caratteri che Discord concede.
+
 ## Risposta automatica a "10m pro"
 
 Se qualcuno scrive a mano "10m pro" (o "5 m pros", "pro 10m"…) nel canale di uno

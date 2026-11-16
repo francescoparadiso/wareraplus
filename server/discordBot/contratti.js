@@ -50,6 +50,7 @@ const TIMEOUT_MS = 15_000;
 const EPHEMERAL = 64;                               // MessageFlags.Ephemeral
 const CARTE_TENUTE_MS = 14 * 24 * 3600_000;
 const MAX_TENTATIVI = 3;
+const DM_VALIDO_MS = 2 * 3600_000;                   // un messaggio privato piu' vecchio non si manda
 const DESC_MAX = 3600;                              // l'embed ne ammette 4096
 const SENZA_MENZIONI = { parse: [] };
 
@@ -337,6 +338,34 @@ function renderSportello(d) {
 // La coda (/contract-queue)
 // ---------------------------------------------------------------------------
 
+/** "10M dmg (burst 5M)": il danno chiesto e, se dichiarato, quello fattibile subito. */
+const dannoConBurst = (r) => `${corto(r.minDamage)} dmg${r.burstDamage ? ` (burst ${corto(r.burstDamage)})` : ''}`;
+
+/**
+ * La descrizione di una voce di menu (Discord: 100 caratteri). Mette i dati
+ * nell'ordine dato e, con lo spazio che resta, la NOTA della richiesta fra
+ * virgolette: e' cio' che chi decide deve leggere ("5M burst", "serve entro
+ * le 21") e prima non c'era. La nota si accorcia con "…" solo se non entra, e
+ * con meno di una decina di caratteri liberi si lascia perdere.
+ */
+function descrizioneVoce(r, parti) {
+  // ⚠️ La lunghezza si conta in unita' UTF-16 (`.length`), come la valida
+  // discord.js: un'emoji nella nota ne vale DUE, e contare i caratteri "veri"
+  // sforava i 100 e il menu andava in errore. Si taglia per caratteri interi,
+  // senza spezzare una coppia surrogata.
+  const taglia = (s, n) => {
+    if (s.length <= n) return s;
+    let out = '';
+    for (const ch of s) { if (out.length + ch.length > n - 1) break; out += ch; }
+    return `${out}…`;
+  };
+  const base = parti.filter(Boolean).join(' · ');
+  const nota = String(r.note || '').replace(/\s+/g, ' ').trim();
+  const spazio = 100 - base.length - 5;                      // " · " + due virgolette
+  if (!nota || spazio < 10) return taglia(base, 100);
+  return `${base} · “${taglia(nota, spazio)}”`;
+}
+
 /** "~8 min", "~1 h 20 min": un tempo medio, senza il "fa" di `durata`. */
 function tempoTipico(ms) {
   const min = Math.max(1, Math.round(ms / 60_000));
@@ -447,9 +476,9 @@ function componentiCoda(d) {
           .setPlaceholder('Decide a request… (oldest first)')
           .addOptions(decidibili.map((r) => ({
             label: `#${r.id} ${r.muNome || '?'} — ${r.battleLabel || r.battleId}`.slice(0, 100),
-            description: (r.status === 'pending'
-              ? `⏳ waiting ${durata(r.createdAt)} · ${corto(r.minDamage)} dmg · budget ${num(r.budget)}`
-              : `✅ approved — open the auction · ${corto(r.minDamage)} dmg`).slice(0, 100),
+            description: descrizioneVoce(r, r.status === 'pending'
+              ? [`⏳ waiting ${durata(r.createdAt)}`, dannoConBurst(r), `budget ${num(r.budget)}`]
+              : ['✅ approved — open the auction', dannoConBurst(r)]),
             value: String(r.id),
           }))),
       ));
@@ -627,6 +656,16 @@ function attach(client, opz = {}) {
   }
 
   async function gestisciEvento(ev) {
+    // ── Messaggio privato al comandante (approvato / postato) ───────────
+    // Un "approvato" che arriva dopo un'interruzione del bot e' una notizia
+    // sbagliata, non in ritardo: oltre due ore si scarta.
+    if (ev.scope?.type === 'dm') {
+      if (Date.now() - (ev.at || 0) > DM_VALIDO_MS) return;
+      const utente = await client.users.fetch(ev.scope.id);
+      await utente.send({ content: String(ev.testo || '').slice(0, 1990), allowedMentions: SENZA_MENZIONI });
+      return;
+    }
+
     const r = ev.richiesta;
     toccaSportelli(r);                                   // prima del canale: serve anche senza
     if (!ev.canaleId) return;                            // nessun canale per questo ambito
@@ -701,7 +740,8 @@ function attach(client, opz = {}) {
           console.warn(`[contratti] evento ${ev.id} (${ev.tipo}) non scritto, tentativo ${n}:`, err.message);
           // Canale senza permessi o sparito: inutile riprovare. Per il resto
           // si riprova qualche giro (Discord ha qualche secondo di cattivo umore).
-          const definitivo = [50001, 50013, 10003].includes(err?.code) || n >= MAX_TENTATIVI;
+          // 50007 = messaggi privati chiusi, 10013 = utente sconosciuto: riprovare non cambia niente.
+          const definitivo = [50001, 50013, 10003, 50007, 10013].includes(err?.code) || n >= MAX_TENTATIVI;
           if (!definitivo) return;                         // il cursore NON avanza: si riprova
         }
         stato.cursore = ev.id;
@@ -825,7 +865,7 @@ function attach(client, opz = {}) {
       components: [new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId(`wp:mine:${modo}`).setPlaceholder('Pick one…').addOptions(lista.map((x) => ({
           label: `#${x.id} ${x.battleLabel || x.battleId}`.slice(0, 100),
-          description: `asked ${durata(x.createdAt)} ago · ${corto(x.minDamage)} dmg · ${statoCarta(x).testo}`.slice(0, 100),
+          description: descrizioneVoce(x, [`asked ${durata(x.createdAt)} ago`, dannoConBurst(x), statoCarta(x).testo]),
           value: String(x.id),
         }))))],
     });
@@ -895,7 +935,7 @@ function attach(client, opz = {}) {
         // puo' dedurre dal messaggio, quindi viaggia nell'id.
         new StringSelectMenuBuilder().setCustomId(`wp:decide:${p.scope}:${p.scopeId}`).setPlaceholder('Pick one…').addOptions(lista.map((r) => ({
           label: `#${r.id} ${r.muNome || '?'} — ${r.battleLabel || r.battleId}`.slice(0, 100),
-          description: `waiting ${durata(r.createdAt)} · ${corto(r.minDamage)} dmg · budget ${num(r.budget)}`.slice(0, 100),
+          description: descrizioneVoce(r, [`waiting ${durata(r.createdAt)}`, dannoConBurst(r), `budget ${num(r.budget)}`]),
           value: String(r.id),
         }))))],
     });

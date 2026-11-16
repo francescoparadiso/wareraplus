@@ -44,6 +44,7 @@ const {
 const { calcolaEffettivi } = require('./roles');
 const { puoChiedere } = require('./policy');
 const { segnalaApertura } = require('./watcher');
+const { notificaComandanti } = require('./dm');
 const {
   avvisa, avvisaCarta, urlWebhookValido,
   testoNuovaRichiesta, testoApprovata, testoRifiutata, testoAperta,
@@ -171,6 +172,8 @@ async function azioneDecidi(identita, id, nuovoStato) {
   avvisa('mu', r.mu_id, (approvata ? testoApprovata : testoRifiutata)(agg, chi),
     { tipo: approvata ? 'approvata' : 'rifiutata', requestId: r.id });
   avvisaCarta(r.country_id, agg, approvata ? 'approvata' : 'rifiutata');
+  // Il comandante dell'unita' lo sa anche senza guardare un canale (dm.js).
+  if (approvata) notificaComandanti(agg, 'approvata', chi, identita.id);
 
   return { codice: 200, corpo: { richiesta: pubblica(conNomi(agg)) } };
 }
@@ -197,6 +200,8 @@ async function azioneAperta(identita, id) {
 
   avvisa('mu', r.mu_id, testoAperta(agg, nomeDi(identita)), { tipo: 'aperta', requestId: r.id });
   avvisaCarta(r.country_id, agg, 'aperta');
+  // "Il contratto e' postato": il comandante puo' mandare l'unita' ADESSO.
+  notificaComandanti(agg, 'aperta', nomeDi(identita), identita.id);
 
   return { codice: 200, corpo: { richiesta: pubblica(conNomi(agg)) } };
 }
