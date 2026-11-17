@@ -39,7 +39,7 @@
 const express = require('express');
 const {
   creaRichiesta, getRichiesta, listaRichieste, aggiornaRichiesta,
-  getAccountById, getWebhook, setWebhook, deleteWebhook, audit, getDb, sportelloAperto,
+  getAccountById, getWebhook, setWebhook, deleteWebhook, audit, getDb, sportelloAperto, limitiSportello,
 } = require('./db');
 const { calcolaEffettivi } = require('./roles');
 const { puoChiedere } = require('./policy');
@@ -100,6 +100,20 @@ async function capacitaDi(identita) {
 
 const nomeDi = (identita) => identita.war_username || identita.discord_username;
 
+/** I tetti che il governo ha messo allo sportello (danno e taglia per 1.000).
+ *  Torna null se la richiesta ci sta, altrimenti la risposta d'errore col tetto
+ *  dentro, cosi' chi la riceve (bot o sito) dice QUALE numero e' troppo alto. */
+function oltreITetti(countryId, minDamage, perK) {
+  const t = limitiSportello(countryId);
+  if (t.maxDamage != null && minDamage > t.maxDamage) {
+    return { codice: 422, corpo: { error: 'oltre_il_tetto', campo: 'damage', tetto: t.maxDamage } };
+  }
+  if (t.maxRate != null && perK > t.maxRate) {
+    return { codice: 422, corpo: { error: 'oltre_il_tetto', campo: 'rate', tetto: t.maxRate } };
+  }
+  return null;
+}
+
 async function azioneCrea(identita, b) {
   b = b || {};
   const battleId = String(b.battleId || '').trim();
@@ -123,6 +137,10 @@ async function azioneCrea(identita, b) {
   if (!permesso.ammesso) {
     return { codice: 403, corpo: { error: permesso.motivo === 'esclusa' ? 'unita_esclusa' : 'fuori_dalla_lista' } };
   }
+
+  // I tetti dello sportello valgono per chi chiede, non per il governo che decide.
+  const fuori = oltreITetti(countryId, Number(b.minDamage) || 0, Number(b.perK) || 0);
+  if (fuori) return fuori;
 
   const r = creaRichiesta({
     battleId, battleLabel: String(b.battleLabel || '').slice(0, 200) || null,
@@ -241,6 +259,13 @@ async function azioneModifica(identita, id, b) {
   const perK = b.perK != null ? Number(b.perK) : r.per_k;
   if (!(minDamage >= 1000) || !(perK >= 0.001 && perK <= 5)) {
     return { codice: 400, corpo: { error: 'parametri_non_validi' } };
+  }
+  // Una modifica non puo' aggirare il tetto che la richiesta nuova rispetterebbe.
+  // Solo se i numeri CAMBIANO: correggere la nota di una richiesta messa prima del
+  // tetto non deve essere bloccato da un tetto arrivato dopo.
+  if (minDamage !== r.min_damage || perK !== r.per_k) {
+    const fuori = oltreITetti(r.country_id, minDamage, perK);
+    if (fuori) return fuori;
   }
   const agg = aggiornaRichiesta(r.id, {
     min_damage: minDamage,

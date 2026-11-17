@@ -46,7 +46,7 @@ const crypto = require('crypto');
 const express = require('express');
 const {
   getRichiesta, findAccountByDiscordId, findAccountByWarUserId, getDb, upsertDiscordAccount,
-  getBotChannel, setBotChannel, deleteBotChannel, setBotAperto, eventiBotDopo, ultimoEventoBotId, audit,
+  getBotChannel, setBotChannel, deleteBotChannel, setBotAperto, limitiSportello, setLimitiSportello, eventiBotDopo, ultimoEventoBotId, audit,
 } = require('./db');
 const { calcolaEffettivi } = require('./roles');
 const { nazioneAmmessa } = require('./nazioni');
@@ -429,6 +429,8 @@ function buildBotRouter() {
         scope, scopeId,
         nome: scope === 'country' ? (naz.get(scopeId)?.name || null) : (righe[0]?.mu_nome || null),
         aperto: !riga || riga.aperto !== 0,
+        // I tetti del governo (danno e taglia per 1.000), null = nessun tetto.
+        limiti: scope === 'country' ? limitiSportello(scopeId) : null,
         governo: governoElenco,
         richieste,
       });
@@ -438,7 +440,17 @@ function buildBotRouter() {
     }
   });
 
-  // ── Aprire / chiudere lo sportello (solo il governo) ───────────────────
+  // I soli tetti, leggeri (database, niente gioco): il modulo dei tetti deve
+  // aprirsi entro 3 secondi dal clic.
+  router.get('/limiti', (req, res) => {
+    const scopeId = String(req.query.scopeId || '');
+    if (!scopeId) return res.status(400).json({ error: 'parametri_non_validi' });
+    res.json({ limiti: limitiSportello(scopeId) });
+  });
+
+  // ── Aprire / chiudere lo sportello e fissarne i tetti (solo il governo) ──
+  // `aperto` assente = non toccarlo; `maxDamage` / `maxRate` presenti = si
+  // impostano (null o vuoto = nessun tetto), assenti = restano com'erano.
   router.post('/scrivania/stato', async (req, res) => {
     const b = req.body || {};
     const id = await identitaDaDiscord(b.discordId);
@@ -448,9 +460,23 @@ function buildBotRouter() {
       return res.status(403).json({ error: 'non_autorizzato' });
     }
     if (!getBotChannel('country', countryId)) return res.status(404).json({ error: 'nessun_canale' });
-    setBotAperto('country', countryId, Boolean(b.aperto));
-    audit(id.account.id, b.aperto ? 'bot.sportello.aperto' : 'bot.sportello.chiuso', `country:${countryId}`, null);
-    res.json({ aperto: Boolean(b.aperto), scopeId: countryId });
+    const attuali = limitiSportello(countryId);
+    const tetto = (v, max) => (v == null || v === '' ? null : (Number(v) > 0 && Number(v) <= max ? Number(v) : false));
+    const maxDamage = 'maxDamage' in b ? tetto(b.maxDamage, 1e12) : attuali.maxDamage;
+    const maxRate = 'maxRate' in b ? tetto(b.maxRate, 5) : attuali.maxRate;
+    // Un tetto sotto il minimo che la richiesta ammette (1.000 di danno, 0,001 di taglia)
+    // chiuderebbe lo sportello di fatto: meglio dirlo.
+    if (maxDamage === false || maxRate === false || (maxDamage != null && maxDamage < 1000) || (maxRate != null && maxRate < 0.001)) {
+      return res.status(400).json({ error: 'tetto_non_valido' });
+    }
+    setLimitiSportello(countryId, { maxDamage, maxRate });
+    if (b.aperto !== undefined) {
+      setBotAperto('country', countryId, Boolean(b.aperto));
+      audit(id.account.id, b.aperto ? 'bot.sportello.aperto' : 'bot.sportello.chiuso', `country:${countryId}`, null);
+    }
+    if ('maxDamage' in b || 'maxRate' in b) audit(id.account.id, 'bot.sportello.tetti', `country:${countryId}`, { maxDamage, maxRate });
+    const riga = getBotChannel('country', countryId);
+    res.json({ aperto: riga.aperto !== 0, scopeId: countryId, limiti: { maxDamage, maxRate } });
   });
 
   // ── Le mie richieste ancora vive (per "Edit mine" / "Withdraw mine") ───

@@ -18,7 +18,8 @@ link) e i bottoni. Tutto il resto si fa da lì.
 | **Withdraw mine** | chi ha chiesto | ritira una propria richiesta |
 | **Refresh** · 📋 **Show all (N more)** | tutti | riscrive lo sportello · elenca tutto quello che non entra |
 | 🗳️ **Pending (n)** | governo | sceglie una richiesta in attesa e la decide (Approve / Reject) |
-| **Open / Close desk** | governo | chiude lo sportello: niente nuove richieste, né da Discord né **dal sito** |
+| **Open / Close desk** | governo | chiude lo sportello: niente nuove richieste, né da Discord né **dal sito**. **Aprire** passa dal modulo dei tetti (vedi sotto) |
+| **📏 Limits** | governo | fissa o cambia i tetti a sportello già aperto |
 | 📣 **Who's tagged** | tutti | chi viene taggato e chi non lo è perché non ha collegato Discord |
 
 In più, ogni richiesta nuova arriva come **carta** con Approve / Reject (poi
@@ -38,6 +39,24 @@ per nome, senza tag.
 Se il bot non chiede nulla per 90 secondi, gli avvisi tornano ai **webhook** (se
 ce n'è uno). Quando un ambito ha un canale del bot, il webhook di quell'ambito
 tace, altrimenti ogni avviso comparirebbe due volte.
+
+## Tetti alle richieste: 📏 *Limits* (governo)
+
+Chi apre lo sportello (bottone **Open desk**) o preme **Limits** vede un modulo con
+due campi facoltativi, già compilati con i valori di adesso:
+
+- **Max damage per request** (es. `20m`);
+- **Max bounty per 1,000 damage** (es. `0.1`).
+
+Vuoto = nessun tetto. I tetti compaiono nell'intestazione dello sportello
+("📏 Limits per request") e valgono per **ogni nuova richiesta e per ogni modifica che
+cambia danno o taglia**, da Discord (modulo e `/contract`) e dal **sito**: il server
+risponde `422 oltre_il_tetto` con il campo e il tetto, e il bot dice quale numero è troppo
+alto. Le richieste già in coda non si toccano (correggere la nota di una richiesta
+vecchia non è bloccato da un tetto arrivato dopo), e **chiudere** lo sportello non
+cancella i tetti. Si salvano in `bot_channel.max_damage` / `max_rate` (migrazione
+automatica); `POST /bot/scrivania/stato` li imposta, `GET /bot/limiti` li legge
+(leggera, solo database: un modulo va aperto entro 3 s dal clic).
 
 ## Chiedere il burst: ⚡ *Ask burst* (governo)
 

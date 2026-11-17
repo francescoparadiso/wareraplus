@@ -260,7 +260,11 @@ export function creaTavolo(ctx) {
     if (occupato) return;
     occupato = true; errore = null; ctx.ridisegna();
     try { await fn(); await carica(); }
-    catch (err) { errore = err instanceof ApiError ? pvErr(err.codice) : pvT('errErrore_server'); }
+    catch (err) {
+      errore = err instanceof ApiError ? pvErr(err.codice) : pvT('errErrore_server');
+      // Il tetto superato dice anche quanto si puo' chiedere (danno o taglia).
+      if (err instanceof ApiError && err.dati?.tetto != null) errore += ` (max ${Number(err.dati.tetto).toLocaleString()})`;
+    }
     finally { occupato = false; ctx.ridisegna(); }
   }
 

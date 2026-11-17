@@ -288,7 +288,8 @@ come prima, con i webhook.
 - `GET /bot/scrivania?scope&scopeId` — i dati dello sportello (governo che può
   approvare, richieste vive + chiuse nelle ultime 24 h)
 - `POST /bot/scrivania/stato` — apre/chiude lo sportello (solo governo): con lo
-  sportello chiuso anche `azioneCrea` del **sito** risponde `sportello_chiuso`
+  sportello chiuso anche `azioneCrea` del **sito** risponde `sportello_chiuso`; imposta anche i **tetti** (`maxDamage`, `maxRate`; assenti = invariati, null = nessuno):
+  `azioneCrea`/`azioneModifica` rispondono `422 oltre_il_tetto` (`campo`, `tetto`). `GET /bot/limiti?scopeId` li legge
 - `GET /bot/approvatori?scopeId` — chi viene taggato e chi no
 - `GET /bot/contratti-attivi?scopeId` — i contratti vinti e ancora in corso di una
   nazione (round dell'asta = round corrente della battaglia); `POST /bot/chiedi-burst`

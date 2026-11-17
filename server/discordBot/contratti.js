@@ -87,6 +87,7 @@ const ERRORI = {
   contratto_non_attivo: 'That contract is not active any more (its round ended, or the battle is over).',
   nessun_comandante_collegato: 'Nobody from that unit is linked to WarEra+, so I have nobody to ping. Ask them to type `/register`.',
   burst_non_valido: 'The burst damage must be a number of at least 1,000 (like `500k`), or leave it empty.',
+  tetto_non_valido: 'The limits must be positive numbers: damage of at least 1,000 and a bounty between 0.001 and 5 per 1,000 (or leave a field empty for no limit).',
   parametri_non_validi: 'Some values are not valid. Minimum damage must be at least 1,000 and the bounty between 0.001 and 5 per 1,000 damage.',
   gioco_non_raggiungibile: 'The game did not answer. Try again in a moment.',
   bot_non_configurato: 'The WarEra+ server has no bot token configured.',
@@ -302,11 +303,29 @@ function mentionOMome(m) {
   return `${chi} _(${m.titolo})_`;
 }
 
+/** "max damage 20M · max bounty 0.1 per 1,000", o null se lo sportello e' libero. */
+function testoLimiti(l) {
+  if (!l || (l.maxDamage == null && l.maxRate == null)) return null;
+  const pezzi = [];
+  if (l.maxDamage != null) pezzi.push(`max damage **${corto(l.maxDamage)}**`);
+  if (l.maxRate != null) pezzi.push(`max bounty **${num(l.maxRate)}** per 1,000`);
+  return pezzi.join(' · ');
+}
+
+/** L'errore di un tetto superato: dice QUALE numero e' troppo alto e quanto si puo' chiedere. */
+function testoTetto({ campo, tetto }) {
+  return campo === 'rate'
+    ? `The government caps the bounty at **${num(tetto)} per 1,000 damage** on this desk. Lower it and try again.`
+    : `The government caps the damage at **${num(tetto)}** per request on this desk. Ask for less and try again.`;
+}
+
 function renderSportello(d) {
   const nazione = d.scope === 'country';
   const righe = [];
   if (nazione && d.governo?.length) righe.push(d.governo.map(mentionOMome).join(' · '));
   if (!d.aperto) righe.push('**this desk is closed** — a government member can open it below');
+  const lim = nazione ? testoLimiti(d.limiti) : null;
+  if (lim) righe.push(`📏 Limits per request: ${lim}`);
   const intestazione = righe.join('\n');
 
   const vive = d.richieste.filter(vivaR);
@@ -338,11 +357,13 @@ function renderSportello(d) {
     righeBottoni.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('wp:pend').setLabel(`Pending (${inAttesa})`).setEmoji('🗳️')
         .setStyle(inAttesa ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('wp:desk').setLabel(d.aperto ? 'Close desk' : 'Open desk')
+      new ButtonBuilder().setCustomId(d.aperto ? 'wp:desk' : 'wp:deskopen').setLabel(d.aperto ? 'Close desk' : 'Open desk')
         .setStyle(d.aperto ? ButtonStyle.Danger : ButtonStyle.Success),
       new ButtonBuilder().setCustomId('wp:tags').setLabel("Who's tagged").setEmoji('📣').setStyle(ButtonStyle.Secondary),
       // Chiede il burst ai comandanti dei contratti ancora in corso.
       new ButtonBuilder().setCustomId('wp:burst').setLabel('Ask burst').setEmoji('⚡').setStyle(ButtonStyle.Secondary),
+      // Tetti al danno e alla taglia delle richieste.
+      new ButtonBuilder().setCustomId('wp:limits').setLabel('Limits').setEmoji('📏').setStyle(ButtonStyle.Secondary),
     ));
   }
   return { embeds: [embed], components: righeBottoni, allowedMentions: SENZA_MENZIONI };
@@ -605,7 +626,7 @@ function attach(client, opz = {}) {
     return { ok: res.ok, codice: res.status, json: json || {} };
   }
 
-  const messaggioErrore = (r) => (ERRORI[r.json?.error] || `Something went wrong (${r.json?.error || `HTTP ${r.codice}`}).`)
+  const messaggioErrore = (r) => (r.json?.error === 'oltre_il_tetto' ? testoTetto(r.json) : ERRORI[r.json?.error] || `Something went wrong (${r.json?.error || `HTTP ${r.codice}`}).`)
     .replace('{tool}', toolUrl);
 
   const mention = (ids) => ids.map((id) => `<@${id}>`).join(' ');
@@ -1140,11 +1161,57 @@ function attach(client, opz = {}) {
   }
 
   // ── Open / Close desk ─────────────────────────────────────────────────
+  //
+  // CHIUDERE e' un clic. APRIRE passa dal modulo dei tetti (danno massimo e taglia
+  // massima, entrambi facoltativi e gia' compilati con quelli di adesso): chi apre
+  // il tavolo decide li' i limiti delle richieste. Lo stesso modulo e' dietro al
+  // bottone "Limits" per cambiarli a tavolo aperto.
+  // I tetti si leggono da una rotta leggera (solo database): un modulo va aperto
+  // entro 3 secondi dal clic e `/scrivania` interroga anche il gioco.
+  async function moduloLimiti(i, p, apri) {
+    const r = await api('GET', `/limiti?scopeId=${encodeURIComponent(p.scopeId)}`);
+    if (!r.ok) return effimero(i, messaggioErrore(r));
+    const l = r.json.limiti || {};
+    return i.showModal(new ModalBuilder().setCustomId(`wp:limm:${apri ? 'open' : 'set'}:${i.message.id}`)
+      .setTitle(apri ? 'Open the desk' : 'Desk limits').addComponents(
+        campo('maxdmg', 'Max damage per request (empty = no limit)', { segnaposto: 'e.g. 20m', valore: l.maxDamage }),
+        campo('maxrate', 'Max bounty per 1,000 damage (empty = none)', { segnaposto: 'e.g. 0.1', valore: l.maxRate }),
+      ));
+  }
+
+  const onLimiti = (i, p) => moduloLimiti(i, p, false);
+  const onApriSportello = (i, p) => moduloLimiti(i, p, true);
+
+  async function onInvioLimiti(i) {                       // modulo `wp:limm:<open|set>:<messaggio>`
+    const [, , modo, messageId] = i.customId.split(':');
+    const p = sportelloDiMessaggio(messageId);
+    if (!p) return effimero(i, 'This desk is not active any more. Run `/contract-desk post` again.');
+    const leggi = (id) => {
+      const t = i.fields.getTextInputValue(id).trim();
+      return t === '' ? null : leggiNumero(t);
+    };
+    const maxDamage = leggi('maxdmg');
+    const maxRate = leggi('maxrate');
+    if ((maxDamage != null && !(maxDamage >= 1000)) || (maxRate != null && !(maxRate >= 0.001 && maxRate <= 5))) {
+      return effimero(i, ERRORI.tetto_non_valido);
+    }
+    await i.deferReply({ flags: EPHEMERAL });
+    const r = await api('POST', '/scrivania/stato', {
+      discordId: i.user.id, maxDamage, maxRate, ...(modo === 'open' ? { aperto: true } : {}),
+    });
+    if (!r.ok) return i.editReply(messaggioErrore(r));
+    await aggiornaSportello(p.key);
+    const lim = testoLimiti(r.json.limiti);
+    return i.editReply(`${modo === 'open' ? 'Desk **open**. ' : ''}${lim ? `Limits per request: ${lim}.` : 'No limits on requests.'}
+Only **new** requests and edits are checked; what is already in the queue stays.`);
+  }
+
   async function onSportello(i, p) {
+    // Gli sportelli postati prima dei tetti hanno ancora "wp:desk" anche quando il
+    // bottone dice "Open desk": si va dall'etichetta, cosi' aprono dal modulo.
+    if (/^open/i.test(i.component?.label || '')) return moduloLimiti(i, p, true);
     await i.deferUpdate();
-    const d = await datiSportello(p.scope, p.scopeId);
-    if (!d) return i.followUp({ content: ERRORI.gioco_non_raggiungibile, flags: EPHEMERAL });
-    const r = await api('POST', '/scrivania/stato', { discordId: i.user.id, aperto: !d.aperto });
+    const r = await api('POST', '/scrivania/stato', { discordId: i.user.id, aperto: false });
     if (!r.ok) return i.followUp({ content: messaggioErrore(r), flags: EPHEMERAL });
     await aggiornaSportello(p.key);
     return undefined;
@@ -1470,7 +1537,7 @@ function attach(client, opz = {}) {
   // ═════════════════════════════════════════════════════════════════════
   const SPORTELLO = {
     'wp:ref': onAggiorna, 'wp:all': onTutto, 'wp:pend': onInAttesa,
-    'wp:desk': onSportello, 'wp:tags': onChiTaggo, 'wp:burst': onChiediBurst,
+    'wp:desk': onSportello, 'wp:limits': onLimiti, 'wp:deskopen': onApriSportello, 'wp:tags': onChiTaggo, 'wp:burst': onChiediBurst,
   };
 
   client.on('interactionCreate', async (i) => {
@@ -1493,6 +1560,7 @@ function attach(client, opz = {}) {
         if (id === 'wp:reg:nome') await onRegistraNome(i);
         else if (id.startsWith('wp:rq:')) await onInvioRichiesta(i);
         else if (id.startsWith('wp:ed:')) await onInvioModifica(i);
+        else if (id.startsWith('wp:limm:')) await onInvioLimiti(i);
         return;
       }
       if (i.isStringSelectMenu()) {

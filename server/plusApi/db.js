@@ -579,6 +579,19 @@ function migrate() {
     }
   }
 
+  // 2026-11-17 — i TETTI dello sportello: il governo che apre il tavolo puo'
+  // fissare il danno massimo e la taglia massima (per 1.000 di danno) che una
+  // richiesta puo' avere. NULL = nessun tetto. Valgono per le richieste NUOVE e
+  // per le modifiche, da bot e sito (azioneCrea / azioneModifica); quelle gia'
+  // in coda non si toccano.
+  const colCanale = colonne('bot_channel');
+  for (const [nome, tipo] of [['max_damage', 'INTEGER'], ['max_rate', 'REAL']]) {
+    if (!colCanale.includes(nome)) {
+      db.exec(`ALTER TABLE bot_channel ADD COLUMN ${nome} ${tipo}`);
+      console.log(`[plusApi] migrazione: aggiunta bot_channel.${nome}`);
+    }
+  }
+
   // 2026-09-03 - il NOME di chi si ammette o si esclude, com'era quando lo
   // si e' aggiunto. Senza, riaperta la lista il giorno dopo, una voce e'
   // ventiquattro caratteri esadecimali: il server non sa come si chiama
@@ -993,6 +1006,18 @@ function setBotAperto(scopeType, scopeId, aperto) {
 function sportelloAperto(countryId) {
   const r = getBotChannel('country', countryId);
   return !r || r.aperto !== 0;
+}
+
+/** I tetti dello sportello di una nazione ({ maxDamage, maxRate }, null = libero).
+ *  Senza un canale del bot non c'e' sportello e quindi nessun tetto. */
+function limitiSportello(countryId) {
+  const r = getBotChannel('country', countryId);
+  return { maxDamage: r?.max_damage ?? null, maxRate: r?.max_rate ?? null };
+}
+
+function setLimitiSportello(countryId, { maxDamage, maxRate }) {
+  getDb().prepare('UPDATE bot_channel SET max_damage = ?, max_rate = ? WHERE scope_type = ? AND scope_id = ?')
+    .run(maxDamage ?? null, maxRate ?? null, 'country', countryId);
 }
 
 function deleteBotChannel(scopeType, scopeId) {
@@ -1739,7 +1764,7 @@ module.exports = {
   initDb, getDb, DATA_DIR,
   upsertDiscordAccount, getAccountById, deleteAccount, listAccounts,
   setWarIdentity, findAccountByWarUserId, findAccountByDiscordId,
-  getBotChannel, setBotChannel, deleteBotChannel, setBotAperto, sportelloAperto, registraEventoBot, eventiBotDopo, ultimoEventoBotId,
+  getBotChannel, setBotChannel, deleteBotChannel, setBotAperto, sportelloAperto, limitiSportello, setLimitiSportello, registraEventoBot, eventiBotDopo, ultimoEventoBotId,
   getClaim, setClaim, deleteClaim, purgeExpiredClaims,
   syncAdminsFromEnv, setAdmin,
   setRoleOverride, removeRoleOverride, listRoleOverrides,
