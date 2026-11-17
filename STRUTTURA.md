@@ -97,6 +97,12 @@ wareraPlus/
 │   │                              livello e nazione di adesso da mu-user-countries,
 │   │                              zero chiamate; conta SPOSTAMENTI, non persone, se
 │   │                              no il saldo di chi fa andata e ritorno sbaglia).
+│   ├── fullRanking.js          ← NUOVO (2026-11-17) — classifiche INTERE dei giocatori
+│   │                             a pagine (ranking.getRankingPage, 50 a pagina, con la
+│   │                             chiave), in memoria, e la rotta /ranking-full. ⚠️ dalla
+│   │                             v0.28.3 ranking.getRanking dà solo i PRIMI 100: ci
+│   │                             passano tournament.js, playerParts.js, plusApi/wealth.js
+│   │                             (via loopback) e le classifiche di Giocatori.
 │   ├── tournament.js           ← NUOVO (2026-10-25) — /tournament e /tournament/team:
 │   │                             forza delle squadre sugli ULTIMI 7 GIORNI (fotografie
 │   │                             della classifica in cache/weekly-snaps/ ogni 6 ore),
@@ -535,6 +541,12 @@ wareraPlus/
     │   │                          nazione + marchio "de facto"), blocchi da 60 righe
     │   ├── muDetail.js          ← scheda unità: sei classifiche + composizione per
     │   │                          nazionalità (calcolata dal vivo sui membri) + membri
+    │   │                          + tipo/sponsor/HQ e lega settimanale (v0.28.3)
+    │   ├── muType.js            ← NUOVO (2026-11-17) — cartellino del tipo di unità
+    │   │                          (Paramilitare / Esercito di Stato con nazione sponsor /
+    │   │                          Mercenaria privata) e riquadro della lega settimanale
+    │   │                          (muLeague.getMuLeague: girone, punti, premi, ▲▼).
+    │   │                          ⚠️ division 0-15, la 15 è la più alta: si mostra +1
     │   ├── ranking.js           ← classifiche, ordinate dalla directory (zero fetch)
     │   ├── muCompare.js         ← NUOVO — linguetta "⚔ 1 vs 1": un'unità contro un'altra,
     │   │                          nello stile del versus comune (shared/versus.js): sei
@@ -587,6 +599,11 @@ wareraPlus/
     │   ├── muSection.js         ← NUOVO (2026-11-13) — scheda UNITÀ MILITARI della
     │   │                          nazione (registrate lì): membri, danno, ricchezza,
     │   │                          guerra/eco. Zero richieste nuove: directory MU.
+    │   ├── stateArmies.js       ← NUOVO (2026-11-17) — sotto muSection: gli ESERCITI DI
+    │   │                          STATO che la nazione sponsorizza (muSponsorship.getByCountry)
+    │   │                          e quanto le costano (stateArmyExpense.getLedger: petrolio
+    │   │                          dell'HQ per giorno UTC, carta delle leggi), stimati in
+    │   │                          monete ai prezzi di oggi. Pubbliche, cache 5 minuti.
     │   ├── i18nEco.js           ← dizionario delle due schede (EN/IT/ES/DE/FR)
     │   ├── damageCurves.js      ← NUOVO — nella scheda nazione: il danno ORA PER ORA
     │   │                          con sopra, sullo stesso riquadro e su un secondo

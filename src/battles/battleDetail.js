@@ -37,6 +37,7 @@ import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 import { btlT } from './i18n.js';
 import { trackEvent, trackThrottled } from '../shared/analytics.js';
 import { getBattleDetail, getBattleMuBreakdown, getRoundRanking } from './api.js';
+import { trpcCall } from '../shared/trpcClient.js';
 import { fetchMoneyTransfers, transfersFor, windowIsShort } from './moneyTransfers.js';
 import { fetchBattleTimeline, timelineSectionHtml, bountySectionHtml, wireTimeline, resetTimeline } from './battleTimeline.js';
 import {
@@ -53,6 +54,8 @@ const TOP = 10;
 let _detail = null;
 let _mu = null;
 let _muState = 'closed';   // 'closed' | 'loading' | 'open' | 'error'
+let _pmd = null;           // v0.28.3: { attacker, defender } danno delle mercenarie private
+let _muTypeBadge = null;   // src/mu/muType.js, caricato con la sezione unità
 let _expanded = { attacker: false, defender: false };
 // Ordinamento delle tabelle per lato (richiesta dell'utente, 2026-10-20:
 // «cliccando in alto sulle voci te le riordina»). Uno solo per entrambi i
@@ -155,8 +158,11 @@ function muCellHtml(id) {
     url ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.remove()">` : ''
   }</span>`;
   if (!name) return `${av}<span class="wp-btl-mu-unres">${btlT('unknownMu')}</span>`;
+  // v0.28.3: Esercito di Stato / mercenaria privata, se la directory lo sa.
+  const d = _dir?.find(x => x._id === id);
+  const badge = d && _muTypeBadge ? _muTypeBadge(d, { short: true }) : '';
   return `<button type="button" class="wp-btl-mu-link" data-mu-id="${escapeHtml(id)}"
-    title="${btlT('openMuHint')}">${av}<span>${escapeHtml(name)}</span></button>`;
+    title="${btlT('openMuHint')}">${av}<span>${escapeHtml(name)}</span>${badge}</button>`;
 }
 
 function typeLabel(t) {
@@ -465,7 +471,20 @@ function muSectionHtml(battle) {
         expanded: _expanded.attacker, entityCell: muCellHtml,
         entityHeader: btlT('colUnit'), truncated: _mu.truncated?.attacker })}
     </div>
-    ${muNamesMissing(_mu) ? `<p class="wp-btl-foot">${btlT('muNamesMissing')}</p>` : ''}`;
+    ${muNamesMissing(_mu) ? `<p class="wp-btl-foot">${btlT('muNamesMissing')}</p>` : ''}
+    ${pmdHtml()}`;
+}
+
+/* v0.28.3: danno delle unità MERCENARIE PRIVATE per schieramento
+   (`battleRanking.getPrivateMercenaryDamage {battleId}` → { attacker,
+   defender }, pubblica). Il gioco lo tiene a parte: è il danno che quelle
+   unità fanno a contratto, fuori dalle classifiche delle nazioni. Riga
+   solo se almeno un lato ne ha. */
+function pmdHtml() {
+  if (!_pmd || !(_pmd.attacker > 0 || _pmd.defender > 0)) return '';
+  return `<p class="wp-btl-foot wp-btl-pmd">${escapeHtml(btlT('pmdLine', {
+    d: fmtNum(_pmd.defender || 0), a: fmtNum(_pmd.attacker || 0),
+  }))}</p>`;
 }
 
 /* ══ PER ALLEANZA ══════════════════════════════════════════
@@ -1141,11 +1160,14 @@ async function loadMuSection(battle, repaint) {
   // sessione: è condivisa con la vista Unità Militari, quindi spesso è
   // già calda. Se non arriva, le classifiche si mostrano comunque, con
   // gli identificativi al posto dei nomi.
-  const [mu, dir] = await Promise.all([
+  const [mu, dir, pmd] = await Promise.all([
     getBattleMuBreakdown(battle.id, { live: Boolean(battle.live) }),
     import('../mu/api.js').then(m => m.fetchMuDirectory()).catch(() => null),
+    trpcCall('battleRanking.getPrivateMercenaryDamage', { battleId: battle.id }).catch(() => null),
+    import('../mu/muType.js').then(m => { _muTypeBadge = m.muTypeBadge; }).catch(() => {}),
   ]);
   if (dir) _dir = dir;
+  _pmd = pmd && typeof pmd === 'object' ? pmd : null;
   // Nel frattempo si è passati a un'altra battaglia: queste classifiche
   // non sono le sue.
   if (_wired.battle?.id !== battle.id) return;
@@ -1354,6 +1376,7 @@ function bonusHtml(battle) {
 export function resetBattleDetail() {
   _detail = null;
   _mu = null;
+  _pmd = null;
   _money = null;
   _tl = null;
   resetTimeline();

@@ -343,3 +343,13 @@ body.light-theme .wp-ply-duel { --vs-a: #be185d; --vs-b: #0369a1; }
 .wp-ply-pptab th, .wp-ply-pptab td { text-align: left; padding: 5px 6px; border-bottom: 1px solid color-mix(in srgb, var(--wp-ov-border, #30363d) 60%, transparent); }
 .wp-ply-pptab thead th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--wp-ov-text-dim, #8b949e); }
 .wp-ply-pptab tbody th { font-weight: 600; }
+
+/* ── v0.28.3: lega settimanale del giocatore (leagueHtml in players/main.js) ── */
+.wp-ply-league { margin: 10px 0 4px; border: 1px solid #30363d; border-radius: 10px; padding: 0 10px; }
+.wp-ply-league > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 8px 0; cursor: pointer; font-size: 13px; list-style: none; }
+.wp-ply-league > summary::-webkit-details-marker { display: none; }
+.wp-ply-league > summary::after { content: '▸'; margin-left: auto; color: #8b949e; transition: transform .15s; }
+.wp-ply-league[open] > summary::after { transform: rotate(90deg); }
+.wp-ply-league-t { font-weight: 800; }
+.wp-ply-league-me td { background: rgba(212, 167, 44, .14); font-weight: 700; }
+.wp-ply-league-out td { opacity: .5; }

@@ -48,7 +48,21 @@ export async function renderMuSection(host, nation) {
   if (_nation?._id !== nation._id) return;   // nazione cambiata nel frattempo
 
   const mine = (dir || []).filter(m => m.country === nation._id);
+  _dir = dir || [];
   paint(mine);
+}
+
+let _dir = [];
+
+/** v0.28.3: gli Eserciti di Stato che la nazione sponsorizza, sotto la
+ *  tabella (src/nations/stateArmies.js). Ha la sua cornice: un'unità
+ *  sponsorizzata può essere registrata altrove. */
+function paintStateArmies() {
+  const el = _host?.querySelector('#wp-nat-sa-host');
+  if (!el || !_nation) return;
+  import('./stateArmies.js')
+    .then(m => m.renderStateArmies(el, _nation, _dir))
+    .catch(err => console.warn('WarEra+ nations: eserciti di Stato:', err.message));
 }
 
 function paint(all) {
@@ -59,7 +73,10 @@ function paint(all) {
   if (!mine.length) {
     _host.innerHTML = `
       <h3 class="wp-nat-section-title">${escapeHtml(ecoT('muTitle', { nation: name }))}</h3>
-      <div class="wp-nat-empty">${escapeHtml(ecoT('muNone'))}</div>`;
+      <div class="wp-nat-empty">${escapeHtml(ecoT('muNone'))}</div>
+      <div id="wp-nat-sa-host"></div>`;
+    _host.querySelector('#wp-nat-sa-host').addEventListener('click', openUnit);
+    paintStateArmies();
     return;
   }
 
@@ -107,13 +124,16 @@ function paint(all) {
     <p class="wp-nat-curve-note">${escapeHtml(ecoT('muSub'))}${hidden ? ` ${escapeHtml(ecoT('muHidden', { n: hidden }))}` : ''}</p>
     <div class="wp-nat-lab-tiles">${tiles}</div>
     <section class="wp-nat-charts">${membersBars}${bars}</section>
-    <div class="wp-nat-mut-wrap"><div class="wp-nat-mut" id="wp-nat-mut">${tableHtml(sorted)}</div></div>`;
+    <div class="wp-nat-mut-wrap"><div class="wp-nat-mut" id="wp-nat-mut">${tableHtml(sorted)}</div></div>
+    <div id="wp-nat-sa-host"></div>`;
 
   _host.querySelector('#wp-nat-mu-sort').addEventListener('change', (e) => {
     _sort = e.target.value;
     paint(all);
   });
   _host.querySelector('#wp-nat-mut').addEventListener('click', openUnit);
+  _host.querySelector('#wp-nat-sa-host').addEventListener('click', openUnit);
+  paintStateArmies();
 }
 
 function sortedRows(rows) {

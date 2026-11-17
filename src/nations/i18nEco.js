@@ -12,6 +12,9 @@ import { getLang } from '../shared/i18n.js';
 
 const DICT = {
   en: {
+    rankWas: "Position on {d}: #{r} (the game’s daily ranking snapshot)",
+    // v0.28.3: Eserciti di Stato (stateArmies.js)
+    saTitle: "State Armies", saNone: "{nation} sponsors no unit as a State Army.", saActive: "Active", saOffered: "Offered", saOilHour: "Oil per hour now", saOilTot: "Oil paid", saPaperTot: "Paper (laws)", saMoney: "Cost at today’s prices", saStActive: "active", saStOffered: "offered, expires {d}", saStEnded: "ended {d}", saEnd_citizenship: "citizenship", saStatus: "Status", saSince: "Since", saOilToday: "Oil today", saOilYest: "Oil yesterday", saPerDay: "Oil paid per day", saSub: "Units this nation sponsors: it pays their HQ oil every hour. Expenses from the game’s ledger, since {d}.", saCut: "Only the most recent 500 ledger rows are counted.", saNote: "HQ levels 1/2/3/4 cost 1/2/5/10 barrels of oil per hour. A sponsorship starts with a law, paid in paper. Days are UTC, and today’s row grows hour by hour.", saPriceNote: "Money at today’s prices: oil {oil}, paper {paper}.",
     tabMu: 'Military units', tabEco: 'Economy',
     // ── Unità militari ──
     muTitle: 'Military units of {nation}', muSub: 'Units registered in this nation, from the unit directory.',
@@ -68,6 +71,9 @@ const DICT = {
     total: 'Total',
   },
   it: {
+    rankWas: "Posizione il {d}: #{r} (fotografia quotidiana delle classifiche del gioco)",
+    // v0.28.3: Eserciti di Stato (stateArmies.js)
+    saTitle: "Eserciti di Stato", saNone: "{nation} non sponsorizza nessuna unità come Esercito di Stato.", saActive: "Attivi", saOffered: "Proposti", saOilHour: "Petrolio all’ora adesso", saOilTot: "Petrolio pagato", saPaperTot: "Carta (leggi)", saMoney: "Costo a prezzi di oggi", saStActive: "attivo", saStOffered: "proposto, scade {d}", saStEnded: "finito {d}", saEnd_citizenship: "cittadinanza", saStatus: "Stato", saSince: "Dal", saOilToday: "Petrolio oggi", saOilYest: "Petrolio ieri", saPerDay: "Petrolio pagato al giorno", saSub: "Le unità che questa nazione sponsorizza: le paga ogni ora il petrolio del quartier generale. Spese dal registro del gioco, dal {d}.", saCut: "Si contano solo le 500 righe più recenti del registro.", saNote: "L’HQ di livello 1/2/3/4 costa 1/2/5/10 barili di petrolio all’ora. Una sponsorizzazione parte con una legge, pagata in carta. I giorni sono UTC, e la riga di oggi cresce ora per ora.", saPriceNote: "Monete a prezzi di oggi: petrolio {oil}, carta {paper}.",
     tabMu: 'Unità militari', tabEco: 'Economia',
     muTitle: 'Unità militari di {nation}', muSub: 'Le unità registrate in questa nazione, dalla directory delle unità.',
     muUnits: 'Unità', muMembers: 'Membri', muWeekly: 'Danno settimanale', muTotal: 'Danno totale',
@@ -122,6 +128,9 @@ const DICT = {
     total: 'Totale',
   },
   es: {
+    rankWas: "Posición el {d}: #{r} (instantánea diaria del ranking del juego)",
+    // v0.28.3: Eserciti di Stato (stateArmies.js)
+    saTitle: "Ejércitos del Estado", saNone: "{nation} no patrocina ninguna unidad como Ejército del Estado.", saActive: "Activos", saOffered: "Ofrecidos", saOilHour: "Petróleo por hora ahora", saOilTot: "Petróleo pagado", saPaperTot: "Papel (leyes)", saMoney: "Coste a precios de hoy", saStActive: "activo", saStOffered: "ofrecido, vence {d}", saStEnded: "terminado {d}", saEnd_citizenship: "ciudadanía", saStatus: "Estado", saSince: "Desde", saOilToday: "Petróleo hoy", saOilYest: "Petróleo ayer", saPerDay: "Petróleo pagado por día", saSub: "Las unidades que esta nación patrocina: les paga cada hora el petróleo del cuartel general. Gastos del registro del juego, desde el {d}.", saCut: "Solo se cuentan las 500 filas más recientes del registro.", saNote: "El cuartel general de nivel 1/2/3/4 cuesta 1/2/5/10 barriles de petróleo por hora. Un patrocinio empieza con una ley, pagada en papel. Los días son UTC y la fila de hoy crece hora a hora.", saPriceNote: "Dinero a precios de hoy: petróleo {oil}, papel {paper}.",
     tabMu: 'Unidades militares', tabEco: 'Economía',
     muTitle: 'Unidades militares de {nation}', muSub: 'Las unidades registradas en esta nación, del directorio de unidades.',
     muUnits: 'Unidades', muMembers: 'Miembros', muWeekly: 'Daño semanal', muTotal: 'Daño total',
@@ -176,6 +185,9 @@ const DICT = {
     total: 'Total',
   },
   de: {
+    rankWas: "Platz am {d}: #{r} (täglicher Ranglisten-Schnappschuss des Spiels)",
+    // v0.28.3: Eserciti di Stato (stateArmies.js)
+    saTitle: "Staatsarmeen", saNone: "{nation} sponsert keine Einheit als Staatsarmee.", saActive: "Aktiv", saOffered: "Angeboten", saOilHour: "Öl pro Stunde jetzt", saOilTot: "Bezahltes Öl", saPaperTot: "Papier (Gesetze)", saMoney: "Kosten zu heutigen Preisen", saStActive: "aktiv", saStOffered: "angeboten, läuft ab {d}", saStEnded: "beendet {d}", saEnd_citizenship: "Staatsbürgerschaft", saStatus: "Status", saSince: "Seit", saOilToday: "Öl heute", saOilYest: "Öl gestern", saPerDay: "Bezahltes Öl pro Tag", saSub: "Einheiten, die diese Nation sponsert: Sie zahlt ihnen stündlich das Öl des Hauptquartiers. Ausgaben aus dem Spielregister, seit {d}.", saCut: "Nur die neuesten 500 Registerzeilen werden gezählt.", saNote: "HQ-Stufe 1/2/3/4 kostet 1/2/5/10 Fass Öl pro Stunde. Ein Sponsoring beginnt mit einem Gesetz, bezahlt in Papier. Tage in UTC; die heutige Zeile wächst Stunde für Stunde.", saPriceNote: "Geld zu heutigen Preisen: Öl {oil}, Papier {paper}.",
     tabMu: 'Militäreinheiten', tabEco: 'Wirtschaft',
     muTitle: 'Militäreinheiten von {nation}', muSub: 'Die in dieser Nation registrierten Einheiten, aus dem Einheitenverzeichnis.',
     muUnits: 'Einheiten', muMembers: 'Mitglieder', muWeekly: 'Wochenschaden', muTotal: 'Gesamtschaden',
@@ -230,6 +242,9 @@ const DICT = {
     total: 'Gesamt',
   },
   fr: {
+    rankWas: "Position le {d} : #{r} (instantané quotidien du classement du jeu)",
+    // v0.28.3: Eserciti di Stato (stateArmies.js)
+    saTitle: "Armées d’État", saNone: "{nation} ne parraine aucune unité comme Armée d’État.", saActive: "Actives", saOffered: "Proposées", saOilHour: "Pétrole par heure maintenant", saOilTot: "Pétrole payé", saPaperTot: "Papier (lois)", saMoney: "Coût aux prix du jour", saStActive: "active", saStOffered: "proposée, expire {d}", saStEnded: "terminée {d}", saEnd_citizenship: "citoyenneté", saStatus: "Statut", saSince: "Depuis", saOilToday: "Pétrole aujourd’hui", saOilYest: "Pétrole hier", saPerDay: "Pétrole payé par jour", saSub: "Les unités que cette nation parraine : elle leur paie chaque heure le pétrole du QG. Dépenses du registre du jeu, depuis le {d}.", saCut: "Seules les 500 lignes les plus récentes du registre sont comptées.", saNote: "Le QG de niveau 1/2/3/4 coûte 1/2/5/10 barils de pétrole par heure. Un parrainage commence par une loi, payée en papier. Jours en UTC ; la ligne du jour grandit heure par heure.", saPriceNote: "Monnaie aux prix du jour : pétrole {oil}, papier {paper}.",
     tabMu: 'Unités militaires', tabEco: 'Économie',
     muTitle: 'Unités militaires de {nation}', muSub: 'Les unités enregistrées dans cette nation, d\'après l\'annuaire des unités.',
     muUnits: 'Unités', muMembers: 'Membres', muWeekly: 'Dégâts hebdo', muTotal: 'Dégâts totaux',

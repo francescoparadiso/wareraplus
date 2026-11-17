@@ -16,6 +16,8 @@ import { getLang } from '../shared/i18n.js';
 
 const MU_DICT = {
   en: {
+    // v0.28.3: tipo di unità e lega settimanale (muType.js)
+    typeLabel: "Type", typeAll: "All types", typeParamilitary: "Paramilitary", typeStateArmy: "State Army", typePrivateMerc: "Private Mercenary", typeParamilitaryShort: "Para", typeStateArmyShort: "State", typePrivateMercShort: "PMC", sponsoredBy: "sponsored by {c}", hqLevel: "HQ level {n}", leagueTitle: "Weekly league", leagueDivision: "Division {d} of 16", leaguePlace: "{r} of {n} in the group", leagueMove_up: "promotion zone", leagueMove_down: "relegation zone", leagueMove_stay: "stays", leagueEnds: "ends {t}", leagueNone: "This unit has no league group this week.", leagueUnit: "Unit", leaguePoints: "Points", leagueSeats: "Seats", leaguePrize: "Prize", leagueCase1: "legendary case", leagueCase2: "mythic case", leagueBadge: "badge", leagueNote: "The game’s weekly damage league: 16 divisions (16 is the top), groups of 10 units. ▲ goes up and ▼ goes down at the end of the week; the prize goes to the unit and is split among members by their share of the points.",
     pillTitle: "Pills", pillCan: "Can pill", pillOn: "Pilled", pillDown: "Debuffed", pillNone: "Nobody", pillHealth: "Health", pillFood: "Food", pillLeft: "left", pillCanHint: "Ready: no pill active and no debuff.", pillOnHint: "Pill active: ends in the time shown.", pillDownHint: "Debuff after the pill: ends in the time shown.",
     title: 'Military Units', subtitle: 'units', mineUnit: 'Your unit', tabList: 'Directory', tabRanking: 'Leaderboards',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
@@ -57,6 +59,8 @@ const MU_DICT = {
     wLastShot: 'Since last',
   },
   it: {
+    // v0.28.3: tipo di unità e lega settimanale (muType.js)
+    typeLabel: "Tipo", typeAll: "Tutti i tipi", typeParamilitary: "Paramilitare", typeStateArmy: "Esercito di Stato", typePrivateMerc: "Mercenaria privata", typeParamilitaryShort: "Para", typeStateArmyShort: "Stato", typePrivateMercShort: "PMC", sponsoredBy: "sponsorizzata da {c}", hqLevel: "HQ livello {n}", leagueTitle: "Lega settimanale", leagueDivision: "Divisione {d} di 16", leaguePlace: "{r}ª di {n} nel girone", leagueMove_up: "zona promozione", leagueMove_down: "zona retrocessione", leagueMove_stay: "resta", leagueEnds: "finisce {t}", leagueNone: "Questa unità non ha un girone di lega questa settimana.", leagueUnit: "Unità", leaguePoints: "Punti", leagueSeats: "Posti", leaguePrize: "Premio", leagueCase1: "cassa leggendaria", leagueCase2: "cassa mitica", leagueBadge: "distintivo", leagueNote: "La lega settimanale del danno del gioco: 16 divisioni (la 16 è la più alta), gironi da 10 unità. A fine settimana ▲ sale e ▼ scende; il premio va all’unità e si divide fra i membri secondo la loro quota di punti.",
     pillTitle: "Pillole", pillCan: "Possono pillare", pillOn: "Pillati", pillDown: "In debuff", pillNone: "Nessuno", pillHealth: "Vita", pillFood: "Cibo", pillLeft: "ancora", pillCanHint: "Pronti: nessuna pillola attiva e nessun debuff.", pillOnHint: "Pillola attiva: finisce fra il tempo indicato.", pillDownHint: "Debuff dopo la pillola: finisce fra il tempo indicato.",
     title: 'Unità Militari', subtitle: 'unità', mineUnit: 'La tua unità', tabList: 'Elenco', tabRanking: 'Classifiche',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
@@ -98,6 +102,8 @@ const MU_DICT = {
     wLastShot: "Dall'ultimo",
   },
   es: {
+    // v0.28.3: tipo di unità e lega settimanale (muType.js)
+    typeLabel: "Tipo", typeAll: "Todos los tipos", typeParamilitary: "Paramilitar", typeStateArmy: "Ejército del Estado", typePrivateMerc: "Mercenaria privada", typeParamilitaryShort: "Para", typeStateArmyShort: "Estado", typePrivateMercShort: "PMC", sponsoredBy: "patrocinada por {c}", hqLevel: "HQ nivel {n}", leagueTitle: "Liga semanal", leagueDivision: "División {d} de 16", leaguePlace: "{r}.º de {n} en el grupo", leagueMove_up: "zona de ascenso", leagueMove_down: "zona de descenso", leagueMove_stay: "se queda", leagueEnds: "termina {t}", leagueNone: "Esta unidad no tiene grupo de liga esta semana.", leagueUnit: "Unidad", leaguePoints: "Puntos", leagueSeats: "Plazas", leaguePrize: "Premio", leagueCase1: "caja legendaria", leagueCase2: "caja mítica", leagueBadge: "insignia", leagueNote: "La liga semanal de daño del juego: 16 divisiones (la 16 es la más alta), grupos de 10 unidades. Al final de la semana ▲ sube y ▼ baja; el premio va a la unidad y se reparte entre los miembros según su parte de puntos.",
     pillTitle: "Píldoras", pillCan: "Pueden pastillarse", pillOn: "Con píldora", pillDown: "En debuff", pillNone: "Nadie", pillHealth: "Vida", pillFood: "Comida", pillLeft: "quedan", pillCanHint: "Listos: sin píldora activa ni debuff.", pillOnHint: "Píldora activa: termina en el tiempo indicado.", pillDownHint: "Debuff tras la píldora: termina en el tiempo indicado.",
     title: 'Unidades Militares', subtitle: 'unidades', mineUnit: 'Tu unidad', tabList: 'Listado', tabRanking: 'Clasificaciones',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
@@ -139,6 +145,8 @@ const MU_DICT = {
     wLastShot: 'Desde la última',
   },
   de: {
+    // v0.28.3: tipo di unità e lega settimanale (muType.js)
+    typeLabel: "Typ", typeAll: "Alle Typen", typeParamilitary: "Paramilitär", typeStateArmy: "Staatsarmee", typePrivateMerc: "Private Söldner", typeParamilitaryShort: "Para", typeStateArmyShort: "Staat", typePrivateMercShort: "PMC", sponsoredBy: "gesponsert von {c}", hqLevel: "HQ Stufe {n}", leagueTitle: "Wochenliga", leagueDivision: "Division {d} von 16", leaguePlace: "Platz {r} von {n} in der Gruppe", leagueMove_up: "Aufstiegszone", leagueMove_down: "Abstiegszone", leagueMove_stay: "bleibt", leagueEnds: "endet {t}", leagueNone: "Diese Einheit hat diese Woche keine Ligagruppe.", leagueUnit: "Einheit", leaguePoints: "Punkte", leagueSeats: "Plätze", leaguePrize: "Preis", leagueCase1: "legendäre Kiste", leagueCase2: "mythische Kiste", leagueBadge: "Abzeichen", leagueNote: "Die wöchentliche Schadensliga des Spiels: 16 Divisionen (16 ist die höchste), Gruppen zu 10 Einheiten. Am Wochenende steigt ▲ auf und ▼ ab; der Preis geht an die Einheit und wird nach Punkteanteil unter den Mitgliedern verteilt.",
     pillTitle: "Pillen", pillCan: "Können pillen", pillOn: "Gepillt", pillDown: "Im Debuff", pillNone: "Niemand", pillHealth: "Leben", pillFood: "Essen", pillLeft: "noch", pillCanHint: "Bereit: keine Pille aktiv, kein Debuff.", pillOnHint: "Pille aktiv: endet in der angezeigten Zeit.", pillDownHint: "Debuff nach der Pille: endet in der angezeigten Zeit.",
     title: 'Militäreinheiten', subtitle: 'Einheiten', mineUnit: 'Deine Einheit', tabList: 'Verzeichnis', tabRanking: 'Ranglisten',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
@@ -180,6 +188,8 @@ const MU_DICT = {
     wLastShot: 'Seit letzter',
   },
   fr: {
+    // v0.28.3: tipo di unità e lega settimanale (muType.js)
+    typeLabel: "Type", typeAll: "Tous les types", typeParamilitary: "Paramilitaire", typeStateArmy: "Armée d’État", typePrivateMerc: "Mercenaire privée", typeParamilitaryShort: "Para", typeStateArmyShort: "État", typePrivateMercShort: "PMC", sponsoredBy: "parrainée par {c}", hqLevel: "QG niveau {n}", leagueTitle: "Ligue hebdomadaire", leagueDivision: "Division {d} sur 16", leaguePlace: "{r}e sur {n} dans le groupe", leagueMove_up: "zone de promotion", leagueMove_down: "zone de relégation", leagueMove_stay: "reste", leagueEnds: "se termine {t}", leagueNone: "Cette unité n’a pas de groupe de ligue cette semaine.", leagueUnit: "Unité", leaguePoints: "Points", leagueSeats: "Places", leaguePrize: "Prix", leagueCase1: "caisse légendaire", leagueCase2: "caisse mythique", leagueBadge: "badge", leagueNote: "La ligue hebdomadaire de dégâts du jeu : 16 divisions (la 16 est la plus haute), groupes de 10 unités. En fin de semaine ▲ monte et ▼ descend ; le prix va à l’unité et se partage entre les membres selon leur part de points.",
     pillTitle: "Pilules", pillCan: "Peuvent se pilluler", pillOn: "Pilulés", pillDown: "En debuff", pillNone: "Personne", pillHealth: "Vie", pillFood: "Nourriture", pillLeft: "reste", pillCanHint: "Prêts : aucune pilule active ni debuff.", pillOnHint: "Pilule active : se termine dans le temps indiqué.", pillDownHint: "Debuff après la pilule : se termine dans le temps indiqué.",
     title: 'Unités Militaires', subtitle: 'unités', mineUnit: 'Ton unité', tabList: 'Annuaire', tabRanking: 'Classements',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
@@ -221,6 +231,8 @@ const MU_DICT = {
     wLastShot: 'Depuis la dernière',
   },
   nl: {
+    // v0.28.3: tipo di unità e lega settimanale (muType.js)
+    typeLabel: "Type", typeAll: "Alle types", typeParamilitary: "Paramilitair", typeStateArmy: "Staatsleger", typePrivateMerc: "Privé-huurlingen", typeParamilitaryShort: "Para", typeStateArmyShort: "Staat", typePrivateMercShort: "PMC", sponsoredBy: "gesponsord door {c}", hqLevel: "HQ niveau {n}", leagueTitle: "Weekcompetitie", leagueDivision: "Divisie {d} van 16", leaguePlace: "{r}e van {n} in de groep", leagueMove_up: "promotiezone", leagueMove_down: "degradatiezone", leagueMove_stay: "blijft", leagueEnds: "eindigt {t}", leagueNone: "Deze eenheid heeft deze week geen competitiegroep.", leagueUnit: "Eenheid", leaguePoints: "Punten", leagueSeats: "Plaatsen", leaguePrize: "Prijs", leagueCase1: "legendarische kist", leagueCase2: "mythische kist", leagueBadge: "badge", leagueNote: "De wekelijkse schadecompetitie van het spel: 16 divisies (16 is de hoogste), groepen van 10 eenheden. Aan het eind van de week gaat ▲ omhoog en ▼ omlaag; de prijs gaat naar de eenheid en wordt verdeeld naar het puntenaandeel van de leden.",
     pillTitle: "Pillen", pillCan: "Kunnen pillen", pillOn: "Gepild", pillDown: "In debuff", pillNone: "Niemand", pillHealth: "Leven", pillFood: "Eten", pillLeft: "nog", pillCanHint: "Klaar: geen pil actief en geen debuff.", pillOnHint: "Pil actief: eindigt over de getoonde tijd.", pillDownHint: "Debuff na de pil: eindigt over de getoonde tijd.",
     title: 'Militaire Eenheden', subtitle: 'eenheden', mineUnit: 'Jouw eenheid', tabList: 'Overzicht', tabRanking: 'Ranglijsten',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
@@ -262,6 +274,8 @@ const MU_DICT = {
     wLastShot: 'Sinds vorige',
   },
   sv: {
+    // v0.28.3: tipo di unità e lega settimanale (muType.js)
+    typeLabel: "Typ", typeAll: "Alla typer", typeParamilitary: "Paramilitär", typeStateArmy: "Statsarmé", typePrivateMerc: "Privata legosoldater", typeParamilitaryShort: "Para", typeStateArmyShort: "Stat", typePrivateMercShort: "PMC", sponsoredBy: "sponsrad av {c}", hqLevel: "HQ nivå {n}", leagueTitle: "Veckoliga", leagueDivision: "Division {d} av 16", leaguePlace: "{r}:a av {n} i gruppen", leagueMove_up: "uppflyttningszon", leagueMove_down: "nedflyttningszon", leagueMove_stay: "stannar", leagueEnds: "slutar {t}", leagueNone: "Den här enheten har ingen ligagrupp den här veckan.", leagueUnit: "Enhet", leaguePoints: "Poäng", leagueSeats: "Platser", leaguePrize: "Pris", leagueCase1: "legendarisk låda", leagueCase2: "mytisk låda", leagueBadge: "märke", leagueNote: "Spelets veckoliga i skada: 16 divisioner (16 är den högsta), grupper om 10 enheter. I slutet av veckan går ▲ upp och ▼ ner; priset går till enheten och delas mellan medlemmarna efter deras poängandel.",
     pillTitle: "Piller", pillCan: "Kan pilla", pillOn: "Pillade", pillDown: "I debuff", pillNone: "Ingen", pillHealth: "Hälsa", pillFood: "Mat", pillLeft: "kvar", pillCanHint: "Redo: ingen pill aktiv och ingen debuff.", pillOnHint: "Pill aktiv: slutar om tiden som visas.", pillDownHint: "Debuff efter pillret: slutar om tiden som visas.",
     title: 'Militära Enheter', subtitle: 'enheter', mineUnit: 'Din enhet', tabList: 'Katalog', tabRanking: 'Topplistor',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
@@ -303,6 +317,8 @@ const MU_DICT = {
     wLastShot: 'Sedan förra',
   },
   pt: {
+    // v0.28.3: tipo di unità e lega settimanale (muType.js)
+    typeLabel: "Tipo", typeAll: "Todos os tipos", typeParamilitary: "Paramilitar", typeStateArmy: "Exército do Estado", typePrivateMerc: "Mercenária privada", typeParamilitaryShort: "Para", typeStateArmyShort: "Estado", typePrivateMercShort: "PMC", sponsoredBy: "patrocinada por {c}", hqLevel: "QG nível {n}", leagueTitle: "Liga semanal", leagueDivision: "Divisão {d} de 16", leaguePlace: "{r}.º de {n} no grupo", leagueMove_up: "zona de subida", leagueMove_down: "zona de descida", leagueMove_stay: "fica", leagueEnds: "termina {t}", leagueNone: "Esta unidade não tem grupo de liga esta semana.", leagueUnit: "Unidade", leaguePoints: "Pontos", leagueSeats: "Lugares", leaguePrize: "Prémio", leagueCase1: "caixa lendária", leagueCase2: "caixa mítica", leagueBadge: "insígnia", leagueNote: "A liga semanal de dano do jogo: 16 divisões (a 16 é a mais alta), grupos de 10 unidades. No fim da semana ▲ sobe e ▼ desce; o prémio vai para a unidade e divide-se entre os membros segundo a sua parte dos pontos.",
     pillTitle: "Pílulas", pillCan: "Podem pilular", pillOn: "Pilulados", pillDown: "Em debuff", pillNone: "Ninguém", pillHealth: "Vida", pillFood: "Comida", pillLeft: "faltam", pillCanHint: "Prontos: sem pílula ativa nem debuff.", pillOnHint: "Pílula ativa: termina no tempo indicado.", pillDownHint: "Debuff após a pílula: termina no tempo indicado.",
     title: 'Unidades Militares', subtitle: 'unidades', mineUnit: 'A tua unidade', tabList: 'Diretório', tabRanking: 'Classificações',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
@@ -344,6 +360,8 @@ const MU_DICT = {
     wLastShot: 'Desde a última',
   },
   ar: {
+    // v0.28.3: tipo di unità e lega settimanale (muType.js)
+    typeLabel: "النوع", typeAll: "كل الأنواع", typeParamilitary: "شبه عسكرية", typeStateArmy: "جيش الدولة", typePrivateMerc: "مرتزقة خاصة", typeParamilitaryShort: "شبه", typeStateArmyShort: "دولة", typePrivateMercShort: "PMC", sponsoredBy: "برعاية {c}", hqLevel: "المقر مستوى {n}", leagueTitle: "الدوري الأسبوعي", leagueDivision: "الدرجة {d} من 16", leaguePlace: "المركز {r} من {n} في المجموعة", leagueMove_up: "منطقة الصعود", leagueMove_down: "منطقة الهبوط", leagueMove_stay: "تبقى", leagueEnds: "ينتهي {t}", leagueNone: "ليس لهذه الوحدة مجموعة في الدوري هذا الأسبوع.", leagueUnit: "الوحدة", leaguePoints: "النقاط", leagueSeats: "المقاعد", leaguePrize: "الجائزة", leagueCase1: "صندوق أسطوري", leagueCase2: "صندوق خرافي", leagueBadge: "شارة", leagueNote: "دوري الضرر الأسبوعي في اللعبة: 16 درجة (16 هي الأعلى)، ومجموعات من 10 وحدات. في نهاية الأسبوع تصعد ▲ وتهبط ▼؛ والجائزة للوحدة وتُقسم بين الأعضاء بحسب حصتهم من النقاط.",
     pillTitle: "الحبوب", pillCan: "يمكنهم تناول الحبة", pillOn: "تحت تأثير الحبة", pillDown: "في حالة الضعف", pillNone: "لا أحد", pillHealth: "الصحة", pillFood: "الطعام", pillLeft: "متبقي", pillCanHint: "جاهزون: لا حبة نشطة ولا ضعف.", pillOnHint: "الحبة نشطة: تنتهي خلال الوقت المعروض.", pillDownHint: "ضعف بعد الحبة: ينتهي خلال الوقت المعروض.",
     title: 'الوحدات العسكرية', subtitle: 'وحدات', mineUnit: 'وحدتك', tabList: 'الدليل', tabRanking: 'التصنيفات',
     // WarEra+: confronto 1 vs 1 (muCompare.js)
@@ -396,6 +414,9 @@ export function muPillLabels() {
   };
 }
 
-export function muT(key) {
-  return MU_DICT[getLang()]?.[key] ?? MU_DICT.en[key] ?? key;
+export function muT(key, vars) {
+  const s = MU_DICT[getLang()]?.[key] ?? MU_DICT.en[key] ?? key;
+  // Segnaposto {x} (dal 2026-11-17, per le etichette della v0.28.3): chi
+  // chiama senza `vars` riceve la stringa com'è, come prima.
+  return vars ? s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m)) : s;
 }

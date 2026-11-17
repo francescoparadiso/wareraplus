@@ -36,6 +36,7 @@ import { renderLabour } from './labourSection.js';
 import { renderMuSection } from './muSection.js';
 import { renderEco } from './ecoSection.js';
 import { ecoT } from './i18nEco.js';
+import { trpcCall } from '../shared/trpcClient.js';
 import { avatarImg, escapeHtml, flagImg, fmtCompact, fmtRelative } from '../mu/ui.js';
 import { countryDamageToday, dailyDamageLabel, ensureDailyDamage } from '../shared/dailyDamage.js';
 import { t as sharedT } from '../shared/i18n.js';
@@ -196,6 +197,7 @@ export function renderNationDetail(host, nation, ctx) {
   });
 
   paintToday(nation);
+  paintRankTrend(nation);
   _painted = new Set();
   paintTab(_ntab);
   loadCitizens(nation);
@@ -253,8 +255,39 @@ function statCard(nation, m) {
     <div class="wp-nat-statcard">
       <div class="wp-nat-statcard-label">${escapeHtml(natT(m.label))}</div>
       <div class="wp-nat-statcard-value ${m.cls || ''}">${escapeHtml(m.fmt(m.get(nation)))}</div>
-      ${rank ? `<div class="wp-nat-statcard-rank">#${rank}</div>` : ''}
+      ${rank ? `<div class="wp-nat-statcard-rank" data-rk="${rankKey}" data-rank="${rank}">#${rank}</div>` : ''}
     </div>`;
+}
+
+/* v0.28.3: la posizione di IERI accanto a quella di oggi. Il gioco tiene da
+   quel giorno una fotografia quotidiana delle classifiche
+   (`rankingSnapshot.getEntityRecentRanks {entityId}`, pubblica: gli ultimi
+   11 giorni di tutte le classifiche della nazione in una richiesta, `null`
+   dove non c'è la fotografia). La prima è del 16 novembre 2026: prima di
+   allora non esiste, e la freccia semplicemente non compare. Il confronto
+   è con l'ultima fotografia PRIMA di oggi, contro la posizione di adesso. */
+async function paintRankTrend(nation) {
+  let d;
+  try { d = await trpcCall('rankingSnapshot.getEntityRecentRanks', { entityId: nation._id }); }
+  catch { return; }
+  if (_nation?._id !== nation._id || !d?.days || !d.ranks) return;
+  const today = new Date().toISOString().slice(0, 10);
+  _host?.querySelectorAll('.wp-nat-statcard-rank[data-rk]').forEach(el => {
+    const arr = d.ranks[el.dataset.rk];
+    if (!Array.isArray(arr)) return;
+    let prev = null, prevDay = null;
+    for (let i = d.days.length - 1; i >= 0; i--) {
+      if (d.days[i] < today && arr[i] != null) { prev = arr[i]; prevDay = d.days[i]; break; }
+    }
+    const now = Number(el.dataset.rank);
+    if (prev == null || !now) return;
+    const delta = prev - now;   // posizioni guadagnate
+    const tip = ecoT('rankWas', { r: prev, d: prevDay });
+    el.title = tip;
+    el.insertAdjacentHTML('beforeend', delta
+      ? ` <span class="wp-nat-rank-move ${delta > 0 ? 'up' : 'down'}">${delta > 0 ? '▲' : '▼'}${Math.abs(delta)}</span>`
+      : ' <span class="wp-nat-rank-move same">=</span>');
+  });
 }
 
 function paintToday(nation) {

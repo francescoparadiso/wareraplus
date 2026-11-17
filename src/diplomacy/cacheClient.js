@@ -415,6 +415,26 @@ export async function fetchUsersLiteViaCache(userIds) {
   return new Map(Object.entries(json.data));
 }
 
+/** WarEra+: la classifica INTERA di un tipo di giocatore (server/fullRanking.js).
+ *  Dalla v0.28.3 `ranking.getRanking` si ferma ai primi 100 e la classifica
+ *  intera sono 300-400 pagine di `getRankingPage`: le sfoglia il server.
+ *  Ritorna { at, count, complete, rows: [{ u, c, m, v, r }] }; lancia se il
+ *  server non c'è o non l'ha ancora pronta (503): chi chiama ripiega sui
+ *  primi 100 e lo dice. Timeout largo: sono ~300 KB compressi. */
+export async function fetchFullRankingViaCache(type) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    const res = await fetch(`${WARERA_CACHE_BASE}/ranking-full?type=${encodeURIComponent(type)}`, { signal: controller.signal });
+    if (!res.ok) throw new Error(`cache /ranking-full: HTTP ${res.status}`);
+    const json = await res.json();
+    if (!Array.isArray(json?.rows)) throw new Error('cache /ranking-full: forma inattesa');
+    return json;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /** Censimento cittadini per nazione (server/warera-cache-server.js:
  *  pollCitizens, che pagina user.getUsersByCountry per tutte le nazioni).
  *  È il numero di cittadini di ADESSO — cosa diversa dalla popolazione

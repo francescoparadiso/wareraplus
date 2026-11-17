@@ -1030,6 +1030,22 @@ con il flusso globale delle ultime transazioni invece che con quelle
 filtrate, e il sintomo si legge come "l'endpoint non sa filtrare" — falso,
 e porta a progettare intorno a un limite che non esiste.
 
+⚠️ **Dalla v0.28.3 (2026-11-16) `ranking.getRanking` risponde con i PRIMI
+100**, non più con la classifica intera (`count` dice ancora ~21.000): niente
+errore, una classifica corta che sembra buona. L'intera si sfoglia con
+`ranking.getRankingPage {rankingType, limit ≤ 50, cursor}`, ~300-430 pagine:
+la tiene in memoria `server/fullRanking.js` (con la chiave) e la serve
+`/ranking-full?type=`. Ci passano tornei, ricchezza per categoria, la
+fotografia notturna di plusApi (loopback, con ripiego a pagine su api6) e le
+classifiche di Giocatori (senza server: i 100, dichiarati). Le fotografie dei
+tornei del 16-17 novembre da 100 righe si saltano (`MIN_SNAP_BYTES`).
+Stessa release: tipo di unità (`type` = `stateArmy` con `sponsorCountry` /
+`privateMercenary`, assente = paramilitare), Eserciti di Stato
+(`muSponsorship.*`, `stateArmyExpense.getLedger`), leghe settimanali
+(`muLeague.*`, `league.getUserLeague`) e fotografie quotidiane delle classifiche
+(`rankingSnapshot.*`, dal 16 novembre) — tutte pubbliche, vedi `src/mu/muType.js`,
+`src/nations/stateArmies.js`.
+
 ⚠️ **`rankings.countryBounty` NON è la spesa di una nazione.** Sembra la
 risposta pronta (è già in `state.nazioniGlobal`, gratis) ma correla 0,87 col
 danno totale e 0,11 con la ricchezza: è quanto i *cittadini* hanno incassato,

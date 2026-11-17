@@ -9,8 +9,9 @@
      danni settimanali, danni totali, ricchezza, taglia, esperienza…
      Una richiesta, ~5 KB.
    · EQUIPAGGIAMENTO — `inventory.fetchCurrentEquipment {userId}`.
-   · CLASSIFICHE — `ranking.getRanking {rankingType}` risponde con la
-     ladder INTERA (~13-16.000 righe, ~470 KB compressi): si scarica solo
+   · CLASSIFICHE — la ladder INTERA (~13-21.000 righe) dal cache-server
+     (/ranking-full): dalla v0.28.3 `ranking.getRanking` dà i primi 100,
+     ed è il ripiego senza server (vedi fetchLeaderboard). Si scarica solo
      quando la si apre, una per tipo e per sessione, in MEMORIA. Le righe
      non hanno il nome del giocatore: i nomi dei primi 50 li dà
      /users-lite del cache-server, con ripiego su getUserLite a gruppi.
@@ -37,7 +38,7 @@
 
 import { API_BASE_URL, WARERA_CACHE_BASE } from '../diplomacy/config.js';
 import { trpcBatchManual, trpcCall } from '../shared/trpcClient.js';
-import { fetchPlayerWealthViaCache, fetchPlayerPartsViaCache, fetchUsersLiteViaCache } from '../diplomacy/cacheClient.js';
+import { fetchPlayerWealthViaCache, fetchPlayerPartsViaCache, fetchUsersLiteViaCache, fetchFullRankingViaCache } from '../diplomacy/cacheClient.js';
 import { getBattleArchive, getLiveBattles } from '../battles/api.js';
 import { fetchCountryCitizens } from '../nations/api.js';
 import { governmentMembers } from '../shared/government.js';
@@ -129,20 +130,52 @@ export async function fetchUserWealth(userId) {
   }
 }
 
+/* ── Lega settimanale (v0.28.3) ───────────────────────────────── */
+
+/** `league.getUserLeague {userId}`, pubblica: il girone del giocatore nella
+ *  lega settimanale (10 giocatori di livello simile, `league.multiplier` è
+ *  il moltiplicatore del premio), con `me` = { points, rank }, le righe del
+ *  girone { user, rank, points, isEligible } e `placeRewards` per posto
+ *  (null dove il posto non vince niente). I punti sono il danno della
+ *  settimana: coincidono con quelli che lo stesso giocatore porta nella
+ *  lega della sua unità (verificato il 2026-11-17). null se fuori lega. */
+export async function fetchUserLeague(userId) {
+  try {
+    const [d] = await trpcBatchManual([['league.getUserLeague', { userId }]]);
+    return d?.league && Array.isArray(d.rows) ? d : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 /* ── Classifiche mondiali ─────────────────────────────────────── */
 
 const _boards = new Map();  // rankingType -> Promise<rows>
 
 /** Righe compatte { u, c, m, v, r } — userId, nazione, unità, valore,
- *  posizione — dell'intera classifica. Una richiesta per tipo e sessione. */
+ *  posizione — dell'intera classifica. Una richiesta per tipo e sessione.
+ *
+ *  ⚠️ Dalla v0.28.3 `ranking.getRanking` risponde con i primi 100 (prima
+ *  con la ladder intera): l'intera la sfoglia il cache-server
+ *  (/ranking-full). Senza server si ripiega sui 100 e l'array porta
+ *  `partial = true`: chi lo mostra deve dirlo, e chi ci cerca un giocatore
+ *  fuori dai primi 100 non lo troverà. */
 export function fetchLeaderboard(type) {
   if (_boards.has(type)) return _boards.get(type);
-  const p = trpcBatchManual([['ranking.getRanking', { rankingType: type }]])
-    .then(([res]) => {
-      const items = Array.isArray(res) ? res : res?.items;
-      if (!Array.isArray(items)) throw new Error('forma inattesa');
-      return items.map(x => ({ u: x.user, c: x.country, m: x.mu, v: Number(x.value) || 0, r: x.rank }));
+  const p = fetchFullRankingViaCache(type)
+    .then(d => {
+      const rows = d.rows.map(x => ({ u: x.u, c: x.c, m: x.m, v: Number(x.v) || 0, r: x.r }));
+      rows.partial = !d.complete;
+      return rows;
     })
+    .catch(() => trpcBatchManual([['ranking.getRanking', { rankingType: type }]])
+      .then(([res]) => {
+        const items = Array.isArray(res) ? res : res?.items;
+        if (!Array.isArray(items)) throw new Error('forma inattesa');
+        const rows = items.map(x => ({ u: x.user, c: x.country, m: x.mu, v: Number(x.value) || 0, r: x.rank }));
+        rows.partial = Number(res?.count) > rows.length;
+        return rows;
+      }))
     .catch(err => { _boards.delete(type); throw err; });
   _boards.set(type, p);
   return p;

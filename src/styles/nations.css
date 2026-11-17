@@ -891,3 +891,23 @@ body.light-theme .wp-nat-cmpt-row > :first-child { background: var(--wp-ov-bg-li
    alto (sticky, vale la regola di .wp-nat-mut-head) e il nome a sinistra. */
 .wp-nat-cmpt-scroll { max-height: 560px; overflow: auto; border: 1px solid var(--wp-ov-border, #30363d); border-radius: 10px; }
 .wp-nat-rank { min-width: 28px; color: var(--wp-ov-text-dim, #8b949e); font-variant-numeric: tabular-nums; }
+
+/* ── v0.28.3: Eserciti di Stato (src/nations/stateArmies.js) ── */
+.wp-nat-sa-wrap { overflow-x: auto; margin-top: 8px; }
+.wp-nat-sa { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.wp-nat-sa th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: #8b949e; padding: 6px 8px; border-bottom: 1px solid #30363d; white-space: nowrap; }
+.wp-nat-sa td { padding: 6px 8px; border-bottom: 1px solid rgba(48, 54, 61, .6); white-space: nowrap; }
+.wp-nat-sa .wp-nat-num { text-align: right; font-variant-numeric: tabular-nums; }
+.wp-nat-sa a.wp-nat-cname { display: inline-flex; align-items: center; gap: 6px; color: inherit; text-decoration: none; }
+.wp-nat-sa a.wp-nat-cname:hover .wp-nat-cnick { text-decoration: underline; }
+.wp-nat-sa-offered td { opacity: .8; font-style: italic; }
+.wp-nat-sa-ended td { opacity: .5; }
+.wp-nat-sa-days { display: flex; align-items: flex-end; gap: 6px; height: 70px; margin: 10px 0 4px; }
+.wp-nat-sa-day { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; flex: 0 0 34px; }
+.wp-nat-sa-bar { display: block; width: 18px; border-radius: 3px 3px 0 0; background: #d4a72c; }
+.wp-nat-sa-dlab { font-size: 10px; color: #8b949e; margin-top: 3px; }
+/* v0.28.3: posizione in classifica rispetto a ieri (paintRankTrend in nationDetail.js) */
+.wp-nat-rank-move { font-weight: 700; margin-left: 2px; }
+.wp-nat-rank-move.up { color: #57ab5a; }
+.wp-nat-rank-move.down { color: #e5534b; }
+.wp-nat-rank-move.same { color: #6e7681; }

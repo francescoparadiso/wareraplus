@@ -266,6 +266,11 @@ const {
 const {
   initTournament, pollTournament, snapshotWeekly, readTournament, readTournamentTeam, statoTournament,
 } = require('./tournament');
+// WarEra+: classifiche intere a pagine. Dalla v0.28.3 ranking.getRanking
+// risponde con i primi 100: vedi il blocco in testa a server/fullRanking.js.
+const {
+  FULL_RANKING_TYPES, initFullRanking, getFullRanking, cachedFullRanking, startFullRankingLoop, fullRankingHealth,
+} = require('./fullRanking');
 
 const app = express();
 const PORT = 3001;
@@ -507,8 +512,13 @@ initOrderMoney({
 // Ricchezza per categoria: getUserById e' pubblica (trpcBatch, niente
 // chiave), l'archivio e' un sqlite nella cartella della cache, e i soldi negli
 // ordini per compratore vengono dalla memoria di orderMoney.
+// Classifiche intere: con la chiave (useWorker), una pagina alla volta.
+initFullRanking({ trpcBatch: (...args) => trpcBatch(...args) });
+startFullRankingLoop();
+
 initPlayerParts({
   trpcBatch: (...args) => trpcBatch(...args),
+  fullRanking: (type, opts) => getFullRanking(type, opts),
   readCache, writeCache, cacheDir: CACHE_DIR,
   ordersByUser: () => orderMoneyByUser(),
 });
@@ -525,7 +535,7 @@ initGearMarket({
 // Tornei: richieste pubbliche. In cache le fotografie della classifica
 // settimanale (weekly-snaps/), il danno delle partite finite e il registro
 // delle previsioni (vedi server/tournament.js).
-initTournament({ trpcBatch: (...args) => trpcBatch(...args), readCacheShared, readCache, writeCache, cacheDir: CACHE_DIR });
+initTournament({ trpcBatch: (...args) => trpcBatch(...args), fullRanking: (type, opts) => getFullRanking(type, opts), readCacheShared, readCache, writeCache, cacheDir: CACHE_DIR });
 
 // I trasferimenti: solo cache. La fotografia gliela passa pollCitizens.
 initCitizenMoves({ readCache, writeCache });
@@ -927,6 +937,13 @@ function leanMu(m) {
     createdAt: m.createdAt,
   };
   if (m.avatarUrl) out.avatarUrl = m.avatarUrl;
+  // WarEra+ v0.28.3: tipo dell'unita'. Assente = Paramilitare (il default,
+  // 1.664 unita' su 1.743 il 2026-11-17); 'stateArmy' porta la nazione che
+  // la sponsorizza e le paga il petrolio del quartier generale;
+  // 'privateMercenary' e' la mercenaria privata.
+  if (m.type) out.type = m.type;
+  if (m.sponsorCountry) out.sponsorCountry = m.sponsorCountry;
+  if (m.activeUpgradeLevels?.headquarters) out.hq = m.activeUpgradeLevels.headquarters;
   const rankings = {};
   for (const type of MU_RANKING_TYPES) {
     const r = m.rankings?.[type];
@@ -2994,6 +3011,34 @@ function playstyleIndex() {
   return _psIndex;
 }
 
+// WarEra+: la classifica INTERA di un tipo (righe compatte { u, c, m, v, r }),
+// al posto della ranking.getRanking che dalla v0.28.3 si ferma a 100. Il
+// browser ne farebbe 300-400 pagine da solo; qui sono gia' in memoria
+// (server/fullRanking.js). 503 finche' il primo giro non e' finito: il client
+// ripiega sui primi 100 e lo dichiara.
+const _fullRankingGz = new Map(); // type -> { at, gz }
+app.get('/ranking-full', (req, res) => {
+  const type = String(req.query.type || '');
+  if (!FULL_RANKING_TYPES.includes(type)) return res.status(400).json({ error: 'tipo non previsto' });
+  const e = cachedFullRanking(type);
+  if (!e) {
+    getFullRanking(type).catch(() => {});
+    return res.status(503).json({ error: 'classifica in preparazione' });
+  }
+  // Il corpo e' gia' JSON: si comprime una volta per versione, non a richiesta.
+  res.set('Content-Type', 'application/json; charset=utf-8');
+  res.set('Vary', 'Accept-Encoding');
+  res.set('Cache-Control', 'public, max-age=300');
+  if (!/\bgzip\b/.test(req.headers['accept-encoding'] || '')) return res.send(e.body);
+  let z = _fullRankingGz.get(type);
+  if (!z || z.at !== e.at) {
+    z = { at: e.at, gz: zlib.gzipSync(Buffer.from(e.body, 'utf-8')) };
+    _fullRankingGz.set(type, z);
+  }
+  res.set('Content-Encoding', 'gzip');
+  return res.send(z.gz);
+});
+
 app.get('/users-lite', async (req, res) => {
   const ids = String(req.query.ids || '').split(',').map(s => s.trim()).filter(Boolean);
   if (!ids.length) return res.json({ data: {} });
@@ -3841,6 +3886,17 @@ const TRPC_ALLOWED = new Set([
   'user.getUserById', 'user.getUserLite', 'user.getUsersByCountry',
   'war.getActiveWarBetweenCountries', 'war.getById',
   'work.getStatsByCompany', 'work.getStatsByUserId',
+  // v0.28.3 (2026-11-17): procedure nuove, tutte di LETTURA e pubbliche
+  // (rispondono uguali senza chiave). Le chiama il tool da src/mu, src/nations,
+  // src/players, src/battles; qui per quando passano dal proxy.
+  'battleRanking.getPrivateMercenaryDamage',
+  'league.getUserLeague',
+  'muLeague.getDivisionCounts', 'muLeague.getMuLeague',
+  'muSponsorship.getActiveByCountryPaginated', 'muSponsorship.getByCountry',
+  'muSponsorship.getForMu', 'muSponsorship.getSponsorable',
+  'ranking.getRankingAround', 'ranking.getRankingPage',
+  'rankingSnapshot.getEntityRecentRanks', 'rankingSnapshot.getHistory', 'rankingSnapshot.getPreviousRanks',
+  'stateArmyExpense.getLedger',
 ]);
 
 const _proxyBlocked = { count: 0, names: new Set() };
@@ -4343,6 +4399,8 @@ app.get('/health', (req, res) => res.json({
   // quante chiuse su disco. Accumula dal deploy, non si recupera.
   battleTimeline: statoBattleTimeline(),
   battleOrders: statoBattleOrders(),
+  // Classifiche intere (getRankingPage): righe, `complete`, ora dell'ultima.
+  fullRanking: fullRankingHealth(),
 }));
 
 app.listen(PORT, '127.0.0.1', () => {

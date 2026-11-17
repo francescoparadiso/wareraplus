@@ -1024,3 +1024,43 @@ body.light-theme .wp-mw-sc-giu { fill: #cf222e; }
 
 /* WarEra+: la stella sulla propria unità (vedi shared/me.js). */
 .wp-mu-mine { margin-left: .35rem; color: #e3b341; font-size: .85em; }
+
+/* ── v0.28.3: tipo dell'unità e lega settimanale (src/mu/muType.js) ──
+   Cartellino del tipo: oro per l'Esercito di Stato (paga la nazione),
+   rosso per la mercenaria privata, grigio per la paramilitare (che
+   nell'elenco non ha cartellino: è il default). */
+.wp-mu-type {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-left: 6px; padding: 1px 7px;
+  border: 1px solid #6e7681; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .03em;
+  color: #c9d1d9; background: rgba(110, 118, 129, .12);
+  vertical-align: middle; white-space: nowrap;
+}
+.wp-mu-type-stateArmy { border-color: #d4a72c; color: #e3b341; background: rgba(212, 167, 44, .12); }
+.wp-mu-type-privateMercenary { border-color: #e5534b; color: #f47067; background: rgba(229, 83, 75, .12); }
+body.light-theme .wp-mu-type { color: #3b4250; }
+body.light-theme .wp-mu-type-stateArmy { color: #8a6100; }
+body.light-theme .wp-mu-type-privateMercenary { color: #b62324; }
+.wp-mu-type img { width: 16px; height: 11px; border-radius: 2px; }
+.wp-mu-head-type { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.wp-mu-head-type .wp-mu-type { margin-left: 0; font-size: 12px; padding: 2px 9px; }
+.wp-mu-hq { font-size: 12px; color: #8b949e; }
+
+.wp-mu-league-head { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 10px; font-size: 13px; color: #c9d1d9; }
+body.light-theme .wp-mu-league-head { color: #3b4250; }
+.wp-mu-league-head span:first-child { font-weight: 800; }
+.wp-mu-tablewrap { overflow-x: auto; }
+.wp-mu-league { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.wp-mu-league th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: #8b949e; padding: 6px 8px; border-bottom: 1px solid #30363d; }
+.wp-mu-league td { padding: 6px 8px; border-bottom: 1px solid rgba(48, 54, 61, .6); }
+.wp-mu-league .wp-mu-num { text-align: right; font-variant-numeric: tabular-nums; }
+.wp-mu-league-me td { background: rgba(229, 83, 75, .12); font-weight: 700; }
+.wp-mu-league-out td { opacity: .55; }
+.wp-mu-league-link { cursor: pointer; }
+.wp-mu-league-link:hover td { background: rgba(110, 118, 129, .12); }
+.wp-mu-league-move { text-align: center; width: 24px; }
+.wp-mu-league-up { color: #57ab5a; }
+.wp-mu-league-down { color: #e5534b; }
+.wp-mu-league-stay { color: #6e7681; }
+.wp-mu-note { margin: 8px 0 0; font-size: 12px; color: #8b949e; line-height: 1.45; }
