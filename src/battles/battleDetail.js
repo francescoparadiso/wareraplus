@@ -42,7 +42,7 @@ import { fetchMoneyTransfers, transfersFor, windowIsShort } from './moneyTransfe
 import { fetchBattleTimeline, timelineSectionHtml, bountySectionHtml, wireTimeline, resetTimeline } from './battleTimeline.js';
 import {
   loadBonusRules, fetchBattleOrders, loadMe, myPlayerId, sideContext, sideNationRows, personalBonus,
-  orderPct, PRIORITIES,
+  orderPct, PRIORITIES, bonusFor, nationTotal, nationParts, capTotal, muTypeEffects, MU_TYPES,
 } from '../shared/battleBonus.js';
 import { fetchActiveBattles } from '../diplomacy/battleHeatmap.js';
 import { bvT } from '../diplomacy/bonusView.js';
@@ -1224,9 +1224,15 @@ const fmtPct = (v) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 1
 
 function bonusChips(parts, side) {
   const KEYS = { home: 'partHome', enemy: 'partEnemy', pact: 'partPact', ally: 'partAlly', order: 'partOrder',
-    muOrder: 'partMuOrder', muHq: 'partMuHq', revolt: 'partRevolt', malus: 'partMalus' };
+    muOrder: 'partMuOrder', muHq: 'partMuHq', revolt: 'partRevolt', malus: 'partMalus',
+    unitType: 'partUnitType', contract: 'partContract' };
   const out = [];
   for (const [k, v] of Object.entries(parts)) {
+    // v0.28.3: il contratto della mercenaria privata è un intervallo [0, 5].
+    if (k === 'contract' && Array.isArray(v) && v[1]) {
+      out.push(`<span class="wp-btl-bchip">${escapeHtml(btlT('partContract'))} +${fmtPct(v[0])}–${fmtPct(v[1])}%</span>`);
+      continue;
+    }
     if (!v || Array.isArray(v)) continue;
     const label = k === 'building' ? btlT(side === 'defender' ? 'partBunker' : 'partBase') : btlT(KEYS[k]);
     const neg = v < 0;
@@ -1251,7 +1257,9 @@ function bonusChips(parts, side) {
    unità, e sommarci questi li conterebbe due volte. */
 const BMAN_KEY = 'we_btl_bonus_manual';
 let _bman = (() => {
-  const def = { order: false, priority: 'medium', hq: false, level: 1 };
+  // `type` (v0.28.3): tipo d'unità applicato a tutte le righe, vedi
+  // MU_TYPE_EFFECTS in battleBonus.js. 'paramilitary' = com'era prima.
+  const def = { order: false, priority: 'medium', hq: false, level: 1, type: 'paramilitary' };
   try { return { ...def, ...JSON.parse(localStorage.getItem(BMAN_KEY) || '{}') }; } catch { return def; }
 })();
 function saveBman() {
@@ -1261,9 +1269,11 @@ function saveBman() {
 /** Le voci accese, nella forma delle parti di battleBonus ({ muOrder, muHq }). */
 function bmanParts(rules) {
   const out = {};
-  if (_bman.order) out.muOrder = orderPct(rules.muOrder, _bman.priority);
+  const e = muTypeEffects(_bman.type);
+  // Esercito di Stato: niente ordini d'unità. Mercenaria privata: ×2.
+  if (_bman.order && e.muOrders) out.muOrder = orderPct(rules.muOrder, _bman.priority) * e.muOrder;
   const lv = Math.min(_bman.level, rules.hq.length - 1);
-  if (_bman.hq && lv > 0) out.muHq = rules.hq[lv] || 0;
+  if (_bman.hq && lv > 0) out.muHq = (rules.hq[lv] || 0) * e.hq;
   return out;
 }
 
@@ -1286,9 +1296,15 @@ function bmanHtml(rules) {
         <div class="wp-btl-bman-row">${sw('order', btlT('partMuOrder'))}
           ${seg('priority', PRIORITIES.map(pr => [pr, `${btlT(prLabel[pr])} +${orderPct(rules.muOrder, pr)}%`, `o-${pr}`]))}</div>
         <div class="wp-btl-bman-row">${sw('hq', btlT('partMuHq'))}
-          ${seg('level', levels.map(lv => [lv, `${btlT('lvN', { n: lv })} +${fmtPct(rules.hq[lv])}%`]))}</div>
+          ${seg('level', levels.map(lv => [lv, `${btlT('lvN', { n: lv })} +${fmtPct(rules.hq[lv] * muTypeEffects(_bman.type).hq)}%`]))}</div>
+        <div class="wp-btl-bman-row"><span class="wp-btl-bman-lab">${escapeHtml(btlT('bmanType'))}</span>
+          <div class="wp-btl-bman-seg" role="group">
+            ${[['paramilitary', 'typePara'], ['stateArmy', 'typeState'], ['privateMercenary', 'typePmc']].map(([v, k]) =>
+              `<button type="button" class="${_bman.type === v ? 'active' : ''}" data-bman-type="${v}">${escapeHtml(btlT(k))}</button>`).join('')}
+          </div></div>
       </div>
       <p class="wp-btl-foot wp-btl-foot-tight">${escapeHtml(btlT('bmanNote'))}</p>
+      ${_bman.type !== 'paramilitary' ? `<p class="wp-btl-foot wp-btl-foot-tight">${escapeHtml(btlT('bmanTypeNote'))}</p>` : ''}
     </div>`;
 }
 
@@ -1297,7 +1313,9 @@ function bmanClick(target) {
   const sw = target.closest?.('[data-bman]');
   const pr = target.closest?.('[data-bman-priority]');
   const lv = target.closest?.('[data-bman-level]');
-  if (sw) _bman[sw.dataset.bman] = !_bman[sw.dataset.bman];
+  const ty = target.closest?.('[data-bman-type]');
+  if (ty) _bman.type = MU_TYPES.includes(ty.dataset.bmanType) ? ty.dataset.bmanType : 'paramilitary';
+  else if (sw) _bman[sw.dataset.bman] = !_bman[sw.dataset.bman];
   // Scegliere un livello accende anche l'interruttore: è quello che si vuole.
   else if (pr) { _bman.priority = pr.dataset.bmanPriority; _bman.order = true; }
   else if (lv) { _bman.level = Number(lv.dataset.bmanLevel); _bman.hq = true; }
@@ -1323,8 +1341,11 @@ function bonusHtml(battle) {
         <strong>${signed(b.mine[side].total)}</strong>
         <div class="wp-btl-bchips">${bonusChips(b.mine[side].parts, side)}</div>
       </div>`;
+    const myType = b.mine.defender?.muType;
+    const typeKey = { stateArmy: 'typeState', privateMercenary: 'typePmc' }[myType];
     you = `<div class="wp-btl-bonus-you"><div class="wp-btl-bonus-title">★ ${escapeHtml(bvT('you'))}</div>
-      <div class="wp-btl-bonus-cells">${cell('defender')}${cell('attacker')}</div></div>`;
+      <div class="wp-btl-bonus-cells">${cell('defender')}${cell('attacker')}</div>
+      ${typeKey ? `<p class="wp-btl-foot wp-btl-foot-tight">${escapeHtml(bvT('youType', { t: btlT(typeKey) }))}</p>` : ''}</div>`;
   } else if (!b.hasMe) {
     you = `<div class="wp-btl-notice">${escapeHtml(bvT('setMe'))}
       <button type="button" class="wp-btl-chip" data-btl-players>${escapeHtml(bvT('openPlayers'))}</button></div>`;
@@ -1342,8 +1363,16 @@ function bonusHtml(battle) {
     }
     // Le voci dell'unità accese a mano si sommano a ogni riga, e chi non ha
     // niente di suo prende comunque quelle: la riga "qualunque altra".
-    const rows = b.rows[side].map(r => ({ ...r, v: r.v + extraTot, parts: { ...r.parts, ...extra } }));
-    if (extraTot) rows.push({ id: null, v: extraTot, parts: extra });
+    // v0.28.3: con un tipo d'unità scelto le righe si rifanno con i suoi
+    // effetti (ordine ×2, +5/−5, niente nazionalità…), "le altre" comprese,
+    // e la mercenaria privata si ferma al suo tetto.
+    const who = _bman.type !== 'paramilitary' ? { muType: _bman.type } : null;
+    const base = who ? sideNationRows(ctx, who) : b.rows[side];
+    const cap = (v) => (who ? capTotal(v, _bman.type) : v);
+    const rows = base.map(r => ({ ...r, v: cap(r.v + extraTot), parts: { ...r.parts, ...extra } }));
+    const othersParts = who ? { ...nationParts(bonusFor(null, ctx, who).parts), ...extra } : extra;
+    const othersV = who ? cap(nationTotal(othersParts) + extraTot) : extraTot;
+    if (othersV) rows.push({ id: null, v: othersV, parts: othersParts });
     const max = Math.max(1, rows[0]?.v || 1);
     const list = rows.length ? rows.map(r => `
       <div class="wp-btl-brow${r.id ? '' : ' wp-btl-brow-others'}">

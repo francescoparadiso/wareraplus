@@ -1259,3 +1259,5 @@ body.light-theme .wp-btl { --wp-btl-in: #1a7f37; --wp-btl-out: #cf222e; }
 .wp-btl-flowbar { height: 6px; border-radius: 3px; background: var(--wp-ov-surface, rgba(255, 255, 255, .06)); overflow: hidden; }
 .wp-btl-flowbar i { display: block; height: 100%; background: var(--wp-btl-contracts); border-radius: 3px; }
 .wp-btl-flowcol:nth-child(2) .wp-btl-flowbar i { background: var(--wp-btl-in); }
+/* v0.28.3: etichetta del selettore del tipo d'unità nella scheda Bonus */
+.wp-btl-bman-lab { font-size: 12px; font-weight: 700; color: var(--wp-ov-text-dim, #8b949e); }
