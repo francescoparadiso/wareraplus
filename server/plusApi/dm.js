@@ -70,19 +70,29 @@ function testoDM(tipo, r, chi, paese) {
  * @param {number} [escludi]  id account di chi ha agito (non si avvisa)
  * Non lancia mai: un messaggio privato non deve far fallire l'azione che lo genera.
  */
+/**
+ * Gli account (con Discord collegato) che rappresentano l'unita' di una
+ * richiesta: chi l'ha fatta, piu' il proprietario e i comandanti letti dal
+ * gioco. Senza doppioni. Serve ai messaggi privati e al "ping" del burst.
+ * @returns {Promise<Map<number, object>>} account.id → riga `account`
+ */
+async function accountsDellUnita(r) {
+  const account = new Map();
+  const aggiungi = (a) => { if (a?.discord_id) account.set(a.id, a); };
+  aggiungi(r.requested_by ? getAccountById(r.requested_by) : null);
+  try {
+    for (const warId of await capiUnita(r.mu_id)) aggiungi(findAccountByWarUserId(warId));
+  } catch (err) {
+    // Il gioco non risponde: resta almeno chi ha fatto la richiesta.
+    console.warn('[dm] capi unita non letti:', err.message);
+  }
+  return account;
+}
+
 async function notificaComandanti(r, tipo, chi, escludi = null) {
   try {
     if (!process.env.BOT_TOKEN) return;                    // niente bot, niente messaggi
-    const account = new Map();                              // account.id → account
-    const aggiungi = (a) => { if (a?.discord_id) account.set(a.id, a); };
-
-    aggiungi(r.requested_by ? getAccountById(r.requested_by) : null);
-    try {
-      for (const warId of await capiUnita(r.mu_id)) aggiungi(findAccountByWarUserId(warId));
-    } catch (err) {
-      // Il gioco non risponde: resta almeno chi ha fatto la richiesta.
-      console.warn('[dm] capi unita non letti:', err.message);
-    }
+    const account = await accountsDellUnita(r);
     if (escludi != null) account.delete(escludi);
     if (!account.size) return;
 
@@ -97,4 +107,4 @@ async function notificaComandanti(r, tipo, chi, escludi = null) {
   }
 }
 
-module.exports = { notificaComandanti, testoDM };
+module.exports = { notificaComandanti, accountsDellUnita, testoDM };

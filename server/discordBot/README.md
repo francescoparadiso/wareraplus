@@ -39,6 +39,26 @@ Se il bot non chiede nulla per 90 secondi, gli avvisi tornano ai **webhook** (se
 ce n'è uno). Quando un ambito ha un canale del bot, il webhook di quell'ambito
 tace, altrimenti ogni avviso comparirebbe due volte.
 
+## Chiedere il burst: ⚡ *Ask burst* (governo)
+
+Bottone della riga del governo sullo sportello. Elenca i **contratti ancora in
+corso** della nazione (menu a scelta multipla) e, per ognuno scelto, scrive nel
+canale dello sportello un messaggio che **pinga i comandanti** dell'unità (chi ha
+fatto la richiesta, il proprietario e i comandanti, se collegati con `/register`):
+"fate il **burst adesso** su *[battaglia](link)* e **chiudete il contratto**", con
+il burst dichiarato in richiesta se c'è.
+
+- **Attivo e non finito**: l'asta è stata vinta dall'unità concordata (`conforme`,
+  o `parametri_diversi`), la battaglia è ancora in corso e il **round dell'asta è
+  ancora il round corrente** della battaglia (un contratto vale per un round). Il
+  gioco non dice pubblicamente quanto danno ha fatto l'unità
+  (`mercenaryContract.*` chiede il login), quindi "finito" è "il round è cambiato o la
+  battaglia è finita". Lo decide il server (`plusApi/bot.js: contrattiAttivi`) anche
+  al momento del clic.
+- **Solo governo** (chi approva o gestisce la nazione), mai più di una volta ogni
+  **10 minuti** per lo stesso contratto; chi chiede non si pinga da solo.
+- Limite noto: le aste vinte di una battaglia si leggono fino a 50 per volta.
+
 ## Chiedere un contratto in una riga: `/contract`
 
 La stessa richiesta del bottone *Request a contract*, per chi sa già cosa vuole:

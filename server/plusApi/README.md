@@ -290,6 +290,10 @@ come prima, con i webhook.
 - `POST /bot/scrivania/stato` — apre/chiude lo sportello (solo governo): con lo
   sportello chiuso anche `azioneCrea` del **sito** risponde `sportello_chiuso`
 - `GET /bot/approvatori?scopeId` — chi viene taggato e chi no
+- `GET /bot/contratti-attivi?scopeId` — i contratti vinti e ancora in corso di una
+  nazione (round dell'asta = round corrente della battaglia); `POST /bot/chiedi-burst`
+  — "Ask burst": solo governo, rivalida che sia attivo, limite 10 min per contratto,
+  risponde chi pingare
 - `POST /bot/canale` — il canale degli avvisi di nazione (governo) o unità
   (comandante); l'ambito lo decide il server da chi chiama
 

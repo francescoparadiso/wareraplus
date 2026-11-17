@@ -84,6 +84,8 @@ const ERRORI = {
   richiesta_inesistente: 'That request no longer exists.',
   battaglia_non_in_corso: 'That battle is not running any more.',
   nessun_canale: 'This nation has no desk yet: someone from the government must run `/contract-desk post`.',
+  contratto_non_attivo: 'That contract is not active any more (its round ended, or the battle is over).',
+  nessun_comandante_collegato: 'Nobody from that unit is linked to WarEra+, so I have nobody to ping. Ask them to type `/register`.',
   burst_non_valido: 'The burst damage must be a number of at least 1,000 (like `500k`), or leave it empty.',
   parametri_non_validi: 'Some values are not valid. Minimum damage must be at least 1,000 and the bounty between 0.001 and 5 per 1,000 damage.',
   gioco_non_raggiungibile: 'The game did not answer. Try again in a moment.',
@@ -339,6 +341,8 @@ function renderSportello(d) {
       new ButtonBuilder().setCustomId('wp:desk').setLabel(d.aperto ? 'Close desk' : 'Open desk')
         .setStyle(d.aperto ? ButtonStyle.Danger : ButtonStyle.Success),
       new ButtonBuilder().setCustomId('wp:tags').setLabel("Who's tagged").setEmoji('📣').setStyle(ButtonStyle.Secondary),
+      // Chiede il burst ai comandanti dei contratti ancora in corso.
+      new ButtonBuilder().setCustomId('wp:burst').setLabel('Ask burst').setEmoji('⚡').setStyle(ButtonStyle.Secondary),
     ));
   }
   return { embeds: [embed], components: righeBottoni, allowedMentions: SENZA_MENZIONI };
@@ -1146,6 +1150,64 @@ function attach(client, opz = {}) {
     return undefined;
   }
 
+  // ── Ask burst ─────────────────────────────────────────────────────────
+  // Il governo sceglie fra i contratti ANCORA IN CORSO (vinti, e il round
+  // dell'asta e' ancora quello della battaglia: lo decide il server) e il bot
+  // scrive nel canale dello sportello, pingando i comandanti dell'unita':
+  // "fate il burst adesso su questa battaglia e chiudete il contratto".
+  async function onChiediBurst(i, p) {
+    await i.deferReply({ flags: EPHEMERAL });
+    const r = await api('GET', `/contratti-attivi?scopeId=${encodeURIComponent(p.scopeId)}`);
+    if (!r.ok) return i.editReply(messaggioErrore(r));
+    const lista = (r.json.contratti || []).slice(0, 25);
+    if (!lista.length) {
+      return i.editReply('No contract is active right now. A contract is active while its round is running: once the round (or the battle) ends there is nothing left to ask.');
+    }
+    return i.editReply({
+      content: 'Which contracts do you want a **burst** from? I will ping each unit\'s commanders in this channel. _(pick one or more)_',
+      components: [new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId(`wp:burstpick:${p.canaleId}`).setPlaceholder('Pick the contracts…')
+          .setMinValues(1).setMaxValues(lista.length)
+          .addOptions(lista.map((c) => ({
+            label: `${c.muNome || '?'} — ${c.battleLabel || c.battleId}`.slice(0, 100),
+            description: descrizioneVoce(c, [`won ${durata(c.vintoIl)} ago`, dannoConBurst(c)]),
+            value: String(c.requestId),
+          }))))],
+    });
+  }
+
+  async function onBurstScelta(i) {                       // menu `wp:burstpick:<canale>`
+    const canaleId = i.customId.split(':')[2];
+    await i.deferUpdate();
+    const esiti = [];
+    for (const rid of i.values) {
+      const r = await api('POST', '/chiedi-burst', { discordId: i.user.id, requestId: Number(rid) });
+      if (!r.ok) {
+        const msg = r.json?.error === 'burst_gia_chiesto'
+          ? `already asked, try again in ${r.json.riprovaFraMin} min`
+          : messaggioErrore(r);
+        esiti.push(`⚠️ ${msg}`);
+        continue;
+      }
+      const d = r.json;
+      try {
+        const canale = await canaleDi(canaleId);
+        const burst = d.burstDamage ? `You said you can burst **${num(d.burstDamage)}**. ` : '';
+        await canale.send({
+          content: `⚡ **Burst needed** — ${mention(d.tag)} (${d.muNome || 'unit'})\n`
+            + `The government asks you to **burst your damage now** on **[${d.battleLabel || 'the battle'}](https://app.warera.io/battle/${d.battleId})** `
+            + `and then **close the contract**.\n${burst}Contract: ${corto(d.minDamage)} damage minimum.\n_Asked by ${d.chi}._`,
+          allowedMentions: { parse: [], users: d.tag },
+        });
+        esiti.push(`✅ **${d.muNome || 'unit'}** — pinged ${d.tag.length} ${d.tag.length === 1 ? 'person' : 'people'}`);
+      } catch (err) {
+        console.warn('[contratti] burst non scritto:', err.message);
+        esiti.push(`⚠️ **${d.muNome || 'unit'}** — I could not post in the channel (check my permissions)`);
+      }
+    }
+    return i.editReply({ content: esiti.join('\n'), components: [] });
+  }
+
   // ── Who's tagged ──────────────────────────────────────────────────────
   async function onChiTaggo(i, p) {
     await i.deferReply({ flags: EPHEMERAL });
@@ -1347,7 +1409,7 @@ function attach(client, opz = {}) {
   // ═════════════════════════════════════════════════════════════════════
   const SPORTELLO = {
     'wp:ref': onAggiorna, 'wp:all': onTutto, 'wp:pend': onInAttesa,
-    'wp:desk': onSportello, 'wp:tags': onChiTaggo,
+    'wp:desk': onSportello, 'wp:tags': onChiTaggo, 'wp:burst': onChiediBurst,
   };
 
   client.on('interactionCreate', async (i) => {
@@ -1374,6 +1436,7 @@ function attach(client, opz = {}) {
       }
       if (i.isStringSelectMenu()) {
         if (id === 'wp:reg:pick') await onRegistraScelta(i);
+        else if (id.startsWith('wp:burstpick:')) await onBurstScelta(i);
         else if (id === 'wp:pick') await onScelta(i);
         else if (id === 'wp:mine:edit') await onSceltaMia(i, 'edit');
         else if (id === 'wp:mine:wd') await onSceltaMia(i, 'wd');

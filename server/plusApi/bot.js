@@ -54,6 +54,8 @@ const { puoChiedere } = require('./policy');
 const { idGoverno, haDiritto, membriGoverno } = require('./governo');
 const { governo, paesiMappa, regioniMappa, battaglieVive, nomiUtenti, memo } = require('./fonti');
 const { segnaBotVivo } = require('./notify');
+const { accountsDellUnita } = require('./dm');
+const { trpcGet } = require('./wareraApi');
 const { cercaPersonaggi, avviaVerifica, controllaVerifica } = require('./verify');
 const {
   pubblica, conNomi, azioneCrea, azioneDecidi, azioneAperta, azioneRitira, azioneModifica,
@@ -240,6 +242,55 @@ function richiesteScrivania(scope, scopeId) {
     ) ORDER BY created_at DESC LIMIT 60
   `).all(scopeId, da);
 }
+
+// ---------------------------------------------------------------------------
+// Contratti ancora ATTIVI (per "Ask burst")
+// ---------------------------------------------------------------------------
+// Un contratto vinto vale per UN ROUND della battaglia (l'asta porta `round`):
+// finito il round il contratto e' finito. Il gioco non dice pubblicamente
+// quanto danno ha fatto l'unita' (`mercenaryContract.*` chiede il login), quindi
+// "attivo e non finito" si deduce cosi':
+//   · l'asta e' stata VINTA dall'unita' concordata (esito `conforme`, o
+//     `parametri_diversi` che e' vinta ma con altri numeri);
+//   · la battaglia e' ancora IN CORSO;
+//   · il round dell'asta e' ancora il round CORRENTE della battaglia.
+// Se il round e' cambiato, o la battaglia e' finita, non c'e' piu' niente da
+// chiedere: un burst chiesto dopo sarebbe inutile.
+const asteVinte = memo(60_000, async (battleId) => {
+  const r = await trpcGet('mercenaryContractAuction.getPaginatedAuctions', { battleId, status: 'won', limit: 50 });
+  return r?.items || [];
+});
+
+/** @returns {Promise<object[]|null>} righe `request`; null se non si riesce a saperlo. */
+async function contrattiAttivi(countryId) {
+  const righe = getDb().prepare(`
+    SELECT * FROM request
+    WHERE country_id = ? AND esito IN ('conforme','parametri_diversi')
+      AND auction_id IS NOT NULL AND verificato_il > ?
+    ORDER BY verificato_il DESC LIMIT 60
+  `).all(countryId, Date.now() - 24 * 3600_000);
+  if (!righe.length) return [];
+
+  let vive;
+  try { vive = await battaglieVive(); } catch { return null; }
+  const perId = new Map((vive || []).filter((b) => b?._id).map((b) => [b._id, b]));
+
+  const attivi = [];
+  for (const r of righe) {
+    const b = perId.get(r.battle_id);
+    if (!b || b.isActive === false || !b.currentRound?._id) continue;          // battaglia finita
+    let round = null;
+    try { round = (await asteVinte(r.battle_id)).find((a) => a._id === r.auction_id)?.round || null; }
+    catch { return null; }
+    if (round && round === b.currentRound._id) attivi.push(r);                 // contratto del round in corso
+  }
+  return attivi;
+}
+
+// Un burst si puo' chiedere per lo stesso contratto una volta ogni 10 minuti:
+// ripingare i comandanti ad ogni clic e' il modo piu' rapido di farsi silenziare.
+const BURST_OGNI_MS = 10 * 60_000;
+const ultimoBurstChiesto = new Map();             // requestId → quando
 
 // ---------------------------------------------------------------------------
 // Le battaglie su cui si può chiedere (per il menu di "Request a contract")
@@ -536,6 +587,64 @@ function buildBotRouter() {
     if (!id.ok) return errore(res, id);
     const esito = await azioneModifica(id.account, b.requestId, b);
     res.status(esito.codice).json(esito.corpo);
+  });
+
+  // ── Contratti attivi di una nazione (per "Ask burst") ─────────────────
+  router.get('/contratti-attivi', async (req, res) => {
+    const scopeId = String(req.query.scopeId || '');
+    if (!scopeId) return res.status(400).json({ error: 'parametri_non_validi' });
+    try {
+      const attivi = await contrattiAttivi(scopeId);
+      if (attivi === null) return res.status(502).json({ error: 'gioco_non_raggiungibile' });
+      res.json({
+        contratti: attivi.map((r) => ({
+          requestId: r.id, muId: r.mu_id, muNome: r.mu_nome,
+          battleId: r.battle_id, battleLabel: r.battle_label,
+          minDamage: r.min_damage, burstDamage: r.burst_damage, perK: r.per_k,
+          vintoIl: r.verificato_il,
+        })),
+      });
+    } catch (err) {
+      console.error('[bot] contratti attivi falliti:', err.message);
+      res.status(502).json({ error: 'gioco_non_raggiungibile' });
+    }
+  });
+
+  // ── "Ask burst": il governo chiede il burst ai comandanti ──────────────
+  // Solo chi governa la nazione che paga. Il server controlla che il contratto
+  // sia DAVVERO ancora attivo (non fidarsi di un menu aperto da dieci minuti) e
+  // restituisce chi pingare: il bot scrive il messaggio.
+  router.post('/chiedi-burst', async (req, res) => {
+    const b = req.body || {};
+    const id = await identitaDaDiscord(b.discordId);
+    if (!id.ok) return errore(res, id);
+    const r = getRichiesta(Number(b.requestId));
+    if (!r) return res.status(404).json({ error: 'richiesta_inesistente' });
+    const cap = id.dati.capacita;
+    if (!(cap.approvaPer.includes(r.country_id) || cap.gestisceNazione.includes(r.country_id) || cap.admin)) {
+      return res.status(403).json({ error: 'non_autorizzato' });
+    }
+
+    const attivi = await contrattiAttivi(r.country_id);
+    if (attivi === null) return res.status(502).json({ error: 'gioco_non_raggiungibile' });
+    if (!attivi.some((x) => x.id === r.id)) return res.status(409).json({ error: 'contratto_non_attivo' });
+
+    const dopo = (ultimoBurstChiesto.get(r.id) || 0) + BURST_OGNI_MS - Date.now();
+    if (dopo > 0) return res.status(429).json({ error: 'burst_gia_chiesto', riprovaFraMin: Math.ceil(dopo / 60_000) });
+
+    const account = await accountsDellUnita(r);
+    account.delete(id.account.id);                                  // chi chiede non si pinga da solo
+    const tag = [...account.values()].map((a) => a.discord_id);
+    if (!tag.length) return res.status(404).json({ error: 'nessun_comandante_collegato' });
+
+    ultimoBurstChiesto.set(r.id, Date.now());
+    audit(id.account.id, 'bot.burst.chiesto', `request:${r.id}`, { tag: tag.length });
+    res.json({
+      tag,
+      chi: id.account.war_username || id.account.discord_username,
+      muNome: r.mu_nome, battleId: r.battle_id, battleLabel: r.battle_label,
+      minDamage: r.min_damage, burstDamage: r.burst_damage,
+    });
   });
 
   // ── "Who's tagged": chi viene taggato e chi no (per nazione) ───────────
