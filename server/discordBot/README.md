@@ -42,11 +42,18 @@ tace, altrimenti ogni avviso comparirebbe due volte.
 ## Chiedere il burst: ⚡ *Ask burst* (governo)
 
 Bottone della riga del governo sullo sportello. Elenca i **contratti ancora in
-corso** della nazione (menu a scelta multipla) e, per ognuno scelto, scrive nel
-canale dello sportello un messaggio che **pinga i comandanti** dell'unità (chi ha
-fatto la richiesta, il proprietario e i comandanti, se collegati con `/register`):
-"fate il **burst adesso** su *[battaglia](link)* e **chiudete il contratto**", con
-il burst dichiarato in richiesta se c'è.
+corso** della nazione (menu a scelta multipla, con la voce **«All active
+contracts»** in cima) e per ogni contratto scelto manda un **messaggio privato**
+ai comandanti dell'unità (chi ha fatto la richiesta, il proprietario e i
+comandanti, se collegati con `/register`): "fate il **burst adesso** su
+*[battaglia](link)* e **chiudete il contratto**", con il burst dichiarato in
+richiesta se c'è. Niente nel canale: la richiesta è per loro, non per la chat.
+Chi ha più contratti riceve UN messaggio con l'elenco.
+
+- **Riscontro a chi chiede**: sempre, nel messaggio effimero, contratto per
+  contratto: a chi è arrivato il DM, chi **non** è raggiungibile (DM chiusi o nessun
+  server in comune col bot: lo si pinga a mano) e i contratti **non partiti** col
+  motivo (già chiesto da poco, non più attivo, nessun comandante collegato).
 
 - **Attivo e non finito**: l'asta è stata vinta dall'unità concordata (`conforme`,
   o `parametri_diversi`), la battaglia è ancora in corso e il **round dell'asta è
@@ -57,7 +64,9 @@ il burst dichiarato in richiesta se c'è.
   al momento del clic.
 - **Solo governo** (chi approva o gestisce la nazione), mai più di una volta ogni
   **10 minuti** per lo stesso contratto; chi chiede non si pinga da solo.
-- Limite noto: le aste vinte di una battaglia si leggono fino a 50 per volta.
+- Le aste vinte di una battaglia si leggono **tutte**: `getPaginatedAuctions` è a
+  cursore (50 per pagina, dalla più recente) e `asteVinte` in `plusApi/bot.js`
+  segue `nextCursor` fino a 30 pagine.
 
 ## Chiedere un contratto in una riga: `/contract`
 

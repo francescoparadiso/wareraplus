@@ -293,7 +293,8 @@ come prima, con i webhook.
 - `GET /bot/contratti-attivi?scopeId` — i contratti vinti e ancora in corso di una
   nazione (round dell'asta = round corrente della battaglia); `POST /bot/chiedi-burst`
   — "Ask burst": solo governo, rivalida che sia attivo, limite 10 min per contratto,
-  risponde chi pingare
+  risponde chi avvisare (`tag` e `destinatari` coi nomi) e i dati per il DM; le
+  aste vinte si leggono a cursore, tutte
 - `POST /bot/canale` — il canale degli avvisi di nazione (governo) o unità
   (comandante); l'ambito lo decide il server da chi chiama
 

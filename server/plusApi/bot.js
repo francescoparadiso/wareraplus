@@ -256,9 +256,23 @@ function richiesteScrivania(scope, scopeId) {
 //   · il round dell'asta e' ancora il round CORRENTE della battaglia.
 // Se il round e' cambiato, o la battaglia e' finita, non c'e' piu' niente da
 // chiedere: un burst chiesto dopo sarebbe inutile.
+// ⚠️ TUTTE le aste vinte, non le prime 50: l'API le da' dalla piu' recente con un
+// cursore (`nextCursor`), e su una battaglia lunga (la Sfax ne aveva 51) una
+// pagina sola lascia fuori le piu' vecchie — e un contratto ancora in corso puo'
+// essere fra quelle. Si segue il cursore fino alla fine; il tetto di 30 pagine
+// (1.500 aste) e' una rete contro un cursore che non finisce mai.
 const asteVinte = memo(60_000, async (battleId) => {
-  const r = await trpcGet('mercenaryContractAuction.getPaginatedAuctions', { battleId, status: 'won', limit: 50 });
-  return r?.items || [];
+  const tutte = [];
+  let cursor;
+  for (let pagina = 0; pagina < 30; pagina++) {
+    const r = await trpcGet('mercenaryContractAuction.getPaginatedAuctions',
+      { battleId, status: 'won', limit: 50, ...(cursor ? { cursor } : {}) });
+    const items = r?.items || [];
+    tutte.push(...items);
+    cursor = r?.nextCursor;
+    if (!cursor || !items.length) break;
+  }
+  return tutte;
 });
 
 /** @returns {Promise<object[]|null>} righe `request`; null se non si riesce a saperlo. */
@@ -641,6 +655,8 @@ function buildBotRouter() {
     audit(id.account.id, 'bot.burst.chiesto', `request:${r.id}`, { tag: tag.length });
     res.json({
       tag,
+      // Con i nomi: a chi chiede il burst si dice A CHI e' arrivato (o no).
+      destinatari: [...account.values()].map((a) => ({ discordId: a.discord_id, nome: a.war_username || a.discord_username })),
       chi: id.account.war_username || id.account.discord_username,
       muNome: r.mu_nome, battleId: r.battle_id, battleLabel: r.battle_label,
       minDamage: r.min_damage, burstDamage: r.burst_damage,

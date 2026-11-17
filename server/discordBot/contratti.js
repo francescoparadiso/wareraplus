@@ -1153,59 +1153,120 @@ function attach(client, opz = {}) {
   // ── Ask burst ─────────────────────────────────────────────────────────
   // Il governo sceglie fra i contratti ANCORA IN CORSO (vinti, e il round
   // dell'asta e' ancora quello della battaglia: lo decide il server) e il bot
-  // scrive nel canale dello sportello, pingando i comandanti dell'unita':
-  // "fate il burst adesso su questa battaglia e chiudete il contratto".
+  // manda un MESSAGGIO PRIVATO ai comandanti dell'unita': "fate il burst adesso su
+  // questa battaglia e chiudete il contratto". Niente messaggio nel canale: la
+  // richiesta e' per loro, non per la chat (e un ping pubblico a ogni comandante
+  // e' esattamente cio' che si voleva evitare).
+  //
+  // Si puo' scegliere un contratto, alcuni, o TUTTI quelli attivi (la prima voce).
+  // Chi ha piu' contratti riceve UN messaggio con l'elenco, non uno per contratto.
   async function onChiediBurst(i, p) {
     await i.deferReply({ flags: EPHEMERAL });
     const r = await api('GET', `/contratti-attivi?scopeId=${encodeURIComponent(p.scopeId)}`);
     if (!r.ok) return i.editReply(messaggioErrore(r));
-    const lista = (r.json.contratti || []).slice(0, 25);
-    if (!lista.length) {
+    const tutti = r.json.contratti || [];
+    if (!tutti.length) {
       return i.editReply('No contract is active right now. A contract is active while its round is running: once the round (or the battle) ends there is nothing left to ask.');
     }
+    const lista = tutti.slice(0, 24);                       // 24 + la voce "tutti" = i 25 che Discord ammette
     return i.editReply({
-      content: 'Which contracts do you want a **burst** from? I will ping each unit\'s commanders in this channel. _(pick one or more)_',
+      content: 'Which contracts do you want a **burst** from? I will **DM** the commanders of each unit. _(pick one or more, or all)_',
       components: [new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId(`wp:burstpick:${p.canaleId}`).setPlaceholder('Pick the contracts…')
-          .setMinValues(1).setMaxValues(lista.length)
-          .addOptions(lista.map((c) => ({
-            label: `${c.muNome || '?'} — ${c.battleLabel || c.battleId}`.slice(0, 100),
-            description: descrizioneVoce(c, [`won ${durata(c.vintoIl)} ago`, dannoConBurst(c)]),
-            value: String(c.requestId),
-          }))))],
+        new StringSelectMenuBuilder().setCustomId(`wp:burstpick:${p.scopeId}`).setPlaceholder('Pick the contracts…')
+          .setMinValues(1).setMaxValues(lista.length + 1)
+          .addOptions([
+            { label: `⚡ All active contracts (${tutti.length})`, description: 'Ask every unit with a running contract', value: 'all' },
+            ...lista.map((c) => ({
+              label: `${c.muNome || '?'} — ${c.battleLabel || c.battleId}`.slice(0, 100),
+              description: descrizioneVoce(c, [`won ${durata(c.vintoIl)} ago`, dannoConBurst(c)]),
+              value: String(c.requestId),
+            })),
+          ]))],
     });
   }
 
-  async function onBurstScelta(i) {                       // menu `wp:burstpick:<canale>`
-    const canaleId = i.customId.split(':')[2];
+  /** Il testo del messaggio privato: i contratti di UNA persona, ognuno con il
+   *  link alla battaglia. */
+  function testoBurst(contratti, chi) {
+    const righe = contratti.map((d) => {
+      const burst = d.burstDamage ? ` · you said you can burst **${num(d.burstDamage)}**` : '';
+      return `• **${d.muNome || 'your unit'}** — [${d.battleLabel || 'the battle'}](https://app.warera.io/battle/${d.battleId}) · ${corto(d.minDamage)} damage minimum${burst}`;
+    });
+    return `⚡ **Burst needed**\nThe government asks you to **burst your damage now** and then **close the ${contratti.length === 1 ? 'contract' : 'contracts'}**:\n`
+      + `${righe.join('\n')}\n_Asked by ${chi}._`;
+  }
+
+  async function onBurstScelta(i) {                       // menu `wp:burstpick:<paese>`
+    const scopeId = i.customId.split(':')[2];
     await i.deferUpdate();
-    const esiti = [];
-    for (const rid of i.values) {
-      const r = await api('POST', '/chiedi-burst', { discordId: i.user.id, requestId: Number(rid) });
+
+    // L'elenco di adesso (il menu puo' essere vecchio): serve per "tutti" e per
+    // dare un NOME a ogni contratto nel resoconto, anche a quelli che non partono.
+    const lr = await api('GET', `/contratti-attivi?scopeId=${encodeURIComponent(scopeId)}`);
+    if (!lr.ok) return i.editReply({ content: messaggioErrore(lr), components: [] });
+    const lista = lr.json.contratti || [];
+    const nomeDi = new Map(lista.map((c) => [c.requestId, c.muNome || 'a unit']));
+    const ids = i.values.includes('all') ? lista.map((c) => c.requestId) : i.values.map(Number);
+
+    // 1) il server decide cosa si puo' chiedere (governo, ancora attivo, non chiesto da poco)
+    const chiesti = [];                                    // { d, destinatari } — partiti dal server
+    const saltati = [];                                    // righe di resoconto: perche' NON e' partito
+    const perPersona = new Map();                          // discordId → [contratti]
+    let chi = i.user.username;
+    for (const rid of ids) {
+      const nome = nomeDi.get(rid) || 'a contract';
+      const r = await api('POST', '/chiedi-burst', { discordId: i.user.id, requestId: rid });
       if (!r.ok) {
-        const msg = r.json?.error === 'burst_gia_chiesto'
-          ? `already asked, try again in ${r.json.riprovaFraMin} min`
-          : messaggioErrore(r);
-        esiti.push(`⚠️ ${msg}`);
+        const perche = r.json?.error === 'burst_gia_chiesto'
+          ? `already asked, you can ask again in ${r.json.riprovaFraMin} min`
+          : messaggioErrore(r).replace(/\.$/, '');
+        saltati.push(`⚠️ **${nome}** — not sent: ${perche}.`);
         continue;
       }
       const d = r.json;
-      try {
-        const canale = await canaleDi(canaleId);
-        const burst = d.burstDamage ? `You said you can burst **${num(d.burstDamage)}**. ` : '';
-        await canale.send({
-          content: `⚡ **Burst needed** — ${mention(d.tag)} (${d.muNome || 'unit'})\n`
-            + `The government asks you to **burst your damage now** on **[${d.battleLabel || 'the battle'}](https://app.warera.io/battle/${d.battleId})** `
-            + `and then **close the contract**.\n${burst}Contract: ${corto(d.minDamage)} damage minimum.\n_Asked by ${d.chi}._`,
-          allowedMentions: { parse: [], users: d.tag },
-        });
-        esiti.push(`✅ **${d.muNome || 'unit'}** — pinged ${d.tag.length} ${d.tag.length === 1 ? 'person' : 'people'}`);
-      } catch (err) {
-        console.warn('[contratti] burst non scritto:', err.message);
-        esiti.push(`⚠️ **${d.muNome || 'unit'}** — I could not post in the channel (check my permissions)`);
+      chi = d.chi || chi;
+      chiesti.push(d);
+      for (const uid of d.tag) {
+        if (!perPersona.has(uid)) perPersona.set(uid, []);
+        perPersona.get(uid).push(d);
       }
     }
-    return i.editReply({ content: esiti.join('\n'), components: [] });
+
+    // 2) un messaggio privato per persona
+    const consegnato = new Map();                          // discordId → true | false
+    for (const [uid, contratti] of perPersona) {
+      try {
+        const utente = await client.users.fetch(uid);
+        await utente.send({ content: testoBurst(contratti, chi).slice(0, 1990), allowedMentions: SENZA_MENZIONI });
+        consegnato.set(uid, true);
+      } catch (err) {
+        // 50007: messaggi privati chiusi o nessun server in comune col bot.
+        console.warn('[contratti] burst non consegnato a', uid, '-', err.message);
+        consegnato.set(uid, false);
+      }
+    }
+
+    // 3) IL RISCONTRO a chi ha chiesto: sempre, contratto per contratto, con i
+    // nomi di chi ha ricevuto il messaggio e di chi no. Con la richiesta fuori dal
+    // canale e' l'unico modo in cui il governo sa se e' arrivata.
+    const righe = chiesti.map((d) => {
+      const dest = d.destinatari || d.tag.map((id) => ({ discordId: id, nome: id }));
+      const ok = dest.filter((x) => consegnato.get(x.discordId));
+      const ko = dest.filter((x) => !consegnato.get(x.discordId));
+      if (!ko.length) return `✅ **${d.muNome || 'unit'}** — DM sent to ${ok.map((x) => x.nome).join(', ')}.`;
+      const kos = ko.map((x) => `<@${x.discordId}> (${x.nome})`).join(', ');
+      return `${ok.length ? '🟡' : '❌'} **${d.muNome || 'unit'}** — `
+        + `${ok.length ? `DM sent to ${ok.map((x) => x.nome).join(', ')}; ` : ''}`
+        + `**could not DM** ${kos} (DMs closed, or no server in common with me) — ping them yourself.`;
+    });
+    const consegnati = [...consegnato.values()].filter(Boolean).length;
+    const testa = chiesti.length
+      ? `⚡ Burst requested for **${chiesti.length}** ${chiesti.length === 1 ? 'contract' : 'contracts'} — **${consegnati}** ${consegnati === 1 ? 'person' : 'people'} reached by DM.`
+      : '⚡ **Nothing was sent.**';
+    return i.editReply({
+      content: [testa, ...righe, ...saltati].join('\n').slice(0, 1990),
+      components: [], allowedMentions: SENZA_MENZIONI,
+    });
   }
 
   // ── Who's tagged ──────────────────────────────────────────────────────
