@@ -706,6 +706,22 @@ function buildBotRouter() {
     }
   });
 
+  // ── Cosa puo' fare QUESTA persona su QUESTA nazione ─────────────────────
+  // Serve al pannello "Government": un messaggio di Discord e' uguale per tutti, quindi
+  // i bottoni del governo non si possono nascondere a chi non c'entra. Si mostra un
+  // solo bottone e, premuto, un pannello PRIVATO con soltanto quello che questa persona
+  // puo' fare davvero (decide il server, con gli stessi poteri delle azioni).
+  router.get('/permessi', async (req, res) => {
+    const id = await identitaDaDiscord(req.query.discordId);
+    if (!id.ok) return errore(res, id);
+    const scopeId = String(req.query.scopeId || '');
+    const cap = id.dati.capacita;
+    res.json({
+      approva: Boolean(cap.admin || cap.approvaPer.includes(scopeId)),
+      gestisce: Boolean(cap.admin || cap.gestisceNazione.includes(scopeId)),
+    });
+  });
+
   // ── "Ask burst": il governo chiede il burst ai comandanti ──────────────
   // Solo chi governa la nazione che paga. Il server controlla che il contratto
   // sia DAVVERO ancora attivo (non fidarsi di un menu aperto da dieci minuti) e

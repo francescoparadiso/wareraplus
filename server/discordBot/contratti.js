@@ -393,16 +393,13 @@ function renderSportello(d) {
 
   if (nazione) {
     const inAttesa = vive.filter((r) => r.status === 'pending').length;
+    // ⚠️ Un messaggio di Discord e' IDENTICO per tutti: non si possono mostrare i bottoni
+    // del governo solo al governo. Quindi qui ce n'e' UNO, e i veri comandi (Pending,
+    // Open/Close, Limits, Ask burst, Who's tagged) stanno in un pannello PRIVATO che
+    // si apre da qui e contiene SOLO quello che chi preme puo' fare davvero (onGoverno).
     righeBottoni.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('wp:pend').setLabel(`Pending (${inAttesa})`).setEmoji('🗳️')
+      new ButtonBuilder().setCustomId('wp:gov').setLabel(inAttesa ? `Government · ${inAttesa} waiting` : 'Government').setEmoji('🏛️')
         .setStyle(inAttesa ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(d.aperto ? 'wp:desk' : 'wp:deskopen').setLabel(d.aperto ? 'Close desk' : 'Open desk')
-        .setStyle(d.aperto ? ButtonStyle.Danger : ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('wp:tags').setLabel("Who's tagged").setEmoji('📣').setStyle(ButtonStyle.Secondary),
-      // Chiede il burst ai comandanti dei contratti ancora in corso.
-      new ButtonBuilder().setCustomId('wp:burst').setLabel('Ask burst').setEmoji('⚡').setStyle(ButtonStyle.Secondary),
-      // Tetti al danno e alla taglia delle richieste.
-      new ButtonBuilder().setCustomId('wp:limits').setLabel('Limits').setEmoji('📏').setStyle(ButtonStyle.Secondary),
     ));
   }
   return { embeds: [embed], components: righeBottoni, allowedMentions: SENZA_MENZIONI };
@@ -1253,7 +1250,7 @@ function attach(client, opz = {}) {
     const r = await api('GET', `/limiti?scopeId=${encodeURIComponent(p.scopeId)}&board=${encodeURIComponent(p.battleId || '')}`);
     if (!r.ok) return effimero(i, messaggioErrore(r));
     const l = r.json.limiti || {};
-    return i.showModal(new ModalBuilder().setCustomId(`wp:limm:${apri ? 'open' : 'set'}:${i.message.id}`)
+    return i.showModal(new ModalBuilder().setCustomId(`wp:limm:${apri ? 'open' : 'set'}:${p.messaggioId}`)
       .setTitle(apri ? 'Open the desk' : 'Desk limits').addComponents(
         campo('maxdmg', 'Max damage per request (empty = no limit)', { segnaposto: 'e.g. 20m', valore: l.maxDamage }),
         campo('maxrate', 'Max bounty per 1,000 damage (empty = none)', { segnaposto: 'e.g. 0.1', valore: l.maxRate }),
@@ -1296,6 +1293,42 @@ Only **new** requests and edits are checked; what is already in the queue stays.
     if (!r.ok) return i.followUp({ content: messaggioErrore(r), flags: EPHEMERAL });
     await aggiornaSportello(p.key);
     return undefined;
+  }
+
+  // ── Government: il pannello PRIVATO ───────────────────────────────────
+  // Il server dice cosa puo' fare chi preme (approvare, gestire lo sportello) e qui
+  // si disegnano SOLO quei bottoni. Chi non e' del governo riceve una frase sola.
+  // I bottoni portano la board nell'id (`wp:gv:<azione>:<chiave>`): questo messaggio
+  // e' effimero e non e' lo sportello.
+  const COMANDI_GOVERNO = {
+    pend: onInAttesa, desk: onSportello, deskopen: onApriSportello,
+    tags: onChiTaggo, burst: onChiediBurst, limits: onLimiti,
+  };
+
+  async function onGoverno(i, p) {
+    await i.deferReply({ flags: EPHEMERAL });
+    const r = await api('GET', `/permessi?discordId=${i.user.id}&scopeId=${encodeURIComponent(p.scopeId)}`);
+    if (!r.ok) return i.editReply(messaggioErrore(r));
+    const { approva, gestisce } = r.json;
+    if (!approva && !gestisce) {
+      return i.editReply('These controls are for the **government** of this nation (the president, the vice president, and ministers with the contracts right). You can still request a contract with **📝 Request a contract**.');
+    }
+    const d = await datiDiPannello(p);
+    const inAttesa = d ? d.richieste.filter((x) => vivaR(x) && x.status === 'pending').length : 0;
+    const b = (azione, label, emoji, stile) => new ButtonBuilder().setCustomId(`wp:gv:${azione}:${p.key}`).setLabel(label).setEmoji(emoji).setStyle(stile);
+    const bottoni = [];
+    if (approva) bottoni.push(b('pend', `Pending (${inAttesa})`, '🗳️', inAttesa ? ButtonStyle.Success : ButtonStyle.Secondary));
+    if (gestisce) bottoni.push(d?.aperto === false
+      ? b('deskopen', 'Open desk', '🔓', ButtonStyle.Success)
+      : b('desk', 'Close desk', '🔒', ButtonStyle.Danger));
+    bottoni.push(b('tags', "Who's tagged", '📣', ButtonStyle.Secondary));
+    if (approva || gestisce) bottoni.push(b('burst', 'Ask burst', '⚡', ButtonStyle.Secondary));
+    if (gestisce) bottoni.push(b('limits', 'Limits', '📏', ButtonStyle.Secondary));
+    const cosa = [approva ? 'decide requests' : null, gestisce ? 'open/close the desk and set limits' : null].filter(Boolean).join(', ');
+    return i.editReply({
+      content: `🏛️ **Government controls** — only what you can do: ${cosa}.`,
+      components: [new ActionRowBuilder().addComponents(bottoni)],
+    });
   }
 
   // ── Ask burst ─────────────────────────────────────────────────────────
@@ -1671,7 +1704,7 @@ Only **new** requests and edits are checked; what is already in the queue stays.
   // Smistamento
   // ═════════════════════════════════════════════════════════════════════
   const SPORTELLO = {
-    'wp:ref': onAggiorna, 'wp:all': onTutto, 'wp:pend': onInAttesa,
+    'wp:ref': onAggiorna, 'wp:all': onTutto, 'wp:pend': onInAttesa, 'wp:gov': onGoverno,
     'wp:desk': onSportello, 'wp:limits': onLimiti, 'wp:deskopen': onApriSportello, 'wp:tags': onChiTaggo, 'wp:burst': onChiediBurst,
   };
 
@@ -1719,6 +1752,17 @@ Only **new** requests and edits are checked; what is already in the queue stays.
         if (id === 'wp:req') { await onRichiedi(i); return; }
         if (id === 'wp:edit') { await onMie(i, 'edit'); return; }
         if (id === 'wp:wd') { await onMie(i, 'wd'); return; }
+        // I comandi del pannello privato del governo: `wp:gv:<azione>:<chiave della board>`.
+        // La board viaggia nell'id perche' il messaggio e' un pannello effimero, non lo sportello.
+        if (id.startsWith('wp:gv:')) {
+          const [, , azione, ...resto] = id.split(':');
+          const key = resto.join(':');
+          const pp = stato.pannelli[key] ? { key, ...stato.pannelli[key] } : null;
+          const fnG = COMANDI_GOVERNO[azione];
+          if (!pp || !fnG) { await effimero(i, 'This desk is not active any more. Ask the government to run `/contract-desk post` again.'); return; }
+          await fnG(i, pp);
+          return;
+        }
         const fn = SPORTELLO[id];
         if (!fn) return;
         // I bottoni dello sportello sanno quale sportello sono dal messaggio.
@@ -1929,6 +1973,8 @@ Only **new** requests and edits are checked; what is already in the queue stays.
     if (opz.registraComandi !== false) await registraComandi();
     // Gli sportelli gia' pubblicati prima di questa funzione: li si prova a pinnare.
     for (const k of Object.keys(stato.pannelli)) provaAPinnare(k);
+    // Gli sportelli gia' pubblicati hanno ancora i vecchi bottoni del governo: si riscrivono.
+    for (const k of Object.keys(stato.pannelli)) aggiornaSportelloDopo(k);
     giro();
     setInterval(giro, POLL_MS).unref?.();
     console.log(`[contratti] in ascolto su ${apiBase}`);

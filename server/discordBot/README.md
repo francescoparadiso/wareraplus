@@ -17,10 +17,9 @@ link) e i bottoni. Tutto il resto si fa da lì.
 | **Edit mine** | chi ha chiesto | corregge una richiesta **ancora in attesa** (dopo l'approvazione i numeri non cambiano: si ritira e si rifà) |
 | **Withdraw mine** | chi ha chiesto | ritira una propria richiesta |
 | **Refresh** · 📋 **Show all (N more)** | tutti | riscrive lo sportello · elenca tutto quello che non entra |
-| 🗳️ **Pending (n)** | governo | sceglie una richiesta in attesa e la decide (Approve / Reject) |
-| **Open / Close desk** | governo | chiude lo sportello: niente nuove richieste, né da Discord né **dal sito**. **Aprire** passa dal modulo dei tetti (vedi sotto) |
-| **📏 Limits** | governo | fissa o cambia i tetti a sportello già aperto |
-| 📣 **Who's tagged** | tutti | chi viene taggato e chi non lo è perché non ha collegato Discord |
+| 🏛️ **Government** (· n waiting) | tutti lo vedono, **lo usa il governo** | apre un pannello **privato** con SOLO i comandi che chi preme può usare: 🗳️ *Pending* e ⚡ *Ask burst* (chi approva), 🔒 *Open / Close desk* e 📏 *Limits* (chi gestisce la nazione), 📣 *Who's tagged* (tutti). Chiudere lo sportello vieta nuove richieste, da Discord e **dal sito**; **aprire** passa dal modulo dei tetti (vedi sotto). A chi non è del governo il bot risponde con una frase |
+
+⚠️ Un messaggio di Discord è **identico per tutti**: non si possono mostrare certi bottoni solo a certe persone. Per questo sullo sportello ce n'è uno solo, e i comandi veri stanno nel pannello privato (`GET /bot/permessi`, `wp:gv:<azione>:<board>`). Le **carte** delle richieste (Approve / Reject) stanno nel canale del governo e restano visibili a chi ci scrive: chi non può approvare riceve un rifiuto se preme.
 
 In più, ogni richiesta nuova arriva come **carta** con Approve / Reject (poi
 *I opened the auction* / *Withdraw*), **taggando** chi nel governo può approvare
