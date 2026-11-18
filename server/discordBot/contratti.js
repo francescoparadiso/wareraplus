@@ -105,18 +105,43 @@ const corto = (n) => {
   return String(v);
 };
 
-/** "1.5m", "500k", "1,000,000", "0,08" → numero. NaN se non si capisce. */
-function leggiNumero(testo) {
-  let s = String(testo || '').trim().toLowerCase().replace(/[\s_]/g, '');
+/**
+ * "10M", "500k", "1,5m", "1.000.000", "0,08" → numero. NaN se non si capisce.
+ * ⚠️ Lo STESSO ragionamento di `src/private/numeri.js` (il sito): se cambi uno, cambia l'altro.
+ * Suffissi: k, mila (×1e3); m, mln, mio, milione, million (×1e6); b, bn, mld, miliardi, billion (×1e9);
+ * NON "mil" (in spagnolo e' mille). Con punto E virgola l'ultimo e' il decimale; un
+ * separatore ripetuto e' delle migliaia; uno solo e' decimale, salvo 1–3 cifre + separatore
+ * + 3 cifre senza suffisso ("500.000", "1,000" = migliaia). `decimali: true` (la taglia):
+ * un separatore solo e' SEMPRE decimale ("0,125").
+ */
+const SUFFISSI_NUMERO = [
+  [/^(k|mila|mille|thousand)$/, 1e3],
+  [/^(m|mln|mio|milion[ei]?|million[s]?)$/, 1e6],
+  [/^(b|bn|mld|miliard[oi]|billion[s]?)$/, 1e9],
+];
+function leggiNumero(testo, { decimali = false } = {}) {
+  const t = String(testo ?? '').trim().toLowerCase().replace(/[\s_']/g, '');
+  const m = t.match(/^(\d[\d.,]*|[.,]\d+)([a-z]*)$/);
+  if (!m) return NaN;
+  let n = m[1]; const suf = m[2];
   let molt = 1;
-  const suf = s.slice(-1);
-  if (suf === 'k') { molt = 1e3; s = s.slice(0, -1); }
-  else if (suf === 'm') { molt = 1e6; s = s.slice(0, -1); }
-  else if (suf === 'b') { molt = 1e9; s = s.slice(0, -1); }
-  if (s.includes('.') && s.includes(',')) s = s.replace(/,/g, '');
-  else if (/^\d{1,3}(,\d{3})+$/.test(s)) s = s.replace(/,/g, '');
-  else s = s.replace(',', '.');
-  const v = Number(s);
+  if (suf) {
+    const x = SUFFISSI_NUMERO.find(([re]) => re.test(suf));
+    if (!x) return NaN;
+    molt = x[1];
+  }
+  const punto = n.lastIndexOf('.'); const virgola = n.lastIndexOf(',');
+  if (punto >= 0 && virgola >= 0) {
+    const dec = punto > virgola ? '.' : ',';
+    const mil = dec === '.' ? ',' : '.';
+    n = n.split(mil).join('').replace(dec, '.');
+  } else if (punto >= 0 || virgola >= 0) {
+    const parti = n.split(punto >= 0 ? '.' : ',');
+    if (parti.length > 2) n = parti.join('');
+    else if (!decimali && !suf && parti[0].length <= 3 && parti[1].length === 3 && parti[0] !== '0' && parti[0] !== '') n = parti.join('');
+    else n = parti.join('.');
+  }
+  const v = Number(n);
   return Number.isFinite(v) ? v * molt : NaN;
 }
 
@@ -1017,7 +1042,7 @@ function attach(client, opz = {}) {
   async function onInvioRichiesta(i) {                   // modulo `wp:rq:<battle>:<side>`
     const [, , battleId, side] = i.customId.split(':');
     const minDamage = leggiNumero(i.fields.getTextInputValue('dmg'));
-    const perK = leggiNumero(i.fields.getTextInputValue('bounty'));
+    const perK = leggiNumero(i.fields.getTextInputValue('bounty'), { decimali: true });
     if (!(minDamage >= 1000) || !(perK >= 0.001 && perK <= 5)) return effimero(i, ERRORI.parametri_non_validi);
     const burst = leggiBurst(i.fields.getTextInputValue('burst'));
     if (burst === false) return effimero(i, ERRORI.burst_non_valido);
@@ -1145,7 +1170,7 @@ function attach(client, opz = {}) {
   async function onInvioModifica(i) {                    // modulo `wp:ed:<id>`
     const id = Number(i.customId.split(':')[2]);
     const minDamage = leggiNumero(i.fields.getTextInputValue('dmg'));
-    const perK = leggiNumero(i.fields.getTextInputValue('bounty'));
+    const perK = leggiNumero(i.fields.getTextInputValue('bounty'), { decimali: true });
     if (!(minDamage >= 1000) || !(perK >= 0.001 && perK <= 5)) return effimero(i, ERRORI.parametri_non_validi);
     const burst = leggiBurst(i.fields.getTextInputValue('burst'));
     if (burst === false) return effimero(i, ERRORI.burst_non_valido);
@@ -1244,7 +1269,7 @@ function attach(client, opz = {}) {
     if (!p) return effimero(i, 'This desk is not active any more. Run `/contract-desk post` again.');
     const leggi = (id) => {
       const t = i.fields.getTextInputValue(id).trim();
-      return t === '' ? null : leggiNumero(t);
+      return t === '' ? null : leggiNumero(t, { decimali: id === 'maxrate' });
     };
     const maxDamage = leggi('maxdmg');
     const maxRate = leggi('maxrate');

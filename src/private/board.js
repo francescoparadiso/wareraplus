@@ -22,6 +22,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { pvT, pvErr } from './i18n.js';
+import { leggiNumero, mostraNumero } from './numeri.js';
 import {
   leggiTavolo, leggiVersioneTavolo, chiediContratto, approvaRichiesta, rifiutaRichiesta,
   segnaAperta, ritiraRichiesta, battaglieInCorso,
@@ -478,14 +479,15 @@ export function creaTavolo(ctx) {
     // mila e' una richiesta che il ministro rifiuta senza capire perche'.
     // Scalini per i tagli usuali, campo libero per il resto, e il numero
     // riscritto per esteso sotto: uno zero di troppo si vede.
-    const danno = campo('number', pvT('minDamage'), '1000000', { obbligatorio: true });
-    // ⚠️ `step` in HTML non e' solo l'incremento delle frecce: VINCOLA la
-    // validazione. Con step=100000 e min=1 i valori accettati diventano
-    // 1, 100001, 200001... e 2.000.000 veniva rifiutato con "i due valori
-    // validi piu' vicini sono 1900001 e 2000001". Gli scalini qui sotto
-    // fanno gia' il lavoro delle frecce, senza vincolare niente.
-    danno.input.step = 'any';
-    danno.input.min = '1000';
+    // ⚠️ Campo di TESTO e non `type=number` (dal 2026-11-18): si scrive "10M", "500k",
+    // "1,5m", "1.000.000" come in chat e nel bot (numeri.js). Un campo numerico non
+    // accettava lettere. Sotto il campo si vede come e' stato CAPITO ("= 10.000.000"):
+    // uno zero di troppo si vede subito.
+    const danno = campo('text', pvT('minDamage'), '10M, 500k, 1000000', { obbligatorio: true });
+    danno.input.inputMode = 'decimal';
+    const dannoCapito = el('span', 'wp-pv-suggerimento wp-pv-capito', '');
+    danno.wrap.appendChild(dannoCapito);
+    const valDanno = () => leggiNumero(danno.input.value);
 
     const scalini = el('div', 'wp-pv-scalini');
     scalini.appendChild(el('span', 'wp-pv-label', pvT('damagePreset')));
@@ -501,12 +503,10 @@ export function creaTavolo(ctx) {
     // ── Taglia per 1000 danni ──────────────────────────────────────────
     // E' la grandezza con cui si ragiona nel gioco (initialPerK), non il
     // totale: si muove fra 0,01 e 0,2, quindi serve il decimale.
-    const taglia = campo('number', pvT('bountyL'), '0.08', { obbligatorio: true });
-    // Stessa ragione: con step=0.01 una taglia di 0,015 verrebbe rifiutata.
-    // Il range si dichiara con min e max, che non vincolano i decimali.
-    taglia.input.step = 'any';
-    taglia.input.min = '0.001';
-    taglia.input.max = '5';
+    // Testo anche qui: accetta "0,08" come "0.08" (un separatore solo e' sempre decimale).
+    const taglia = campo('text', pvT('bountyL'), '0.08', { obbligatorio: true });
+    taglia.input.inputMode = 'decimal';
+    const valTaglia = () => leggiNumero(taglia.input.value, { decimali: true });
     taglia.wrap.appendChild(el('span', 'wp-pv-suggerimento', pvT('bountyHint')));
 
     // Il totale non si chiede, si calcola: e' il numero che esce davvero
@@ -518,11 +518,13 @@ export function creaTavolo(ctx) {
     totale.appendChild(el('span', 'wp-pv-suggerimento', pvT('totalBudgetHint')));
 
     function budgetCalcolato() {
-      const d = Number(danno.input.value) || 0;
-      const t = Number(taglia.input.value) || 0;
+      const d = valDanno() || 0;
+      const t = valTaglia() || 0;
       return (d / 1000) * t;
     }
     function aggiornaTotale() {
+      const d = valDanno();
+      dannoCapito.textContent = danno.input.value.trim() === '' ? '' : (Number.isFinite(d) ? `= ${mostraNumero(d)}` : '?');
       const v = budgetCalcolato();
       totaleVal.textContent = v > 0 ? v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—';
     }
@@ -549,15 +551,19 @@ export function creaTavolo(ctx) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const [side, countryId] = String(lato.value || '|').split('|');
+      // Numeri che non si capiscono (o fuori range) si dicono PRIMA di partire.
+      if (!(valDanno() >= 1000) || !(valTaglia() >= 0.001 && valTaglia() <= 5)) {
+        errore = pvErr('parametri_non_validi'); ctx.ridisegna(); return;
+      }
       azione(async () => {
         await chiediContratto({
           battleId: b.id, battleLabel: b.etichetta, side, countryId,
           muId: unita.value, muNome: ctx.nomeUnita?.(unita.value) || null,
-          minDamage: Number(danno.input.value) || null,
+          minDamage: valDanno() || null,
           // Si manda il totale calcolato, che e' cio' che l'asta vuole, e
           // anche la tariffa: il tavolo mostra quella, il gioco quello.
           budget: budgetCalcolato() || null,
-          perK: Number(taglia.input.value) || null,
+          perK: valTaglia() || null,
           professionalsOnly: proBox.checked,
           note: nota.input.value.trim() || null,
         });
