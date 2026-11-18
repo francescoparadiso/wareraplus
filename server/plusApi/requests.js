@@ -39,7 +39,7 @@
 const express = require('express');
 const {
   creaRichiesta, getRichiesta, listaRichieste, aggiornaRichiesta,
-  getAccountById, getWebhook, setWebhook, deleteWebhook, audit, getDb, sportelloAperto, limitiSportello,
+  getAccountById, getWebhook, setWebhook, deleteWebhook, audit, getDb, sportelloAperto, limitiSportello, elencoBoard, boardPerRichiesta,
 } = require('./db');
 const { calcolaEffettivi } = require('./roles');
 const { puoChiedere } = require('./policy');
@@ -103,8 +103,8 @@ const nomeDi = (identita) => identita.war_username || identita.discord_username;
 /** I tetti che il governo ha messo allo sportello (danno e taglia per 1.000).
  *  Torna null se la richiesta ci sta, altrimenti la risposta d'errore col tetto
  *  dentro, cosi' chi la riceve (bot o sito) dice QUALE numero e' troppo alto. */
-function oltreITetti(countryId, minDamage, perK) {
-  const t = limitiSportello(countryId);
+function oltreITetti(countryId, battleId, minDamage, perK) {
+  const t = limitiSportello(countryId, battleId);
   if (t.maxDamage != null && minDamage > t.maxDamage) {
     return { codice: 422, corpo: { error: 'oltre_il_tetto', campo: 'damage', tetto: t.maxDamage } };
   }
@@ -127,7 +127,13 @@ async function azioneCrea(identita, b) {
   // Lo sportello chiuso dal governo (bottone "Close desk" del bot) vale per
   // tutti, sito compreso: chiuderlo solo su Discord e lasciare che le
   // richieste arrivino dal sito sarebbe un divieto a meta'.
-  if (!sportelloAperto(countryId)) return { codice: 409, corpo: { error: 'sportello_chiuso' } };
+  // Ogni battaglia ha la sua board (bot_board): la richiesta va a quella, se c'e', o alla
+  // generale. Una nazione che ha board ma nessuna per QUESTA battaglia non ha chi
+  // la riceva: meglio dirlo a chi chiede che mandare l'avviso nel vuoto.
+  if (elencoBoard(countryId).length && !boardPerRichiesta(countryId, battleId)) {
+    return { codice: 409, corpo: { error: 'nessuna_board_per_battaglia' } };
+  }
+  if (!sportelloAperto(countryId, battleId)) return { codice: 409, corpo: { error: 'sportello_chiuso' } };
 
   // Comandare un'unita' non basta: e' la nazione che paga, ed e' la
   // nazione che decide con chi lavora (policy.js).
@@ -139,7 +145,7 @@ async function azioneCrea(identita, b) {
   }
 
   // I tetti dello sportello valgono per chi chiede, non per il governo che decide.
-  const fuori = oltreITetti(countryId, Number(b.minDamage) || 0, Number(b.perK) || 0);
+  const fuori = oltreITetti(countryId, battleId, Number(b.minDamage) || 0, Number(b.perK) || 0);
   if (fuori) return fuori;
 
   const r = creaRichiesta({
@@ -264,7 +270,7 @@ async function azioneModifica(identita, id, b) {
   // Solo se i numeri CAMBIANO: correggere la nota di una richiesta messa prima del
   // tetto non deve essere bloccato da un tetto arrivato dopo.
   if (minDamage !== r.min_damage || perK !== r.per_k) {
-    const fuori = oltreITetti(r.country_id, minDamage, perK);
+    const fuori = oltreITetti(r.country_id, r.battle_id, minDamage, perK);
     if (fuori) return fuori;
   }
   const agg = aggiornaRichiesta(r.id, {
@@ -295,14 +301,20 @@ async function azioneModifica(identita, id, b) {
 // Ogni chiamata calcola la posizione sull'INTERA coda della nazione, non sulle
 // sole righe che quella persona vede: un comandante vede solo le sue richieste,
 // ma "sono 3° su 12" ha senso solo contro tutte le altre.
+// ⚠️ Dal 2026-11-18 la coda e' PER BATTAGLIA, non per nazione: ogni battaglia ha la sua
+// board, e chi aspetta un contratto sulla battaglia X non e' "dietro" a chi lo aspetta
+// sulla Y (aste diverse, decisioni diverse). La chiave e' `nazione|battaglia`.
+const chiaveCoda = (r) => `${r.country_id}|${r.battle_id}`;
+
 function posizioniInCoda(righe) {
-  const paesi = [...new Set(righe.filter((r) => r.status === 'pending' && !r.esito).map((r) => r.country_id))];
+  const chiavi = new Map();
+  for (const r of righe) if (r.status === 'pending' && !r.esito) chiavi.set(chiaveCoda(r), [r.country_id, r.battle_id]);
   const pos = new Map();
   const tot = {};
-  for (const cid of paesi) {
-    const att = getDb().prepare("SELECT id FROM request WHERE country_id = ? AND status = 'pending' AND esito IS NULL ORDER BY created_at, id").all(cid);
-    att.forEach((x, k) => pos.set(x.id, k + 1));
-    tot[cid] = att.length;
+  for (const [k, [cid, bid]] of chiavi) {
+    const att = getDb().prepare("SELECT id FROM request WHERE country_id = ? AND battle_id = ? AND status = 'pending' AND esito IS NULL ORDER BY created_at, id").all(cid, bid);
+    att.forEach((x, i) => pos.set(x.id, i + 1));
+    tot[k] = att.length;
   }
   return { pos, tot };
 }
@@ -340,7 +352,7 @@ function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSott
           ...pubblica(conNomi(r)),
           // Solo per le in attesa: posizione e quante sono nella coda della nazione.
           posizione: pos.get(r.id) || null,
-          inCoda: pos.has(r.id) ? tot[r.country_id] : null,
+          inCoda: pos.has(r.id) ? tot[chiaveCoda(r)] : null,
         })),
         capacita: cap,
         lente: req.lente,
@@ -442,6 +454,6 @@ function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSott
 }
 
 module.exports = {
-  buildRequestsRouter, pubblica, conNomi,
+  buildRequestsRouter, pubblica, conNomi, posizioniInCoda, chiaveCoda,
   azioneCrea, azioneDecidi, azioneAperta, azioneRitira, azioneModifica,
 };

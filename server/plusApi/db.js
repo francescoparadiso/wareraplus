@@ -499,6 +499,29 @@ CREATE TABLE IF NOT EXISTS bot_channel (
   PRIMARY KEY (scope_type, scope_id)
 );
 
+-- ── Le BOARD (sportelli) di una nazione ─────────────────────────────────
+-- Dal 2026-11-18 una nazione puo' avere piu' board, ognuna un'ISTANZA a se': una
+-- per battaglia (battle_id), ciascuna col suo canale, il suo aperto/chiuso, i suoi
+-- tetti e la sua CODA. battle_id = '' e' la board "generale": prende le richieste
+-- delle battaglie che non hanno una board propria (e' lo sportello unico di prima).
+-- Una richiesta va alla board della sua battaglia; se non c'e', a quella generale;
+-- se la nazione ha board ma nessuna per quella battaglia, e' rifiutata.
+-- Per le UNITA' resta bot_channel (un canale per unita').
+CREATE TABLE IF NOT EXISTS bot_board (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  country_id   TEXT    NOT NULL,
+  battle_id    TEXT    NOT NULL DEFAULT '',
+  battle_label TEXT,
+  channel_id   TEXT    NOT NULL,
+  guild_id     TEXT,
+  aperto       INTEGER NOT NULL DEFAULT 1,
+  max_damage   INTEGER,
+  max_rate     REAL,
+  created_by   INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_at   INTEGER NOT NULL,
+  UNIQUE (country_id, battle_id)
+);
+
 -- Gli avvisi in attesa che il bot li ritiri. Stesso testo che andrebbe sul
 -- webhook, piu' il tipo e la richiesta, cosi' il bot sa che carta aggiornare.
 -- Si pota da sola (notify.js): un bot spento per giorni non deve far
@@ -591,6 +614,15 @@ function migrate() {
       console.log(`[plusApi] migrazione: aggiunta bot_channel.${nome}`);
     }
   }
+
+  // 2026-11-18 — lo sportello della nazione diventa una BOARD per battaglia
+  // (bot_board). Le righe di nazione di bot_channel (canale, aperto, tetti) diventano la
+  // board GENERALE: niente cambia finche' la nazione non ne apre altre. Si copia una
+  // volta; da qui in poi bot_channel vale solo per le unita'.
+  db.exec(`INSERT OR IGNORE INTO bot_board (country_id, battle_id, channel_id, guild_id, aperto, max_damage, max_rate, created_by, created_at)
+           SELECT scope_id, '', channel_id, guild_id, aperto, max_damage, max_rate, created_by, created_at
+           FROM bot_channel WHERE scope_type = 'country'`);
+  db.exec("DELETE FROM bot_channel WHERE scope_type = 'country'");   // altrimenti un riavvio le rimetterebbe
 
   // 2026-09-03 - il NOME di chi si ammette o si esclude, com'era quando lo
   // si e' aggiunto. Senza, riaperta la lista il giorno dopo, una voce e'
@@ -1001,23 +1033,64 @@ function setBotAperto(scopeType, scopeId, aperto) {
     .run(aperto ? 1 : 0, scopeType, scopeId);
 }
 
-/** Lo sportello della nazione e' aperto? Senza un canale del bot non c'e'
- *  sportello da chiudere: vale "aperto" (il sito funziona come prima). */
-function sportelloAperto(countryId) {
-  const r = getBotChannel('country', countryId);
+// ── Le board della nazione ──────────────────────────────────────────────
+/** La board esatta (battleId '' = generale), o null. */
+function getBoard(countryId, battleId = '') {
+  return getDb().prepare('SELECT * FROM bot_board WHERE country_id = ? AND battle_id = ?')
+    .get(countryId, battleId || '') || null;
+}
+
+function elencoBoard(countryId) {
+  return getDb().prepare('SELECT * FROM bot_board WHERE country_id = ? ORDER BY (battle_id = ?) DESC, created_at').all(countryId, '');
+}
+
+/** La board che riceve una richiesta di QUESTA battaglia: la sua, se c'e', altrimenti
+ *  la generale, altrimenti null (la nazione non ha board, o ne ha ma non per questa). */
+function boardPerRichiesta(countryId, battleId) {
+  return getBoard(countryId, battleId) || getBoard(countryId, '');
+}
+
+/** Gli avvisi che non riguardano una battaglia (allarmi dai confini...): la board
+ *  generale, o la piu' vecchia se la nazione ne ha solo di per-battaglia. */
+function boardPerAvviso(countryId) {
+  return getBoard(countryId, '') || elencoBoard(countryId)[0] || null;
+}
+
+function setBoard({ countryId, battleId = '', battleLabel = null, channelId, guildId, createdBy }) {
+  getDb().prepare(`
+    INSERT INTO bot_board (country_id, battle_id, battle_label, channel_id, guild_id, created_by, created_at)
+    VALUES (?,?,?,?,?,?,?)
+    ON CONFLICT(country_id, battle_id) DO UPDATE SET
+      channel_id = excluded.channel_id, guild_id = excluded.guild_id,
+      battle_label = COALESCE(excluded.battle_label, bot_board.battle_label),
+      created_by = excluded.created_by
+  `).run(countryId, battleId || '', battleLabel, String(channelId), guildId ? String(guildId) : null, createdBy || null, Date.now());
+  return getBoard(countryId, battleId);
+}
+
+function setBoardAperto(boardId, aperto) {
+  getDb().prepare('UPDATE bot_board SET aperto = ? WHERE id = ?').run(aperto ? 1 : 0, boardId);
+}
+
+function setBoardLimiti(boardId, { maxDamage, maxRate }) {
+  getDb().prepare('UPDATE bot_board SET max_damage = ?, max_rate = ? WHERE id = ?').run(maxDamage ?? null, maxRate ?? null, boardId);
+}
+
+function deleteBoard(boardId) {
+  getDb().prepare('DELETE FROM bot_board WHERE id = ?').run(boardId);
+}
+
+/** La board della richiesta e' aperta? Senza board (nazione che non usa il bot) vale
+ *  "aperto": il sito funziona come prima. */
+function sportelloAperto(countryId, battleId = '') {
+  const r = boardPerRichiesta(countryId, battleId);
   return !r || r.aperto !== 0;
 }
 
-/** I tetti dello sportello di una nazione ({ maxDamage, maxRate }, null = libero).
- *  Senza un canale del bot non c'e' sportello e quindi nessun tetto. */
-function limitiSportello(countryId) {
-  const r = getBotChannel('country', countryId);
+/** I tetti della board di quella battaglia ({ maxDamage, maxRate }, null = libero). */
+function limitiSportello(countryId, battleId = '') {
+  const r = boardPerRichiesta(countryId, battleId);
   return { maxDamage: r?.max_damage ?? null, maxRate: r?.max_rate ?? null };
-}
-
-function setLimitiSportello(countryId, { maxDamage, maxRate }) {
-  getDb().prepare('UPDATE bot_channel SET max_damage = ?, max_rate = ? WHERE scope_type = ? AND scope_id = ?')
-    .run(maxDamage ?? null, maxRate ?? null, 'country', countryId);
 }
 
 function deleteBotChannel(scopeType, scopeId) {
@@ -1734,6 +1807,7 @@ function dbStatus() {
     inAttesa: one("SELECT COUNT(*) AS n FROM request WHERE status = 'pending'"),
     webhook: one('SELECT COUNT(*) AS n FROM webhook'),
     canaliBot: one('SELECT COUNT(*) AS n FROM bot_channel'),
+    boardBot: one('SELECT COUNT(*) AS n FROM bot_board'),
     eventiBot: one('SELECT COUNT(*) AS n FROM bot_event'),
     sessioniAttive: one(`SELECT COUNT(*) AS n FROM session WHERE expires_at > ${Date.now()}`),
     // Niente COUNT sull'intera wealth_snapshot: 6-8 s di processo fermo a
@@ -1764,7 +1838,7 @@ module.exports = {
   initDb, getDb, DATA_DIR,
   upsertDiscordAccount, getAccountById, deleteAccount, listAccounts,
   setWarIdentity, findAccountByWarUserId, findAccountByDiscordId,
-  getBotChannel, setBotChannel, deleteBotChannel, setBotAperto, sportelloAperto, limitiSportello, setLimitiSportello, registraEventoBot, eventiBotDopo, ultimoEventoBotId,
+  getBotChannel, setBotChannel, deleteBotChannel, setBotAperto, sportelloAperto, limitiSportello, getBoard, elencoBoard, boardPerRichiesta, boardPerAvviso, setBoard, setBoardAperto, setBoardLimiti, deleteBoard, registraEventoBot, eventiBotDopo, ultimoEventoBotId,
   getClaim, setClaim, deleteClaim, purgeExpiredClaims,
   syncAdminsFromEnv, setAdmin,
   setRoleOverride, removeRoleOverride, listRoleOverrides,

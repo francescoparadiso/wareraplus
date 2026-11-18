@@ -701,6 +701,10 @@ redeploy di **warera-plus-api** con `BOT_TOKEN` in `ecosystem.config.js` (serve
 `pm2 restart ecosystem.config.js --update-env`, un restart semplice non lo
 legge): senza, `/bot/*` risponde 503 e restano i webhook. Tre cose da sapere:
 
+- **una board per battaglia** (`bot_board`, dal 2026-11-18): ogni battaglia ha il suo canale, la sua
+  coda, i suoi tetti e il suo aperto/chiuso; la coda è PER BATTAGLIA ovunque (sito compreso).
+  Una richiesta va alla board della sua battaglia, o alla generale (`battle_id` ''); le unità
+  hanno ancora un solo canale (`bot_channel`). Dettagli nel README del bot;
 - si taggano SOLO i ministri che hanno collegato Discord e personaggio al tool
   (`approvaPer`: diritto `manageMercenaryContracts`, presidente e vice, più
   deroghe); gli altri compaiono per nome, senza tag. Non aggiungere un elenco di

@@ -297,9 +297,13 @@ come prima, con i webhook.
   risponde chi avvisare (`tag` e `destinatari` coi nomi) e i dati per il DM; le
   aste vinte si leggono a cursore, tutte
 - `POST /bot/canale` — il canale degli avvisi di nazione (governo) o unità
-  (comandante); l'ambito lo decide il server da chi chiama
+  (comandante); l'ambito lo decide il server da chi chiama.
+  Per la nazione c'è `battleId` (vuoto = board generale): una board per battaglia,
+  verificata in corso e con la nazione fra i contendenti. `GET /bot/battaglie-nazione`
+  per l'autocompletamento. `scrivania`, `limiti`, `scrivania/stato` e `contratti-attivi`
+  prendono `board` / `battleId` (assente in `scrivania` = tutte le richieste della nazione)
 
-Due tabelle nuove dalla `CREATE TABLE IF NOT EXISTS` (`bot_channel`,
+Tre tabelle dalla `CREATE TABLE IF NOT EXISTS` (`bot_channel` per le unità, `bot_board` per le board delle nazioni — una per battaglia, vedi il README del bot —,
 `bot_event`): nessuna migrazione. Gli eventi si potano da soli a 7 giorni.
 `avvisa()` manda un avviso al bot **solo se** il bot ha chiesto negli ultimi 90
 secondi **e** l'ambito ha un canale del bot; altrimenti va al webhook come

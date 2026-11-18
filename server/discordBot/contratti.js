@@ -87,6 +87,8 @@ const ERRORI = {
   contratto_non_attivo: 'That contract is not active any more (its round ended, or the battle is over).',
   nessun_comandante_collegato: 'Nobody from that unit is linked to WarEra+, so I have nobody to ping. Ask them to type `/register`.',
   burst_non_valido: 'The burst damage must be a number of at least 1,000 (like `500k`), or leave it empty.',
+  nessuna_board_per_battaglia: 'This nation has no desk for that battle. Ask the government to open one with `/contract-desk post battle:…`.',
+  battaglia_non_della_nazione: 'That battle does not involve your nation, so it cannot have a desk here.',
   tetto_non_valido: 'The limits must be positive numbers: damage of at least 1,000 and a bounty between 0.001 and 5 per 1,000 (or leave a field empty for no limit).',
   parametri_non_validi: 'Some values are not valid. Minimum damage must be at least 1,000 and the bounty between 0.001 and 5 per 1,000 damage.',
   gioco_non_raggiungibile: 'The game did not answer. Try again in a moment.',
@@ -266,6 +268,17 @@ function rigaRichiesta(r, conPaese) {
   return `${ICONE[st.chiave] || '•'} **${r.muNome || '?'}** — ${corto(r.minDamage)} dmg${burst} · ${num(r.budget)}${dove}${quando} · _${st.testo}_`;
 }
 
+/** La posizione in coda di ogni richiesta IN ATTESA, contata dentro la sua battaglia
+ *  (la coda e' per battaglia): Map id → n. `lista` e' gia' in ordine di arrivo. */
+function posizioniPerBattaglia(lista) {
+  const per = new Map(); const out = new Map();
+  for (const r of lista) {
+    if (r.status !== 'pending' || r.esito) continue;
+    const n = (per.get(r.battleId) || 0) + 1; per.set(r.battleId, n); out.set(r.id, n);
+  }
+  return out;
+}
+
 /** Raggruppa per battaglia, la più recente per prima. */
 function perBattaglia(richieste) {
   const m = new Map();
@@ -323,6 +336,7 @@ function renderSportello(d) {
   const nazione = d.scope === 'country';
   const righe = [];
   if (nazione && d.governo?.length) righe.push(d.governo.map(mentionOMome).join(' · '));
+  if (nazione && d.battleId) righe.push(`This desk is only for [this battle](https://app.warera.io/battle/${d.battleId}) — its queue is its own.`);
   if (!d.aperto) righe.push('**this desk is closed** — a government member can open it below');
   const lim = nazione ? testoLimiti(d.limiti) : null;
   if (lim) righe.push(`📏 Limits per request: ${lim}`);
@@ -336,7 +350,7 @@ function renderSportello(d) {
   const nome = d.nome || (nazione ? 'Your nation' : 'Your unit');
   const embed = new EmbedBuilder()
     .setColor(d.aperto ? 0x5865f2 : 0x95a5a6)
-    .setTitle(`${nome} — contract desk`)
+    .setTitle(d.battleId ? `${nome} — ${d.battleLabel || 'battle'} desk` : `${nome} — contract desk`)
     .setDescription(`${intestazione ? `${intestazione}\n\n` : ''}${corpo}`)
     .setFooter({ text: 'WarEra+ contract desk · a request is not a promise until the auction is won' })
     .setTimestamp(Date.now());
@@ -455,8 +469,10 @@ function renderCoda(d, opz = {}) {
   const ordina = (a, b) => (a.createdAt || 0) - (b.createdAt || 0);        // la piu' vecchia per prima
   // La posizione in coda c'e' se la rotta /coda l'ha calcolata; altrimenti
   // (i dati dello sportello non la portano) e' l'ordine di arrivo qui.
-  const inAttesa = vive.filter((r) => r.status === 'pending').sort(ordina)
-    .map((r, k) => ({ ...r, posizione: r.posizione ?? k + 1 }));
+  // ⚠️ La coda e' PER BATTAGLIA: la posizione si conta dentro la battaglia della richiesta.
+  const pendenti = vive.filter((r) => r.status === 'pending').sort(ordina);
+  const posBat = posizioniPerBattaglia(pendenti);
+  const inAttesa = pendenti.map((r) => ({ ...r, posizione: r.posizione ?? posBat.get(r.id) }));
   const gruppi = [
     ['Waiting for a decision', inAttesa],
     ['Approved — the auction is not open yet', vive.filter((r) => r.status === 'approved' && !r.openedAt).sort(ordina)],
@@ -481,7 +497,20 @@ function renderCoda(d, opz = {}) {
     }
   }
 
-  let corpo = gruppi.map(([titolo, righe]) => `**${titolo}**\n${righe.map((r) => rigaCoda(r, nazione, opz.evidenzia)).join('\n')}`).join('\n\n');
+  let corpo;
+  if (nazione && new Set(vive.map((r) => r.battleId)).size > 1) {
+    // Piu' battaglie nella stessa vista (/contract-queue nation): un blocco per battaglia,
+    // perche' ognuna ha la sua coda e i numeri di una non c'entrano con quelli dell'altra.
+    const ordineStato = (r) => (r.status === 'pending' ? 0 : (r.openedAt ? 2 : 1));
+    corpo = perBattaglia(vive).map((g) => {
+      const righe = [...inAttesa.filter((r) => r.battleId === g.battleId),
+        ...vive.filter((r) => r.battleId === g.battleId && r.status !== 'pending')]
+        .sort((a, b) => ordineStato(a) - ordineStato(b) || ordina(a, b));
+      return `**${g.label}** · [battle](https://app.warera.io/battle/${g.battleId})\n${righe.map((r) => rigaCoda(r, nazione, opz.evidenzia)).join('\n')}`;
+    }).join('\n\n');
+  } else {
+    corpo = gruppi.map(([titolo, righe]) => `**${titolo}**\n${righe.map((r) => rigaCoda(r, nazione, opz.evidenzia)).join('\n')}`).join('\n\n');
+  }
   if (!corpo) corpo = nazione ? '_The queue is empty._' : '_Your unit has no open requests._';
   let testo = `${testa.join('\n')}${testa.length ? '\n\n' : ''}${corpo}`;
   const max = opz.max || 4000;
@@ -517,14 +546,14 @@ function componentiCoda(d) {
       .filter((r) => vivaR(r) && !(r.status === 'approved' && r.openedAt))
       .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)).slice(0, 25);
     if (decidibili.length) {
-      let inFila = 0;                       // posizione fra le SOLE in attesa (l'ordine e' per arrivo)
+      const posBat = posizioniPerBattaglia(decidibili);   // posizione dentro la propria battaglia
       righe.push(new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId(`wp:decideq:country:${d.scopeId}`)
           .setPlaceholder('Decide a request… (oldest first)')
           .addOptions(decidibili.map((r) => ({
             label: `${r.muNome || '?'} — ${r.battleLabel || r.battleId}`.slice(0, 100),
             description: descrizioneVoce(r, r.status === 'pending'
-              ? [`⏳ #${++inFila} in line`, `waiting ${durata(r.createdAt)}`, dannoConBurst(r), `budget ${num(r.budget)}`]
+              ? [`⏳ #${posBat.get(r.id)} in line`, `waiting ${durata(r.createdAt)}`, dannoConBurst(r), `budget ${num(r.budget)}`]
               : ['✅ approved — open the auction', dannoConBurst(r)]),
             value: String(r.id),
           }))),
@@ -572,11 +601,15 @@ function definizioniComandi() {
     // Niente permessi Discord richiesti: chi puo' aprire lo sportello lo
     // decide il SERVER (governo della nazione / comandante dell'unita'), non
     // chi ha "Gestisci canali" in questo server — un ministro puo' non averlo.
-    .addSubcommand((s) => s.setName('post').setDescription('Post the desk here (or in another channel)')
+    // Una board e' un'ISTANZA: con `battle` e' quella di UNA battaglia (coda, tetti e canale
+    // suoi); senza, e' la board generale, che prende le battaglie senza una board propria.
+    .addSubcommand((s) => s.setName('post').setDescription('Post a desk here (or in another channel) — one per battle if you like')
       .addStringOption(ambito)
+      .addStringOption((o) => o.setName('battle').setDescription('Nation desks: a desk only for this battle (its own queue) — empty = the general desk').setAutocomplete(true))
       .addChannelOption((o) => o.setName('channel').setDescription('Defaults to this channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
-    .addSubcommand((s) => s.setName('remove').setDescription('Stop posting alerts and remove the desk')
-      .addStringOption(ambito))];
+    .addSubcommand((s) => s.setName('remove').setDescription('Stop posting alerts and remove a desk')
+      .addStringOption(ambito)
+      .addStringOption((o) => o.setName('battle').setDescription('Nation desks: remove the desk of this battle — empty = the general desk').setAutocomplete(true)))];
 }
 
 // ---------------------------------------------------------------------------
@@ -640,22 +673,29 @@ function attach(client, opz = {}) {
   // ═════════════════════════════════════════════════════════════════════
   // SPORTELLI
   // ═════════════════════════════════════════════════════════════════════
-  const chiave = (scope, scopeId) => `${scope}:${scopeId}`;
+  // Una nazione ha UNA board per battaglia: la chiave e' `country:<id>` per la generale
+  // (com'era prima) e `country:<id>:<battaglia>` per quelle di una battaglia.
+  const chiave = (scope, scopeId, battleId = '') => (scope === 'country' && battleId ? `country:${scopeId}:${battleId}` : `${scope}:${scopeId}`);
   const sportelloDiMessaggio = (messageId) => Object.entries(stato.pannelli)
     .map(([k, v]) => ({ key: k, ...v }))
     .find((p) => p.messaggioId === messageId) || null;
 
-  async function datiSportello(scope, scopeId) {
-    const r = await api('GET', `/scrivania?scope=${scope}&scopeId=${encodeURIComponent(scopeId)}`);
+  /** `board`: undefined = tutte le richieste della nazione; '' = la board generale;
+   *  un id = la board di quella battaglia. */
+  async function datiSportello(scope, scopeId, board) {
+    const b = scope === 'country' && board !== undefined ? `&board=${encodeURIComponent(board)}` : '';
+    const r = await api('GET', `/scrivania?scope=${scope}&scopeId=${encodeURIComponent(scopeId)}${b}`);
     return r.ok ? r.json : null;
   }
+  /** I dati della board a cui appartiene un pannello (per l'unita': i suoi). */
+  const datiDiPannello = (p) => datiSportello(p.scope, p.scopeId, p.scope === 'country' ? (p.battleId || '') : undefined);
 
   /** Riscrive lo sportello col dato di adesso. Un messaggio sparito
    *  (cancellato a mano) toglie lo sportello dallo stato: non e' un guasto. */
   async function aggiornaSportello(key) {
     const p = stato.pannelli[key];
     if (!p) return;
-    const d = await datiSportello(p.scope, p.scopeId);
+    const d = await datiDiPannello(p);
     if (!d) return;
     try {
       const c = await canaleDi(p.canaleId);
@@ -683,7 +723,8 @@ function attach(client, opz = {}) {
    *  e della sua unita'. */
   function toccaSportelli(r) {
     if (!r) return;
-    aggiornaSportelloDopo(chiave('country', r.countryId));
+    aggiornaSportelloDopo(chiave('country', r.countryId, r.battleId));   // la board della sua battaglia
+    aggiornaSportelloDopo(chiave('country', r.countryId));               // e la generale
     aggiornaSportelloDopo(chiave('mu', r.muId));
     aggiornaCarteDopo(r.countryId);
   }
@@ -717,8 +758,7 @@ function attach(client, opz = {}) {
   /** Riscrive la coda sull'ultimo promemoria del canale dello sportello della
    *  nazione: una coda ferma al momento in cui e' stato mandato tornerebbe a
    *  dare numeri vecchi. */
-  async function aggiornaCodaDelRicordo(countryId, d) {
-    const sp = stato.pannelli[chiave('country', countryId)];
+  async function aggiornaCodaDelRicordo(sp, d) {
     const ric = sp && stato.ricordi[sp.canaleId];
     if (!ric) return;
     try {
@@ -731,11 +771,13 @@ function attach(client, opz = {}) {
   }
 
   async function aggiornaListeCarte(countryId) {
-    const d = await datiSportello('country', countryId);
+    const d = await datiSportello('country', countryId);                    // TUTTE le richieste della nazione
     if (!d) return;
-    aggiornaCodaDelRicordo(countryId, d);
-    const dati = { vista: 'nation', nome: d.nome, richieste: d.richieste, decisione: {} };
-    const attese = d.richieste.filter((x) => vivaR(x) && x.status === 'pending').length;
+    // Il promemoria di ogni canale mostra la coda della SUA board.
+    for (const sp of Object.values(stato.pannelli).filter((x) => x.scope === 'country' && x.scopeId === countryId)) {
+      const db = await datiDiPannello(sp);
+      if (db) aggiornaCodaDelRicordo(sp, db);
+    }
     for (const r of d.richieste) {
       if (!(vivaR(r) && r.status === 'pending')) continue;
       const k = stato.carte[r.id];
@@ -743,6 +785,10 @@ function attach(client, opz = {}) {
       try {
         const c = await canaleDi(k.canaleId);
         const carta = cartaPayload(r, r.nomePaese);
+        // La coda sotto la carta e' quella della SUA battaglia: le altre battaglie hanno una coda a parte.
+        const dBattaglia = d.richieste.filter((x) => x.battleId === r.battleId);
+        const dati = { vista: 'nation', nome: d.nome, richieste: dBattaglia, decisione: {} };
+        const attese = dBattaglia.filter((x) => vivaR(x) && x.status === 'pending').length;
         const lista = renderCoda(dati, { evidenzia: r.id, max: 3300, titolo: `Queue right now — ${attese} waiting` });
         await c.messages.edit(k.messaggioId, { ...carta, embeds: [...carta.embeds, lista] });
       } catch (err) {
@@ -777,9 +823,10 @@ function attach(client, opz = {}) {
     try {
       const d = await datiSportello('country', r.countryId);
       if (!d) return null;
-      const attese = d.richieste.filter((x) => vivaR(x) && x.status === 'pending').length;
+      const stessa = d.richieste.filter((x) => x.battleId === r.battleId);       // la coda di QUESTA battaglia
+      const attese = stessa.filter((x) => vivaR(x) && x.status === 'pending').length;
       return renderCoda(
-        { vista: 'nation', nome: d.nome, richieste: d.richieste, decisione: {} },
+        { vista: 'nation', nome: d.nome, richieste: stessa, decisione: {} },
         { evidenzia: r.id, max: 3300, titolo: `Queue right now — ${attese} waiting` },
       );
     } catch { return null; }
@@ -938,7 +985,10 @@ function attach(client, opz = {}) {
   // ── Request a contract ────────────────────────────────────────────────
   async function onRichiedi(i) {
     await i.deferReply({ flags: EPHEMERAL });
-    const r = await api('GET', `/battaglie?discordId=${i.user.id}`);
+    // Dalla board di UNA battaglia si chiede per quella battaglia: niente da scegliere fra le altre.
+    const dalla = sportelloDiMessaggio(i.message?.id);
+    const solo = dalla?.scope === 'country' && dalla.battleId ? `&id=${dalla.battleId}` : '';
+    const r = await api('GET', `/battaglie?discordId=${i.user.id}${solo}`);
     if (!r.ok) return i.editReply(messaggioErrore(r));
     const opzioni = [];
     for (const b of r.json.battaglie || []) {
@@ -1003,6 +1053,11 @@ function attach(client, opz = {}) {
   async function onAutocompleta(i) {
     const f = i.options.getFocused(true);
     try {
+      if (f.name === 'battle' && i.commandName === 'contract-desk') {
+        const r = await conLimite(api('GET', `/battaglie-nazione?discordId=${i.user.id}&q=${encodeURIComponent(f.value || '')}`), 2500);
+        const lista = r.ok ? r.json.battaglie || [] : [];
+        return await i.respond(lista.slice(0, 25).map((b) => ({ name: `${b.conBoard ? '✅ ' : ''}${b.etichetta}`.slice(0, 100), value: b.id })));
+      }
       if (f.name === 'battle') {
         const r = await conLimite(api('GET', `/battaglie?discordId=${i.user.id}&q=${encodeURIComponent(f.value || '')}`), 2500);
         const lista = r.ok ? r.json.battaglie || [] : [];
@@ -1113,7 +1168,7 @@ function attach(client, opz = {}) {
 
   async function onTutto(i, p) {
     await i.deferReply({ flags: EPHEMERAL });
-    const d = await datiSportello(p.scope, p.scopeId);
+    const d = await datiDiPannello(p);
     if (!d) return i.editReply(ERRORI.gioco_non_raggiungibile);
     const gruppi = perBattaglia(d.richieste).map((g) => testoGruppo(g, d.scope === 'mu'));
     const testo = gruppi.join('\n\n') || '_nobody waiting_';
@@ -1123,21 +1178,22 @@ function attach(client, opz = {}) {
   // ── Pending (il governo decide da qui) ────────────────────────────────
   async function onInAttesa(i, p) {
     await i.deferReply({ flags: EPHEMERAL });
-    const d = await datiSportello(p.scope, p.scopeId);
+    const d = await datiDiPannello(p);
     if (!d) return i.editReply(ERRORI.gioco_non_raggiungibile);
     // La piu' vecchia per prima: e' quella che aspetta da piu'.
     const lista = d.richieste.filter((r) => r.status === 'pending' && !r.esito)
       .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)).slice(0, 25);
+    const posBat = posizioniPerBattaglia(lista);
     if (!lista.length) return i.editReply('No request is waiting for a decision.');
     return i.editReply({
       content: 'Pick a request to decide:',
       components: [new ActionRowBuilder().addComponents(
         // Il menu e' in un messaggio effimero: lo sportello d'origine non si
         // puo' dedurre dal messaggio, quindi viaggia nell'id.
-        new StringSelectMenuBuilder().setCustomId(`wp:decide:${p.scope}:${p.scopeId}`).setPlaceholder('Pick one…').addOptions(lista.map((r, k) => ({
+        new StringSelectMenuBuilder().setCustomId(`wp:decide:${p.scope}:${p.scopeId}`).setPlaceholder('Pick one…').addOptions(lista.map((r) => ({
           label: `${r.muNome || '?'} — ${r.battleLabel || r.battleId}`.slice(0, 100),
-          // `lista` e' in ordine di arrivo e contiene solo le in attesa: la posizione e' k + 1.
-          description: descrizioneVoce(r, [`⏳ #${k + 1} in line`, `waiting ${durata(r.createdAt)}`, dannoConBurst(r), `budget ${num(r.budget)}`]),
+          // La posizione e' dentro la battaglia della richiesta (la coda e' per battaglia).
+          description: descrizioneVoce(r, [`⏳ #${posBat.get(r.id)} in line`, `waiting ${durata(r.createdAt)}`, dannoConBurst(r), `budget ${num(r.budget)}`]),
           value: String(r.id),
         }))))],
     });
@@ -1169,7 +1225,7 @@ function attach(client, opz = {}) {
   // I tetti si leggono da una rotta leggera (solo database): un modulo va aperto
   // entro 3 secondi dal clic e `/scrivania` interroga anche il gioco.
   async function moduloLimiti(i, p, apri) {
-    const r = await api('GET', `/limiti?scopeId=${encodeURIComponent(p.scopeId)}`);
+    const r = await api('GET', `/limiti?scopeId=${encodeURIComponent(p.scopeId)}&board=${encodeURIComponent(p.battleId || '')}`);
     if (!r.ok) return effimero(i, messaggioErrore(r));
     const l = r.json.limiti || {};
     return i.showModal(new ModalBuilder().setCustomId(`wp:limm:${apri ? 'open' : 'set'}:${i.message.id}`)
@@ -1197,7 +1253,7 @@ function attach(client, opz = {}) {
     }
     await i.deferReply({ flags: EPHEMERAL });
     const r = await api('POST', '/scrivania/stato', {
-      discordId: i.user.id, maxDamage, maxRate, ...(modo === 'open' ? { aperto: true } : {}),
+      discordId: i.user.id, battleId: p.battleId || '', maxDamage, maxRate, ...(modo === 'open' ? { aperto: true } : {}),
     });
     if (!r.ok) return i.editReply(messaggioErrore(r));
     await aggiornaSportello(p.key);
@@ -1211,7 +1267,7 @@ Only **new** requests and edits are checked; what is already in the queue stays.
     // bottone dice "Open desk": si va dall'etichetta, cosi' aprono dal modulo.
     if (/^open/i.test(i.component?.label || '')) return moduloLimiti(i, p, true);
     await i.deferUpdate();
-    const r = await api('POST', '/scrivania/stato', { discordId: i.user.id, aperto: false });
+    const r = await api('POST', '/scrivania/stato', { discordId: i.user.id, battleId: p.battleId || '', aperto: false });
     if (!r.ok) return i.followUp({ content: messaggioErrore(r), flags: EPHEMERAL });
     await aggiornaSportello(p.key);
     return undefined;
@@ -1229,7 +1285,7 @@ Only **new** requests and edits are checked; what is already in the queue stays.
   // Chi ha piu' contratti riceve UN messaggio con l'elenco, non uno per contratto.
   async function onChiediBurst(i, p) {
     await i.deferReply({ flags: EPHEMERAL });
-    const r = await api('GET', `/contratti-attivi?scopeId=${encodeURIComponent(p.scopeId)}`);
+    const r = await api('GET', `/contratti-attivi?scopeId=${encodeURIComponent(p.scopeId)}&board=${encodeURIComponent(p.battleId || '')}`);
     if (!r.ok) return i.editReply(messaggioErrore(r));
     const tutti = r.json.contratti || [];
     if (!tutti.length) {
@@ -1239,7 +1295,7 @@ Only **new** requests and edits are checked; what is already in the queue stays.
     return i.editReply({
       content: 'Which contracts do you want a **burst** from? I will **DM** the commanders of each unit. _(pick one or more, or all)_',
       components: [new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId(`wp:burstpick:${p.scopeId}`).setPlaceholder('Pick the contracts…')
+        new StringSelectMenuBuilder().setCustomId(`wp:burstpick:${p.scopeId}:${p.battleId || ''}`).setPlaceholder('Pick the contracts…')
           .setMinValues(1).setMaxValues(lista.length + 1)
           .addOptions([
             { label: `⚡ All active contracts (${tutti.length})`, description: 'Ask every unit with a running contract', value: 'all' },
@@ -1264,12 +1320,12 @@ Only **new** requests and edits are checked; what is already in the queue stays.
   }
 
   async function onBurstScelta(i) {                       // menu `wp:burstpick:<paese>`
-    const scopeId = i.customId.split(':')[2];
+    const [, , scopeId, battleBoard = ''] = i.customId.split(':');
     await i.deferUpdate();
 
     // L'elenco di adesso (il menu puo' essere vecchio): serve per "tutti" e per
     // dare un NOME a ogni contratto nel resoconto, anche a quelli che non partono.
-    const lr = await api('GET', `/contratti-attivi?scopeId=${encodeURIComponent(scopeId)}`);
+    const lr = await api('GET', `/contratti-attivi?scopeId=${encodeURIComponent(scopeId)}&board=${encodeURIComponent(battleBoard)}`);
     if (!lr.ok) return i.editReply({ content: messaggioErrore(lr), components: [] });
     const lista = lr.json.contratti || [];
     const nomeDi = new Map(lista.map((c) => [c.requestId, c.muNome || 'a unit']));
@@ -1359,8 +1415,6 @@ Only **new** requests and edits are checked; what is already in the queue stays.
    *  bot) e lo stato punta alle nuove. Le carte di richieste chiuse restano dove
    *  sono: sono storia. Torna quante ne ha spostate. */
   async function spostaCarte(d, canale) {
-    const dati = { vista: 'nation', nome: d.nome, richieste: d.richieste, decisione: {} };
-    const attese = d.richieste.filter((x) => vivaR(x) && x.status === 'pending').length;
     const daSpostare = d.richieste
       .filter((r) => vivaR(r) && stato.carte[r.id] && stato.carte[r.id].canaleId !== canale.id)
       .sort((a, b) => (a.createdAt - b.createdAt) || (a.id - b.id))
@@ -1369,8 +1423,10 @@ Only **new** requests and edits are checked; what is already in the queue stays.
     for (const r of daSpostare) {
       const vecchia = stato.carte[r.id];
       const carta = cartaPayload(r, r.nomePaese);
+      const stessa = d.richieste.filter((x) => x.battleId === r.battleId);       // la coda e' della sua battaglia
+      const attese = stessa.filter((x) => vivaR(x) && x.status === 'pending').length;
       const lista = r.status === 'pending'
-        ? renderCoda(dati, { evidenzia: r.id, max: 3300, titolo: `Queue right now — ${attese} waiting` }) : null;
+        ? renderCoda({ vista: 'nation', nome: d.nome, richieste: stessa, decisione: {} }, { evidenzia: r.id, max: 3300, titolo: `Queue right now — ${attese} waiting` }) : null;
       const nuova = await canale.send({ ...carta, embeds: lista ? [...carta.embeds, lista] : carta.embeds, allowedMentions: SENZA_MENZIONI });
       stato.carte[r.id] = { canaleId: canale.id, messaggioId: nuova.id, at: vecchia.at || Date.now() };
       try { const c = await canaleDi(vecchia.canaleId); await c.messages.delete(vecchia.messaggioId); } catch { /* gia' sparita */ }
@@ -1382,21 +1438,30 @@ Only **new** requests and edits are checked; what is already in the queue stays.
 
   async function onComandoSportello(i) {
     const scope = i.options.getString('scope', true);
+    // Una board per battaglia (solo per la nazione): `battle` vuoto = la board generale.
+    const battleOpt = scope === 'country' ? (i.options.getString('battle') || '') : '';
+    if (battleOpt && !/^[a-f0-9]{24}$/.test(battleOpt)) {
+      return effimero(i, 'Pick the battle from the list that appears while you type in the **battle** box.');
+    }
     await i.deferReply({ flags: EPHEMERAL });
 
     if (i.options.getSubcommand() === 'remove') {
-      const r = await api('POST', '/canale', { discordId: i.user.id, scope, remove: true });
+      const r = await api('POST', '/canale', { discordId: i.user.id, scope, battleId: battleOpt, remove: true });
       if (!r.ok) return i.editReply(messaggioErrore(r));
       // Il server dice di CHI era il canale: solo il proprio sportello si
       // toglie, quello di un'altra nazione non si tocca.
-      const k = chiave(scope, r.json.scopeId);
+      const k = chiave(scope, r.json.scopeId, battleOpt);
       const p = stato.pannelli[k];
       if (p) {
         try { const c = await canaleDi(p.canaleId); await c.messages.delete(p.messaggioId); } catch { /* gia' sparito */ }
         delete stato.pannelli[k];
         salva();
       }
-      return i.editReply('Done — the desk is removed and the bot stops posting alerts there.');
+      // Le richieste di quella battaglia tornano alla board generale (se c'e'): la si riscrive.
+      if (scope === 'country' && battleOpt) aggiornaSportelloDopo(chiave('country', r.json.scopeId));
+      return i.editReply(battleOpt
+        ? 'Done — the desk of that battle is removed. Its requests go to the general desk now (if there is one).'
+        : 'Done — the desk is removed and the bot stops posting alerts there.');
     }
 
     // ⚠️ Con il solo intent `Guilds` il canale dell'interazione puo' NON essere
@@ -1429,21 +1494,21 @@ Only **new** requests and edits are checked; what is already in the queue stays.
     let canale;
     try { canale = await canaleDi(canaleId); }
     catch { return i.editReply(`I cannot see <#${canaleId}>: give the bot's role access to that channel and try again.`); }
-    const r = await api('POST', '/canale', { discordId: i.user.id, scope, channelId: canale.id, guildId: i.guildId });
+    const r = await api('POST', '/canale', { discordId: i.user.id, scope, battleId: battleOpt, channelId: canale.id, guildId: i.guildId });
     if (!r.ok) return i.editReply(messaggioErrore(r));
 
     const scopeId = r.json.scopeId;
-    const key = chiave(scope, scopeId);
-    const d = await datiSportello(scope, scopeId);
+    const key = chiave(scope, scopeId, battleOpt);
+    const d = await datiSportello(scope, scopeId, scope === 'country' ? battleOpt : undefined);
     if (!d) return i.editReply(ERRORI.gioco_non_raggiungibile);
 
-    // Un solo sportello per nazione/unita': se ce n'era un altro, via.
+    // Una sola board per nazione+battaglia (o per unita'): se ce n'era un'altra, via.
     const vecchio = stato.pannelli[key];
     if (vecchio) {
       try { const c = await canaleDi(vecchio.canaleId); await c.messages.delete(vecchio.messaggioId); } catch { /* gia' sparito */ }
     }
     const m = await canale.send(renderSportello(d));
-    stato.pannelli[key] = { scope, scopeId, canaleId: canale.id, messaggioId: m.id };
+    stato.pannelli[key] = { scope, scopeId, canaleId: canale.id, messaggioId: m.id, ...(battleOpt ? { battleId: battleOpt, battleLabel: r.json.battleLabel || null } : {}) };
     salva();
     provaAPinnare(key);                                   // se il bot ha il permesso, lo sportello resta in cima
 
@@ -1451,6 +1516,8 @@ Only **new** requests and edits are checked; what is already in the queue stays.
     // arrivate: cambiando canale resterebbero li', e le decisioni e gli aggiornamenti
     // continuerebbero a comparire nel posto vecchio. Si portano nel canale nuovo.
     let spostate = 0;
+    // Aprendo la board di una battaglia, la generale perde quelle richieste: si riscrive.
+    if (scope === 'country' && battleOpt) aggiornaSportelloDopo(chiave('country', scopeId));
     if (scope === 'country') {
       try { spostate = await spostaCarte(d, canale); }
       catch (err) { console.warn('[contratti] carte non spostate:', err.message); }
@@ -1458,7 +1525,9 @@ Only **new** requests and edits are checked; what is already in the queue stays.
     // L'altro ambito (unita' <-> nazione) ha un canale suo: se e' un altro, lo si dice.
     const altri = (r.json.altri || []).map((x) => `your ${x.scope === 'mu' ? 'unit' : 'nation'}'s alerts still go to <#${x.channelId}>`);
     return i.editReply([
-      `Done — the contract desk is in <#${canale.id}>. Alerts for ${scope === 'country' ? 'your nation' : 'your unit'} go there too.`,
+      battleOpt
+        ? `Done — the desk for **${r.json.battleLabel || 'that battle'}** is in <#${canale.id}>. It has its own queue, limits and open/closed switch; requests for that battle (and only that battle) land here.`
+        : `Done — the contract desk is in <#${canale.id}>. Alerts for ${scope === 'country' ? 'your nation' : 'your unit'} go there too${scope === 'country' ? ', for every battle that has no desk of its own' : ''}.`,
       spostate ? `Moved **${spostate}** open request${spostate === 1 ? '' : 's'} here.` : null,
       altri.length ? `⚠️ Note: ${altri.join(' and ')}. To move those too, run \`/contract-desk post\` with the other scope in the channel you want.` : null,
     ].filter(Boolean).join('\n'));
@@ -1584,7 +1653,7 @@ Only **new** requests and edits are checked; what is already in the queue stays.
   client.on('interactionCreate', async (i) => {
     try {
       if (i.isAutocomplete()) {
-        if (i.commandName === 'contract') await onAutocompleta(i);
+        if (i.commandName === 'contract' || i.commandName === 'contract-desk') await onAutocompleta(i);
         return;
       }
       if (i.isChatInputCommand()) {
@@ -1777,7 +1846,7 @@ Only **new** requests and edits are checked; what is already in the queue stays.
       let embeds = [];
       if (sportello.scope === 'country') {
         try {
-          const d = await datiSportello('country', sportello.scopeId);
+          const d = await datiDiPannello(sportello);
           if (d) embeds = [embedCodaCorrente(d)];
         } catch { /* senza coda */ }
       }

@@ -29,14 +29,38 @@ sportello è il quadro d'insieme, la carta è quella che suona sul telefono. Se 
 altro vince l'asta ("rubato") il governo viene taggato di nuovo. L'unità riceve
 gli avvisi nel suo canale (`/contract-desk post scope:My military unit`).
 
-**Spostare lo sportello in un altro canale** (rilanciare `/contract-desk post` lì):
-il vecchio sportello si cancella e le **carte delle richieste ancora vive**
-(in attesa o approvate, max 40, nell'ordine della coda) vengono ricreate nel canale
-nuovo; quelle delle richieste chiuse restano dov'erano. ⚠️ **Nazione e unità hanno
-un canale ciascuna**: spostare la nazione non sposta l'unità, i cui avvisi
-(approvata, rifiutata, aperta…) continuano ad arrivare nel canale vecchio. Il bot lo
-scrive nella risposta ("your unit's alerts still go to #…", dalla risposta `altri` di
-`POST /bot/canale`).
+## Una board per battaglia (istanze separate)
+
+Una nazione non ha uno sportello solo: ha **una board per battaglia**, ognuna un'istanza a sé
+con il **suo canale, la sua coda, i suoi tetti e il suo Open/Close**.
+
+- `/contract-desk post scope:My nation battle:<cerca>` apre la board di UNA battaglia in
+  corso della tua nazione (autocompletamento; ✅ = ce l'ha già). Senza `battle` è la
+  **board generale**, che prende le richieste delle battaglie senza una board propria
+  (è lo sportello unico di prima: le board esistenti sono diventate generali, senza
+  cambiare niente).
+- **Una richiesta va alla board della sua battaglia**; se non c'è, alla generale; se la
+  nazione ha board ma **nessuna per quella battaglia** (e non ha la generale) viene
+  rifiutata con `nessuna_board_per_battaglia`. Una nazione senza board funziona come
+  prima (webhook, sito).
+- **La coda è per battaglia**: chi aspetta sulla battaglia X non è "dietro" a chi aspetta
+  sulla Y (aste e decisioni diverse). Vale ovunque: sito, `/contract-queue`, menu delle
+  decisioni, lista sotto le carte. Nella coda di tutta la nazione le battaglie sono blocchi
+  separati.
+- Ogni board ha i suoi **tetti** e il suo **aperto/chiuso**; chiuderne una non tocca le altre.
+  "Request a contract" dalla board di una battaglia chiede per quella battaglia, senza
+  scegliere; "Ask burst" elenca solo i suoi contratti.
+- **Spostare una board in un altro canale**: rilancia `/contract-desk post` con la stessa
+  battaglia (o senza, per la generale). Il vecchio messaggio si cancella e le **carte delle
+  richieste vive di QUELLA board** (max 40, in ordine di coda) si ricreano nel canale nuovo;
+  le altre board non si toccano. Aprire la board di una battaglia porta lì anche le carte
+  che stavano nella generale.
+- `/contract-desk remove battle:…` toglie la board di una battaglia (le sue richieste
+  tornano alla generale, se c'è); senza `battle` toglie la generale.
+- ⚠️ **Le unità hanno ancora un solo canale** (`bot_channel`), a parte: spostare la nazione
+  non sposta l'unità, e il bot lo scrive nella risposta (`altri` di `POST /bot/canale`).
+- Le board sono nella tabella `bot_board` (`country_id`, `battle_id` — '' = generale —,
+  canale, aperto, tetti). Una board di una battaglia finita resta finché non la togli.
 
 Sportello e carte si **riscrivono da sole** quando qualcosa cambia, anche se si
 decide dal sito.
@@ -63,8 +87,7 @@ cambia danno o taglia**, da Discord (modulo e `/contract`) e dal **sito**: il se
 risponde `422 oltre_il_tetto` con il campo e il tetto, e il bot dice quale numero è troppo
 alto. Le richieste già in coda non si toccano (correggere la nota di una richiesta
 vecchia non è bloccato da un tetto arrivato dopo), e **chiudere** lo sportello non
-cancella i tetti. Si salvano in `bot_channel.max_damage` / `max_rate` (migrazione
-automatica); `POST /bot/scrivania/stato` li imposta, `GET /bot/limiti` li legge
+cancella i tetti. Si salvano **per board** in `bot_board.max_damage` / `max_rate`; `POST /bot/scrivania/stato` li imposta, `GET /bot/limiti` li legge
 (leggera, solo database: un modulo va aperto entro 3 s dal clic).
 
 ## Chiedere il burst: ⚡ *Ask burst* (governo)

@@ -46,7 +46,7 @@ const crypto = require('crypto');
 const express = require('express');
 const {
   getRichiesta, findAccountByDiscordId, findAccountByWarUserId, getDb, upsertDiscordAccount,
-  getBotChannel, setBotChannel, deleteBotChannel, setBotAperto, limitiSportello, setLimitiSportello, eventiBotDopo, ultimoEventoBotId, audit,
+  getBotChannel, setBotChannel, deleteBotChannel, getBoard, elencoBoard, boardPerRichiesta, boardPerAvviso, setBoard, setBoardAperto, setBoardLimiti, deleteBoard, eventiBotDopo, ultimoEventoBotId, audit,
 } = require('./db');
 const { calcolaEffettivi } = require('./roles');
 const { nazioneAmmessa } = require('./nazioni');
@@ -58,7 +58,7 @@ const { accountsDellUnita } = require('./dm');
 const { trpcGet } = require('./wareraApi');
 const { cercaPersonaggi, avviaVerifica, controllaVerifica } = require('./verify');
 const {
-  pubblica, conNomi, azioneCrea, azioneDecidi, azioneAperta, azioneRitira, azioneModifica,
+  pubblica, conNomi, azioneCrea, azioneDecidi, azioneAperta, azioneRitira, azioneModifica, posizioniInCoda, chiaveCoda,
 } = require('./requests');
 
 const ID_DISCORD = /^\d{15,25}$/;
@@ -172,8 +172,16 @@ function tagRichiedente(r) {
 const TAGGA_GOVERNO = new Set(['nuova', 'allarme_paese', 'persa_paese']);
 
 async function arricchisci(e) {
-  const canale = getBotChannel(e.scope_type, e.scope_id);
   const r = e.request_id ? getRichiesta(e.request_id) : null;
+  // Una NAZIONE ha una board per battaglia: l'avviso va in quella della battaglia della
+  // richiesta (o nella generale). Un avviso senza richiesta (allarmi dai confini) va
+  // nella generale. Per un'unita' resta il suo canale.
+  let board = null;
+  let canale;
+  if (e.scope_type === 'country') {
+    board = r ? boardPerRichiesta(e.scope_id, r.battle_id) : boardPerAvviso(e.scope_id);
+    canale = board ? { channel_id: board.channel_id } : null;
+  } else canale = getBotChannel(e.scope_type, e.scope_id);
   let tag = [];
   let senzaDiscord = [];
   let senzaNome = 0;
@@ -194,6 +202,7 @@ async function arricchisci(e) {
     tipo: e.tipo,
     scope: { type: e.scope_type, id: e.scope_id },
     canaleId: canale?.channel_id || null,
+    battleId: board ? board.battle_id : null,        // quale board (''=generale)
     testo: e.testo,
     richiesta: r ? pubblica(conNomi(r)) : null,
     nomePaese,
@@ -233,14 +242,21 @@ const GIORNO_MS = 24 * 3600_000;
 /** Le richieste di un ambito che il pannello deve mostrare: quelle ancora
  *  vive, piu' quelle chiuse nelle ultime 24 ore (cosi' "com'e' finita" non
  *  sparisce un secondo dopo). */
-function richiesteScrivania(scope, scopeId) {
+function richiesteScrivania(scope, scopeId, board = null) {
   const col = scope === 'country' ? 'country_id' : 'mu_id';
   const da = Date.now() - GIORNO_MS;
-  return getDb().prepare(`
+  let righe = getDb().prepare(`
     SELECT * FROM request WHERE ${col} = ? AND (
       (status IN ('pending','approved') AND esito IS NULL) OR updated_at > ?
-    ) ORDER BY created_at DESC LIMIT 60
+    ) ORDER BY created_at DESC LIMIT 200
   `).all(scopeId, da);
+  // Una board vede SOLO le richieste che le spettano: la sua battaglia; la generale, le
+  // battaglie che non hanno una board propria.
+  if (scope === 'country' && board) {
+    const proprie = new Set(elencoBoard(scopeId).filter((b) => b.battle_id).map((b) => b.battle_id));
+    righe = righe.filter((r) => (board.battle_id ? r.battle_id === board.battle_id : !proprie.has(r.battle_id)));
+  }
+  return righe.slice(0, 60);
 }
 
 // ---------------------------------------------------------------------------
@@ -276,13 +292,17 @@ const asteVinte = memo(60_000, async (battleId) => {
 });
 
 /** @returns {Promise<object[]|null>} righe `request`; null se non si riesce a saperlo. */
-async function contrattiAttivi(countryId) {
-  const righe = getDb().prepare(`
+async function contrattiAttivi(countryId, board = null) {
+  let righe = getDb().prepare(`
     SELECT * FROM request
     WHERE country_id = ? AND esito IN ('conforme','parametri_diversi')
       AND auction_id IS NOT NULL AND verificato_il > ?
     ORDER BY verificato_il DESC LIMIT 60
   `).all(countryId, Date.now() - 24 * 3600_000);
+  if (board) {                                    // la board vede solo i suoi contratti
+    const proprie = new Set(elencoBoard(countryId).filter((b) => b.battle_id).map((b) => b.battle_id));
+    righe = righe.filter((r) => (board.battle_id ? r.battle_id === board.battle_id : !proprie.has(r.battle_id)));
+  }
   if (!righe.length) return [];
 
   let vive;
@@ -396,6 +416,37 @@ function buildBotRouter() {
     res.status(esito.codice).json(esito.corpo);
   });
 
+  // ── Le battaglie in corso della MIA nazione (per aprire una board) ──────
+  // Solo governo (o admin). Serve all'autocompletamento di `/contract-desk post battle:`.
+  router.get('/battaglie-nazione', async (req, res) => {
+    const id = await identitaDaDiscord(req.query.discordId);
+    if (!id.ok) return errore(res, id);
+    const cid = id.dati.derivati?.countryId;
+    const cap = id.dati.capacita;
+    if (!cid || !(cap.gestisceNazione.includes(cid) || cap.approvaPer.includes(cid) || cap.admin)) {
+      return res.status(403).json({ error: 'non_autorizzato' });
+    }
+    try {
+      const [elenco, naz, regRaw] = await Promise.all([battaglieVive(), paesiMappa(), regioniMappa().catch(() => ({}))]);
+      const reg = regRaw && !Array.isArray(regRaw) ? regRaw : {};
+      const cerca = String(req.query.q || '').trim().toLowerCase();
+      const aperte = new Set(elencoBoard(cid).map((x) => x.battle_id));
+      const out = [];
+      for (const bat of elenco || []) {
+        if (!bat?._id || bat.isActive === false) continue;
+        if (bat.attacker?.country !== cid && bat.defender?.country !== cid) continue;
+        const etichetta = etichettaBattaglia(bat, naz, reg);
+        if (cerca && !etichetta.toLowerCase().includes(cerca)) continue;
+        out.push({ id: bat._id, etichetta, danno: dannoRound(bat), conBoard: aperte.has(bat._id) });
+      }
+      out.sort((x, y) => y.danno - x.danno);
+      res.json({ battaglie: out.slice(0, 25) });
+    } catch (err) {
+      console.error('[bot] battaglie nazione fallite:', err.message);
+      res.status(502).json({ error: 'gioco_non_raggiungibile' });
+    }
+  });
+
   // ── Dove chiedere (autocompletamento) ──────────────────────────────────
   router.get('/battaglie', async (req, res) => {
     const id = await identitaDaDiscord(req.query.discordId);
@@ -416,10 +467,15 @@ function buildBotRouter() {
     const scope = req.query.scope === 'mu' ? 'mu' : 'country';
     const scopeId = String(req.query.scopeId || '');
     if (!scopeId) return res.status(400).json({ error: 'parametri_non_validi' });
-    const riga = getBotChannel(scope, scopeId);
+    // `board` assente = TUTTE le richieste della nazione (per le liste sotto le carte);
+    // `board=` (vuoto) = la generale; `board=<battaglia>` = quella battaglia.
+    const boardCercata = scope === 'country' && req.query.board !== undefined
+      ? getBoard(scopeId, String(req.query.board || '')) : null;
+    if (scope === 'country' && req.query.board !== undefined && !boardCercata) return res.status(404).json({ error: 'nessun_canale' });
+    const riga = scope === 'country' ? boardCercata || boardPerAvviso(scopeId) : getBotChannel(scope, scopeId);
     try {
       const naz = await paesiMappa();
-      const righe = richiesteScrivania(scope, scopeId);
+      const righe = richiesteScrivania(scope, scopeId, boardCercata);
       const richieste = righe.map((r) => ({ ...pubblica(conNomi(r)), nomePaese: naz.get(r.country_id)?.name || null }));
       let governoElenco = [];
       if (scope === 'country') {
@@ -430,7 +486,9 @@ function buildBotRouter() {
         nome: scope === 'country' ? (naz.get(scopeId)?.name || null) : (righe[0]?.mu_nome || null),
         aperto: !riga || riga.aperto !== 0,
         // I tetti del governo (danno e taglia per 1.000), null = nessun tetto.
-        limiti: scope === 'country' ? limitiSportello(scopeId) : null,
+        limiti: scope === 'country' ? { maxDamage: riga?.max_damage ?? null, maxRate: riga?.max_rate ?? null } : null,
+        battleId: boardCercata ? boardCercata.battle_id : null,
+        battleLabel: boardCercata?.battle_label || null,
         governo: governoElenco,
         richieste,
       });
@@ -445,7 +503,8 @@ function buildBotRouter() {
   router.get('/limiti', (req, res) => {
     const scopeId = String(req.query.scopeId || '');
     if (!scopeId) return res.status(400).json({ error: 'parametri_non_validi' });
-    res.json({ limiti: limitiSportello(scopeId) });
+    const b = getBoard(scopeId, String(req.query.board || ''));
+    res.json({ limiti: { maxDamage: b?.max_damage ?? null, maxRate: b?.max_rate ?? null } });
   });
 
   // ── Aprire / chiudere lo sportello e fissarne i tetti (solo il governo) ──
@@ -459,8 +518,10 @@ function buildBotRouter() {
     if (!countryId || !(id.dati.capacita.gestisceNazione.includes(countryId) || id.dati.capacita.admin)) {
       return res.status(403).json({ error: 'non_autorizzato' });
     }
-    if (!getBotChannel('country', countryId)) return res.status(404).json({ error: 'nessun_canale' });
-    const attuali = limitiSportello(countryId);
+    // `battleId` dice QUALE board (assente o vuoto = la generale).
+    const board = getBoard(countryId, String(b.battleId || ''));
+    if (!board) return res.status(404).json({ error: 'nessun_canale' });
+    const attuali = { maxDamage: board.max_damage, maxRate: board.max_rate };
     const tetto = (v, max) => (v == null || v === '' ? null : (Number(v) > 0 && Number(v) <= max ? Number(v) : false));
     const maxDamage = 'maxDamage' in b ? tetto(b.maxDamage, 1e12) : attuali.maxDamage;
     const maxRate = 'maxRate' in b ? tetto(b.maxRate, 5) : attuali.maxRate;
@@ -469,14 +530,14 @@ function buildBotRouter() {
     if (maxDamage === false || maxRate === false || (maxDamage != null && maxDamage < 1000) || (maxRate != null && maxRate < 0.001)) {
       return res.status(400).json({ error: 'tetto_non_valido' });
     }
-    setLimitiSportello(countryId, { maxDamage, maxRate });
+    setBoardLimiti(board.id, { maxDamage, maxRate });
     if (b.aperto !== undefined) {
-      setBotAperto('country', countryId, Boolean(b.aperto));
+      setBoardAperto(board.id, Boolean(b.aperto));
       audit(id.account.id, b.aperto ? 'bot.sportello.aperto' : 'bot.sportello.chiuso', `country:${countryId}`, null);
     }
     if ('maxDamage' in b || 'maxRate' in b) audit(id.account.id, 'bot.sportello.tetti', `country:${countryId}`, { maxDamage, maxRate });
-    const riga = getBotChannel('country', countryId);
-    res.json({ aperto: riga.aperto !== 0, scopeId: countryId, limiti: { maxDamage, maxRate } });
+    const riga = getBoard(countryId, board.battle_id);
+    res.json({ aperto: riga.aperto !== 0, scopeId: countryId, battleId: board.battle_id, limiti: { maxDamage, maxRate } });
   });
 
   // ── Le mie richieste ancora vive (per "Edit mine" / "Withdraw mine") ───
@@ -586,17 +647,13 @@ function buildBotRouter() {
 
       // Posizione in coda: l'ordine di arrivo fra le richieste ANCORA IN ATTESA
       // di quella nazione (e' l'ordine in cui il governo le vede in "Pending").
-      const posizione = new Map();
-      const inCoda = {};
+      const { pos: posizione, tot: totCoda } = posizioniInCoda(righe);   // PER BATTAGLIA
       // Tempo tipico di decisione, sugli ultimi 7 giorni: la MEDIANA (una
       // richiesta dimenticata per un giorno non deve far sembrare lento un
       // governo che risponde in dieci minuti), e solo da 3 decisioni in su.
       const decisione = {};
       const settimana = Date.now() - 7 * GIORNO_MS;
       for (const cid of paesi) {
-        const att = getDb().prepare("SELECT id FROM request WHERE country_id = ? AND status = 'pending' AND esito IS NULL ORDER BY created_at, id").all(cid);
-        att.forEach((x, k) => posizione.set(x.id, k + 1));
-        inCoda[cid] = att.length;
         const d = getDb().prepare('SELECT created_at AS c, approved_at AS a FROM request WHERE country_id = ? AND approved_at IS NOT NULL AND approved_at > ?')
           .all(cid, settimana).map((x) => x.a - x.c).filter((x) => x >= 0).sort((a, b) => a - b);
         decisione[cid] = d.length >= 3 ? { medianaMs: d[Math.floor(d.length / 2)], n: d.length } : null;
@@ -610,7 +667,7 @@ function buildBotRouter() {
           ...pubblica(conNomi(r)),
           nomePaese: naz.get(r.country_id)?.name || null,
           posizione: posizione.get(r.id) || null,
-          inCoda: inCoda[r.country_id] ?? null,
+          inCoda: totCoda[chiaveCoda(r)] ?? null,
         })),
         decisione,
         paesi: Object.fromEntries(paesi.map((cid) => [cid, naz.get(cid)?.name || null])),
@@ -634,7 +691,8 @@ function buildBotRouter() {
     const scopeId = String(req.query.scopeId || '');
     if (!scopeId) return res.status(400).json({ error: 'parametri_non_validi' });
     try {
-      const attivi = await contrattiAttivi(scopeId);
+      const board = req.query.board !== undefined ? getBoard(scopeId, String(req.query.board || '')) : null;
+      const attivi = await contrattiAttivi(scopeId, board);
       if (attivi === null) return res.status(502).json({ error: 'gioco_non_raggiungibile' });
       res.json({
         contratti: attivi.map((r) => ({
@@ -765,15 +823,48 @@ function buildBotRouter() {
     if (!puo && !capacita.admin) return res.status(403).json({ error: 'non_autorizzato' });
     if (!scopeId) return res.status(403).json({ error: 'non_autorizzato' });
 
+    // Una NAZIONE ha una board per battaglia (`battleId`; vuoto = la generale).
+    const battleId = b.scope === 'country' ? String(b.battleId || '') : '';
+    if (battleId && !/^[a-f0-9]{24}$/.test(battleId)) return res.status(400).json({ error: 'parametri_non_validi' });
+
     if (b.remove) {
-      deleteBotChannel(b.scope, scopeId);
-      audit(id.account.id, 'bot.canale.rimosso', `${b.scope}:${scopeId}`, null);
-      return res.json({ configurato: false, scope: b.scope, scopeId });
+      if (b.scope === 'country') {
+        const board = getBoard(scopeId, battleId);
+        if (!board) return res.status(404).json({ error: 'nessun_canale' });
+        deleteBoard(board.id);
+        audit(id.account.id, 'bot.board.rimossa', `country:${scopeId}`, { battleId });
+      } else {
+        deleteBotChannel(b.scope, scopeId);
+        audit(id.account.id, 'bot.canale.rimosso', `${b.scope}:${scopeId}`, null);
+      }
+      return res.json({ configurato: false, scope: b.scope, scopeId, battleId });
     }
     if (!ID_DISCORD.test(String(b.channelId || ''))) return res.status(400).json({ error: 'parametri_non_validi' });
 
-    setBotChannel({ scopeType: b.scope, scopeId, channelId: b.channelId, guildId: b.guildId, createdBy: id.account.id });
-    audit(id.account.id, 'bot.canale.impostato', `${b.scope}:${scopeId}`, { channelId: b.channelId });
+    // Una board per una battaglia: deve essere IN CORSO e vedere la nazione fra i
+    // contendenti (e' la nazione che paga: una board di una battaglia altrui non ha senso).
+    let battleLabel = null;
+    if (b.scope === 'country' && battleId) {
+      try {
+        const [elenco, naz, reg] = await Promise.all([battaglieVive(), paesiMappa(), regioniMappa().catch(() => ({}))]);
+        const bat = (elenco || []).find((x) => x?._id === battleId && x.isActive !== false);
+        if (!bat) return res.status(409).json({ error: 'battaglia_non_in_corso' });
+        if (bat.attacker?.country !== scopeId && bat.defender?.country !== scopeId) {
+          return res.status(403).json({ error: 'battaglia_non_della_nazione' });
+        }
+        battleLabel = etichettaBattaglia(bat, naz, reg && !Array.isArray(reg) ? reg : {});
+      } catch (err) {
+        console.warn('[bot] board: battaglia non verificabile:', err.message);
+        return res.status(502).json({ error: 'gioco_non_raggiungibile' });
+      }
+    }
+
+    if (b.scope === 'country') {
+      setBoard({ countryId: scopeId, battleId, battleLabel, channelId: b.channelId, guildId: b.guildId, createdBy: id.account.id });
+    } else {
+      setBotChannel({ scopeType: b.scope, scopeId, channelId: b.channelId, guildId: b.guildId, createdBy: id.account.id });
+    }
+    audit(id.account.id, b.scope === 'country' ? 'bot.board.impostata' : 'bot.canale.impostato', `${b.scope}:${scopeId}`, { channelId: b.channelId, battleId });
     // Lo sportello dell'ALTRO ambito (nazione <-> unita') di chi sta impostando: se sta
     // in un canale diverso, gli avvisi di quell'ambito restano LI', e chi ha spostato
     // la nazione crede che il bot risponda "nel canale vecchio". Lo si dice a chi
@@ -781,10 +872,12 @@ function buildBotRouter() {
     const altri = [];
     for (const [ambito, id2] of [['country', derivati?.countryId], ['mu', derivati?.muId]]) {
       if (ambito === b.scope || !id2) continue;
-      const c2 = getBotChannel(ambito, id2);
-      if (c2 && c2.channel_id !== String(b.channelId)) altri.push({ scope: ambito, channelId: c2.channel_id });
+      // Le board per battaglia sono istanze separate e non c'entrano: si confronta la
+      // generale con l'unita' (e viceversa).
+      const c2 = ambito === 'country' ? getBoard(id2, '') : getBotChannel(ambito, id2);
+      if (c2 && c2.channel_id !== String(b.channelId) && !battleId) altri.push({ scope: ambito, channelId: c2.channel_id });
     }
-    res.json({ configurato: true, scope: b.scope, scopeId, altri, nome: b.scope === 'country' ? null : derivati?.muNome || null });
+    res.json({ configurato: true, scope: b.scope, scopeId, battleId, battleLabel, altri, nome: b.scope === 'country' ? null : derivati?.muNome || null });
   });
 
   return router;
