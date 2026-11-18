@@ -158,10 +158,17 @@ const derivatiDi = async (account) => (await calcolaEffettivi(account, {})).deri
 // non essere abilitato e lo scrive, invece di mostrare una pagina rotta.
 const filtroNazione = costruisciFiltroNazione(derivatiDi);
 
+// ⚠️ I CONTRATTI non passano dal filtro nazione (richiesta del 2026-11-18). Chi puo' chiedere
+// o approvare lo decidono gia' due cose piu' precise: il RUOLO di gioco (comandi l'unita',
+// governi la nazione) e la LISTA PERMESSI della nazione che paga (policy.js: alleanza +
+// aggiunte - esclusioni). Chiedere anche "sei cittadino di P.A.S.T.A." fermava a monte le
+// unita' di nazioni ammesse da una lista: la lista diceva si' e il filtro no, senza motivo.
+const passaSempre = (req, res, next) => next();
+
 app.use('/verify', buildVerifyRouter({ requireAuth, requireAdmin }));
 app.use('/roles', buildRolesRouter({ requireAuth, requireAdmin }));
-app.use('/requests', buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione }));
-app.use('/policy', buildPolicyRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, capacitaDi, filtroNazione }));
+app.use('/requests', buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione: passaSempre }));
+app.use('/policy', buildPolicyRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, capacitaDi, filtroNazione: passaSempre }));
 
 // Il bilancio delle unita' usa le STESSE capacita' delle prenotazioni: chi
 // puo' chiedere un contratto per un'unita' e' chi la comanda, ed e' la

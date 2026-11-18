@@ -49,7 +49,6 @@ const {
   getBotChannel, setBotChannel, deleteBotChannel, getBoard, elencoBoard, boardPerRichiesta, boardPerAvviso, setBoard, setBoardAperto, setBoardLimiti, deleteBoard, eventiBotDopo, ultimoEventoBotId, audit,
 } = require('./db');
 const { calcolaEffettivi } = require('./roles');
-const { nazioneAmmessa } = require('./nazioni');
 const { puoChiedere } = require('./policy');
 const { idGoverno, haDiritto, membriGoverno } = require('./governo');
 const { governo, paesiMappa, regioniMappa, battaglieVive, nomiUtenti, memo } = require('./fonti');
@@ -87,10 +86,9 @@ function requireBot(req, res, next) {
 // ---------------------------------------------------------------------------
 
 /**
- * Dall'id Discord all'identità che può agire. Ripete, per il bot, i due
- * sbarramenti che sul sito stanno in `requireAuth` e `filtroNazione`:
- * l'account deve esistere ed essere collegato a un personaggio, e la sua
- * nazione deve essere fra quelle abilitate.
+ * Dall'id Discord all'identità che può agire. Ripete, per il bot, lo
+ * sbarramento che sul sito sta in `requireAuth` (non `filtroNazione`, vedi sotto):
+ * l'account deve esistere ed essere collegato a un personaggio.
  * @returns {Promise<{ok:true, account, dati}|{ok:false, codice:number, error:string}>}
  */
 async function identitaDaDiscord(discordId) {
@@ -104,8 +102,8 @@ async function identitaDaDiscord(discordId) {
   catch (err) { return { ok: false, codice: 502, error: 'gioco_non_raggiungibile' }; }
   if (dati.erroreGioco) return { ok: false, codice: 502, error: 'gioco_non_raggiungibile' };
 
-  const esito = nazioneAmmessa(account, dati.derivati);
-  if (!esito.ok) return { ok: false, codice: 403, error: 'nazione_non_abilitata' };
+  // ⚠️ Niente filtro nazione: il bot e' SOLO contratti, e i contratti non lo usano (vedi index.js).
+  // Chi puo' fare cosa lo dicono il ruolo di gioco e la lista permessi della nazione che paga.
   return { ok: true, account, dati };
 }
 

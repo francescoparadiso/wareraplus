@@ -269,6 +269,13 @@ function disegna() {
       // motivo per cui il resto no; solo DOPO viene l'elenco dei paesi.
       colonnaDx.appendChild(cardPanoramica());
       colonnaDx.appendChild(cardNazioneNonAbilitata(nazione));
+      // ⚠️ I CONTRATTI non passano dal filtro nazione (server/plusApi/index.js): chi ha
+      // un potere sui contratti — comanda un'unita', governa una nazione — vede il tavolo
+      // anche da una nazione non abilitata. Cosa puo' fare lo decide il ruolo + la lista permessi.
+      const capN = ruoli?.capacita;
+      if (capN && (capN.chiedePer?.length || capN.approvaPer?.length || capN.gestisceNazione?.length)) {
+        colonnaDx.appendChild(areaSchede(['contratti']));
+      }
     } else if (account.verificato || account.admin) {
       // ── Tre pagine, un bottone ciascuna ──────────────────────────────
       // La nazione, i contratti mercenari e l'amministrazione sono tre

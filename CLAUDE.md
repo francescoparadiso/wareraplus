@@ -660,6 +660,10 @@ amministrazione restano identici. Tre cose da sapere prima di crederla rotta:
   (lo imposta il suo governo) e uno di alleanza (scope `confini_alleanza`,
   lo imposta il capo dell'alleanza in gioco), che riceve solo le regioni
   di nazioni FUORI dall'alleanza, una riga per regione;
+- ⚠️ **i contratti NON passano dal filtro nazione** (dal 2026-11-18): tavolo, `/policy` e tutto il bot sono
+  aperti a chiunque abbia collegato il personaggio, anche di una nazione fuori da P.A.S.T.A. Cosa può fare lo
+  decidono il ruolo di gioco (comandi l'unità, governi la nazione) e la lista permessi della nazione che
+  paga. Il filtro resta su La mia nazione, Operazioni e Bilancio unità;
 - la pagina la vedono il **governo** per carica (presidente, vice, ministri)
   e i **cittadini che il governo aggiunge** (tabella `nation_access`, sempre
   con Discord + personaggio collegato); agli altri cittadini il server

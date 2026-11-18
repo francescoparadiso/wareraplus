@@ -63,7 +63,8 @@ export function stato({ account, ruoli, accessoNazione }) {
   });
   voci.push({
     id: 'contratti', gruppo: 'area', scheda: 'contratti',
-    motivo: motivoArea || (admin || poteri ? null : 'needRole'),
+    // I contratti non passano dal filtro nazione: serve il collegamento e un ruolo, non P.A.S.T.A.
+    motivo: admin ? null : !verificato ? 'needLink' : (poteri ? null : 'needRole'),
   });
   if (admin) voci.push({ id: 'admin', gruppo: 'area', scheda: 'admin', motivo: null });
 
