@@ -35,6 +35,7 @@ import { state } from '../diplomacy/state.js';
 import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 import { accordoInVigore, nazioniParte, impostaAccordiSullaMappa } from '../diplomacy/accordiNaps.js';
 import { trackEvent } from '../shared/analytics.js';
+import { trpcBatch } from '../diplomacy/utils.js';
 
 let rootEl = null;
 let accordi = [];
@@ -75,7 +76,37 @@ const fmtDataOra = (ms) => `${fmtData(ms)} ${new Date(ms).toLocaleTimeString(und
 
 const nomeNazione = (id) => state.nationMap?.get(id)?.name || id;
 const alleanza = (id) => (state.alliancesList || []).find(a => a._id === id) || null;
-const nomeAlleanza = (id) => alleanza(id)?.name || id;
+
+/* WarEra+ 2026-11-18 — alleanze che la mappa non conosce più.
+   `state.alliancesList` ha solo le alleanze delle nazioni di OGGI: una
+   sciolta dopo la firma del patto (Hippo Unchained, 14 nov, nel patto
+   HU-SMD) sparisce, e la scheda mostrava l'id nudo al posto del nome.
+   alliance.getById è pubblica e risponde anche per quelle sciolte, con
+   `disbandedAt`: si chiede UNA volta per id e si tiene per la sessione. */
+const alleanzeFuori = new Map(); // id → { name, disbandedAt } | null (non trovata)
+
+async function recuperaAlleanzeFuori() {
+  const ids = new Set();
+  for (const a of accordi) for (const p of [a.parteA, a.parteB]) {
+    if (p?.tipo === 'alleanza' && p.id && !alleanza(p.id) && !alleanzeFuori.has(p.id)) ids.add(p.id);
+  }
+  if (!ids.size) return false;
+  const lista = [...ids];
+  try {
+    const r = await trpcBatch(lista.map(id => ['alliance.getById', { allianceId: id }]));
+    lista.forEach((id, i) => {
+      const x = r?.[i];
+      alleanzeFuori.set(id, x?.name ? { name: x.name, disbandedAt: x.disbandedAt ? Date.parse(x.disbandedAt) : null } : null);
+    });
+    return true;
+  } catch (err) {
+    console.warn('[accordi] alleanze fuori elenco non risolte:', err);
+    return false;
+  }
+}
+
+const alleanzaFuori = (id) => (alleanza(id) ? null : alleanzeFuori.get(id) || null);
+const nomeAlleanza = (id) => alleanza(id)?.name || alleanzaFuori(id)?.name || id;
 const nomeParte = (p) => (p?.tipo === 'alleanza' ? nomeAlleanza(p.id) : nomeNazione(p?.id));
 
 function bandiera(id) {
@@ -97,8 +128,14 @@ function chipParte(p) {
     sw.style.background = state.allianceColorMap?.get(p.id) || 'var(--ac-accent)';
     c.appendChild(sw);
     c.appendChild(el('span', 'wp-ac-parte-nome', nomeAlleanza(p.id)));
-    const n = nazioniParte(p).length;
-    if (n) c.appendChild(el('span', 'wp-ac-parte-sub', acT('nations', { n })));
+    const sciolta = alleanzaFuori(p.id)?.disbandedAt;
+    if (sciolta) {
+      c.classList.add('wp-ac-parte-sciolta');
+      c.appendChild(el('span', 'wp-ac-parte-sub', acT('disbanded', { date: fmtData(sciolta) })));
+    } else {
+      const n = nazioniParte(p).length;
+      if (n) c.appendChild(el('span', 'wp-ac-parte-sub', acT('nations', { n })));
+    }
   }
   return c;
 }
@@ -152,7 +189,22 @@ function creaAggiunte(iniziali) {
   return { el: box, valori: () => [...scelte] };
 }
 
+/** Il lato di un patto fatto di un'alleanza sciolta e senza nazioni aggiunte:
+ *  { p, sciolta } oppure null. */
+function latoSciolto(a) {
+  for (const p of [a.parteA, a.parteB]) {
+    const sciolta = p?.tipo === 'alleanza' ? alleanzaFuori(p.id)?.disbandedAt : null;
+    if (sciolta && !nazioniParte(p).length) return { p, sciolta };
+  }
+  return null;
+}
+
 function statoDi(a, ora = Date.now()) {
+  // WarEra+ 2026-11-18 — un patto non ancora scaduto con un lato vuoto
+  // (alleanza sciolta) è DECADUTO: non lega più nessuno, non va fra quelli
+  // in vigore né nelle statistiche, e sulla mappa già non disegnava niente.
+  const finito = a.fine && a.fine <= ora;
+  if (!finito && latoSciolto(a)) return 'decaduto';
   if (accordoInVigore(a, ora)) return 'attivo';
   return a.inizio > ora ? 'futuro' : 'scaduto';
 }
@@ -221,6 +273,8 @@ async function caricaElenco() {
     errore = true;
   }
   disegnaLista();
+  // Le alleanze sciolte si risolvono dopo: l'elenco non le aspetta.
+  if (!errore && await recuperaAlleanzeFuori()) disegnaLista();
 }
 
 async function caricaChiSei() {
@@ -311,7 +365,7 @@ function corrisponde(a) {
   if (filtro !== 'tutti') {
     const s = statoDi(a);
     if ((filtro === 'attivi' && s !== 'attivo') || (filtro === 'futuri' && s !== 'futuro')
-        || (filtro === 'scaduti' && s !== 'scaduto')) return false;
+        || (filtro === 'scaduti' && s !== 'scaduto' && s !== 'decaduto')) return false;
   }
   const q = ricerca.trim().toLowerCase();
   if (!q) return true;
@@ -370,7 +424,7 @@ function disegnaLista() {
 
   const ora = Date.now();
   // In vigore prima, poi i futuri, poi gli scaduti; dentro, dal più recente.
-  const ordine = { attivo: 0, futuro: 1, scaduto: 2 };
+  const ordine = { attivo: 0, futuro: 1, decaduto: 2, scaduto: 2 };
   const visibili = accordi.filter(corrisponde)
     .sort((x, y) => (ordine[statoDi(x, ora)] - ordine[statoDi(y, ora)]) || (y.inizio - x.inizio));
   if (!visibili.length) { elLista.appendChild(el('p', 'wp-ac-vuoto', acT('emptyFilter'))); return; }
@@ -395,7 +449,7 @@ function schedaAccordo(a, ora) {
   parti.append(latoScheda(a.parteA), el('span', 'wp-ac-vs', '⇄'), latoScheda(a.parteB));
   testa.appendChild(parti);
   const badge = el('span', `wp-ac-badge wp-ac-badge-${stato}`,
-    acT(stato === 'attivo' ? 'stActive' : stato === 'futuro' ? 'stFuture' : 'stExpired'));
+    acT(stato === 'attivo' ? 'stActive' : stato === 'futuro' ? 'stFuture' : stato === 'decaduto' ? 'stVoid' : 'stExpired'));
   testa.appendChild(badge);
   card.appendChild(testa);
 
@@ -408,6 +462,12 @@ function schedaAccordo(a, ora) {
 
   const tetto = testoTetto(a);
   if (tetto) card.appendChild(el('div', 'wp-ac-tetto', `⚔ ${tetto}`));
+
+  // Il perché del «Decaduto», in chiaro sotto il titolo.
+  if (stato === 'decaduto') {
+    const { p, sciolta } = latoSciolto(a);
+    card.appendChild(el('div', 'wp-ac-avviso', `⚠ ${acT('disbandedNote', { who: nomeAlleanza(p.id), date: fmtData(sciolta) })}`));
+  }
 
   if (a.muEscluse?.length) {
     const r = el('div', 'wp-ac-mu');
@@ -716,6 +776,9 @@ function menuParti(tipo, scelto) {
   const voci = tipo === 'alleanza'
     ? (state.alliancesList || []).map(a => [a._id, a.name])
     : (state.nazioniGlobal || []).map(n => [n._id, n.name]);
+  // Modificando un patto con un'alleanza sciolta il menù non la conosce più:
+  // la si tiene come voce, altrimenti il salvataggio la perderebbe in silenzio.
+  if (tipo === 'alleanza' && scelto && !voci.some(v => v[0] === scelto)) voci.push([scelto, nomeAlleanza(scelto)]);
   voci.sort((x, y) => String(x[1]).localeCompare(String(y[1])));
   for (const [id, nome] of voci) {
     const o = el('option', null, nome); o.value = id;

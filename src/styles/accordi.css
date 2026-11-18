@@ -207,6 +207,8 @@ body.light-theme #wp-accordi-root input[type="datetime-local"] { color-scheme: l
 .wp-ac-st-attivo { border-left-color: var(--ac-accent); }
 .wp-ac-st-futuro { border-left-color: var(--ac-future); }
 .wp-ac-st-scaduto { opacity: .78; }
+.wp-ac-st-decaduto { border-left-color: var(--ac-future); border-left-style: dashed; }
+.wp-ac-st-decaduto .wp-ac-titolo { text-decoration: line-through; text-decoration-color: var(--ac-ink-soft); }
 
 .wp-ac-testa { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 .wp-ac-parti { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; flex: 1; min-width: 0; }
@@ -245,11 +247,22 @@ body.light-theme #wp-accordi-root input[type="datetime-local"] { color-scheme: l
 .wp-ac-badge-attivo { color: var(--ac-accent); }
 .wp-ac-badge-futuro { color: var(--ac-future); }
 .wp-ac-badge-scaduto { color: var(--ac-ink-soft); }
+.wp-ac-badge-decaduto { color: var(--ac-future); border-style: dashed; }
 
 .wp-ac-titolo { font-size: 1.02rem; font-weight: 600; }
 .wp-ac-periodo { font-size: .86rem; color: var(--ac-ink-soft); font-variant-numeric: tabular-nums; }
 .wp-ac-tetto { font-size: .88rem; }
 .wp-ac-copertura { font-size: .84rem; opacity: .8; }
+/* WarEra+ 2026-11-18 — un lato fatto di un'alleanza sciolta. */
+.wp-ac-parte-sciolta { border-style: dashed; }
+.wp-ac-parte-sciolta .wp-ac-parte-nome { opacity: .75; }
+.wp-ac-parte-sciolta .wp-ac-parte-sub { color: var(--ac-future); }
+.wp-ac-avviso {
+  font-size: .84rem; line-height: 1.5;
+  padding: .35rem .7rem;
+  border-left: 2px solid var(--ac-future);
+  color: var(--ac-ink-soft);
+}
 .wp-ac-limite {
   font-size: .86rem; line-height: 1.55;
   padding: .6rem .8rem;
