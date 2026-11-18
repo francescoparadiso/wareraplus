@@ -260,6 +260,24 @@ function buildRolesRouter({ requireAuth, requireAdmin }) {
     res.json({ accounts: listAccounts() });
   });
 
+  /**
+   * Cosa puo' fare QUESTA persona adesso, per il dettaglio nel pannello admin: ruoli di
+   * gioco, capacita' effettive e correzioni. Come `/me?asAccount=` ma SENZA lasciare una
+   * riga di audit "view-as" a ogni riga aperta: leggerlo non e' vestire l'identita' altrui.
+   * Sola lettura.
+   */
+  router.get('/admin/account/:id', requireAuth, requireAdmin, async (req, res) => {
+    const bersaglio = getAccountById(Number(req.params.id));
+    if (!bersaglio) return res.status(404).json({ error: 'account_inesistente' });
+    try {
+      const dati = await calcolaEffettivi(bersaglio, { forzaRicalcolo: req.query.refresh === '1' });
+      res.json({ derivati: dati.derivati, capacita: dati.capacita, deroghe: dati.deroghe, erroreGioco: dati.erroreGioco });
+    } catch (err) {
+      console.error('[roles] dettaglio admin fallito:', err.message);
+      res.status(502).json({ error: 'gioco_non_raggiungibile' });
+    }
+  });
+
   /** Mette o sostituisce una deroga. `mode` 'grant' o 'revoke'. */
   router.post('/admin/override', requireAuth, requireAdmin, (req, res) => {
     const { accountId, scopeType, scopeId = null, role, mode, reason, expiresAt = null } = req.body || {};

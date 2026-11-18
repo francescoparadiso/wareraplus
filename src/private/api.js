@@ -210,6 +210,12 @@ export async function elencoAccount() {
   return (await getJson('/roles/admin/accounts')).accounts || [];
 }
 
+/** Ruoli di gioco, poteri effettivi e correzioni di UNA persona, per il pannello admin
+ *  (sola lettura, nessuna riga di audit: vedi roles.js). */
+export function dettaglioAccount(accountId, { refresh = false } = {}) {
+  return getJson(`/roles/admin/account/${accountId}${refresh ? '?refresh=1' : ''}`);
+}
+
 export function metteDeroga(dati) {
   return callOrThrow('/roles/admin/override', dati);
 }
@@ -315,6 +321,20 @@ export async function cercaUnita(testo) {
   if (!res.ok) return [];
   const body = await res.json();
   return (body?.result?.data?.items || []).map((m) => ({ id: m._id, nome: m.name }));
+}
+
+const _nomiUnita = new Map();
+/** Il nome di un'unita' dal suo id (pubblica, in memoria per la sessione). null se non si sa. */
+export async function nomeUnitaPerId(muId) {
+  if (_nomiUnita.has(muId)) return _nomiUnita.get(muId);
+  try {
+    const { API_BASE_URL } = await import('../diplomacy/config.js');
+    const input = encodeURIComponent(JSON.stringify({ muId }));
+    const res = await fetch(`${API_BASE_URL}/trpc/mu.getById?input=${input}`);
+    const nome = res.ok ? (await res.json())?.result?.data?.name || null : null;
+    if (nome) _nomiUnita.set(muId, nome);
+    return nome;
+  } catch { return null; }
 }
 
 /** Le alleanze con il loro nome, dal server di cache. Sedici righe, ~29 KB:

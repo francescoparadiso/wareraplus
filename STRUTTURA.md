@@ -413,20 +413,11 @@ wareraPlus/
     │   │                          mappa: moto fluido a velocità costante, zero repaint
     │   │                          di MapLibre, condiviso dai due temi
     │   ├── oceanBackground.js   ← NUOVO — rotte animate, tema scuro
-    │   ├── travelDistance.js    ← NUOVO — vista mappa "Distanze" (idea dal tool di
-    │   │                          nioKi, ni0ki.github.io/warera-distance-map): clic su
-    │   │                          una regione → tutte le altre colorate per numero di
-    │   │                          confini da attraversare (BFS su `neighbors` delle
-    │   │                          geometrie di state.mapDataGlobal, zero fetch), percorso
-    │   │                          col mouse, istogramma e giro ottimale fino a 5 casse di
-    │   │                          legno (Held-Karp, con un ritorno gratis a casa).
-    │   │                          ⚠️ i costi (10 stamina a regione, poi 2 barili) NON
-    │   │                          sono in gameConfig: sono della patch 0.26.1, costanti
-    │   │                          in testa al file. Testi in travelI18n.js (9 lingue).
-    │   │                          "Percorri il giro": un segnalino cammina il percorso
-    │   │                          regione per regione, la barra stamina si svuota e le
-    │   │                          casse si contano. È a comando, quindi l'interruttore
-    │   │                          Animazioni non lo blocca.
+    │   ├── regionGraph.js       ← NUOVO — nome, regioni confinanti e punto sulla mappa di
+    │   │                          ogni regione, da state.mapDataGlobal (zero fetch). Era la
+    │   │                          base della vista "Distanze", tolta il 2026-11-17 (dalla
+    │   │                          v0.28.3 niente più casse sulla mappa né ritorno gratis a
+    │   │                          casa); l'usano la lavagna delle operazioni e mapPulses.js.
     │   ├── migrationFlows.js    ← NUOVO — vista mappa "Migrazioni": saldo dei cambi di
     │   │                          cittadinanza per nazione (rosso perde, verde guadagna,
     │   │                          assoluto o ogni 100 cittadini 10+) e, cliccando una
@@ -951,6 +942,9 @@ wareraPlus/
     │   │                          capacitaDi), che resta l'unico a decidere. Le funzioni fuori
     │   │                          dall'area chiudono l'overlay e aprono la sezione.
     │   ├── i18nPanoramica.js    ← dizionario (9 lingue) di panoramica.js
+    │   ├── admin.js + i18nAdmin.js ← pannello permessi: si sceglie il DIRITTO (governo, gestire una
+    │   │                          nazione, chiedere per un'unità, bloccare un ruolo), non "ambito/ruolo/grant";
+    │   │                          mostra poteri effettivi (GET /roles/admin/account/:id) e modifiche con "Togli"
     │   ├── i18nNazione.js       ← dizionario (9 lingue) di nazione.js e delle sezioni
     │   ├── operazioni.js        ← NUOVO (2026-10-22) — pagina "Operazioni", subito dopo la
     │   │                          nazione: la lavagna dei piani. Un flowchart su un asse
@@ -974,7 +968,7 @@ wareraPlus/
     │   │                          cerchi e cartellini numerati, barra in basso con i passi,
     │   │                          "Torna alla lavagna"). Toglie tutto alla chiusura. ⚠️ il
     │   │                          punto di una regione è regionAnchor (geometria della mappa),
-    │   │                          NON regionData.position: vedi travelDistance.js.
+    │   │                          NON regionData.position: vedi regionGraph.js.
     │   ├── operazioniComuni.js  ← numero, stato ricavato, orario e colori di un passo:
     │   │                          condivisi da lavagna e mappa
     │   ├── i18nOperazioni.js    ← dizionario (9 lingue) delle operazioni
