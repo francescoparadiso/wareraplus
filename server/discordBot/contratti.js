@@ -1354,6 +1354,32 @@ Only **new** requests and edits are checked; what is already in the queue stays.
   // ═════════════════════════════════════════════════════════════════════
   // /contract-desk
   // ═════════════════════════════════════════════════════════════════════
+  /** Porta nel canale nuovo le carte delle richieste ancora vive che stanno in un
+   *  altro, nell'ordine della coda; quelle vecchie si cancellano (sono messaggi del
+   *  bot) e lo stato punta alle nuove. Le carte di richieste chiuse restano dove
+   *  sono: sono storia. Torna quante ne ha spostate. */
+  async function spostaCarte(d, canale) {
+    const dati = { vista: 'nation', nome: d.nome, richieste: d.richieste, decisione: {} };
+    const attese = d.richieste.filter((x) => vivaR(x) && x.status === 'pending').length;
+    const daSpostare = d.richieste
+      .filter((r) => vivaR(r) && stato.carte[r.id] && stato.carte[r.id].canaleId !== canale.id)
+      .sort((a, b) => (a.createdAt - b.createdAt) || (a.id - b.id))
+      .slice(0, 40);
+    let n = 0;
+    for (const r of daSpostare) {
+      const vecchia = stato.carte[r.id];
+      const carta = cartaPayload(r, r.nomePaese);
+      const lista = r.status === 'pending'
+        ? renderCoda(dati, { evidenzia: r.id, max: 3300, titolo: `Queue right now — ${attese} waiting` }) : null;
+      const nuova = await canale.send({ ...carta, embeds: lista ? [...carta.embeds, lista] : carta.embeds, allowedMentions: SENZA_MENZIONI });
+      stato.carte[r.id] = { canaleId: canale.id, messaggioId: nuova.id, at: vecchia.at || Date.now() };
+      try { const c = await canaleDi(vecchia.canaleId); await c.messages.delete(vecchia.messaggioId); } catch { /* gia' sparita */ }
+      n++;
+    }
+    if (n) salva();
+    return n;
+  }
+
   async function onComandoSportello(i) {
     const scope = i.options.getString('scope', true);
     await i.deferReply({ flags: EPHEMERAL });
@@ -1420,7 +1446,22 @@ Only **new** requests and edits are checked; what is already in the queue stays.
     stato.pannelli[key] = { scope, scopeId, canaleId: canale.id, messaggioId: m.id };
     salva();
     provaAPinnare(key);                                   // se il bot ha il permesso, lo sportello resta in cima
-    return i.editReply(`Done — the contract desk is in <#${canale.id}>. Alerts for ${scope === 'country' ? 'your nation' : 'your unit'} go there too.`);
+
+    // Le richieste ancora vive hanno la loro CARTA (coi bottoni) nel canale dove sono
+    // arrivate: cambiando canale resterebbero li', e le decisioni e gli aggiornamenti
+    // continuerebbero a comparire nel posto vecchio. Si portano nel canale nuovo.
+    let spostate = 0;
+    if (scope === 'country') {
+      try { spostate = await spostaCarte(d, canale); }
+      catch (err) { console.warn('[contratti] carte non spostate:', err.message); }
+    }
+    // L'altro ambito (unita' <-> nazione) ha un canale suo: se e' un altro, lo si dice.
+    const altri = (r.json.altri || []).map((x) => `your ${x.scope === 'mu' ? 'unit' : 'nation'}'s alerts still go to <#${x.channelId}>`);
+    return i.editReply([
+      `Done — the contract desk is in <#${canale.id}>. Alerts for ${scope === 'country' ? 'your nation' : 'your unit'} go there too.`,
+      spostate ? `Moved **${spostate}** open request${spostate === 1 ? '' : 's'} here.` : null,
+      altri.length ? `⚠️ Note: ${altri.join(' and ')}. To move those too, run \`/contract-desk post\` with the other scope in the channel you want.` : null,
+    ].filter(Boolean).join('\n'));
   }
 
   // ═════════════════════════════════════════════════════════════════════

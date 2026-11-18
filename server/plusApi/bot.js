@@ -774,7 +774,17 @@ function buildBotRouter() {
 
     setBotChannel({ scopeType: b.scope, scopeId, channelId: b.channelId, guildId: b.guildId, createdBy: id.account.id });
     audit(id.account.id, 'bot.canale.impostato', `${b.scope}:${scopeId}`, { channelId: b.channelId });
-    res.json({ configurato: true, scope: b.scope, scopeId, nome: b.scope === 'country' ? null : derivati?.muNome || null });
+    // Lo sportello dell'ALTRO ambito (nazione <-> unita') di chi sta impostando: se sta
+    // in un canale diverso, gli avvisi di quell'ambito restano LI', e chi ha spostato
+    // la nazione crede che il bot risponda "nel canale vecchio". Lo si dice a chi
+    // imposta, che ne ha il diritto: e' il suo stesso sportello.
+    const altri = [];
+    for (const [ambito, id2] of [['country', derivati?.countryId], ['mu', derivati?.muId]]) {
+      if (ambito === b.scope || !id2) continue;
+      const c2 = getBotChannel(ambito, id2);
+      if (c2 && c2.channel_id !== String(b.channelId)) altri.push({ scope: ambito, channelId: c2.channel_id });
+    }
+    res.json({ configurato: true, scope: b.scope, scopeId, altri, nome: b.scope === 'country' ? null : derivati?.muNome || null });
   });
 
   return router;

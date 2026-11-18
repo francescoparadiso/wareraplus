@@ -29,6 +29,15 @@ sportello è il quadro d'insieme, la carta è quella che suona sul telefono. Se 
 altro vince l'asta ("rubato") il governo viene taggato di nuovo. L'unità riceve
 gli avvisi nel suo canale (`/contract-desk post scope:My military unit`).
 
+**Spostare lo sportello in un altro canale** (rilanciare `/contract-desk post` lì):
+il vecchio sportello si cancella e le **carte delle richieste ancora vive**
+(in attesa o approvate, max 40, nell'ordine della coda) vengono ricreate nel canale
+nuovo; quelle delle richieste chiuse restano dov'erano. ⚠️ **Nazione e unità hanno
+un canale ciascuna**: spostare la nazione non sposta l'unità, i cui avvisi
+(approvata, rifiutata, aperta…) continuano ad arrivare nel canale vecchio. Il bot lo
+scrive nella risposta ("your unit's alerts still go to #…", dalla risposta `altri` di
+`POST /bot/canale`).
+
 Sportello e carte si **riscrivono da sole** quando qualcosa cambia, anche se si
 decide dal sito.
 
