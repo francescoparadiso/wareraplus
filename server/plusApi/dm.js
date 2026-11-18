@@ -55,7 +55,8 @@ function testoDM(tipo, r, chi, paese) {
   }
   if (tipo === 'rubata') {
     // `r` e' la richiesta NUOVA, quella rimessa in coda dal watcher.
-    return `⚔️ **Your contract was taken by another unit**\n${dove}\n${cifre}\n`
+    // `chi` e' l'unita' che l'ha presa ("Gutian Legion (Iraq)"), o "another unit" se non si sa.
+    return `⚔️ **Your contract was taken by ${chi && chi !== 'the watcher' ? chi : 'another unit'}**\n${dove}\n${cifre}\n`
       + 'The auction went to someone else, so your request was **put back in the queue in its original place**. '
       + 'The government has to approve it again.';
   }

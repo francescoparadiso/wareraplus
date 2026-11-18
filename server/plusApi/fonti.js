@@ -185,8 +185,18 @@ async function nomiUtenti(ids) {
   return out;
 }
 
+/** Nome e nazione di un'unita' dal suo id (pubblica, sei ore): per dire CHI ha preso un
+ *  contratto invece di "un'altra unita'". `null` se il gioco non risponde. */
+const unitaDa = memo(6 * 3600_000, async (muId) => {
+  const mu = await trpcGet('mu.getById', { muId });
+  if (!mu?.name) return null;
+  let paese = null;
+  try { paese = (await paesiMappa()).get(mu.country)?.name || null; } catch { /* resta senza nazione */ }
+  return { nome: mu.name, paese };
+});
+
 module.exports = {
-  CACHE_BASE, dalCache, memo,
+  CACHE_BASE, dalCache, memo, unitaDa,
   regioniMappa, paesiMappa, paeseLive, governo, configGioco,
   battaglieVive, baseDannoGiornaliero, bonifici, timeline, cittadini, nomiUtenti,
   cittadiniTutti, conteggiCittadini, aziendeEstero, eventiTicker, archivioBattaglie, speseGuerra, direttorioMu, elezioniDi,

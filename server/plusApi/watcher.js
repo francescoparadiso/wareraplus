@@ -50,7 +50,17 @@ const {
 } = require('./db');
 const { avvisa, avvisaCarta, testoRiaccodata } = require('./notify');
 const { notificaComandanti } = require('./dm');
-const { battaglieVive } = require('./fonti');
+const { battaglieVive, unitaDa } = require('./fonti');
+
+/** "**Gutian Legion** (Iraq)": chi ha l'asta, per nome; "another unit" se non si riesce a saperlo. */
+async function chiE(muId) {
+  if (!muId) return 'another unit';
+  try {
+    const u = await unitaDa(muId);
+    return u ? `**${u.nome}**${u.paese ? ` (${u.paese})` : ''}` : 'another unit';
+  } catch { return 'another unit'; }
+}
+const perKTesto = (x) => (x == null ? '?' : Number(x).toLocaleString('en-US', { maximumFractionDigits: 4 }));
 
 const RAFFICA_MS = 12_000;
 const RAFFICA_DURATA_MS = 3 * 60_000;
@@ -252,9 +262,13 @@ async function allarme(c) {
       avvisa('mu', r.mu_id, `**Auction closing in ~15s** — no bid yet on ${r.battle_label || r.battle_id}.`,
         { tipo: 'allarme', requestId: r.id });
     } else if (inTesta !== r.mu_id) {
-      avvisa('mu', r.mu_id, `**Auction closing in ~15s** — another unit is leading on ${r.battle_label || r.battle_id}.`,
+      // CHI sta per prenderlo e a CHI era destinato, coi numeri dell'offerta in testa.
+      const chi = await chiE(inTesta);
+      const previsto = `**${r.mu_nome || r.mu_id}**`;
+      avvisa('mu', r.mu_id, `**Auction closing in ~15s** — ${chi} is leading on ${r.battle_label || r.battle_id}.`,
         { tipo: 'allarme', requestId: r.id });
-      avvisa('country', r.country_id, `**Heads up** — the contract on ${r.battle_label || r.battle_id} is being taken by a unit other than the one agreed.`,
+      avvisa('country', r.country_id, `**Heads up** — on ${r.battle_label || r.battle_id} the contract is being taken by ${chi}, not by ${previsto} (the unit agreed). `
+        + `Leading bid: ${perKTesto(a.currentPerK)} per 1,000 · agreed: ${perKTesto(r.per_k)}.`,
         { tipo: 'allarme_paese', requestId: r.id });
     }
   } catch (err) {
@@ -317,15 +331,17 @@ async function verdetto(c) {
     // vinta un'altra. Rifarla da capo la metterebbe in fondo, dopo chi e'
     // arrivato nel frattempo: si rimette in coda da sola, al suo posto.
     const nuova = await riaccodaRubata(r);
-    avvisa('country', r.country_id, `**Contract went elsewhere** — ${r.battle_label || r.battle_id}: another unit won the auction agreed with ${r.mu_nome || r.mu_id}.${nuova ? ' It was put back in the queue.' : ''}`,
+    const presa = await chiE(a.currentWinner);
+    avvisa('country', r.country_id, `**Contract went elsewhere** — ${r.battle_label || r.battle_id}: ${presa} won the auction that was agreed with **${r.mu_nome || r.mu_id}**. `
+      + `Winning bid: ${perKTesto(a.currentPerK)} per 1,000 · agreed: ${perKTesto(r.per_k)}.${nuova ? ' The request was put back in the queue.' : ''}`,
       { tipo: 'persa_paese', requestId: r.id });
-    avvisa('mu', r.mu_id, `**Lost** — the contract on ${r.battle_label || r.battle_id} was taken by another unit.${nuova ? ' Your request was put back in the queue, in its original place.' : ''}`,
+    avvisa('mu', r.mu_id, `**Lost** — the contract on ${r.battle_label || r.battle_id} was taken by ${presa}.${nuova ? ' Your request was put back in the queue, in its original place.' : ''}`,
       { tipo: 'persa', requestId: r.id });
     if (nuova) {
       const chi = (getAccountById(nuova.requested_by)?.war_username) || '?';
       // Il governo la vede come una richiesta NUOVA (carta, tag, lista): deve riapprovarla.
       avvisa('country', nuova.country_id, testoRiaccodata(nuova, chi), { tipo: 'nuova', requestId: nuova.id });
-      notificaComandanti(nuova, 'rubata', 'the watcher', null);
+      notificaComandanti(nuova, 'rubata', presa.replace(/\*\*/g, ''), null);
     }
   } else if (esito === 'conforme') {
     avvisa('mu', r.mu_id, `**Won** — the contract on ${r.battle_label || r.battle_id} is yours.`,
