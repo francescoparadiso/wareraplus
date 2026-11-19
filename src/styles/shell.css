@@ -4284,3 +4284,34 @@ body.wp-no-motion .wp-num-delta { animation: none; }
 .bs-srb-dmg .bs-srb-do { flex-basis: 100%; }
 .bs-srb-help { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #8b949e; line-height: 1.4; }
 .bs-srb-help b { color: #e6edf3; font-weight: 600; }
+
+/* ══ Colonne ordinabili e sezioni spostabili (shared/viewTools.js) ═════════ */
+.wp-sort-h { cursor: pointer; user-select: none; }
+.wp-sort-h:hover { color: var(--wp-ov-text, #e6edf3); }
+.wp-sort-h:focus-visible { outline: 2px solid var(--wp-ov-accent, #39d0d8); outline-offset: 1px; border-radius: 3px; }
+.wp-sort-h[aria-sort] { color: var(--wp-ov-accent, #39d0d8); }
+.wp-sort-h[aria-sort="ascending"]::after { content: ' \25B4'; }
+.wp-sort-h[aria-sort="descending"]::after { content: ' \25BE'; }
+
+.wp-sec-ctl {
+  display: inline-flex; align-items: center; gap: 1px; flex: none; margin-right: 6px;
+  font-weight: 400; font-size: 12px; text-transform: none; letter-spacing: 0; vertical-align: middle;
+}
+.wp-sec-toggle, .wp-sec-grip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px;
+  background: transparent; color: var(--wp-ov-text-dim, #8b949e);
+  font: inherit; font-size: 13px; line-height: 1; cursor: pointer;
+}
+.wp-sec-toggle:hover, .wp-sec-grip:hover { background: color-mix(in srgb, var(--wp-ov-accent, #39d0d8) 16%, transparent); color: var(--wp-ov-text, #e6edf3); }
+.wp-sec-toggle:focus-visible, .wp-sec-grip:focus-visible { outline: 2px solid var(--wp-ov-accent, #39d0d8); outline-offset: 1px; }
+.wp-sec-toggle::before { content: '\25BE'; }
+.wp-sec-h.wp-sec-closed .wp-sec-toggle::before { content: '\25B8'; }
+.wp-sec-grip { cursor: grab; touch-action: none; }
+.wp-sec-grip::before { content: '\2807'; font-size: 15px; }
+.wp-sec-collapsed { display: none !important; }
+.wp-sec-dragging { opacity: .4; }
+.wp-sec-drop-before { box-shadow: 0 -3px 0 0 var(--wp-ov-accent, #39d0d8); }
+.wp-sec-drop-after { box-shadow: 0 3px 0 0 var(--wp-ov-accent, #39d0d8); }
+body.wp-sec-drag-on { user-select: none; cursor: grabbing; }
+body.wp-sec-drag-on * { cursor: grabbing !important; }

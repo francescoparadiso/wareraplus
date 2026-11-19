@@ -1,0 +1,20 @@
+[Unit]
+Description=WarEra+ contract desk (Discord bot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=contratti
+WorkingDirectory=/opt/contratti-bot
+# DISCORD_TOKEN, PLUS_API_BASE, PLUS_BOT_TOKEN, GUILD_ID (facoltativo): vedi il README.
+# Il file sta solo sul VPS, chmod 600.
+EnvironmentFile=/etc/contratti-bot.env
+ExecStart=/usr/local/bin/node --max-old-space-size=120 index.js
+Restart=always
+RestartSec=5
+# Il micro ha 954 MB e ci gira anche buzzelle (MemoryMax=850M): tenere il bot piccolo.
+MemoryMax=200M
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

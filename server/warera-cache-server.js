@@ -129,8 +129,8 @@ const { initProxyIndex, pollProxyIndex, readProxyIndex } = require('./proxyIndex
 const {
   initBattleArchive,
   pollBattleArchive, pollBattleArchiveBootstrap, pollBattleWarBackfill,
-  pollMercArchive, pollMercArchiveBootstrap,
-  readBattleArchive, readWarExpenses, readArchiveStatus,
+  pollMercArchive, pollMercArchiveBootstrap, pollMercMuBootstrap,
+  readBattleArchive, readWarExpenses, readWarFlows, readArchiveStatus,
   BOOT_TZ: BOOT_ARCHIVE_TZ,
 } = require('./battleArchive');
 // WarEra+ danni delle unita' giorno per giorno, sommati battaglia per
@@ -149,6 +149,13 @@ const {
   initMoneyTransfers, pollMoneyTransfers,
   readMoneyTransfers, readMoneyTransfersStatus,
 } = require('./moneyTransfers');
+// WarEra+ donazioni (transactionType 'donation'): quanto donano i cittadini
+// di una nazione e quanto ricevono le sue unita' militari. ⚠️ la forma della
+// riga non e' stata verificata prima di scriverlo: vedi la testata di
+// server/donations.js e /health -> donations.fields.
+const {
+  initDonations, pollDonations, readDonations, readDonationsByCountry, readDonationsStatus,
+} = require('./donations');
 // WarEra+ storia delle alleanze (bilaterali fino al 10 giugno 2026, poi a
 // blocco) dal registro eventi del gioco, per la time machine. Vedi il
 // blocco in testa a server/allianceHistory.js.
@@ -200,7 +207,7 @@ const {
 // nient'altro era mai stato salvato nel tempo. Adesso questi quattro campi
 // lo sono. Zero fetch: legge le cache che il server riempie gia'.
 const {
-  initDayHistory, snapshotDay, readDay, statoDayHistory, treasuryByDay,
+  initDayHistory, snapshotDay, readDay, statoDayHistory, treasuryByDay, treasuryOfCountry,
 } = require('./dayHistory');
 // WarEra+ soldi bloccati negli ordini d'acquisto, per risorsa, unita' e
 // nazione del compratore, piu' il totale dei tesori. Il gioco non dice quanti
@@ -246,6 +253,11 @@ const {
 const {
   initBattleOrders, observeBattleOrders, readBattleOrders, statoBattleOrders,
 } = require('./battleOrders');
+// WarEra+ danno e incasso per nazione di una battaglia rifatti dalla classifica
+// per GIOCATORE: quella per nazione del gioco a volte perde intere
+// cittadinanze (Libano–Siria, 19 nov: un terzo del lato). Vedi
+// server/battleNations.js.
+const { initBattleNations, readBattleNations, statoBattleNations } = require('./battleNations');
 // WarEra+ censimento aziende: per risorsa quante aziende, quanti dipendenti
 // e quante tasse sui salari incassa lo Stato dove operano. Un giro al
 // giorno di notte, partendo dai cittadini attivi del censimento. Vedi il
@@ -259,6 +271,11 @@ const {
 const {
   initTournament, pollTournament, snapshotWeekly, readTournament, readTournamentTeam, statoTournament,
 } = require('./tournament');
+// WarEra+: classifiche intere a pagine. Dalla v0.28.3 ranking.getRanking
+// risponde con i primi 100: vedi il blocco in testa a server/fullRanking.js.
+const {
+  FULL_RANKING_TYPES, initFullRanking, getFullRanking, cachedFullRanking, startFullRankingLoop, fullRankingHealth,
+} = require('./fullRanking');
 
 const app = express();
 const PORT = 3001;
@@ -467,6 +484,9 @@ initProxyIndex({
 initBattleArchive({
   trpcBatch: (...args) => trpcBatch(...args),
   readCache, writeCache,
+  // WarEra+: /war-flows incrocia l'archivio dei contratti con mu-directory
+  // (1 MB): parsato una volta per versione invece che a ogni richiesta.
+  readCacheShared,
 });
 
 // Danni per unita': classifiche pubbliche (api6, niente chiave), e la rotta
@@ -497,8 +517,13 @@ initOrderMoney({
 // Ricchezza per categoria: getUserById e' pubblica (trpcBatch, niente
 // chiave), l'archivio e' un sqlite nella cartella della cache, e i soldi negli
 // ordini per compratore vengono dalla memoria di orderMoney.
+// Classifiche intere: con la chiave (useWorker), una pagina alla volta.
+initFullRanking({ trpcBatch: (...args) => trpcBatch(...args) });
+startFullRankingLoop();
+
 initPlayerParts({
   trpcBatch: (...args) => trpcBatch(...args),
+  fullRanking: (type, opts) => getFullRanking(type, opts),
   readCache, writeCache, cacheDir: CACHE_DIR,
   ordersByUser: () => orderMoneyByUser(),
 });
@@ -515,7 +540,7 @@ initGearMarket({
 // Tornei: richieste pubbliche. In cache le fotografie della classifica
 // settimanale (weekly-snaps/), il danno delle partite finite e il registro
 // delle previsioni (vedi server/tournament.js).
-initTournament({ trpcBatch: (...args) => trpcBatch(...args), readCacheShared, readCache, writeCache, cacheDir: CACHE_DIR });
+initTournament({ trpcBatch: (...args) => trpcBatch(...args), fullRanking: (type, opts) => getFullRanking(type, opts), readCacheShared, readCache, writeCache, cacheDir: CACHE_DIR });
 
 // I trasferimenti: solo cache. La fotografia gliela passa pollCitizens.
 initCitizenMoves({ readCache, writeCache });
@@ -540,6 +565,15 @@ initMoneyTransfers({
   get trpcUpstream() { return TRPC_UPSTREAM; },
 });
 
+// Donazioni: transazioni con la chiave del VPS (come i bonifici), archivio
+// sqlite su disco; per classificare legge le cache mu-directory, countries e
+// mu-user-countries.
+initDonations({
+  cacheDir: CACHE_DIR, readCache, readCacheShared,
+  get apiToken() { return WARERA_API_TOKEN; },
+  get trpcUpstream() { return TRPC_UPSTREAM; },
+});
+
 // La timeline riceve trpcBatch per la sola gameConfig (una chiamata ogni 6
 // ore, per le durate della pillola): il danno lo campiona dalla cache
 // `countries` e le pillole gliele passa il loop dei cittadini.
@@ -555,6 +589,12 @@ initDamageTimeline({
 initBattleOrders({
   trpcBatch: (...args) => trpcBatch(...args),
   readCache, writeCache,
+});
+initBattleNations({
+  trpcBatch: (...args) => trpcBatch(...args),
+  readCacheShared,
+  // Getter: MU_USER_COUNTRIES_FILE è dichiarata più in basso (TDZ).
+  get userCountriesFile() { return MU_USER_COUNTRIES_FILE; },
 });
 initBattleTimeline({
   trpcBatch: (...args) => trpcBatch(...args),
@@ -908,6 +948,13 @@ function leanMu(m) {
     createdAt: m.createdAt,
   };
   if (m.avatarUrl) out.avatarUrl = m.avatarUrl;
+  // WarEra+ v0.28.3: tipo dell'unita'. Assente = Paramilitare (il default,
+  // 1.664 unita' su 1.743 il 2026-11-17); 'stateArmy' porta la nazione che
+  // la sponsorizza e le paga il petrolio del quartier generale;
+  // 'privateMercenary' e' la mercenaria privata.
+  if (m.type) out.type = m.type;
+  if (m.sponsorCountry) out.sponsorCountry = m.sponsorCountry;
+  if (m.activeUpgradeLevels?.headquarters) out.hq = m.activeUpgradeLevels.headquarters;
   const rankings = {};
   for (const type of MU_RANKING_TYPES) {
     const r = m.rankings?.[type];
@@ -2666,6 +2713,9 @@ cron.schedule('* 2-6 * * *', pollMercArchiveBootstrap, { timezone: BOOT_ARCHIVE_
 // Guerra delle righe d'archivio scritte prima di `wr` (scheda "Guerre"): una
 // nottata, solo pagine di battle.getBattles, poi non fa piu' niente.
 cron.schedule('*/2 2-6 * * *', pollBattleWarBackfill, { timezone: BOOT_ARCHIVE_TZ });
+// Chi INCASSA i contratti (unita' vincitrice), dal 2026-11-13: stesso schema,
+// archivio e cursore suoi. Vedi la sezione "FLUSSO" di battleArchive.js.
+cron.schedule('* 2-6 * * *', pollMercMuBootstrap, { timezone: BOOT_ARCHIVE_TZ });
 // Danni per unita' (server/muBattleDamage.js): il giro incrementale tre
 // minuti dopo quello dell'archivio, da cui prende le battaglie nuove; il
 // recupero di notte come i bootstrap qui sopra, al secondo :30 per non
@@ -2676,6 +2726,9 @@ cron.schedule('30 * 2-6 * * *', pollMuBattleDamageBackfill, { timezone: MU_DAMAG
 // ferma al primo id gia' visto — cioe' quasi sempre UNA richiesta. Offset
 // :11 per non cadere addosso ai due giri dell'archivio (:06 e :16).
 cron.schedule('11,31,51 * * * *', pollMoneyTransfers);
+// Donazioni: come i bonifici (l'API ne ricorda una finestra corta), ma sono
+// molte di piu': un giro ogni 10 minuti, a :07 per non cadere sugli altri.
+cron.schedule('7,17,27,37,47,57 * * * *', pollDonations);
 cron.schedule('4,34 * * * *', refreshPoliticalHistory);     // ogni 30 min: riassunti elezioni + nomi dei presidenti
 cron.schedule('48 * * * *', pollAllianceHistory);           // ogni ora, :48       // ogni 20 min, :11
 cron.schedule('45 */6 * * *', pollProxyIndex);               // ogni 6 ore, :45 (radar dei proxy)
@@ -2799,6 +2852,9 @@ cron.schedule('* * * * *', () => {
   // minuto in cui questo modulo non guarda è un pezzo di storico che si
   // perde per sempre (vedi il blocco in testa a moneyTransfers.js).
   await pollMoneyTransfers();
+  // Donazioni: stesso motivo, la finestra dell'API scorre. Senza await: il
+  // primo giro sfoglia fino a 60 pagine e non deve ritardare l'avvio.
+  pollDonations().catch(err => console.error('[donations] avvio:', err.message));
   // Prezzi: un campione subito. Costa una richiesta pubblica, e su un
   // riavvio a meta' pomeriggio evita che la candela di oggi si apra solo
   // alle :27 successive.
@@ -2965,6 +3021,34 @@ function playstyleIndex() {
   if (!_psIndex) refreshPlaystyleIndex(readCache(MU_USER_COUNTRIES_FILE, { data: {} }).data);
   return _psIndex;
 }
+
+// WarEra+: la classifica INTERA di un tipo (righe compatte { u, c, m, v, r }),
+// al posto della ranking.getRanking che dalla v0.28.3 si ferma a 100. Il
+// browser ne farebbe 300-400 pagine da solo; qui sono gia' in memoria
+// (server/fullRanking.js). 503 finche' il primo giro non e' finito: il client
+// ripiega sui primi 100 e lo dichiara.
+const _fullRankingGz = new Map(); // type -> { at, gz }
+app.get('/ranking-full', (req, res) => {
+  const type = String(req.query.type || '');
+  if (!FULL_RANKING_TYPES.includes(type)) return res.status(400).json({ error: 'tipo non previsto' });
+  const e = cachedFullRanking(type);
+  if (!e) {
+    getFullRanking(type).catch(() => {});
+    return res.status(503).json({ error: 'classifica in preparazione' });
+  }
+  // Il corpo e' gia' JSON: si comprime una volta per versione, non a richiesta.
+  res.set('Content-Type', 'application/json; charset=utf-8');
+  res.set('Vary', 'Accept-Encoding');
+  res.set('Cache-Control', 'public, max-age=300');
+  if (!/\bgzip\b/.test(req.headers['accept-encoding'] || '')) return res.send(e.body);
+  let z = _fullRankingGz.get(type);
+  if (!z || z.at !== e.at) {
+    z = { at: e.at, gz: zlib.gzipSync(Buffer.from(e.body, 'utf-8')) };
+    _fullRankingGz.set(type, z);
+  }
+  res.set('Content-Encoding', 'gzip');
+  return res.send(z.gz);
+});
 
 app.get('/users-lite', async (req, res) => {
   const ids = String(req.query.ids || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -3255,12 +3339,45 @@ app.get('/mu-damage-history', (req, res) => {
 // costa niente e resta sempre coerente con l'ultimo giro di poll.
 app.get('/battle-archive', (req, res) => res.json(readBattleArchive()));
 app.get('/war-expenses', (req, res) => res.json(readWarExpenses()));
+// Chi paga e chi incassa i contratti mercenari: pagante -> nazione dell'unita'
+// vincitrice, giorno per giorno. Senza deploy risponde 404 e la scheda Spese
+// di guerra resta com'era, senza colonna "incassato".
+app.get('/war-flows', (req, res) => res.json(readWarFlows()));
 app.get('/battle-archive/status', (req, res) => res.json(readArchiveStatus()));
 
 // Finanziamenti fra nazioni (server/moneyTransfers.js). `coverageFrom` nella
 // risposta dice da quando questo archivio guarda: prima di quella data una
 // lista vuota NON vuol dire "nessun finanziamento", e il client lo dichiara.
 app.get('/money-transfers', (req, res) => res.json(readMoneyTransfers()));
+
+// Donazioni dei cittadini di una nazione e ricevute dalle sue unita'
+// (server/donations.js). `classified` dice quante righe la lettura ha capito:
+// se resta a zero con righe in archivio la forma del dato e' diversa da quella
+// attesa, e il client lo dichiara invece di mostrare "nessuna donazione".
+app.get('/donations', (req, res) => {
+  const country = String(req.query.country || '');
+  if (!/^[0-9a-f]{24}$/i.test(country)) return res.status(400).json({ error: 'country' });
+  const out = readDonations(country, req.query.days);
+  if (!out) return res.status(404).json({ error: 'donations non disponibile' });
+  res.json(out);
+});
+
+// Le donazioni ricevute da ogni nazione (tesoro + unita'), per il confronto
+// fra nazioni nella scheda Economia: donazioni per cittadino e per sviluppo.
+app.get('/donations-by-country', (req, res) => {
+  const out = readDonationsByCountry(req.query.days);
+  if (!out) return res.status(404).json({ error: 'donations non disponibile' });
+  res.json(out);
+});
+
+// Il tesoro di una nazione giorno per giorno (countryWealth, scatto delle
+// 02:05 italiane), da dayHistory.
+app.get('/country-treasury', (req, res) => {
+  const country = String(req.query.country || '');
+  if (!/^[0-9a-f]{24}$/i.test(country)) return res.status(400).json({ error: 'country' });
+  const days = Math.max(1, Math.min(400, Math.floor(Number(req.query.days)) || 90));
+  res.json({ country, days: treasuryOfCountry(country, days) });
+});
 
 // Storia delle alleanze per la time machine (server/allianceHistory.js).
 app.get('/alliance-history', (req, res) => res.json(readAllianceHistory()));
@@ -3455,6 +3572,20 @@ app.get('/battle-orders', (req, res) => {
   const ids = String(req.query.ids || '').split(',').filter((v) => /^[a-f0-9]{24}$/i.test(v)).slice(0, 200);
   if (!ids.length) return res.status(400).json({ error: 'ids mancanti' });
   res.json(readBattleOrders(ids));
+});
+
+// Danno e incasso per cittadinanza di una battaglia (server/battleNations.js).
+// `live=1` tiene la risposta 60 s invece di 6 ore. 502 se una classifica
+// non risponde: il client resta sulla classifica per nazione del gioco.
+app.get('/battle-nations', async (req, res) => {
+  const battleId = String(req.query.battleId || '');
+  if (!/^[a-f0-9]{24}$/i.test(battleId)) return res.status(400).json({ error: 'battleId mancante' });
+  try {
+    res.json(await readBattleNations(battleId, { live: req.query.live === '1' }));
+  } catch (err) {
+    console.error('[battle-nations] richiesta fallita:', err.message);
+    res.status(502).json({ error: 'classifiche non disponibili' });
+  }
 });
 
 app.get('/battle-timeline', (req, res) => {
@@ -3780,6 +3911,17 @@ const TRPC_ALLOWED = new Set([
   'user.getUserById', 'user.getUserLite', 'user.getUsersByCountry',
   'war.getActiveWarBetweenCountries', 'war.getById',
   'work.getStatsByCompany', 'work.getStatsByUserId',
+  // v0.28.3 (2026-11-17): procedure nuove, tutte di LETTURA e pubbliche
+  // (rispondono uguali senza chiave). Le chiama il tool da src/mu, src/nations,
+  // src/players, src/battles; qui per quando passano dal proxy.
+  'battleRanking.getPrivateMercenaryDamage',
+  'league.getUserLeague',
+  'muLeague.getDivisionCounts', 'muLeague.getMuLeague',
+  'muSponsorship.getActiveByCountryPaginated', 'muSponsorship.getByCountry',
+  'muSponsorship.getForMu', 'muSponsorship.getSponsorable',
+  'ranking.getRankingAround', 'ranking.getRankingPage',
+  'rankingSnapshot.getEntityRecentRanks', 'rankingSnapshot.getHistory', 'rankingSnapshot.getPreviousRanks',
+  'stateArmyExpense.getLedger',
 ]);
 
 const _proxyBlocked = { count: 0, names: new Set() };
@@ -4245,6 +4387,7 @@ app.get('/health', (req, res) => res.json({
   // Quanto indietro arrivano i finanziamenti. Subito dopo un deploy copre
   // i ~3 giorni che l'API ricorda, e da li' cresce da solo.
   moneyTransfers: readMoneyTransfersStatus(),
+  donations: readDonationsStatus(),
   allianceHistory: statoAllianceHistory(),
   citizenMoves: statoCitizenMoves(),
   // Quante ore di danno orario sono in archivio (accumulano da qui in
@@ -4281,6 +4424,9 @@ app.get('/health', (req, res) => res.json({
   // quante chiuse su disco. Accumula dal deploy, non si recupera.
   battleTimeline: statoBattleTimeline(),
   battleOrders: statoBattleOrders(),
+  battleNations: statoBattleNations(),
+  // Classifiche intere (getRankingPage): righe, `complete`, ora dell'ultima.
+  fullRanking: fullRankingHealth(),
 }));
 
 app.listen(PORT, '127.0.0.1', () => {

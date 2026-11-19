@@ -37,11 +37,12 @@ import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 import { btlT } from './i18n.js';
 import { trackEvent, trackThrottled } from '../shared/analytics.js';
 import { getBattleDetail, getBattleMuBreakdown, getRoundRanking } from './api.js';
+import { trpcCall } from '../shared/trpcClient.js';
 import { fetchMoneyTransfers, transfersFor, windowIsShort } from './moneyTransfers.js';
 import { fetchBattleTimeline, timelineSectionHtml, bountySectionHtml, wireTimeline, resetTimeline } from './battleTimeline.js';
 import {
   loadBonusRules, fetchBattleOrders, loadMe, myPlayerId, sideContext, sideNationRows, personalBonus,
-  orderPct, PRIORITIES,
+  orderPct, PRIORITIES, bonusFor, nationTotal, nationParts, capTotal, muTypeEffects, MU_TYPES,
 } from '../shared/battleBonus.js';
 import { fetchActiveBattles } from '../diplomacy/battleHeatmap.js';
 import { bvT } from '../diplomacy/bonusView.js';
@@ -53,6 +54,8 @@ const TOP = 10;
 let _detail = null;
 let _mu = null;
 let _muState = 'closed';   // 'closed' | 'loading' | 'open' | 'error'
+let _pmd = null;           // v0.28.3: { attacker, defender } danno delle mercenarie private
+let _muTypeBadge = null;   // src/mu/muType.js, caricato con la sezione unità
 let _expanded = { attacker: false, defender: false };
 // Ordinamento delle tabelle per lato (richiesta dell'utente, 2026-10-20:
 // «cliccando in alto sulle voci te le riordina»). Uno solo per entrambi i
@@ -155,8 +158,11 @@ function muCellHtml(id) {
     url ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.remove()">` : ''
   }</span>`;
   if (!name) return `${av}<span class="wp-btl-mu-unres">${btlT('unknownMu')}</span>`;
+  // v0.28.3: Esercito di Stato / mercenaria privata, se la directory lo sa.
+  const d = _dir?.find(x => x._id === id);
+  const badge = d && _muTypeBadge ? _muTypeBadge(d, { short: true }) : '';
   return `<button type="button" class="wp-btl-mu-link" data-mu-id="${escapeHtml(id)}"
-    title="${btlT('openMuHint')}">${av}<span>${escapeHtml(name)}</span></button>`;
+    title="${btlT('openMuHint')}">${av}<span>${escapeHtml(name)}</span>${badge}</button>`;
 }
 
 function typeLabel(t) {
@@ -181,7 +187,7 @@ function sideHeadHtml(battle, sideKey, label, color, countryId) {
    sbilanciati la quota sul totale non risponderebbe. */
 function sideTable(rows, sideKey, battle, opts) {
   const { label, color, countryId, expanded, entityName, entityFlag, truncated, entityHeader,
-          entityCell, sentBy, pay } = opts;
+          entityCell, sentBy, pay, fix } = opts;
   // entityCell: cella già in HTML (unità militari, che sono cliccabili).
   // Senza, si resta al comportamento originale nome+bandiera come testo.
   const cell = entityCell || ((id) => `${entityFlag(id)}${escapeHtml(entityName(id) || '—')}`);
@@ -248,11 +254,30 @@ function sideTable(rows, sideKey, battle, opts) {
         </tr></tfoot>
       </table>
       ${truncated ? `<p class="wp-btl-foot wp-btl-foot-tight wp-btl-side-note">${btlT('rankTruncated')}</p>` : ''}
+      ${nationFixHtml(fix)}
       ${rows.length > TOP
         ? `<button type="button" class="wp-btl-more wp-btl-side-more" data-side="${sideKey}">${
             expanded ? btlT('showTop', { n: TOP }) : btlT('showAll', { n: rows.length })}</button>`
         : ''}
     </div>`;
+}
+
+/* ── Classifica per nazione completata dai giocatori ──
+   Vedi src/shared/battleNations.js: la classifica del gioco per nazione a
+   volte perde intere cittadinanze, e i numeri qui sopra sono stati
+   completati da quella per giocatore. Si dice di quanto, e cosa resta senza
+   nazione (solo nel totale, mai assegnato a caso). Sotto lo 0,5% del lato si
+   tace: è rumore di arrotondamento, non un buco. */
+function nationFixHtml(fix) {
+  if (!fix) return '';
+  const parts = [];
+  if (fix.damage > 0 || fix.money > 0) {
+    parts.push(btlT('nationFix', { dmg: fmtNum(fix.damage), money: fmtMoney(fix.money) }));
+  }
+  if (fix.unattributedDamage > 0 || fix.unattributedMoney > 0) {
+    parts.push(btlT('nationFixUn', { dmg: fmtNum(fix.unattributedDamage), money: fmtMoney(fix.unattributedMoney) }));
+  }
+  return parts.length ? `<p class="wp-btl-foot wp-btl-foot-tight wp-btl-side-note">⚠️ ${parts.join(' ')}</p>` : '';
 }
 
 /* ── Quanto è stato PAGATO il danno, nazione per nazione ──
@@ -465,7 +490,20 @@ function muSectionHtml(battle) {
         expanded: _expanded.attacker, entityCell: muCellHtml,
         entityHeader: btlT('colUnit'), truncated: _mu.truncated?.attacker })}
     </div>
-    ${muNamesMissing(_mu) ? `<p class="wp-btl-foot">${btlT('muNamesMissing')}</p>` : ''}`;
+    ${muNamesMissing(_mu) ? `<p class="wp-btl-foot">${btlT('muNamesMissing')}</p>` : ''}
+    ${pmdHtml()}`;
+}
+
+/* v0.28.3: danno delle unità MERCENARIE PRIVATE per schieramento
+   (`battleRanking.getPrivateMercenaryDamage {battleId}` → { attacker,
+   defender }, pubblica). Il gioco lo tiene a parte: è il danno che quelle
+   unità fanno a contratto, fuori dalle classifiche delle nazioni. Riga
+   solo se almeno un lato ne ha. */
+function pmdHtml() {
+  if (!_pmd || !(_pmd.attacker > 0 || _pmd.defender > 0)) return '';
+  return `<p class="wp-btl-foot wp-btl-pmd">${escapeHtml(btlT('pmdLine', {
+    d: fmtNum(_pmd.defender || 0), a: fmtNum(_pmd.attacker || 0),
+  }))}</p>`;
 }
 
 /* ══ PER ALLEANZA ══════════════════════════════════════════
@@ -823,11 +861,13 @@ export function renderBattleDetail(battle) {
         ${sideTable(_detail.sides.defender, 'defender', battle, {
           label: btlT('defender'), color: 'var(--wp-btl-def)', countryId: battle.defender.countryId,
           expanded: _expanded.defender, entityName: nm, entityFlag: flagHtml, sentBy: sentDef, pay: payDef,
-          entityHeader: btlT('colNation'), truncated: _detail.truncated?.defender })}
+          entityHeader: btlT('colNation'), truncated: _detail.truncated?.defender,
+          fix: _detail.nationFix?.defender })}
         ${sideTable(_detail.sides.attacker, 'attacker', battle, {
           label: btlT('attacker'), color: 'var(--wp-btl-atk)', countryId: battle.attacker.countryId,
           expanded: _expanded.attacker, entityName: nm, entityFlag: flagHtml, sentBy: sentAtk, pay: payAtk,
-          entityHeader: btlT('colNation'), truncated: _detail.truncated?.attacker })}
+          entityHeader: btlT('colNation'), truncated: _detail.truncated?.attacker,
+          fix: _detail.nationFix?.attacker })}
       </div>
       ${anySent ? `<p class="wp-btl-foot wp-btl-foot-tight">${btlT('sentNote')}</p>` : ''}
       <p class="wp-btl-foot wp-btl-foot-tight">${btlT('paidPerKNote')}${anyCtr ? ' ' + btlT('paidPerKCtrNote') : ''}${
@@ -1141,11 +1181,14 @@ async function loadMuSection(battle, repaint) {
   // sessione: è condivisa con la vista Unità Militari, quindi spesso è
   // già calda. Se non arriva, le classifiche si mostrano comunque, con
   // gli identificativi al posto dei nomi.
-  const [mu, dir] = await Promise.all([
+  const [mu, dir, pmd] = await Promise.all([
     getBattleMuBreakdown(battle.id, { live: Boolean(battle.live) }),
     import('../mu/api.js').then(m => m.fetchMuDirectory()).catch(() => null),
+    trpcCall('battleRanking.getPrivateMercenaryDamage', { battleId: battle.id }).catch(() => null),
+    import('../mu/muType.js').then(m => { _muTypeBadge = m.muTypeBadge; }).catch(() => {}),
   ]);
   if (dir) _dir = dir;
+  _pmd = pmd && typeof pmd === 'object' ? pmd : null;
   // Nel frattempo si è passati a un'altra battaglia: queste classifiche
   // non sono le sue.
   if (_wired.battle?.id !== battle.id) return;
@@ -1202,9 +1245,15 @@ const fmtPct = (v) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 1
 
 function bonusChips(parts, side) {
   const KEYS = { home: 'partHome', enemy: 'partEnemy', pact: 'partPact', ally: 'partAlly', order: 'partOrder',
-    muOrder: 'partMuOrder', muHq: 'partMuHq', revolt: 'partRevolt', malus: 'partMalus' };
+    muOrder: 'partMuOrder', muHq: 'partMuHq', revolt: 'partRevolt', malus: 'partMalus',
+    unitType: 'partUnitType', contract: 'partContract' };
   const out = [];
   for (const [k, v] of Object.entries(parts)) {
+    // v0.28.3: il contratto della mercenaria privata è un intervallo [0, 5].
+    if (k === 'contract' && Array.isArray(v) && v[1]) {
+      out.push(`<span class="wp-btl-bchip">${escapeHtml(btlT('partContract'))} +${fmtPct(v[0])}–${fmtPct(v[1])}%</span>`);
+      continue;
+    }
     if (!v || Array.isArray(v)) continue;
     const label = k === 'building' ? btlT(side === 'defender' ? 'partBunker' : 'partBase') : btlT(KEYS[k]);
     const neg = v < 0;
@@ -1229,7 +1278,9 @@ function bonusChips(parts, side) {
    unità, e sommarci questi li conterebbe due volte. */
 const BMAN_KEY = 'we_btl_bonus_manual';
 let _bman = (() => {
-  const def = { order: false, priority: 'medium', hq: false, level: 1 };
+  // `type` (v0.28.3): tipo d'unità applicato a tutte le righe, vedi
+  // MU_TYPE_EFFECTS in battleBonus.js. 'paramilitary' = com'era prima.
+  const def = { order: false, priority: 'medium', hq: false, level: 1, type: 'paramilitary' };
   try { return { ...def, ...JSON.parse(localStorage.getItem(BMAN_KEY) || '{}') }; } catch { return def; }
 })();
 function saveBman() {
@@ -1239,9 +1290,11 @@ function saveBman() {
 /** Le voci accese, nella forma delle parti di battleBonus ({ muOrder, muHq }). */
 function bmanParts(rules) {
   const out = {};
-  if (_bman.order) out.muOrder = orderPct(rules.muOrder, _bman.priority);
+  const e = muTypeEffects(_bman.type);
+  // Esercito di Stato: niente ordini d'unità. Mercenaria privata: ×2.
+  if (_bman.order && e.muOrders) out.muOrder = orderPct(rules.muOrder, _bman.priority) * e.muOrder;
   const lv = Math.min(_bman.level, rules.hq.length - 1);
-  if (_bman.hq && lv > 0) out.muHq = rules.hq[lv] || 0;
+  if (_bman.hq && lv > 0) out.muHq = (rules.hq[lv] || 0) * e.hq;
   return out;
 }
 
@@ -1264,9 +1317,15 @@ function bmanHtml(rules) {
         <div class="wp-btl-bman-row">${sw('order', btlT('partMuOrder'))}
           ${seg('priority', PRIORITIES.map(pr => [pr, `${btlT(prLabel[pr])} +${orderPct(rules.muOrder, pr)}%`, `o-${pr}`]))}</div>
         <div class="wp-btl-bman-row">${sw('hq', btlT('partMuHq'))}
-          ${seg('level', levels.map(lv => [lv, `${btlT('lvN', { n: lv })} +${fmtPct(rules.hq[lv])}%`]))}</div>
+          ${seg('level', levels.map(lv => [lv, `${btlT('lvN', { n: lv })} +${fmtPct(rules.hq[lv] * muTypeEffects(_bman.type).hq)}%`]))}</div>
+        <div class="wp-btl-bman-row"><span class="wp-btl-bman-lab">${escapeHtml(btlT('bmanType'))}</span>
+          <div class="wp-btl-bman-seg" role="group">
+            ${[['paramilitary', 'typePara'], ['stateArmy', 'typeState'], ['privateMercenary', 'typePmc']].map(([v, k]) =>
+              `<button type="button" class="${_bman.type === v ? 'active' : ''}" data-bman-type="${v}">${escapeHtml(btlT(k))}</button>`).join('')}
+          </div></div>
       </div>
       <p class="wp-btl-foot wp-btl-foot-tight">${escapeHtml(btlT('bmanNote'))}</p>
+      ${_bman.type !== 'paramilitary' ? `<p class="wp-btl-foot wp-btl-foot-tight">${escapeHtml(btlT('bmanTypeNote'))}</p>` : ''}
     </div>`;
 }
 
@@ -1275,7 +1334,9 @@ function bmanClick(target) {
   const sw = target.closest?.('[data-bman]');
   const pr = target.closest?.('[data-bman-priority]');
   const lv = target.closest?.('[data-bman-level]');
-  if (sw) _bman[sw.dataset.bman] = !_bman[sw.dataset.bman];
+  const ty = target.closest?.('[data-bman-type]');
+  if (ty) _bman.type = MU_TYPES.includes(ty.dataset.bmanType) ? ty.dataset.bmanType : 'paramilitary';
+  else if (sw) _bman[sw.dataset.bman] = !_bman[sw.dataset.bman];
   // Scegliere un livello accende anche l'interruttore: è quello che si vuole.
   else if (pr) { _bman.priority = pr.dataset.bmanPriority; _bman.order = true; }
   else if (lv) { _bman.level = Number(lv.dataset.bmanLevel); _bman.hq = true; }
@@ -1301,8 +1362,11 @@ function bonusHtml(battle) {
         <strong>${signed(b.mine[side].total)}</strong>
         <div class="wp-btl-bchips">${bonusChips(b.mine[side].parts, side)}</div>
       </div>`;
+    const myType = b.mine.defender?.muType;
+    const typeKey = { stateArmy: 'typeState', privateMercenary: 'typePmc' }[myType];
     you = `<div class="wp-btl-bonus-you"><div class="wp-btl-bonus-title">★ ${escapeHtml(bvT('you'))}</div>
-      <div class="wp-btl-bonus-cells">${cell('defender')}${cell('attacker')}</div></div>`;
+      <div class="wp-btl-bonus-cells">${cell('defender')}${cell('attacker')}</div>
+      ${typeKey ? `<p class="wp-btl-foot wp-btl-foot-tight">${escapeHtml(bvT('youType', { t: btlT(typeKey) }))}</p>` : ''}</div>`;
   } else if (!b.hasMe) {
     you = `<div class="wp-btl-notice">${escapeHtml(bvT('setMe'))}
       <button type="button" class="wp-btl-chip" data-btl-players>${escapeHtml(bvT('openPlayers'))}</button></div>`;
@@ -1320,8 +1384,16 @@ function bonusHtml(battle) {
     }
     // Le voci dell'unità accese a mano si sommano a ogni riga, e chi non ha
     // niente di suo prende comunque quelle: la riga "qualunque altra".
-    const rows = b.rows[side].map(r => ({ ...r, v: r.v + extraTot, parts: { ...r.parts, ...extra } }));
-    if (extraTot) rows.push({ id: null, v: extraTot, parts: extra });
+    // v0.28.3: con un tipo d'unità scelto le righe si rifanno con i suoi
+    // effetti (ordine ×2, +5/−5, niente nazionalità…), "le altre" comprese,
+    // e la mercenaria privata si ferma al suo tetto.
+    const who = _bman.type !== 'paramilitary' ? { muType: _bman.type } : null;
+    const base = who ? sideNationRows(ctx, who) : b.rows[side];
+    const cap = (v) => (who ? capTotal(v, _bman.type) : v);
+    const rows = base.map(r => ({ ...r, v: cap(r.v + extraTot), parts: { ...r.parts, ...extra } }));
+    const othersParts = who ? { ...nationParts(bonusFor(null, ctx, who).parts), ...extra } : extra;
+    const othersV = who ? cap(nationTotal(othersParts) + extraTot) : extraTot;
+    if (othersV) rows.push({ id: null, v: othersV, parts: othersParts });
     const max = Math.max(1, rows[0]?.v || 1);
     const list = rows.length ? rows.map(r => `
       <div class="wp-btl-brow${r.id ? '' : ' wp-btl-brow-others'}">
@@ -1354,6 +1426,7 @@ function bonusHtml(battle) {
 export function resetBattleDetail() {
   _detail = null;
   _mu = null;
+  _pmd = null;
   _money = null;
   _tl = null;
   resetTimeline();

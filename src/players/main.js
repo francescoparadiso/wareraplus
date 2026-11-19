@@ -50,7 +50,7 @@ import { setMe, clearMe } from '../shared/me.js';
 import { vsRow, countUpScore as countUpIn } from '../shared/versus.js';
 import {
   LEADERBOARDS, fetchPlayer, searchPlayers, fetchEquipment, fetchWealthHistory,
-  fetchLeaderboard, fetchNames, fetchPlayerBattles, fetchCompanies, fetchPointValues, fetchWorkStats,
+  fetchLeaderboard, fetchNames, fetchPlayerBattles, fetchUserLeague, fetchCompanies, fetchPointValues, fetchWorkStats,
   fetchPolitics, fetchNationRanks, fetchWealthParts, fetchUserWealth,
 } from './api.js';
 import { prtT } from './i18nParts.js';
@@ -109,6 +109,8 @@ let _equip;                  // idem
 let _muName = null;
 let _wealthObs = null;
 let _natRanks = null;        // posizione nella sua nazione (fetchNationRanks)
+let _league = null;          // v0.28.3: girone della lega settimanale (fetchUserLeague)
+let _leagueOpen = false;
 let _companies;              // undefined = non chiesta, 'loading', null, []
 let _pointValues = null;     // { itemCode: monete per punto }, per il margine
 let _work;                   // idem, statistiche di lavoro a 31 giorni
@@ -318,6 +320,7 @@ export async function openPlayer(id, { tabs = true } = {}) {
   _equip = undefined;
   _muName = null;
   _natRanks = null;
+  _league = null;
   _companies = undefined;
   _pointValues = null;
   _work = undefined;
@@ -340,7 +343,60 @@ export async function openPlayer(id, { tabs = true } = {}) {
   render();
   if (lite?.mu) resolveMuName(lite.mu, id);
   if (lite) fetchNationRanks(lite).then(r => { if (_pid === id) { _natRanks = r; render(); } }).catch(() => {});
+  if (lite) loadLeague(id);
   if (tabs || !_cmpId) loadTab(_ptab);
+}
+
+/* v0.28.3: lega settimanale del giocatore. Arriva dopo la scheda (una
+   richiesta, più i nomi del girone dalla stessa cache di sessione delle
+   classifiche) e si aggiunge sotto le statistiche; fuori lega non compare. */
+async function loadLeague(id) {
+  const lg = await fetchUserLeague(id);
+  if (_pid !== id) return;
+  _league = lg;
+  render();
+  if (!lg) return;
+  const ids = lg.rows.map(r => r.user).filter(u => u && !_boardNames.has(u));
+  if (!ids.length) return;
+  const got = await fetchNames(ids).catch(() => new Map());
+  got.forEach((v, uid) => { if (v) _boardNames.set(uid, v); });
+  if (_pid === id) render();
+}
+
+function leagueHtml() {
+  const lg = _league;
+  if (!lg?.me) return '';
+  const me = lg.me;
+  const prize = lg.placeRewards?.[me.rank - 1];
+  const prizeTxt = prize
+    ? [prize.money ? fmtMoney(prize.money) : null, prize.case1 ? plyT('lgCase1', { n: prize.case1 }) : null,
+       prize.case2 ? plyT('lgCase2', { n: prize.case2 }) : null, prize.hasBadge ? plyT('lgBadge') : null].filter(Boolean).join(' · ')
+    : plyT('lgNoPrize');
+  const ends = lg.weekEndsAt ? new Date(lg.weekEndsAt).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  return `
+    <details class="wp-ply-league"${_leagueOpen ? ' open' : ''}>
+      <summary>
+        <span class="wp-ply-league-t">🏆 ${escapeHtml(plyT('lgTitle'))}</span>
+        <b>${escapeHtml(plyT('lgPlace', { r: me.rank, n: lg.rows.length }))}</b>
+        <span>${escapeHtml(fmtCompact(me.points))} ${escapeHtml(plyT('lgPoints'))}</span>
+        <span>${escapeHtml(prizeTxt)}</span>
+        ${ends ? `<span class="wp-ply-dim">${escapeHtml(plyT('lgEnds', { t: ends }))}</span>` : ''}
+      </summary>
+      <div class="wp-ply-tablewrap"><table class="wp-ply-table wp-ply-league-table">
+        <thead><tr><th class="wp-ply-num">${escapeHtml(plyT('colRank'))}</th><th>${escapeHtml(plyT('colPlayer'))}</th>
+          <th class="wp-ply-num">${escapeHtml(plyT('lgPoints'))}</th><th>${escapeHtml(plyT('lgPrize'))}</th></tr></thead>
+        <tbody>${lg.rows.map(r => {
+          const n = _boardNames.get(r.user);
+          const pr = lg.placeRewards?.[r.rank - 1];
+          return `<tr class="wp-ply-rowlink${r.user === _pid ? ' wp-ply-league-me' : ''}${r.isEligible === false ? ' wp-ply-league-out' : ''}" data-open="${escapeHtml(r.user)}" tabindex="0">
+            <td class="wp-ply-num wp-ply-dim">${escapeHtml(r.rank)}</td>
+            <td><span class="wp-ply-who">${avatarImg(n?.avatarUrl, n?.username, 'wp-ply-av wp-ply-av-xs')}<span>${escapeHtml(n?.username || '…')}</span></span></td>
+            <td class="wp-ply-num">${escapeHtml(fmtCompact(r.points))}</td>
+            <td>${pr ? escapeHtml(fmtMoney(pr.money)) : '—'}</td></tr>`;
+        }).join('')}</tbody>
+      </table></div>
+      <p class="wp-ply-note">${escapeHtml(plyT('lgNote', { m: (Number(lg.league.multiplier) || 1).toFixed(2), lv: lg.league.levelAvg ?? '—' }))}</p>
+    </details>`;
 }
 
 async function resolveMuName(muId, pid) {
@@ -458,7 +514,8 @@ function homeHtml() {
             <td class="wp-ply-num">${escapeHtml(isMoney ? fmtMoney(r.v) : fmtCompact(r.v))}</td></tr>`;
         }).join('')}</tbody>
       </table></div>
-      <p class="wp-ply-note">${escapeHtml(plyT('boardNote', { n: top.length, t: fmtFull(boardFiltered().length) }))}</p>`;
+      <p class="wp-ply-note">${escapeHtml(plyT('boardNote', { n: top.length, t: fmtFull(boardFiltered().length) }))}</p>
+      ${_boardRows.partial ? `<p class="wp-ply-note">${escapeHtml(plyT('boardPartial'))}</p>` : ''}`;
   }
 
   return `
@@ -706,6 +763,7 @@ function playerHtml() {
         .filter(([, r]) => r?.value != null)
         .map(([k, r]) => `<span>${escapeHtml(plyT(k))} <b>${escapeHtml(fmtFull(r.value))}</b>${r.rank ? ` <em>#${escapeHtml(fmtFull(r.rank))}</em>` : ''}</span>`).join('')}
     </div>
+    ${leagueHtml()}
 
     <nav class="wp-ply-tabs" role="tablist">${tabs.map(t => `
       <button type="button" role="tab" class="wp-ply-pill${_ptab === t.id ? ' active' : ''}" aria-selected="${_ptab === t.id}" data-ptab="${t.id}">${escapeHtml(t.label)}</button>`).join('')}
@@ -1198,6 +1256,8 @@ function wire() {
   });
   _root.addEventListener('click', (e) => {
     const t = e.target;
+    // Il girone di lega resta aperto fra un ridisegno e l'altro.
+    if (t.closest('.wp-ply-league > summary')) { _leagueOpen = !_leagueOpen; return; }
     const vs = t.closest('[data-vs]');
     if (vs) { openCompare(vs.dataset.vs); return; }
     const dPick = t.closest('[data-duel-pick]');

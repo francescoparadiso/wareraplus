@@ -149,6 +149,10 @@ export function leanMu(m) {
     createdAt: m.createdAt,
   };
   if (m.avatarUrl) out.avatarUrl = m.avatarUrl;
+  // v0.28.3: tipo (assente = Paramilitare), nazione sponsor, livello HQ.
+  if (m.type) out.type = m.type;
+  if (m.sponsorCountry) out.sponsorCountry = m.sponsorCountry;
+  if (m.activeUpgradeLevels?.headquarters) out.hq = m.activeUpgradeLevels.headquarters;
   const rankings = {};
   for (const type of MU_RANKING_TYPES) {
     const r = m.rankings?.[type];
@@ -156,6 +160,41 @@ export function leanMu(m) {
   }
   if (Object.keys(rankings).length) out.rankings = rankings;
   return out;
+}
+
+/* ── v0.28.3: tipo di unità e lega settimanale ──────────────────────
+   Dal 16 novembre 2026 un'unità è Paramilitare (default: il campo `type`
+   manca), Esercito di Stato (`stateArmy`, con `sponsorCountry`: la nazione
+   le paga il petrolio dell'HQ) o Mercenaria privata (`privateMercenary`).
+   La directory del server porta già i tre campi; una directory vecchia
+   (server non rideployato) non li ha, e allora tutte sembrano paramilitari:
+   per questo la scheda della singola unità li rilegge da mu.getById.
+
+   La LEGA delle unità (`muLeague.getMuLeague {muId}`, pubblica) è il
+   campionato settimanale del danno in 16 divisioni: la risposta porta il
+   girone intero dell'unità (righe con posizione, punti, posti, premio,
+   promozione/retrocessione) e la quota di ogni membro. */
+export const MU_TYPES = ['paramilitary', 'stateArmy', 'privateMercenary'];
+export function muType(m) {
+  return m?.type === 'stateArmy' || m?.type === 'privateMercenary' ? m.type : 'paramilitary';
+}
+
+const _leagues = new Map();   // muId -> { at, data }
+const LEAGUE_TTL_MS = 5 * 60 * 1000;
+
+/** Il girone di lega dell'unità, o null (fuori lega o lettura fallita). */
+export async function fetchMuLeague(muId) {
+  const hit = _leagues.get(muId);
+  if (hit && Date.now() - hit.at < LEAGUE_TTL_MS) return hit.data;
+  try {
+    const d = await trpcCall('muLeague.getMuLeague', { muId });
+    const data = d && Array.isArray(d.rows) ? d : null;
+    _leagues.set(muId, { at: Date.now(), data });
+    return data;
+  } catch (err) {
+    console.warn('WarEra+ mu: lega non disponibile:', err.message);
+    return null;
+  }
 }
 
 /** Scomposizione guerra/economia per NAZIONE, calcolata dal server sui

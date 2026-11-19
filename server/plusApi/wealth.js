@@ -332,7 +332,53 @@ async function ricchezzaDi(userIds) {
 }
 
 /**
- * La classifica mondiale della ricchezza, in UNA richiesta pubblica.
+ * ⚠️ DALLA v0.28.3 (2026-11-16) `ranking.getRanking` risponde con i primi
+ * 100 e basta (`count` dice ancora 21.319): quello che è scritto sotto sulla
+ * "una richiesta" non vale più, e lo scatto del 17 novembre ha preso 100
+ * righe. La classifica intera si sfoglia con `ranking.getRankingPage`
+ * (cursore, 50 a pagina, ~430 pagine). Prima la si chiede al cache-server
+ * sulla loopback (/ranking-full, già sfogliata con la chiave: zero richieste
+ * a WarEra da qui); se non risponde o è vecchia si sfoglia da sé su api6,
+ * piano (700 ms fra le pagine: 100/min è il tetto senza chiave, e lo stesso
+ * IP lo usa il cache-server). Mai una classifica a metà: se una pagina non
+ * arriva si lancia, e lo scatto della classifica salta come prima.
+ */
+const PAGINE_PAUSA_MS = 700;
+const CLASSIFICA_MAX_ETA_MS = 4 * 3600 * 1000;
+
+async function classificaRicchezzaIntera() {
+  try {
+    const res = await fetch(`${CACHE_BASE}/ranking-full?type=userWealth`, { signal: AbortSignal.timeout(20_000) });
+    if (res.ok) {
+      const d = await res.json();
+      if (d?.complete && Array.isArray(d.rows) && d.rows.length > 1000 && Date.now() - d.at < CLASSIFICA_MAX_ETA_MS) {
+        return d.rows.map(r => ({ user: r.u, mu: r.m, country: r.c, value: r.v }));
+      }
+    }
+  } catch { /* si sfoglia da sé */ }
+
+  const items = [];
+  let cursor = null;
+  for (let n = 0; n < 1500; n++) {
+    const input = { rankingType: 'userWealth', limit: 50 };
+    if (cursor) input.cursor = cursor;
+    let d = null;
+    for (let a = 1; a <= 3 && !d; a++) {
+      try { d = await trpcGet('ranking.getRankingPage', input); }
+      catch { await new Promise(r => setTimeout(r, 3000 * a)); }
+    }
+    if (!d || !Array.isArray(d.items)) throw new Error(`classifica: pagina ${n + 1} non arrivata`);
+    items.push(...d.items);
+    const last = d.items[d.items.length - 1];
+    if (!d.nextCursor || !d.items.length || Number(last?.value) <= 0) return items;
+    cursor = d.nextCursor;
+    await new Promise(r => setTimeout(r, PAGINE_PAUSA_MS));
+  }
+  throw new Error('classifica: troppe pagine');
+}
+
+/**
+ * La classifica mondiale della ricchezza (fino alla v0.28.2 in UNA richiesta).
  *
  * `ranking.getRanking` ignora `limit` e `page` e risponde con tutti gli
  * iscritti alla ladder (17.143 il 2026-09-19). Niente paginazione da
@@ -344,8 +390,7 @@ async function ricchezzaDi(userIds) {
  * unità entra senza nome. È voluto — vedi il blocco in testa al file.
  */
 async function scattoClassifica(momento, takenAt) {
-  const d = await trpcGet('ranking.getRanking', { rankingType: 'userWealth' });
-  const items = Array.isArray(d?.items) ? d.items : [];
+  const items = await classificaRicchezzaIntera();
   if (!items.length) throw new Error('classifica vuota');
 
   const righe = [];

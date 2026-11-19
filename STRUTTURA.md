@@ -14,6 +14,18 @@ wareraPlus/
 ├── vite.config.js              ← build + PWA
 ├── vercel.json
 ├── server/
+│   ├── discordBot/             ← NUOVO (2026-11-16) — bot Discord dei contratti, sul
+│   │                              SECONDO VPS (a1-creator, systemd: contratti-bot.service).
+│   │                              contratti.js = lo SPORTELLO a bottoni (`/contract-desk
+│   │                              post`: richiesta con menu+modulo, modifica, ritiro,
+│   │                              governo che decide / apre-chiude / vede chi è taggato)
+│   │                              + carte con Approva/Rifiuta; index.js = avvio. Nessun
+│   │                              database: ritira gli avvisi da plusApi (`/bot/eventi`),
+│   │                              li scrive taggando i ministri collegati al tool, e
+│   │                              inoltra i bottoni a plusApi, che decide. Vedi il README.
+│   │                              Lato server: server/plusApi/bot.js (+ notify.js,
+│   │                              requests.js: azioni riusabili). Senza BOT_TOKEN è
+│   │                              spento e restano i webhook.
 │   ├── warera-cache-server.js  ← server di cache su VPS (Node, pm2) — poll periodico
 │   │                              delle API WarEra al posto dei browser utente
 │   ├── battleArchive.js        ← NUOVO — archivio battaglie concluse (90 gg) coi loro
@@ -21,7 +33,9 @@ wareraPlus/
 │   │                              Bootstrap SOLO fra le 02:00 e le 06:59 italiane
 │   │                              (gioco vuoto), giro incrementale tutto il giorno.
 │   │                              Endpoint: /battle-archive, /war-expenses,
-│   │                              /battle-archive/status.
+│   │                              /battle-archive/status, /war-flows (chi INCASSA i
+│   │                              contratti: pagante → nazione dell'unità vincitrice,
+│   │                              giorno per giorno; archivio e bootstrap propri).
 │   ├── muBattleDamage.js       ← NUOVO — danni di OGNI unità giorno per giorno, sommati
 │   │                              battaglia per battaglia dalla classifica per unità
 │   │                              (battleRanking type 'mu'). Giro incrementale ogni 20
@@ -30,6 +44,11 @@ wareraPlus/
 │   │                              minuto, ~una notte. ⚠️ il giorno è quello in cui la
 │   │                              battaglia FINISCE (UTC): settimane e cumulati sì,
 │   │                              barre giornaliere no. Endpoint: /mu-damage-history.
+│   ├── donations.js         ← NUOVO (2026-11-13) — archivio sqlite delle donazioni
+│   │                          (transactionType 'donation'); /donations?country=&days=.
+│   │                          Righe {money, buyerId, sellerCountryId|sellerMuId|
+│   │                          sellerPartyId}: buyerId DONA, seller*Id RICEVE (verso del
+│   │                          gioco). Salva gli id grezzi e classifica in lettura.
 │   ├── moneyTransfers.js    ← NUOVO — archivio dei finanziamenti fra nazioni
 │   │                              (bonifici da tesoro a tesoro), retention 90 gg.
 │   │                              ⚠️ NIENTE bootstrap e non è una dimenticanza:
@@ -78,6 +97,12 @@ wareraPlus/
 │   │                              livello e nazione di adesso da mu-user-countries,
 │   │                              zero chiamate; conta SPOSTAMENTI, non persone, se
 │   │                              no il saldo di chi fa andata e ritorno sbaglia).
+│   ├── fullRanking.js          ← NUOVO (2026-11-17) — classifiche INTERE dei giocatori
+│   │                             a pagine (ranking.getRankingPage, 50 a pagina, con la
+│   │                             chiave), in memoria, e la rotta /ranking-full. ⚠️ dalla
+│   │                             v0.28.3 ranking.getRanking dà solo i PRIMI 100: ci
+│   │                             passano tournament.js, playerParts.js, plusApi/wealth.js
+│   │                             (via loopback) e le classifiche di Giocatori.
 │   ├── tournament.js           ← NUOVO (2026-10-25) — /tournament e /tournament/team:
 │   │                             forza delle squadre sugli ULTIMI 7 GIORNI (fotografie
 │   │                             della classifica in cache/weekly-snaps/ ogni 6 ore),
@@ -388,20 +413,11 @@ wareraPlus/
     │   │                          mappa: moto fluido a velocità costante, zero repaint
     │   │                          di MapLibre, condiviso dai due temi
     │   ├── oceanBackground.js   ← NUOVO — rotte animate, tema scuro
-    │   ├── travelDistance.js    ← NUOVO — vista mappa "Distanze" (idea dal tool di
-    │   │                          nioKi, ni0ki.github.io/warera-distance-map): clic su
-    │   │                          una regione → tutte le altre colorate per numero di
-    │   │                          confini da attraversare (BFS su `neighbors` delle
-    │   │                          geometrie di state.mapDataGlobal, zero fetch), percorso
-    │   │                          col mouse, istogramma e giro ottimale fino a 5 casse di
-    │   │                          legno (Held-Karp, con un ritorno gratis a casa).
-    │   │                          ⚠️ i costi (10 stamina a regione, poi 2 barili) NON
-    │   │                          sono in gameConfig: sono della patch 0.26.1, costanti
-    │   │                          in testa al file. Testi in travelI18n.js (9 lingue).
-    │   │                          "Percorri il giro": un segnalino cammina il percorso
-    │   │                          regione per regione, la barra stamina si svuota e le
-    │   │                          casse si contano. È a comando, quindi l'interruttore
-    │   │                          Animazioni non lo blocca.
+    │   ├── regionGraph.js       ← NUOVO — nome, regioni confinanti e punto sulla mappa di
+    │   │                          ogni regione, da state.mapDataGlobal (zero fetch). Era la
+    │   │                          base della vista "Distanze", tolta il 2026-11-17 (dalla
+    │   │                          v0.28.3 niente più casse sulla mappa né ritorno gratis a
+    │   │                          casa); l'usano la lavagna delle operazioni e mapPulses.js.
     │   ├── migrationFlows.js    ← NUOVO — vista mappa "Migrazioni": saldo dei cambi di
     │   │                          cittadinanza per nazione (rosso perde, verde guadagna,
     │   │                          assoluto o ogni 100 cittadini 10+) e, cliccando una
@@ -516,6 +532,12 @@ wareraPlus/
     │   │                          nazione + marchio "de facto"), blocchi da 60 righe
     │   ├── muDetail.js          ← scheda unità: sei classifiche + composizione per
     │   │                          nazionalità (calcolata dal vivo sui membri) + membri
+    │   │                          + tipo/sponsor/HQ e lega settimanale (v0.28.3)
+    │   ├── muType.js            ← NUOVO (2026-11-17) — cartellino del tipo di unità
+    │   │                          (Paramilitare / Esercito di Stato con nazione sponsor /
+    │   │                          Mercenaria privata) e riquadro della lega settimanale
+    │   │                          (muLeague.getMuLeague: girone, punti, premi, ▲▼).
+    │   │                          ⚠️ division 0-15, la 15 è la più alta: si mostra +1
     │   ├── ranking.js           ← classifiche, ordinate dalla directory (zero fetch)
     │   ├── muCompare.js         ← NUOVO — linguetta "⚔ 1 vs 1": un'unità contro un'altra,
     │   │                          nello stile del versus comune (shared/versus.js): sei
@@ -556,6 +578,24 @@ wareraPlus/
     │   │                          gettito NON si sommano: le prime le incassa la
     │   │                          nazione dove opera l'azienda. Archivio chiuso, e la
     │   │                          fascia in cima lo dichiara.
+    │   ├── ecoSection.js        ← NUOVO (2026-11-13) — scheda ECONOMIA della nazione:
+    │   │                          tesoro (countryWealth, mai `country.money`) con storia
+    │   │                          e variazione 7/30 giorni, bonifici fra tesori in
+    │   │                          entrata/uscita, DONAZIONI dei giocatori giorno per
+    │   │                          giorno (al tesoro della nazione / alle sue unità), e
+    │   │                          quanto ha ricevuto ogni unità.
+    │   │                          Dati: /country-treasury, /money-transfers, /donations.
+    │   │                          ⚠️ una donation va da un giocatore (buyerId) a chi
+    │   │                          riceve (seller*Id), non viceversa: vedi server/donations.js.
+    │   ├── muSection.js         ← NUOVO (2026-11-13) — scheda UNITÀ MILITARI della
+    │   │                          nazione (registrate lì): membri, danno, ricchezza,
+    │   │                          guerra/eco. Zero richieste nuove: directory MU.
+    │   ├── stateArmies.js       ← NUOVO (2026-11-17) — sotto muSection: gli ESERCITI DI
+    │   │                          STATO che la nazione sponsorizza (muSponsorship.getByCountry)
+    │   │                          e quanto le costano (stateArmyExpense.getLedger: petrolio
+    │   │                          dell'HQ per giorno UTC, carta delle leggi), stimati in
+    │   │                          monete ai prezzi di oggi. Pubbliche, cache 5 minuti.
+    │   ├── i18nEco.js           ← dizionario delle due schede (EN/IT/ES/DE/FR)
     │   ├── damageCurves.js      ← NUOVO — nella scheda nazione: il danno ORA PER ORA
     │   │                          con sopra, sullo stesso riquadro e su un secondo
     │   │                          asse, la linea dei giocatori PILLATI (item `cocain`,
@@ -814,6 +854,9 @@ wareraPlus/
     │   │                            per nazione), riga espandibile → battaglie → dettaglio.
     │   │                            Dipende da `wr` nell'archivio del server (vedi CLAUDE.md)
     │   ├── main.js, battleList.js, warExpenses.js, i18n.js (9 lingue)
+    │   │                       warExpenses.js: vista per nazione o per ALLEANZA (somma sui
+    │   │                       membri, state.nationAlliancesMap) + colonne Incassato/Saldo
+    │   │                       dal flusso /war-flows (aggregateFlows in api.js).
     ├── tournament/               ← NUOVO (2026-10-25) — Tornei: voce di Approfondimenti,
     │   │                            schede Unità militari / Nazioni, ognuna dal torneo
     │   │                            più recente del suo tipo (menù per i precedenti).
@@ -899,6 +942,9 @@ wareraPlus/
     │   │                          capacitaDi), che resta l'unico a decidere. Le funzioni fuori
     │   │                          dall'area chiudono l'overlay e aprono la sezione.
     │   ├── i18nPanoramica.js    ← dizionario (9 lingue) di panoramica.js
+    │   ├── admin.js + i18nAdmin.js ← pannello permessi: si sceglie il DIRITTO (governo, gestire una
+    │   │                          nazione, chiedere per un'unità, bloccare un ruolo), non "ambito/ruolo/grant";
+    │   │                          mostra poteri effettivi (GET /roles/admin/account/:id) e modifiche con "Togli"
     │   ├── i18nNazione.js       ← dizionario (9 lingue) di nazione.js e delle sezioni
     │   ├── operazioni.js        ← NUOVO (2026-10-22) — pagina "Operazioni", subito dopo la
     │   │                          nazione: la lavagna dei piani. Un flowchart su un asse
@@ -922,7 +968,7 @@ wareraPlus/
     │   │                          cerchi e cartellini numerati, barra in basso con i passi,
     │   │                          "Torna alla lavagna"). Toglie tutto alla chiusura. ⚠️ il
     │   │                          punto di una regione è regionAnchor (geometria della mappa),
-    │   │                          NON regionData.position: vedi travelDistance.js.
+    │   │                          NON regionData.position: vedi regionGraph.js.
     │   ├── operazioniComuni.js  ← numero, stato ricavato, orario e colori di un passo:
     │   │                          condivisi da lavagna e mappa
     │   ├── i18nOperazioni.js    ← dizionario (9 lingue) delle operazioni
@@ -1180,6 +1226,24 @@ wareraPlus/
     │   ├── dailyDamage.js      ← "danno di oggi" per nazioni/alleanze/unità, dalla
     │   │                          differenza fra due snapshot del cumulato settimanale
     │   ├── analytics.js        ← wrapper su Umami (trackEvent)
+    │   ├── viewTools.js        ← NUOVO (2026-11-13) — UN MutationObserver (solo dentro gli
+    │   │                          overlay, il pannello nazione e Political) che passa i nodi
+    │   │                          nuovi a tableSort.js e sections.js. Timer, non rAF: in una
+    │   │                          scheda in secondo piano rAF si ferma.
+    │   ├── tableSort.js        ← NUOVO — colonne ordinabili in TUTTE le tabelle, riconosciute
+    │   │                          dalla struttura (<table> con intestazione, o griglia con
+    │   │                          prima riga "…head/hdr"). Si lasciano stare le tabelle che
+    │   │                          hanno già un ordinamento proprio (intestazioni con
+    │   │                          pulsanti) e quelle con `data-nosort`. ⚠️ ordina le righe
+    │   │                          MOSTRATE: in un elenco paginato o tagliato non è un
+    │   │                          ordinamento globale — lì serve quello della vista.
+    │   ├── sections.js         ← NUOVO — sezioni chiudibili e spostabili (maniglia ⠿:
+    │   │                          trascinamento a puntatore, o ↑/↓ da tastiera). Titoli
+    │   │                          elencati in FLOW/CARD in testa al file; stato in
+    │   │                          localStorage `we_layout`. Chiave di una sezione:
+    │   │                          `data-sec` sul titolo, altrimenti classe + ordinale —
+    │   │                          per le sezioni che compaiono solo a volte conviene
+    │   │                          `data-sec`. `data-nosections` su un antenato la esclude.
     │   ├── reveal.js           ← NUOVO — numeri che contano e grafici che si disegnano,
     │   │                          con UN MutationObserver su <body>: nessuna vista è
     │   │                          toccata, si riconoscono dai selettori (NUM_SELECTOR,

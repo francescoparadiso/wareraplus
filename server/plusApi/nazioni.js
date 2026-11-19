@@ -61,6 +61,12 @@
      probabile una cache monca che un'alleanza sciolta, e svuotare la lista
      chiuderebbe l'area a tutti. Si tiene quella di prima e si avvisa.
 
+   ── I CONTRATTI NON PASSANO DA QUI (2026-11-18) ──────────────────────
+   Tavolo dei contratti, `/policy` e bot Discord non usano questo filtro: una
+   nazione ammessa dalla lista permessi di Iraq (es. il South Africa) restava
+   bloccata a monte perche' i suoi cittadini non sono di P.A.S.T.A. Per i
+   contratti decidono il ruolo di gioco e la lista permessi (policy.js).
+
    ── DOVE SI CAMBIA ────────────────────────────────────────────────────
    `WP_ALLEANZA_AMMESSA` (id) cambia l'alleanza senza deploy del codice.
    `WP_NAZIONI_AMMESSE` (id separati da virgola) aggiunge nazioni FUORI

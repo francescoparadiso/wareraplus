@@ -24,7 +24,15 @@
    mezza banca dati.
    ══════════════════════════════════════════════════════════════════════ */
 
-const { getWebhook } = require('./db');
+const { getWebhook, getBotChannel, registraEventoBot, getRichiesta, boardPerRichiesta, boardPerAvviso } = require('./db');
+
+/** C'e' un canale del bot per questo avviso? Per una NAZIONE dipende dalla battaglia della
+ *  richiesta (ogni battaglia puo' avere la sua board), per un'unita' e' il suo canale. */
+function haCanaleBot(scopeType, scopeId, requestId) {
+  if (scopeType !== 'country') return Boolean(getBotChannel(scopeType, scopeId));
+  const r = requestId ? getRichiesta(requestId) : null;
+  return Boolean(r ? boardPerRichiesta(scopeId, r.battle_id) : boardPerAvviso(scopeId));
+}
 
 const TIMEOUT_MS = 4000;
 
@@ -62,13 +70,57 @@ async function inviaA(url, contenuto) {
  * Manda l'avviso al canale di un ambito, se ne è configurato uno.
  * Non attende: chi chiama non deve rallentare per una notifica.
  */
-function avvisa(scopeType, scopeId, contenuto) {
+function avvisa(scopeType, scopeId, contenuto, meta = null) {
   if (!scopeId) return;
+
+  // ── Il bot Discord, se c'e' e se questo ambito ha un canale suo ──────
+  // Un avviso va per UNA strada sola: se bot e webhook rispondessero
+  // entrambi, ogni evento comparirebbe due volte nello stesso canale.
+  // Il webhook resta il ripiego: se il bot non ha chiesto niente da piu' di
+  // 90 secondi (processo giu', VPS riavviato) si torna a lui, cosi' un
+  // allarme "l'asta sta per essere rubata" non finisce in una coda che
+  // nessuno legge.
+  if (meta?.tipo && botVivo() && haCanaleBot(scopeType, scopeId, meta.requestId)) {
+    try {
+      registraEventoBot({ scopeType, scopeId, tipo: meta.tipo, requestId: meta.requestId, testo: contenuto });
+      return;
+    } catch (err) {
+      console.warn('[notify] evento bot non registrato:', err.message);
+      // si cade sul webhook
+    }
+  }
+
   const w = getWebhook(scopeType, scopeId);
   if (!w) return;
   // Volutamente senza await: l'esito non cambia niente per il chiamante.
   inviaA(w.url, contenuto).catch(() => {});
 }
+
+/** Aggiorna la carta della richiesta sul canale della nazione, SOLO via bot:
+ *  un evento senza testo da pubblicare, che il bot usa per riscrivere il
+ *  messaggio con i bottoni giusti. Il webhook non lo vede mai. Serve perche'
+ *  chi decide dal SITO (o chi vede chiudersi l'asta) non deve lasciare sul
+ *  canale una carta che chiede ancora "Approva?". */
+function avvisaCarta(countryId, r, tipo) {
+  if (!countryId || !botVivo() || !haCanaleBot('country', countryId, r.id)) return;
+  try {
+    registraEventoBot({ scopeType: 'country', scopeId: countryId, tipo: `carta_${tipo}`, requestId: r.id, testo: '' });
+  } catch (err) {
+    console.warn('[notify] evento carta non registrato:', err.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Il bot e' vivo?
+// ---------------------------------------------------------------------------
+// bot.js chiama segnaBotVivo() a ogni richiesta del bot. In memoria e non su
+// disco: dopo un restart di plusApi si riparte da "non vivo" e il bot, che
+// chiede ogni pochi secondi, lo riporta vivo da solo.
+let _ultimoContattoBot = 0;
+const BOT_VIVO_MS = 90_000;
+function segnaBotVivo() { _ultimoContattoBot = Date.now(); }
+function botVivo() { return Date.now() - _ultimoContattoBot < BOT_VIVO_MS; }
+function statoBot() { return { ultimoContatto: _ultimoContattoBot || null, vivo: botVivo() }; }
 
 // ---------------------------------------------------------------------------
 // Testi
@@ -79,19 +131,31 @@ function avvisa(scopeType, scopeId, contenuto) {
 // (59% dei giocatori, vedi la misura in warera-user-endpoint-fields).
 
 const num = (n) => (n == null ? '?' : Number(n).toLocaleString('en-US'));
+/** " · burst now 500,000": il danno che l'unita' dice di poter fare subito. */
+const burst = (r) => (r.burst_damage ? ` · burst now ${num(r.burst_damage)}` : '');
 
 function testoNuovaRichiesta(r, chi) {
   return `**New contract request** — ${r.mu_nome || r.mu_id}\n`
     + `Battle: ${r.battle_label || r.battle_id}\n`
-    + `Min damage ${num(r.min_damage)} · budget ${num(r.budget)}`
+    + `Min damage ${num(r.min_damage)}${burst(r)} · budget ${num(r.budget)}`
     + `${r.professionals_only ? ' · professionals only' : ''}\n`
     + `Asked by ${chi}${r.note ? `\n> ${r.note.slice(0, 200)}` : ''}`;
+}
+
+/** Per il webhook: una richiesta rimessa in coda dopo che l'asta e' andata a
+ *  un'altra unita'. Con il bot e' la carta a dirlo (`riAccodata`). */
+function testoRiaccodata(r, chi) {
+  return `**Contract stolen — put back in the queue** — ${r.mu_nome || r.mu_id}\n`
+    + `Battle: ${r.battle_label || r.battle_id}\n`
+    + `Min damage ${num(r.min_damage)}${burst(r)} · budget ${num(r.budget)}`
+    + `${r.professionals_only ? ' · professionals only' : ''}\n`
+    + `Asked by ${chi}. It keeps its original place in line: it needs a new approval.`;
 }
 
 function testoApprovata(r, chi) {
   return `**Approved** — ${r.mu_nome || r.mu_id}\n`
     + `Battle: ${r.battle_label || r.battle_id}\n`
-    + `Min damage ${num(r.min_damage)} · budget ${num(r.budget)}\n`
+    + `Min damage ${num(r.min_damage)}${burst(r)} · budget ${num(r.budget)}\n`
     + `By ${chi}. Wait for the auction to open, then bid.`;
 }
 
@@ -107,7 +171,7 @@ function testoRifiutata(r, chi) {
 function testoAperta(r, chi) {
   return `**Auction opening now** — ${r.mu_nome || r.mu_id}\n`
     + `Battle: ${r.battle_label || r.battle_id}\n`
-    + `Min damage ${num(r.min_damage)} · budget ${num(r.budget)}`
+    + `Min damage ${num(r.min_damage)}${burst(r)} · budget ${num(r.budget)}`
     + `${r.professionals_only ? ' · professionals only' : ''}\n`
     + `Opened by ${chi}. First bid usually lands within ~10 seconds.`;
 }
@@ -163,7 +227,7 @@ function testoConfiniAlleanza(eventi, nomePaese, nomeAlleanza) {
 }
 
 module.exports = {
-  avvisa, urlWebhookValido,
-  testoNuovaRichiesta, testoApprovata, testoRifiutata, testoAperta,
+  avvisa, avvisaCarta, urlWebhookValido, segnaBotVivo, botVivo, statoBot,
+  testoNuovaRichiesta, testoRiaccodata, testoApprovata, testoRifiutata, testoAperta,
   testoConfini, testoConfiniAlleanza,
 };

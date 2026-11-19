@@ -22,8 +22,9 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { pvT, pvErr } from './i18n.js';
+import { leggiNumero, mostraNumero } from './numeri.js';
 import {
-  leggiTavolo, chiediContratto, approvaRichiesta, rifiutaRichiesta,
+  leggiTavolo, leggiVersioneTavolo, chiediContratto, approvaRichiesta, rifiutaRichiesta,
   segnaAperta, ritiraRichiesta, battaglieInCorso,
   nazioniAmmesse, leggiListaPermessi, aggiungiAllaLista, togliDallaLista,
   leggiCanale, impostaCanale, svuotaTavolo, elencoAlleanze, ApiError,
@@ -50,6 +51,29 @@ function bottone(cls, testo, onClick) {
   return b;
 }
 
+/** Ogni quanto si chiede al server "e' cambiato qualcosa?" a scheda aperta. */
+const AUTO_OGNI_MS = 8000;
+
+/** La "versione" di un elenco di richieste: quante sono e l'ultima modifica.
+ *  ⚠️ Stessa formula di `GET /requests/versione` (server/plusApi/requests.js):
+ *  se cambia una, deve cambiare l'altra, o il tavolo si ricaricherebbe ad ogni
+ *  controllo (o mai). */
+const versioneDi = (righe) => `${righe.length}:${righe.reduce((m, r) => Math.max(m, r.updatedAt || 0), 0)}:${righe.reduce((s, r) => s + (r.posizione || 0), 0)}`;
+
+/**
+ * L'ordine delle righe dentro una battaglia: quello della CODA. Le in attesa per
+ * ordine di arrivo (chi e' primo sta in alto), poi approvate, poi con l'asta
+ * aperta, poi le chiuse (la piu' recente per prima). Prima il server le dava dalla
+ * piu' recente: una richiesta riportata davanti dopo un furto finiva in fondo.
+ */
+const rangoRiga = (r) => (r.status === 'pending' ? 0 : r.status === 'approved' ? (r.openedAt ? 2 : 1) : 3);
+function ordineCoda(a, b) {
+  const ra = rangoRiga(a); const rb = rangoRiga(b);
+  if (ra !== rb) return ra - rb;
+  if (ra === 3) return (b.createdAt || 0) - (a.createdAt || 0);
+  return ((a.createdAt || 0) - (b.createdAt || 0)) || (a.id - b.id);
+}
+
 function quando(ms) {
   if (!ms) return null;
   return new Date(ms).toLocaleString(undefined,
@@ -68,6 +92,15 @@ export function creaTavolo(ctx) {
   let nomiAlleanze = new Map();
   let caricamento = false;
   let errore = null;
+  // Quando i dati sono stati letti l'ultima volta (a buon fine): accanto al
+  // tasto "Aggiorna", cosi' si sa quanto e' vecchio quello che si guarda.
+  let aggiornatoIl = null;
+  // Aggiornamento automatico: la versione dei dati che si stanno guardando, il
+  // timer che chiede al server se e' cambiata, e la riga "Aggiorna" disegnata per
+  // ultima (se non e' piu' nella pagina il tavolo non e' piu' visibile: si smette).
+  let versione = null;
+  let timerAuto = null;
+  let rigaAttuale = null;
   let apertaId = null;          // battaglia con il modulo aperto
   let occupato = false;
   // Tre sezioni invece di un elenco di schede tutte uguali: si arriva
@@ -153,15 +186,86 @@ export function creaTavolo(ctx) {
     } catch (err) {
       errore = err instanceof ApiError ? pvErr(err.codice) : pvT('errErrore_server');
     } finally {
-      caricamento = false; ctx.ridisegna();
+      caricamento = false;
+      if (!errore) aggiornatoIl = Date.now();
+      // La versione di CIO' CHE SI VEDE adesso: il prossimo controllo la
+      // confronta con quella del server.
+      if (dati?.richieste) versione = versioneDi(dati.richieste);
+      ctx.ridisegna();
     }
+  }
+
+  /**
+   * Il controllo automatico. Ogni pochi secondi chiede al server la versione
+   * delle richieste e, SE E' CAMBIATA, ricarica: una richiesta nuova, una
+   * modifica, un'approvazione, un'asta aperta o chiusa — fatte da chiunque,
+   * dal sito o dal bot Discord — compaiono senza premere "Aggiorna".
+   *
+   * Non ricarica quando farlo farebbe danni:
+   *  · scheda nascosta o overlay chiuso (nessuno guarda);
+   *  · si sta gia' caricando o agendo;
+   *  · un modulo di richiesta e' aperto, o il cursore e' dentro un campo / un
+   *    menu: il ridisegno riscrive la pagina e cancellerebbe cio' che si sta
+   *    digitando. Si riprova al giro dopo.
+   * Un errore di rete non si mostra: e' un controllo di sfondo, e il tasto
+   * "Aggiorna" resta per chi vuole forzare.
+   */
+  async function controllaNovita() {
+    // La riga "Aggiorna" fuori dalla pagina = il tavolo non e' la pagina aperta
+    // (si e' passati ad un'altra scheda dell'area): si ferma il timer.
+    if (!rigaAttuale?.isConnected) { fermaAuto(); return; }
+    if (document.hidden) return;
+    const overlay = document.getElementById('wp-private-overlay');
+    if (overlay && !overlay.classList.contains('open')) return;
+    if (caricamento || occupato || apertaId || !dati || versione == null) return;
+    const attivo = document.activeElement;
+    if (attivo && /^(INPUT|TEXTAREA|SELECT)$/.test(attivo.tagName)) return;
+
+    try {
+      const { versione: nuova } = await leggiVersioneTavolo({ asAccount: ctx.lente() });
+      // Nel frattempo la persona puo' aver cominciato a scrivere o ad agire.
+      if (nuova && nuova !== versione && !caricamento && !occupato && !apertaId) await carica();
+    } catch { /* controllo di sfondo: si riprova al giro dopo */ }
+  }
+
+  function avviaAuto() {
+    if (timerAuto) return;
+    timerAuto = setInterval(() => { controllaNovita(); }, AUTO_OGNI_MS);
+  }
+
+  function fermaAuto() {
+    if (timerAuto) { clearInterval(timerAuto); timerAuto = null; }
+  }
+
+  /** "Aggiorna": rilegge richieste, battaglie e liste. Il tavolo si riscrive da
+   *  solo solo quando si agisce; chi lo tiene aperto per vedere se arriva una
+   *  richiesta nuova non ha altro modo di saperlo che ricaricare la pagina. */
+  function rigaAggiorna() {
+    const riga = el('div', 'wp-pv-aggiorna-riga');
+    // Il tavolo e' sulla pagina: si tiene d'occhio (vedi controllaNovita).
+    rigaAttuale = riga;
+    avviaAuto();
+    if (aggiornatoIl) {
+      const ora = new Date(aggiornatoIl).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      riga.appendChild(el('span', 'wp-pv-note', `${pvT('updatedAt')} ${ora}`));
+    }
+    const b = bottone('wp-pv-btn-quiet wp-pv-btn-small', caricamento ? '…' : `↻ ${pvT('refreshBoard')}`, () => {
+      if (!caricamento && !occupato) carica();
+    });
+    b.disabled = caricamento || occupato;
+    riga.appendChild(b);
+    return riga;
   }
 
   async function azione(fn) {
     if (occupato) return;
     occupato = true; errore = null; ctx.ridisegna();
     try { await fn(); await carica(); }
-    catch (err) { errore = err instanceof ApiError ? pvErr(err.codice) : pvT('errErrore_server'); }
+    catch (err) {
+      errore = err instanceof ApiError ? pvErr(err.codice) : pvT('errErrore_server');
+      // Il tetto superato dice anche quanto si puo' chiedere (danno o taglia).
+      if (err instanceof ApiError && err.dati?.tetto != null) errore += ` (max ${Number(err.dati.tetto).toLocaleString()})`;
+    }
     finally { occupato = false; ctx.ridisegna(); }
   }
 
@@ -188,6 +292,9 @@ export function creaTavolo(ctx) {
       if (caricamento) frag.appendChild(el('p', 'wp-pv-note', '…'));
       return frag;
     }
+
+    // In cima a tutte le sezioni: aggiornare serve ovunque, non solo sul tavolo.
+    frag.appendChild(rigaAggiorna());
 
     const cap = dati.capacita || {};
     const puoChiedere = Boolean(cap.chiedePer?.length) && !dati.lente;
@@ -372,14 +479,15 @@ export function creaTavolo(ctx) {
     // mila e' una richiesta che il ministro rifiuta senza capire perche'.
     // Scalini per i tagli usuali, campo libero per il resto, e il numero
     // riscritto per esteso sotto: uno zero di troppo si vede.
-    const danno = campo('number', pvT('minDamage'), '1000000', { obbligatorio: true });
-    // ⚠️ `step` in HTML non e' solo l'incremento delle frecce: VINCOLA la
-    // validazione. Con step=100000 e min=1 i valori accettati diventano
-    // 1, 100001, 200001... e 2.000.000 veniva rifiutato con "i due valori
-    // validi piu' vicini sono 1900001 e 2000001". Gli scalini qui sotto
-    // fanno gia' il lavoro delle frecce, senza vincolare niente.
-    danno.input.step = 'any';
-    danno.input.min = '1000';
+    // ⚠️ Campo di TESTO e non `type=number` (dal 2026-11-18): si scrive "10M", "500k",
+    // "1,5m", "1.000.000" come in chat e nel bot (numeri.js). Un campo numerico non
+    // accettava lettere. Sotto il campo si vede come e' stato CAPITO ("= 10.000.000"):
+    // uno zero di troppo si vede subito.
+    const danno = campo('text', pvT('minDamage'), '10M, 500k, 1000000', { obbligatorio: true });
+    danno.input.inputMode = 'decimal';
+    const dannoCapito = el('span', 'wp-pv-suggerimento wp-pv-capito', '');
+    danno.wrap.appendChild(dannoCapito);
+    const valDanno = () => leggiNumero(danno.input.value);
 
     const scalini = el('div', 'wp-pv-scalini');
     scalini.appendChild(el('span', 'wp-pv-label', pvT('damagePreset')));
@@ -395,12 +503,10 @@ export function creaTavolo(ctx) {
     // ── Taglia per 1000 danni ──────────────────────────────────────────
     // E' la grandezza con cui si ragiona nel gioco (initialPerK), non il
     // totale: si muove fra 0,01 e 0,2, quindi serve il decimale.
-    const taglia = campo('number', pvT('bountyL'), '0.08', { obbligatorio: true });
-    // Stessa ragione: con step=0.01 una taglia di 0,015 verrebbe rifiutata.
-    // Il range si dichiara con min e max, che non vincolano i decimali.
-    taglia.input.step = 'any';
-    taglia.input.min = '0.001';
-    taglia.input.max = '5';
+    // Testo anche qui: accetta "0,08" come "0.08" (un separatore solo e' sempre decimale).
+    const taglia = campo('text', pvT('bountyL'), '0.08', { obbligatorio: true });
+    taglia.input.inputMode = 'decimal';
+    const valTaglia = () => leggiNumero(taglia.input.value, { decimali: true });
     taglia.wrap.appendChild(el('span', 'wp-pv-suggerimento', pvT('bountyHint')));
 
     // Il totale non si chiede, si calcola: e' il numero che esce davvero
@@ -412,11 +518,13 @@ export function creaTavolo(ctx) {
     totale.appendChild(el('span', 'wp-pv-suggerimento', pvT('totalBudgetHint')));
 
     function budgetCalcolato() {
-      const d = Number(danno.input.value) || 0;
-      const t = Number(taglia.input.value) || 0;
+      const d = valDanno() || 0;
+      const t = valTaglia() || 0;
       return (d / 1000) * t;
     }
     function aggiornaTotale() {
+      const d = valDanno();
+      dannoCapito.textContent = danno.input.value.trim() === '' ? '' : (Number.isFinite(d) ? `= ${mostraNumero(d)}` : '?');
       const v = budgetCalcolato();
       totaleVal.textContent = v > 0 ? v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—';
     }
@@ -443,15 +551,19 @@ export function creaTavolo(ctx) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const [side, countryId] = String(lato.value || '|').split('|');
+      // Numeri che non si capiscono (o fuori range) si dicono PRIMA di partire.
+      if (!(valDanno() >= 1000) || !(valTaglia() >= 0.001 && valTaglia() <= 5)) {
+        errore = pvErr('parametri_non_validi'); ctx.ridisegna(); return;
+      }
       azione(async () => {
         await chiediContratto({
           battleId: b.id, battleLabel: b.etichetta, side, countryId,
           muId: unita.value, muNome: ctx.nomeUnita?.(unita.value) || null,
-          minDamage: Number(danno.input.value) || null,
+          minDamage: valDanno() || null,
           // Si manda il totale calcolato, che e' cio' che l'asta vuole, e
           // anche la tariffa: il tavolo mostra quella, il gioco quello.
           budget: budgetCalcolato() || null,
-          perK: Number(taglia.input.value) || null,
+          perK: valTaglia() || null,
           professionalsOnly: proBox.checked,
           note: nota.input.value.trim() || null,
         });
@@ -688,6 +800,7 @@ export function creaTavolo(ctx) {
 
     const gruppi = [...m.values()];
     for (const g of gruppi) {
+      g.righe.sort(ordineCoda);
       g.soldi = soldiDi(g.righe);
       g.ricevuto = ricevutoDi(g.righe);
       g.impegnato = g.soldi.attesa + g.soldi.approvato + g.soldi.aperto;
@@ -840,6 +953,11 @@ export function creaTavolo(ctx) {
     testa.appendChild(el('strong', 'wp-pv-req-mu', r.muNome || r.muId));
     testa.appendChild(el('span', 'wp-pv-req-stato',
       pvT(`st${r.status.charAt(0).toUpperCase()}${r.status.slice(1)}`)));
+    // La POSIZIONE in coda (la stessa del bot): conta quella, non quando e' stata
+    // fatta. Una richiesta riaccodata dopo un furto la mantiene.
+    if (r.posizione) {
+      testa.appendChild(el('span', 'wp-pv-req-pos', `${pvT('queuePos')} ${r.posizione}/${r.inCoda}`));
+    }
     // Dentro un gruppo per battaglia il NOME della battaglia sarebbe
     // ripetuto ad ogni riga; lo SCHIERAMENTO no — due unità sulla stessa
     // battaglia possono servire lati opposti, ed è l'unica cosa che

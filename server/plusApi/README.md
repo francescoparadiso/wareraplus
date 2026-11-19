@@ -260,6 +260,79 @@ non risponde all'apertura, e la votazione resta "in apertura" senza
 accettare voti). ⚠️ `votazione_scheda` si svuota al sigillo apposta: le
 schede segrete da lì esistono solo rimescolate dentro `votazione.result`.
 
+## Il bot Discord dei contratti (`bot.js`)
+
+Porta server-a-server per il bot che gira sul **secondo VPS**
+(`server/discordBot/`, che ha il suo README). Autenticata da un segreto
+condiviso, **`BOT_TOKEN`**, nell'`env` di ogni istanza in
+`ecosystem.config.js` (uno per live, uno per dev: `openssl rand -hex 32`).
+Senza `BOT_TOKEN` tutte le rotte `/bot/*` rispondono 503 e il tool funziona
+come prima, con i webhook.
+
+- `GET /bot/eventi?dopo=<id>` — gli avvisi in coda (`bot_event`), già arricchiti
+  con canale, richiesta aggiornata e chi **taggare** (`approvaPer` del governo
+  + deroghe, solo chi ha collegato Discord); `?dopo=ultimo` per la prima
+  partenza
+- `POST /bot/azione` — `approve` / `reject` / `opened` / `cancel` per conto di
+  un id Discord: stesse funzioni e stessi permessi della pagina
+  (`requests.js: azione*`), più il filtro nazione
+- `GET /bot/battaglie` — dove l'unità del comandante può chiedere (il menu di
+  "Request a contract")
+- `POST /bot/richiesta` — nazione che paga, etichetta e totale li ricava il server
+- `POST /bot/modifica` — corregge una richiesta ancora `pending`, solo chi l'ha fatta
+- `GET /bot/mie` — le richieste vive di chi chiede ("Edit mine" / "Withdraw mine")
+- `GET /bot/coda?vista=unit|nation` — `/contract-queue`: richieste con posizione
+  in coda (ordine di arrivo fra le `pending` della nazione) e mediana dei tempi
+  di decisione a 7 giorni; `unit` per i comandanti (`chiedePer`), `nation` per
+  chi approva o gestisce la nazione
+- `GET /bot/scrivania?scope&scopeId` — i dati dello sportello (governo che può
+  approvare, richieste vive + chiuse nelle ultime 24 h)
+- `POST /bot/scrivania/stato` — apre/chiude lo sportello (solo governo): con lo
+  sportello chiuso anche `azioneCrea` del **sito** risponde `sportello_chiuso`; imposta anche i **tetti** (`maxDamage`, `maxRate`; assenti = invariati, null = nessuno):
+  `azioneCrea`/`azioneModifica` rispondono `422 oltre_il_tetto` (`campo`, `tetto`). `GET /bot/limiti?scopeId` li legge
+- `GET /bot/approvatori?scopeId` — chi viene taggato e chi no
+- `GET /bot/contratti-attivi?scopeId` — i contratti vinti e ancora in corso di una
+  nazione (round dell'asta = round corrente della battaglia); `POST /bot/chiedi-burst`
+  — "Ask burst": solo governo, rivalida che sia attivo, limite 10 min per contratto,
+  risponde chi avvisare (`tag` e `destinatari` coi nomi) e i dati per il DM; le
+  aste vinte si leggono a cursore, tutte
+- `POST /bot/canale` — il canale degli avvisi di nazione (governo) o unità
+  (comandante); l'ambito lo decide il server da chi chiama.
+  Per la nazione c'è `battleId` (vuoto = board generale): una board per battaglia,
+  verificata in corso e con la nazione fra i contendenti. `GET /bot/battaglie-nazione`
+  per l'autocompletamento. `scrivania`, `limiti`, `scrivania/stato` e `contratti-attivi`
+  prendono `board` / `battleId` (assente in `scrivania` = tutte le richieste della nazione)
+
+Tre tabelle dalla `CREATE TABLE IF NOT EXISTS` (`bot_channel` per le unità, `bot_board` per le board delle nazioni — una per battaglia, vedi il README del bot —,
+`bot_event`): nessuna migrazione. Gli eventi si potano da soli a 7 giorni.
+`avvisa()` manda un avviso al bot **solo se** il bot ha chiesto negli ultimi 90
+secondi **e** l'ambito ha un canale del bot; altrimenti va al webhook come
+prima. `/health` → `bot` (`token`, `ultimoContatto`, `vivo`) e
+`db.canaliBot`, `db.eventiBot`.
+
+⚠️ Dopo aver aggiunto `BOT_TOKEN` a `ecosystem.config.js` il semplice
+`pm2 restart <nome>` **non** lo legge: serve
+`pm2 restart ecosystem.config.js --update-env` (vedi più sotto).
+
+## Contratto rubato: si rimette in coda (`watcher.js: riaccodaRubata`)
+
+Quando il verdetto è `altra_unita` (l'asta approvata l'ha vinta un'altra unità) il
+watcher crea una **nuova richiesta** `pending` con gli stessi dati (burst, nota,
+taglia…) e la **stessa ora di arrivo** di quella rubata: la posizione in coda è
+l'ordine di arrivo, quindi torna dove stava, di solito in cima. La rubata resta
+chiusa con il suo esito (è la storia); la nuova porta `request.requeue_of` (colonna
+nuova, migrazione automatica) e `riAccodata: true` nella forma pubblica.
+
+- **Da riapprovare**: il governo la vede come una richiesta nuova (carta, tag, lista
+  della coda) con la dicitura "stolen contract put back in the queue".
+- **Avvisi**: canale della nazione e dell'unità (testo con "put back in the queue"),
+  messaggio privato a richiedente + comandanti (`dm.js`, tipo `rubata`).
+- **Condizioni**: non si riaccoda due volte la stessa (`requeue_of`), e non se la
+  **battaglia è finita** (se non si riesce a saperlo, cache-server giù, si riaccoda
+  comunque: il governo può rifiutarla, non può riavere una richiesta persa in silenzio).
+- Solo `altra_unita`: `parametri_diversi`, `nessuna_offerta` e `mai_aperta` non
+  si riaccodano.
+
 ## Aggiornare
 
 ```bash
@@ -274,7 +347,7 @@ Poi il preflight, e solo se stampa `PREFLIGHT-OK`:
 
 ```bash
 ssh -i ../serverOracle/ssh-key-2026-08-18.key ubuntu@79.72.45.17 \
-  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && node --check wealth.js && node --check fonti.js && node --check confini.js && node --check nemici.js && node --check nazione.js && node --check istantanee.js && node --check operazioni.js && node --check accordi.js && node --check votazioni.js && node --check votazioniFinte.js && echo PREFLIGHT-OK"
+  "cd warera-plus-api && node --check index.js && node --check auth.js && node --check db.js && node --check wealth.js && node --check fonti.js && node --check confini.js && node --check nemici.js && node --check nazione.js && node --check istantanee.js && node --check operazioni.js && node --check accordi.js && node --check votazioni.js && node --check votazioniFinte.js && node --check notify.js && node --check requests.js && node --check watcher.js && node --check bot.js && echo PREFLIGHT-OK"
 ```
 
 ```bash

@@ -18,7 +18,8 @@
    sé le proprie `rankings` (verificato dal vivo), quindi sono già qui.
    ══════════════════════════════════════════════════════════════ */
 
-import { MU_RANKING_TYPES, fetchMuDetail, fetchUsersLite } from './api.js';
+import { MU_RANKING_TYPES, fetchMuDetail, fetchMuLeague, fetchUsersLite } from './api.js';
+import { muLeagueHtml, muTypeBadge } from './muType.js';
 import { muT, muPillLabels } from './i18n.js';
 import { isPinned, togglePin } from '../app/pins.js';
 import { classifyPlaystyle, countPlaystyles, playstyleBarHtml } from './playstyle.js';
@@ -93,6 +94,7 @@ function paintHeader() {
             </span>
             <span id="wp-mu-head-defacto">${deFactoBadge(dominantCountry(m))}</span>
           </div>
+          <div class="wp-mu-head-type" id="wp-mu-head-type">${typeLineHtml(m)}</div>
           <div class="wp-mu-head-meta">
             <span>${escapeHtml(muT('created'))} <strong>${escapeHtml(fmtDate(m.createdAt))}</strong></span>
             <span>${escapeHtml(muT('members'))} <strong id="wp-mu-head-members">${m.memberCount ?? (m.members?.length ?? '—')}</strong></span>
@@ -108,6 +110,8 @@ function paintHeader() {
         ${todayCardHtml()}
         ${fighterCardHtml()}
       </section>
+
+      <section id="wp-mu-league" class="wp-mu-league-box" hidden></section>
 
       <section id="wp-mu-pills"></section>
 
@@ -170,6 +174,35 @@ function paintHeader() {
   });
 
   paintTodayCard(m);
+  paintLeague(m._id);
+}
+
+/* ── v0.28.3: tipo dell'unità e lega settimanale (src/mu/muType.js) ── */
+function typeLineHtml(m) {
+  const hq = m.hq ?? m.activeUpgradeLevels?.headquarters;
+  return `${muTypeBadge(m, { always: true })}${hq ? `<span class="wp-mu-hq">${escapeHtml(muT('hqLevel', { n: hq }))}</span>` : ''}`;
+}
+
+/** Il dettaglio (mu.getById) porta tipo e sponsor anche quando la
+ *  directory del server è di prima del rideploy: si riscrive la riga. */
+function paintTypeFromDetail(detail) {
+  const el = hostEl?.querySelector('#wp-mu-head-type');
+  if (el && detail) el.innerHTML = typeLineHtml(detail);
+}
+
+async function paintLeague(muId) {
+  const data = await fetchMuLeague(muId);
+  if (currentMu?._id !== muId) return;
+  const el = hostEl?.querySelector('#wp-mu-league');
+  if (!el || !data) return;   // lettura fallita: il riquadro resta nascosto
+  const byId = new Map(ctx.directory.map(d => [d._id, d]));
+  el.innerHTML = muLeagueHtml(data, muId, id => byId.get(id) || null);
+  el.hidden = false;
+  el.querySelectorAll('tr[data-mu-id]').forEach(tr => {
+    if (tr.dataset.muId === muId || !byId.has(tr.dataset.muId) || !ctx.onOpenMu) return;
+    tr.classList.add('wp-mu-league-link');
+    tr.addEventListener('click', () => ctx.onOpenMu(tr.dataset.muId));
+  });
 }
 
 /** Marchio "de facto": si mostra SOLO quando la nazione prevalente fra i
@@ -343,6 +376,7 @@ async function loadMembers(muId) {
     if (!detail) throw new Error('vuoto');
     // L'utente può aver già cambiato scheda mentre la chiamata era in volo.
     if (currentMu?._id !== muId) return;
+    paintTypeFromDetail(detail);
     await paintMembers(detail);
   } catch (err) {
     const list = hostEl?.querySelector('#wp-mu-member-list');

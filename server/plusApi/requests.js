@@ -28,18 +28,25 @@
    `capacita.approvaPer` arrivano dai dati di gioco più le deroghe, e
    questo file si limita a rispettarli. Un secondo posto in cui si decide
    chi comanda è un secondo posto in cui sbagliare.
+
+   ── LE AZIONI STANNO FUORI DALLE ROTTE (2026-11-16) ───────────────────
+   `azioneCrea / azioneDecidi / azioneAperta / azioneRitira` prendono
+   l'identità che agisce e rispondono `{ codice, corpo }`. Le rotte qui sotto
+   le traducono in HTTP; il bot Discord (bot.js) in bottoni e comandi. Un
+   bottone "Approva" passa dagli STESSI controlli di quello della pagina.
    ══════════════════════════════════════════════════════════════════════ */
 
 const express = require('express');
 const {
   creaRichiesta, getRichiesta, listaRichieste, aggiornaRichiesta,
-  getAccountById, getWebhook, setWebhook, deleteWebhook, audit, getDb,
+  getAccountById, getWebhook, setWebhook, deleteWebhook, audit, getDb, sportelloAperto, limitiSportello, elencoBoard, boardPerRichiesta,
 } = require('./db');
 const { calcolaEffettivi } = require('./roles');
 const { puoChiedere } = require('./policy');
 const { segnalaApertura } = require('./watcher');
+const { notificaComandanti } = require('./dm');
 const {
-  avvisa, urlWebhookValido,
+  avvisa, avvisaCarta, urlWebhookValido,
   testoNuovaRichiesta, testoApprovata, testoRifiutata, testoAperta,
 } = require('./notify');
 
@@ -51,6 +58,10 @@ function pubblica(r) {
     battleId: r.battle_id, battleLabel: r.battle_label, side: r.side,
     countryId: r.country_id, muId: r.mu_id, muNome: r.mu_nome,
     minDamage: r.min_damage, budget: r.budget, perK: r.per_k,
+    // Danno fattibile SUBITO all'apertura dell'asta (facoltativo).
+    burstDamage: r.burst_damage,
+    // Rimessa in coda dal watcher dopo che il contratto e' stato rubato.
+    riAccodata: Boolean(r.requeue_of),
     duration: r.duration, professionalsOnly: Boolean(r.professionals_only),
     note: r.note,
     status: r.status,
@@ -77,6 +88,241 @@ function conNomi(r) {
   return { ...r, richiedente: nome(r.requested_by), approvatore: nome(r.approved_by), apritore: nome(r.opened_by) };
 }
 
+// ---------------------------------------------------------------------------
+// LE AZIONI, SEPARATE DALLE ROTTE
+// ---------------------------------------------------------------------------
+
+/** Capacità di un'identità (che sotto lente è il bersaglio). */
+async function capacitaDi(identita) {
+  const dati = await calcolaEffettivi(identita, {});
+  return dati.capacita;
+}
+
+const nomeDi = (identita) => identita.war_username || identita.discord_username;
+
+/** I tetti che il governo ha messo allo sportello (danno e taglia per 1.000).
+ *  Torna null se la richiesta ci sta, altrimenti la risposta d'errore col tetto
+ *  dentro, cosi' chi la riceve (bot o sito) dice QUALE numero e' troppo alto. */
+function oltreITetti(countryId, battleId, minDamage, perK) {
+  const t = limitiSportello(countryId, battleId);
+  if (t.maxDamage != null && minDamage > t.maxDamage) {
+    return { codice: 422, corpo: { error: 'oltre_il_tetto', campo: 'damage', tetto: t.maxDamage } };
+  }
+  if (t.maxRate != null && perK > t.maxRate) {
+    return { codice: 422, corpo: { error: 'oltre_il_tetto', campo: 'rate', tetto: t.maxRate } };
+  }
+  return null;
+}
+
+async function azioneCrea(identita, b) {
+  b = b || {};
+  const battleId = String(b.battleId || '').trim();
+  const muId = String(b.muId || '').trim();
+  const countryId = String(b.countryId || '').trim();
+  if (!battleId || !muId || !countryId) return { codice: 400, corpo: { error: 'parametri_non_validi' } };
+
+  const cap = await capacitaDi(identita);
+  if (!cap.chiedePer.includes(muId)) return { codice: 403, corpo: { error: 'non_comandi_questa_unita' } };
+
+  // Lo sportello chiuso dal governo (bottone "Close desk" del bot) vale per
+  // tutti, sito compreso: chiuderlo solo su Discord e lasciare che le
+  // richieste arrivino dal sito sarebbe un divieto a meta'.
+  // Ogni battaglia ha la sua board (bot_board): la richiesta va a quella, se c'e', o alla
+  // generale. Una nazione che ha board ma nessuna per QUESTA battaglia non ha chi
+  // la riceva: meglio dirlo a chi chiede che mandare l'avviso nel vuoto.
+  if (elencoBoard(countryId).length && !boardPerRichiesta(countryId, battleId)) {
+    return { codice: 409, corpo: { error: 'nessuna_board_per_battaglia' } };
+  }
+  if (!sportelloAperto(countryId, battleId)) return { codice: 409, corpo: { error: 'sportello_chiuso' } };
+
+  // Comandare un'unita' non basta: e' la nazione che paga, ed e' la
+  // nazione che decide con chi lavora (policy.js).
+  const permesso = await puoChiedere({
+    muId, muCountryId: cap.muCountryId, targetCountryId: countryId,
+  });
+  if (!permesso.ammesso) {
+    return { codice: 403, corpo: { error: permesso.motivo === 'esclusa' ? 'unita_esclusa' : 'fuori_dalla_lista' } };
+  }
+
+  // I tetti dello sportello valgono per chi chiede, non per il governo che decide.
+  const fuori = oltreITetti(countryId, battleId, Number(b.minDamage) || 0, Number(b.perK) || 0);
+  if (fuori) return fuori;
+
+  const r = creaRichiesta({
+    battleId, battleLabel: String(b.battleLabel || '').slice(0, 200) || null,
+    side: b.side === 'defender' ? 'defender' : b.side === 'attacker' ? 'attacker' : null,
+    countryId, muId, muNome: String(b.muNome || '').slice(0, 100) || null,
+    requestedBy: identita.id,
+    minDamage: Number(b.minDamage) || null,
+    budget: Number(b.budget) || null,
+    perK: Number(b.perK) || null,
+    duration: Number(b.duration) || null,
+    professionalsOnly: Boolean(b.professionalsOnly),
+    note: String(b.note || '').slice(0, 500) || null,
+    burstDamage: Number(b.burstDamage) >= 1000 ? Math.round(Number(b.burstDamage)) : null,
+  });
+  audit(identita.id, 'request.create', `request:${r.id}`, { battleId, muId, countryId });
+
+  // L'avviso va al canale della NAZIONE: è chi deve decidere.
+  avvisa('country', countryId, testoNuovaRichiesta(r, nomeDi(identita)), { tipo: 'nuova', requestId: r.id });
+
+  return { codice: 201, corpo: { richiesta: pubblica(conNomi(r)) } };
+}
+
+// Approvazione e rifiuto sono la stessa porta: cambia solo lo stato e il
+// testo dell'avviso.
+async function azioneDecidi(identita, id, nuovoStato) {
+  const r = getRichiesta(Number(id));
+  if (!r) return { codice: 404, corpo: { error: 'richiesta_inesistente' } };
+  if (r.status !== 'pending') return { codice: 409, corpo: { error: 'gia_decisa' } };
+
+  const cap = await capacitaDi(identita);
+  if (!cap.approvaPer.includes(r.country_id)) return { codice: 403, corpo: { error: 'non_approvi_per_questa_nazione' } };
+
+  const chi = nomeDi(identita);
+  // ⚠️ `approved_by`/`approved_at` significano "chi ha DECISO e quando",
+  // non "chi ha approvato": ci scrive dentro anche il rifiuto. Il nome
+  // della colonna e' infelice ma cambiarlo costerebbe una migrazione su
+  // dati veri; chi mostra il dato deve guardare `status` per sapere in
+  // che verso e' andata. Era un bug reale: una richiesta rifiutata
+  // compariva come "approvata da".
+  const agg = aggiornaRichiesta(r.id, {
+    status: nuovoStato,
+    approved_by: identita.id,
+    approved_at: Date.now(),
+  });
+  audit(identita.id, `request.${nuovoStato}`, `request:${r.id}`, null);
+
+  // L'avviso va al canale dell'UNITÀ: è chi aspetta la risposta.
+  const approvata = nuovoStato === 'approved';
+  avvisa('mu', r.mu_id, (approvata ? testoApprovata : testoRifiutata)(agg, chi),
+    { tipo: approvata ? 'approvata' : 'rifiutata', requestId: r.id });
+  avvisaCarta(r.country_id, agg, approvata ? 'approvata' : 'rifiutata');
+  // Il comandante dell'unita' lo sa anche senza guardare un canale (dm.js).
+  if (approvata) notificaComandanti(agg, 'approvata', chi, identita.id);
+
+  return { codice: 200, corpo: { richiesta: pubblica(conNomi(agg)) } };
+}
+
+// ── "L'ho aperta" ──────────────────────────────────────────────────────
+// Il gesto che fa partire tutto il resto. Volutamente manuale: è anche
+// l'unico modo di avvisare PRIMA che l'asta esista.
+async function azioneAperta(identita, id) {
+  const r = getRichiesta(Number(id));
+  if (!r) return { codice: 404, corpo: { error: 'richiesta_inesistente' } };
+  if (r.status !== 'approved') return { codice: 409, corpo: { error: 'non_approvata' } };
+  if (r.opened_at) return { codice: 409, corpo: { error: 'gia_segnata_aperta' } };
+
+  const cap = await capacitaDi(identita);
+  if (!cap.approvaPer.includes(r.country_id)) return { codice: 403, corpo: { error: 'non_approvi_per_questa_nazione' } };
+
+  const agg = aggiornaRichiesta(r.id, { opened_at: Date.now(), opened_by: identita.id });
+  audit(identita.id, 'request.opened', `request:${r.id}`, null);
+
+  // La spunta e' l'innesco: da qui parte la raffica che cerca l'asta e
+  // schedula i due controlli. Non c'e' polling a vuoto prima di questo
+  // momento, perche' prima non c'era niente da guardare.
+  segnalaApertura(r.id);
+
+  avvisa('mu', r.mu_id, testoAperta(agg, nomeDi(identita)), { tipo: 'aperta', requestId: r.id });
+  avvisaCarta(r.country_id, agg, 'aperta');
+  // "Il contratto e' postato": il comandante puo' mandare l'unita' ADESSO.
+  notificaComandanti(agg, 'aperta', nomeDi(identita), identita.id);
+
+  return { codice: 200, corpo: { richiesta: pubblica(conNomi(agg)) } };
+}
+
+// ── Ritirare ───────────────────────────────────────────────────────────
+async function azioneRitira(identita, id) {
+  const r = getRichiesta(Number(id));
+  if (!r) return { codice: 404, corpo: { error: 'richiesta_inesistente' } };
+  if (['cancelled', 'closed'].includes(r.status)) return { codice: 409, corpo: { error: 'gia_chiusa' } };
+
+  const cap = await capacitaDi(identita);
+  const suo = r.requested_by === identita.id;
+  const puo = suo || cap.chiedePer.includes(r.mu_id) || cap.approvaPer.includes(r.country_id) || cap.admin;
+  if (!puo) return { codice: 403, corpo: { error: 'non_autorizzato' } };
+
+  const agg = aggiornaRichiesta(r.id, { status: 'cancelled' });
+  audit(identita.id, 'request.cancel', `request:${r.id}`, null);
+  avvisaCarta(r.country_id, agg, 'ritirata');
+  return { codice: 200, corpo: { richiesta: pubblica(conNomi(agg)) } };
+}
+
+// ── Correggere la propria richiesta ────────────────────────────────────
+// Solo finche' nessuno ha deciso (`pending`) e solo chi l'ha fatta: dopo
+// l'approvazione il ministro ha detto di si' a QUEI numeri, e cambiarli sotto
+// i suoi occhi sarebbe farsi approvare una cosa e aprirne un'altra. Chi vuole
+// cambiare dopo ritira e rifa'.
+async function azioneModifica(identita, id, b) {
+  b = b || {};
+  const r = getRichiesta(Number(id));
+  if (!r) return { codice: 404, corpo: { error: 'richiesta_inesistente' } };
+  if (r.requested_by !== identita.id) return { codice: 403, corpo: { error: 'non_autorizzato' } };
+  if (r.status !== 'pending') return { codice: 409, corpo: { error: 'gia_decisa' } };
+
+  const minDamage = b.minDamage != null ? Number(b.minDamage) : r.min_damage;
+  const perK = b.perK != null ? Number(b.perK) : r.per_k;
+  if (!(minDamage >= 1000) || !(perK >= 0.001 && perK <= 5)) {
+    return { codice: 400, corpo: { error: 'parametri_non_validi' } };
+  }
+  // Una modifica non puo' aggirare il tetto che la richiesta nuova rispetterebbe.
+  // Solo se i numeri CAMBIANO: correggere la nota di una richiesta messa prima del
+  // tetto non deve essere bloccato da un tetto arrivato dopo.
+  if (minDamage !== r.min_damage || perK !== r.per_k) {
+    const fuori = oltreITetti(r.country_id, r.battle_id, minDamage, perK);
+    if (fuori) return fuori;
+  }
+  const agg = aggiornaRichiesta(r.id, {
+    min_damage: minDamage,
+    per_k: perK,
+    budget: (minDamage / 1000) * perK,
+    professionals_only: b.professionalsOnly == null ? r.professionals_only : (b.professionalsOnly ? 1 : 0),
+    note: b.note === undefined ? r.note : (String(b.note || '').slice(0, 500) || null),
+    // `undefined` = non toccare; vuoto o 0 = toglierlo.
+    burst_damage: b.burstDamage === undefined ? r.burst_damage
+      : (Number(b.burstDamage) >= 1000 ? Math.round(Number(b.burstDamage)) : null),
+  });
+  audit(identita.id, 'request.edit', `request:${r.id}`, { minDamage, perK });
+  // Chi deve decidere vede i numeri nuovi sulla carta, senza un secondo avviso.
+  avvisaCarta(r.country_id, agg, 'modificata');
+  return { codice: 200, corpo: { richiesta: pubblica(conNomi(agg)) } };
+}
+
+// ---------------------------------------------------------------------------
+// POSIZIONE IN CODA
+// ---------------------------------------------------------------------------
+// La coda e' l'ordine di ARRIVO delle richieste ancora in attesa di ciascuna
+// nazione (`created_at`, poi `id`): e' quello che il governo vede in "Pending" e
+// nel bot. Il tavolo lo mostrava al contrario (dalla piu' recente) e senza
+// posizione: una richiesta riportata davanti dopo un furto scendeva in fondo
+// all'elenco, e chi la cercava non la trovava.
+//
+// Ogni chiamata calcola la posizione sull'INTERA coda della nazione, non sulle
+// sole righe che quella persona vede: un comandante vede solo le sue richieste,
+// ma "sono 3° su 12" ha senso solo contro tutte le altre.
+// ⚠️ Dal 2026-11-18 la coda e' PER BATTAGLIA, non per nazione: ogni battaglia ha la sua
+// board, e chi aspetta un contratto sulla battaglia X non e' "dietro" a chi lo aspetta
+// sulla Y (aste diverse, decisioni diverse). La chiave e' `nazione|battaglia`.
+const chiaveCoda = (r) => `${r.country_id}|${r.battle_id}`;
+
+function posizioniInCoda(righe) {
+  const chiavi = new Map();
+  for (const r of righe) if (r.status === 'pending' && !r.esito) chiavi.set(chiaveCoda(r), [r.country_id, r.battle_id]);
+  const pos = new Map();
+  const tot = {};
+  for (const [k, [cid, bid]] of chiavi) {
+    const att = getDb().prepare("SELECT id FROM request WHERE country_id = ? AND battle_id = ? AND status = 'pending' AND esito IS NULL ORDER BY created_at, id").all(cid, bid);
+    att.forEach((x, i) => pos.set(x.id, i + 1));
+    tot[k] = att.length;
+  }
+  return { pos, tot };
+}
+
+// ---------------------------------------------------------------------------
+// LE ROTTE
+// ---------------------------------------------------------------------------
+
 function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione }) {
   const router = express.Router();
   // `filtroNazione` sta nella catena del router, non sulle singole rotte:
@@ -86,10 +332,8 @@ function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSott
   router.use(requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione);
 
   /** Capacità dell'identità corrente (che sotto lente è il bersaglio). */
-  async function capacita(req) {
-    const dati = await calcolaEffettivi(req.identita, {});
-    return dati.capacita;
-  }
+  const capacita = (req) => capacitaDi(req.identita);
+  const rispondi = (res, { codice, corpo }) => res.status(codice).json(corpo);
 
   // ── Il tavolo ──────────────────────────────────────────────────────────
   router.get('/', async (req, res) => {
@@ -102,8 +346,14 @@ function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSott
       const righe = listaRichieste({
         muIds: cap.chiedePer, countryIds: cap.approvaPer, tutto,
       });
+      const { pos, tot } = posizioniInCoda(righe);
       res.json({
-        richieste: righe.map((r) => pubblica(conNomi(r))),
+        richieste: righe.map((r) => ({
+          ...pubblica(conNomi(r)),
+          // Solo per le in attesa: posizione e quante sono nella coda della nazione.
+          posizione: pos.get(r.id) || null,
+          inCoda: pos.has(r.id) ? tot[chiaveCoda(r)] : null,
+        })),
         capacita: cap,
         lente: req.lente,
       });
@@ -113,120 +363,40 @@ function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSott
     }
   });
 
-  // ── Chiedere ───────────────────────────────────────────────────────────
-  router.post('/', async (req, res) => {
-    const b = req.body || {};
-    const battleId = String(b.battleId || '').trim();
-    const muId = String(b.muId || '').trim();
-    const countryId = String(b.countryId || '').trim();
-    if (!battleId || !muId || !countryId) return res.status(400).json({ error: 'parametri_non_validi' });
-
-    const cap = await capacita(req);
-    if (!cap.chiedePer.includes(muId)) return res.status(403).json({ error: 'non_comandi_questa_unita' });
-
-    // Comandare un'unita' non basta: e' la nazione che paga, ed e' la
-    // nazione che decide con chi lavora (policy.js).
-    const permesso = await puoChiedere({
-      muId, muCountryId: cap.muCountryId, targetCountryId: countryId,
-    });
-    if (!permesso.ammesso) {
-      return res.status(403).json({ error: permesso.motivo === 'esclusa' ? 'unita_esclusa' : 'fuori_dalla_lista' });
+  // ── "Qualcosa e' cambiato?" ───────────────────────────────────────────
+  // Il tool la chiede ogni pochi secondi a scheda aperta, al posto di
+  // rileggere tutto il tavolo: una riga di SQL e due numeri. La versione e'
+  // calcolata sulle STESSE richieste che `GET /` darebbe a questa identita'
+  // (stesso `listaRichieste`, stessi poteri, sotto lente come il bersaglio), e
+  // con la stessa formula del client (board.js: `versioneDi`) — se cambiano
+  // una, cambia l'altra. Qualunque cosa tocchi una richiesta (richiesta,
+  // modifica, approvazione, apertura, esito del watcher, ritiro, dal sito O dal
+  // bot Discord) ne aggiorna `updated_at`; il conteggio copre le cancellazioni.
+  router.get('/versione', async (req, res) => {
+    try {
+      const cap = await capacita(req);
+      const tutto = Boolean(cap.admin) && !req.lente;
+      const righe = listaRichieste({ muIds: cap.chiedePer, countryIds: cap.approvaPer, tutto });
+      const ultima = righe.reduce((m, r) => Math.max(m, r.updated_at || 0), 0);
+      // Anche la SOMMA delle posizioni: se davanti a te entra o esce qualcuno le
+      // tue richieste non cambiano (un comandante non vede quelle degli altri),
+      // ma la tua posizione si': senza, il numero resterebbe vecchio.
+      const { pos } = posizioniInCoda(righe);
+      let somma = 0;
+      for (const r of righe) somma += pos.get(r.id) || 0;
+      res.json({ versione: `${righe.length}:${ultima}:${somma}` });
+    } catch (err) {
+      console.error('[requests] versione fallita:', err.message);
+      res.status(502).json({ error: 'gioco_non_raggiungibile' });
     }
-
-    const r = creaRichiesta({
-      battleId, battleLabel: String(b.battleLabel || '').slice(0, 200) || null,
-      side: b.side === 'defender' ? 'defender' : b.side === 'attacker' ? 'attacker' : null,
-      countryId, muId, muNome: String(b.muNome || '').slice(0, 100) || null,
-      requestedBy: req.identita.id,
-      minDamage: Number(b.minDamage) || null,
-      budget: Number(b.budget) || null,
-      perK: Number(b.perK) || null,
-      duration: Number(b.duration) || null,
-      professionalsOnly: Boolean(b.professionalsOnly),
-      note: String(b.note || '').slice(0, 500) || null,
-    });
-    audit(req.identita.id, 'request.create', `request:${r.id}`, { battleId, muId, countryId });
-
-    // L'avviso va al canale della NAZIONE: è chi deve decidere.
-    avvisa('country', countryId, testoNuovaRichiesta(r, req.identita.war_username || req.identita.discord_username));
-
-    res.status(201).json({ richiesta: pubblica(conNomi(r)) });
   });
 
-  // ── Decidere ───────────────────────────────────────────────────────────
-  // Approvazione e rifiuto sono la stessa porta: cambia solo lo stato e il
-  // testo dell'avviso.
-  async function decidi(req, res, nuovoStato) {
-    const r = getRichiesta(Number(req.params.id));
-    if (!r) return res.status(404).json({ error: 'richiesta_inesistente' });
-    if (r.status !== 'pending') return res.status(409).json({ error: 'gia_decisa' });
-
-    const cap = await capacita(req);
-    if (!cap.approvaPer.includes(r.country_id)) return res.status(403).json({ error: 'non_approvi_per_questa_nazione' });
-
-    const chi = req.identita.war_username || req.identita.discord_username;
-    // ⚠️ `approved_by`/`approved_at` significano "chi ha DECISO e quando",
-    // non "chi ha approvato": ci scrive dentro anche il rifiuto. Il nome
-    // della colonna e' infelice ma cambiarlo costerebbe una migrazione su
-    // dati veri; chi mostra il dato deve guardare `status` per sapere in
-    // che verso e' andata. Era un bug reale: una richiesta rifiutata
-    // compariva come "approvata da".
-    const agg = aggiornaRichiesta(r.id, {
-      status: nuovoStato,
-      approved_by: req.identita.id,
-      approved_at: Date.now(),
-    });
-    audit(req.identita.id, `request.${nuovoStato}`, `request:${r.id}`, null);
-
-    // L'avviso va al canale dell'UNITÀ: è chi aspetta la risposta.
-    avvisa('mu', r.mu_id, (nuovoStato === 'approved' ? testoApprovata : testoRifiutata)(agg, chi));
-
-    res.json({ richiesta: pubblica(conNomi(agg)) });
-  }
-
-  router.post('/:id/approve', (req, res) => decidi(req, res, 'approved'));
-  router.post('/:id/reject', (req, res) => decidi(req, res, 'rejected'));
-
-  // ── "L'ho aperta" ──────────────────────────────────────────────────────
-  // Il gesto che fa partire tutto il resto. Volutamente manuale: è anche
-  // l'unico modo di avvisare PRIMA che l'asta esista.
-  router.post('/:id/opened', async (req, res) => {
-    const r = getRichiesta(Number(req.params.id));
-    if (!r) return res.status(404).json({ error: 'richiesta_inesistente' });
-    if (r.status !== 'approved') return res.status(409).json({ error: 'non_approvata' });
-    if (r.opened_at) return res.status(409).json({ error: 'gia_segnata_aperta' });
-
-    const cap = await capacita(req);
-    if (!cap.approvaPer.includes(r.country_id)) return res.status(403).json({ error: 'non_approvi_per_questa_nazione' });
-
-    const agg = aggiornaRichiesta(r.id, { opened_at: Date.now(), opened_by: req.identita.id });
-    audit(req.identita.id, 'request.opened', `request:${r.id}`, null);
-
-    // La spunta e' l'innesco: da qui parte la raffica che cerca l'asta e
-    // schedula i due controlli. Non c'e' polling a vuoto prima di questo
-    // momento, perche' prima non c'era niente da guardare.
-    segnalaApertura(r.id);
-
-    avvisa('mu', r.mu_id, testoAperta(agg, req.identita.war_username || req.identita.discord_username));
-
-    res.json({ richiesta: pubblica(conNomi(agg)) });
-  });
-
-  // ── Ritirare ───────────────────────────────────────────────────────────
-  router.post('/:id/cancel', async (req, res) => {
-    const r = getRichiesta(Number(req.params.id));
-    if (!r) return res.status(404).json({ error: 'richiesta_inesistente' });
-    if (['cancelled', 'closed'].includes(r.status)) return res.status(409).json({ error: 'gia_chiusa' });
-
-    const cap = await capacita(req);
-    const suo = r.requested_by === req.identita.id;
-    const puo = suo || cap.chiedePer.includes(r.mu_id) || cap.approvaPer.includes(r.country_id) || cap.admin;
-    if (!puo) return res.status(403).json({ error: 'non_autorizzato' });
-
-    const agg = aggiornaRichiesta(r.id, { status: 'cancelled' });
-    audit(req.identita.id, 'request.cancel', `request:${r.id}`, null);
-    res.json({ richiesta: pubblica(conNomi(agg)) });
-  });
+  // ── Chiedere / decidere / aprire / ritirare ────────────────────────────
+  router.post('/', async (req, res) => rispondi(res, await azioneCrea(req.identita, req.body)));
+  router.post('/:id/approve', async (req, res) => rispondi(res, await azioneDecidi(req.identita, req.params.id, 'approved')));
+  router.post('/:id/reject', async (req, res) => rispondi(res, await azioneDecidi(req.identita, req.params.id, 'rejected')));
+  router.post('/:id/opened', async (req, res) => rispondi(res, await azioneAperta(req.identita, req.params.id)));
+  router.post('/:id/cancel', async (req, res) => rispondi(res, await azioneRitira(req.identita, req.params.id)));
 
   // ── Svuotare il tavolo ─────────────────────────────────────────────────
   // Cancella SOLO le righe gia' concluse: quelle ancora aperte sono lavoro
@@ -283,4 +453,7 @@ function buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSott
   return router;
 }
 
-module.exports = { buildRequestsRouter };
+module.exports = {
+  buildRequestsRouter, pubblica, conNomi, posizioniInCoda, chiaveCoda,
+  azioneCrea, azioneDecidi, azioneAperta, azioneRitira, azioneModifica,
+};

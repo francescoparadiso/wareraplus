@@ -41,6 +41,8 @@ import { PLAYSTYLE_GROUPS } from './playstyle.js';
 import { avatarImg, countryName, dominantCountry, escapeHtml, flagImg, fmtCompact, tierOf } from './ui.js';
 import { ensureDailyDamage, muDamageToday } from '../shared/dailyDamage.js';
 import { ensureMuReferrals, muReferrals, muReferralsInfo } from './referrals.js';
+import { MU_TYPES, muType } from './api.js';
+import { TYPE_LABEL, muTypeBadge } from './muType.js';
 
 const CHUNK = 60;
 
@@ -104,6 +106,7 @@ function weeklyPerMember(m) {
 // lasciati.
 let query = '';
 let countryFilter = '';
+let typeFilter = '';          // v0.28.3: '' | paramilitary | stateArmy | privateMercenary
 let sortId = 'muWeeklyDamages';
 let shown = CHUNK;
 
@@ -141,6 +144,7 @@ function sortedList() {
   const q = norm(query.trim());
   const arr = ctx.directory.filter(m => {
     if (!matchesCountry(m, countryFilter)) return false;
+    if (typeFilter && muType(m) !== typeFilter) return false;
     if (q && !norm(m.name).includes(q)) return false;
     return true;
   }).slice(); // mai .sort() in place: `directory` è condivisa con classifiche e ricerca globale
@@ -180,6 +184,11 @@ export function renderMuList(host, context) {
   const countries = [...countryIds]
     .map(id => ({ id, name: countryName(id) }))
     .sort((a, b) => a.name.localeCompare(b.name));
+  // Il filtro per tipo solo se la directory porta i tipi (server rideployato
+  // o directory presa dal browser): con una directory vecchia sembrerebbero
+  // tutte paramilitari, e il filtro direbbe "nessuna" per gli altri due.
+  const hasTypes = ctx.directory.some(m => m.type);
+  if (!hasTypes) typeFilter = '';
 
   host.innerHTML = `
     <div class="wp-mu-toolbar">
@@ -196,6 +205,13 @@ export function renderMuList(host, context) {
           ${countries.map(c => `<option value="${escapeHtml(c.id)}"${c.id === countryFilter ? ' selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
         </select>
       </label>
+      ${hasTypes ? `<label class="wp-mu-field">
+        <span class="wp-mu-field-label">${escapeHtml(muT('typeLabel'))}</span>
+        <select class="wp-mu-select" id="wp-mu-type">
+          <option value="">${escapeHtml(muT('typeAll'))}</option>
+          ${MU_TYPES.map(t => `<option value="${t}"${t === typeFilter ? ' selected' : ''}>${escapeHtml(muT(TYPE_LABEL[t]))}</option>`).join('')}
+        </select>
+      </label>` : ''}
       <span class="wp-mu-count" id="wp-mu-count"></span>
     </div>
     ${scrollHintHtml(768)}
@@ -214,6 +230,9 @@ export function renderMuList(host, context) {
   });
   host.querySelector('#wp-mu-country').addEventListener('change', (e) => {
     countryFilter = e.target.value; shown = CHUNK; paint();
+  });
+  host.querySelector('#wp-mu-type')?.addEventListener('change', (e) => {
+    typeFilter = e.target.value; shown = CHUNK; paint();
   });
   host.querySelector('#wp-mu-more').addEventListener('click', () => {
     shown += CHUNK; paint();
@@ -415,7 +434,7 @@ function rowHtml(m, position) {
       <span class="wp-mu-cell-pos">${position}</span>
       <span class="wp-mu-cell-name">
         ${avatarImg(m.avatarUrl, m.name, 'wp-mu-avatar wp-mu-avatar-sm')}
-        <span class="wp-mu-name-text">${escapeHtml(m.name)}</span>${m._id === getMeMeta()?.muId ? `<span class="wp-mu-mine" title="${escapeHtml(muT('mineUnit'))}">★</span>` : ''}
+        <span class="wp-mu-name-text">${escapeHtml(m.name)}</span>${m._id === getMeMeta()?.muId ? `<span class="wp-mu-mine" title="${escapeHtml(muT('mineUnit'))}">★</span>` : ''}${muTypeBadge(m, { short: true })}
       </span>
       <span class="wp-mu-cell-country">
         ${flagImg(m.country)}

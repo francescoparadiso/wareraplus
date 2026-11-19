@@ -154,7 +154,7 @@ const D = {
     ordersUnknown: 'Orders could not be loaded: nation orders are missing from the numbers.',
     none: 'No nation has a specific bonus here.',
     note: '≈ = sum of the bonuses that apply to a nation’s citizens: home, alliance, pact, sworn enemy, nation order (red +15, yellow +10, green +5), bunker or base, revolt. Unit orders and unit HQ depend on the player, so they count only in “Your bonus”. Who gets half of a bunker or base (same alliance or pact) is our reading of the rules.',
-    home: 'Home', enemy: 'Sworn enemy', pact: 'Pact', ally: 'Alliance', order: 'Order', muOrder: 'Unit order', muHq: 'Unit HQ', revolt_p: 'Revolt', malus: 'Not linked', bunker_p: 'Bunker', base_p: 'Base',
+    home: 'Home', enemy: 'Sworn enemy', pact: 'Pact', ally: 'Alliance', order: 'Order', muOrder: 'Unit order', muHq: 'Unit HQ', revolt_p: 'Revolt', malus: 'Not linked', bunker_p: 'Bunker', base_p: 'Base', unitType: "State Army", contract: "Contract", youType: "Your unit is a {t}: its effects are already in your bonus.",
   },
   it: {
     title: 'Bonus battaglia',
@@ -171,7 +171,7 @@ const D = {
     ordersUnknown: 'Gli ordini non si sono potuti leggere: il bonus degli ordini manca dai numeri.',
     none: 'Nessuna nazione ha un bonus specifico qui.',
     note: '≈ = somma dei bonus che valgono per i cittadini di una nazione: patria, alleanza, patto, nemico giurato, ordine della nazione (rosso +15, giallo +10, verde +5), bunker o base, rivolta. Ordini e QG dell’unità dipendono dal giocatore, quindi contano solo in “Il tuo bonus”. Chi riceve metà di bunker o base (stessa alleanza o patto) è la nostra lettura delle regole.',
-    home: 'Patria', enemy: 'Nemico giurato', pact: 'Patto', ally: 'Alleanza', order: 'Ordine', muOrder: 'Ordine unità', muHq: 'QG unità', revolt_p: 'Rivolta', malus: 'Non collegata', bunker_p: 'Bunker', base_p: 'Base',
+    home: 'Patria', enemy: 'Nemico giurato', pact: 'Patto', ally: 'Alleanza', order: 'Ordine', muOrder: 'Ordine unità', muHq: 'QG unità', revolt_p: 'Rivolta', malus: 'Non collegata', bunker_p: 'Bunker', base_p: 'Base', unitType: "Esercito di Stato", contract: "Contratto", youType: "La tua unità è {t}: i suoi effetti sono già nel tuo bonus.",
   },
   es: {
     title: 'Bonus de batalla',
@@ -188,7 +188,7 @@ const D = {
     ordersUnknown: 'No se pudieron leer las órdenes: falta su bonus en los números.',
     none: 'Ninguna nación tiene un bonus específico aquí.',
     note: '≈ = suma de los bonus que valen para los ciudadanos de una nación: patria, alianza, pacto, enemigo jurado, orden de la nación (rojo +15, amarillo +10, verde +5), búnker o base, revuelta. Órdenes y CG de unidad dependen del jugador: solo cuentan en “Tu bonus”. Quién recibe la mitad de un búnker o base (misma alianza o pacto) es nuestra lectura de las reglas.',
-    home: 'Patria', enemy: 'Enemigo jurado', pact: 'Pacto', ally: 'Alianza', order: 'Orden', muOrder: 'Orden de unidad', muHq: 'CG unidad', revolt_p: 'Revuelta', malus: 'Sin conexión', bunker_p: 'Búnker', base_p: 'Base',
+    home: 'Patria', enemy: 'Enemigo jurado', pact: 'Pacto', ally: 'Alianza', order: 'Orden', muOrder: 'Orden de unidad', muHq: 'CG unidad', revolt_p: 'Revuelta', malus: 'Sin conexión', bunker_p: 'Búnker', base_p: 'Base', unitType: "Ejército del Estado", contract: "Contrato", youType: "Tu unidad es {t}: sus efectos ya están en tu bonus.",
   },
   de: {
     title: 'Schlachtbonus',
@@ -205,7 +205,7 @@ const D = {
     ordersUnknown: 'Befehle konnten nicht geladen werden: ihr Bonus fehlt in den Zahlen.',
     none: 'Keine Nation hat hier einen eigenen Bonus.',
     note: '≈ = Summe der Boni für die Bürger einer Nation: Heimat, Allianz, Pakt, Erzfeind, Befehl der Nation (rot +15, gelb +10, grün +5), Bunker oder Basis, Aufstand. Befehle und HQ der Einheit hängen vom Spieler ab und zählen nur in „Dein Bonus“. Wer die Hälfte von Bunker oder Basis erhält (gleiche Allianz oder Pakt), ist unsere Lesart der Regeln.',
-    home: 'Heimat', enemy: 'Erzfeind', pact: 'Pakt', ally: 'Allianz', order: 'Befehl', muOrder: 'Einheitsbefehl', muHq: 'Einheit-HQ', revolt_p: 'Aufstand', malus: 'Nicht verbunden', bunker_p: 'Bunker', base_p: 'Basis',
+    home: 'Heimat', enemy: 'Erzfeind', pact: 'Pakt', ally: 'Allianz', order: 'Befehl', muOrder: 'Einheitsbefehl', muHq: 'Einheit-HQ', revolt_p: 'Aufstand', malus: 'Nicht verbunden', bunker_p: 'Bunker', base_p: 'Basis', unitType: "Staatsarmee", contract: "Vertrag", youType: "Deine Einheit ist {t}: ihre Effekte sind schon in deinem Bonus.",
   },
   fr: {
     title: 'Bonus de bataille',
@@ -222,7 +222,7 @@ const D = {
     ordersUnknown: 'Les ordres n’ont pas pu être lus : leur bonus manque dans les chiffres.',
     none: 'Aucune nation n’a de bonus particulier ici.',
     note: '≈ = somme des bonus qui valent pour les citoyens d’une nation : patrie, alliance, pacte, ennemi juré, ordre de la nation (rouge +15, jaune +10, vert +5), bunker ou base, révolte. Ordres et QG d’unité dépendent du joueur : ils ne comptent que dans « Ton bonus ». Qui reçoit la moitié d’un bunker ou d’une base (même alliance ou pacte) est notre lecture des règles.',
-    home: 'Patrie', enemy: 'Ennemi juré', pact: 'Pacte', ally: 'Alliance', order: 'Ordre', muOrder: 'Ordre d’unité', muHq: 'QG d’unité', revolt_p: 'Révolte', malus: 'Non reliée', bunker_p: 'Bunker', base_p: 'Base',
+    home: 'Patrie', enemy: 'Ennemi juré', pact: 'Pacte', ally: 'Alliance', order: 'Ordre', muOrder: 'Ordre d’unité', muHq: 'QG d’unité', revolt_p: 'Révolte', malus: 'Non reliée', bunker_p: 'Bunker', base_p: 'Base', unitType: "Armée d’État", contract: "Contrat", youType: "Ton unité est {t} : ses effets sont déjà dans ton bonus.",
   },
   nl: {
     title: 'Slagbonus',
@@ -239,7 +239,7 @@ const D = {
     ordersUnknown: 'Orders konden niet worden gelezen: hun bonus ontbreekt in de cijfers.',
     none: 'Geen enkel land heeft hier een eigen bonus.',
     note: '≈ = som van de bonussen voor de burgers van een land: thuis, alliantie, pact, aartsvijand, landorder (rood +15, geel +10, groen +5), bunker of basis, opstand. Orders en HK van de eenheid hangen af van de speler en tellen alleen in “Jouw bonus”. Wie de helft van een bunker of basis krijgt (zelfde alliantie of pact) is onze lezing van de regels.',
-    home: 'Thuis', enemy: 'Aartsvijand', pact: 'Pact', ally: 'Alliantie', order: 'Order', muOrder: 'Eenheidsorder', muHq: 'Eenheid-HK', revolt_p: 'Opstand', malus: 'Niet verbonden', bunker_p: 'Bunker', base_p: 'Basis',
+    home: 'Thuis', enemy: 'Aartsvijand', pact: 'Pact', ally: 'Alliantie', order: 'Order', muOrder: 'Eenheidsorder', muHq: 'Eenheid-HK', revolt_p: 'Opstand', malus: 'Niet verbonden', bunker_p: 'Bunker', base_p: 'Basis', unitType: "Staatsleger", contract: "Contract", youType: "Je eenheid is {t}: de effecten zitten al in je bonus.",
   },
   sv: {
     title: 'Stridsbonus',
@@ -256,7 +256,7 @@ const D = {
     ordersUnknown: 'Order kunde inte läsas: deras bonus saknas i siffrorna.',
     none: 'Ingen nation har en egen bonus här.',
     note: '≈ = summan av bonusarna för en nations medborgare: hemma, allians, pakt, svuren fiende, nationsorder (röd +15, gul +10, grön +5), bunker eller bas, revolt. Order och HK för enheten beror på spelaren och räknas bara i ”Din bonus”. Vem som får halva bunkern eller basen (samma allians eller pakt) är vår tolkning av reglerna.',
-    home: 'Hemma', enemy: 'Svuren fiende', pact: 'Pakt', ally: 'Allians', order: 'Order', muOrder: 'Enhetsorder', muHq: 'Enhets-HK', revolt_p: 'Revolt', malus: 'Ej ansluten', bunker_p: 'Bunker', base_p: 'Bas',
+    home: 'Hemma', enemy: 'Svuren fiende', pact: 'Pakt', ally: 'Allians', order: 'Order', muOrder: 'Enhetsorder', muHq: 'Enhets-HK', revolt_p: 'Revolt', malus: 'Ej ansluten', bunker_p: 'Bunker', base_p: 'Bas', unitType: "Statsarmé", contract: "Kontrakt", youType: "Din enhet är {t}: effekterna finns redan i din bonus.",
   },
   pt: {
     title: 'Bônus de batalha',
@@ -273,7 +273,7 @@ const D = {
     ordersUnknown: 'Não foi possível ler as ordens: o bônus delas falta nos números.',
     none: 'Nenhuma nação tem bônus específico aqui.',
     note: '≈ = soma dos bônus que valem para os cidadãos de uma nação: pátria, aliança, pacto, inimigo jurado, ordem da nação (vermelho +15, amarelo +10, verde +5), bunker ou base, revolta. Ordens e QG da unidade dependem do jogador: só contam em “Seu bônus”. Quem recebe metade de um bunker ou base (mesma aliança ou pacto) é nossa leitura das regras.',
-    home: 'Pátria', enemy: 'Inimigo jurado', pact: 'Pacto', ally: 'Aliança', order: 'Ordem', muOrder: 'Ordem da unidade', muHq: 'QG da unidade', revolt_p: 'Revolta', malus: 'Sem ligação', bunker_p: 'Bunker', base_p: 'Base',
+    home: 'Pátria', enemy: 'Inimigo jurado', pact: 'Pacto', ally: 'Aliança', order: 'Ordem', muOrder: 'Ordem da unidade', muHq: 'QG da unidade', revolt_p: 'Revolta', malus: 'Sem ligação', bunker_p: 'Bunker', base_p: 'Base', unitType: "Exército do Estado", contract: "Contrato", youType: "A tua unidade é {t}: os efeitos já estão no teu bónus.",
   },
   ar: {
     title: 'مكافأة المعركة',
@@ -290,7 +290,7 @@ const D = {
     ordersUnknown: 'تعذرت قراءة الأوامر: مكافأتها غير محسوبة.',
     none: 'لا توجد دولة بمكافأة خاصة هنا.',
     note: '≈ = مجموع المكافآت التي تنطبق على مواطني دولة: الوطن، التحالف، الميثاق، العدو اللدود، أمر الدولة (أحمر +15، أصفر +10، أخضر +5)، المخبأ أو القاعدة، التمرد. أوامر الوحدة ومقرها تعتمد على اللاعب فتُحسب فقط في «مكافأتك». من يحصل على نصف المخبأ أو القاعدة (نفس التحالف أو ميثاق) هو قراءتنا للقواعد.',
-    home: 'الوطن', enemy: 'العدو اللدود', pact: 'ميثاق', ally: 'تحالف', order: 'أمر', muOrder: 'أمر الوحدة', muHq: 'مقر الوحدة', revolt_p: 'تمرد', malus: 'غير متصلة', bunker_p: 'مخبأ', base_p: 'قاعدة',
+    home: 'الوطن', enemy: 'العدو اللدود', pact: 'ميثاق', ally: 'تحالف', order: 'أمر', muOrder: 'أمر الوحدة', muHq: 'مقر الوحدة', revolt_p: 'تمرد', malus: 'غير متصلة', bunker_p: 'مخبأ', base_p: 'قاعدة', unitType: "جيش الدولة", contract: "عقد", youType: "وحدتك {t}: آثارها محسوبة في مكافأتك.",
   },
 };
 
@@ -306,6 +306,8 @@ export function partsText(parts, side) {
   const fmt = (v) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 10) / 10));
   const out = [];
   for (const [k, v] of Object.entries(parts)) {
+    // v0.28.3: il contratto della mercenaria privata è un intervallo [0, 5].
+    if (k === 'contract' && Array.isArray(v) && v[1]) { out.push(`${bvT('contract')} +${fmt(v[0])}–${fmt(v[1])}`); continue; }
     if (!v || Array.isArray(v)) continue;
     let label;
     if (k === 'building') label = bvT(side === 'attacker' ? 'base_p' : 'bunker_p');

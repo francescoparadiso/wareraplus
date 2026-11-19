@@ -952,6 +952,9 @@ function buildSpendRows(data, subColor, textColor, sides = {}) {
       estimated unit by unit: what fighters collected minus their unit's contract payouts.
       Contracts count only awarded auctions.
       ${data.truncated ? '<br>⚠️ Very large battle — figures are a lower bound (API paging limit).' : ''}
+      ${data.bounty.defender?.nationFix || data.bounty.attacker?.nationFix
+        ? '<br>⚠️ The game’s nation ranking left out some citizens of this battle: their earnings were added back from the player ranking, by current citizenship.'
+        : ''}
     </div>`;
 }
 

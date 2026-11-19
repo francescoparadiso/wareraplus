@@ -25,8 +25,9 @@
    orderMoney.js — un MINIMO, `getTopOrders` si ferma a 100 ordini per libro.
 
    ── IL GIRO ───────────────────────────────────────────────────────────
-   Una richiesta per sapere CHI (`ranking.getRanking userWealth`: tutta la
-   ladder in un colpo, ~17.000 giocatori con nazione e unità), poi
+   La classifica della ricchezza per sapere CHI (~21.000 giocatori con
+   nazione e unità: dalla v0.28.3 a pagine, da server/fullRanking.js —
+   `ranking.getRanking` ora si ferma ai primi 100), poi
    `getUserById` a blocchi di 25 (~7 KB a giocatore, ~120 MB e ~12 minuti in
    tutto). Si lancia una volta al giorno fra le 05:00 e le 06:59 italiane,
    dopo il censimento aziende che occupa la chiave fino a quell'ora; e una
@@ -108,8 +109,8 @@ async function sweepPlayerParts({ motivo = 'programmato', forza = false } = {}) 
   _inCorso = true;
   const t0 = Date.now();
   try {
-    const [rk] = await deps.trpcBatch([['ranking.getRanking', { rankingType: 'userWealth' }]]);
-    const items = (Array.isArray(rk) ? rk : rk?.items || []).filter(x => x?.user);
+    const rk = await deps.fullRanking('userWealth');
+    const items = (rk?.complete ? rk.items : []).filter(x => x?.user);
     if (items.length < 1000) {
       console.warn(`[player-parts] classifica troppo corta (${items.length}): giro saltato`);
       return;

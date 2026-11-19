@@ -43,6 +43,7 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { API_BASE_URL } from '../diplomacy/config.js';
+import { fetchFullRankingViaCache } from '../diplomacy/cacheClient.js';
 
 const TIMEOUT_MS = 15000; // ~420 KB gzip: più generoso degli 8s della directory
 
@@ -87,7 +88,14 @@ export function referralsFetchedAt() {
   return _fetchedAt;
 }
 
+// ⚠️ Dalla v0.28.3 `ranking.getRanking` dà i primi 100 (prima l'intera, ~2.500
+// righe per i referral): l'intera arriva dal cache-server, e senza server i
+// 100 restano il ripiego (le unità fuori da quei 100 avranno un trattino).
 async function _fetchReferralRanking() {
+  try {
+    const d = await fetchFullRankingViaCache('userReferrals');
+    if (d.rows.length) return d.rows.map(r => ({ mu: r.m, value: Number(r.v) || 0 }));
+  } catch (_) { /* ripiego sui primi 100 */ }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {

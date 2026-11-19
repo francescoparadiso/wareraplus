@@ -105,6 +105,31 @@ export async function loadSpotPrices({ force = false } = {}) {
   return { prices: _mem.prices, pricesTs: _mem.pricesTs };
 }
 
+/**
+ * WarEra+ — prezzi "da libro": il punto medio fra la migliore domanda e la
+ * migliore offerta, che è il numero che si vede nel gioco.
+ *
+ * ⚠️ `itemTrading.getPrices` NON è il libro: è una media delle vendite
+ * recenti (cassa 1: 3,890 contro 3,910 / 3,915 nel libro, il 2026-11-19).
+ * Per un ROI da ±1% quello scarto cambia il verdetto, quindi la scheda
+ * Crafting parte dal libro e ricade su getPrices solo dove il libro non
+ * c'è (un lato vuoto) o non è un prezzo (spread oltre il 25%).
+ * Una richiesta pubblica, un batch.
+ */
+export async function loadBookPrices(prices, { codes = null } = {}) {
+  const list = codes || Object.keys(prices || {});
+  const res = await trpcBatchManual(list.map(code => ['tradingOrder.getTopOrders', { itemCode: code, limit: 1 }]));
+  const out = { ...prices };
+  list.forEach((code, i) => {
+    const o = res[i];
+    const bid = o?.buyOrders?.[0]?.price;
+    const ask = o?.sellOrders?.[0]?.price;
+    if (!(bid > 0) || !(ask > 0) || ask > bid * 1.25) return;
+    out[code] = (bid + ask) / 2;
+  });
+  return out;
+}
+
 /** Quanto sono vecchi i prezzi adesso (ms). -1 se non ce ne sono. */
 export function priceAgeMs() {
   return _mem.pricesTs ? Date.now() - _mem.pricesTs : -1;

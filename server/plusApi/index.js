@@ -45,6 +45,8 @@ const { buildVerifyRouter } = require('./verify');
 const { buildRolesRouter } = require('./roles');
 const { buildRequestsRouter } = require('./requests');
 const { buildPolicyRouter } = require('./policy');
+const { buildBotRouter } = require('./bot');
+const { statoBot } = require('./notify');
 const { buildWealthRouter, buildWealthPublicRouter, initWealth, statoRicchezza } = require('./wealth');
 const { initWatcher, statoWatcher } = require('./watcher');
 // La mia nazione: quadro, confini sorvegliati, nemici. Vedi nazione.js.
@@ -156,10 +158,17 @@ const derivatiDi = async (account) => (await calcolaEffettivi(account, {})).deri
 // non essere abilitato e lo scrive, invece di mostrare una pagina rotta.
 const filtroNazione = costruisciFiltroNazione(derivatiDi);
 
+// ⚠️ I CONTRATTI non passano dal filtro nazione (richiesta del 2026-11-18). Chi puo' chiedere
+// o approvare lo decidono gia' due cose piu' precise: il RUOLO di gioco (comandi l'unita',
+// governi la nazione) e la LISTA PERMESSI della nazione che paga (policy.js: alleanza +
+// aggiunte - esclusioni). Chiedere anche "sei cittadino di P.A.S.T.A." fermava a monte le
+// unita' di nazioni ammesse da una lista: la lista diceva si' e il filtro no, senza motivo.
+const passaSempre = (req, res, next) => next();
+
 app.use('/verify', buildVerifyRouter({ requireAuth, requireAdmin }));
 app.use('/roles', buildRolesRouter({ requireAuth, requireAdmin }));
-app.use('/requests', buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione }));
-app.use('/policy', buildPolicyRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, capacitaDi, filtroNazione }));
+app.use('/requests', buildRequestsRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, filtroNazione: passaSempre }));
+app.use('/policy', buildPolicyRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente, capacitaDi, filtroNazione: passaSempre }));
 
 // Il bilancio delle unita' usa le STESSE capacita' delle prenotazioni: chi
 // puo' chiedere un contratto per un'unita' e' chi la comanda, ed e' la
@@ -193,6 +202,12 @@ app.use('/accordi', buildAccordiRouter({ requireAuth, risolviIdentita, bloccaScr
 // Niente filtro nazione: è Political, aperto a ogni nazione. Vedi votazioni.js.
 app.use('/votazioni', buildVotazioniRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoLente }));
 
+// Il bot Discord dei contratti (gira su un altro VPS): ritira gli avvisi e
+// chiede di approvare/aprire/creare per conto di chi preme un bottone.
+// Server-a-server, col segreto BOT_TOKEN: niente sessione, niente CORS.
+// Senza BOT_TOKEN tutte le rotte rispondono 503. Vedi bot.js.
+app.use('/bot', buildBotRouter());
+
 app.use('/auth', buildAuthRouter({
   env: WP_ENV,
   publicBase: PUBLIC_BASE,
@@ -223,6 +238,9 @@ app.get('/health', (req, res) => res.json({
   // Quanti controlli sulle aste sono in attesa. Dopo un restart dice a
   // colpo d'occhio se la coda è stata ripresa da disco o persa.
   watcher: statoWatcher(),
+  // Il bot Discord dei contratti: token caricato? e quando ha chiesto per
+  // l'ultima volta? `vivo: false` = gli avvisi stanno andando ai webhook.
+  bot: { token: process.env.BOT_TOKEN ? 'caricato' : 'MANCANTE (bot disattivato)', ...statoBot() },
   // Da quando in qua l'archivio ricchezza guarda. E' la prima cosa da
   // controllare dopo il deploy: la serie completa arriva dopo otto giorni
   // di scatti, e prima di allora la vista mostra meno colonne DI PROPOSITO.

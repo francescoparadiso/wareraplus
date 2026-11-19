@@ -27,7 +27,10 @@ import { trpcBatch } from '../diplomacy/utils.js';
 import {
   fetchBattleArchiveViaCache,
   fetchWarExpensesViaCache,
+  fetchWarFlowsViaCache,
+  fetchBattleNationsViaCache,
 } from '../diplomacy/cacheClient.js';
+import { fillMissingNations } from '../shared/battleNations.js';
 import { fetchActiveBattles } from '../diplomacy/battleHeatmap.js';
 
 // Quante pagine da 50 sfogliare nel fallback. 8 pagine = 400 battaglie
@@ -390,6 +393,10 @@ export async function getBattleDetail(battleId, { live = false } = {}) {
     // "durante" la battaglia. È pubblica come le altre quattro: nessun
     // consumo del proxy, e una procedura in più in un batch che c'era già
     // non è una richiesta in più.
+    // WarEra+ 2026-11-19: in parallelo, la stessa scomposizione rifatta dal
+    // server sulla classifica per GIOCATORE (src/shared/battleNations.js):
+    // quella per nazione del gioco a volte perde intere cittadinanze.
+    const fullP = fetchBattleNationsViaCache(battleId, { live });
     const [dAtk, dDef, mAtk, mDef, firstAuctions, raw] = await trpcBatch([
       rank('damage', 'country', 'attacker'),
       rank('damage', 'country', 'defender'),
@@ -401,13 +408,19 @@ export async function getBattleDetail(battleId, { live = false } = {}) {
     // La prima pagina arriva nel batch; le altre solo se ci sono.
     const auctions = await _allWonAuctions(battleId, firstAuctions);
 
+    const full = await fullP;
+    const atk = fillMissingNations(_mergeSide(_rankRows(dAtk, 'country'), _rankRows(mAtk, 'country')), full?.sides?.attacker);
+    const def = fillMissingNations(_mergeSide(_rankRows(dDef, 'country'), _rankRows(mDef, 'country')), full?.sides?.defender);
     const detail = {
       startedAt: _ts(raw?.createdAt),
       finishedAt: _ts(raw?.endedAt),
       sides: {
-        attacker: _mergeSide(_rankRows(dAtk, 'country'), _rankRows(mAtk, 'country')),
-        defender: _mergeSide(_rankRows(dDef, 'country'), _rankRows(mDef, 'country')),
+        attacker: atk.rows,
+        defender: def.rows,
       },
+      // Quanto è stato rimesso a mano per lato (null = classifica del gioco
+      // completa, o server assente): la vista lo dichiara.
+      nationFix: { attacker: atk.fix, defender: def.fix },
       truncated: {
         attacker: _isTruncated(dAtk) || _isTruncated(mAtk),
         defender: _isTruncated(dDef) || _isTruncated(mDef),
@@ -571,11 +584,15 @@ async function _fallbackExpenses() {
 export async function getWarExpenses({ force = false } = {}) {
   if (!force && _expensesCache && Date.now() - _expensesCache.at < TTL_MS) return _expensesCache;
 
-  const server = await fetchWarExpensesViaCache();
+  // WarEra+: chi incassa i contratti viaggia a parte (/war-flows) e non deve
+  // mai far fallire le spese: se manca, `flows` e' null e la vista nasconde
+  // le colonne "incassato" dicendolo.
+  const [server, flows] = await Promise.all([fetchWarExpensesViaCache(), fetchWarFlowsViaCache()]);
   if (server && Object.keys(server.byDay).length) {
     _expensesCache = {
       at: Date.now(),
       byDay: server.byDay,
+      flows,
       degraded: false,
       bountyMissing: false,
       tz: server.tz || 'UTC',
@@ -589,7 +606,7 @@ export async function getWarExpenses({ force = false } = {}) {
   try { byDay = await _fallbackExpenses(); }
   catch (err) { console.warn('WarEra+ spese di guerra: fallback fallito', err); }
   _expensesCache = {
-    at: Date.now(), byDay, degraded: true, bountyMissing: true,
+    at: Date.now(), byDay, flows, degraded: true, bountyMissing: true,
     tz: 'UTC', retentionDays: null, fetchedAt: Date.now(),
   };
   return _expensesCache;
@@ -598,8 +615,11 @@ export async function getWarExpenses({ force = false } = {}) {
 /** Aggrega la serie giornaliera su una finestra di N giorni, per nazione.
  *  Vive qui e non nella vista perché le due schede (classifica e dettaglio
  *  nazione) devono per forza contare allo stesso modo. */
-export function aggregateExpenses(byDay, days) {
-  const cutoff = _day(Date.now() - (days - 1) * 24 * 60 * 60 * 1000);
+export function aggregateExpenses(byDay, days, minDay = '') {
+  // `minDay` (WarEra+): alza il taglio, per confrontare le spese con gli
+  // incassi sullo STESSO periodo quando l'archivio degli incassi e' piu' corto.
+  let cutoff = _day(Date.now() - (days - 1) * 24 * 60 * 60 * 1000);
+  if (minDay > cutoff) cutoff = minDay;
   const totals = new Map();
   for (const [d, byCountry] of Object.entries(byDay)) {
     if (d < cutoff) continue;
@@ -654,4 +674,43 @@ export function effectiveDays(byDay, days) {
   const cutoff = _day(Date.now() - (days - 1) * 24 * 60 * 60 * 1000);
   const n = Object.keys(byDay).filter(d => d >= cutoff).length;
   return Math.max(1, n);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   FLUSSO DEI CONTRATTI — chi incassa (WarEra+, 2026-11-13)
+   ------------------------------------------------------------------
+   `flows.byDay[giorno][paganti][incassa] = [monete, contratti]`, dove
+   "incassa" e' la nazione dell'unita' vincitrice dell'asta (decisa dal
+   server, vedi readWarFlows). Qui si somma su una finestra.
+
+   ⚠️ Il taglio e' max(inizio finestra, flows.coverageFrom): prima di
+   quella data l'archivio degli incassi e' parziale (il bootstrap notturno
+   scende all'indietro) e un buco non e' "non ha incassato niente". Chi
+   disegna deve usare `from` per dichiararlo e per confrontare le spese
+   sullo stesso periodo (aggregateExpenses(..., from)).
+   ══════════════════════════════════════════════════════════════ */
+export function aggregateFlows(flows, days) {
+  const out = { earned: new Map(), pairs: new Map(), unattributed: 0, from: '', windowFrom: '', days: 0 };
+  if (!flows) return out;
+  let cutoff = _day(Date.now() - (days - 1) * 24 * 60 * 60 * 1000);
+  out.windowFrom = cutoff;
+  if (flows.coverageFrom && flows.coverageFrom > cutoff) cutoff = flows.coverageFrom;
+  out.from = cutoff;
+  for (const [d, byPayer] of Object.entries(flows.byDay)) {
+    if (d < cutoff) continue;
+    out.days++;
+    for (const [payer, byTo] of Object.entries(byPayer)) {
+      for (const [to, [c, n]] of Object.entries(byTo)) {
+        // '?' = unita' sciolta o fuori directory: non e' di nessuna nazione.
+        if (to === '?') { out.unattributed += c; continue; }
+        const e = out.earned.get(to) || { c: 0, n: 0 };
+        e.c += c; e.n += n; out.earned.set(to, e);
+        let row = out.pairs.get(payer);
+        if (!row) out.pairs.set(payer, row = new Map());
+        const p = row.get(to) || { c: 0, n: 0 };
+        p.c += c; p.n += n; row.set(to, p);
+      }
+    }
+  }
+  return out;
 }

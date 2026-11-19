@@ -480,6 +480,62 @@ CREATE TABLE IF NOT EXISTS votazione_scheda (
   PRIMARY KEY (vote_id, id)
 ) WITHOUT ROWID;
 
+-- ── Il bot Discord dei contratti (bot.js) ───────────────────────────────
+-- Dove il bot scrive per una nazione o un'unita': un CANALE, non un URL
+-- con dentro un token come il webhook. Chi lo imposta lo fa dal comando
+-- /contract-channel, e il server decide per quale nazione/unita' vale
+-- guardando chi e' (mai l'id passato dal bot).
+CREATE TABLE IF NOT EXISTS bot_channel (
+  scope_type TEXT    NOT NULL,                    -- country | mu
+  scope_id   TEXT    NOT NULL,
+  channel_id TEXT    NOT NULL,
+  guild_id   TEXT,
+  -- Lo "sportello" della nazione: 0 = chiuso, il governo non vuole richieste
+  -- (vale per il bot E per il sito: vedi azioneCrea). Un cambio di canale non
+  -- lo riapre: non e' nella lista dell'upsert.
+  aperto     INTEGER NOT NULL DEFAULT 1,
+  created_by INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (scope_type, scope_id)
+);
+
+-- ── Le BOARD (sportelli) di una nazione ─────────────────────────────────
+-- Dal 2026-11-18 una nazione puo' avere piu' board, ognuna un'ISTANZA a se': una
+-- per battaglia (battle_id), ciascuna col suo canale, il suo aperto/chiuso, i suoi
+-- tetti e la sua CODA. battle_id = '' e' la board "generale": prende le richieste
+-- delle battaglie che non hanno una board propria (e' lo sportello unico di prima).
+-- Una richiesta va alla board della sua battaglia; se non c'e', a quella generale;
+-- se la nazione ha board ma nessuna per quella battaglia, e' rifiutata.
+-- Per le UNITA' resta bot_channel (un canale per unita').
+CREATE TABLE IF NOT EXISTS bot_board (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  country_id   TEXT    NOT NULL,
+  battle_id    TEXT    NOT NULL DEFAULT '',
+  battle_label TEXT,
+  channel_id   TEXT    NOT NULL,
+  guild_id     TEXT,
+  aperto       INTEGER NOT NULL DEFAULT 1,
+  max_damage   INTEGER,
+  max_rate     REAL,
+  created_by   INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_at   INTEGER NOT NULL,
+  UNIQUE (country_id, battle_id)
+);
+
+-- Gli avvisi in attesa che il bot li ritiri. Stesso testo che andrebbe sul
+-- webhook, piu' il tipo e la richiesta, cosi' il bot sa che carta aggiornare.
+-- Si pota da sola (notify.js): un bot spento per giorni non deve far
+-- crescere il database.
+CREATE TABLE IF NOT EXISTS bot_event (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  at         INTEGER NOT NULL,
+  scope_type TEXT    NOT NULL,
+  scope_id   TEXT    NOT NULL,
+  tipo       TEXT    NOT NULL,
+  request_id INTEGER,
+  testo      TEXT    NOT NULL
+);
+
 -- ⚠️ L'indice su (mu_id, slot) NON sta qui ma in migrate(). SCHEMA gira
 -- PRIMA delle migrazioni: su un database che ha ancora la colonna day
 -- la CREATE TABLE viene saltata (IF NOT EXISTS) ma la CREATE INDEX no, e
@@ -531,12 +587,42 @@ function migrate() {
   // chiesti dice la cosa esatta; ridurre tutto a "conforme / diverso"
   // butterebbe via l'unica informazione utile.
   const colReq = colonne('request');
-  for (const [nome, tipo] of [['apert_min_damage', 'INTEGER'], ['apert_budget', 'REAL']]) {
+  // 2026-11-16 — `burst_damage`: quanto danno l'unita' puo' fare SUBITO, al
+  // momento in cui l'asta apre (facoltativo, dichiarato da chi chiede). Il
+  // governo lo legge accanto al danno minimo: 1M di minimo con 800k pronti
+  // e' un'altra richiesta da 1M di minimo da fare in tre ore.
+  // 2026-11-16 — `requeue_of`: se il contratto viene RUBATO (l'asta la vince
+  // un'altra unita') il watcher rimette la richiesta in coda come nuova riga e
+  // qui scrive l'id di quella rubata. Serve a non riaccodare due volte la stessa
+  // e a dire "rimessa in coda dopo un furto" sulla carta.
+  for (const [nome, tipo] of [['apert_min_damage', 'INTEGER'], ['apert_budget', 'REAL'], ['burst_damage', 'INTEGER'], ['requeue_of', 'INTEGER']]) {
     if (!colReq.includes(nome)) {
       db.exec(`ALTER TABLE request ADD COLUMN ${nome} ${tipo}`);
       console.log(`[plusApi] migrazione: aggiunta request.${nome}`);
     }
   }
+
+  // 2026-11-17 — i TETTI dello sportello: il governo che apre il tavolo puo'
+  // fissare il danno massimo e la taglia massima (per 1.000 di danno) che una
+  // richiesta puo' avere. NULL = nessun tetto. Valgono per le richieste NUOVE e
+  // per le modifiche, da bot e sito (azioneCrea / azioneModifica); quelle gia'
+  // in coda non si toccano.
+  const colCanale = colonne('bot_channel');
+  for (const [nome, tipo] of [['max_damage', 'INTEGER'], ['max_rate', 'REAL']]) {
+    if (!colCanale.includes(nome)) {
+      db.exec(`ALTER TABLE bot_channel ADD COLUMN ${nome} ${tipo}`);
+      console.log(`[plusApi] migrazione: aggiunta bot_channel.${nome}`);
+    }
+  }
+
+  // 2026-11-18 — lo sportello della nazione diventa una BOARD per battaglia
+  // (bot_board). Le righe di nazione di bot_channel (canale, aperto, tetti) diventano la
+  // board GENERALE: niente cambia finche' la nazione non ne apre altre. Si copia una
+  // volta; da qui in poi bot_channel vale solo per le unita'.
+  db.exec(`INSERT OR IGNORE INTO bot_board (country_id, battle_id, channel_id, guild_id, aperto, max_damage, max_rate, created_by, created_at)
+           SELECT scope_id, '', channel_id, guild_id, aperto, max_damage, max_rate, created_by, created_at
+           FROM bot_channel WHERE scope_type = 'country'`);
+  db.exec("DELETE FROM bot_channel WHERE scope_type = 'country'");   // altrimenti un riavvio le rimetterebbe
 
   // 2026-09-03 - il NOME di chi si ammette o si esclude, com'era quando lo
   // si e' aggiunto. Senza, riaperta la lista il giorno dopo, una voce e'
@@ -763,6 +849,13 @@ function findAccountByWarUserId(warUserId) {
   return getDb().prepare('SELECT * FROM account WHERE war_user_id = ?').get(warUserId) || null;
 }
 
+/** L'account per id Discord (lo usa il bot: chi preme un bottone e' un id
+ *  Discord, e da li' si risale a chi e' nel gioco). */
+function findAccountByDiscordId(discordId) {
+  if (!discordId) return null;
+  return getDb().prepare('SELECT * FROM account WHERE discord_id = ?').get(String(discordId)) || null;
+}
+
 // ---------------------------------------------------------------------------
 // RICHIESTE DI VERIFICA
 // ---------------------------------------------------------------------------
@@ -852,11 +945,15 @@ function creaRichiesta(d) {
   const info = getDb().prepare(`
     INSERT INTO request (battle_id, battle_label, side, country_id, mu_id, mu_nome,
       requested_by, min_damage, budget, per_k, duration, professionals_only, note,
-      status, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',?,?)
+      burst_damage, requeue_of, status, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',?,?)
   `).run(d.battleId, d.battleLabel || null, d.side || null, d.countryId, d.muId, d.muNome || null,
          d.requestedBy, d.minDamage || null, d.budget || null, d.perK || null, d.duration || null,
-         d.professionalsOnly ? 1 : 0, d.note || null, ora, ora);
+         d.professionalsOnly ? 1 : 0, d.note || null, d.burstDamage || null, d.requeueOf || null,
+         // `createdAt`: una richiesta rimessa in coda dopo un furto CONSERVA l'ora
+         // di arrivo originale, ed e' cosi' che torna davanti (la posizione e'
+         // l'ordine di arrivo).
+         d.createdAt || ora, ora);
   return getRichiesta(info.lastInsertRowid);
 }
 
@@ -910,6 +1007,115 @@ function setWebhook({ scopeType, scopeId, url, createdBy }) {
 
 function deleteWebhook(scopeType, scopeId) {
   getDb().prepare('DELETE FROM webhook WHERE scope_type = ? AND scope_id = ?').run(scopeType, scopeId);
+}
+
+// ---------------------------------------------------------------------------
+// BOT DISCORD (canali ed eventi)
+// ---------------------------------------------------------------------------
+
+function getBotChannel(scopeType, scopeId) {
+  return getDb().prepare('SELECT * FROM bot_channel WHERE scope_type = ? AND scope_id = ?')
+    .get(scopeType, scopeId) || null;
+}
+
+function setBotChannel({ scopeType, scopeId, channelId, guildId, createdBy }) {
+  getDb().prepare(`
+    INSERT INTO bot_channel (scope_type, scope_id, channel_id, guild_id, created_by, created_at)
+    VALUES (?,?,?,?,?,?)
+    ON CONFLICT(scope_type, scope_id) DO UPDATE SET
+      channel_id = excluded.channel_id, guild_id = excluded.guild_id,
+      created_by = excluded.created_by, created_at = excluded.created_at
+  `).run(scopeType, scopeId, String(channelId), guildId ? String(guildId) : null, createdBy || null, Date.now());
+}
+
+function setBotAperto(scopeType, scopeId, aperto) {
+  getDb().prepare('UPDATE bot_channel SET aperto = ? WHERE scope_type = ? AND scope_id = ?')
+    .run(aperto ? 1 : 0, scopeType, scopeId);
+}
+
+// ── Le board della nazione ──────────────────────────────────────────────
+/** La board esatta (battleId '' = generale), o null. */
+function getBoard(countryId, battleId = '') {
+  return getDb().prepare('SELECT * FROM bot_board WHERE country_id = ? AND battle_id = ?')
+    .get(countryId, battleId || '') || null;
+}
+
+function elencoBoard(countryId) {
+  return getDb().prepare('SELECT * FROM bot_board WHERE country_id = ? ORDER BY (battle_id = ?) DESC, created_at').all(countryId, '');
+}
+
+/** La board che riceve una richiesta di QUESTA battaglia: la sua, se c'e', altrimenti
+ *  la generale, altrimenti null (la nazione non ha board, o ne ha ma non per questa). */
+function boardPerRichiesta(countryId, battleId) {
+  return getBoard(countryId, battleId) || getBoard(countryId, '');
+}
+
+/** Gli avvisi che non riguardano una battaglia (allarmi dai confini...): la board
+ *  generale, o la piu' vecchia se la nazione ne ha solo di per-battaglia. */
+function boardPerAvviso(countryId) {
+  return getBoard(countryId, '') || elencoBoard(countryId)[0] || null;
+}
+
+function setBoard({ countryId, battleId = '', battleLabel = null, channelId, guildId, createdBy }) {
+  getDb().prepare(`
+    INSERT INTO bot_board (country_id, battle_id, battle_label, channel_id, guild_id, created_by, created_at)
+    VALUES (?,?,?,?,?,?,?)
+    ON CONFLICT(country_id, battle_id) DO UPDATE SET
+      channel_id = excluded.channel_id, guild_id = excluded.guild_id,
+      battle_label = COALESCE(excluded.battle_label, bot_board.battle_label),
+      created_by = excluded.created_by
+  `).run(countryId, battleId || '', battleLabel, String(channelId), guildId ? String(guildId) : null, createdBy || null, Date.now());
+  return getBoard(countryId, battleId);
+}
+
+function setBoardAperto(boardId, aperto) {
+  getDb().prepare('UPDATE bot_board SET aperto = ? WHERE id = ?').run(aperto ? 1 : 0, boardId);
+}
+
+function setBoardLimiti(boardId, { maxDamage, maxRate }) {
+  getDb().prepare('UPDATE bot_board SET max_damage = ?, max_rate = ? WHERE id = ?').run(maxDamage ?? null, maxRate ?? null, boardId);
+}
+
+function deleteBoard(boardId) {
+  getDb().prepare('DELETE FROM bot_board WHERE id = ?').run(boardId);
+}
+
+/** La board della richiesta e' aperta? Senza board (nazione che non usa il bot) vale
+ *  "aperto": il sito funziona come prima. */
+function sportelloAperto(countryId, battleId = '') {
+  const r = boardPerRichiesta(countryId, battleId);
+  return !r || r.aperto !== 0;
+}
+
+/** I tetti della board di quella battaglia ({ maxDamage, maxRate }, null = libero). */
+function limitiSportello(countryId, battleId = '') {
+  const r = boardPerRichiesta(countryId, battleId);
+  return { maxDamage: r?.max_damage ?? null, maxRate: r?.max_rate ?? null };
+}
+
+function deleteBotChannel(scopeType, scopeId) {
+  getDb().prepare('DELETE FROM bot_channel WHERE scope_type = ? AND scope_id = ?').run(scopeType, scopeId);
+}
+
+function registraEventoBot({ scopeType, scopeId, tipo, requestId, testo }) {
+  const ora = Date.now();
+  // Potatura a ogni scrittura: sono poche righe al giorno, e cosi' non serve
+  // un giro apposta. Sette giorni sono piu' di quanto un bot possa stare giu'
+  // senza che qualcuno se ne accorga.
+  getDb().prepare('DELETE FROM bot_event WHERE at < ?').run(ora - 7 * 24 * 3600_000);
+  const info = getDb().prepare(`
+    INSERT INTO bot_event (at, scope_type, scope_id, tipo, request_id, testo) VALUES (?,?,?,?,?,?)
+  `).run(ora, scopeType, scopeId, tipo, requestId || null, String(testo).slice(0, 1900));
+  return Number(info.lastInsertRowid);
+}
+
+function eventiBotDopo(dopoId, limite = 50) {
+  return getDb().prepare('SELECT * FROM bot_event WHERE id > ? ORDER BY id LIMIT ?')
+    .all(Number(dopoId) || 0, limite);
+}
+
+function ultimoEventoBotId() {
+  return getDb().prepare('SELECT COALESCE(MAX(id), 0) AS n FROM bot_event').get().n;
 }
 
 // ---------------------------------------------------------------------------
@@ -1600,6 +1806,9 @@ function dbStatus() {
     prenotazioni: one('SELECT COUNT(*) AS n FROM request'),
     inAttesa: one("SELECT COUNT(*) AS n FROM request WHERE status = 'pending'"),
     webhook: one('SELECT COUNT(*) AS n FROM webhook'),
+    canaliBot: one('SELECT COUNT(*) AS n FROM bot_channel'),
+    boardBot: one('SELECT COUNT(*) AS n FROM bot_board'),
+    eventiBot: one('SELECT COUNT(*) AS n FROM bot_event'),
     sessioniAttive: one(`SELECT COUNT(*) AS n FROM session WHERE expires_at > ${Date.now()}`),
     // Niente COUNT sull'intera wealth_snapshot: 6-8 s di processo fermo a
     // ogni /health (vedi slotRicchezza). Il totale delle righe non serve a
@@ -1628,7 +1837,8 @@ function dbStatus() {
 module.exports = {
   initDb, getDb, DATA_DIR,
   upsertDiscordAccount, getAccountById, deleteAccount, listAccounts,
-  setWarIdentity, findAccountByWarUserId,
+  setWarIdentity, findAccountByWarUserId, findAccountByDiscordId,
+  getBotChannel, setBotChannel, deleteBotChannel, setBotAperto, sportelloAperto, limitiSportello, getBoard, elencoBoard, boardPerRichiesta, boardPerAvviso, setBoard, setBoardAperto, setBoardLimiti, deleteBoard, registraEventoBot, eventiBotDopo, ultimoEventoBotId,
   getClaim, setClaim, deleteClaim, purgeExpiredClaims,
   syncAdminsFromEnv, setAdmin,
   setRoleOverride, removeRoleOverride, listRoleOverrides,

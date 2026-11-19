@@ -54,7 +54,8 @@ const fs = require('fs');
 const path = require('path');
 
 const LIST_LIMIT = 8;
-const WEEKLY_TTL_MS = 10 * 60 * 1000;
+const WEEKLY_TTL_MS = 30 * 60 * 1000;   // = TTL di weeklyUserDamages in fullRanking.js
+const MIN_SNAP_BYTES = 50 * 1000;       // una fotografia intera è ~470 KB; quelle da 100 righe ~5 KB
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
 const WEEK = 7 * DAY;
@@ -86,13 +87,20 @@ async function one(proc, input) {
 
 /* ── 1. Classifica settimanale e settimana mobile ───────────────────── */
 
+// ⚠️ Dalla v0.28.3 (2026-11-16) `ranking.getRanking` risponde con i primi
+// 100: la classifica intera arriva da server/fullRanking.js, a pagine. Le
+// fotografie scattate il 16-17 novembre prima di questa correzione hanno
+// 100 righe e listSnaps le salta (MIN_SNAP_BYTES): prese per buone, il
+// "7 giorni fa" di chiunque fuori dai primi 100 sarebbe stato zero.
 async function refreshWeekly(force = false) {
   if (!force && _weekly && Date.now() - _weeklyAt < WEEKLY_TTL_MS) return false;
-  const res = await one('ranking.getRanking', { rankingType: 'weeklyUserDamages' });
-  const items = Array.isArray(res) ? res : res?.items;
+  const e = await deps.fullRanking('weeklyUserDamages', force ? { maxAgeMs: 5 * 60 * 1000 } : undefined);
+  const items = e?.items;
   if (!Array.isArray(items) || !items.length) throw new Error('classifica settimanale vuota');
-  _weekly = new Map(items.map(x => [x.user, Number(x.value) || 0]));
-  _weeklyAt = Date.now();
+  if (!e.complete) throw new Error(`classifica settimanale incompleta (${items.length})`);
+  if (_weekly && e.at === _weeklyAt) return false;
+  _weekly = new Map(items.filter(x => x.user).map(x => [x.user, Number(x.value) || 0]));
+  _weeklyAt = e.at;
   _rolling = null;
   return true;
 }
@@ -101,16 +109,20 @@ function snapDir() { return path.join(deps.cacheDir, SNAP_SUBDIR); }
 
 function stamp(t) { return new Date(t).toISOString().slice(0, 16).replace(/[-:]/g, ''); }
 
-function listSnaps() {
+/** `all`: anche le fotografie troncate (servono solo per potarle). */
+function listSnaps({ all = false } = {}) {
   try {
     return fs.readdirSync(snapDir())
       .map(f => {
         const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})\.json$/.exec(f);
         return m ? { f, t: Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) } : null;
       })
-      .filter(Boolean)
+      .filter(s => s && (all || _snapBytes(s.f) >= MIN_SNAP_BYTES))
       .sort((a, b) => a.t - b.t);
   } catch { return []; }
+}
+function _snapBytes(f) {
+  try { return fs.statSync(path.join(snapDir(), f)).size; } catch { return 0; }
 }
 
 const _snapMemo = new Map();    // file -> Map (al massimo tre, vedi loadSnap)
@@ -133,7 +145,7 @@ async function snapshotWeekly() {
     fs.mkdirSync(snapDir(), { recursive: true });
     fs.writeFileSync(path.join(snapDir(), `${stamp(_weeklyAt)}.json`),
       JSON.stringify({ t: _weeklyAt, v: Object.fromEntries(_weekly) }));
-    for (const s of listSnaps()) {
+    for (const s of listSnaps({ all: true })) {
       if (Date.now() - s.t > SNAP_KEEP_MS) fs.unlinkSync(path.join(snapDir(), s.f));
     }
     recomputeAll();

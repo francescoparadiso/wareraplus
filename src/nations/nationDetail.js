@@ -33,6 +33,10 @@ import { renderLevelPlaystyle } from './levelPlaystyle.js';
 import { renderDamageCurves } from './damageCurves.js';
 import { renderPlaystyleTrend } from './playstyleTrend.js';
 import { renderLabour } from './labourSection.js';
+import { renderMuSection } from './muSection.js';
+import { renderEco } from './ecoSection.js';
+import { ecoT } from './i18nEco.js';
+import { trpcCall } from '../shared/trpcClient.js';
 import { avatarImg, escapeHtml, flagImg, fmtCompact, fmtRelative } from '../mu/ui.js';
 import { countryDamageToday, dailyDamageLabel, ensureDailyDamage } from '../shared/dailyDamage.js';
 import { t as sharedT } from '../shared/i18n.js';
@@ -62,6 +66,9 @@ const CITIZEN_SORTS = [
   // cioè quasi sempre, il prestigio è 0 o 1 — decide il livello.
   { key: 'pr',   label: 'prestigeShort', get: c => Number(c.pr) || 0, then: c => c.lv || 0 },
   { key: 'mr',   label: 'mrank',    get: c => c.mr || 0 },
+  // Lo stile di gioco è una categoria, non una scala: si ordina A→Z sul nome
+  // della categoria (eco, guerra, misto, indeciso), così i simili stanno insieme.
+  { key: 'ps',   label: 'playstyle', get: c => c.ps || (c.skills ? classifyPlaystyle(c).mode : '') || '', text: true },
   { key: 'seen', label: 'lastSeen', get: c => c.seen || 0 },
   { key: 'u',    label: 'citizen',  get: c => c.u || '', text: true },
 ];
@@ -79,6 +86,8 @@ const NAT_TABS = [
   { id: 'style',    label: 'playstyle' },
   { id: 'damage',   label: 'tabDamage' },
   { id: 'labour',   label: 'tabLabour' },
+  { id: 'eco',      label: 'tabEco',  dict: 'eco' },
+  { id: 'mu',       label: 'tabMu',   dict: 'eco' },
   { id: 'citizens', label: 'citizenList' },
 ];
 let _ntab = 'style';
@@ -123,7 +132,7 @@ export function renderNationDetail(host, nation, ctx) {
 
     <nav class="wp-nat-dtabs" id="wp-nat-dtabs" role="tablist">
       ${NAT_TABS.map(t => `<button type="button" role="tab" class="wp-nat-dtab${_ntab === t.id ? ' active' : ''}"
-        aria-selected="${_ntab === t.id}" data-ntab="${t.id}">${escapeHtml(natT(t.label))}${
+        aria-selected="${_ntab === t.id}" data-ntab="${t.id}">${escapeHtml(t.dict === 'eco' ? ecoT(t.label) : natT(t.label))}${
         t.id === 'citizens' ? '<span class="wp-nat-dtab-n" id="wp-nat-dtab-cit"></span>' : ''}</button>`).join('')}
     </nav>
 
@@ -136,6 +145,10 @@ export function renderNationDetail(host, nation, ctx) {
     <section class="wp-nat-curves" id="wp-nat-curves" data-npanel="damage"${_ntab === 'damage' ? '' : ' hidden'}></section>
 
     <section class="wp-nat-labour" id="wp-nat-labour" data-npanel="labour"${_ntab === 'labour' ? '' : ' hidden'}></section>
+
+    <section class="wp-nat-labour" id="wp-nat-eco" data-npanel="eco"${_ntab === 'eco' ? '' : ' hidden'}></section>
+
+    <section class="wp-nat-labour" id="wp-nat-mu" data-npanel="mu"${_ntab === 'mu' ? '' : ' hidden'}></section>
 
     <section class="wp-nat-citizens" data-npanel="citizens"${_ntab === 'citizens' ? '' : ' hidden'}>
       <h3 class="wp-nat-section-title">
@@ -184,6 +197,7 @@ export function renderNationDetail(host, nation, ctx) {
   });
 
   paintToday(nation);
+  paintRankTrend(nation);
   _painted = new Set();
   paintTab(_ntab);
   loadCitizens(nation);
@@ -212,6 +226,8 @@ function paintTab(id) {
   if (id === 'style') { _painted.add(id); paintTrend(_nation); }
   else if (id === 'damage') { _painted.add(id); paintCurves(_nation); }
   else if (id === 'labour') { _painted.add(id); paintLabour(_nation); }
+  else if (id === 'eco') { _painted.add(id); paintEco(_nation); }
+  else if (id === 'mu') { _painted.add(id); paintMu(_nation); }
 }
 
 /* Se il server non ha quella sezione il modulo la lascia vuota (degrado
@@ -239,8 +255,39 @@ function statCard(nation, m) {
     <div class="wp-nat-statcard">
       <div class="wp-nat-statcard-label">${escapeHtml(natT(m.label))}</div>
       <div class="wp-nat-statcard-value ${m.cls || ''}">${escapeHtml(m.fmt(m.get(nation)))}</div>
-      ${rank ? `<div class="wp-nat-statcard-rank">#${rank}</div>` : ''}
+      ${rank ? `<div class="wp-nat-statcard-rank" data-rk="${rankKey}" data-rank="${rank}">#${rank}</div>` : ''}
     </div>`;
+}
+
+/* v0.28.3: la posizione di IERI accanto a quella di oggi. Il gioco tiene da
+   quel giorno una fotografia quotidiana delle classifiche
+   (`rankingSnapshot.getEntityRecentRanks {entityId}`, pubblica: gli ultimi
+   11 giorni di tutte le classifiche della nazione in una richiesta, `null`
+   dove non c'è la fotografia). La prima è del 16 novembre 2026: prima di
+   allora non esiste, e la freccia semplicemente non compare. Il confronto
+   è con l'ultima fotografia PRIMA di oggi, contro la posizione di adesso. */
+async function paintRankTrend(nation) {
+  let d;
+  try { d = await trpcCall('rankingSnapshot.getEntityRecentRanks', { entityId: nation._id }); }
+  catch { return; }
+  if (_nation?._id !== nation._id || !d?.days || !d.ranks) return;
+  const today = new Date().toISOString().slice(0, 10);
+  _host?.querySelectorAll('.wp-nat-statcard-rank[data-rk]').forEach(el => {
+    const arr = d.ranks[el.dataset.rk];
+    if (!Array.isArray(arr)) return;
+    let prev = null, prevDay = null;
+    for (let i = d.days.length - 1; i >= 0; i--) {
+      if (d.days[i] < today && arr[i] != null) { prev = arr[i]; prevDay = d.days[i]; break; }
+    }
+    const now = Number(el.dataset.rank);
+    if (prev == null || !now) return;
+    const delta = prev - now;   // posizioni guadagnate
+    const tip = ecoT('rankWas', { r: prev, d: prevDay });
+    el.title = tip;
+    el.insertAdjacentHTML('beforeend', delta
+      ? ` <span class="wp-nat-rank-move ${delta > 0 ? 'up' : 'down'}">${delta > 0 ? '▲' : '▼'}${Math.abs(delta)}</span>`
+      : ' <span class="wp-nat-rank-move same">=</span>');
+  });
 }
 
 function paintToday(nation) {
@@ -290,6 +337,28 @@ function paintLabour(nation) {
   if (!el) return;
   renderLabour(el, nation).catch(err => {
     console.warn('WarEra+ nations: sezione lavoro non disegnata:', err.message);
+    el.innerHTML = '';
+  }).then(() => markIfEmpty(el));
+}
+
+/* Economia e Unità militari: come Lavoro, alla prima apertura della scheda
+   (le curve misurano il contenitore, e chi non le apre non scarica
+   /donations né la directory delle unità). Gli errori restano dentro la
+   scheda: una sezione che si rompe non deve portarsi dietro la pagina. */
+function paintEco(nation) {
+  const el = _host?.querySelector('#wp-nat-eco');
+  if (!el) return;
+  renderEco(el, nation).catch(err => {
+    console.warn('WarEra+ nations: sezione economia non disegnata:', err.message);
+    el.innerHTML = '';
+  }).then(() => markIfEmpty(el));
+}
+
+function paintMu(nation) {
+  const el = _host?.querySelector('#wp-nat-mu');
+  if (!el) return;
+  renderMuSection(el, nation).catch(err => {
+    console.warn('WarEra+ nations: sezione unità non disegnata:', err.message);
     el.innerHTML = '';
   }).then(() => markIfEmpty(el));
 }
@@ -418,8 +487,8 @@ function renderCitizens() {
 }
 
 // `sort` = chiave in CITIZEN_SORTS: le colonne che ce l'hanno diventano
-// intestazioni cliccabili. Lo stile di gioco non ne ha: è una categoria,
-// non una scala, e ordinarla direbbe solo "prima le rosse".
+// intestazioni cliccabili. Anche lo stile di gioco (2026-11-13: «tutte le
+// colonne ordinabili»): raggruppa per categoria, non è una scala.
 const CITIZEN_COLS = [
   { label: 'citizen',  sort: 'u' },
   { label: 'level',    num: true, sort: 'lv',   get: c => c.lv ?? '—' },
@@ -428,7 +497,7 @@ const CITIZEN_COLS = [
   // stessa riga. Nelle CARD, che non hanno colonne, resta accanto al nome.
   { label: 'prestigeShort', head: '★', titleKey: 'prestige', num: true, sort: 'pr', get: c => prestigeStar(c) || '—' },
   { label: 'mrank',    num: true, sort: 'mr',   get: c => c.mr ?? '—' },
-  { label: 'playstyle', get: c => psPill(c) },
+  { label: 'playstyle', sort: 'ps', get: c => psPill(c) },
   { label: 'weekly',   num: true, sort: 'wk',   get: c => fmtCompact(c.wk || 0), cls: 'wk' },
   { label: 'total',    num: true, sort: 'dmg',  get: c => fmtCompact(c.dmg || 0) },
   { label: 'wealth',   num: true, sort: 'w',    get: c => fmtCompact(c.w || 0), cls: 'money' },

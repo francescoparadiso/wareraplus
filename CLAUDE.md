@@ -287,7 +287,7 @@ serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`
 `/ticker` + `/ticker/summary`,
 `/region-history/{at,range,events,contested,war-intensity}`, `/alliances`,
 `/battles`, `/elections`, `/parties`, `/users-lite`, `/credit-profiles`,
-`/mu-damage-history`, `/tournament`,
+`/mu-damage-history`, `/war-flows`, `/tournament`,
 `/visits`, `/health`.
 
 Espone inoltre **`/trpc/*`**: un proxy passthrough verso `api2.warera.io`
@@ -379,6 +379,26 @@ punto di fallimento. Vedi il ⚠️ in fondo per cosa degrada e come.
   condivise dallo shell vanno in `src/shared/i18n.js`.
 - **Niente barre di scorrimento di sistema**: mai le native grigie — regola
   globale in `shell.css`, cursore nella tinta della sezione.
+
+## Tabelle e sezioni: ordinamento e riordino GENERICI
+
+Dal 2026-11-13 ogni colonna di ogni tabella si ordina con un clic e ogni
+sezione si chiude e si sposta, **senza che le viste lo sappiano**: lo fa
+`src/shared/viewTools.js` (osservatore) con `tableSort.js` e `sections.js`, che
+riconoscono tabelle e titoli dalla struttura. Quando scrivi una vista nuova:
+
+- una tabella a griglia ha la riga di intestazione come PRIMO figlio, con una
+  classe che finisce in `head`/`thead`/`hdr`, e righe con lo stesso numero di
+  celle; un titolo di sezione usa una delle classi in `FLOW` di `sections.js`
+  (o è un `<h3>`/`<h4>` primo figlio del suo riquadro);
+- se la tabella ha già un suo ordinamento (intestazioni con pulsanti) il modulo
+  la lascia stare: dai un ordinamento a TUTTE le colonne, non a metà;
+- se mostri solo una parte dell'elenco (top N, pagina) e hai un tuo selettore,
+  metti `data-nosort` sul contenitore: ordinare le righe già tagliate direbbe
+  una cosa falsa;
+- sulle sezioni che compaiono solo a volte metti `data-sec="nome-stabile"` sul
+  titolo, altrimenti la chiave (classe + ordinale) si sposta e lo stato salvato
+  finisce sulla sezione sbagliata.
 
 ## Novità per gli utenti (`src/app/changelog.js`)
 
@@ -494,6 +514,24 @@ sopra il pagato (Siria–Libano: 48.270 contro ~15.400): nel dettaglio battaglia
 la colonna "di cui contratti" mostra il **pagato finora** per unità
 (`min(incasso, pattuito)`) diviso per cittadinanza dei membri
 (`payPerK` in `battleDetail.js`), mai oltre l'incassato della nazione.
+Le **Spese di guerra** hanno la vista **per alleanza** (somma sui membri, senza server)
+e le colonne **Incassato / Saldo** (`src/battles/warExpenses.js`, `aggregateFlows` in
+`api.js`, dal 2026-11-13): quanto hanno incassato le UNITÀ di una nazione dai contratti
+mercenari, il lato opposto della spesa. Dipendono dal redeploy del **cache-server**
+(`/war-flows`, `server/battleArchive.js`): finché non lo fai la rotta risponde 404 e la
+scheda resta com'era, con un avviso. Dopo il deploy servono due cose:
+
+- il giro incrementale riempie subito i primi ~600 contratti (1-2 giorni); il resto lo
+  recupera il bootstrap notturno (02:00-06:59 italiane, una notte). `coverageFrom` dice
+  da che giorno gli incassi sono completi e la vista lo dichiara, e il **saldo si calcola
+  sullo stesso periodo** (contratti pagati dal `coverageFrom` in poi), mai su tutta la
+  finestra;
+- ⚠️ l'incasso è attribuito alla nazione **de facto** dell'unità vincitrice (maggioranza
+  vera dei membri, altrimenti registrazione) e ricalcolato in lettura: è dove i soldi
+  arrivano per primi, perché poi l'unità li divide fra membri di ogni nazionalità. Non
+  presentarlo come "guadagno della nazione" senza questa nota (è nella vista).
+- Una nazione in più alleanze conta in ciascuna; nel saldo di un'alleanza i soldi fra
+  membri si annullano da soli.
 
 I **finanziatori** nel dettaglio battaglia dipendono da `/money-transfers`:
 finché non rideployi funzionano lo stesso, ma sulla sola finestra che l'API
@@ -541,6 +579,20 @@ niente". `/health` di plusApi riporta `ricchezza` con i giorni in archivio.
 ⚠️ Il numero è il **saldo netto**, non la spesa militare: entrate meno
 uscite fra due scatti. Chiamarlo "quanto costa la guerra" sarebbe la
 stessa trappola di `rankings.countryBounty` — la vista lo dice in testa.
+
+Le schede **Economia** e **Unità militari** di Statistiche nazioni
+(`src/nations/ecoSection.js`, `muSection.js`, dal 2026-11-13): Unità militari non
+dipende da nessun deploy (directory MU già in cache). Economia sì, dal
+**cache-server**: `/country-treasury` (storia del tesoro, da dayHistory) e
+`/donations` (`server/donations.js`). Senza rideploy il tesoro di adesso e i
+bonifici si vedono comunque, la curva dice che manca lo storico e le donazioni
+dicono che il server non ha l'archivio. ⚠️ **In una transazione `donation` il
+DONATORE è `buyerId` (un giocatore) e chi RICEVE è `sellerCountryId` /
+`sellerMuId` / `sellerPartyId`**: nel gioco i giocatori donano a nazioni e unità,
+e le nazioni non pagano i giocatori (solo mercato e contratti). I nomi
+«seller/buyer» non vanno letti per analogia con i bonifici fra tesori: per un
+giorno questo repo ha letto il verso al contrario. Si accumulano dal deploy come i bonifici; il primo giro scende fin dove arriva
+il cursore dell'API (`bootstrap` in `/health` → `donations`).
 
 La scheda **Crafting** di Economia (`src/economy/crafting.js` +
 `craftingModel.js` + `server/gearMarket.js`, dal 2026-11-11) dipende dal
@@ -608,6 +660,10 @@ amministrazione restano identici. Tre cose da sapere prima di crederla rotta:
   (lo imposta il suo governo) e uno di alleanza (scope `confini_alleanza`,
   lo imposta il capo dell'alleanza in gioco), che riceve solo le regioni
   di nazioni FUORI dall'alleanza, una riga per regione;
+- ⚠️ **i contratti NON passano dal filtro nazione** (dal 2026-11-18): tavolo, `/policy` e tutto il bot sono
+  aperti a chiunque abbia collegato il personaggio, anche di una nazione fuori da P.A.S.T.A. Cosa può fare lo
+  decidono il ruolo di gioco (comandi l'unità, governi la nazione) e la lista permessi della nazione che
+  paga. Il filtro resta su La mia nazione, Operazioni e Bilancio unità;
 - la pagina la vedono il **governo** per carica (presidente, vice, ministri)
   e i **cittadini che il governo aggiunge** (tabella `nation_access`, sempre
   con Discord + personaggio collegato); agli altri cittadini il server
@@ -638,6 +694,35 @@ deploy la lista resta vuota con "si riempie stanotte" fino al giro delle
 mezza di richieste e non si lancia di giorno. Solo cittadini ATTIVI (soglia
 del censimento, 3 giorni); la nazione ospite la ricalcola plusApi sulle
 regioni di adesso.
+
+Il **bot Discord dei contratti** (`server/discordBot/` + `server/plusApi/bot.js`,
+dal 2026-11-16) gira sul SECONDO VPS e non decide niente: ritira gli avvisi da
+plusApi e inoltra i bottoni dello sportello (`/contract-desk post` pubblica il
+pannello: richiesta, modifica, ritiro, governo che decide e apre/chiude lo
+sportello), e plusApi applica gli stessi permessi
+della pagina (`azioneCrea/Decidi/Aperta/Ritira` in `requests.js`). Dipende dal
+redeploy di **warera-plus-api** con `BOT_TOKEN` in `ecosystem.config.js` (serve
+`pm2 restart ecosystem.config.js --update-env`, un restart semplice non lo
+legge): senza, `/bot/*` risponde 503 e restano i webhook. Tre cose da sapere:
+
+- **una board per battaglia** (`bot_board`, dal 2026-11-18): ogni battaglia ha il suo canale, la sua
+  coda, i suoi tetti e il suo aperto/chiuso; la coda è PER BATTAGLIA ovunque (sito compreso).
+  Una richiesta va alla board della sua battaglia, o alla generale (`battle_id` ''); le unità
+  hanno ancora un solo canale (`bot_channel`). Dettagli nel README del bot;
+- si taggano SOLO i ministri che hanno collegato Discord e personaggio al tool
+  (`approvaPer`: diritto `manageMercenaryContracts`, presidente e vice, più
+  deroghe); gli altri compaiono per nome, senza tag. Non aggiungere un elenco di
+  ministri nel bot;
+- un avviso va per UNA strada sola: se il bot ha chiesto negli ultimi 90 s e
+  l'ambito ha un canale del bot (`bot_channel`), il webhook di quell'ambito
+  tace; altrimenti vale il webhook come prima (`avvisa()` in `notify.js`);
+- l'applicazione Discord è la stessa del login ("WarEra+", 1544716064087347242):
+  il bot è un bot user aggiunto ad essa, e non si fa girare in due processi
+  (ognuno riceve ogni interazione). Il VPS 2 è l'istanza `a1-creator`
+  (10.0.0.10, solo dalla rete privata, passando dal VPS 1): lì i servizi sono
+  unit systemd, **non pm2**, e 954 MB sono condivisi con `buzzelle`.
+  ⚠️ Se un altro bot dello stesso processo fa `commands.set([...])` cancella
+  `/contract-desk`. Vedi `server/discordBot/README.md`.
 
 Le **Operazioni** dell'area riservata (`src/private/operazioni.js` +
 `mappaOperazione.js` + `server/plusApi/operazioni.js`, dal 2026-10-22) sono
@@ -952,6 +1037,22 @@ ignorati in silenzio**: `transaction.getPaginatedTransactions` risponde 200
 con il flusso globale delle ultime transazioni invece che con quelle
 filtrate, e il sintomo si legge come "l'endpoint non sa filtrare" — falso,
 e porta a progettare intorno a un limite che non esiste.
+
+⚠️ **Dalla v0.28.3 (2026-11-16) `ranking.getRanking` risponde con i PRIMI
+100**, non più con la classifica intera (`count` dice ancora ~21.000): niente
+errore, una classifica corta che sembra buona. L'intera si sfoglia con
+`ranking.getRankingPage {rankingType, limit ≤ 50, cursor}`, ~300-430 pagine:
+la tiene in memoria `server/fullRanking.js` (con la chiave) e la serve
+`/ranking-full?type=`. Ci passano tornei, ricchezza per categoria, la
+fotografia notturna di plusApi (loopback, con ripiego a pagine su api6) e le
+classifiche di Giocatori (senza server: i 100, dichiarati). Le fotografie dei
+tornei del 16-17 novembre da 100 righe si saltano (`MIN_SNAP_BYTES`).
+Stessa release: tipo di unità (`type` = `stateArmy` con `sponsorCountry` /
+`privateMercenary`, assente = paramilitare), Eserciti di Stato
+(`muSponsorship.*`, `stateArmyExpense.getLedger`), leghe settimanali
+(`muLeague.*`, `league.getUserLeague`) e fotografie quotidiane delle classifiche
+(`rankingSnapshot.*`, dal 16 novembre) — tutte pubbliche, vedi `src/mu/muType.js`,
+`src/nations/stateArmies.js`.
 
 ⚠️ **`rankings.countryBounty` NON è la spesa di una nazione.** Sembra la
 risposta pronta (è già in `state.nazioniGlobal`, gratis) ma correla 0,87 col

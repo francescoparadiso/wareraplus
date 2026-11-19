@@ -53,6 +53,22 @@
 const express = require('express');
 const { getDb, audit } = require('./db');
 
+/** Tutto o niente. ⚠️ Il database è `node:sqlite` (DatabaseSync), che NON ha
+ *  il `.transaction()` di better-sqlite3: chiamarlo lanciava "transaction is
+ *  not a function" e la lista non si salvava mai (16 nov 2026). Stesso
+ *  BEGIN/COMMIT/ROLLBACK di db.js. */
+function inTransazione(fn) {
+  const d = getDb();
+  d.exec('BEGIN');
+  try {
+    fn();
+    d.exec('COMMIT');
+  } catch (err) {
+    d.exec('ROLLBACK');
+    throw err;
+  }
+}
+
 // Il cache-server gira sulla STESSA macchina: le nazioni si leggono da
 // 127.0.0.1 senza uscire in rete e senza toccare il budget di nessuno.
 // Se non risponde si degrada, come ogni altra cosa che dipende da lui.
@@ -318,11 +334,11 @@ function buildPolicyRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoL
     const ora = Date.now();
     // Tutte o nessuna: mezza lista scritta è peggio di nessuna, perché chi
     // ha premuto una volta non sa più a che punto è rimasto.
-    getDb().transaction(() => {
+    inTransazione(() => {
       for (const v of voci) {
         stmt.run(countryId, v.entryType, v.entryId, v.mode, v.nome, v.nota, req.identita.id, ora);
       }
-    })();
+    });
 
     audit(req.identita.id, 'policy.set', `country:${countryId}`,
       voci.map((v) => ({ entryType: v.entryType, entryId: v.entryId, mode: v.mode })));
@@ -344,9 +360,9 @@ function buildPolicyRouter({ requireAuth, risolviIdentita, bloccaScrittureSottoL
 
     const stmt = getDb().prepare(
       'DELETE FROM request_allow WHERE country_id = ? AND entry_type = ? AND entry_id = ?');
-    getDb().transaction(() => {
+    inTransazione(() => {
       for (const v of voci) stmt.run(countryId, v.entryType, v.entryId);
-    })();
+    });
 
     audit(req.identita.id, 'policy.remove', `country:${countryId}`, voci);
     res.json({ ok: true, tolte: voci.length });

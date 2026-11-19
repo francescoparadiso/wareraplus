@@ -66,6 +66,10 @@ const DEFAULT_RULES = Object.freeze({
   bunker: [0, 5, 10, 15, 20, 25],   // indice = livello
   base: [0, 5, 10, 15, 20, 25],
   hq: [0, 5, 10, 15, 20],
+  // gameConfig.mapTravel (v0.28.3, 16 nov 2026): le casse sulla mappa e il
+  // ritorno gratis a casa sono spenti. Ripiego = com'è oggi.
+  mapCases: false,
+  travelHome: false,
 });
 
 /* ── Tipo di governo (v0.27, dal 2026-10-26) ────────────────────
@@ -81,11 +85,52 @@ const DEFAULT_RULES = Object.freeze({
      · Stato mercenario: danno degli ordini ×2, normale finché la sua
        capitale è occupata.
    Il bonus sul nemico giurato (Stato nazionalista 5% → 15%) arriva già
-   dal dato della diplomazia, e non si tocca. */
+   dal dato della diplomazia, e non si tocca.
+
+   ⚠️ v0.28.3 (16 nov 2026): Stato mercenario non esiste più (le nazioni
+   tornano Provvisorie), quindi `MERCENARY_ORDER_FACTOR` resta solo per
+   leggere un dato vecchio. I tipi di unità sono modellati più sotto
+   (MU_TYPE_EFFECTS). La barra di resistenza (cala dello 0,2%/h a casa,
+   sale 0,1–0,35%/h sotto occupazione) è già quella che legge `defRegion`. */
 const GOV_PATRIOTIC = Object.freeze({ nationalistState: 30, federation: 15, plutocracy: 10 });
 const FEDERATION_ALLY_BONUS = 5;
 const HOMELAND_BUNKER_BONUS = 5;
 const MERCENARY_ORDER_FACTOR = 2;
+
+/* ── Tipo di UNITÀ (v0.28.3, dal 2026-11-16) ─────────────────────
+   Il tipo arriva dalle API (`mu.type`: assente = paramilitare,
+   'stateArmy' con `sponsorCountry`, 'privateMercenary'), gli EFFETTI no:
+   non sono in gameConfig. Questi sono quelli della tabella `effects` del
+   client del gioco (app.warera.io, chunk _app, letta il 2026-11-17), solo
+   le voci che toccano il danno:
+     · Esercito di Stato: ordine della NAZIONE ×2, nessun ordine d'unità
+       (canIssueMuOrders: false), +5 al bonus patriottico (patrioticBonusDelta),
+       +5 a quello d'alleanza (allianceBonusDelta), −5 quando combatte per
+       un lato che non è né suo né alleato (foreignSideBonusPercent);
+     · Mercenaria privata: QG e ordini d'unità ×2, NESSUN bonus legato alla
+       nazionalità (patria, nemico giurato, patto, alleanza, ordine della
+       nazione, bunker/base, rivolta), +5 sotto contratto, tetto 70% (75%
+       sotto contratto).
+   ⚠️ Due letture nostre, da confermare in gioco: chi è "straniero" per il
+   −5 (qui: né la propria nazione né un alleato, quindi anche un partner di
+   patto), e che bunker/base e rivolta siano fra i bonus di nazionalità
+   della mercenaria. Se il gioco cambia la tabella, va cambiata qui. */
+export const MU_TYPE_EFFECTS = Object.freeze({
+  paramilitary: Object.freeze({ hq: 1, muOrder: 1, countryOrder: 1, muOrders: true, nationality: true, home: 0, ally: 0, foreign: 0, contract: 0, cap: null, capContract: null }),
+  stateArmy: Object.freeze({ hq: 1, muOrder: 1, countryOrder: 2, muOrders: false, nationality: true, home: 5, ally: 5, foreign: -5, contract: 0, cap: null, capContract: null }),
+  privateMercenary: Object.freeze({ hq: 2, muOrder: 2, countryOrder: 1, muOrders: true, nationality: false, home: 0, ally: 0, foreign: 0, contract: 5, cap: 70, capContract: 75 }),
+});
+export const MU_TYPES = Object.freeze(Object.keys(MU_TYPE_EFFECTS));
+export function muTypeEffects(type) {
+  return MU_TYPE_EFFECTS[type] || MU_TYPE_EFFECTS.paramilitary;
+}
+
+/** Tetto della mercenaria privata sul totale: 70, o 75 se la parte
+ *  `contract` può valere (è un intervallo [0, 5]: il contratto non si sa). */
+export function capTotal(total, type) {
+  const e = muTypeEffects(type);
+  return e.capContract == null ? total : Math.min(total, e.capContract);
+}
 
 const govOf = (countryId) => (countryId && state.nationMap?.get(countryId)?.govType) || null;
 
@@ -135,6 +180,8 @@ export function loadBonusRules() {
       bunker: levels(up.bunker, 'defenseBonus', DEFAULT_RULES.bunker),
       base: levels(up.base, 'attackBonus', DEFAULT_RULES.base),
       hq: levels(up.headquarters, 'attackBonus', DEFAULT_RULES.hq),
+      mapCases: cfg?.mapTravel?.mapCasesEnabled ?? DEFAULT_RULES.mapCases,
+      travelHome: cfg?.mapTravel?.travelHomeEnabled ?? DEFAULT_RULES.travelHome,
       fromConfig: !!cfg,
     });
     return _rules;
@@ -196,16 +243,25 @@ export function myPlayerId() {
   } catch { return null; }
 }
 
-async function muHqLevel(muId) {
-  if (!muId) return 0;
+/** Livello ATTIVO del quartier generale e tipo dell'unità, in un batch.
+ *  { hqLevel: 0, muType: 'paramilitary' } se non si leggono. */
+async function muHqAndType(muId) {
+  if (!muId) return { hqLevel: 0, muType: 'paramilitary' };
   if (_hq.has(muId)) return _hq.get(muId);
-  let lvl = 0;
+  let out = { hqLevel: 0, muType: 'paramilitary', sponsorCountry: null };
   try {
-    const [u] = await trpcBatch([['upgrade.getUpgradeByTypeAndEntity', { upgradeType: 'headquarters', muId }]]);
-    if (u && u.status === 'active') lvl = Number(u.level) || 0;
-  } catch { /* nessun quartier generale letto: 0 */ }
-  _hq.set(muId, lvl);
-  return lvl;
+    const [u, mu] = await trpcBatch([
+      ['upgrade.getUpgradeByTypeAndEntity', { upgradeType: 'headquarters', muId }],
+      ['mu.getById', { muId }],
+    ]);
+    out = {
+      hqLevel: u && u.status === 'active' ? Number(u.level) || 0 : 0,
+      muType: MU_TYPE_EFFECTS[mu?.type] ? mu.type : 'paramilitary',
+      sponsorCountry: mu?.sponsorCountry || null,
+    };
+  } catch { /* non letti: paramilitare senza QG */ }
+  _hq.set(muId, out);
+  return out;
 }
 
 /**
@@ -221,12 +277,15 @@ export async function loadMe() {
     const [lite] = await trpcBatch([['user.getUserLite', { userId }]]);
     if (lite) {
       const muId = typeof lite.mu === 'string' ? lite.mu : (lite.mu?._id || null);
+      const unit = await muHqAndType(muId);
       data = {
         userId,
         name: lite.username || '',
         countryId: typeof lite.country === 'string' ? lite.country : (lite.country?._id || null),
         muId,
-        hqLevel: await muHqLevel(muId),
+        hqLevel: unit.hqLevel,
+        muType: unit.muType,
+        sponsorCountry: unit.sponsorCountry,
       };
     }
   } catch { /* profilo non letto */ }
@@ -317,10 +376,14 @@ export function sideContext(battle, side, rules, orders) {
 
 /**
  * Bonus di chi combatte per `ctx.side` essendo cittadino di
- * `fighterCountryId`. Con `who` ({ muId, hqLevel }) il calcolo è esatto
- * per quella persona; senza, ordini d'unità e quartier generale sono un
- * intervallo ("5-15", "fino a 20").
- * Le parti sono numeri, o [min, max] per gli intervalli.
+ * `fighterCountryId`. Con `who` ({ muId, hqLevel, muType }) il calcolo è
+ * esatto per quella persona; senza, ordini d'unità e quartier generale sono
+ * un intervallo ("5-15", "fino a 20") e l'unità è paramilitare. `who` col
+ * solo `muType` (scheda Bonus, a mano) applica gli effetti del tipo alle
+ * voci della nazione, senza ordine né QG d'unità.
+ * Le parti sono numeri, o [min, max] per gli intervalli. Due parti nuove
+ * (v0.28.3): `unitType` (Esercito di Stato: +5 / +5 / −5) e `contract`
+ * (mercenaria privata: [0, 5], il contratto non si sa).
  */
 export function bonusFor(fighterCountryId, ctx, who = null) {
   const r = ctx.rules;
@@ -337,19 +400,32 @@ export function bonusFor(fighterCountryId, ctx, who = null) {
   const gov = govOf(fighterCountryId);
   const orderFactor = (gov === 'mercenaryState' && !capitalOccupied(fighterCountryId)) ? MERCENARY_ORDER_FACTOR : 1;
 
+  // v0.28.3: tipo dell'unità (vedi MU_TYPE_EFFECTS). Senza `who` resta
+  // paramilitare, cioè com'era prima: e = tutti fattori 1, delta 0.
+  const muType = who?.muType && MU_TYPE_EFFECTS[who.muType] ? who.muType : 'paramilitary';
+  const e = muTypeEffects(muType);
+  const nat = e.nationality ? 1 : 0;           // mercenaria privata: niente bonus di nazionalità
+  const scaleRange = (v, k) => (Array.isArray(v) ? [v[0] * k, v[1] * k] : v * k);
+  const muOrderRaw = who?.muId !== undefined ? (ctx.muOrders.get(who.muId) || 0) : who ? 0 : (ctx.muOrderRange || 0);
+  const muHqRaw = who?.muId !== undefined ? (r.hq[who.hqLevel || 0] || 0) : who ? 0 : [0, Math.max(...r.hq)];
+
   const parts = {
-    home: own ? (GOV_PATRIOTIC[gov] ?? r.patriotic) : 0,
-    enemy: (fighterDip?.swornEnemy && fighterDip.swornEnemy === ctx.enemyId) ? (fighterDip.swornBonus || 0) : 0,
-    pact: (ctx.pactSide && !own) ? (sideDip?.pactBonus?.[fighterCountryId] || 0) : 0,
-    ally: ally ? ctx.allianceBonus(fighterAlliance) + (gov === 'federation' ? FEDERATION_ALLY_BONUS : 0) : 0,
-    order: (ctx.countryOrders.get(fighterCountryId) || 0) * orderFactor,
-    muOrder: who ? (ctx.muOrders.get(who.muId) || 0) : (ctx.muOrderRange || 0),
-    muHq: who ? (r.hq[who.hqLevel || 0] || 0) : [0, Math.max(...r.hq)],
-    building: own ? ctx.building : (shareBuilding ? halfUp(ctx.building) : 0),
-    revolt: ctx.revoltBar ? Math.round((own ? r.revoltOwn : (ally || pactWithSide) ? r.revoltAlly : 0) * ctx.revoltBar * 100) / 100 : 0,
+    home: nat * (own ? (GOV_PATRIOTIC[gov] ?? r.patriotic) : 0),
+    enemy: nat * ((fighterDip?.swornEnemy && fighterDip.swornEnemy === ctx.enemyId) ? (fighterDip.swornBonus || 0) : 0),
+    pact: nat * ((ctx.pactSide && !own) ? (sideDip?.pactBonus?.[fighterCountryId] || 0) : 0),
+    ally: nat * (ally ? ctx.allianceBonus(fighterAlliance) + (gov === 'federation' ? FEDERATION_ALLY_BONUS : 0) : 0),
+    order: nat * (ctx.countryOrders.get(fighterCountryId) || 0) * orderFactor * e.countryOrder,
+    muOrder: e.muOrders ? scaleRange(muOrderRaw, e.muOrder) : 0,
+    muHq: scaleRange(muHqRaw, e.hq),
+    building: nat * (own ? ctx.building : (shareBuilding ? halfUp(ctx.building) : 0)),
+    revolt: nat * (ctx.revoltBar ? Math.round((own ? r.revoltOwn : (ally || pactWithSide) ? r.revoltAlly : 0) * ctx.revoltBar * 100) / 100 : 0),
     malus: ctx.notLinked,
+    unitType: own ? e.home : ally ? e.ally : e.foreign,
+    contract: e.contract ? [0, e.contract] : 0,
   };
-  return { parts, total: sumMax(parts), relation: { own, ally, pact: pactWithSide } };
+  // Il −0 di `nat * 0` non deve comparire come "−0%".
+  for (const k of Object.keys(parts)) if (parts[k] === 0) parts[k] = 0;
+  return { parts, total: capTotal(sumMax(parts), muType), relation: { own, ally, pact: pactWithSide }, muType };
 }
 
 /** Totale "al massimo": la somma usando l'estremo alto degli intervalli. */
@@ -412,7 +488,7 @@ export function bonusByCountry(ctx) {
 /** Il bonus di una persona per entrambi i lati di una battaglia. */
 export function personalBonus(battle, rules, orders, me) {
   if (!me?.countryId) return null;
-  const who = { muId: me.muId, hqLevel: me.hqLevel };
+  const who = { muId: me.muId, hqLevel: me.hqLevel, muType: me.muType };
   const out = {};
   for (const side of ['defender', 'attacker']) {
     out[side] = bonusFor(me.countryId, sideContext(battle, side, rules, orders), who);
@@ -424,8 +500,10 @@ export function personalBonus(battle, rules, orders, me) {
 /* ── Bonus di una NAZIONE (vista mappa e scheda Bonus della battaglia) ──
    Le voci che valgono per tutti i cittadini di una nazione. Ordine e
    quartier generale dell'unità no: dipendono dal singolo giocatore, e
-   sommati a tutti farebbero partire il mondo intero dal 35%. */
-export const NATION_KEYS = ['home', 'enemy', 'pact', 'ally', 'order', 'building', 'revolt', 'malus'];
+   sommati a tutti farebbero partire il mondo intero dal 35%. `unitType` è 0
+   senza un tipo scelto; vale solo quando la scheda Bonus applica a mano il
+   tipo d'unità a tutte le righe (sideNationRows con `who`). */
+export const NATION_KEYS = ['home', 'enemy', 'pact', 'ally', 'order', 'building', 'revolt', 'malus', 'unitType'];
 
 export function nationTotal(parts) {
   let t = 0;
@@ -439,13 +517,17 @@ export function nationParts(parts) {
   return out;
 }
 
-/** Le nazioni con un bonus loro (> 0) su un lato, dalla più alta. */
-export function sideNationRows(ctx) {
+/** Le nazioni con un bonus loro (> 0) su un lato, dalla più alta.
+ *  `who` ({ muType }) applica il tipo d'unità a tutte (scheda Bonus). Con
+ *  l'Esercito di Stato "un bonus loro" è più del −5 degli stranieri: le
+ *  nazioni che prendono solo quello finiscono nella riga "le altre". */
+export function sideNationRows(ctx, who = null) {
   const rows = [];
+  const floor = who ? nationTotal(bonusFor(null, ctx, who).parts) : 0;
   for (const n of state.nazioniGlobal || []) {
-    const { parts } = bonusFor(n._id, ctx);
+    const { parts } = bonusFor(n._id, ctx, who);
     const v = nationTotal(parts);
-    if (v > 0) rows.push({ id: n._id, v, parts: nationParts(parts) });
+    if (who ? v > floor : v > 0) rows.push({ id: n._id, v, parts: nationParts(parts) });
   }
   return rows.sort((a, b) => b.v - a.v);
 }

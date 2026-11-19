@@ -415,6 +415,54 @@ export async function fetchUsersLiteViaCache(userIds) {
   return new Map(Object.entries(json.data));
 }
 
+/** WarEra+: danno e incasso per CITTADINANZA di una battaglia, rifatti dal
+ *  server sulla classifica per giocatore (server/battleNations.js): quella
+ *  per nazione del gioco a volte perde intere cittadinanze. Ritorna
+ *  { sides: { attacker|defender: { totals:{d,m}, countries:[{c,d,m}],
+ *  unresolved:{d,m,n} } }, truncated } o null se il server non c'è (404 prima
+ *  del deploy), non risponde o non ha tutte le classifiche: chi chiama resta
+ *  sulla classifica del gioco. Richieste uguali nella stessa sessione si
+ *  accorpano (la scheda battaglia e il pannello della mappa la chiedono
+ *  entrambi). */
+const _battleNations = new Map(); // battleId → { at, p }
+export function fetchBattleNationsViaCache(battleId, { live = false } = {}) {
+  if (!battleId) return Promise.resolve(null);
+  const hit = _battleNations.get(battleId);
+  if (hit && Date.now() - hit.at < (live ? 60_000 : 30 * 60_000)) return hit.p;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  const p = fetch(`${WARERA_CACHE_BASE}/battle-nations?battleId=${encodeURIComponent(battleId)}${live ? '&live=1' : ''}`,
+    { signal: controller.signal })
+    .then(res => (res.ok ? res.json() : null))
+    .then(json => (json?.sides?.attacker && json?.sides?.defender ? json : null))
+    .catch(() => null)
+    .finally(() => clearTimeout(timeout));
+  _battleNations.set(battleId, { at: Date.now(), p });
+  // Un fallimento non si tiene in memoria: alla prossima apertura si riprova.
+  p.then(v => { if (!v) _battleNations.delete(battleId); });
+  return p;
+}
+
+/** WarEra+: la classifica INTERA di un tipo di giocatore (server/fullRanking.js).
+ *  Dalla v0.28.3 `ranking.getRanking` si ferma ai primi 100 e la classifica
+ *  intera sono 300-400 pagine di `getRankingPage`: le sfoglia il server.
+ *  Ritorna { at, count, complete, rows: [{ u, c, m, v, r }] }; lancia se il
+ *  server non c'è o non l'ha ancora pronta (503): chi chiama ripiega sui
+ *  primi 100 e lo dice. Timeout largo: sono ~300 KB compressi. */
+export async function fetchFullRankingViaCache(type) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    const res = await fetch(`${WARERA_CACHE_BASE}/ranking-full?type=${encodeURIComponent(type)}`, { signal: controller.signal });
+    if (!res.ok) throw new Error(`cache /ranking-full: HTTP ${res.status}`);
+    const json = await res.json();
+    if (!Array.isArray(json?.rows)) throw new Error('cache /ranking-full: forma inattesa');
+    return json;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /** Censimento cittadini per nazione (server/warera-cache-server.js:
  *  pollCitizens, che pagina user.getUsersByCountry per tutte le nazioni).
  *  È il numero di cittadini di ADESSO — cosa diversa dalla popolazione
@@ -719,6 +767,21 @@ export async function fetchWarExpensesViaCache() {
     return json;
   } catch (err) {
     console.warn('WarEra+ cache: /war-expenses non disponibile:', err.message);
+    return null;
+  }
+}
+
+/** WarEra+ — chi PAGA e chi INCASSA i contratti mercenari (server/
+ *  battleArchive.js: readWarFlows). Gemella di fetchWarExpensesViaCache:
+ *  se il rotta non c'è (deploy non fatto) o l'archivio è vuoto torna null e
+ *  la scheda Spese di guerra resta com'era, senza colonna "incassato". */
+export async function fetchWarFlowsViaCache() {
+  try {
+    const json = await _fetchCacheJsonRaw('/war-flows');
+    if (!json || typeof json.byDay !== 'object' || !Object.keys(json.byDay).length) return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /war-flows non disponibile:', err.message);
     return null;
   }
 }
