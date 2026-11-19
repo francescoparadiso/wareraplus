@@ -1387,8 +1387,6 @@ export function renderViewOverviewPanel(mode) {
     });
   });
 
-  // WarEra+ vista Distanze: bottoni del giro delle casse.
-  if (mode === 'travel') import('../diplomacy/travelDistance.js').then(m => m.wireTravelOverview(contentEl));
   // WarEra+ vista Migrazioni: finestra, metrica, direzione delle frecce e
   // righe che mettono a fuoco una nazione (non aprono il suo pannello).
   if (mode === 'migration') import('../diplomacy/migrationFlows.js').then(m => m.wireMigrationOverview(contentEl));
@@ -1845,10 +1843,6 @@ export function initCountryPanel() {
     // riepilogo della vista (map.js → migrationFlows.js); aprire qui il
     // pannello nazione lo sostituirebbe, frecce senza spiegazione.
     if (state.coloringMode === 'migration' || state.coloringMode === 'funding') return;
-    // WarEra+ (feedback utente): in vista Distanze il click sceglie
-    // partenza, casa o casse (map.js → travelDistance.js) e il riepilogo
-    // della vista mostra il percorso: il pannello nazione lo copriva.
-    if (state.coloringMode === 'travel') return;
     // WarEra+ (feedback utente): su mobile il pannello a schermo intero non
     // si apre più da solo al click — nasconderebbe mappa/diplomazia sotto
     // finché non lo si chiude. nationTooltip.js mostra un tooltip leggero

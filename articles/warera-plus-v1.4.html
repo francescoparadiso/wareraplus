@@ -1,0 +1,340 @@
+<!--
+  ══════════════════════════════════════════════════════════════
+  WarEra+ — Update article, v1.4 ("From plan to war, from vote to tournament")
+  ------------------------------------------------------------------
+  Ready-to-paste HTML for the Arcana Era Article Writer. Light inline
+  styling (gold/cream, like the site): if the editor strips it, the text
+  still reads fine. Every image is a placeholder: replace src with the
+  URL of your uploaded image, or delete the <figure> block and insert
+  the picture with the editor button. The suggested screenshot is
+  written above each one as a comment.
+  ══════════════════════════════════════════════════════════════
+-->
+
+<article style="font-family: Georgia, 'Times New Roman', serif; line-height: 1.65; color: #3b2f1a;">
+
+  <h1 style="font-variant: small-caps; letter-spacing: 0.04em; color: #7a5a0c;">WarEra+ v1.4 — from plan to war, from vote to tournament</h1>
+
+  <p>
+    It's <strong>frappa10</strong>, and this post is long for a simple reason: it's been a while
+    since v1.1, and in the meantime the game changed its skin. The <strong>v0.27</strong> update
+    removed the labour market, brought employees and government types, and moved half the tool
+    from one place to another. So this round has two halves: what I had to <em>put back on its
+    feet</em>, and what I got to <em>build from scratch</em> in the meantime.
+  </p>
+
+  <p>
+    If I had to pick one thread for this version: <strong>WarEra+ no longer only lets you
+    watch</strong>. Until now it was a window onto the game — the map, the numbers, the history.
+    Now you can also <em>organise</em> things: plan an operation, sign a pact, vote, follow a
+    tournament. All of it stays outside the real game (it touches nothing of yours), but it's the
+    first time the tool helps you decide, not just understand.
+  </p>
+
+  <!-- IMAGE: hero — the world map with an open battle and the side panel, or a collage of the new sections -->
+  <figure>
+    <img src="IMAGE_1" alt="WarEra+ v1.4">
+    <figcaption style="color: #8a7a55; font-style: italic;">Same map as ever, a lot more to do on top of it.</figcaption>
+  </figure>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">First of all: v0.27, put back in order</h2>
+
+  <p>
+    The game changed its rules halfway through, and plenty of things the tool showed stopped
+    making sense. I rewrote them instead of letting them limp along:
+  </p>
+
+  <ul>
+    <li><strong>Production bonus became Daily income.</strong> The map view that coloured the
+      world by bonus now colours it by what a region actually earns in a day, with the nations
+      ranking and the most profitable regions. In each nation's panel, in place of bonus and
+      ethics, you'll find income and <strong>government type</strong>.</li>
+    <li><strong>The Industrial Optimizer was rebuilt.</strong> With no labour market, the old tabs
+      (Position, Workers, Hiring) had nothing left to say. There are now two, written on the
+      numbers the game measures day by day: <strong>Companies</strong> — what a point is worth
+      and costs, the margin over the last seven days, and signals for those losing money or
+      standing idle — and <strong>Skills</strong>, to spread your points across Companies, Energy,
+      Production and Management.</li>
+    <li><strong>Government battle bonuses</strong> are in the tool: the patriotic bonus of the
+      Nationalist State, the Federation and the Plutocracy, the Patriotic Front's bunker bonus,
+      the Mercenary State's double orders. You'll find them where the ethics used to be.</li>
+    <li><strong>Names on the map</strong> use the nations' colours as in the game: the game
+      stopped handing them to us ready-made, so I derive them from the nation's colour,
+      lightened to stay readable.</li>
+    <li>Production yields, Nation stats, Political, play style, borders and <em>My nation</em>
+      were adapted to the new way of calculating. The Guide explains all of this in plain words.</li>
+  </ul>
+
+  <!-- IMAGE: the Daily income map view, with the nation panel open showing income and government type -->
+  <figure>
+    <img src="IMAGE_2" alt="Daily income and government type">
+    <figcaption style="color: #8a7a55; font-style: italic;">The bonus is gone. What's there now, you can see.</figcaption>
+  </figure>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Operations: the war-plan whiteboard</h2>
+
+  <p>
+    This is the biggest addition, and it comes from something anyone who has organised a war
+    knows: the plan lives in a chat, in a screenshot and in the heads of three people.
+  </p>
+
+  <p>
+    The <strong>private area</strong> now has an <strong>Operations</strong> section. It's a
+    whiteboard: each operation is a sequence of steps with a time, joined by arrows, and with the
+    <strong>"See on map"</strong> button the plan opens on the real map, region by region. The
+    government writes the plans; anyone with access to the nation can move a step's status with a
+    click — done, in progress, skipped.
+  </p>
+
+  <p>
+    What I like most is that it <strong>knows the game</strong>. You can attach already-open
+    battles to the plan (even other nations' battles), and the board shows when they'll end, with
+    an estimate calibrated on past battles for the uncertain cases. <strong>Pills</strong> are
+    drawn as the chart background — the 8 hours of effect and the 15 and a half of malus — so you
+    see right away when an attack window closes. There's the priority timer, with the rule that
+    you can't have more than one battle at a time against the same state, and the extra hour
+    after a conquest. Battles are coloured by who fights them: blue ours, green the alliance's,
+    red the enemies'.
+  </p>
+
+  <p>
+    To avoid the blank page there's an <strong>auto-builder</strong> that proposes a draft, and
+    you work directly on the chart: quick add, drag, arrows. Everything saves by itself, and
+    battles and the plan refresh every two minutes, so if a teammate changes something you see it
+    without reloading.
+  </p>
+
+  <!-- IMAGE: an operation on the timeline with arrows, the pill bars in the background and the battles panel open on the left -->
+  <figure>
+    <img src="IMAGE_3" alt="Operations: timeline with pills and battles">
+    <figcaption style="color: #8a7a55; font-style: italic;">A plan you read in ten seconds, instead of ten messages.</figcaption>
+  </figure>
+
+  <!-- IMAGE: "See on map" — the operation drawn on the map with arrows between regions -->
+  <figure>
+    <img src="IMAGE_4" alt="An operation on the map">
+    <figcaption style="color: #8a7a55; font-style: italic;">The same plan, on the map.</figcaption>
+  </figure>
+
+  <p>
+    One thing to say clearly: Operations is part of <strong>My nation</strong>, so only nations
+    with access to the private area can see it, not everybody.
+  </p>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Agreements: non-aggression pacts finally have a home</h2>
+
+  <p>
+    Until now the NAPs on the map came from a sheet someone updated by hand. It was the most
+    fragile part of the whole tool, and I knew it.
+  </p>
+
+  <p>
+    The new <strong>Agreements</strong> section is the <strong>archive of pacts</strong>: nation
+    with nation, nation with alliance, alliance with alliance, each with its text, start and end
+    dates, the units left out and, if there is one, a <strong>damage cap</strong> per battle. Each
+    side can have extra nations added (useful for proxies and for allies outside the alliance).
+    Pacts in force become <strong>NAPs on the map</strong> by themselves, and disappear by
+    themselves when they expire.
+  </p>
+
+  <p>
+    And there's a <strong>check</strong>: the section flags direct attacks between the two sides
+    and exceeded caps, summing damage by nationality on the opposite side. It's an estimate, and
+    says so, but it's the kind of thing that used to be discovered after the argument.
+  </p>
+
+  <p>
+    Reading them is <strong>public</strong>; writing them can be done by the government of one of
+    the nations involved — because a pact has two sides, and the counterpart has to be able to
+    write it too. At the top of the list there are the numbers: pacts in the archive, in force,
+    nations involved.
+  </p>
+
+  <!-- IMAGE: Agreements list with the four tiles at the top and a pact open, or the map with NAPs highlighted -->
+  <figure>
+    <img src="IMAGE_5" alt="The Agreements section">
+    <figcaption style="color: #8a7a55; font-style: italic;">One pact, two signatures, and the map updates.</figcaption>
+  </figure>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Votes: a real ballot box inside Political</h2>
+
+  <p>
+    <strong>Political</strong> has a new button, <strong>Votes</strong>. The government (or
+    congress) can open a vote, and only <strong>congress</strong>, <strong>congress plus
+    government</strong> or <strong>all citizens</strong> in a referendum can cast it. Your choice
+    of <strong>open</strong> or <strong>secret</strong> ballot.
+  </p>
+
+  <p>
+    The count isn't a table that just appears. In an open vote a <strong>hemicycle</strong> lights
+    up live, with votes going to their seat one at a time; in a secret vote there's a
+    <strong>ballot box</strong> from which one ballot at a time is drawn, flips over and flies to
+    its pile. It's theatre, I know, but a vote you watch being counted is a vote you trust more.
+    When everyone has voted, whoever opened it can show the count right away.
+  </p>
+
+  <p>
+    The government can set a <strong>Discord</strong> channel for notifications: opening, count
+    start, result. Voting needs the Discord login with your linked character. And on the secret
+    ballot, a promise worth making: the system <strong>doesn't know</strong> who voted what, by
+    the way it's built, not because it says so.
+  </p>
+
+  <!-- IMAGE: an open count in progress, with the hemicycle filling up; or the ballot box with a flying ballot -->
+  <figure>
+    <img src="IMAGE_6" alt="The live count">
+    <figcaption style="color: #8a7a55; font-style: italic;">A count you watch, not read.</figcaption>
+  </figure>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Tournaments: who reaches the final, before they do</h2>
+
+  <p>
+    A new Insights entry, <strong>Tournaments</strong>, with two tabs: <strong>Military
+    units</strong> and <strong>Nations</strong>, each on the most recent tournament of its kind.
+    The bracket — the units one has nine rounds and 457 teams — is split into sectors, and you
+    can pick a team (also with "My unit") to see its path round by round and, for every future
+    round, <strong>who it could face</strong>, strongest first, with a difficulty band.
+  </p>
+
+  <p>
+    And then the <strong>probabilities</strong>: for each match, the chance of winning; and along
+    the bracket, how likely it is to reach each round and win the tournament. A team's strength
+    is the last seven days' damage of the tournament's entrants only, and also takes into account
+    how it played in the matches already done. There's also a <strong>"What if…?"</strong>: pick
+    the winners yourself and the downstream probabilities recompute.
+  </p>
+
+  <p>
+    I want to be honest about the predictions: the tool <strong>writes them as soon as a match has
+    both teams and never touches them again</strong>, and in the ranking you see how many it got
+    right. In the October MU tournament the favourite won 250 matches out of 329. It's not magic,
+    it's a model that tells you every day how wrong it was.
+  </p>
+
+  <!-- IMAGE: the bracket of one sector with the probabilities, and the "possible opponents" panel open -->
+  <figure>
+    <img src="IMAGE_7" alt="Tournaments: bracket and probabilities">
+    <figcaption style="color: #8a7a55; font-style: italic;">Not a crystal ball, but you can check how wrong it was.</figcaption>
+  </figure>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Battles: from watching to reliving</h2>
+
+  <ul>
+    <li><strong>The battle replay</strong> now has the <em>wall</em> going back and forth as in
+      the game's own view, with territories and units, and an animation at the end of the round.
+      You can also replay from the archive, not just from battles in progress.</li>
+    <li><strong>The trend</strong> is a chart you can really explore: zoom, pan, box, expand.
+      Battle timeline and bounty timeline are two separate tabs, with nation names.</li>
+    <li><strong>Money spent</strong> has its own section, per side, with toggles to switch items
+      on and off. Tables can be sorted.</li>
+    <li><strong>Round and battle end</strong> are written in the list and above the map markers,
+      so you see at a glance which battles are about to close.</li>
+  </ul>
+
+  <p>
+    In the same round: <strong>charts are explorable everywhere</strong>. Hover or tap and the
+    value appears — in parliament, war expenses, the donuts, player wealth. It's one of those
+    things that look small and change how you use every view. Damage over time now has an average
+    and a long history, and political history shows the members of all parties.
+  </p>
+
+  <!-- IMAGE: a battle replay with the wall and units, or the trend chart with the tooltip open -->
+  <figure>
+    <img src="IMAGE_8" alt="A battle replay">
+    <figcaption style="color: #8a7a55; font-style: italic;">A finished battle is no longer lost in the history.</figcaption>
+  </figure>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">The map has ships</h2>
+
+  <p>
+    <strong>Sea routes</strong> now really cross the sea, not the land, and ships move smoothly on
+    a separate layer, at a speed I tweaked several times until it looked right at world view. It's
+    the least useful thing on this whole list and one of my favourites. The particle background,
+    meanwhile, adapts its number of nodes and lines to your screen, so it doesn't make your phone
+    stutter.
+  </p>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Units and nations: better comparisons</h2>
+
+  <ul>
+    <li><strong>The 1 vs 1 comparison</strong> is now one thing for everything — units, nations,
+      alliances — with the same way of reading numbers, and for units there's <strong>damage over
+      time</strong>: how they did week after week, not just today.</li>
+    <li><strong>Per member and per fighter</strong>: in the units list a column with weekly
+      damage divided by members, sortable, and in the unit page the average over only those who
+      actually hit. A 50-person unit and a 500-person one can finally be compared.</li>
+    <li><strong>Damage and devcore</strong> in nation and alliance stats, and in the alliance
+      popup a <em>Dmg/Core</em> column per nation. Long tables scroll in a box with an always
+      visible bar.</li>
+    <li>In the <strong>nation panel</strong> on laptops there's less to click through (the tooltip
+      no longer pins, it duplicated the panel) and the third button is now called
+      <em>Statistics</em> and opens the right tab.</li>
+  </ul>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Other tools: the community's work</h2>
+
+  <p>
+    One thing I didn't write myself, and I'm glad to put here. The WarEra community has made
+    wonderful things, and there was no place to find them. Now there is: a new Insights entry,
+    <strong>Other tools</strong>, with one card per site — <strong>EMPRESS</strong>,
+    <strong>SPYWarera</strong>, <strong>Unikhorne WarEra Suite</strong>, <strong>Arcana Era</strong>
+    — with a line on what it does and the link, which opens in a new tab. They're third-party
+    tools, not affiliated with WarEra+, and the page says so at the top. If you've made one too,
+    write to me.
+  </p>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">And one thing that was broken</h2>
+
+  <p>
+    As always, honesty: <strong>borders</strong> watch the bases and bunkers of regions and warn
+    when something is turned on or built. There was a case where, if none of the checked
+    buildings existed, the whole group was discarded as an error, and those regions were never
+    read: a base built there later would have raised no alert. It was a real hole. It's closed.
+  </p>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Thanks, now go try it</h2>
+
+  <p>
+    <a href="https://wareraplus.vercel.app/" style="color: #7a5a0c;"><strong>wareraplus.vercel.app</strong></a>
+    — free, works from your phone, and the information-only parts (map, stats, battles,
+    tournaments, agreements) don't even ask for a login. If this is your first time hearing about
+    WarEra+, start from Part 1: the map is the front door.
+  </p>
+
+  <p>
+    A practical note: some of the new things (Agreements, Votes, Operations, Tournaments) fill up
+    over time, because the game doesn't keep history and the tool collects it day by day. If a
+    section looks empty on day one, that's normal, and it usually says so itself at the top.
+  </p>
+
+  <!-- Replace the placeholders with the real tags of whoever reported things -->
+  <p>
+    Thanks to <strong>@reporter1</strong> and <strong>@reporter2</strong>, who wrote to me instead
+    of closing the tab: half of this post comes from there. Bugs, ideas, complaints — always
+    welcome, find me in game:
+    <a href="https://app.warera.io/user/69d2ed249f38d300d59a2af1" style="color: #7a5a0c;">frappa10</a>.
+  </p>
+
+</article>

@@ -31,7 +31,7 @@
 import maplibregl from 'maplibre-gl';
 import { state } from '../diplomacy/state.js';
 import { arc, alongArc } from '../diplomacy/flowGeometry.js';
-import { regionName, regionAnchor } from '../diplomacy/travelDistance.js';
+import { regionName, regionAnchor } from '../diplomacy/regionGraph.js';
 import { showToast } from '../diplomacy/utils.js';
 import { closePrivateView, openPrivateView } from '../app/privateOverlay.js';
 // WarEra+: spegnere i marker delle battaglie mentre il piano è sulla mappa.

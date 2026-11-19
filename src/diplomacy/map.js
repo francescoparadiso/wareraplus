@@ -24,8 +24,6 @@ import { buildPlaystyleColorExpression } from './playstyleHeatmap.js';
 import { buildPlaystyleTrendColorExpression } from './playstyleTrendHeatmap.js';
 // WarEra+ vista Elezioni: nazioni dove si vota o si raccolgono candidature.
 import { buildPoliticsColorExpression } from './politicsHeatmap.js';
-// WarEra+ vista Distanze: quante regioni da A a B (vedi travelDistance.js)
-import { buildTravelColorExpression, syncTravelOverlay, onTravelRegionClick } from './travelDistance.js';
 // WarEra+ vista Migrazioni: saldo per nazione + frecce della nazione cliccata
 import { buildMigrationColorExpression, syncMigrationOverlay, onMigrationCountryClick, clearMigrationFocus } from './migrationFlows.js';
 // WarEra+ vista Finanziamenti: saldo dei bonifici + frecce con le monete
@@ -667,11 +665,6 @@ export function renderMap() {
     // WarEra+: la fase si ricalcola qui dagli orari, a ogni ridisegno —
     // vedi politicsHeatmap.js.
     fillExpr = buildPoliticsColorExpression(state.mapSource === 'original');
-  } else if (state.coloringMode === 'travel') {
-    // WarEra+: per REGIONE, dalla partenza scelta col click — vedi
-    // travelDistance.js. Non dipende da chi possiede cosa: vale identico in
-    // vista Attuale e Originale.
-    fillExpr = buildTravelColorExpression();
   } else if (state.coloringMode === 'migration') {
     // WarEra+: saldo dei trasferimenti di cittadinanza per nazione — vedi
     // migrationFlows.js. Le frecce le accende syncMigrationOverlay qui sotto.
@@ -711,9 +704,6 @@ export function renderMap() {
   // deciso — quindi va chiamata QUI, dopo fillExpr, non prima.
   _applyGameBorderStyle(gameBorders, fillExpr);
 
-  // WarEra+: percorso e barra in basso della vista Distanze — si accendono
-  // e si spengono qui, così uscire dalla vista li toglie senza un hook a parte.
-  syncTravelOverlay();
   // WarEra+: stesso patto per le frecce della vista Migrazioni.
   syncMigrationOverlay();
   syncFundingOverlay();
@@ -863,12 +853,6 @@ function _onRegionClick(e) {
   // non tocca il comportamento normale (state.timeMachineActive è false di
   // default, vedi state.js).
   if (state.timeMachineActive) return;
-  // WarEra+: in vista Distanze il click sceglie una REGIONE (partenza,
-  // casa o cassa), non una nazione — vedi travelDistance.js.
-  if (state.coloringMode === 'travel') {
-    onTravelRegionClick(e.features[0].properties.regionId);
-    return;
-  }
   const cId = state.mapSource === 'original'
     ? e.features[0].properties.initialCountryId
     : e.features[0].properties.countryId;
@@ -1514,7 +1498,6 @@ export function setColoringMode(mode) {
   document.getElementById('mode-warIntensity')?.classList.toggle('active', mode === 'warIntensity');
   document.getElementById('mode-playstyle')?.classList.toggle('active', mode === 'playstyle');
   document.getElementById('mode-politics')?.classList.toggle('active', mode === 'politics');
-  document.getElementById('mode-travel')?.classList.toggle('active', mode === 'travel');
   document.getElementById('mode-migration')?.classList.toggle('active', mode === 'migration');
   document.getElementById('mode-funding')?.classList.toggle('active', mode === 'funding');
   document.getElementById('mode-battleBonus')?.classList.toggle('active', mode === 'battleBonus');
@@ -1530,7 +1513,7 @@ export function setColoringMode(mode) {
       sphereOfInfluence: isMobile ? 'calc(66.66% + 0.5px)' : 'calc(66.66% + 0.6px)'
     };
     // Per i modi delle altre righe, nascondi lo slider o mettilo in una posizione neutra
-    if (mode === 'weeklyDamage' || mode === 'population' || mode === 'production' || isThirdRow || mode === 'politics' || mode === 'travel' || mode === 'migration' || mode === 'funding' || mode === 'battleBonus') {
+    if (mode === 'weeklyDamage' || mode === 'population' || mode === 'production' || isThirdRow || mode === 'politics' || mode === 'migration' || mode === 'funding' || mode === 'battleBonus') {
       sliderTop.style.opacity = '0.3';
     } else {
       sliderTop.style.opacity = '1';

@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Contract Desk guide</title>
+<style>
+  :root {
+    --bg: #1e1f22; --panel: #2b2d31; --panel2: #313338; --line: #3f4147;
+    --text: #f2f3f5; --muted: #b5bac1; --dim: #949ba4;
+    --blurple: #5865f2; --green: #23a55a; --red: #da373c; --amber: #f0b232; --grey: #4e5058;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); }
+  body { width: 1280px; padding: 48px 56px 40px; color: var(--text);
+         font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 20px; line-height: 1.4; }
+
+  header { display: flex; align-items: center; justify-content: space-between; gap: 24px;
+           padding-bottom: 28px; border-bottom: 2px solid var(--line); }
+  h1 { font-size: 50px; letter-spacing: -.5px; font-weight: 800; }
+  h1 span { color: var(--blurple); }
+  .sub { color: var(--muted); font-size: 22px; margin-top: 6px; }
+  .badge { background: var(--blurple); color: #fff; font-weight: 700; padding: 10px 20px; border-radius: 999px; font-size: 20px; white-space: nowrap; }
+
+  h2 { font-size: 27px; margin: 34px 0 16px; display: flex; align-items: center; gap: 12px; }
+  h2 .n { background: var(--blurple); color: #fff; width: 40px; height: 40px; border-radius: 50%;
+          display: inline-flex; align-items: center; justify-content: center; font-size: 22px; flex: none; }
+
+  .once { background: #2b2d31; border: 2px solid var(--amber); border-radius: 14px; padding: 18px 24px; margin-top: 28px; display: flex; gap: 18px; align-items: flex-start; }
+  .once .ic { font-size: 34px; }
+  .once b { color: var(--amber); }
+  .once code, code { background: #1e1f22; padding: 2px 8px; border-radius: 6px; font-family: Consolas, monospace; font-size: .92em; color: #c9cdfb; }
+
+  /* ── Mock Discord ── */
+  .row { display: grid; grid-template-columns: 640px 1fr; gap: 36px; align-items: start; }
+  .msg { background: var(--panel2); border-radius: 12px; padding: 18px 20px 20px; }
+  .msg .who { display: flex; align-items: center; gap: 10px; font-weight: 700; margin-bottom: 10px; font-size: 19px; }
+  .msg .av { width: 40px; height: 40px; border-radius: 50%; background: var(--blurple); display: flex; align-items: center; justify-content: center; font-weight: 800; }
+  .msg .app { background: var(--blurple); font-size: 12px; padding: 2px 6px; border-radius: 4px; font-weight: 700; }
+  .embed { background: var(--panel); border-left: 5px solid var(--blurple); border-radius: 6px; padding: 14px 16px; font-size: 17px; }
+  .embed .t { font-weight: 800; font-size: 20px; margin-bottom: 6px; }
+  .embed .gov { color: var(--muted); margin-bottom: 10px; }
+  .at { background: rgba(88,101,242,.3); color: #c9cdfb; border-radius: 4px; padding: 0 4px; font-weight: 600; }
+  .embed .bt { font-weight: 800; margin-top: 10px; }
+  .embed .bt a { color: #00a8fc; font-weight: 500; }
+  .embed .rq { margin-top: 3px; color: var(--text); }
+  .embed .rq i { color: var(--muted); }
+  .embed .ft { margin-top: 12px; font-size: 13px; color: var(--dim); }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .b { font-size: 16px; font-weight: 600; padding: 8px 14px; border-radius: 6px; background: var(--grey); color: #fff; white-space: nowrap; position: relative; }
+  .b.p { background: var(--blurple); } .b.g { background: var(--green); } .b.r { background: var(--red); }
+  .b .k { position: absolute; top: -13px; right: -9px; background: var(--amber); color: #1e1f22; width: 24px; height: 24px; border-radius: 50%;
+          font-size: 14px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+
+  .keys { list-style: none; }
+  .keys li { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 19px; }
+  .keys li:last-child { border: 0; }
+  .keys .k { background: var(--amber); color: #1e1f22; min-width: 26px; height: 26px; border-radius: 50%; font-size: 15px; font-weight: 800;
+             display: flex; align-items: center; justify-content: center; flex: none; margin-top: 2px; }
+  .keys b { color: #fff; }
+  .keys span { color: var(--muted); }
+  .keys .gv { background: #3a3d44; color: var(--amber); font-size: 12px; padding: 1px 7px; border-radius: 4px; margin-left: 6px; font-weight: 700; vertical-align: 2px; }
+
+  /* ── Role columns ── */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .card { background: var(--panel); border-radius: 16px; padding: 24px 26px 26px; border-top: 6px solid var(--blurple); }
+  .card.gov { border-top-color: var(--green); }
+  .card h3 { font-size: 26px; margin-bottom: 14px; }
+  .step { display: flex; gap: 14px; margin: 14px 0; }
+  .step .s { background: var(--blurple); width: 34px; height: 34px; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; margin-top: 1px; }
+  .gov .step .s { background: var(--green); }
+  .step b { color: #fff; } .step span { color: var(--muted); }
+
+  .legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 26px; background: var(--panel); border-radius: 16px; padding: 22px 26px; }
+  .legend div { font-size: 19px; } .legend small { display: block; color: var(--dim); font-size: 15px; margin-left: 34px; margin-top: -2px; }
+
+  .setup { margin-top: 30px; background: var(--panel); border-radius: 16px; padding: 20px 26px; border-left: 6px solid var(--grey); font-size: 19px; color: var(--muted); }
+  .setup b { color: #fff; }
+  footer { margin-top: 26px; display: flex; justify-content: space-between; color: var(--dim); font-size: 18px; }
+  footer b { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📝 Contract <span>Desk</span></h1>
+    <div class="sub">Ask for, approve and track mercenary contracts — without leaving Discord.</div>
+  </div>
+  <div class="badge">WarEra+ bot</div>
+</header>
+
+<div class="once">
+  <div class="ic">🔗</div>
+  <div><b>Do this once:</b> type <code>/register</code> in Discord, pick your character, put the code it gives you in one of your company names, and press <b>Verify</b>. One minute, no website needed.
+  The bot only recognises (and tags) people who linked their character. Not linked = no tag, and the buttons will tell you so.</div>
+</div>
+
+<h2><span class="n">1</span> The desk — one message, all the buttons</h2>
+<div class="row">
+  <div class="msg">
+    <div class="who"><div class="av">W+</div> WarEra+ <span class="app">APP</span></div>
+    <div class="embed">
+      <div class="t">Italy — contract desk</div>
+      <div class="gov"><span class="at">@President</span> <i>(President)</i> · <span class="at">@Anna</span> <i>(MoD)</i> · <span class="at">@Marco</span> <i>(MoE)</i></div>
+      <div class="bt">Lombardy — Italy → France · <a>battle</a></div>
+      <div class="rq">⏳ <b>Legio VI</b> — 1M dmg · 80 · asked <b>12 minutes ago</b> · <i>Waiting for a decision</i></div>
+      <div class="rq">✅ <b>Rex Unit</b> — 2M dmg · 200 · asked <b>1 hour ago</b> · <i>Approved — open the auction in game</i></div>
+      <div class="bt">Tuscany — France → Italy · <a>battle</a></div>
+      <div class="rq">🏆 <b>Legio VI</b> — 1M dmg · 90 · asked 3 hours ago · <i>Won by the agreed unit</i></div>
+      <div class="ft">WarEra+ contract desk · a request is not a promise until the auction is won</div>
+    </div>
+    <div class="btns">
+      <div class="b p">📝 Request a contract<span class="k">1</span></div>
+      <div class="b">Edit mine<span class="k">2</span></div>
+      <div class="b">Withdraw mine<span class="k">3</span></div>
+      <div class="b">Refresh<span class="k">4</span></div>
+    </div>
+    <div class="btns">
+      <div class="b g">🗳️ Pending (1)<span class="k">5</span></div>
+      <div class="b r">Close desk<span class="k">6</span></div>
+      <div class="b">📣 Who's tagged<span class="k">7</span></div>
+      <div class="b">⚡ Ask burst<span class="k">8</span></div>
+    </div>
+  </div>
+
+  <ul class="keys">
+    <li><div class="k">1</div><div><b>Request a contract</b><br><span>Pick the battle and the side your unit fights on (that nation pays), then fill in the form.</span></div></li>
+    <li><div class="k">2</div><div><b>Edit mine</b><br><span>Fix damage, bounty or note — only while nobody has decided yet.</span></div></li>
+    <li><div class="k">3</div><div><b>Withdraw mine</b><br><span>Cancel one of your open requests.</span></div></li>
+    <li><div class="k">4</div><div><b>Refresh</b><br><span>Redraws the desk. It also updates itself on every change.</span></div></li>
+    <li><div class="k">5</div><div><b>Pending</b><span class="gv">GOVERNMENT</span><br><span>Oldest first. Pick one, then Approve or Reject.</span></div></li>
+    <li><div class="k">6</div><div><b>Close / Open desk</b><span class="gv">GOVERNMENT</span><br><span>Stops new requests — here and on the website.</span></div></li>
+    <li><div class="k">7</div><div><b>Who's tagged</b><br><span>Who gets pinged for a decision, and who can't be (not linked).</span></div></li>
+    <li><div class="k">8</div><div><b>Ask burst</b><span class="gv">GOVERNMENT</span><br><span>Pings the commanders of contracts still running: burst now and close it.</span></div></li>
+  </ul>
+</div>
+
+<h2><span class="n">2</span> Step by step</h2>
+<div class="cols">
+  <div class="card">
+    <h3>🪖 Unit commanders</h3>
+    <div class="step"><div class="s">1</div><div><b>Press “Request a contract”</b> — or type <code>/contract</code><br><span>Choose the battle &amp; side from the menu (or search the battle as you type).</span></div></div>
+    <div class="step"><div class="s">2</div><div><b>Fill the form</b><br><span>Minimum damage (<code>1m</code>, <code>500k</code>), bounty per 1,000 damage (<code>0.08</code>), <b>burst damage</b> = what you can hit right away (optional), professionals only, a note.</span></div></div>
+    <div class="step"><div class="s">3</div><div><b>Wait for the government</b><br><span>They are tagged at once and see the <b>whole queue</b> under your request. Your desk shows <b>how long you have been waiting</b>.</span></div></div>
+    <div class="step"><div class="s">4</div><div><b>Watch the result</b><br><span>You get <b>Won</b> or <b>Lost</b> in your unit's channel. If another unit takes the auction, the government is alerted too.</span></div></div>
+  </div>
+
+  <div class="card gov">
+    <h3>🏛️ Government</h3>
+    <div class="step"><div class="s">1</div><div><b>You are tagged</b><br><span>President, VP and everyone with the <i>manage mercenary contracts</i> right.</span></div></div>
+    <div class="step"><div class="s">2</div><div><b>Approve or Reject</b><br><span>On the request card, via <b>Pending</b> on the desk, or from the menu under <code>/contract-queue nation</code>. Same result as on the website.</span></div></div>
+    <div class="step"><div class="s">3</div><div><b>Open the auction in game</b><br><span>Then press <b>“I opened the auction”</b> so the bot can watch it.</span></div></div>
+    <div class="step"><div class="s">4</div><div><b>The bot checks the outcome</b><br><span>Won, stolen by another unit, different terms, or no bid — shown on the desk.</span></div></div>
+  </div>
+</div>
+
+<h2><span class="n">3</span> What the icons mean</h2>
+<div class="legend">
+  <div>⏳ Waiting for a decision</div>
+  <div>✅ Approved<small>open the auction in game</small></div>
+  <div>🔨 Auction opened<small>the bot is checking</small></div>
+  <div>🏆 Won<small>by the agreed unit</small></div>
+  <div>⚔️ Stolen<small>another unit took it</small></div>
+  <div>⚠️ Different terms<small>opened with other numbers</small></div>
+  <div>💤 No valid bid</div>
+  <div>❌ Rejected</div>
+  <div>↩️ Withdrawn</div>
+</div>
+
+<div class="setup">
+  <b>Setting up a channel</b> (government or unit commander): type <code>/contract-desk post</code> and pick <b>My nation</b> or <b>My military unit</b>.
+  The bot needs <b>View Channel</b>, <b>Send Messages</b> and <b>Embed Links</b> there. Use <code>/contract-desk remove</code> to stop.
+</div>
+
+<div class="setup" style="margin-top:16px; border-left-color: var(--blurple);">
+  <b>Check the queue any time</b> (only you see the answer):
+  <code>/contract-queue unit</code> — <b>commanders</b>: your requests, your <b>place in line</b> and how long that government usually takes to decide.
+  <code>/contract-queue nation</code> — <b>government</b>: the whole queue, oldest first, 🔥 for anyone waiting over 30 minutes.
+</div>
+
+<footer>
+  <div><b>Not getting tagged?</b> Type <code>/register</code> first (see the yellow box).</div>
+  <div>wareraplus.vercel.app</div>
+</footer>
+
+</body>
+</html>

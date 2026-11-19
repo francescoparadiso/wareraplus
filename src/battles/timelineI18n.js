@@ -2,7 +2,7 @@
    WarEra+ — Andamento della battaglia: dizionario (9 lingue)
    ------------------------------------------------------------------
    A parte da src/battles/i18n.js per la stessa ragione di
-   blocStatsI18n.js e travelI18n.js: una sezione nuova con molte
+   blocStatsI18n.js e migrationI18n.js: una sezione nuova con molte
    etichette sue, che nel dizionario della vista sarebbero altre nove
    modifiche sparse. Ciò che manca in una lingua ricade sull'inglese.
    ══════════════════════════════════════════════════════════════ */

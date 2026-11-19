@@ -93,7 +93,7 @@ export function sphereLinksControlHtml({ inOverview = false } = {}) {
   const seg = (label, attr, options, cur) => `
     <div class="wp-mig-seg" role="group" aria-label="${escapeHtml(label)}">
       <span class="wp-mig-seg-label">${escapeHtml(label)}</span>
-      ${options.map(([v, text]) => `<button type="button" class="wp-travel-btn" data-${attr}="${v}" aria-pressed="${v === cur}">${escapeHtml(text)}</button>`).join('')}
+      ${options.map(([v, text]) => `<button type="button" class="wp-view-btn" data-${attr}="${v}" aria-pressed="${v === cur}">${escapeHtml(text)}</button>`).join('')}
     </div>`;
   return `<div class="wp-sphere-links-ctl">
     ${seg(sT('Links on the map'), 'sphere-links-mode', [['selected', sT('Open sphere')], ['all', sT('All')], ['off', sT('None')]], p.mode)}

@@ -66,10 +66,9 @@ const DEFAULT_RULES = Object.freeze({
   bunker: [0, 5, 10, 15, 20, 25],   // indice = livello
   base: [0, 5, 10, 15, 20, 25],
   hq: [0, 5, 10, 15, 20],
-  // gameConfig.mapTravel (v0.28.3, 16 nov 2026): le casse sulla mappa e il
-  // ritorno gratis a casa sono spenti. Ripiego = com'è oggi.
+  // gameConfig.mapTravel (v0.28.3, 16 nov 2026): le casse sulla mappa sono
+  // spente (e le casse di legno escono dal mercato). Ripiego = com'è oggi.
   mapCases: false,
-  travelHome: false,
 });
 
 /* ── Tipo di governo (v0.27, dal 2026-10-26) ────────────────────
@@ -181,7 +180,6 @@ export function loadBonusRules() {
       base: levels(up.base, 'attackBonus', DEFAULT_RULES.base),
       hq: levels(up.headquarters, 'attackBonus', DEFAULT_RULES.hq),
       mapCases: cfg?.mapTravel?.mapCasesEnabled ?? DEFAULT_RULES.mapCases,
-      travelHome: cfg?.mapTravel?.travelHomeEnabled ?? DEFAULT_RULES.travelHome,
       fromConfig: !!cfg,
     });
     return _rules;

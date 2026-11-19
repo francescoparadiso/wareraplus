@@ -35,6 +35,10 @@ ricette tecniche che le rendono eseguibili. Il riassunto sta in `CLAUDE.md`
     caricamento su Imgur, incolla nell'editor, correzioni): si fa e si
     riferisce. Restano all'utente: il login, "Copy HTML" e la pubblicazione.
 
+12. **Ultima cosa di ogni articolo: l'immagine fissa**
+    `https://i.imgur.com/OVusFyI.png` (richiesta dell'utente, 2026-11-11), dopo
+    la firma/ringraziamento. È già su Imgur, non va ricaricata.
+
 ## Dati
 
 Fonti, dalla più grezza alla più comoda (tutte senza chiave):

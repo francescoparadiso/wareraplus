@@ -11,7 +11,6 @@ import { getWarIntensityStats, warIntensityLegendGradient } from './warIntensity
 import { getPlaystyleStats, playstyleLegendGradient } from './playstyleHeatmap.js';
 import { activeDeposits, getProductionStats, productionLegendGradient, RESOURCE_TYPES, scaleMax } from './productionHeatmap.js';
 import { getPoliticsStats, POLITICS_COLORS, TURNOUT_MAX, TURNOUT_MID, turnoutLegendGradient } from './politicsHeatmap.js';
-import { getTravelStats, travelLegendGradient, regionName, HOPS_PER_BAR, STAMINA_PER_HOP, OIL_PER_EXTRA_HOP } from './travelDistance.js';
 import { getTrendStats, trendLegendGradient } from './playstyleTrendHeatmap.js';
 import { getMigrationStats, migrationLegendGradient, focusFlows, OUT_COLOR, IN_COLOR } from './migrationFlows.js';
 import { damagePulseInfo } from './damagePulse.js';
@@ -253,30 +252,6 @@ export function updateDynamicLegend() {
   // "quali", e la legenda è il posto dove sta senza aprire nulla.
   // WarEra+ — Elezioni: due colori e i conti. Stesso inglese fisso delle
   // altre legende; il riepilogo nel pannello è quello tradotto.
-  // WarEra+ — Distanze: la scala in regioni, con il segno dove finisce la
-  // barra di stamina (oltre si paga in petrolio). Inglese fisso come le
-  // altre legende; il riepilogo tradotto sta nel pannello.
-  if (state.coloringMode === 'travel') {
-    const sub = THEMES[state.theme].TEXT_SECONDARY;
-    const s = getTravelStats();
-    const barPct = ((HOPS_PER_BAR - 0.5) / 19 * 100).toFixed(1);
-    box.innerHTML = `
-      <div class="legend-section-title">Travel distance</div>
-      <div class="legend-scale" style="margin:4px 0;position:relative;">
-        <div style="width:100%;height:14px;background:${travelLegendGradient()};border-radius:3px;"></div>
-        <div style="position:absolute;top:-2px;bottom:-2px;left:${barPct}%;width:2px;background:#fff;opacity:.85;"></div>
-      </div>
-      <div class="legend-item" style="justify-content:space-between; padding:0 4px;">
-        <span style="font-size:10px; color:${sub};">1</span>
-        <span style="font-size:10px; color:${sub};">${HOPS_PER_BAR} · full bar</span>
-        <span style="font-size:10px; color:${sub};">20+</span>
-      </div>
-      <div class="legend-note">${s
-        ? `From ${regionName(state.travel.origin)} · ${s.withinBar} regions within a full stamina bar · farthest ${s.far} · `
-        : 'Click a region to start from it · '}${STAMINA_PER_HOP} stamina per region crossed, then ${OIL_PER_EXTRA_HOP} oil barrels each (patch 0.26.1)</div>`;
-    return;
-  }
-
   // WarEra+ — Migrazioni: la scala del saldo (rosso perde, verde guadagna)
   // e, con una nazione a fuoco, cosa vogliono dire i due colori delle
   // frecce. Inglese fisso come le altre legende; il riepilogo tradotto sta
@@ -1087,5 +1062,4 @@ export function syncUIToState() {
   document.getElementById('mode-playstyle')?.classList.toggle('active', state.coloringMode === 'playstyle');
   document.getElementById('mode-production')?.classList.toggle('active', state.coloringMode === 'production');
   document.getElementById('mode-politics')?.classList.toggle('active', state.coloringMode === 'politics');
-  document.getElementById('mode-travel')?.classList.toggle('active', state.coloringMode === 'travel');
 }

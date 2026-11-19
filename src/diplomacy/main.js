@@ -487,19 +487,6 @@ document.getElementById('mode-politics')?.addEventListener('click', async () => 
   await _loadOpenElections();
 });
 
-// WarEra+ vista Distanze: tutto in memoria (i confini di ogni regione sono
-// già in state.mapDataGlobal), quindi nessuna fetch — si sceglie solo la
-// partenza (casa salvata o capitale della nazione selezionata, se ci sono).
-document.getElementById('mode-travel')?.addEventListener('click', async () => {
-  _dimOtherSliders();
-  const third = document.getElementById('mode-slider-third');
-  if (third) third.style.opacity = '0.3';
-  trackEvent('view-mode-change', { mode: 'travel' });
-  const { enterTravelView } = await import('./travelDistance.js');
-  enterTravelView();
-  setColoringMode('travel');
-});
-
 // WarEra+ vista Migrazioni: una richiesta per tutto il mondo
 // (/migration-flows), rinfrescata ogni 10 minuti a vista accesa — vedi
 // migrationFlows.js, che possiede dato, timer e frecce.

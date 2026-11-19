@@ -85,10 +85,17 @@ const MODEL_TTL_MS = 10 * 60 * 1000;
 const CFG_TTL_MS = 12 * 3600 * 1000;
 const BOOT_PAGES_SALES = 450;    // ~45.000 vendite: poco più di quanto l'API ricorda
 
-// Pagine al massimo per tipo e per giro. Le vendite e i craft si leggono
-// TUTTI (fermandosi al segno già visto); le casse e gli smontaggi si
-// campionano, perché servono solo frequenze e rese medie.
-const MAX_PAGES = { itemMarket: 30, craftItem: 20, openCase: 8, dismantleItem: 1 };
+// Pagine al massimo per tipo e per giro. Vendite, craft E casse si leggono
+// TUTTI (fermandosi al segno già visto); solo gli smontaggi si campionano,
+// perché servono solo rese medie e la resa è fissa per rarità.
+// ⚠️ Le casse si campionavano (8 pagine = ~800 righe ogni 10 minuti, un terzo
+// di quelle che passano: ~12.000 all'ora). Troppo poco: la cassa 2 contava
+// 202 aperture e il suo valore dipende da esiti rari (pezzi mitici, 0,1%) che
+// con quel campione compaiono due volte o mai. Leggerle tutte costa ~21
+// richieste ogni 10 minuti: niente, rispetto a un valore che oscillava.
+const MAX_PAGES = { itemMarket: 30, craftItem: 20, openCase: 40, dismantleItem: 1 };
+// Recupero una tantum delle aperture che il campionamento si era perso.
+const BACKFILL_PAGES_CASE = 1500;   // ~150.000 righe, ~12 ore di aperture
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -208,9 +215,12 @@ const _nuovo = (item) => item && Number(item.state) === Number(item.maxState);
  * pagine. Le righe dentro la sovrapposizione si deduplicano: per le vendite
  * dalla chiave primaria, per il resto dalla tabella `seen`.
  */
-async function _giro(type, { maxPages, pausa = PAUSA_MS } = {}) {
+async function _giro(type, { maxPages, pausa = PAUSA_MS, ignoraWm = false, fermaPrima = 0 } = {}) {
   const wmKey = `wm:${type}`;
-  const wm = Number(_meta(wmKey)) || 0;
+  // `ignoraWm`: il recupero all'indietro non si ferma al segno già visto. Le
+  // righe già contate si saltano comunque con `seen`.
+  const wm = ignoraWm ? 0 : Number(_meta(wmKey)) || 0;
+  const wmSalvato = Number(_meta(wmKey)) || 0;
   const oggi = giornoUtc(Date.now());
   let cursor = null;
   let nuovoWm = wm;
@@ -233,6 +243,9 @@ async function _giro(type, { maxPages, pausa = PAUSA_MS } = {}) {
         lette++;
         if (ts > nuovoWm) nuovoWm = ts;
         if (wm && ts < wm - OVERLAP_MS) { finito = true; continue; }
+        // Il recupero non va oltre quello che `seen` ricorda: più indietro le
+        // righe già contate non si riconoscerebbero e si conterebbero due volte.
+        if (fermaPrima && ts < fermaPrima) { finito = true; continue; }
 
         if (type === 'itemMarket') {
           const g = _gear[t.item?.code];
@@ -273,7 +286,7 @@ async function _giro(type, { maxPages, pausa = PAUSA_MS } = {}) {
     if (pausa) await sleep(pausa);
   }
 
-  if (nuovoWm > wm) _setMeta(wmKey, nuovoWm);
+  if (nuovoWm > Math.max(wm, wmSalvato)) _setMeta(wmKey, nuovoWm);
   return { lette, nuove };
 }
 
@@ -333,6 +346,28 @@ async function bootstrapGearMarket() {
     _setMeta('lastPoll', Date.now());
   } catch (err) {
     console.error('[gear-market] bootstrap fallito:', err.message);
+  } finally {
+    _inCorso = false;
+  }
+}
+
+/** Recupero UNA TANTUM delle aperture di casse: le prime versioni ne
+ *  leggevano un terzo. Parte solo se non è già stato fatto (`bf:openCase`),
+ *  senza await, e tiene occupato il modulo per una decina di minuti (i giri
+ *  periodici saltano: l'API ricorda oltre un giorno di vendite e craft). */
+async function backfillOpenCases() {
+  if (!deps || !db || _inCorso || !deps.apiToken) return;
+  if (_meta('bf:openCase')) return;
+  _inCorso = true;
+  try {
+    if (!await _loadConfig()) return;
+    console.log('[gear-market] recupero delle aperture di casse (una tantum)');
+    const r = await _giro('openCase', { maxPages: BACKFILL_PAGES_CASE, pausa: PAUSA_BOOT_MS, ignoraWm: true, fermaPrima: Date.now() - 30 * 3600_000 });
+    console.log(`[gear-market] aperture recuperate: ${r.nuove} nuove su ${r.lette} righe`);
+    _setMeta('bf:openCase', Date.now());
+  } catch (err) {
+    // Senza il flag, il prossimo avvio riprova.
+    console.error('[gear-market] recupero aperture fallito:', err.message);
   } finally {
     _inCorso = false;
   }
@@ -531,6 +566,7 @@ module.exports = {
   initGearMarket,
   pollGearMarket,
   bootstrapGearMarket,
+  backfillOpenCases,
   readGearMarket,
   statoGearMarket,
 };

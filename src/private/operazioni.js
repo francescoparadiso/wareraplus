@@ -48,7 +48,7 @@ import { stimaBattaglia, stimaPianificata, BUFFER_CONQUISTA } from '../shared/ba
 // fine come se la battaglia partisse all'orario del passo.
 const BATTAGLIA_PIANIFICATA = new Set(['attacco', 'rivolta', 'difesa']);
 import { state } from '../diplomacy/state.js';
-import { regionName, regionNeighbors } from '../diplomacy/travelDistance.js';
+import { regionName, regionNeighbors } from '../diplomacy/regionGraph.js';
 import { mostraOperazione } from './mappaOperazione.js';
 import { statoVisto, numeriPassi, oraBreve, etichettaRegione } from './operazioniComuni.js';
 import { trackEvent } from '../shared/analytics.js';

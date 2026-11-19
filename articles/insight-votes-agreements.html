@@ -1,0 +1,125 @@
+<p style="text-align: center;"><span style="font-family: Texturina, serif; color: #d97706;"><strong>Votes and Agreements, explained straight: what they do, who can use them, and why every foreign minister should be writing pacts there.</strong></span></p>
+
+<p>WarEra+ has two tools for the political side of the game: <strong>Votes</strong> and <strong>Agreements</strong>. People have started using them, so here is how they really work, no fluff. Numbers read on <strong>11 November 2026</strong>. By <span data-content-link="" data-content-type="user" data-content-data="{&quot;userId&quot;:&quot;69d2ed249f38d300d59a2af1&quot;,&quot;fullMatch&quot;:&quot;https://app.warera.io/user/69d2ed249f38d300d59a2af1&quot;}" data-original-text="https://app.warera.io/user/69d2ed249f38d300d59a2af1"></span>, who builds the tool. <a href="https://wareraplus.vercel.app/">Open WarEra+</a>, it's free.</p>
+
+<hr>
+
+<h2><span style="font-family: Texturina, serif; color: #d97706;">Votes: decide things outside the game, in secret if you want</span></h2>
+
+<p>The game has laws, and congress votes them in game. What it doesn't give you is a way to vote on anything <em>outside</em> the game: a treaty, a stance, a motion. And a Discord poll doesn't work, because everyone sees who voted what. <strong>Votes</strong> (a button inside Political) fills that hole. It lives on WarEra+, not in the game, so it binds only whoever agrees to respect it. Role play, but with proper rules.</p>
+
+<p><strong><span style="color: #d97706;">The basics</span></strong></p>
+<ul>
+<li><strong>Who opens a vote:</strong> the government or the congress of a nation. You sign in with Discord and link your character (a vote counts per character).</li>
+<li><strong>Who votes:</strong> you pick one: <strong>congress</strong>, <strong>congress + government</strong>, or a <strong>referendum</strong> for every citizen. For congress the voters are a snapshot taken when the vote opens, so an election halfway through can't change them. In a referendum you must be a citizen now, level 10+, with a character created before the vote opened.</li>
+<li><strong>Your ballot:</strong> in favour, against, abstain, or spoiled (a spoiled ballot needs a short note, read out during the count). It's final. The booth tells you which character you're voting as.</li>
+<li><strong>When it passes:</strong> simple majority, absolute majority (more than half of everyone entitled) or two thirds, plus an optional quorum from 1% to 100%. Abstentions and spoiled ballots count for the quorum, not for the majority. A vote lasts from 1 hour to 7 days, and can be scheduled up to 30 days ahead.</li>
+<li><strong>Who sees it:</strong> the text and result can be public or only for government and congress. That a vote exists, its title, dates and turnout are always public.</li>
+</ul>
+
+<p><strong><span style="color: #d97706;">The count</span></strong></p>
+<p>While a vote is open you only see the turnout: partial results would sway whoever hasn't voted yet. When it closes, the count starts one minute later, <strong>at the same second for everyone</strong>. With an open ballot a hemicycle lights up seat by seat. With a secret ballot a ballot box opens and one ballot comes out every 3 seconds. If everyone entitled has voted, whoever opened the vote can start the count right away (10 seconds). The government can also set a Discord channel for notices: opening, count start, result.</p>
+
+<p><img class="tiptap-image" src="https://i.imgur.com/IB4sN0N.png"></p>
+<p style="text-align: center;"><em><span style="color: #6b7280;">The first real vote on the tool: Italy's congress, secret ballot, 11 of 17 members voted. Text and result are reserved, so this is all that's public. <a href="https://wareraplus.vercel.app/?section=political&country=6813b6d446e731854c7ac7a2&tab=votes">See it in WarEra+</a>.</span></em></p>
+
+<p><img class="tiptap-image" src="https://i.postimg.cc/YqBVMP4X/image-1793015992399.gif"></p>
+<p style="text-align: center;"><em><span style="color: #6b7280;">Open ballot: the hemicycle lights up.</span></em></p>
+<p><img class="tiptap-image" src="https://i.postimg.cc/hPRwcYJ6/image-1793016011128.gif"></p>
+<p style="text-align: center;"><em><span style="color: #6b7280;">Secret ballot: one ballot out of the box at a time.</span></em></p>
+
+<p><strong><span style="color: #d97706;">How a secret ballot stays secret</span></strong></p>
+<p>The server has to know <em>who</em> voted, to stop double votes, but not <em>what</em>. So the two things sit in two tables with no link between them, and neither has a timestamp. When the vote is sealed the ballots are shuffled and the rows are deleted. A secret vote never goes in the audit log either, because the log has the time. It's secret even from WarEra+ administrators.</p>
+
+<blockquote>
+<p><strong>Honest limit.</strong> It doesn't protect against someone with direct access to the server <em>while the vote is open</em>. And in a referendum the number of people entitled is an estimate, so there's no absolute majority there.</p>
+</blockquote>
+
+<hr>
+
+<h2><span style="font-family: Texturina, serif; color: #d97706;">Agreements: one place for every pact</span></h2>
+
+<p>Until October the NAPs on the map came from a spreadsheet I updated by hand. Since 23 October the spreadsheet is gone: <strong>Agreements are the only source of NAPs on the map</strong>. A pact in force shows up by itself and disappears when it expires (the map rereads them every 10 minutes).</p>
+
+<ul>
+<li><strong>A pact has two sides</strong>, each a nation or an alliance. For an alliance, whoever joins is in and whoever leaves is out. You can add extra nations to a side (proxies, allies outside the alliance).</li>
+<li><strong>What you write:</strong> title, full text, start and end (empty end = no expiry), units left out of the pact, and an optional <strong>damage cap per battle</strong> for one side or both.</li>
+<li><strong>Everyone can read</strong>, no login. <strong>Writing</strong> is for the government (president, vice, ministers) of one of the nations involved, or of a member of an involved alliance. No alliance filter: a pact has two sides and the other one has to be able to write it too.</li>
+</ul>
+
+<p><img class="tiptap-image" src="https://i.imgur.com/ThIva3q.png"></p>
+<p style="text-align: center;"><em><span style="color: #6b7280;">The archive today: three pacts in force, 37 nations. <a href="https://wareraplus.vercel.app/?section=accordi">Open Agreements</a>.</span></em></p>
+
+<p><strong><span style="color: #d97706;">The check</span></strong></p>
+<p>Press <em>Check</em> on a pact and the tool rereads the battles of its period and flags two things: a <strong>direct attack</strong> (a nation of one side opened a battle against the other) and a <strong>cap exceeded</strong> (damage by one side's citizens against the other, in one battle, above the limit). Units left out are subtracted player by player.</p>
+
+<p><img class="tiptap-image" src="https://i.imgur.com/cvXVxYg.png"></p>
+<p style="text-align: center;"><em><span style="color: #6b7280;">The check on the Italy–Austria pact. <a href="https://wareraplus.vercel.app/?section=accordi">Try it on any pact</a>.</span></em></p>
+
+<blockquote>
+<p><strong>Honest limit: it's an alarm, not a judge.</strong> The check is an estimate, because the game doesn't tell the tool everything:</p>
+<ul>
+<li>Units and nationalities are the ones <em>of today</em>, not of the day of the battle. If a player changed unit or nation since, the tool can't know.</li>
+<li>In huge battles only the top 100 players are read, so the real damage can be higher than shown (the line says so when it happens).</li>
+<li>A battle counts on the day it <em>ended</em>: one that started before the pact and finished after it still shows up.</li>
+<li>A pact can cover <strong>core regions only</strong> (the original regions of the nations in it) or <strong>all regions</strong>, occupied ones included. With core only, battles in occupied regions are left out, and the check tells you how many.</li>
+<li>Each check reads the last 90 days, 120 battles at most.</li>
+</ul>
+<p>So a red line means "go read that battle and talk to the other government", not "caught".</p>
+</blockquote>
+
+<p>In the archive right now: the <strong>Iberian–Italic Friendship Treaty</strong> between <span data-content-link="" data-content-type="country" data-content-data="{&quot;countryId&quot;:&quot;6813b6d446e731854c7ac7a2&quot;,&quot;fullMatch&quot;:&quot;https://app.warera.io/country/6813b6d446e731854c7ac7a2&quot;}" data-original-text="https://app.warera.io/country/6813b6d446e731854c7ac7a2"></span> and <span data-content-link="" data-content-type="country" data-content-data="{&quot;countryId&quot;:&quot;6813b6d446e731854c7ac7a8&quot;,&quot;fullMatch&quot;:&quot;https://app.warera.io/country/6813b6d446e731854c7ac7a8&quot;}" data-original-text="https://app.warera.io/country/6813b6d446e731854c7ac7a8"></span>, the <strong>Italy–Austria NAP</strong> (500,000 damage cap each way) with <span data-content-link="" data-content-type="country" data-content-data="{&quot;countryId&quot;:&quot;6813b6d446e731854c7ac7ac&quot;,&quot;fullMatch&quot;:&quot;https://app.warera.io/country/6813b6d446e731854c7ac7ac&quot;}" data-original-text="https://app.warera.io/country/6813b6d446e731854c7ac7ac"></span>, and the <strong>HU–SMD NAP</strong> between the alliances Hippo Unchained and Southern Maritime Defence (34 nations, 1,500,000 cap, until 30 November), written by Mister_Hippo, not by me.</p>
+
+<hr>
+
+<h2><span style="font-family: Texturina, serif; color: #d97706;">A call to foreign ministers and congress members</span></h2>
+
+<p>This part is for you, <strong>ministers of foreign affairs</strong> and <strong>members of congress</strong> of every nation. The world has 181 nations. The archive has <strong>three</strong> pacts. Let's fix that.</p>
+
+<p>Today, to know if two nations have a NAP, you ask on Discord or trust someone's memory. If every government wrote its pacts in one public place, anyone, even from a third nation, could open one page and see who agreed what, until when, with which cap. The map would draw them without a spreadsheet, expired pacts would stay as history, and "you broke the pact" would have a page both sides can read.</p>
+
+<ul>
+<li><strong>Foreign ministers:</strong> write your nation's pacts there, the old ones too. A few minutes: Discord, link your character, <em>New agreement</em>. Don't wait for the other side, either one can write it. When a pact is renewed or ends early, change the date.</li>
+<li><strong>Congress members:</strong> a treaty is a decision, so vote it with <strong>Votes</strong> before the government signs (open for a public record, secret to let members disagree freely). Then the minister registers it in Agreements. The two don't talk to each other automatically, but together they give you a vote and a published text.</li>
+</ul>
+
+<blockquote>
+<p>WarEra+ enforces nothing: it records pacts and measures battles. What happens when a pact is broken is still between the two governments. It just makes sure they're reading the same page. If a pact type or a field you need is missing (for now only non-aggression pacts), tell me.</p>
+</blockquote>
+
+<hr>
+
+<h2><span style="font-family: Texturina, serif; color: #2563eb;">Also new lately, in short</span></h2>
+
+<ul>
+<li><strong>Ministers:</strong> up to 20 per government, each with their title, in the nation panel, Political and the player profile.</li>
+<li><strong>Presidential results redesigned:</strong> winner and party, one vote-share bar with the 50% line, the margin in words, comparison with the previous presidential. Older elections now show the government of that term (archive from 29 September).</li>
+<li><strong>Government types:</strong> the Plutocracy doubles wage and manager taxes; Nationalist and Mercenary State are gone.</li>
+<li><strong>Strategic resources and alliance bonuses:</strong> 1, 4 and 9 copies give level 1, 2 and 3. P.A.S.T.A. today: +20.00% damage bonus and 10 levels out of 18.</li>
+<li><strong>Money tab</strong> in Economy: 40.18M in wallets, 3.81M in treasuries, at least 1.86M in buy orders (45.85M visible). And wealth split into Companies, Equipment, Weapons, Items and Money.</li>
+<li><strong>Smaller things:</strong> employees in the Optimizer and player profile, pills in unit detail, live player search, a "What's new" box after updates, and the click on map battles works again.</li>
+</ul>
+
+<p><img class="tiptap-image" src="https://i.imgur.com/CeqyrBa.png"></p>
+<p style="text-align: center;"><em><span style="color: #6b7280;">Alliance bonuses for P.A.S.T.A. <a href="https://wareraplus.vercel.app/?section=alliances">Open Alliance statistics</a> and click an alliance.</span></em></p>
+
+<p><img class="tiptap-image" src="https://i.imgur.com/TOVz9nq.png"></p>
+<p style="text-align: center;"><em><span style="color: #6b7280;">The Money tab, read on 11 November. <a href="https://wareraplus.vercel.app/?section=economy&tab=money">Open it in WarEra+</a>.</span></em></p>
+
+<blockquote>
+<p>Buy-order coins are a <em>minimum</em> (the game shows at most 100 orders per book, and 17 books out of 24 were already at the cap) and they are not part of a player's wealth. History starts in early November: nobody keeps yesterday's wallet.</p>
+</blockquote>
+
+<hr>
+
+<h2><span style="font-family: Texturina, serif; color: #1a7d3f;">Try it yourself in WarEra+</span></h2>
+<ul>
+<li><a href="https://wareraplus.vercel.app/?section=political&country=6813b6d446e731854c7ac7a2&tab=votes">Votes</a> (Political, then the Votes button)</li>
+<li><a href="https://wareraplus.vercel.app/?section=accordi">Agreements</a> (Insights menu)</li>
+<li><a href="https://wareraplus.vercel.app/?section=alliances">Alliance statistics and bonuses</a></li>
+<li><a href="https://wareraplus.vercel.app/?section=economy&tab=money">Money</a></li>
+</ul>
+
+<p>Bugs, ideas, complaints: find me in game, <span data-content-link="" data-content-type="user" data-content-data="{&quot;userId&quot;:&quot;69d2ed249f38d300d59a2af1&quot;,&quot;fullMatch&quot;:&quot;https://app.warera.io/user/69d2ed249f38d300d59a2af1&quot;}" data-original-text="https://app.warera.io/user/69d2ed249f38d300d59a2af1"></span>. The booth that tells you which character you're voting as exists because someone wrote to me on Discord instead of closing the tab. Thank you.</p>
+
+<p><img class="tiptap-image" src="https://i.imgur.com/OVusFyI.png"></p>

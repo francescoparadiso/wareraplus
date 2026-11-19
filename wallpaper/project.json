@@ -44,7 +44,6 @@
 				"ui_wp_view_population" : "Population",
 				"ui_wp_view_production" : "Production",
 				"ui_wp_view_sphere" : "Spheres of influence",
-				"ui_wp_view_travel" : "Travel distances",
 				"ui_wp_view_warhistory" : "War history"
 			},
 			"it-it" : 
@@ -85,7 +84,6 @@
 				"ui_wp_view_population" : "Popolazione",
 				"ui_wp_view_production" : "Produzione",
 				"ui_wp_view_sphere" : "Sfere d'influenza",
-				"ui_wp_view_travel" : "Distanze",
 				"ui_wp_view_warhistory" : "Storico bellico"
 			}
 		},
@@ -345,10 +343,6 @@
 					{
 						"label" : "ui_wp_view_politics",
 						"value" : "politics"
-					},
-					{
-						"label" : "ui_wp_view_travel",
-						"value" : "travel"
 					},
 					{
 						"label" : "ui_wp_view_migration",

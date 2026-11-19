@@ -47,7 +47,6 @@ import { getTrendColor, getTrendStats } from '../diplomacy/playstyleTrendHeatmap
 import { activeDeposits, depositsByCountry, getProductionColor, getProductionStats, isRevenueEra, productionRankedList, RESOURCE_TYPES, topRevenueRegions } from '../diplomacy/productionHeatmap.js';
 import { openElectionRows, getPoliticsStats, POLITICS_COLORS, turnoutColor } from '../diplomacy/politicsHeatmap.js';
 import { recentResults } from '../diplomacy/electionsLive.js';
-import { travelOverviewHtml } from '../diplomacy/travelDistance.js';
 import { mig, migrationRanking, getMigrationStats, focusFlows, migrationValue, migrationColor, migrationCanHover, migrationDays,
   MIGRATION_DAYS, MIN_RATE_CITIZENS, OUT_COLOR, IN_COLOR } from '../diplomacy/migrationFlows.js';
 import { mT } from '../diplomacy/migrationI18n.js';
@@ -61,7 +60,7 @@ import { myPlayerId } from '../shared/battleBonus.js';
 /** Le viste che hanno un riepilogo. Chi chiama usa questo elenco per
  *  decidere se aprire il pannello: tenerlo qui evita che countryPanel.js
  *  e map.js abbiano due liste da tenere allineate a mano. */
-export const OVERVIEW_MODES = ['blocs', 'population', 'weeklyDamage', 'production', 'contested', 'warIntensity', 'playstyle', 'politics', 'travel', 'migration', 'funding', 'battleBonus'];
+export const OVERVIEW_MODES = ['blocs', 'population', 'weeklyDamage', 'production', 'contested', 'warIntensity', 'playstyle', 'politics', 'migration', 'funding', 'battleBonus'];
 
 export function hasViewOverview(mode) {
   return OVERVIEW_MODES.includes(mode);
@@ -656,7 +655,7 @@ function migSegHtml(label, attr, options, current) {
   return `
     <div class="wp-mig-seg" role="group" aria-label="${escapeHtml(label)}">
       <span class="wp-mig-seg-label">${escapeHtml(label)}</span>
-      ${options.map(([v, text]) => `<button type="button" class="wp-travel-btn" data-${attr}="${v}" aria-pressed="${String(v) === String(current)}">${escapeHtml(text)}</button>`).join('')}
+      ${options.map(([v, text]) => `<button type="button" class="wp-view-btn" data-${attr}="${v}" aria-pressed="${String(v) === String(current)}">${escapeHtml(text)}</button>`).join('')}
     </div>`;
 }
 
@@ -725,8 +724,8 @@ function migTimelineHtml(s) {
     <div class="wp-mig-tl">
       <div class="wp-mig-tl-head">
         <span class="wp-mig-seg-label">${escapeHtml(focus ? mT('Balance day by day') : mT('Day by day'))}</span>
-        <button type="button" class="wp-travel-btn" data-mig-action="day-play" aria-pressed="${s.dayPlaying}">${s.dayPlaying ? '⏸' : '▶'}</button>
-        ${s.day ? `<button type="button" class="wp-travel-btn" data-mig-action="day-clear">✕ ${escapeHtml(mT('Whole window'))}</button>` : ''}
+        <button type="button" class="wp-view-btn" data-mig-action="day-play" aria-pressed="${s.dayPlaying}">${s.dayPlaying ? '⏸' : '▶'}</button>
+        ${s.day ? `<button type="button" class="wp-view-btn" data-mig-action="day-clear">✕ ${escapeHtml(mT('Whole window'))}</button>` : ''}
       </div>
       <svg class="wp-mig-tl-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(mT('Day by day'))}">${axis}${bars}</svg>
       <div class="wp-mig-tl-foot"><span>${escapeHtml(migDayLabel(days[0].day))}</span><b>${escapeHtml(selLabel)}</b><span>${escapeHtml(migDayLabel(days[days.length - 1].day))}</span></div>
@@ -858,7 +857,7 @@ function migrationFocusHtml(s, d, controls) {
     ])
     + (s.day ? '' : migNotesHtml(d))
     + body
-    + `<button type="button" class="wp-travel-btn wp-mig-open" data-mig-action="open-nation">${escapeHtml(mT('Players by name in the nation panel'))} ›</button>`;
+    + `<button type="button" class="wp-view-btn wp-mig-open" data-mig-action="open-nation">${escapeHtml(mT('Players by name in the nation panel'))} ›</button>`;
 }
 
 /* ══════════════════ FINANZIAMENTI ══════════════════
@@ -1055,7 +1054,7 @@ function fundingFocusHtml(s, controls) {
     ])
     + fundNotesHtml()
     + body
-    + `<button type="button" class="wp-travel-btn wp-mig-open" data-fund-action="open-nation">${escapeHtml(fT('Open the nation panel'))} ›</button>`;
+    + `<button type="button" class="wp-view-btn wp-mig-open" data-fund-action="open-nation">${escapeHtml(fT('Open the nation panel'))} ›</button>`;
 }
 
 /* I GIACIMENTI: l'altro bonus alla produzione, e l'unico che scade.
@@ -1126,10 +1125,6 @@ export function buildViewOverviewHtml(mode) {
   if (mode === 'production') return productionHtml();
 
   if (mode === 'politics') return politicsHtml();
-
-  // WarEra+ vista Distanze: tutto (numeri, giro delle casse, istogramma) sta
-  // in travelDistance.js, che possiede anche lo stato della vista.
-  if (mode === 'travel') return travelOverviewHtml();
 
   if (mode === 'migration') return migrationHtml();
 

@@ -31,7 +31,7 @@
 import { state } from './state.js';
 import { countryAnchor } from './flowGeometry.js';
 import { activeDeposits, isRevenueEra, topRevenueRegions } from './productionHeatmap.js';
-import { regionAnchor } from './travelDistance.js';
+import { regionAnchor } from './regionGraph.js';
 import { animationsOn } from '../shared/motion.js';
 
 const SRC = 'wp-map-pulses-src';

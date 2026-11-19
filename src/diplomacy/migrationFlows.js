@@ -20,7 +20,7 @@
    guarda, e il riepilogo lo dichiara se la finestra scelta comincia
    prima — altrimenti un mese "vuoto" sembrerebbe un mese tranquillo.
 
-   Tre pezzi, tutti qui dentro (come travelDistance.js):
+   Tre pezzi, tutti qui dentro (come fundingFlows.js):
      · colore della mappa: saldo per nazione, rosso → verde, assoluto o
        ogni 100 cittadini di livello 10+ (renderMap →
        buildMigrationColorExpression);

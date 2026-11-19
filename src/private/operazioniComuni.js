@@ -9,7 +9,7 @@
 
 import { state } from '../diplomacy/state.js';
 import { nomeNazione } from './battles.js';
-import { regionName } from '../diplomacy/travelDistance.js';
+import { regionName } from '../diplomacy/regionGraph.js';
 
 /** I colori degli stati, uguali sulla scheda e sulla freccia in mappa.
  *  Chiari di proposito: la mappa ha fondi scuri, e una freccia scura

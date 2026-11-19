@@ -79,10 +79,9 @@ const WE_KEYMAP = {
 const VIEWS = [
   'diplomacy', 'blocs', 'sphereOfInfluence', 'weeklyDamage', 'population',
   'production', 'contested', 'warIntensity', 'playstyle', 'politics',
-  'travel', 'migration', 'funding',
+  'migration', 'funding',
 ];
-// In rotazione no "Distanze": senza un clic su una regione è una mappa vuota.
-const ROTATION = VIEWS.filter(v => v !== 'travel');
+const ROTATION = VIEWS;
 
 // Inquadrature: centro e zoom di partenza. 'world' è quella del sito.
 const FRAMINGS = {

@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════
    WarEra+ — Traduzioni della vista mappa "Migrazioni" (migrationFlows.js)
    ------------------------------------------------------------------
-   Stesso schema di travelI18n.js: la CHIAVE è il testo inglese, così
+   Stesso schema di blocStatsI18n.js: la CHIAVE è il testo inglese, così
    nel codice si legge cosa c'è scritto e una traduzione mancante ricade
    sull'inglese invece di mostrare una chiave. Variabili fra graffe.
 

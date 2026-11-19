@@ -72,9 +72,6 @@ export const state = {
   openElections: null,
   openElectionsAt: 0,         // quando è stata scaricata (si rinfresca ogni 3 min a vista aperta)
   openElectionsError: null,   // messaggio se il server non risponde
-  // WarEra+ vista Distanze (travelDistance.js): { origin, target, home, cases, pick },
-  // creato alla prima apertura; la casa sopravvive in localStorage (we_travel_home).
-  travel: null,
   // WarEra+ vista Migrazioni (migrationFlows.js): { data, error, days, metric,
   // focus, dir }, creato alla prima apertura. `data` è /migration-flows.
   migration: null,

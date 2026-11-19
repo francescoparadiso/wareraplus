@@ -136,7 +136,6 @@ const DICT = {
     vo_production_title: 'Production bonus',
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Elections",
-    mode_travel: "🧭 Travel",
     mode_migration: "🧳 Migration",
     mode_funding: "💰 Funding",
     mode_battleBonus: "🎖️ Battle bonus",
@@ -498,7 +497,6 @@ const DICT = {
     vo_production_title: 'Bonus produzione',
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Elezioni",
-    mode_travel: "🧭 Distanze",
     mode_migration: "🧳 Migrazioni",
     mode_funding: "💰 Finanziamenti",
     mode_battleBonus: "🎖️ Bonus battaglia",
@@ -860,7 +858,6 @@ const DICT = {
     vo_production_title: 'Bonus de producción',
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Elecciones",
-    mode_travel: "🧭 Distancias",
     mode_migration: "🧳 Migraciones",
     mode_funding: "💰 Financiación",
     mode_battleBonus: "🎖️ Bonus de batalla",
@@ -1222,7 +1219,6 @@ const DICT = {
     vo_production_title: 'Produktionsbonus',
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Wahlen",
-    mode_travel: "🧭 Reisen",
     mode_migration: "🧳 Migration",
     mode_funding: "💰 Finanzierung",
     mode_battleBonus: "🎖️ Schlachtbonus",
@@ -1584,7 +1580,6 @@ const DICT = {
     vo_production_title: 'Bonus de production',
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Élections",
-    mode_travel: "🧭 Distances",
     mode_migration: "🧳 Migrations",
     mode_funding: "💰 Financements",
     mode_battleBonus: "🎖️ Bonus de bataille",
@@ -1946,7 +1941,6 @@ const DICT = {
     vo_production_title: 'Productiebonus',
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Verkiezingen",
-    mode_travel: "🧭 Afstanden",
     mode_migration: "🧳 Migratie",
     mode_funding: "💰 Financiering",
     mode_battleBonus: "🎖️ Slagbonus",
@@ -2308,7 +2302,6 @@ const DICT = {
     vo_production_title: 'Produktionsbonus',
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Val",
-    mode_travel: "🧭 Avstånd",
     mode_migration: "🧳 Migration",
     mode_funding: "💰 Finansiering",
     mode_battleBonus: "🎖️ Stridsbonus",
@@ -2670,7 +2663,6 @@ const DICT = {
     vo_production_title: 'Bónus de produção',
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ Eleições",
-    mode_travel: "🧭 Distâncias",
     mode_migration: "🧳 Migrações",
     mode_funding: "💰 Financiamentos",
     mode_battleBonus: "🎖️ Bônus de batalha",
@@ -3032,7 +3024,6 @@ const DICT = {
     vo_production_title: 'مكافأة الإنتاج',
     // WarEra+ vista mappa Elezioni (diplomacy/politicsHeatmap.js)
     mode_politics: "🗳️ الانتخابات",
-    mode_travel: "🧭 المسافات",
     mode_migration: "🧳 الهجرة",
     mode_funding: "💰 التمويل",
     mode_battleBonus: "🎖️ مكافأة المعركة",

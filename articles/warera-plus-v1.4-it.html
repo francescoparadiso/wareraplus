@@ -1,0 +1,344 @@
+<!--
+  ══════════════════════════════════════════════════════════════
+  WarEra+ — Articolo di aggiornamento, v1.4 ("Dal piano alla guerra, dal voto al torneo")
+  ------------------------------------------------------------------
+  HTML pronto da incollare nell'Article Writer di Arcana Era. Stile
+  inline leggero (oro/crema, come il sito): se l'editor lo ripulisce,
+  il testo resta leggibile lo stesso. Ogni immagine è un placeholder:
+  sostituisci src con l'URL della tua immagine caricata, oppure elimina
+  il blocco <figure> e inserisci la foto col bottone dell'editor. Lo
+  screenshot suggerito è scritto sopra ognuna come commento.
+  ══════════════════════════════════════════════════════════════
+-->
+
+<article style="font-family: Georgia, 'Times New Roman', serif; line-height: 1.65; color: #3b2f1a;">
+
+  <h1 style="font-variant: small-caps; letter-spacing: 0.04em; color: #7a5a0c;">WarEra+ v1.4 — dal piano alla guerra, dal voto al torneo</h1>
+
+  <p>
+    Sono <strong>frappa10</strong>, e questa volta il post è lungo per un motivo semplice: è
+    passato un po' di tempo dalla v1.1, e nel frattempo il gioco ha cambiato pelle. L'aggiornamento
+    <strong>v0.27</strong> ha tolto il mercato del lavoro, ha portato i dipendenti e i tipi di
+    governo, e ha spostato mezzo tool da una parte all'altra. Quindi questo giro ha due metà:
+    quello che ho dovuto <em>rimettere in piedi</em>, e quello che ho potuto <em>costruire di
+    nuovo</em> nel frattempo.
+  </p>
+
+  <p>
+    Il filo di questa versione, se devo trovarne uno: <strong>WarEra+ non vi fa più solo
+    guardare</strong>. Fin qui era una finestra sul gioco — la mappa, i numeri, le storie. Adesso
+    si possono anche <em>organizzare</em> cose: pianificare un'operazione, firmare un patto,
+    votare, seguire un torneo. Tutto resta fuori dal gioco vero (non tocca niente di vostro), ma
+    è la prima volta che il tool serve a decidere, non solo a capire.
+  </p>
+
+  <!-- IMAGE: hero — la mappa del mondo con una battaglia aperta e il pannello laterale, o un collage delle sezioni nuove -->
+  <figure>
+    <img src="IMAGE_1" alt="WarEra+ v1.4">
+    <figcaption style="color: #8a7a55; font-style: italic;">Stessa mappa di sempre, molte più cose da fare sopra.</figcaption>
+  </figure>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Prima di tutto: la v0.27, rimessa in ordine</h2>
+
+  <p>
+    Il gioco ha cambiato regole a metà strada, e parecchie cose che il tool mostrava hanno smesso
+    di avere senso. Le ho riscritte invece di lasciarle zoppicare:
+  </p>
+
+  <ul>
+    <li><strong>Il bonus produzione è diventato Rendita giornaliera.</strong> La vista mappa che
+      colorava il mondo sul bonus ora lo colora su quanto rende davvero una regione in un giorno,
+      con la classifica delle nazioni e le regioni più redditizie. Nel pannello di ogni nazione,
+      al posto di bonus ed etiche, trovate rendita e <strong>tipo di governo</strong>.</li>
+    <li><strong>L'Ottimizzatore industriale è stato ricostruito.</strong> Senza mercato del lavoro,
+      le vecchie schede (Posizione, Lavoratori, Assunzioni) non avevano più niente da dire. Ora ce
+      ne sono due, scritte sui numeri che il gioco misura giorno per giorno:
+      <strong>Aziende</strong> — quanto vale e quanto costa un punto, il margine degli ultimi sette
+      giorni, e i segnali di chi sta perdendo soldi o è fermo — e <strong>Competenze</strong>, per
+      distribuire i punti fra Companies, Energy, Production e Management.</li>
+    <li><strong>I bonus di battaglia dei governi</strong> sono nel tool: il patriottico dello
+      Stato nazionalista, della Federazione e della Plutocrazia, il bonus del Fronte patriottico al
+      bunker, gli ordini doppi dello Stato mercenario. Li trovate dove prima c'erano le etiche.</li>
+    <li><strong>I nomi sulla mappa</strong> hanno i colori delle nazioni come nel gioco: il gioco
+      ha smesso di darceli già pronti, quindi li ricavo dal colore della nazione, schiarito per
+      restare leggibile.</li>
+    <li>Rendite di produzione, Statistiche nazioni, Political, stile di gioco, confini e
+      <em>La mia nazione</em> sono stati adeguati al nuovo modo di calcolare. La Guida racconta
+      tutto questo in chiaro.</li>
+  </ul>
+
+  <!-- IMAGE: la vista Rendita giornaliera sulla mappa, con il pannello nazione aperto che mostra rendita e tipo di governo -->
+  <figure>
+    <img src="IMAGE_2" alt="Rendita giornaliera e tipo di governo">
+    <figcaption style="color: #8a7a55; font-style: italic;">Il bonus non c'è più. Quello che c'è adesso, si vede.</figcaption>
+  </figure>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Operazioni: la lavagna dei piani di guerra</h2>
+
+  <p>
+    Questa è la novità più grossa, e nasce da una cosa che chiunque abbia organizzato una guerra
+    conosce: il piano vive in una chat, in uno screenshot e nella testa di tre persone.
+  </p>
+
+  <p>
+    Nell'<strong>area riservata</strong> c'è ora una sezione <strong>Operazioni</strong>. È una
+    lavagna: ogni operazione è una sequenza di passi con un orario, uniti da frecce, e col
+    bottone <strong>"Vedi sulla mappa"</strong> il piano si apre sulla mappa vera, regione per
+    regione. Il governo scrive i piani; chiunque abbia accesso alla nazione può spostare lo stato
+    di un passo con un clic — fatto, in corso, saltato.
+  </p>
+
+  <p>
+    La parte che mi diverte di più è che <strong>conosce il gioco</strong>. Potete agganciare al
+    piano le battaglie già aperte (anche quelle di altre nazioni), e la lavagna vi mostra quando
+    finiranno, con una stima che per i casi più incerti è tarata sullo storico. Le <strong>pillole</strong>
+    sono disegnate come sfondo del grafico — le 8 ore di effetto e le 15 e mezza di malus — così
+    vedete subito quando una finestra di attacco si chiude. C'è il timer della priorità, con la
+    regola che non si può avere più di una battaglia per volta verso uno stesso Stato, e la
+    finestra di un'ora in più dopo una conquista. Le battaglie sono colorate per chi le combatte:
+    blu le nostre, verdi quelle dell'alleanza, rosse quelle dei nemici.
+  </p>
+
+  <p>
+    Per partire senza foglio bianco c'è un <strong>auto-builder</strong> che propone una bozza, e
+    si lavora direttamente sul grafico: aggiunta rapida, trascinamenti, frecce. Tutto si salva da
+    solo, e battaglie e piano si rileggono ogni due minuti, quindi se un compagno cambia qualcosa
+    lo vedete senza ricaricare.
+  </p>
+
+  <!-- IMAGE: una operazione sulla timeline con frecce, le barre pillola sullo sfondo e il pannello battaglie aperto a sinistra -->
+  <figure>
+    <img src="IMAGE_3" alt="Operazioni: timeline con pillole e battaglie">
+    <figcaption style="color: #8a7a55; font-style: italic;">Un piano che si legge in dieci secondi, invece che in dieci messaggi.</figcaption>
+  </figure>
+
+  <!-- IMAGE: "Vedi sulla mappa" — l'operazione disegnata sulla mappa con le frecce fra le regioni -->
+  <figure>
+    <img src="IMAGE_4" alt="Un'operazione vista sulla mappa">
+    <figcaption style="color: #8a7a55; font-style: italic;">Lo stesso piano, sulla mappa.</figcaption>
+  </figure>
+
+  <p>
+    Una cosa da dire chiara: Operazioni è parte di <strong>La mia nazione</strong>, quindi la
+    vedono solo le nazioni con accesso all'area riservata, non tutti.
+  </p>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Accordi: i patti di non belligeranza hanno finalmente un posto</h2>
+
+  <p>
+    Fin qui i NAP sulla mappa venivano da un foglio che qualcuno aggiornava a mano. Era la parte
+    più fragile di tutto il tool, e lo sapevo.
+  </p>
+
+  <p>
+    La nuova sezione <strong>Accordi</strong> è l'<strong>archivio dei patti</strong>: nazione con
+    nazione, nazione con alleanza, alleanza con alleanza, ognuno con il suo testo, le date di
+    inizio e fine, le unità lasciate fuori e, se c'è, un <strong>tetto ai danni</strong> per
+    battaglia. Ogni parte può avere nazioni aggiunte (utile per i proxy e per gli alleati fuori
+    dall'alleanza). I patti in vigore diventano <strong>NAP sulla mappa</strong> da soli, e quando
+    scadono spariscono da soli.
+  </p>
+
+  <p>
+    E c'è un <strong>controllo</strong>: la sezione segnala gli attacchi diretti fra le due parti e
+    i tetti superati, sommando il danno per nazionalità sulla parte opposta. È una stima, e lo
+    dice chiaramente, ma è il tipo di cosa che prima si scopriva a litigata fatta.
+  </p>
+
+  <p>
+    Leggerli è <strong>pubblico</strong>; scriverli lo può fare il governo di una delle nazioni
+    coinvolte — perché un patto ha due parti, e la controparte deve poterlo scrivere anche lei.
+    In testa all'elenco ci sono i numeri: accordi in archivio, in vigore, nazioni coinvolte.
+  </p>
+
+  <!-- IMAGE: elenco Accordi con le quattro tessere in testa e un patto aperto, oppure la mappa con i NAP evidenziati -->
+  <figure>
+    <img src="IMAGE_5" alt="La sezione Accordi">
+    <figcaption style="color: #8a7a55; font-style: italic;">Un patto, due firme, e la mappa si aggiorna.</figcaption>
+  </figure>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Votazioni: un'urna vera dentro Political</h2>
+
+  <p>
+    Dentro <strong>Political</strong> c'è un nuovo bottone, <strong>Votazioni</strong>. Il governo
+    (o il congresso) può aprire una votazione, e la possono votare solo il <strong>congresso</strong>,
+    il <strong>congresso con il governo</strong> o <strong>tutti i cittadini</strong> in un
+    referendum. A scelta, a scrutinio <strong>palese</strong> o <strong>segreto</strong>.
+  </p>
+
+  <p>
+    Lo scrutinio non è una tabella che compare. Nel voto palese si accende in diretta un
+    <strong>emiciclo</strong>, con i voti che vanno al loro posto uno alla volta; nel voto segreto
+    c'è un'<strong>urna</strong> da cui si estrae una scheda alla volta, che si gira e vola sul suo
+    mucchio. È teatro, lo so, ma una votazione che si vede aprire è una votazione di cui ci si
+    fida di più. Quando hanno votato tutti, chi l'ha aperta può mostrare lo scrutinio subito.
+  </p>
+
+  <p>
+    Il governo può impostare un canale <strong>Discord</strong> per gli avvisi: apertura, inizio
+    scrutinio, esito. Per votare serve il login Discord con il personaggio collegato. E sul
+    segreto una promessa che vale la pena dire: il sistema <strong>non sa</strong> chi ha votato
+    cosa, per come è costruito, non perché lo prometta.
+  </p>
+
+  <!-- IMAGE: lo scrutinio palese in corso, con l'emiciclo che si riempie; oppure l'urna con la scheda che vola -->
+  <figure>
+    <img src="IMAGE_6" alt="Lo scrutinio in diretta">
+    <figcaption style="color: #8a7a55; font-style: italic;">Lo scrutinio si guarda, non si legge.</figcaption>
+  </figure>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Tornei: chi arriva in finale, prima che ci arrivi</h2>
+
+  <p>
+    Una nuova voce di Approfondimenti, <strong>Tornei</strong>, con due schede: <strong>Unità
+    militari</strong> e <strong>Nazioni</strong>, ognuna sul torneo più recente del suo tipo. Il
+    tabellone — quello delle unità ha nove turni e 457 squadre — è diviso in settori, e potete
+    scegliere una squadra (anche con "La mia unità") per vedere il suo percorso turno per turno e,
+    per ogni turno futuro, <strong>chi potrebbe incontrare</strong>, dal più forte, con una fascia
+    di difficoltà.
+  </p>
+
+  <p>
+    E poi le <strong>probabilità</strong>: per ogni partita, la percentuale di vincere; e lungo il
+    tabellone, quanto è probabile arrivare a ogni turno e vincere il torneo. La forza di una
+    squadra è il danno degli ultimi sette giorni dei soli iscritti al torneo, e tiene conto anche
+    di come ha giocato nelle partite già fatte. C'è anche un <strong>"E se…?"</strong>: scegliete
+    voi i vincitori e le probabilità a valle si ricalcolano.
+  </p>
+
+  <p>
+    Ci tengo a essere onesto sulle previsioni: il tool <strong>le scrive appena una partita ha le
+    due squadre e non le tocca più</strong>, e nella classifica vedete quante ne ha azzeccate.
+    Sul torneo MU di ottobre il favorito ha vinto 250 partite su 329. Non è magia, è un modello
+    che ogni giorno dice quanto si è sbagliato.
+  </p>
+
+  <!-- IMAGE: il tabellone di un settore con le probabilità, e il pannello "possibili avversari" aperto -->
+  <figure>
+    <img src="IMAGE_7" alt="Tornei: tabellone e probabilità">
+    <figcaption style="color: #8a7a55; font-style: italic;">Non è una sfera di cristallo, ma si può controllare quanto ha sbagliato.</figcaption>
+  </figure>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Battaglie: da guardare a rivivere</h2>
+
+  <ul>
+    <li><strong>Il replay della battaglia</strong> ora ha il <em>muro</em> che va avanti e indietro
+      come nella scheda del gioco, con territori e unità, e un'animazione a fine round. Si può
+      rivedere anche dall'archivio, non solo dalle battaglie in corso.</li>
+    <li><strong>L'andamento</strong> è un grafico che si esplora davvero: zoom, spostamento,
+      riquadro, allarga. Timeline della battaglia e timeline delle taglie sono due schede
+      distinte, con i nomi delle nazioni.</li>
+    <li><strong>I soldi spesi</strong> hanno una sezione tutta loro, per lato, con gli interruttori
+      per accendere e spegnere le voci. Le tabelle si possono ordinare.</li>
+    <li><strong>Fine round e fine battaglia</strong> sono scritte nella lista e sopra i marker
+      sulla mappa, così capite a colpo d'occhio quali battaglie stanno per chiudersi.</li>
+  </ul>
+
+  <p>
+    Nello stesso giro: <strong>i grafici sono esplorabili ovunque</strong>. Passate il mouse o
+    toccate e compare il valore, in parlamento, nelle spese di guerra, nelle ciambelle, nella
+    ricchezza dei giocatori. È una di quelle cose che sembrano piccole e che cambiano il modo di
+    usare ogni vista. Il danno nel tempo ora ha una media e uno storico lungo, e la storia
+    politica mostra gli iscritti di tutti i partiti.
+  </p>
+
+  <!-- IMAGE: il replay di una battaglia con il muro e le unità, oppure il grafico dell'andamento con il tooltip aperto -->
+  <figure>
+    <img src="IMAGE_8" alt="Replay di una battaglia">
+    <figcaption style="color: #8a7a55; font-style: italic;">Una battaglia finita non è più una battaglia persa nella cronologia.</figcaption>
+  </figure>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">La mappa ha le navi</h2>
+
+  <p>
+    Le <strong>rotte marittime</strong> ora passano davvero sul mare, non tagliano le terre, e le
+    navi si muovono fluide su uno strato a parte, a una velocità che ho ritoccato più volte finché
+    non sembrava giusta alla vista del mondo intero. È la cosa meno utile di tutta questa lista e
+    una delle mie preferite. Lo sfondo a particelle, nel frattempo, adatta il numero di nodi e
+    linee al vostro schermo, così non fa scattare il telefono.
+  </p>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Unità e nazioni: confronti migliori</h2>
+
+  <ul>
+    <li><strong>Il confronto 1 vs 1</strong> ora è uno solo per tutto — unità, nazioni, alleanze —
+      con lo stesso modo di leggere i numeri, e per le unità c'è il <strong>danno nel tempo</strong>:
+      come sono andate settimana dopo settimana, non solo oggi.</li>
+    <li><strong>Per membro e per combattente</strong>: nell'elenco delle unità una colonna con il
+      danno settimanale diviso i membri, ordinabile, e nella scheda la media sui soli che hanno
+      davvero colpito. Una unità da 50 persone e una da 500 finalmente si confrontano.</li>
+    <li><strong>Danno e devcore</strong> nelle statistiche di nazioni e alleanze, e nel popup
+      dell'alleanza una colonna <em>Dmg/Core</em> per nazione. Le tabelle lunghe scorrono in un
+      riquadro con la barra sempre visibile.</li>
+    <li>Nel <strong>pannello nazione</strong> su portatile c'è meno roba al clic (il tooltip non si
+      fissa più, è un doppione del pannello) e il terzo bottone ora si chiama <em>Statistiche</em>
+      e apre la scheda giusta.</li>
+  </ul>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Altri strumenti: i tool della community</h2>
+
+  <p>
+    Una cosa che non ho scritto io, e che sono contento di mettere qui. La community di WarEra ha
+    fatto cose bellissime, e non c'era un posto in cui trovarle. Ora c'è: una voce nuova in
+    Approfondimenti, <strong>Altri strumenti</strong>, con una scheda per sito — <strong>EMPRESS</strong>,
+    <strong>SPYWarera</strong>, <strong>Unikhorne WarEra Suite</strong>, <strong>Arcana Era</strong>
+    — con una riga su cosa fa e il link, che si apre in una scheda nuova. Sono tool di terzi, non
+    affiliati a WarEra+, e la pagina lo dice in cima. Se ne avete fatto uno anche voi, scrivetemi.
+  </p>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">E una cosa che era rotta</h2>
+
+  <p>
+    Come sempre, onestà: i <strong>confini</strong> sorvegliano le basi e i bunker delle regioni e
+    avvisano quando qualcosa si accende o si costruisce. C'era un caso in cui, se nessuna delle
+    costruzioni controllate esisteva, tutto il gruppo veniva scartato come errore, e quelle
+    regioni non venivano mai lette: una base costruita lì dopo non avrebbe generato nessun avviso.
+    Era un buco vero. Ora è chiuso.
+  </p>
+
+  <hr style="border: 0; border-top: 1px solid #d9c9a0;">
+
+  <h2 style="color: #7a5a0c;">Grazie, ora andate a provarla</h2>
+
+  <p>
+    <a href="https://wareraplus.vercel.app/" style="color: #7a5a0c;"><strong>wareraplus.vercel.app</strong></a>
+    — gratis, funziona dal telefono, e le parti che sono solo informazione (mappa, statistiche,
+    battaglie, tornei, accordi) non vogliono nemmeno un login. Se questa è la prima volta che
+    sentite parlare di WarEra+, partite dalla Parte 1: la mappa è la porta d'ingresso.
+  </p>
+
+  <p>
+    Una nota pratica: alcune delle novità (Accordi, Votazioni, Operazioni, Tornei) si riempiono col
+    tempo, perché il gioco non conserva la storia e il tool la raccoglie giorno per giorno. Se una
+    sezione vi sembra vuota il primo giorno, è normale, e di solito lo scrive lei stessa in cima.
+  </p>
+
+  <!-- Sostituisci i placeholder con i tag veri di chi ha segnalato -->
+  <p>
+    Grazie a <strong>@segnalatore1</strong> e <strong>@segnalatore2</strong>, che mi hanno scritto
+    invece di chiudere la scheda: metà di questo post nasce da lì. Bug, idee, lamentele — sempre
+    benvenuti, trovatemi in gioco:
+    <a href="https://app.warera.io/user/69d2ed249f38d300d59a2af1" style="color: #7a5a0c;">frappa10</a>.
+  </p>
+
+</article>

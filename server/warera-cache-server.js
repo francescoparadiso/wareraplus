@@ -230,7 +230,7 @@ const {
 // valore atteso delle casse. sqlite su disco. Vedi il blocco in testa a
 // server/gearMarket.js.
 const {
-  initGearMarket, pollGearMarket, bootstrapGearMarket, readGearMarket, statoGearMarket,
+  initGearMarket, pollGearMarket, bootstrapGearMarket, backfillOpenCases, readGearMarket, statoGearMarket,
 } = require('./gearMarket');
 // WarEra+ lavoro e tasse: ogni pagamento di salario del gioco, aggregato per
 // nazione. Archivio CHIUSO (29 lug - 17 set 2026) e senza poll: sono ~550.000
@@ -2866,7 +2866,9 @@ cron.schedule('* * * * *', () => {
   sweepAlPrimoAvvio().catch(err => console.error('[player-parts] avvio:', err.message));
   // Mercato dell'equipaggiamento: senza await, il primo avvio sfoglia ~450
   // pagine con calma (qualche minuto); con l'archivio gia' pieno non fa niente.
-  bootstrapGearMarket().catch(err => console.error('[gear-market] avvio:', err.message));
+  bootstrapGearMarket()
+    .then(() => backfillOpenCases())
+    .catch(err => console.error('[gear-market] avvio:', err.message));
   // Tornei: senza await, la prima classifica settimanale pesa 2 MB e non
   // deve ritardare il resto dell'avvio.
   pollTournament().catch(err => console.error('[tournament] avvio:', err.message));
