@@ -38,6 +38,17 @@
 
 export const CHANGELOG = [
   {
+    id: '2026-11-19',
+    title: { en: 'Battle figures by nation, fixed', it: 'Numeri per nazione delle battaglie, corretti' },
+    items: [
+      {
+        tag: 'fix',
+        en: 'Battle details and battle spending on the map: in some battles the game\'s ranking by nation leaves out the citizens of whole nations (in Lebanon–Syria, a third of the Syrian side\'s damage). The figures are now completed from the player ranking, and the table says how much was added. The "of which contracts" column no longer exceeds what was earned.',
+        it: 'Dettaglio battaglia e spese della battaglia sulla mappa: in alcune battaglie la classifica per nazione del gioco lascia fuori i cittadini di intere nazioni (in Libano–Siria, un terzo del danno del lato siriano). Ora i numeri si completano dalla classifica per giocatore, e la tabella dice quanto è stato aggiunto. La colonna "di cui contratti" non supera più l\'incassato.',
+      },
+    ],
+  },
+  {
     id: '2026-11-12',
     title: { en: 'Wars tab, agreements and battle costs', it: 'Scheda Guerre, accordi e costi delle battaglie' },
     items: [

@@ -415,6 +415,34 @@ export async function fetchUsersLiteViaCache(userIds) {
   return new Map(Object.entries(json.data));
 }
 
+/** WarEra+: danno e incasso per CITTADINANZA di una battaglia, rifatti dal
+ *  server sulla classifica per giocatore (server/battleNations.js): quella
+ *  per nazione del gioco a volte perde intere cittadinanze. Ritorna
+ *  { sides: { attacker|defender: { totals:{d,m}, countries:[{c,d,m}],
+ *  unresolved:{d,m,n} } }, truncated } o null se il server non c'è (404 prima
+ *  del deploy), non risponde o non ha tutte le classifiche: chi chiama resta
+ *  sulla classifica del gioco. Richieste uguali nella stessa sessione si
+ *  accorpano (la scheda battaglia e il pannello della mappa la chiedono
+ *  entrambi). */
+const _battleNations = new Map(); // battleId → { at, p }
+export function fetchBattleNationsViaCache(battleId, { live = false } = {}) {
+  if (!battleId) return Promise.resolve(null);
+  const hit = _battleNations.get(battleId);
+  if (hit && Date.now() - hit.at < (live ? 60_000 : 30 * 60_000)) return hit.p;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  const p = fetch(`${WARERA_CACHE_BASE}/battle-nations?battleId=${encodeURIComponent(battleId)}${live ? '&live=1' : ''}`,
+    { signal: controller.signal })
+    .then(res => (res.ok ? res.json() : null))
+    .then(json => (json?.sides?.attacker && json?.sides?.defender ? json : null))
+    .catch(() => null)
+    .finally(() => clearTimeout(timeout));
+  _battleNations.set(battleId, { at: Date.now(), p });
+  // Un fallimento non si tiene in memoria: alla prossima apertura si riprova.
+  p.then(v => { if (!v) _battleNations.delete(battleId); });
+  return p;
+}
+
 /** WarEra+: la classifica INTERA di un tipo di giocatore (server/fullRanking.js).
  *  Dalla v0.28.3 `ranking.getRanking` si ferma ai primi 100 e la classifica
  *  intera sono 300-400 pagine di `getRankingPage`: le sfoglia il server.

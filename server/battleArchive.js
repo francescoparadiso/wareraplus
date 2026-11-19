@@ -81,8 +81,8 @@ const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
 const BATTLE_PAGE = 50;      // tetto di battle.getBattles
 const AUCTION_PAGE = 50;     // tetto misurato di getPaginatedAuctions
 // Quante battaglie mandare in un solo batch di classifiche. Ogni battaglia
-// costa 2 call, quindi 25 battaglie = 50 call = un solo POST (MAX_BATCH lato
-// server è 100).
+// costa 4 call (dal 2026-11-19: anche la classifica per unità), quindi 25
+// battaglie = 100 call = un solo POST (MAX_BATCH lato server è 100).
 const RANK_CHUNK = 25;
 // Pagine per tick durante il bootstrap. Le battaglie costano molto di più
 // per pagina (50 battaglie = 100 chiamate di classifica), le aste sono
@@ -173,13 +173,25 @@ async function _fetchBountyFor(battleIds) {
     for (const id of chunk) {
       calls.push(['battleRanking.getRanking', { battleId: id, dataType: 'money', type: 'country', side: 'attacker', limit: 100 }]);
       calls.push(['battleRanking.getRanking', { battleId: id, dataType: 'money', type: 'country', side: 'defender', limit: 100 }]);
+      calls.push(['battleRanking.getRanking', { battleId: id, dataType: 'money', type: 'mu', side: 'attacker', limit: 100 }]);
+      calls.push(['battleRanking.getRanking', { battleId: id, dataType: 'money', type: 'mu', side: 'defender', limit: 100 }]);
     }
     const res = await trpcBatch(calls);
     chunk.forEach((id, k) => {
       const sum = (r) => Array.isArray(r?.items)
         ? r.items.reduce((s, x) => s + (Number(x.value) || 0), 0)
         : null;
-      out.set(id, { atk: sum(res[k * 2]), def: sum(res[k * 2 + 1]) });
+      // ⚠️ 2026-11-19: la classifica per NAZIONE a volte perde intere
+      // cittadinanze (Libano–Siria, lato siriano: 16.142 contro 27.215 delle
+      // sole unità, vedi server/battleNations.js). Le unità sono un
+      // sottoinsieme dei giocatori, quindi quando superano le nazioni è la
+      // classifica per nazione a essere bucata: si tiene la più alta. È
+      // ancora un minimo (chi combatte fuori da un'unità, in quel caso, manca).
+      const best = (country, mu) => (country == null ? null : Math.max(country, mu ?? 0));
+      out.set(id, {
+        atk: best(sum(res[k * 4]), sum(res[k * 4 + 2])),
+        def: best(sum(res[k * 4 + 1]), sum(res[k * 4 + 3])),
+      });
     });
     // Respiro fra un chunk e l'altro: il bootstrap non ha fretta e il resto
     // del server continua a pollare in parallelo.

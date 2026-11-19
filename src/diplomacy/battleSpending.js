@@ -58,6 +58,8 @@
    ══════════════════════════════════════════════════════════════ */
 
 import { trpcBatch } from './utils.js';
+import { fetchBattleNationsViaCache } from './cacheClient.js';
+import { fillMissingEarned } from '../shared/battleNations.js';
 
 // Tetti dell'API misurati dal vivo: `limit` delle aste si ferma a 50,
 // quello della classifica accetta almeno 100 (77 nazioni in una battaglia
@@ -200,11 +202,19 @@ async function _drainAuctions(battleId, status, firstPage) {
  * }>} `null` se l'API non risponde affatto (la UI lo tratta come "dato
  * non disponibile" e non mostra la sezione).
  */
-export async function fetchBattleSpending(battleId) {
+export async function fetchBattleSpending(battleId, { live = true } = {}) {
   if (!battleId) return null;
 
   const hit = _cache.get(battleId);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.data;
+
+  // WarEra+ 2026-11-19: la classifica "money" per NAZIONE a volte perde
+  // intere cittadinanze (Libano–Siria: 16.142 incassati contro 27.440 dei
+  // giocatori, lato siriano). Il server la rifà dai giocatori; qui serve sia
+  // alla colonna "earned" sia alla taglia (bountyFromUnits, che conta come
+  // taglia l'incasso di chi non è in un'unità: con un totale troppo basso
+  // quella parte spariva). Vedi src/shared/battleNations.js.
+  const fullP = fetchBattleNationsViaCache(battleId, { live });
 
   const [moneyAtk, moneyDef, wonPage, activePage, muAtk, muDef] = await trpcBatch([
     ['battleRanking.getRanking', { battleId, dataType: 'money', type: 'country', side: 'attacker', limit: RANKING_LIMIT }],
@@ -235,8 +245,21 @@ export async function fetchBattleSpending(battleId) {
   // "earned": la classifica così com'è (taglia + paga dei contratti) —
   // resta la colonna per nazione. `total` diventa invece la TAGLIA stimata
   // del lato, cioè quanto è uscito dal suo salvadanaio.
-  const earnedAtk = _sumRanking(moneyAtk);
-  const earnedDef = _sumRanking(moneyDef);
+  const full = await fullP;
+  const completed = (earned, side) => {
+    if (!earned) return earned;
+    const r = fillMissingEarned(earned.byCountry, full?.sides?.[side]);
+    if (!r.added && !r.unattributed) return earned;
+    return {
+      ...earned,
+      byCountry: r.list,
+      // Chi è rimasto senza cittadinanza conta nel totale, non in una riga.
+      total: r.list.reduce((s, x) => s + x.value, 0) + r.unattributed,
+      nationFix: { added: r.added, unattributed: r.unattributed },
+    };
+  };
+  const earnedAtk = completed(_sumRanking(moneyAtk), 'attacker');
+  const earnedDef = completed(_sumRanking(moneyDef), 'defender');
   const ctrByMu = { attacker: new Map(), defender: new Map() };
   for (const a of won.items) {
     const side = a?.forCountrySide === 'defender' ? 'defender' : 'attacker';

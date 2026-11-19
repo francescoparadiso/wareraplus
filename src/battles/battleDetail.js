@@ -187,7 +187,7 @@ function sideHeadHtml(battle, sideKey, label, color, countryId) {
    sbilanciati la quota sul totale non risponderebbe. */
 function sideTable(rows, sideKey, battle, opts) {
   const { label, color, countryId, expanded, entityName, entityFlag, truncated, entityHeader,
-          entityCell, sentBy, pay } = opts;
+          entityCell, sentBy, pay, fix } = opts;
   // entityCell: cella già in HTML (unità militari, che sono cliccabili).
   // Senza, si resta al comportamento originale nome+bandiera come testo.
   const cell = entityCell || ((id) => `${entityFlag(id)}${escapeHtml(entityName(id) || '—')}`);
@@ -254,11 +254,30 @@ function sideTable(rows, sideKey, battle, opts) {
         </tr></tfoot>
       </table>
       ${truncated ? `<p class="wp-btl-foot wp-btl-foot-tight wp-btl-side-note">${btlT('rankTruncated')}</p>` : ''}
+      ${nationFixHtml(fix)}
       ${rows.length > TOP
         ? `<button type="button" class="wp-btl-more wp-btl-side-more" data-side="${sideKey}">${
             expanded ? btlT('showTop', { n: TOP }) : btlT('showAll', { n: rows.length })}</button>`
         : ''}
     </div>`;
+}
+
+/* ── Classifica per nazione completata dai giocatori ──
+   Vedi src/shared/battleNations.js: la classifica del gioco per nazione a
+   volte perde intere cittadinanze, e i numeri qui sopra sono stati
+   completati da quella per giocatore. Si dice di quanto, e cosa resta senza
+   nazione (solo nel totale, mai assegnato a caso). Sotto lo 0,5% del lato si
+   tace: è rumore di arrotondamento, non un buco. */
+function nationFixHtml(fix) {
+  if (!fix) return '';
+  const parts = [];
+  if (fix.damage > 0 || fix.money > 0) {
+    parts.push(btlT('nationFix', { dmg: fmtNum(fix.damage), money: fmtMoney(fix.money) }));
+  }
+  if (fix.unattributedDamage > 0 || fix.unattributedMoney > 0) {
+    parts.push(btlT('nationFixUn', { dmg: fmtNum(fix.unattributedDamage), money: fmtMoney(fix.unattributedMoney) }));
+  }
+  return parts.length ? `<p class="wp-btl-foot wp-btl-foot-tight wp-btl-side-note">⚠️ ${parts.join(' ')}</p>` : '';
 }
 
 /* ── Quanto è stato PAGATO il danno, nazione per nazione ──
@@ -842,11 +861,13 @@ export function renderBattleDetail(battle) {
         ${sideTable(_detail.sides.defender, 'defender', battle, {
           label: btlT('defender'), color: 'var(--wp-btl-def)', countryId: battle.defender.countryId,
           expanded: _expanded.defender, entityName: nm, entityFlag: flagHtml, sentBy: sentDef, pay: payDef,
-          entityHeader: btlT('colNation'), truncated: _detail.truncated?.defender })}
+          entityHeader: btlT('colNation'), truncated: _detail.truncated?.defender,
+          fix: _detail.nationFix?.defender })}
         ${sideTable(_detail.sides.attacker, 'attacker', battle, {
           label: btlT('attacker'), color: 'var(--wp-btl-atk)', countryId: battle.attacker.countryId,
           expanded: _expanded.attacker, entityName: nm, entityFlag: flagHtml, sentBy: sentAtk, pay: payAtk,
-          entityHeader: btlT('colNation'), truncated: _detail.truncated?.attacker })}
+          entityHeader: btlT('colNation'), truncated: _detail.truncated?.attacker,
+          fix: _detail.nationFix?.attacker })}
       </div>
       ${anySent ? `<p class="wp-btl-foot wp-btl-foot-tight">${btlT('sentNote')}</p>` : ''}
       <p class="wp-btl-foot wp-btl-foot-tight">${btlT('paidPerKNote')}${anyCtr ? ' ' + btlT('paidPerKCtrNote') : ''}${

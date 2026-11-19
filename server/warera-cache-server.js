@@ -253,6 +253,11 @@ const {
 const {
   initBattleOrders, observeBattleOrders, readBattleOrders, statoBattleOrders,
 } = require('./battleOrders');
+// WarEra+ danno e incasso per nazione di una battaglia rifatti dalla classifica
+// per GIOCATORE: quella per nazione del gioco a volte perde intere
+// cittadinanze (Libano–Siria, 19 nov: un terzo del lato). Vedi
+// server/battleNations.js.
+const { initBattleNations, readBattleNations, statoBattleNations } = require('./battleNations');
 // WarEra+ censimento aziende: per risorsa quante aziende, quanti dipendenti
 // e quante tasse sui salari incassa lo Stato dove operano. Un giro al
 // giorno di notte, partendo dai cittadini attivi del censimento. Vedi il
@@ -584,6 +589,12 @@ initDamageTimeline({
 initBattleOrders({
   trpcBatch: (...args) => trpcBatch(...args),
   readCache, writeCache,
+});
+initBattleNations({
+  trpcBatch: (...args) => trpcBatch(...args),
+  readCacheShared,
+  // Getter: MU_USER_COUNTRIES_FILE è dichiarata più in basso (TDZ).
+  get userCountriesFile() { return MU_USER_COUNTRIES_FILE; },
 });
 initBattleTimeline({
   trpcBatch: (...args) => trpcBatch(...args),
@@ -3563,6 +3574,20 @@ app.get('/battle-orders', (req, res) => {
   res.json(readBattleOrders(ids));
 });
 
+// Danno e incasso per cittadinanza di una battaglia (server/battleNations.js).
+// `live=1` tiene la risposta 60 s invece di 6 ore. 502 se una classifica
+// non risponde: il client resta sulla classifica per nazione del gioco.
+app.get('/battle-nations', async (req, res) => {
+  const battleId = String(req.query.battleId || '');
+  if (!/^[a-f0-9]{24}$/i.test(battleId)) return res.status(400).json({ error: 'battleId mancante' });
+  try {
+    res.json(await readBattleNations(battleId, { live: req.query.live === '1' }));
+  } catch (err) {
+    console.error('[battle-nations] richiesta fallita:', err.message);
+    res.status(502).json({ error: 'classifiche non disponibili' });
+  }
+});
+
 app.get('/battle-timeline', (req, res) => {
   const data = readBattleTimeline(String(req.query.battleId || ''));
   if (!data) return res.status(404).json({ error: 'battaglia non registrata', coverage: statoBattleTimeline() });
@@ -4399,6 +4424,7 @@ app.get('/health', (req, res) => res.json({
   // quante chiuse su disco. Accumula dal deploy, non si recupera.
   battleTimeline: statoBattleTimeline(),
   battleOrders: statoBattleOrders(),
+  battleNations: statoBattleNations(),
   // Classifiche intere (getRankingPage): righe, `complete`, ora dell'ultima.
   fullRanking: fullRankingHealth(),
 }));
