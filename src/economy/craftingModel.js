@@ -190,7 +190,7 @@ export function caseEv(model, prices, caseCode, strategy, custom, tax = DEFAULT_
   if (!freq) return null;
   const tot = Object.values(freq).reduce((s, n) => s + n, 0);
   if (tot < 30) return null;
-  let ev = 0, coperto = 0;
+  let ev = 0, m2 = 0, coperto = 0;
   for (const [code, n] of Object.entries(freq)) {
     const c = model.curves?.[code];
     if (!c) continue;
@@ -203,10 +203,16 @@ export function caseEv(model, prices, caseCode, strategy, custom, tax = DEFAULT_
     else if (strategy === 'custom') v = (custom?.[c.r] || 'sell') === 'scrap' ? cv.scrap : cv.sell;
     else v = cv.opt;
     ev += (n / tot) * v; coperto += n / tot;
+    if (strategy === 'opt') m2 += (n / tot) * cv.m2;
   }
   if (coperto < 0.5) return null;
   // Pezzi senza curva (mai visti in vendita): la media è sui coperti.
-  return { ev: ev / coperto, covered: coperto, opens: tot };
+  const media = ev / coperto;
+  // Errore standard della media dovuto al CAMPIONE di aperture (non alle curve
+  // dei valori): sqrt(varianza del valore di una apertura / aperture viste).
+  // Solo per la strategia 'opt', l'unica di cui si tiene il secondo momento.
+  const se = strategy === 'opt' ? Math.sqrt(Math.max(0, m2 / coperto - media * media) / tot) : null;
+  return { ev: media, covered: coperto, opens: tot, se };
 }
 
 /** La cassa di legno: nessun pezzo, risorse. Valore = quantità × prezzo,

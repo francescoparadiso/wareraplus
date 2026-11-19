@@ -30,7 +30,7 @@ import { escapeHtml } from '../mu/ui.js';
 import { ecoT } from './i18n.js';
 import { craftT } from './i18nCraft.js';
 import { fetchGearMarketViaCache } from '../diplomacy/cacheClient.js';
-import { loadSpotPrices } from '../market/api.js';
+import { loadSpotPrices, loadBookPrices } from '../market/api.js';
 import { loadBonusRules } from '../shared/battleBonus.js';
 import * as M from './craftingModel.js';
 
@@ -255,6 +255,10 @@ function caseCard(code) {
       <p class="wp-ecn-note">${escapeHtml(craftT('casePrice'))}: ${escapeHtml(prezzo(prezzoCassa))} · ${escapeHtml(craftT('caseFew'))}</p></div>`;
   }
   const apri = strat.opt.ev > venditaChiusa;
+  // Dentro il 95% dell'errore del campione la differenza non dice niente:
+  // meglio "troppo vicino" che un verdetto rosso o verde su rumore.
+  const ci = strat.opt.se != null ? 1.96 * strat.opt.se : 0;
+  const incerto = Math.abs(strat.opt.ev - venditaChiusa) < ci;
   const riga = (k, v) => `<div class="wp-crf-crow">
       <span>${escapeHtml(craftT(k))}</span>
       <span class="wp-ecn-num">${escapeHtml(v != null ? prezzo(v) : '—')}</span>
@@ -263,11 +267,11 @@ function caseCard(code) {
   return `<div class="wp-crf-case">
       <header>
         <h3 class="wp-crf-h3">${iconaHtml(code)}${escapeHtml(nome)}</h3>
-        <span class="wp-crf-verdict ${apri ? 'wp-crf-pos' : 'wp-crf-neg'}">${escapeHtml(craftT(apri ? 'verdictOpen' : 'verdictSell'))}</span>
+        <span class="wp-crf-verdict ${incerto ? 'wp-crf-dim' : apri ? 'wp-crf-pos' : 'wp-crf-neg'}">${escapeHtml(craftT(incerto ? 'verdictUnsure' : apri ? 'verdictOpen' : 'verdictSell'))}</span>
       </header>
       <div class="wp-ecn-kpis wp-crf-mini">
-        ${kpiHtml(craftT('casePrice'), prezzo(prezzoCassa), craftT('opens', { n: strat.opt.opens }))}
-        ${kpiHtml(craftT('roiBuy'), pctFirmato(strat.opt.ev / prezzoCassa - 1), craftT('stratOpt'), segno(strat.opt.ev - prezzoCassa))}
+        ${kpiHtml(craftT('casePrice'), prezzo(prezzoCassa), craftT('opens', { n: new Intl.NumberFormat(lingua()).format(strat.opt.opens) }))}
+        ${kpiHtml(craftT('roiBuy'), pctFirmato(strat.opt.ev / prezzoCassa - 1), `${craftT('stratOpt')} · ±${pct(ci / prezzoCassa, 1)}`, segno(strat.opt.ev - prezzoCassa))}
       </div>
       <div class="wp-crf-crow wp-crf-head"><span></span><span class="wp-ecn-num"></span><span class="wp-ecn-num">${escapeHtml(craftT('vsSell'))}</span></div>
       ${riga('stratSell', venditaChiusa)}
@@ -396,12 +400,16 @@ async function carica(forza = false, soloPrezzi = false) {
       loadSpotPrices({ force: forza }).catch(() => null),
     ]);
     if (!soloPrezzi) { _model = model; _modelTs = Date.now(); }
-    _prices = spot?.prices || _prices;
+    if (spot?.prices) {
+      // Dal libro ordini, non dalla media di getPrices (vedi loadBookPrices).
+      // Se il libro non risponde si resta sulla media, che è meglio di niente.
+      _prices = await loadBookPrices(spot.prices).catch(() => spot.prices);
+    }
+    _woodOnSale = !!(await loadBonusRules().catch(() => null))?.mapCases;
   } finally {
     _loading = false;
     paint();
   }
-    _woodOnSale = !!(await loadBonusRules().catch(() => null))?.mapCases;
 }
 
 function avviaGiro() {
@@ -409,7 +417,11 @@ function avviaGiro() {
   _timer = setInterval(() => {
     _tick++;
     // I prezzi ogni 5 minuti, il modello (server) ogni tre giri.
-    carica(true, _tick % MODEL_EVERY_TICKS !== 0);
+    // WarEra+: se il modello non è mai arrivato (server in riavvio, rete
+    // caduta all'apertura) si riprova a ogni giro e non fra un quarto d'ora:
+    // la scheda altrimenti resta su "il server non risponde" anche a
+    // server tornato.
+    carica(true, !!_model && _tick % MODEL_EVERY_TICKS !== 0);
   }, PRICE_EVERY_MS);
 }
 
