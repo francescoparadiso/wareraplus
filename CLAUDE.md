@@ -644,6 +644,19 @@ rotta o sbagliata:
   i primi giorni. Senza rideploy la linguetta dice che il server non ha lo
   storico.
 
+⚠️ **`work.getStatsByCompany` è premium** (403 «Premium required» anche con la
+chiave, dal ~4 novembre 2026): il censimento aziende non sa più chi ha prodotto,
+quindi chiede la rosa a TUTTE le aziende (`scope: 'all'`, vedi la testata di
+`companyCensus.js`) e i salari giorno per giorno della scheda Produzione sono fermi
+al 3 novembre.
+
+La **popolazione nel tempo** (linguetta Grafici di Statistiche nazioni,
+`src/nations/populationChart.js` + `server/populationHistory.js`, dal 2026-11-20)
+è la somma di `countryActivePopulation`: giocatori ATTIVI, non iscritti. Il dente
+di sega quotidiano è vero (il gioco toglie gli inattivi una volta al giorno). Le
+prime due settimane sono ricostruite al primo avvio dal `ticker-history`, poi si
+registra; senza rideploy la sezione non compare.
+
 La **felicità dei dipendenti** (scheda Economia di Statistiche nazioni,
 `src/nations/ecoSection.js` + `server/companyCensus.js`, `/employee-happiness`,
 dal 2026-11-20) si conta nel censimento aziende notturno, sulla stessa rosa

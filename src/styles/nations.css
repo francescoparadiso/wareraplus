@@ -928,4 +928,6 @@ body.light-theme .wp-nat-cur-line { stroke: #24292f; }
 .wp-nat-pop .wp-nat-curve-note { margin-top: 10px; }
 @media (max-width: 600px) {
   .wp-nat-pop .wp-nat-lab-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* 880×220 su 340 px di larghezza farebbe 85 px d'altezza: illeggibile. */
+  .wp-nat-pop .wp-nat-pop-chart { height: 160px; }
 }

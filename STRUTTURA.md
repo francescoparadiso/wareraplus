@@ -150,6 +150,11 @@ wareraPlus/
 │   │                              (mondo, nazioni, prime 150 unità: i portafogli
 │   │                              sommati, per la scheda Soldi). Endpoint:
 │   │                              /player-parts?userId= e /player-money?days=.
+│   ├── populationHistory.js    ← NUOVO — la popolazione ATTIVA nel tempo: totale del
+│   │                              mondo ora per ora e ogni nazione giorno per giorno,
+│   │                              da countryActivePopulation a ogni giro della
+│   │                              diplomazia. I primi 14 giorni ricostruiti a ritroso
+│   │                              dal ticker-history. Endpoint: /population-history.
 │   ├── dayHistory.js           ← NUOVO — la giornata storica: diplomazia (patti,
 │   │                              guerre, nemico giurato, tesoro) e battaglie aperte,
 │   │                              giorno per giorno. Toglie alla time machine il suo
@@ -596,6 +601,8 @@ wareraPlus/
     │   │                          dell'HQ per giorno UTC, carta delle leggi), stimati in
     │   │                          monete ai prezzi di oggi. Pubbliche, cache 5 minuti.
     │   ├── i18nEco.js           ← dizionario delle due schede (EN/IT/ES/DE/FR)
+    │   ├── populationChart.js   ← NUOVO — in cima ai Grafici: la popolazione attiva
+    │   │                          del mondo nel tempo (/population-history).
     │   ├── damageCurves.js      ← NUOVO — nella scheda nazione: il danno ORA PER ORA
     │   │                          con sopra, sullo stesso riquadro e su un secondo
     │   │                          asse, la linea dei giocatori PILLATI (item `cocain`,
