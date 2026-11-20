@@ -274,7 +274,11 @@ const _citizensByCountry = new Map();   // countryId → { rows, total, known, p
  * @param {{limit?: number}} [opts]
  * @returns {Promise<{rows: object[], total: number, known: number, partial: boolean, fetchedAt: number|null}>}
  */
-export async function fetchCountryCitizens(countryId, { limit = 1000 } = {}) {
+// WarEra+ 2026-11-20: tutta la nazione. Era 1.000, e l'Algeria (~10.000
+// cittadini) mostrava i primi mille per danno settimanale: elenco, stile di
+// gioco e livelli erano di un decimo della nazione. Il server ne dà fino a
+// 20.000, ~1,5 MB di JSON che viaggiano compressi.
+export async function fetchCountryCitizens(countryId, { limit = 20000 } = {}) {
   if (_citizensByCountry.has(countryId)) return _citizensByCountry.get(countryId);
 
   let out;

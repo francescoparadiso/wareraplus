@@ -1920,7 +1920,12 @@ function pollTickerEvents(countries, diplomacy) {
 // ═══════════════════════════════════════════════════════════════════════
 const CITIZENS_FILE = 'citizens-by-country';
 const CITIZENS_PAGE = 100;          // massimo accettato da user.getUsersByCountry
-const CITIZENS_MAX_ROUNDS = 40;     // guardia: 4000 cittadini per nazione
+// Guardia: 15.000 cittadini per nazione. Era 40 giri (4.000) e l'Algeria la
+// toccava da settimane: il 2026-11-20 l'elenco del gioco ne aveva 9.934, e i
+// ~6.000 oltre la soglia non esistevano per il tool (elenco cittadini,
+// stile di gioco, livelli). I giri in più li fa solo chi ha ancora pagine:
+// una chiamata a giro, non 181.
+const CITIZENS_MAX_ROUNDS = 150;
 
 async function pollCitizens() {
   try {
@@ -3100,10 +3105,11 @@ app.get('/citizens', (req, res) => {
 app.get('/country-citizens', (req, res) => {
   const countryId = String(req.query.countryId || '');
   if (!countryId) return res.status(400).json({ error: 'countryId mancante' });
-  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 500, 1), 5000);
+  // Tetto 20.000 (era 5.000): una nazione intera, anche l'Algeria (~10.000).
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 500, 1), 20000);
   // I campi di combattimento ([11..16] di citizenStats) solo a chi li
   // chiede: la vista Statistiche nazioni non li usa, e sono ~60 byte a riga
-  // in più su elenchi che arrivano a 3.500 righe.
+  // in più su elenchi che arrivano a 10.000 righe.
   const combat = req.query.fields === 'combat';
 
   const census = readCacheShared(CITIZENS_FILE, { fetchedAt: null, data: {} });
