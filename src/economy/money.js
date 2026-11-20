@@ -99,7 +99,7 @@ function serieTesori() {
 
 /** Linea semplice con asse: il tratto si spezza dove manca un campione
  *  (più di 3 ore nella parte oraria, più di 50 in quella giornaliera). */
-function graficoHtml(punti) {
+function graficoHtml(punti, { giornaliera = false } = {}) {
   if (punti.length < 2) return `<p class="wp-ecn-note">${escapeHtml(moneyT('empty'))}</p>`;
   const W = 880, H = 260, L = 62, R = 14, T = 14, B = 26;
   const x0 = punti[0].t, x1 = punti[punti.length - 1].t, arco = Math.max(1, x1 - x0);
@@ -109,7 +109,11 @@ function graficoHtml(punti) {
   const x = (t) => L + ((t - x0) / arco) * (W - L - R);
   const y = (v) => T + (1 - (v - min) / (max - min)) * (H - T - B);
 
-  const orario = Date.now() - 14 * 24 * ORA;
+  // WarEra+ (2026-11-20): una serie SOLO giornaliera (i portafogli, un punto
+  // al giorno) non ha parte oraria. Con la regola delle 3 ore ogni suo giorno
+  // delle ultime due settimane risultava un buco e la linea si fermava al
+  // quattordicesimo giorno fa: si vedevano tre punti su quindici.
+  const orario = giornaliera ? Infinity : Date.now() - 14 * 24 * ORA;
   const pts = punti.map((p, i) => {
     const prec = punti[i - 1];
     const salto = prec && (p.t - prec.t) > (prec.t >= orario ? 3 * ORA : 50 * ORA);
@@ -127,9 +131,14 @@ function graficoHtml(punti) {
   // browser, nessuno stato da tenere. Con centinaia di campioni orari si
   // sottocampiona a ~120 colonne per non appesantire il DOM.
   const passo = Math.max(1, Math.ceil(punti.length / 120));
-  const colonne = punti.filter((_, i) => i % passo === 0 || i === punti.length - 1).map((p) => {
+  // WarEra+ (2026-11-20): ogni colonna arriva a metà strada dai vicini (prima
+  // era larga 8: fra due giorni il tooltip e il cursore sparivano).
+  const scelti = punti.filter((_, i) => i % passo === 0 || i === punti.length - 1);
+  const colonne = scelti.map((p, i) => {
     const quando = new Intl.DateTimeFormat(lingua(), { day: 'numeric', month: 'short', hour: p.t >= orario ? '2-digit' : undefined, minute: p.t >= orario ? '2-digit' : undefined }).format(new Date(p.t));
-    return `<rect x="${(x(p.t) - 4).toFixed(1)}" y="${T}" width="8" height="${H - T - B}" fill="transparent"><title>${escapeHtml(`${quando} — ${intero(p.y)}`)}</title></rect>`;
+    const xa = i ? (x(scelti[i - 1].t) + x(p.t)) / 2 : x(p.t) - 4;
+    const xb = i < scelti.length - 1 ? (x(p.t) + x(scelti[i + 1].t)) / 2 : x(p.t) + 4;
+    return `<rect class="wp-tip-hit" x="${xa.toFixed(1)}" y="${T}" width="${Math.max(1, xb - xa).toFixed(1)}" height="${H - T - B}"><title>${escapeHtml(`${quando} — ${intero(p.y)}`)}</title></rect>`;
   }).join('');
 
   const ultimo = punti[punti.length - 1];
@@ -236,7 +245,7 @@ function corpoHtml() {
 
     ${serieWallets().length ? `<section class="wp-ecn-msec">
       <h3>${escapeHtml(moneyT('chartWallets'))}</h3>
-      <div class="wp-ecn-chartwrap">${graficoHtml(serieWallets())}</div>
+      <div class="wp-ecn-chartwrap">${graficoHtml(serieWallets(), { giornaliera: true })}</div>
     </section>` : ''}
     <section class="wp-ecn-msec">
       <h3>${escapeHtml(moneyT('chartOrders'))}</h3>

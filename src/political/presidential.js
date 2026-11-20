@@ -25,6 +25,8 @@
    ══════════════════════════════════════════════════════════════ */
 
 import Chart from 'chart.js/auto';
+// WarEra+: linea verticale sul punto puntato (src/shared/chartCursor.js).
+import { chartJsCursor } from '../shared/chartCursor.js';
 import { t } from './i18n.js';
 import {
   csvColorMap, PALETTE, electionHistory, currentCountryId,
@@ -381,6 +383,7 @@ export function renderPresidentialTurnoutChart(currentElectionId = null) {
 
   new Chart(canvas.getContext('2d'), {
     type: 'line',
+    plugins: [chartJsCursor],
     data: {
       labels,
       datasets: [

@@ -25,6 +25,10 @@
    fa un closest() — sulla mappa (canvas) esce al primo controllo.
    ══════════════════════════════════════════════════════════════ */
 
+// WarEra+ (2026-11-20): il cursore (linea verticale + punti sulle linee)
+// sulla colonna puntata. Modulo a sé, acceso insieme al tooltip.
+import { initChartCursor } from './chartCursor.js';
+
 let _tip = null;
 let _current = null;
 
@@ -98,6 +102,7 @@ function hide() {
 
 export function initChartTips() {
   if (_tip) return;
+  initChartCursor();
   _tip = document.createElement('div');
   _tip.className = 'wp-chart-tip';
   _tip.setAttribute('role', 'tooltip');

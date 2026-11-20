@@ -379,6 +379,14 @@ punto di fallimento. Vedi il ⚠️ in fondo per cosa degrada e come.
   condivise dallo shell vanno in `src/shared/i18n.js`.
 - **Niente barre di scorrimento di sistema**: mai le native grigie — regola
   globale in `shell.css`, cursore nella tinta della sezione.
+- **Grafici: tooltip e cursore**. Un grafico SVG nuovo mette una colonna
+  invisibile `<rect class="wp-tip-hit">` per punto (da metà strada al vicino a
+  metà strada al successivo, non una striscia di 8 px) col testo in `tipAttr()`:
+  il tooltip comune (`shared/chartTip.js`) e il cursore comune
+  (`shared/chartCursor.js`, dal 2026-11-20: linea verticale + un punto su ogni
+  linea) arrivano da soli. Le linee col tratto e senza riempimento, le aree col
+  riempimento: il cursore riconosce così cosa è una linea. Un grafico Chart.js
+  a linea passa `plugins: [chartJsCursor]`.
 
 ## Tabelle e sezioni: ordinamento e riordino GENERICI
 

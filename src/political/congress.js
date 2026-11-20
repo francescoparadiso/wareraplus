@@ -32,6 +32,8 @@
    ══════════════════════════════════════════════════════════════ */
 
 import Chart from 'chart.js/auto';
+// WarEra+: linea verticale sul punto puntato (src/shared/chartCursor.js).
+import { chartJsCursor } from '../shared/chartCursor.js';
 import { t } from './i18n.js';
 import {
   escapeHtml, makeAbbr, getPartyColor, chartTheme, getTheme, APP_BASE, CACHE_TTL_LONG,
@@ -268,6 +270,7 @@ export function renderTimeline(congressElections) {
   setTimelineChart(new Chart(canvas.getContext('2d'), {
     type: 'line',
     data: { labels, datasets: [] },
+    plugins: [chartJsCursor],
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
