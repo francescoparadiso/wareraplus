@@ -371,7 +371,7 @@ function graficoStoricoHtml(dati) {
   const step = dati.step;
   const passo = step === '6h' ? 6 * 3600_000 : 86400_000;
   const righe = dati.rows;
-  const W = 880, H = 300, L = 58, R = 14, T = 14, B = 24, VOL = 54, GAP = 12;
+  const W = 880, H = 310, L = 58, R = 14, T = 14, B = 24, VOL = 54, GAP = 22;
   const yPrezzoBasso = H - B - VOL - GAP;
   const t0 = istante(righe[0], step), t1 = istante(righe[righe.length - 1], step);
   const arco = Math.max(1, t1 - t0);
@@ -429,11 +429,12 @@ function graficoStoricoHtml(dati) {
     const t = istante(r, step);
     const parz = dati.partialLast && i === ultimo;
     // Riga [inizio, n, med, n0, m0, n1, m1, n2, m2]: fascia b = n in 3+2b, mediana in 4+2b.
-    const fascia = (b) => `${craftT('band' + b)}\t${r[4 + b * 2] != null ? prezzo(r[4 + b * 2]) : '—'} · ${num(r[3 + b * 2], 0)}`;
+    const vendite = craftT('hVolume').toLocaleLowerCase();
+    const fascia = (b) => `${craftT('band' + b)}\t${r[4 + b * 2] != null ? prezzo(r[4 + b * 2]) : '—'} · ${num(r[3 + b * 2], 0)} ${vendite}`;
     return `<rect x="${(x(t) - meta / 2).toFixed(1)}" y="${T}" width="${Math.max(meta, 4).toFixed(1)}" height="${H - T - B}" fill="transparent"${tipAttr(
       `${etichettaTempo(t, step, true)}${parz ? ` (${craftT('hPartial')})` : ''}`,
       fascia(2), fascia(1), fascia(0),
-      `${craftT('hAll')}\t${r[2] != null ? prezzo(r[2]) : '—'} · ${num(r[1], 0)}`,
+      `${craftT('hAll')}\t${r[2] != null ? prezzo(r[2]) : '—'} · ${num(r[1], 0)} ${vendite}`,
     )}/>`;
   }).join('');
 
@@ -466,16 +467,18 @@ function storicoHtml() {
 
   const c = _hist.get(histKey());
   let corpo;
-  if (!c) corpo = `<div class="wp-ecn-loading">${escapeHtml(ecoT('loading'))}</div>`;
+  // Durante il caricamento si tiene l'altezza del grafico: senza, il riquadro
+  // si accorcia e la pagina torna in cima a ogni cambio di pezzo o di passo.
+  if (!c) corpo = `<div class="wp-ecn-loading" style="min-height:520px">${escapeHtml(ecoT('loading'))}</div>`;
   else if (!c.data) corpo = `<p class="wp-ecn-note">${escapeHtml(craftT('hNoRoute'))}</p>`;
   else if (c.data.rows.length < 2) corpo = `<p class="wp-ecn-note">${escapeHtml(craftT('hEmpty'))}</p>`;
-  else corpo = kpiStoricoHtml(c.data) + graficoStoricoHtml(c.data) + legendaHtml() + noteStoricoHtml(c.data);
+  else corpo = kpiStoricoHtml(c.data) + `<div class="wp-crf-hscroll">${graficoStoricoHtml(c.data)}</div>` + legendaHtml() + noteStoricoHtml(c.data);
 
   return `
     <section class="wp-ecn-msec" data-nosort>
       <div class="wp-crf-hsel">${chipRar}</div>
       <div class="wp-crf-hsel">${chipPezzi}</div>
-      <h3 class="wp-crf-h3">${iconaHtml(p.img, p.tier)}${escapeHtml(craftT('hTitle', { p: p.nome }))}</h3>
+      <h3 class="wp-crf-h3" data-sec="crf-history">${iconaHtml(p.img, p.tier)}${escapeHtml(craftT('hTitle', { p: p.nome }))}</h3>
       <div class="wp-crf-hsel">${chipStep}</div>
       ${corpo}
     </section>`;
@@ -498,7 +501,7 @@ function kpiStoricoHtml(dati) {
   });
   const media = complete.reduce((s, r) => s + r[1], 0) / complete.length;
   kpi.push(kpiHtml(craftT(step === '6h' ? 'hSales6h' : 'hSalesDay'), num(media, 0), craftT('hAvg')));
-  return `<div class="wp-ecn-kpis">${kpi.join('')}</div>`;
+  return `<div class="wp-ecn-kpis wp-crf-hk">${kpi.join('')}</div>`;
 }
 
 function legendaHtml() {

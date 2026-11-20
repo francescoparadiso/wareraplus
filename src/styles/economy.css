@@ -813,3 +813,11 @@ body.light-theme .wp-crf-hl.wp-crf-hc1, body.light-theme .wp-crf-hsw.wp-crf-hc1 
 body.light-theme .wp-crf-hl.wp-crf-hc2, body.light-theme .wp-crf-hsw.wp-crf-hc2 { stroke: #15803d; background: #15803d; }
 body.light-theme .wp-crf-hdot.wp-crf-hc0 { fill: #6b7280; } body.light-theme .wp-crf-hdot.wp-crf-hc1 { fill: #2563eb; } body.light-theme .wp-crf-hdot.wp-crf-hc2 { fill: #15803d; }
 body.light-theme .wp-crf-hdot.wp-crf-hpart { fill: #fff; }
+/* Telefono: tessere a due a due, e il grafico tiene una larghezza minima
+   leggibile e scorre in orizzontale dentro il suo riquadro (la pagina no). */
+.wp-crf-hscroll { overflow-x: auto; }
+@media (max-width: 600px) {
+  .wp-crf-hk { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wp-crf-hk .wp-ecn-kpi strong { font-size: 20px; }
+  .wp-crf-hscroll .wp-crf-hchart { min-width: 700px; }
+}

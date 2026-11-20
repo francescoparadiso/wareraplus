@@ -341,6 +341,7 @@ function happinessHtml(d) {
     </div>
     <div class="wp-nat-lab-col">
       <h4 class="wp-nat-chart-title">${escapeHtml(ecoT('hapCauses'))}</h4>
+      <p class="wp-nat-lab-note">${escapeHtml(ecoT('hapCauseNote'))}</p>
       <ul class="wp-nat-lab-list">${righe}</ul>
     </div>
     <div class="wp-nat-curve-card">
