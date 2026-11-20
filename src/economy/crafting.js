@@ -29,7 +29,8 @@
 import { escapeHtml } from '../mu/ui.js';
 import { ecoT } from './i18n.js';
 import { craftT } from './i18nCraft.js';
-import { fetchGearMarketViaCache } from '../diplomacy/cacheClient.js';
+import { fetchGearMarketViaCache, fetchGearPriceHistoryViaCache } from '../diplomacy/cacheClient.js';
+import { tipAttr } from '../shared/chartTip.js';
 import { loadSpotPrices, loadBookPrices } from '../market/api.js';
 import { loadBonusRules } from '../shared/battleBonus.js';
 import * as M from './craftingModel.js';
@@ -46,7 +47,11 @@ let _prices = null;
 let _woodOnSale = false;
 let _modelTs = 0;
 let _loading = false;
-let _view = 'craft';        // 'craft' | 'cases'
+let _view = 'craft';        // 'craft' | 'cases' | 'history'
+let _hCode = null;          // pezzo aperto in "Prezzi nel tempo"
+let _hStep = 'day';         // 'day' | '6h'
+const _hist = new Map();    // `${code}|${step}` → { at, data|null }
+const _hLoading = new Set();
 let _rar = 0;               // rarità aperta (1..6), 0 = ancora da scegliere
 let _tax = M.DEFAULT_TAX;
 let _steel = true;
@@ -181,7 +186,7 @@ function craftHtml() {
 
   const righe = sel.outcomes.map(o => `
       <div class="wp-crf-row">
-        ${(() => { const p = pezzo(o.code, sel.rarityIdx); return `<span class="wp-crf-piece wp-crf-t${p.tier}" title="${escapeHtml(o.code)}">${iconaHtml(p.img, p.tier)}<b>${escapeHtml(p.nome)}</b></span>`; })()}
+        ${(() => { const p = pezzo(o.code, sel.rarityIdx); return `<span class="wp-crf-piece wp-crf-go wp-crf-t${p.tier}" role="button" tabindex="0" data-hgo="${escapeHtml(o.code)}" title="${escapeHtml(craftT('secHistory'))}">${iconaHtml(p.img, p.tier)}<b>${escapeHtml(p.nome)}</b></span>`; })()}
         <span class="wp-ecn-num">${escapeHtml(pct(o.p, 1))}</span>
         <span class="wp-ecn-num">${escapeHtml(o.ev != null ? prezzo(o.ev) : '—')}</span>
         <span class="wp-ecn-num${segno(o.margin)}">${escapeHtml(firmato(o.margin))}</span>
@@ -319,6 +324,213 @@ function casesHtml() {
     </section>`;
 }
 
+// ── Prezzi nel tempo ────────────────────────────────────────────────
+// WarEra+ (2026-11-20, richiesta dell'utente): le vendite che fanno le curve
+// dei valori, messe in fila nel tempo. Il server ne tiene il riassunto per
+// giorno (mai potato) e, per le ultime due settimane, per 6 ore: vedi "LO
+// STORICO DEI PREZZI" in server/gearMarket.js. Tre linee e non una: la
+// mediana di tutte le vendite si sposta anche quando cambia la mescolanza dei
+// tiri venduti, e lo si leggerebbe come un rincaro che non c'è.
+const SLOT_ORDINE = ['helmet', 'chest', 'pants', 'boots', 'gloves'];
+const HIST_FRESCO_MS = 10 * 60 * 1000;
+
+/** I pezzi di una rarità: le cinque armature nell'ordine del gioco, poi l'arma. */
+function pezziDi(rar) {
+  const r = M.RARITIES[rar - 1];
+  return Object.entries(_model?.curves || {})
+    .filter(([, c]) => c.r === r)
+    .sort(([a, ca], [b, cb]) => {
+      const pa = ca.k === 'weapon' ? 9 : SLOT_ORDINE.indexOf(SLOT_RE.exec(a)?.[1]);
+      const pb = cb.k === 'weapon' ? 9 : SLOT_ORDINE.indexOf(SLOT_RE.exec(b)?.[1]);
+      return pa - pb;
+    })
+    .map(([code, c]) => ({ code, n: c.n || 0 }));
+}
+
+function codiceIniziale() {
+  // Il pezzo più venduto: è quello su cui la linea dice di più.
+  let best = null;
+  for (const [code, c] of Object.entries(_model?.curves || {})) if (!best || (c.n || 0) > best.n) best = { code, n: c.n || 0 };
+  return best?.code || null;
+}
+
+const rarDi = (code) => M.RARITIES.indexOf(_model?.curves?.[code]?.r) + 1 || 1;
+const histKey = () => `${_hCode}|${_hStep}`;
+
+function istante(r, step) {
+  return step === '6h' ? Date.parse(r[0]) : Date.parse(`${r[0]}T00:00:00Z`);
+}
+function etichettaTempo(ms, step, lunga = false) {
+  const o = step === '6h'
+    ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
+    : { day: 'numeric', month: 'short', ...(lunga ? { weekday: 'short' } : {}) };
+  return new Intl.DateTimeFormat(lingua(), { ...o, timeZone: 'UTC' }).format(new Date(ms)) + (step === '6h' ? ' UTC' : '');
+}
+
+function graficoStoricoHtml(dati) {
+  const step = dati.step;
+  const passo = step === '6h' ? 6 * 3600_000 : 86400_000;
+  const righe = dati.rows;
+  const W = 880, H = 300, L = 58, R = 14, T = 14, B = 24, VOL = 54, GAP = 12;
+  const yPrezzoBasso = H - B - VOL - GAP;
+  const t0 = istante(righe[0], step), t1 = istante(righe[righe.length - 1], step);
+  const arco = Math.max(1, t1 - t0);
+  const x = (t) => L + ((t - t0) / arco) * (W - L - R);
+
+  const valori = righe.flatMap(r => [r[4], r[6], r[8]]).filter(v => v != null);
+  if (!valori.length) return '';
+  let min = Math.min(...valori), max = Math.max(...valori);
+  if (max - min < 1e-9) { max = max * 1.05 || 1; min = min * 0.95; }
+  else { const pad = (max - min) * 0.08; min = Math.max(0, min - pad); max += pad; }
+  const y = (v) => T + (1 - (v - min) / (max - min)) * (yPrezzoBasso - T);
+  const maxN = Math.max(...righe.map(r => r[1]), 1);
+  const ultimo = righe.length - 1;
+
+  const guide = [0, 1, 2, 3].map(i => {
+    const v = min + ((max - min) * i) / 3;
+    const gy = y(v).toFixed(1);
+    return `<line class="wp-ecn-grid" x1="${L}" x2="${W - R}" y1="${gy}" y2="${gy}"/>
+      <text class="wp-ecn-axis" x="${L - 6}" y="${(Number(gy) + 3).toFixed(1)}" text-anchor="end">${escapeHtml(prezzo(v))}</text>`;
+  }).join('');
+
+  // Una linea per fascia; si spezza dove manca un secchio o la fascia ha
+  // troppe poche vendite (un buco non è un prezzo).
+  const linee = [0, 1, 2].map(b => {
+    let d = '', prec = null;
+    righe.forEach((r, i) => {
+      const v = r[3 + b * 2 + 1];
+      const t = istante(r, step);
+      if (v == null) { prec = null; return; }
+      const salto = prec == null || t - prec > passo * 1.5;
+      d += `${salto ? 'M' : 'L'}${x(t).toFixed(1)},${y(v).toFixed(1)}`;
+      prec = t;
+    });
+    const punti = righe.length <= 60 ? righe.map((r, i) => {
+      const v = r[3 + b * 2 + 1];
+      if (v == null) return '';
+      const parz = dati.partialLast && i === ultimo;
+      return `<circle class="wp-crf-hdot wp-crf-hc${b}${parz ? ' wp-crf-hpart' : ''}" cx="${x(istante(r, step)).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${parz ? 3.2 : 2.4}"/>`;
+    }).join('') : '';
+    return `<path class="wp-crf-hl wp-crf-hc${b}" d="${d}"/>${punti}`;
+  }).join('');
+
+  // Le vendite in basso, una barra per secchio.
+  const larg = Math.max(2, Math.min(28, ((W - L - R) / Math.max(1, righe.length)) * 0.7));
+  const base = H - B;
+  const barre = righe.map((r, i) => {
+    const h = (r[1] / maxN) * VOL;
+    const cx = x(istante(r, step));
+    return `<rect class="wp-crf-hvol${dati.partialLast && i === ultimo ? ' wp-crf-hpart' : ''}" x="${(cx - larg / 2).toFixed(1)}" y="${(base - h).toFixed(1)}" width="${larg.toFixed(1)}" height="${h.toFixed(1)}"/>`;
+  }).join('');
+
+  // Colonne invisibili col tooltip comune (src/shared/chartTip.js).
+  const meta = righe.length > 1 ? (x(istante(righe[1], step)) - x(istante(righe[0], step))) : 20;
+  const colonne = righe.map((r, i) => {
+    const t = istante(r, step);
+    const parz = dati.partialLast && i === ultimo;
+    // Riga [inizio, n, med, n0, m0, n1, m1, n2, m2]: fascia b = n in 3+2b, mediana in 4+2b.
+    const fascia = (b) => `${craftT('band' + b)}\t${r[4 + b * 2] != null ? prezzo(r[4 + b * 2]) : '—'} · ${num(r[3 + b * 2], 0)}`;
+    return `<rect x="${(x(t) - meta / 2).toFixed(1)}" y="${T}" width="${Math.max(meta, 4).toFixed(1)}" height="${H - T - B}" fill="transparent"${tipAttr(
+      `${etichettaTempo(t, step, true)}${parz ? ` (${craftT('hPartial')})` : ''}`,
+      fascia(2), fascia(1), fascia(0),
+      `${craftT('hAll')}\t${r[2] != null ? prezzo(r[2]) : '—'} · ${num(r[1], 0)}`,
+    )}/>`;
+  }).join('');
+
+  const meta3 = Math.floor(righe.length / 2);
+  return `<svg class="wp-ecn-mchart wp-crf-hchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escapeHtml(craftT('secHistory'))}">
+      ${guide}
+      <line class="wp-ecn-grid" x1="${L}" x2="${W - R}" y1="${base}" y2="${base}"/>
+      <text class="wp-ecn-axis" x="${L - 6}" y="${base - VOL + 8}" text-anchor="end">${escapeHtml(num(maxN, 0))}</text>
+      ${barre}
+      ${linee}
+      <text class="wp-ecn-axis" x="${L}" y="${H - 7}">${escapeHtml(etichettaTempo(t0, step))}</text>
+      ${righe.length > 4 ? `<text class="wp-ecn-axis" x="${x(istante(righe[meta3], step)).toFixed(1)}" y="${H - 7}" text-anchor="middle">${escapeHtml(etichettaTempo(istante(righe[meta3], step), step))}</text>` : ''}
+      <text class="wp-ecn-axis" x="${W - R}" y="${H - 7}" text-anchor="end">${escapeHtml(etichettaTempo(t1, step))}</text>
+      ${colonne}
+    </svg>`;
+}
+
+function storicoHtml() {
+  if (!_hCode || !_model.curves?.[_hCode]) _hCode = codiceIniziale();
+  if (!_hCode) return `<p class="wp-ecn-note">${escapeHtml(craftT('notYet'))}</p>`;
+  const rar = rarDi(_hCode);
+  const p = pezzo(_hCode, rar);
+
+  const chipRar = [1, 2, 3, 4, 5, 6].map(i => `<button type="button" class="wp-ecn-chip${i === rar ? ' active' : ''}" data-hrar="${i}"><b class="wp-crf-rname wp-crf-t${i}">${escapeHtml(craftT(M.RARITIES[i - 1]))}</b></button>`).join('');
+  const chipPezzi = pezziDi(rar).map(({ code, n }) => {
+    const pp = pezzo(code, rar);
+    return `<button type="button" class="wp-ecn-chip wp-crf-hpiece${code === _hCode ? ' active' : ''}" data-hcode="${escapeHtml(code)}">${iconaHtml(pp.img, pp.tier)}${escapeHtml(pp.nome)} <small class="wp-crf-dim">${escapeHtml(num(n, 0))}</small></button>`;
+  }).join('');
+  const chipStep = ['day', '6h'].map(s => `<button type="button" class="wp-ecn-chip${_hStep === s ? ' active' : ''}" data-hstep="${s}">${escapeHtml(craftT(s === 'day' ? 'hStepDay' : 'hStep6h'))}</button>`).join('');
+
+  const c = _hist.get(histKey());
+  let corpo;
+  if (!c) corpo = `<div class="wp-ecn-loading">${escapeHtml(ecoT('loading'))}</div>`;
+  else if (!c.data) corpo = `<p class="wp-ecn-note">${escapeHtml(craftT('hNoRoute'))}</p>`;
+  else if (c.data.rows.length < 2) corpo = `<p class="wp-ecn-note">${escapeHtml(craftT('hEmpty'))}</p>`;
+  else corpo = kpiStoricoHtml(c.data) + graficoStoricoHtml(c.data) + legendaHtml() + noteStoricoHtml(c.data);
+
+  return `
+    <section class="wp-ecn-msec" data-nosort>
+      <div class="wp-crf-hsel">${chipRar}</div>
+      <div class="wp-crf-hsel">${chipPezzi}</div>
+      <h3 class="wp-crf-h3">${iconaHtml(p.img, p.tier)}${escapeHtml(craftT('hTitle', { p: p.nome }))}</h3>
+      <div class="wp-crf-hsel">${chipStep}</div>
+      ${corpo}
+    </section>`;
+}
+
+function kpiStoricoHtml(dati) {
+  const righe = dati.rows;
+  // I confronti sui secchi COMPLETI: l'ultimo è a metà.
+  const complete = dati.partialLast && righe.length > 2 ? righe.slice(0, -1) : righe;
+  const step = dati.step;
+  const kpi = [2, 1, 0].map(b => {
+    const col = 3 + b * 2 + 1;
+    const conValore = complete.filter(r => r[col] != null);
+    if (!conValore.length) return kpiHtml(craftT('band' + b), '—', '');
+    const primo = conValore[0], ultimo = conValore[conValore.length - 1];
+    const varz = primo !== ultimo && primo[col] ? ultimo[col] / primo[col] - 1 : null;
+    return kpiHtml(craftT('band' + b), prezzo(ultimo[col]),
+      varz != null ? craftT('hSince', { v: pctFirmato(varz), d: etichettaTempo(istante(primo, step), step) }) : '',
+      segno(varz));
+  });
+  const media = complete.reduce((s, r) => s + r[1], 0) / complete.length;
+  kpi.push(kpiHtml(craftT(step === '6h' ? 'hSales6h' : 'hSalesDay'), num(media, 0), craftT('hAvg')));
+  return `<div class="wp-ecn-kpis">${kpi.join('')}</div>`;
+}
+
+function legendaHtml() {
+  return `<div class="wp-crf-hleg">
+      ${[2, 1, 0].map(b => `<span><i class="wp-crf-hsw wp-crf-hc${b}"></i>${escapeHtml(craftT('band' + b))}</span>`).join('')}
+      <span><i class="wp-crf-hsw wp-crf-hswvol"></i>${escapeHtml(craftT('hVolume'))}</span>
+    </div>`;
+}
+
+function noteStoricoHtml(dati) {
+  const primo = dati.rows[0];
+  return `
+    <p class="wp-ecn-note">${escapeHtml(craftT('hNoteBands', { n: dati.minBand || 5 }))}</p>
+    <p class="wp-ecn-note">${escapeHtml(dati.step === '6h' ? craftT('hNote6h') : craftT('hNoteDay', { d: etichettaTempo(istante(primo, 'day'), 'day') }))}</p>`;
+}
+
+async function caricaStorico(forza = false) {
+  if (!_hCode) return;
+  const key = histKey();
+  const c = _hist.get(key);
+  if (_hLoading.has(key) || (!forza && c && Date.now() - c.at < HIST_FRESCO_MS)) return;
+  _hLoading.add(key);
+  try {
+    const [code, step] = key.split('|');
+    const data = await fetchGearPriceHistoryViaCache(code, step);
+    _hist.set(key, { at: Date.now(), data });
+  } finally {
+    _hLoading.delete(key);
+    if (_view === 'history' && histKey() === key) paint();
+  }
+}
+
 // ── Note di fondo ───────────────────────────────────────────────────
 function noteHtml() {
   const m = _model;
@@ -332,6 +544,7 @@ function corpoHtml() {
   if (!_model) return `<p class="wp-ecn-note">${escapeHtml(craftT('noServer'))}</p>`;
   if (!_prices) return `<p class="wp-ecn-note">${escapeHtml(craftT('noServer'))}</p>`;
   if (!_model.sales) return `<p class="wp-ecn-note">${escapeHtml(craftT('notYet'))}</p>`;
+  if (_view === 'history') return storicoHtml();
   return (_view === 'craft' ? craftHtml() : casesHtml()) + noteHtml();
 }
 
@@ -345,26 +558,42 @@ function paint() {
           <p class="wp-ecn-sub">${escapeHtml(craftT('sub'))}</p>
         </div>
         <div class="wp-ecn-tools">
-          ${['craft', 'cases'].map(v => `<button type="button" class="wp-ecn-chip${_view === v ? ' active' : ''}" data-view="${v}">${
-            escapeHtml(craftT(v === 'craft' ? 'secCraft' : 'secCases'))}</button>`).join('')}
+          ${['craft', 'cases', 'history'].map(v => `<button type="button" class="wp-ecn-chip${_view === v ? ' active' : ''}" data-view="${v}">${
+            escapeHtml(craftT({ craft: 'secCraft', cases: 'secCases', history: 'secHistory' }[v]))}</button>`).join('')}
           <button type="button" class="wp-ecn-refresh"${_loading ? ' disabled' : ''}>${
             escapeHtml(_loading ? ecoT('refreshing') : ecoT('refresh'))}</button>
         </div>
       </header>
-      <div class="wp-crf-opts">
+      ${_view === 'history' ? '' : `<div class="wp-crf-opts">
         <label title="${escapeHtml(craftT('taxTip'))}">${escapeHtml(craftT('tax'))}
           <input type="number" min="0" max="50" step="0.5" value="${+(_tax * 100).toFixed(2)}" id="wp-crf-tax" class="wp-ecn-search wp-crf-num"> %</label>
         ${_view === 'craft' ? `<label><input type="checkbox" id="wp-crf-steel"${_steel ? ' checked' : ''}> ${escapeHtml(craftT('steel'))}</label>` : ''}
-      </div>
+      </div>`}
       ${_loading && !_model ? `<div class="wp-ecn-loading">${escapeHtml(ecoT('loading'))}</div>` : corpoHtml()}
     </div>`;
   collega();
+  // Lo storico si chiede solo quando serve, un pezzo alla volta.
+  if (_view === 'history' && _model?.sales && _hCode && !_hist.has(histKey())) caricaStorico();
 }
 
 function collega() {
   const c = _container;
   c.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => { _view = b.dataset.view; paint(); }));
-  c.querySelector('.wp-ecn-refresh')?.addEventListener('click', () => carica(true));
+  c.querySelector('.wp-ecn-refresh')?.addEventListener('click', () => {
+    if (_view === 'history') caricaStorico(true);
+    carica(true);
+  });
+  c.querySelectorAll('[data-hrar]').forEach(b => b.addEventListener('click', () => {
+    const lista = pezziDi(Number(b.dataset.hrar));
+    // A parità di slot si resta sullo stesso pezzo (Elmo T4 → Elmo T5).
+    const slot = SLOT_RE.exec(_hCode || '')?.[1];
+    const stesso = lista.find(x => slot ? SLOT_RE.exec(x.code)?.[1] === slot : _model.curves[x.code]?.k === 'weapon');
+    const scelto = stesso || lista.reduce((m, x) => (!m || x.n > m.n ? x : m), null);
+    if (scelto) { _hCode = scelto.code; paint(); }
+  }));
+  c.querySelectorAll('[data-hcode]').forEach(b => b.addEventListener('click', () => { _hCode = b.dataset.hcode; paint(); }));
+  c.querySelectorAll('[data-hstep]').forEach(b => b.addEventListener('click', () => { _hStep = b.dataset.hstep; paint(); }));
+  c.querySelectorAll('[data-hgo]').forEach(b => b.addEventListener('click', () => { _hCode = b.dataset.hgo; _view = 'history'; paint(); }));
   c.querySelectorAll('[data-rar]').forEach(b => b.addEventListener('click', () => { _rar = Number(b.dataset.rar); paint(); }));
   c.querySelectorAll('[data-cust]').forEach(b => b.addEventListener('click', () => {
     const [r, s] = b.dataset.cust.split(':');

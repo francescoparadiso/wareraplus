@@ -190,6 +190,31 @@ export function fetchTreasury(countryId) {
   return p;
 }
 
+const _happiness = new Map();   // countryId → Promise<risposta | null>
+
+/**
+ * WarEra+ — la felicità dei dipendenti delle aziende in una nazione
+ * (/employee-happiness, server/companyCensus.js: giro notturno sulla rosa).
+ * `null` se il server non risponde o non l'ha ancora contata: la sezione lo
+ * dice. Cambia una volta a notte, quindi una fetch per nazione e sessione.
+ */
+export function fetchEmployeeHappiness(countryId) {
+  if (!countryId) return Promise.resolve(null);
+  if (_happiness.has(countryId)) return _happiness.get(countryId);
+  const p = (async () => {
+    try {
+      const json = await cacheJson(`/employee-happiness?countryId=${encodeURIComponent(countryId)}`);
+      return json && json.available === true ? json : null;
+    } catch (err) {
+      console.warn('WarEra+ nations: /employee-happiness non disponibile:', err.message);
+      return null;
+    }
+  })();
+  _happiness.set(countryId, p);
+  p.then(v => { if (!v && _happiness.get(countryId) === p) _happiness.delete(countryId); });
+  return p;
+}
+
 /**
  * Donazioni dei cittadini di una nazione e ricevute dalle sue unità
  * militari (/donations, server/donations.js). `null` se il server non ha la

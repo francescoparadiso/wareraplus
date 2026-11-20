@@ -625,7 +625,24 @@ rotta o sbagliata:
   i tiri sono uniformi nell'intervallo di `dynamicStats` (verificato), quindi
   il valore atteso è la media della curva sull'intera griglia;
 - la **cassa di legno** non ha `item`: il suo contenuto sono le righe
-  `openCase` senza pezzo (risorsa + quantità), valutate all'ultimo prezzo.
+  `openCase` senza pezzo (risorsa + quantità), valutate all'ultimo prezzo;
+- **Prezzi nel tempo** (terza linguetta, dal 2026-11-20, `/gear-price-history`):
+  mediana per giorno (o per 6 ore) in tre fasce di tiro, dalla tabella `daily`
+  di `gear-market.sqlite`. ⚠️ È l'unico pezzo di quel database che NON si rifà
+  dall'API: le vendite grezze si potano a 14 giorni, il riassunto no. Il
+  database è fuori dal tar del backup, quindi lo storico si copia a ogni giro
+  in `cache/gear-price-daily.json` e all'avvio si rilegge da lì se la tabella è
+  vuota. Le vendite partono dal 9 novembre: un deploy dopo il 23 avrebbe perso
+  i primi giorni. Senza rideploy la linguetta dice che il server non ha lo
+  storico.
+
+La **felicità dei dipendenti** (scheda Economia di Statistiche nazioni,
+`src/nations/ecoSection.js` + `server/companyCensus.js`, `/employee-happiness`,
+dal 2026-11-20) si conta nel censimento aziende notturno, sulla stessa rosa
+(aziende che hanno prodotto in 7 giorni), per nazione dove STA l'azienda: zero
+richieste in più. Dopo il rideploy la sezione dice "non ancora contata" fino al
+giro delle 03:20; la curva notte per notte si accumula da lì e non si
+ricostruisce.
 
 La vista **Potere d'acquisto** della scheda Ricchezza di Giocatori
 (`src/players/purchasingPower.js`) è solo client: divide per un indice dei

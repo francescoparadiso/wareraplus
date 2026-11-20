@@ -787,3 +787,29 @@ body.light-theme .wp-crf-rname.wp-crf-t3, body.light-theme .wp-crf-crar .wp-crf-
 body.light-theme .wp-crf-rname.wp-crf-t4, body.light-theme .wp-crf-crar .wp-crf-t4 { color: #6d28d9; }
 body.light-theme .wp-crf-rname.wp-crf-t5, body.light-theme .wp-crf-crar .wp-crf-t5 { color: #b45309; }
 body.light-theme .wp-crf-rname.wp-crf-t6, body.light-theme .wp-crf-crar .wp-crf-t6 { color: #b91c1c; }
+
+/* ── Crafting: prezzi nel tempo (2026-11-20) ──────────────────── */
+.wp-crf-hsel { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.wp-crf-hpiece { display: inline-flex; align-items: center; gap: 6px; }
+.wp-crf-hpiece .wp-crf-ico { width: 22px; height: 22px; padding: 1px; }
+.wp-crf-hchart { margin-top: 6px; }
+.wp-crf-hl { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.wp-crf-hl.wp-crf-hc0, .wp-crf-hsw.wp-crf-hc0 { stroke: #8b949e; background: #8b949e; }
+.wp-crf-hl.wp-crf-hc1, .wp-crf-hsw.wp-crf-hc1 { stroke: #60a5fa; background: #60a5fa; }
+.wp-crf-hl.wp-crf-hc2, .wp-crf-hsw.wp-crf-hc2 { stroke: #3fb950; background: #3fb950; }
+.wp-crf-hdot.wp-crf-hc0 { fill: #8b949e; } .wp-crf-hdot.wp-crf-hc1 { fill: #60a5fa; } .wp-crf-hdot.wp-crf-hc2 { fill: #3fb950; }
+.wp-crf-hdot.wp-crf-hpart { fill: var(--wp-ov-surface, #0d1117); stroke-width: 1.6; }
+.wp-crf-hdot.wp-crf-hpart.wp-crf-hc0 { stroke: #8b949e; } .wp-crf-hdot.wp-crf-hpart.wp-crf-hc1 { stroke: #60a5fa; } .wp-crf-hdot.wp-crf-hpart.wp-crf-hc2 { stroke: #3fb950; }
+.wp-crf-hvol { fill: var(--wp-ov-text-dim, #8b949e); opacity: .35; }
+.wp-crf-hvol.wp-crf-hpart { opacity: .15; }
+.wp-crf-hleg { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--wp-ov-text-dim, #8b949e); margin: 4px 0 8px; }
+.wp-crf-hleg span { display: inline-flex; align-items: center; gap: 6px; }
+.wp-crf-hsw { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
+.wp-crf-hswvol { height: 9px; width: 9px; background: var(--wp-ov-text-dim, #8b949e); opacity: .45; }
+.wp-crf-go { cursor: pointer; }
+.wp-crf-go:hover b { text-decoration: underline; }
+body.light-theme .wp-crf-hl.wp-crf-hc0, body.light-theme .wp-crf-hsw.wp-crf-hc0 { stroke: #6b7280; background: #6b7280; }
+body.light-theme .wp-crf-hl.wp-crf-hc1, body.light-theme .wp-crf-hsw.wp-crf-hc1 { stroke: #2563eb; background: #2563eb; }
+body.light-theme .wp-crf-hl.wp-crf-hc2, body.light-theme .wp-crf-hsw.wp-crf-hc2 { stroke: #15803d; background: #15803d; }
+body.light-theme .wp-crf-hdot.wp-crf-hc0 { fill: #6b7280; } body.light-theme .wp-crf-hdot.wp-crf-hc1 { fill: #2563eb; } body.light-theme .wp-crf-hdot.wp-crf-hc2 { fill: #15803d; }
+body.light-theme .wp-crf-hdot.wp-crf-hpart { fill: #fff; }

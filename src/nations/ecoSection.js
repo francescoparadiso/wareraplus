@@ -17,6 +17,11 @@
      6. il CONFRONTO con le altre nazioni: donazioni ricevute per cittadino
         attivo e per punto di sviluppo (/donations-by-country).
 
+   Fra 1 e 2, dal 2026-11-20: la FELICITÀ dei dipendenti delle aziende che
+   stanno nella nazione (/employee-happiness, contata dal censimento
+   notturno sulla rosa: vedi "LA FELICITÀ" in server/companyCensus.js).
+   È una fotografia della notte; la curva si accumula da quel giorno.
+
    Una `donation` va da un giocatore (`buyerId`) a una nazione, un'unità o
    un partito (`seller*Id`): vedi server/donations.js. Non si filtra per
    nazionalità del donatore, che la riga non porta.
@@ -38,7 +43,7 @@ import { fetchMoneyTransfers } from '../battles/moneyTransfers.js';
 import { state } from '../diplomacy/state.js';
 import { donutHtml } from './charts.js';
 import { fetchMuDirectory } from '../mu/api.js';
-import { fetchDonations, fetchDonationsByCountry, fetchTreasury, getNations } from './api.js';
+import { fetchDonations, fetchDonationsByCountry, fetchTreasury, fetchEmployeeHappiness, getNations } from './api.js';
 import { metricValue } from './metrics.js';
 import { ecoT } from './i18nEco.js';
 
@@ -124,7 +129,7 @@ function paintShell() {
 async function load() {
   const nation = _nation;
   const range = _range;
-  const [treasury, donations, transfers, directory, byCountry] = await Promise.all([
+  const [treasury, donations, transfers, directory, byCountry, happiness] = await Promise.all([
     fetchTreasury(nation._id).catch(() => null),
     fetchDonations(nation._id, range).catch(() => null),
     fetchMoneyTransfers().catch(() => null),
@@ -132,12 +137,14 @@ async function load() {
     // si è aperta la scheda Unità militari, e comunque è una fetch per sessione.
     fetchMuDirectory().catch(() => null),
     fetchDonationsByCountry(range).catch(() => null),
+    fetchEmployeeHappiness(nation._id).catch(() => null),
   ]);
   // Nazione o intervallo cambiati mentre si aspettava: questo disegno è vecchio.
   if (_nation?._id !== nation._id || _range !== range || !_host?.isConnected) return;
   const body = _host.querySelector('#wp-nat-eco-body');
   if (!body) return;
   body.innerHTML = tilesAndTreasury(treasury, transfers)
+    + happinessHtml(happiness)
     + transfersHtml(transfers)
     + donationsHtml(donations)
     + unitsHtml(donations, directory)
@@ -217,7 +224,7 @@ function tilesAndTreasury(treasury, transfers) {
  *  tempo, perché lo storico ha buchi e i buchi non devono sembrare
  *  continuità. Etichette in HTML, non nell'SVG, per restare leggibili su
  *  telefono (vedi la nota in labourSection.js). */
-function lineChartHtml(points) {
+function lineChartHtml(points, { fmt = oro, color = C_TREASURY, label = ecoT('ecoTreasury'), aria = ecoT('ecoTreasuryChart') } = {}) {
   const t0 = dayMs(points[0][0]);
   const t1 = dayMs(points[points.length - 1][0]);
   const span = Math.max(1, t1 - t0);
@@ -236,17 +243,110 @@ function lineChartHtml(points) {
     const xa = i ? (x(points[i - 1][0]) + x(d)) / 2 : 0;
     const xb = i < points.length - 1 ? (x(d) + x(points[i + 1][0])) / 2 : W;
     return `<rect class="wp-tip-hit" x="${xa.toFixed(1)}" y="0" width="${Math.max(1, xb - xa).toFixed(1)}" height="${H}"${tipAttr(
-      fmtData(d), `${ecoT('ecoTreasury')}\t${oro(v)}`)}/>`;
+      fmtData(d), `${label}\t${fmt(v)}`)}/>`;
   }).join('');
 
   return `
-    <div class="wp-nat-lab-axisrow wp-nat-lab-axis-top"><span>${escapeHtml(oro(Math.max(...vals)))}</span><span>${escapeHtml(oro(Math.min(...vals)))}</span></div>
-    <svg class="wp-nat-lab-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(ecoT('ecoTreasuryChart'))}">
-      <path d="${area}" fill="${C_TREASURY}" fill-opacity=".14"/>
-      <path d="${path}" fill="none" stroke="${C_TREASURY}" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    <div class="wp-nat-lab-axisrow wp-nat-lab-axis-top"><span>${escapeHtml(fmt(Math.max(...vals)))}</span><span>${escapeHtml(fmt(Math.min(...vals)))}</span></div>
+    <svg class="wp-nat-lab-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(aria)}">
+      <path d="${area}" fill="${color}" fill-opacity=".14"/>
+      <path d="${path}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>
       ${hits}
     </svg>
     <div class="wp-nat-lab-axisrow"><span>${escapeHtml(fmtData(points[0][0]))}</span><span>${escapeHtml(fmtData(points[points.length - 1][0]))}</span></div>`;
+}
+
+/* ── 1b. felicità dei dipendenti (/employee-happiness) ─────────── */
+
+const C_HAPPY = '#58a6ff';
+const decimale = (v, d = 1) => (v == null || !Number.isFinite(v) ? '—'
+  : v.toLocaleString(document.documentElement.lang || undefined, { minimumFractionDigits: d, maximumFractionDigits: d }));
+/* 'primaDonna' → 'Prima donna': i tratti non hanno un dizionario, come
+   nell'Ottimizzatore (humanize di src/eco/main.js). */
+const umano = (code) => {
+  const s = String(code).replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+
+function causaNome(k) {
+  if (k === 't:?') return ecoT('hapR_hiddenTrait');
+  if (k.startsWith('t:')) return `${umano(k.slice(2))} (${ecoT('hapTrait')})`;
+  const nota = ecoT(`hapR_${k}`);
+  return nota === `hapR_${k}` ? umano(k) : nota;
+}
+
+/** Istogramma a decine (0–10 … 90–100), colori dal rosso al verde. */
+function happyHistHtml(hist) {
+  const max = Math.max(...hist, 1);
+  const tot = hist.reduce((s, v) => s + v, 0) || 1;
+  const bw = W / hist.length;
+  const hh = 110;
+  const bars = hist.map((n, i) => {
+    const h = (n / max) * (hh - 8);
+    const hue = Math.round((i / 9) * 120);   // 0 rosso … 120 verde
+    return `<rect x="${(i * bw + 3).toFixed(1)}" y="${(hh - h).toFixed(1)}" width="${(bw - 6).toFixed(1)}" height="${Math.max(h, n ? 1 : 0).toFixed(1)}" fill="hsl(${hue} 60% 50%)" fill-opacity=".8"${tipAttr(
+      `${i * 10}–${i * 10 + 10}`, `${ecoT('hapCount')}\t${n.toLocaleString()} (${decimale((n / tot) * 100)}%)`)}/>`;
+  }).join('');
+  return `
+    <svg class="wp-nat-lab-chart" viewBox="0 0 ${W} ${hh}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(ecoT('hapDist'))}">${bars}</svg>
+    <div class="wp-nat-lab-axisrow"><span>0</span><span>50</span><span>100</span></div>`;
+}
+
+function happinessHtml(d) {
+  const title = `<h3 class="wp-nat-section-title" data-sec="eco-happiness">${escapeHtml(ecoT('hapTitle'))}</h3>`;
+  if (!d) return `${title}<p class="wp-nat-notice">${escapeHtml(ecoT('hapNone'))}</p>`;
+  const nome = _nation.name || '—';
+  const s = d.country;
+  if (!s) return `${title}<p class="wp-nat-notice">${escapeHtml(ecoT('hapNoCountry', { nation: nome }))}</p>`;
+
+  const pos = d.ranking.findIndex(r => r[0] === _nation._id);
+  const iP = (p) => d.percentiles.indexOf(p);
+  const tile = (lab, val, cls = '', tip = '') => `
+    <div class="wp-nat-lab-tile"${tip ? ` title="${escapeHtml(tip)}"` : ''}>
+      <span class="wp-nat-lab-lab">${escapeHtml(lab)}</span>
+      <strong class="wp-nat-lab-val ${cls}">${escapeHtml(val)}</strong>
+    </div>`;
+  const tiles = [
+    tile(ecoT('hapMean'), decimale(s.mean), d.world && s.mean >= d.world.mean ? 'wp-nat-up' : 'wp-nat-down'),
+    tile(ecoT('hapMedian'), decimale(s.p?.[iP(50)])),
+    tile(ecoT('hapRange'), `${decimale(s.p?.[iP(10)], 0)} – ${decimale(s.p?.[iP(90)], 0)}`),
+    tile(ecoT('hapWorld'), d.world ? decimale(d.world.mean) : '—'),
+    tile(ecoT('hapRank'), pos >= 0 ? ecoT('hapRankOf', { r: pos + 1, n: d.ranking.length }) : ecoT('hapNoRank', { n: d.minRanking })),
+    tile(ecoT('hapProd'), s.prod != null ? `${s.prod > 0 ? '+' : ''}${decimale(s.prod)}%` : '—', s.prod > 0 ? 'wp-nat-up' : s.prod < 0 ? 'wp-nat-down' : '', ecoT('hapProdNote')),
+    tile(ecoT('hapCount'), s.n.toLocaleString(), '', [s.tax != null ? ecoT('hapTax', { t: decimale(s.tax, 2) }) : '', s.quit ? ecoT('hapQuit', { n: s.quit }) : ''].filter(Boolean).join(' · ')),
+  ].join('');
+
+  // Le cause per peso: quota di dipendenti toccati × effetto medio.
+  const cause = Object.entries(s.contrib || {})
+    .map(([k, [quota, delta]]) => ({ k, quota, delta, peso: Math.abs(quota * delta) }))
+    .sort((a, b) => b.peso - a.peso);
+  const righe = cause.map(c => `
+        <li class="wp-nat-lab-row">
+          <span class="wp-nat-lab-name">${escapeHtml(causaNome(c.k))}</span>
+          <span class="wp-nat-lab-bar"${tipAttr(causaNome(c.k), `${ecoT('hapShare')}\t${decimale(c.quota * 100, 0)}%`, `${ecoT('hapDelta')}\t${c.delta > 0 ? '+' : ''}${decimale(c.delta)}`)}><span style="width:${(c.quota * 100).toFixed(1)}%;background:${c.delta >= 0 ? C_IN : C_OUT}"></span></span>
+          <span class="wp-nat-lab-num ${c.delta >= 0 ? 'wp-nat-up' : 'wp-nat-down'}">${escapeHtml(`${c.delta > 0 ? '+' : ''}${decimale(c.delta)}`)}</span>
+        </li>`).join('');
+
+  const curva = d.countryDays.map(([g, m]) => [g, m]);
+  const grafico = curva.length > 1
+    ? lineChartHtml(curva, { fmt: (v) => decimale(v), color: C_HAPPY, label: ecoT('hapChartLbl'), aria: ecoT('hapChart') })
+    : `<p class="wp-nat-lab-note">${escapeHtml(ecoT('hapNoHist'))}</p>`;
+
+  return `${title}
+    <p class="wp-nat-curve-note">${escapeHtml(ecoT('hapSub', { nation: nome, d: fmtData(d.day) }))}</p>
+    <div class="wp-nat-lab-tiles">${tiles}</div>
+    <div class="wp-nat-curve-card">
+      <h4 class="wp-nat-chart-title">${escapeHtml(ecoT('hapDist'))}</h4>
+      <div class="wp-nat-curve-slot">${happyHistHtml(s.hist)}</div>
+    </div>
+    <div class="wp-nat-lab-col">
+      <h4 class="wp-nat-chart-title">${escapeHtml(ecoT('hapCauses'))}</h4>
+      <ul class="wp-nat-lab-list">${righe}</ul>
+    </div>
+    <div class="wp-nat-curve-card">
+      <h4 class="wp-nat-chart-title">${escapeHtml(ecoT('hapChart'))}</h4>
+      <div class="wp-nat-curve-slot">${grafico}</div>
+    </div>`;
 }
 
 /* ── 2. bonifici fra tesori ────────────────────────────────────── */

@@ -230,7 +230,7 @@ const {
 // valore atteso delle casse. sqlite su disco. Vedi il blocco in testa a
 // server/gearMarket.js.
 const {
-  initGearMarket, pollGearMarket, bootstrapGearMarket, backfillOpenCases, readGearMarket, statoGearMarket,
+  initGearMarket, pollGearMarket, bootstrapGearMarket, backfillOpenCases, readGearMarket, readGearPriceHistory, statoGearMarket,
 } = require('./gearMarket');
 // WarEra+ lavoro e tasse: ogni pagamento di salario del gioco, aggregato per
 // nazione. Archivio CHIUSO (29 lug - 17 set 2026) e senza poll: sono ~550.000
@@ -263,7 +263,7 @@ const { initBattleNations, readBattleNations, statoBattleNations } = require('./
 // giorno di notte, partendo dai cittadini attivi del censimento. Vedi il
 // blocco in testa a server/companyCensus.js.
 const {
-  initCompanyCensus, runCompanyCensus, companyCensusDovuto, readCompanyCensus, readCompanyAbroad, readEmployeeBenchmarks, statoCompanyCensus,
+  initCompanyCensus, runCompanyCensus, companyCensusDovuto, readCompanyCensus, readCompanyAbroad, readEmployeeBenchmarks, readEmployeeHappiness, statoCompanyCensus,
 } = require('./companyCensus');
 // WarEra+ tornei: tabellone e forza delle squadre (danno settimanale dei
 // loro iscritti) gia' calcolata, per non far scaricare a ogni browser la
@@ -3667,6 +3667,21 @@ app.get('/gear-market', async (req, res) => {
   }
 });
 
+// Lo storico dei prezzi di un pezzo (server/gearMarket.js, tabella `daily`):
+// mediana e numero di vendite per giorno, in tre fasce di tiro. `step=6h` per
+// le ultime due settimane, calcolato sulle vendite grezze.
+app.get('/gear-price-history', async (req, res) => {
+  const code = String(req.query.code || '');
+  if (!/^[A-Za-z0-9]{1,40}$/.test(code)) return res.status(400).json({ error: 'code' });
+  const step = req.query.step === '6h' ? '6h' : 'day';
+  try {
+    res.json(await readGearPriceHistory(code, step));
+  } catch (err) {
+    console.error('[gear-market] storico fallito:', err.message);
+    res.status(502).json({ available: false, error: err.message });
+  }
+});
+
 app.get('/price-history', (req, res) => {
   const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 365);
   res.json(readPriceHistory(days));
@@ -3689,6 +3704,14 @@ app.get('/company-census', (req, res) => {
 // "costa più dell'80% dei dipendenti del ferro". Pochi KB.
 app.get('/employee-benchmarks', (req, res) => {
   res.json(readEmployeeBenchmarks());
+});
+
+// La felicità dei dipendenti per nazione dove sta l'azienda (stesso giro
+// notturno, stessa rosa): fotografia, curva giornaliera e classifica.
+// `available: false` finche' un giro con la rosa valida non l'ha scritta.
+app.get('/employee-happiness', (req, res) => {
+  const countryId = /^[a-f0-9]{24}$/.test(String(req.query.countryId || '')) ? String(req.query.countryId) : null;
+  res.json(readEmployeeHappiness(countryId));
 });
 
 // Le aziende dei cittadini di una nazione in regioni di altre nazioni,

@@ -133,6 +133,20 @@
    (conteggio null, nessun riferimento nuovo): un riferimento fatto su
    mezzo mondo direbbe a metà dei giocatori che stanno pagando troppo.
 
+   ── LA FELICITÀ (2026-11-20) ───────────────────────────────────────────
+   Richiesta dell'utente: «una media della felicità dei dipendenti in
+   Italia». La rosa la porta già (`happinessBreakdown`: valore, cause col
+   loro delta, probabilità di dimissioni), quindi zero richieste in più: si
+   conta nello stesso passaggio, per la nazione che possiede ADESSO la
+   regione dell'azienda (dove si pagano le tasse sul reddito, che tolgono
+   felicità). Stesso perimetro della rosa: solo le aziende che hanno
+   prodotto negli ultimi 7 giorni. Si salva la fotografia dell'ultimo giro
+   (media, percentili, istogramma a decine, cause, effetto medio sulla
+   produzione) e una riga al giorno [media, dipendenti]: la curva parte dal
+   deploy e non si ricostruisce, la felicità di ieri non la dice nessuno.
+   Misurato a mano il 2026-11-20 su un campione italiano (1.801 dipendenti):
+   media 62, mediana 60,5.
+
    ── LE AZIENDE ALL'ESTERO (2026-10-26) ────────────────────────────────
    Richiesta dell'area riservata: quali cittadini di una nazione hanno
    aziende in regioni di un'ALTRA nazione (tasse sui salari e produzione
@@ -208,6 +222,59 @@ function _vuoto() {
     measured: {},          // giornoUtc → giorno italiano in cui è stato misurato
     rates: {},             // cid → aliquota sul reddito all'ultimo giro (percentuale)
     staff: null,           // riferimenti mondiali dalla rosa (vedi testata), dell'ultimo giro buono
+    happiness: null,       // felicità per nazione dell'ultimo giro buono (vedi "LA FELICITÀ")
+    happinessDays: {},     // giorno → {cid: [media, dipendenti]}, si accumula
+  };
+}
+
+// ── La felicità dei dipendenti ─────────────────────────────────────────
+const WORLD = '_world';
+const MIN_CLASSIFICA = 30;   // dipendenti sotto i quali una nazione non entra nella classifica
+
+/** Somma un dipendente all'accumulatore della sua nazione. Si tengono i
+ *  valori (per i percentili: ~decine di migliaia di numeri al giro, poi via)
+ *  e, per ogni causa, quanti la hanno e la somma dei suoi delta. */
+function _felicitaAcc(acc, cid, e) {
+  const h = Number(e?.happinessBreakdown?.value);
+  if (!cid || !Number.isFinite(h)) return;
+  const a = acc[cid] || (acc[cid] = { v: [], quit: 0, prod: 0, prodN: 0, contrib: {} });
+  a.v.push(h);
+  if (Number(e.happinessBreakdown.quitChance) > 0) a.quit++;
+  const p = (e.productionBonus?.contributions || []).find((c) => c?.source === 'happiness');
+  a.prod += Number(p?.percent) || 0;
+  a.prodN++;
+  for (const c of e.happinessBreakdown.contributions || []) {
+    // I tratti col loro codice; uno non ancora rivelato resta "?": il gioco
+    // ne dà il delta ma non il nome.
+    const k = c?.reason === 'trait' ? `t:${c.revealed === false ? '?' : c.code || '?'}` : c?.reason;
+    if (!k) continue;
+    const s = a.contrib[k] || (a.contrib[k] = [0, 0]);
+    s[0]++; s[1] += Number(c.delta) || 0;
+  }
+}
+
+/** L'accumulatore di una nazione → quello che si salva. */
+function _felicitaSintesi(a, aliquota) {
+  const n = a.v.length;
+  if (!n) return null;
+  const media = a.v.reduce((s, v) => s + v, 0) / n;
+  const hist = new Array(10).fill(0);
+  for (const v of a.v) hist[Math.min(9, Math.max(0, Math.floor(v / 10)))]++;
+  const contrib = {};
+  for (const [k, [m, somma]] of Object.entries(a.contrib)) {
+    contrib[k] = [Math.round((m / n) * 1000) / 1000, Math.round((somma / m) * 10) / 10];
+  }
+  return {
+    n,
+    mean: Math.round(media * 10) / 10,
+    p: _percentili(a.v),
+    hist,
+    quit: a.quit,
+    // Effetto medio della felicità sulla produzione, in punti percentuali
+    // (la voce `happiness` di productionBonus): quello che costa davvero.
+    prod: a.prodN ? Math.round((a.prod / a.prodN) * 100) / 100 : null,
+    tax: aliquota ?? null,
+    contrib,
   };
 }
 
@@ -391,6 +458,7 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
     const dipendentiDi = new Map();   // azienda → dipendenti
     const rifPerCode = {};            // code → { cost: [], pts: [], stat: [] }
     const tratti = {};
+    const felicita = {};              // cid → accumulatore (vedi _felicitaAcc), più WORLD
     let conAttrezzo = 0, dipendentiVisti = 0;
     let roseOk = 0;
     await _perBlocchi('employee.getCompanyRoster',
@@ -398,10 +466,12 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
         res.forEach((r, j) => {
           if (!Array.isArray(r?.employees)) return;
           roseOk++;
-          const { id, code } = daRosa[inizio + j];
+          const { id, code, cid } = daRosa[inizio + j];
           dipendentiDi.set(id, r.employees.length);
           const rif = rifPerCode[code] || (rifPerCode[code] = { cost: [], pts: [], stat: [] });
           for (const e of r.employees) {
+            _felicitaAcc(felicita, cid, e);
+            _felicitaAcc(felicita, WORLD, e);
             dipendentiVisti++;
             const pts = Number(e?.estimate?.production) || 0;
             const wage = Number(e?.estimate?.wage ?? e?.wage) || 0;
@@ -503,6 +573,18 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
         companies: roseOk, employees: dipendentiVisti, withTool: conAttrezzo,
         percentiles: PERCENTILI, items: perCode, traits: tratti,
       };
+      // La felicità per nazione (vedi "LA FELICITÀ" in testata): fotografia
+      // di stanotte più una riga al giorno [media, dipendenti] per la curva.
+      const naz = {};
+      const giorno = {};
+      for (const [cid, acc] of Object.entries(felicita)) {
+        const s = _felicitaSintesi(acc, cid === WORLD ? null : aliquote[cid]);
+        if (!s) continue;
+        naz[cid] = s;
+        giorno[cid] = [s.mean, s.n];
+      }
+      store.happiness = { day: oggi, updatedAt: Date.now(), scope: 'active7d', percentiles: PERCENTILI, countries: naz };
+      store.happinessDays = { ...(store.happinessDays || {}), [oggi]: giorno };
     }
     store.coverage = {
       owners: proprietari.length,
@@ -683,6 +765,39 @@ function readEmployeeBenchmarks() {
   return { available: true, ...s };
 }
 
+/**
+ * La felicità dei dipendenti delle aziende in `countryId` (null = solo il
+ * mondo): la fotografia dell'ultimo giro, la curva [giorno, media,
+ * dipendenti] e la classifica [cid, media, dipendenti] delle nazioni con
+ * almeno MIN_CLASSIFICA dipendenti contati, dalla più felice.
+ */
+function readEmployeeHappiness(countryId = null) {
+  const store = _read();
+  const h = store.happiness;
+  if (!h) return { available: false };
+  const curva = (cid) => Object.keys(store.happinessDays || {}).sort()
+    .map((g) => [g, ...(store.happinessDays[g][cid] || [])])
+    .filter((r) => r.length === 3);
+  const classifica = Object.entries(h.countries)
+    .filter(([cid, s]) => cid !== WORLD && s.n >= MIN_CLASSIFICA)
+    .map(([cid, s]) => [cid, s.mean, s.n])
+    .sort((a, b) => b[1] - a[1]);
+  return {
+    available: true,
+    day: h.day,
+    updatedAt: h.updatedAt,
+    scope: h.scope,
+    percentiles: h.percentiles,
+    minRanking: MIN_CLASSIFICA,
+    world: h.countries[WORLD] || null,
+    worldDays: curva(WORLD),
+    countryId,
+    country: countryId ? h.countries[countryId] || null : null,
+    countryDays: countryId ? curva(countryId) : [],
+    ranking: classifica,
+  };
+}
+
 /** Per /health. */
 function statoCompanyCensus() {
   const store = _read();
@@ -696,6 +811,9 @@ function statoCompanyCensus() {
     salariAl: giorni[giorni.length - 1] || null,
     fotografie: Object.keys(store.counts).length,
     rosa: store.staff ? { giorno: store.staff.day, dipendenti: store.staff.employees, aziende: store.staff.companies } : null,
+    felicita: store.happiness
+      ? { giorno: store.happiness.day, nazioni: Object.keys(store.happiness.countries).length - 1, giorniInArchivio: Object.keys(store.happinessDays || {}).length }
+      : null,
   };
 }
 
@@ -706,5 +824,6 @@ module.exports = {
   readCompanyCensus,
   readCompanyAbroad,
   readEmployeeBenchmarks,
+  readEmployeeHappiness,
   statoCompanyCensus,
 };

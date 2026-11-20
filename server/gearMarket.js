@@ -58,15 +58,34 @@
    (`events`) invece non si potano: sono pochi byte al giorno e una
    frequenza di uscita misurata su mesi vale più di una su una settimana.
 
+   ── LO STORICO DEI PREZZI (2026-11-20) ─────────────────────────────
+   Le vendite grezze si potano, il loro RIASSUNTO no: la tabella `daily`
+   tiene per ogni giorno UTC e ogni pezzo quante vendite e la mediana del
+   prezzo, divise in tre fasce di tiro (basso, medio, alto: il tiro
+   normalizzato sull'intervallo di dynamicStats, per le armi la media dei
+   due). Le fasce servono perché una mediana sola si sposta anche quando
+   cambia la MESCOLANZA dei tiri venduti, non il prezzo: un giorno con molti
+   sniper buoni sembrerebbe un rincaro. Pochi byte a pezzo e a giorno, mai
+   potata: è l'unica copia, le vendite di cui è fatta spariscono.
+   Un giorno si riscrive solo se le vendite grezze lo coprono DA MEZZANOTTE:
+   il giorno su cui cade la potatura è a metà, e un riassunto fatto su mezza
+   giornata sostituirebbe quello buono. Oggi è a metà per definizione: la
+   rotta lo segna (`partialLast`). Per le ultime due settimane la rotta sa
+   fare anche secchi da 6 ore, calcolati al volo sulle vendite grezze.
+   ⚠️ Il database è fuori dal backup (vedi sotto), lo storico NO: a ogni
+   aggiornamento si copia in `cache/gear-price-daily.json`, che il tar
+   prende, e all'avvio si rilegge da lì se la tabella è vuota.
+
    ── COSTI ──────────────────────────────────────────────────────────────
    Regime: ~45 richieste ogni 10 minuti (le casse si aprono 12.000 volte
    l'ora, ma le frequenze si campionano: non serve vederle tutte). Su disco
    (`cache/gear-market.sqlite`, NON in RAM: il VPS ha 954 MB): ~1 MB al
    giorno di vendite, 14 giorni di coda. Escluso dal tar del backup: è un
-   dato derivato che l'API rifà in un giorno.
+   dato derivato che l'API rifà in un giorno (tranne lo storico, vedi sopra).
    ═══════════════════════════════════════════════════════════════════════ */
 
 const path = require('path');
+const fs = require('fs');
 
 let DatabaseSync = null;
 try { ({ DatabaseSync } = require('node:sqlite')); } catch (_) { /* il modulo si spegne, il server no */ }
@@ -161,6 +180,13 @@ function initGearMarket(tools) {
     ) WITHOUT ROWID`);
     db.exec('CREATE TABLE IF NOT EXISTS seen (id TEXT PRIMARY KEY, ts INTEGER NOT NULL) WITHOUT ROWID');
     db.exec('CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT) WITHOUT ROWID');
+    // Storico dei prezzi: vedi "LO STORICO DEI PREZZI" in testa. Mai potato.
+    db.exec(`CREATE TABLE IF NOT EXISTS daily (
+      day TEXT NOT NULL, code TEXT NOT NULL, n INTEGER NOT NULL, med REAL,
+      n0 INTEGER, m0 REAL, n1 INTEGER, m1 REAL, n2 INTEGER, m2 REAL,
+      PRIMARY KEY (code, day)
+    ) WITHOUT ROWID`);
+    _ripristinaStorico();
   } catch (err) {
     db = null;
     console.error('[gear-market] database non aperto:', err.message);
@@ -311,6 +337,9 @@ async function pollGearMarket() {
         console.error(`[gear-market] giro ${type} fallito:`, err.message);
       }
     }
+    // Lo storico PRIMA della potatura: il giorno che sta per perdere le
+    // prime ore è già stato riassunto intero ai giri precedenti.
+    try { _aggiornaStorico(); } catch (err) { console.error('[gear-market] storico prezzi:', err.message); }
     // Manutenzione: poche righe, ma gira a ogni giro e costa niente.
     db.prepare('DELETE FROM sales WHERE ts < ?').run(Date.now() - RETENTION_DAYS * 86400_000);
     db.prepare('DELETE FROM seen WHERE ts < ?').run(Date.now() - 36 * 3600_000);
@@ -507,6 +536,140 @@ function _frequenze() {
   return { craft, cases, wood, dismantle, since: primo || null };
 }
 
+// ── Lo storico dei prezzi ─────────────────────────────────────────────
+const MIN_FASCIA = 5;            // vendite sotto le quali la mediana di una fascia è null
+const STEP_6H = 6 * 3600_000;
+const STORICO_FILE = 'gear-price-daily.json';
+const COLONNE = ['day', 'code', 'n', 'med', 'n0', 'm0', 'n1', 'm1', 'n2', 'm2'];
+
+/** Tiro normalizzato 0..1 di una vendita (armi: media dei due tiri). */
+function _qualita(g, a, b) {
+  const norm = (val, k) => (g.hi[k] > g.lo[k] ? (val - g.lo[k]) / (g.hi[k] - g.lo[k]) : 0.5);
+  const q = g.kind === 'weapon' && b != null ? (norm(a, 0) + norm(b, 1)) / 2 : norm(a, 0);
+  return Math.min(1, Math.max(0, q));
+}
+
+function _mediana(v) {
+  if (!v.length) return null;
+  v.sort((x, y) => x - y);
+  const m = v.length >> 1;
+  return round4(v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2);
+}
+
+/** Righe { price, a, b } di UN pezzo → [n, med, n0, m0, n1, m1, n2, m2]. */
+function _riassunto(g, righe) {
+  const tutti = [], fasce = [[], [], []];
+  for (const r of righe) {
+    tutti.push(r.price);
+    const q = _qualita(g, r.a, r.b);
+    fasce[q < 1 / 3 ? 0 : q < 2 / 3 ? 1 : 2].push(r.price);
+  }
+  const out = [tutti.length, _mediana(tutti)];
+  for (const f of fasce) out.push(f.length, f.length >= MIN_FASCIA ? _mediana(f) : null);
+  return out;
+}
+
+/** La copia per il backup: il database è fuori dal tar, lo storico no. */
+function _salvaStorico() {
+  const righe = db.prepare(`SELECT ${COLONNE.join(', ')} FROM daily ORDER BY code, day`).all()
+    .map(r => COLONNE.map(c => r[c]));
+  const dest = path.join(deps.cacheDir, STORICO_FILE);
+  fs.writeFileSync(`${dest}.tmp`, JSON.stringify({ savedAt: new Date().toISOString(), cols: COLONNE, rows: righe }));
+  fs.renameSync(`${dest}.tmp`, dest);
+}
+
+/** All'avvio, con la tabella vuota (database perso o rifatto), si rilegge la copia. */
+function _ripristinaStorico() {
+  if (db.prepare('SELECT COUNT(*) AS n FROM daily').get().n) return;
+  let dati;
+  try { dati = JSON.parse(fs.readFileSync(path.join(deps.cacheDir, STORICO_FILE), 'utf8')); } catch (_) { return; }
+  if (!Array.isArray(dati?.rows)) return;
+  const ins = db.prepare(`INSERT OR IGNORE INTO daily (${COLONNE.join(', ')}) VALUES (${COLONNE.map(() => '?').join(', ')})`);
+  db.exec('BEGIN');
+  for (const r of dati.rows) if (Array.isArray(r) && r.length === COLONNE.length) ins.run(...r);
+  db.exec('COMMIT');
+  console.log(`[gear-market] storico prezzi ripristinato dalla copia: ${dati.rows.length} righe`);
+}
+
+/** Riscrive in `daily` i giorni che le vendite grezze coprono da mezzanotte.
+ *  Al primo giro dopo il deploy li fa tutti (al più 14), poi ieri e oggi. */
+function _aggiornaStorico() {
+  if (!_gear) return;
+  const lim = db.prepare('SELECT MIN(ts) AS min, MAX(ts) AS max FROM sales').get();
+  if (!lim.min) return;
+  // Il primo giorno pieno: quello dopo la prima vendita, salvo che la prima
+  // vendita cada nei primi minuti del suo giorno.
+  const inizioPrimo = Date.parse(`${giornoUtc(lim.min)}T00:00:00Z`);
+  let dal = lim.min - inizioPrimo < 10 * 60_000 ? inizioPrimo : inizioPrimo + 86400_000;
+  if (_meta('daily:fatto')) dal = Math.max(dal, Date.parse(`${giornoUtc(Date.now() - 86400_000)}T00:00:00Z`));
+  const sel = db.prepare('SELECT code, price, a, b FROM sales WHERE ts >= ? AND ts < ?');
+  const ins = db.prepare(`INSERT OR REPLACE INTO daily (${COLONNE.join(', ')}) VALUES (${COLONNE.map(() => '?').join(', ')})`);
+  for (let t = dal; t <= lim.max; t += 86400_000) {
+    const day = giornoUtc(t);
+    const perCode = {};
+    for (const r of sel.all(t, t + 86400_000)) (perCode[r.code] ||= []).push(r);
+    db.exec('BEGIN');
+    try {
+      for (const [code, righe] of Object.entries(perCode)) {
+        const g = _gear[code];
+        if (g) ins.run(day, code, ..._riassunto(g, righe));
+      }
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+  _setMeta('daily:fatto', Date.now());
+  _storicoCache.clear();
+  try { _salvaStorico(); } catch (err) { console.error('[gear-market] copia dello storico non scritta:', err.message); }
+}
+
+const _storicoCache = new Map();   // `${code}|${step}` → { at, data }
+
+/**
+ * Lo storico di un pezzo. `step` = 'day' (dalla tabella `daily`, tutta la
+ * storia) o '6h' (al volo sulle vendite grezze, le ultime due settimane).
+ * Righe [inizio, n, med, n0, m0, n1, m1, n2, m2], dal più vecchio; `inizio`
+ * è il giorno ISO o, per i 6h, l'istante ISO di inizio del secchio.
+ */
+async function readGearPriceHistory(code, step = 'day') {
+  if (!db) return { available: false, reason: 'database spento' };
+  if (!_gear && !await _loadConfig()) return { available: false, reason: 'configurazione di gioco non letta' };
+  const g = _gear[code];
+  if (!g) return { available: false, reason: 'pezzo sconosciuto' };
+  const chiave = `${code}|${step}`;
+  const c = _storicoCache.get(chiave);
+  if (c && Date.now() - c.at < MODEL_TTL_MS) return c.data;
+
+  let rows;
+  if (step === '6h') {
+    const lim = db.prepare('SELECT MIN(ts) AS min FROM sales').get().min;
+    const dal = lim ? Math.ceil(lim / STEP_6H) * STEP_6H : Date.now();   // il primo secchio intero
+    const secchi = new Map();
+    for (const r of db.prepare('SELECT ts, price, a, b FROM sales WHERE code = ? AND ts >= ? ORDER BY ts').all(code, dal)) {
+      const k = Math.floor(r.ts / STEP_6H) * STEP_6H;
+      if (!secchi.has(k)) secchi.set(k, []);
+      secchi.get(k).push(r);
+    }
+    rows = [...secchi.entries()].map(([k, righe]) => [new Date(k).toISOString(), ..._riassunto(g, righe)]);
+  } else {
+    rows = db.prepare('SELECT day, n, med, n0, m0, n1, m1, n2, m2 FROM daily WHERE code = ? ORDER BY day').all(code)
+      .map(r => [r.day, r.n, r.med, r.n0, r.m0, r.n1, r.m1, r.n2, r.m2]);
+  }
+  const data = {
+    available: true,
+    code, step,
+    kind: g.kind, rarity: g.rarity, keys: g.keys, lo: g.lo, hi: g.hi,
+    minBand: MIN_FASCIA,
+    // L'ultimo secchio (oggi, o le 6 ore in corso) è a metà.
+    partialLast: true,
+    rows,
+  };
+  _storicoCache.set(chiave, { at: Date.now(), data });
+  return data;
+}
+
 let _model = null;
 
 function _buildModel() {
@@ -558,6 +721,7 @@ function statoGearMarket() {
     ultimaVendita: v.max ? new Date(v.max).toISOString() : null,
     ultimoGiro: lp ? new Date(lp).toISOString() : null,
     eventi: Object.fromEntries(ev.map(e => [e.kind, e.n])),
+    storico: db.prepare('SELECT COUNT(DISTINCT day) AS giorni, MIN(day) AS dal, MAX(day) AS al FROM daily').get(),
     inCorso: _inCorso,
   };
 }
@@ -568,5 +732,6 @@ module.exports = {
   bootstrapGearMarket,
   backfillOpenCases,
   readGearMarket,
+  readGearPriceHistory,
   statoGearMarket,
 };

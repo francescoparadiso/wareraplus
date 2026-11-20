@@ -726,6 +726,21 @@ export async function fetchGearMarketViaCache() {
   }
 }
 
+/** WarEra+ — lo storico dei prezzi di un pezzo (`/gear-price-history`, vedi
+ *  "LO STORICO DEI PREZZI" in server/gearMarket.js): mediana e vendite per
+ *  giorno (o per 6 ore) in tre fasce di tiro. null se il server non risponde
+ *  o non ha ancora la rotta (404 prima del rideploy). */
+export async function fetchGearPriceHistoryViaCache(code, step = 'day') {
+  try {
+    const json = await _fetchCacheJsonRaw(`/gear-price-history?code=${encodeURIComponent(code)}&step=${step === '6h' ? '6h' : 'day'}`);
+    if (!json || json.available !== true || !Array.isArray(json.rows)) return null;
+    return json;
+  } catch (err) {
+    console.warn('WarEra+ cache: /gear-price-history non disponibile:', err.message);
+    return null;
+  }
+}
+
 /** WarEra+ — i portafogli dei giocatori sommati (`/player-money`, vedi
  *  server/playerParts.js): il mondo giorno per giorno e, per l'ultimo giorno,
  *  per nazione e per unità. null se il server non risponde o non ha ancora la
