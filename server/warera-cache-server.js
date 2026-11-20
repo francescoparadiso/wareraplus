@@ -209,6 +209,8 @@ const {
 const {
   initDayHistory, snapshotDay, readDay, statoDayHistory, treasuryByDay, treasuryOfCountry,
 } = require('./dayHistory');
+// WarEra+ (2026-11-20): la popolazione attiva nel tempo, mondo e nazioni.
+const { initPopulationHistory, snapshotPopulation, readPopulationHistory, statoPopulationHistory } = require('./populationHistory');
 // WarEra+ soldi bloccati negli ordini d'acquisto, per risorsa, unita' e
 // nazione del compratore, piu' il totale dei tesori. Il gioco non dice quanti
 // soldi ha un giocatore: l'unica parte visibile del suo portafoglio e' quella
@@ -505,6 +507,9 @@ initPriceHistory({
 
 // La giornata storica: solo cache, nessuna chiamata.
 initDayHistory({ readCache, writeCache });
+
+// La popolazione nel tempo: solo cache (countries + ticker-history), nessuna chiamata.
+initPopulationHistory({ readCache, writeCache });
 
 // Soldi negli ordini: richieste pubbliche (libro ordini), la mappa
 // utente -> nazione che il giro dei cittadini tiene gia', e i tesori giorno
@@ -857,6 +862,8 @@ async function pollDiplomacy() {
     console.log(`[poll] diplomacy aggiornato (${diplomacy.length})`);
 
     pollTickerEvents(countries, diplomacy);
+    // Dopo il ticker: al primo scatto la ricostruzione legge anche gli eventi di questo giro.
+    snapshotPopulation(countries);
   } catch (err) { console.error('[poll] diplomacy fallito:', err.message); }
 }
 
@@ -3763,6 +3770,14 @@ app.get('/player-wealth', async (req, res) => {
 // guerra".
 app.get('/day-history', (req, res) => res.json(readDay(req.query.day)));
 
+// La popolazione attiva nel tempo (server/populationHistory.js): il mondo ora
+// per ora, e con ?countryId= anche quella nazione giorno per giorno.
+app.get('/population-history', (req, res) => {
+  const cid = String(req.query.countryId || '');
+  if (cid && !/^[0-9a-f]{24}$/.test(cid)) return res.status(400).json({ error: 'countryId non valido' });
+  res.json(readPopulationHistory(cid || null));
+});
+
 // Lavoro e tasse (server/labourHistory.js): una nazione per volta, piu' il
 // totale mondiale come metro di paragone. `from`/`to` viaggiano sempre:
 // l'archivio e' chiuso al 17 settembre 2026 e la vista deve dirlo invece di
@@ -4433,6 +4448,7 @@ app.get('/health', (req, res) => res.json({
   // import/battaglie.js) e la time machine mostra la fascia "fuori portata"
   // per i giorni precedenti.
   dayHistory: statoDayHistory(),
+  populationHistory: statoPopulationHistory(),
   // Lavoro e tasse: archivio chiuso, `archivioChiuso: true` lo dichiara.
   // Se `nazioni` e' 0 l'import non e' mai stato fatto (import/lavoro.js).
   labour: statoLabour(),

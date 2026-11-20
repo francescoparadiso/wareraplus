@@ -919,3 +919,13 @@ body.light-theme .wp-nat-cmpt-row > :first-child { background: var(--wp-ov-bg-li
 .wp-nat-cur-line { stroke: var(--wp-ov-text, #e6edf3); stroke-width: 1; stroke-dasharray: 3 3; opacity: .7; }
 .wp-nat-cur-dot { stroke-width: 9; stroke-linecap: round; }
 body.light-theme .wp-nat-cur-line { stroke: #24292f; }
+
+/* ── Popolazione nel tempo (populationChart.js), in cima ai Grafici ── */
+.wp-nat-pop { margin-bottom: 14px; }
+.wp-nat-pop .wp-nat-curve-head { margin-bottom: 10px; }
+.wp-nat-pop .wp-nat-chart-title { margin: 0; }
+.wp-nat-pop .wp-nat-lab-tiles { margin-bottom: 12px; }
+.wp-nat-pop .wp-nat-curve-note { margin-top: 10px; }
+@media (max-width: 600px) {
+  .wp-nat-pop .wp-nat-lab-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

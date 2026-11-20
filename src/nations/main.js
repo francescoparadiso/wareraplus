@@ -23,6 +23,7 @@ import { renderNationCompare } from './nationCompare.js';
 import { renderNationDetail } from './nationDetail.js';
 import { METRICS, metricValue } from './metrics.js';
 import { donutHtml, barsHtml } from './charts.js';
+import { populationSlotHtml, paintPopulation } from './populationChart.js';
 import { escapeHtml, flagImg, fmtCompact } from '../mu/ui.js';
 import { trackEvent } from '../shared/analytics.js';
 import { syncBack } from '../app/backNav.js';
@@ -164,7 +165,10 @@ function renderCharts(body, nations) {
     .map(n => ({ label: n.name || '—', value: metricValue(n, key) }))
     .filter(s => s.value > 0);
 
+  // WarEra+ (2026-11-20): in cima la popolazione nel tempo (populationChart.js),
+  // che arriva dal server e compare solo se c'è.
   body.innerHTML = `
+    ${populationSlotHtml()}
     <div class="wp-nat-chart-grid">
       ${donutHtml({ title: natT('chartWeekly'), slices: slice('weekly'), otherLabel: natT('others') })}
       ${donutHtml({ title: natT('chartWealth'), slices: slice('wealth'), otherLabel: natT('others') })}
@@ -188,6 +192,7 @@ function renderCharts(body, nations) {
         fmt: v => v.toFixed(1),
       })}
     </div>`;
+  paintPopulation(body);
 }
 
 /** Apre direttamente la scheda di una nazione (pannello nazione, ricerca). */
