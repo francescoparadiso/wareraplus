@@ -821,3 +821,15 @@ body.light-theme .wp-crf-hdot.wp-crf-hpart { fill: #fff; }
   .wp-crf-hk .wp-ecn-kpi strong { font-size: 20px; }
   .wp-crf-hscroll .wp-crf-hchart { min-width: 700px; }
 }
+/* Il cursore del grafico: acceso sulla colonna puntata (hover col mouse,
+   wp-tip-on al tocco, vedi src/shared/chartTip.js). */
+.wp-crf-hchart { cursor: crosshair; }
+.wp-crf-hcur { opacity: 0; pointer-events: none; transition: opacity .08s; }
+.wp-crf-hcol:hover .wp-crf-hcur, .wp-crf-hcol:has(.wp-tip-on) .wp-crf-hcur { opacity: 1; }
+.wp-crf-hcur-line { stroke: var(--wp-ov-text, #e6edf3); stroke-width: 1; stroke-dasharray: 3 3; opacity: .7; }
+.wp-crf-hcur-vol { fill: var(--wp-ov-text-dim, #8b949e); fill-opacity: .55; stroke: var(--wp-ov-text, #e6edf3); stroke-width: 1; }
+.wp-crf-hcur-dot { stroke: var(--wp-ov-surface, #0d1117); stroke-width: 2; }
+.wp-crf-hcur-dot.wp-crf-hc0 { fill: #8b949e; } .wp-crf-hcur-dot.wp-crf-hc1 { fill: #60a5fa; } .wp-crf-hcur-dot.wp-crf-hc2 { fill: #3fb950; }
+body.light-theme .wp-crf-hcur-line { stroke: #24292f; }
+body.light-theme .wp-crf-hcur-dot { stroke: #fff; }
+body.light-theme .wp-crf-hcur-dot.wp-crf-hc0 { fill: #6b7280; } body.light-theme .wp-crf-hcur-dot.wp-crf-hc1 { fill: #2563eb; } body.light-theme .wp-crf-hcur-dot.wp-crf-hc2 { fill: #15803d; }

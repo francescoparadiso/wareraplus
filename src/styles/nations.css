@@ -911,3 +911,11 @@ body.light-theme .wp-nat-cmpt-row > :first-child { background: var(--wp-ov-bg-li
 .wp-nat-rank-move.up { color: #57ab5a; }
 .wp-nat-rank-move.down { color: #e5534b; }
 .wp-nat-rank-move.same { color: #6e7681; }
+
+/* Cursore dei grafici a linea dell'Economia (ecoSection.js: lineChartHtml).
+   Acceso sulla colonna puntata: hover col mouse, wp-tip-on al tocco. */
+.wp-nat-cur { opacity: 0; pointer-events: none; transition: opacity .08s; }
+.wp-nat-cur-col:hover .wp-nat-cur, .wp-nat-cur-col:has(.wp-tip-on) .wp-nat-cur { opacity: 1; }
+.wp-nat-cur-line { stroke: var(--wp-ov-text, #e6edf3); stroke-width: 1; stroke-dasharray: 3 3; opacity: .7; }
+.wp-nat-cur-dot { stroke-width: 9; stroke-linecap: round; }
+body.light-theme .wp-nat-cur-line { stroke: #24292f; }

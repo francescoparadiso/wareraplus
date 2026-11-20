@@ -239,11 +239,23 @@ function lineChartHtml(points, { fmt = oro, color = C_TREASURY, label = ecoT('ec
 
   const path = points.map(([d, v], i) => `${i ? 'L' : 'M'}${x(d).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
   const area = `${path} L${W},${H - PAD_B} L0,${H - PAD_B} Z`;
+  // WarEra+ (2026-11-20): ogni colonna porta il suo cursore — linea verticale
+  // e punto sul valore — acceso quando è quella puntata (hover, o wp-tip-on al
+  // tocco). L'SVG è preserveAspectRatio="none": il punto è una linea di
+  // lunghezza zero con estremo tondo e tratto non scalato, così resta un
+  // cerchio invece di diventare un'ellisse.
   const hits = points.map(([d, v], i) => {
     const xa = i ? (x(points[i - 1][0]) + x(d)) / 2 : 0;
     const xb = i < points.length - 1 ? (x(d) + x(points[i + 1][0])) / 2 : W;
-    return `<rect class="wp-tip-hit" x="${xa.toFixed(1)}" y="0" width="${Math.max(1, xb - xa).toFixed(1)}" height="${H}"${tipAttr(
-      fmtData(d), `${label}\t${fmt(v)}`)}/>`;
+    const px = x(d).toFixed(1), py = y(v).toFixed(1);
+    return `<g class="wp-nat-cur-col">
+        <g class="wp-nat-cur">
+          <line class="wp-nat-cur-line" x1="${px}" x2="${px}" y1="0" y2="${H - PAD_B}" vector-effect="non-scaling-stroke"/>
+          <line class="wp-nat-cur-dot" x1="${px}" x2="${px}" y1="${py}" y2="${py}" stroke="${color}" vector-effect="non-scaling-stroke"/>
+        </g>
+        <rect class="wp-tip-hit" x="${xa.toFixed(1)}" y="0" width="${Math.max(1, xb - xa).toFixed(1)}" height="${H}"${tipAttr(
+      fmtData(d), `${label}\t${fmt(v)}`)}/>
+      </g>`;
   }).join('');
 
   return `

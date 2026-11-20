@@ -423,19 +423,32 @@ function graficoStoricoHtml(dati) {
     return `<rect class="wp-crf-hvol${dati.partialLast && i === ultimo ? ' wp-crf-hpart' : ''}" x="${(cx - larg / 2).toFixed(1)}" y="${(base - h).toFixed(1)}" width="${larg.toFixed(1)}" height="${h.toFixed(1)}"/>`;
   }).join('');
 
-  // Colonne invisibili col tooltip comune (src/shared/chartTip.js).
+  // Colonne invisibili col tooltip comune (src/shared/chartTip.js). Ognuna
+  // porta con sé il suo CURSORE (richiesta dell'utente, 2026-11-20: «col
+  // mouse devo vedere graficamente dove punto»): una linea verticale, i tre
+  // punti ingranditi e la barra delle vendite contornata, nascosti finché la
+  // colonna non è quella puntata. Il tooltip mette `wp-tip-on` sul rettangolo
+  // (anche al tocco, su telefono) e il CSS accende il gruppo da lì.
   const meta = righe.length > 1 ? (x(istante(righe[1], step)) - x(istante(righe[0], step))) : 20;
   const colonne = righe.map((r, i) => {
     const t = istante(r, step);
+    const cx = x(t);
     const parz = dati.partialLast && i === ultimo;
     // Riga [inizio, n, med, n0, m0, n1, m1, n2, m2]: fascia b = n in 3+2b, mediana in 4+2b.
     const vendite = craftT('hVolume').toLocaleLowerCase();
     const fascia = (b) => `${craftT('band' + b)}\t${r[4 + b * 2] != null ? prezzo(r[4 + b * 2]) : '—'} · ${num(r[3 + b * 2], 0)} ${vendite}`;
-    return `<rect x="${(x(t) - meta / 2).toFixed(1)}" y="${T}" width="${Math.max(meta, 4).toFixed(1)}" height="${H - T - B}" fill="transparent"${tipAttr(
+    const hBar = (r[1] / maxN) * VOL;
+    const cursore = `<g class="wp-crf-hcur">
+        <line class="wp-crf-hcur-line" x1="${cx.toFixed(1)}" x2="${cx.toFixed(1)}" y1="${T}" y2="${base}"/>
+        <rect class="wp-crf-hcur-vol" x="${(cx - larg / 2).toFixed(1)}" y="${(base - hBar).toFixed(1)}" width="${larg.toFixed(1)}" height="${hBar.toFixed(1)}"/>
+        ${[0, 1, 2].map(b => (r[4 + b * 2] != null
+    ? `<circle class="wp-crf-hcur-dot wp-crf-hc${b}" cx="${cx.toFixed(1)}" cy="${y(r[4 + b * 2]).toFixed(1)}" r="5"/>` : '')).join('')}
+      </g>`;
+    return `<g class="wp-crf-hcol">${cursore}<rect class="wp-tip-hit" x="${(cx - meta / 2).toFixed(1)}" y="${T}" width="${Math.max(meta, 4).toFixed(1)}" height="${H - T - B}"${tipAttr(
       `${etichettaTempo(t, step, true)}${parz ? ` (${craftT('hPartial')})` : ''}`,
       fascia(2), fascia(1), fascia(0),
       `${craftT('hAll')}\t${r[2] != null ? prezzo(r[2]) : '—'} · ${num(r[1], 0)} ${vendite}`,
-    )}/>`;
+    )}/></g>`;
   }).join('');
 
   const meta3 = Math.floor(righe.length / 2);
