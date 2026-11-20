@@ -147,6 +147,18 @@
    Misurato a mano il 2026-11-20 su un campione italiano (1.801 dipendenti):
    media 62, mediana 60,5.
 
+   ── STATISTICHE PREMIUM (2026-11-20) ──────────────────────────────────
+   `work.getStatsByCompany` risponde 403 «Premium required» anche con la
+   chiave (l'ultima rosa buona è del 3 novembre: da allora 0 statistiche
+   a giro e quindi 0 rose, perché la rosa si chiedeva solo a chi aveva
+   prodotto). Se i primi tre blocchi non danno niente le statistiche si
+   lasciano stare e la rosa si chiede a TUTTE le aziende (`scope: 'all'`):
+   costa quanto costavano le statistiche, e la rosa vuota di un'azienda
+   ferma non sposta niente. Si perdono i salari giorno per giorno (la
+   scheda Produzione resta all'ultimo giorno misurato) e "con dipendenti"
+   diventa "ne ha in rosa adesso". Se un giorno le statistiche tornano,
+   il giro torna da solo alla forma di prima.
+
    ── LE AZIENDE ALL'ESTERO (2026-10-26) ────────────────────────────────
    Richiesta dell'area riservata: quali cittadini di una nazione hanno
    aziende in regioni di un'ALTRA nazione (tasse sui salari e produzione
@@ -351,7 +363,9 @@ async function _perBlocchi(proc, inputs, dimensione, suBlocco) {
   for (let i = 0; i < inputs.length; i += dimensione) {
     const blocco = inputs.slice(i, i + dimensione);
     const res = await deps.trpcBatch(blocco.map((x) => [proc, x]), { useWorker: true });
-    suBlocco(res, i);
+    // WarEra+ (2026-11-20): `suBlocco` che risponde false ferma il giro
+    // (le statistiche diventate premium: inutile chiederne altre 120.000).
+    if (suBlocco(res, i) === false) break;
     if (i + dimensione < inputs.length) await sleep(PAUSA_MS);
   }
 }
@@ -431,8 +445,13 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
     const prodottoSettimana = new Set();   // ...negli ultimi GIORNI_ROSA giorni: a loro la rosa
     const dalRosa = giornoMeno(giornoUtc(), GIORNI_ROSA);
     let statsOk = 0;
+    let statsBloccate = false;
     await _perBlocchi('work.getStatsByCompany',
       daInterrogare.map((x) => ({ companyId: x.id })), CHUNK_STATS, (res, inizio) => {
+        // WarEra+ (2026-11-20): dal ~4 novembre la procedura risponde 403
+        // «Premium required» anche con la chiave. Se i primi blocchi non
+        // danno niente ci si ferma: vedi "STATISTICHE PREMIUM" in testata.
+        if (!statsOk && inizio >= CHUNK_STATS * 3 && !res.some(Array.isArray)) { statsBloccate = true; return false; }
         res.forEach((righe, j) => {
           if (!Array.isArray(righe)) return;
           statsOk++;
@@ -454,7 +473,9 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
     // 4b. La rosa, alle sole aziende che hanno prodotto in settimana (vedi
     //     testata). Se ne tengono i conti: quanti per azienda, e per risorsa
     //     i valori di cui fare i percentili. Niente rose in memoria.
-    const daRosa = conteggioNoto ? [] : daInterrogare.filter((x) => prodottoSettimana.has(x.id));
+    // Senza statistiche non si sa chi ha prodotto: la rosa a tutte.
+    const daRosa = conteggioNoto ? [] : statsBloccate ? daInterrogare : daInterrogare.filter((x) => prodottoSettimana.has(x.id));
+    const ambitoRosa = statsBloccate ? 'all' : 'active7d';
     const dipendentiDi = new Map();   // azienda → dipendenti
     const rifPerCode = {};            // code → { cost: [], pts: [], stat: [] }
     const tratti = {};
@@ -569,7 +590,7 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
         perCode[code] = { n: v.stat.length, cost: _percentili(v.cost), pts: _percentili(v.pts), stat: _percentili(v.stat) };
       }
       store.staff = {
-        day: oggi, updatedAt: Date.now(), scope: 'active7d',
+        day: oggi, updatedAt: Date.now(), scope: ambitoRosa,
         companies: roseOk, employees: dipendentiVisti, withTool: conAttrezzo,
         percentiles: PERCENTILI, items: perCode, traits: tratti,
       };
@@ -583,7 +604,7 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
         naz[cid] = s;
         giorno[cid] = [s.mean, s.n];
       }
-      store.happiness = { day: oggi, updatedAt: Date.now(), scope: 'active7d', percentiles: PERCENTILI, countries: naz };
+      store.happiness = { day: oggi, updatedAt: Date.now(), scope: ambitoRosa, percentiles: PERCENTILI, countries: naz };
       store.happinessDays = { ...(store.happinessDays || {}), [oggi]: giorno };
     }
     store.coverage = {
@@ -597,7 +618,8 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
       // la rosa (`rosterScope`), che però guarda solo chi ha prodotto in
       // settimana: vedi testata.
       workersKnown: contaDip,
-      rosterScope: !conteggioNoto && rosaValida ? 'active7d' : null,
+      rosterScope: !conteggioNoto && rosaValida ? ambitoRosa : null,
+      statsBlocked: statsBloccate,
       rosterAsked: daRosa.length,
       rosterOk: roseOk,
       statsAsked: daInterrogare.length,

@@ -345,7 +345,7 @@ function happinessHtml(d) {
     : `<p class="wp-nat-lab-note">${escapeHtml(ecoT('hapNoHist'))}</p>`;
 
   return `${title}
-    <p class="wp-nat-curve-note">${escapeHtml(ecoT('hapSub', { nation: nome, d: fmtData(d.day) }))}</p>
+    <p class="wp-nat-curve-note">${escapeHtml(ecoT(d.scope === 'all' ? 'hapSubAll' : 'hapSub', { nation: nome, d: fmtData(d.day) }))}</p>
     <div class="wp-nat-lab-tiles">${tiles}</div>
     <div class="wp-nat-curve-card">
       <h4 class="wp-nat-chart-title">${escapeHtml(ecoT('hapDist'))}</h4>
