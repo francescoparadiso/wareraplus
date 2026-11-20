@@ -153,7 +153,8 @@ wareraPlus/
 │   ├── populationHistory.js    ← NUOVO — la popolazione ATTIVA nel tempo: totale del
 │   │                              mondo ora per ora e ogni nazione giorno per giorno,
 │   │                              da countryActivePopulation a ogni giro della
-│   │                              diplomazia. I primi 14 giorni ricostruiti a ritroso
+│   │                              diplomazia (ore per nazione: ultimi 90 giorni).
+│   │                              I primi 14 giorni ricostruiti a ritroso
 │   │                              dal ticker-history. Endpoint: /population-history.
 │   ├── dayHistory.js           ← NUOVO — la giornata storica: diplomazia (patti,
 │   │                              guerre, nemico giurato, tesoro) e battaglie aperte,
@@ -601,8 +602,9 @@ wareraPlus/
     │   │                          dell'HQ per giorno UTC, carta delle leggi), stimati in
     │   │                          monete ai prezzi di oggi. Pubbliche, cache 5 minuti.
     │   ├── i18nEco.js           ← dizionario delle due schede (EN/IT/ES/DE/FR)
-    │   ├── populationChart.js   ← NUOVO — in cima ai Grafici: la popolazione attiva
-    │   │                          del mondo nel tempo (/population-history).
+    │   ├── populationChart.js   ← NUOVO — la popolazione attiva nel tempo: del mondo in
+    │   │                          cima ai Grafici, di una nazione in cima alla scheda
+    │   │                          Cittadini (/population-history[?countryId=]).
     │   ├── damageCurves.js      ← NUOVO — nella scheda nazione: il danno ORA PER ORA
     │   │                          con sopra, sullo stesso riquadro e su un secondo
     │   │                          asse, la linea dei giocatori PILLATI (item `cocain`,

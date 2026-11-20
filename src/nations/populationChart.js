@@ -13,6 +13,11 @@
    serie, letta all'indietro) e la nota lo dice. Senza server la sezione non
    compare: la popolazione di ieri non la dice nessun'altra fonte.
 
+   Dal 2026-11-20 (seconda richiesta: «anche nazione per nazione») lo stesso
+   riquadro sta in cima alla scheda Cittadini di ogni nazione, con
+   /population-history?countryId=: ora per ora negli ultimi 90 giorni,
+   giorno per giorno prima.
+
    Il grafico segue le regole comuni (CLAUDE.md, «Grafici: tooltip e
    cursore»): una colonna `wp-tip-hit` per punto, da metà strada a metà
    strada, con il cursore suo come in ecoSection.js (`wp-nat-cur-col`).
@@ -25,6 +30,8 @@ import { tipAttr } from '../shared/chartTip.js';
 
 const DICT = {
   en: {
+    titleNation: "Active population of {nation}", playersNation: "Active citizens",
+    noteNation: "Population of {nation} as the game counts it: active citizens only (whoever has not logged in for 3 days drops out and comes back when they return). Hourly from {d}.",
     title: 'Active population over time', now: 'Now', d1: 'vs 24 hours ago', d7: 'vs 7 days ago', dAll: 'Since {d}',
     players: 'Active players', all: 'All', days: '{n} d',
     note: 'Sum of the population of every nation as the game counts it: active players only (whoever has not logged in for 3 days drops out and comes back when they return). Hourly from {d}.',
@@ -32,6 +39,8 @@ const DICT = {
     daily: 'Longer than three weeks: one point per day (the last reading of the day).',
   },
   it: {
+    titleNation: "Popolazione attiva di {nation}", playersNation: "Cittadini attivi",
+    noteNation: "Popolazione di {nation} come la conta il gioco: solo i cittadini attivi (chi non si collega da 3 giorni esce dal conto e ci rientra quando torna). Ora per ora dal {d}.",
     title: 'Popolazione attiva nel tempo', now: 'Adesso', d1: 'rispetto a 24 ore fa', d7: 'rispetto a 7 giorni fa', dAll: 'Dal {d}',
     players: 'Giocatori attivi', all: 'Tutto', days: '{n} g',
     note: 'Somma della popolazione di tutte le nazioni come la conta il gioco: solo i giocatori attivi (chi non si collega da 3 giorni esce dal conto e ci rientra quando torna). Ora per ora dal {d}.',
@@ -39,6 +48,8 @@ const DICT = {
     daily: 'Oltre tre settimane: un punto al giorno (l\'ultima lettura del giorno).',
   },
   es: {
+    titleNation: "Población activa de {nation}", playersNation: "Ciudadanos activos",
+    noteNation: "Población de {nation} tal como la cuenta el juego: solo ciudadanos activos (quien no se conecta en 3 días sale del recuento y vuelve al regresar). Hora a hora desde el {d}.",
     title: 'Población activa en el tiempo', now: 'Ahora', d1: 'frente a hace 24 horas', d7: 'frente a hace 7 días', dAll: 'Desde el {d}',
     players: 'Jugadores activos', all: 'Todo', days: '{n} d',
     note: 'Suma de la población de todas las naciones tal como la cuenta el juego: solo jugadores activos (quien no se conecta en 3 días sale del recuento y vuelve al regresar). Hora a hora desde el {d}.',
@@ -46,6 +57,8 @@ const DICT = {
     daily: 'Más de tres semanas: un punto por día (la última lectura del día).',
   },
   de: {
+    titleNation: "Aktive Bevölkerung von {nation}", playersNation: "Aktive Bürger",
+    noteNation: "Bevölkerung von {nation}, wie das Spiel sie zählt: nur aktive Bürger (wer sich 3 Tage nicht einloggt, fällt heraus und kommt bei Rückkehr wieder dazu). Stündlich seit {d}.",
     title: 'Aktive Bevölkerung im Zeitverlauf', now: 'Jetzt', d1: 'ggü. vor 24 Stunden', d7: 'ggü. vor 7 Tagen', dAll: 'Seit {d}',
     players: 'Aktive Spieler', all: 'Alles', days: '{n} T',
     note: 'Summe der Bevölkerung aller Nationen, wie das Spiel sie zählt: nur aktive Spieler (wer sich 3 Tage nicht einloggt, fällt heraus und kommt bei Rückkehr wieder dazu). Stündlich seit {d}.',
@@ -53,6 +66,8 @@ const DICT = {
     daily: 'Länger als drei Wochen: ein Punkt pro Tag (letzter Wert des Tages).',
   },
   fr: {
+    titleNation: "Population active de {nation}", playersNation: "Citoyens actifs",
+    noteNation: "Population de {nation} telle que le jeu la compte : seulement les citoyens actifs (qui ne se connecte pas pendant 3 jours sort du compte et y revient à son retour). Heure par heure depuis le {d}.",
     title: 'Population active dans le temps', now: 'Maintenant', d1: 'par rapport à il y a 24 h', d7: 'par rapport à il y a 7 jours', dAll: 'Depuis le {d}',
     players: 'Joueurs actifs', all: 'Tout', days: '{n} j',
     note: 'Somme de la population de toutes les nations telle que le jeu la compte : seulement les joueurs actifs (qui ne se connecte pas pendant 3 jours sort du compte et y revient à son retour). Heure par heure depuis le {d}.',
@@ -60,6 +75,8 @@ const DICT = {
     daily: 'Au-delà de trois semaines : un point par jour (la dernière lecture du jour).',
   },
   nl: {
+    titleNation: "Actieve bevolking van {nation}", playersNation: "Actieve burgers",
+    noteNation: "Bevolking van {nation} zoals het spel die telt: alleen actieve burgers (wie 3 dagen niet inlogt valt eruit en komt terug bij terugkeer). Per uur sinds {d}.",
     title: 'Actieve bevolking door de tijd', now: 'Nu', d1: 't.o.v. 24 uur geleden', d7: 't.o.v. 7 dagen geleden', dAll: 'Sinds {d}',
     players: 'Actieve spelers', all: 'Alles', days: '{n} d',
     note: 'Som van de bevolking van alle naties zoals het spel die telt: alleen actieve spelers (wie 3 dagen niet inlogt valt eruit en komt terug bij terugkeer). Per uur sinds {d}.',
@@ -67,6 +84,8 @@ const DICT = {
     daily: 'Langer dan drie weken: één punt per dag (de laatste meting van de dag).',
   },
   sv: {
+    titleNation: "Aktiv befolkning i {nation}", playersNation: "Aktiva medborgare",
+    noteNation: "Befolkningen i {nation} så som spelet räknar den: bara aktiva medborgare (den som inte loggar in på 3 dagar räknas bort och kommer tillbaka vid återkomst). Timme för timme sedan {d}.",
     title: 'Aktiv befolkning över tid', now: 'Nu', d1: 'mot för 24 timmar sedan', d7: 'mot för 7 dagar sedan', dAll: 'Sedan {d}',
     players: 'Aktiva spelare', all: 'Allt', days: '{n} d',
     note: 'Summan av alla nationers befolkning så som spelet räknar den: bara aktiva spelare (den som inte loggar in på 3 dagar räknas bort och kommer tillbaka vid återkomst). Timme för timme sedan {d}.',
@@ -74,6 +93,8 @@ const DICT = {
     daily: 'Längre än tre veckor: en punkt per dag (dagens sista avläsning).',
   },
   pt: {
+    titleNation: "População ativa de {nation}", playersNation: "Cidadãos ativos",
+    noteNation: "População de {nation} tal como o jogo a conta: só cidadãos ativos (quem não entra durante 3 dias sai da contagem e volta quando regressa). Hora a hora desde {d}.",
     title: 'População ativa ao longo do tempo', now: 'Agora', d1: 'face a 24 horas atrás', d7: 'face a 7 dias atrás', dAll: 'Desde {d}',
     players: 'Jogadores ativos', all: 'Tudo', days: '{n} d',
     note: 'Soma da população de todas as nações tal como o jogo a conta: só jogadores ativos (quem não entra durante 3 dias sai da contagem e volta quando regressa). Hora a hora desde {d}.',
@@ -81,6 +102,8 @@ const DICT = {
     daily: 'Mais de três semanas: um ponto por dia (a última leitura do dia).',
   },
   ar: {
+    titleNation: "السكان النشطون في {nation}", playersNation: "المواطنون النشطون",
+    noteNation: "سكان {nation} كما تحسبهم اللعبة: المواطنون النشطون فقط (من لا يدخل لمدة 3 أيام يخرج من العدّ ويعود عند عودته). ساعة بساعة منذ {d}.",
     title: 'السكان النشطون عبر الزمن', now: 'الآن', d1: 'مقارنة بقبل 24 ساعة', d7: 'مقارنة بقبل 7 أيام', dAll: 'منذ {d}',
     players: 'اللاعبون النشطون', all: 'الكل', days: '{n} ي',
     note: 'مجموع سكان جميع الدول كما تحسبه اللعبة: اللاعبون النشطون فقط (من لا يدخل لمدة 3 أيام يخرج من العدّ ويعود عند عودته). ساعة بساعة منذ {d}.',
@@ -106,7 +129,7 @@ let _range = (() => {
   try { const v = localStorage.getItem(RANGE_KEY); return v === 'all' ? 'all' : (RANGES.includes(Number(v)) ? Number(v) : 'all'); }
   catch { return 'all'; }
 })();
-let _data = null;   // promessa della risposta, una per sessione
+const _data = new Map();   // countryId | '' → promessa della risposta, una per sessione
 
 const loc = () => document.documentElement.lang || undefined;
 const intero = (v) => Math.round(v).toLocaleString(loc());
@@ -115,22 +138,41 @@ const pct = (v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toLocaleStr
 const data = (ms) => new Date(ms).toLocaleDateString(loc(), { day: 'numeric', month: 'short' });
 const dataOra = (ms) => new Date(ms).toLocaleString(loc(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-function fetchPopulation() {
-  if (!_data) {
-    _data = (async () => {
+function fetchPopulation(countryId = '') {
+  if (!_data.has(countryId)) {
+    _data.set(countryId, (async () => {
       try {
-        const res = await fetch(`${WARERA_CACHE_BASE}/population-history`);
+        const q = countryId ? `?countryId=${encodeURIComponent(countryId)}` : '';
+        const res = await fetch(`${WARERA_CACHE_BASE}/population-history${q}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const j = await res.json();
         return j?.available && Array.isArray(j.world) && j.world.length > 1 ? j : null;
       } catch (err) {
         console.warn('WarEra+ nations: /population-history non disponibile:', err.message);
-        _data = null;   // si riprova alla prossima apertura
+        _data.delete(countryId);   // si riprova alla prossima apertura
         return null;
       }
-    })();
+    })());
   }
-  return _data;
+  return _data.get(countryId);
+}
+
+/* La serie da disegnare: il mondo ora per ora, oppure una nazione — le sue ore
+   (ultimi 90 giorni) precedute dai suoi giorni (tutto il resto). */
+function serieDi(d, nation) {
+  if (!nation) {
+    return { tutto: d.world, oreDal: d.world[0][0], rebuiltFrom: d.rebuiltFrom, rebuiltTo: d.rebuiltTo };
+  }
+  const ore = Array.isArray(d.countryHours) ? d.countryHours : [];
+  const primaOra = ore.length ? ore[0][0] : Infinity;
+  // Solo i giorni PRIMA di quello della prima ora: il valore di un giorno è la
+  // sua ultima lettura, e messo a mezzogiorno accanto alle ore dello stesso
+  // giorno sarebbe un punto fuori posto.
+  const primoGiorno = Math.floor(primaOra / DAY_MS);
+  const giorni = (d.country || []).filter(q => Math.floor(q[0] / DAY_MS) < primoGiorno);
+  const tutto = [...giorni, ...ore];
+  if (tutto.length < 2) return null;
+  return { tutto, oreDal: ore.length ? primaOra : null, rebuiltFrom: d.countryRebuiltFrom, rebuiltTo: d.countryRebuiltTo };
 }
 
 /** Il punto della serie più vicino (prima) a un istante, o null. */
@@ -147,7 +189,7 @@ function perGiorno(serie) {
   return [...out.values()];
 }
 
-function graficoHtml(punti, giornaliero) {
+function graficoHtml(punti, giornaliero, nation) {
   const t0 = punti[0][0], t1 = punti[punti.length - 1][0];
   const span = Math.max(1, t1 - t0);
   const vals = punti.map(p => p[1]);
@@ -173,13 +215,13 @@ function graficoHtml(punti, giornaliero) {
           <line class="wp-nat-cur-dot" x1="${px}" x2="${px}" y1="${py}" y2="${py}" stroke="${COLOR}" vector-effect="non-scaling-stroke"/>
         </g>
         <rect class="wp-tip-hit" x="${xa.toFixed(1)}" y="0" width="${Math.max(1, xb - xa).toFixed(1)}" height="${H}"${tipAttr(
-      etichetta(ms), `${t('players')}\t${intero(v)}`, prima ? `Δ\t${segno(prima)}` : null)}/>
+      etichetta(ms), `${t(nation ? 'playersNation' : 'players')}\t${intero(v)}`, prima ? `Δ\t${segno(prima)}` : null)}/>
       </g>`;
   }).join('');
 
   return `
     <div class="wp-nat-lab-axisrow wp-nat-lab-axis-top"><span>${escapeHtml(intero(Math.max(...vals)))}</span><span>${escapeHtml(intero(Math.min(...vals)))}</span></div>
-    <svg class="wp-nat-lab-chart wp-nat-pop-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(t('title'))}">
+    <svg class="wp-nat-lab-chart wp-nat-pop-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(titolo(nation))}">
       <path d="${area}" fill="${COLOR}" fill-opacity=".14"/>
       <path d="${path}" fill="none" stroke="${COLOR}" stroke-width="2" vector-effect="non-scaling-stroke"/>
       ${colonne}
@@ -187,8 +229,12 @@ function graficoHtml(punti, giornaliero) {
     <div class="wp-nat-lab-axisrow"><span>${escapeHtml(etichetta(t0))}</span><span>${escapeHtml(etichetta(t1))}</span></div>`;
 }
 
-function cardHtml(d) {
-  const tutto = d.world;
+const titolo = (nation) => (nation ? t('titleNation', { nation: nation.name || '—' }) : t('title'));
+
+function cardHtml(d, nation) {
+  const sd = serieDi(d, nation);
+  if (!sd) return '';
+  const { tutto } = sd;
   const ultimo = tutto[tutto.length - 1];
   const giorniTot = (ultimo[0] - tutto[0][0]) / DAY_MS;
   // Solo gli intervalli più corti della serie, più «Tutto».
@@ -225,32 +271,37 @@ function cardHtml(d) {
       </div>` : '';
 
   const note = [
-    t('note', { d: data(d.startedAt && (!d.rebuiltFrom || d.startedAt < d.rebuiltFrom) ? d.startedAt : tutto[0][0]) }),
-    d.rebuiltFrom && d.rebuiltTo ? t('rebuilt', { a: dataOra(d.rebuiltFrom), b: dataOra(d.rebuiltTo) }) : '',
+    sd.oreDal ? t(nation ? 'noteNation' : 'note', { d: data(sd.oreDal), nation: nation?.name || '—' }) : '',
+    sd.rebuiltFrom && sd.rebuiltTo ? t('rebuilt', { a: dataOra(sd.rebuiltFrom), b: dataOra(sd.rebuiltTo) }) : '',
     giornaliero ? t('daily') : '',
   ].filter(Boolean).join(' ');
 
   return `
     <div class="wp-nat-curve-head">
-      <h4 class="wp-nat-chart-title" data-sec="nat-population">${escapeHtml(t('title'))}</h4>
+      <h4 class="wp-nat-chart-title" data-sec="${nation ? 'nat-population-nation' : 'nat-population'}">${escapeHtml(titolo(nation))}</h4>
       ${chips}
     </div>
     <div class="wp-nat-lab-tiles">${tiles}</div>
-    ${graficoHtml(serie, giornaliero)}
+    ${graficoHtml(serie, giornaliero, nation)}
     <p class="wp-nat-curve-note">${escapeHtml(note)}</p>`;
 }
 
-/** Il segnaposto da mettere nella linguetta Grafici: vuoto finché non arriva il dato. */
+/** Il segnaposto: vuoto e nascosto finché non arriva il dato. */
 export function populationSlotHtml() {
-  return '<div class="wp-nat-chart wp-nat-pop" id="wp-nat-pop" hidden></div>';
+  return '<div class="wp-nat-chart wp-nat-pop" data-pop hidden></div>';
 }
 
-/** Riempie il segnaposto (se c'è ancora: l'utente può aver cambiato linguetta). */
-export async function paintPopulation(root) {
-  const d = await fetchPopulation();
-  const el = root?.querySelector('#wp-nat-pop');
-  if (!el || !d) return;
-  const paint = () => { el.innerHTML = cardHtml(d); el.hidden = false; };
+/** Riempie il segnaposto dentro `root` (se c'è ancora: l'utente può aver
+ *  cambiato linguetta o nazione). Senza `nation` è il mondo. */
+export async function paintPopulation(root, nation = null) {
+  const d = await fetchPopulation(nation?._id || '');
+  const el = root?.querySelector('[data-pop]');
+  if (!el || !d || !el.isConnected) return;
+  const paint = () => {
+    const html = cardHtml(d, nation);
+    el.innerHTML = html;
+    el.hidden = !html;
+  };
   paint();
   el.addEventListener('click', (e) => {
     const b = e.target.closest('[data-pop-range]');

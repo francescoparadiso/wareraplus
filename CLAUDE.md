@@ -650,7 +650,8 @@ quindi chiede la rosa a TUTTE le aziende (`scope: 'all'`, vedi la testata di
 `companyCensus.js`) e i salari giorno per giorno della scheda Produzione sono fermi
 al 3 novembre.
 
-La **popolazione nel tempo** (linguetta Grafici di Statistiche nazioni,
+La **popolazione nel tempo** (linguetta Grafici di Statistiche nazioni e scheda
+Cittadini di ogni nazione,
 `src/nations/populationChart.js` + `server/populationHistory.js`, dal 2026-11-20)
 è la somma di `countryActivePopulation`: giocatori ATTIVI, non iscritti. Il dente
 di sega quotidiano è vero (il gioco toglie gli inattivi una volta al giorno). Le

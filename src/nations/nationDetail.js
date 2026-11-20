@@ -40,6 +40,7 @@ import { trpcCall } from '../shared/trpcClient.js';
 import { avatarImg, escapeHtml, flagImg, fmtCompact, fmtRelative } from '../mu/ui.js';
 import { countryDamageToday, dailyDamageLabel, ensureDailyDamage } from '../shared/dailyDamage.js';
 import { t as sharedT } from '../shared/i18n.js';
+import { populationSlotHtml, paintPopulation } from './populationChart.js';
 
 const APP_BASE = 'https://app.warera.io';
 
@@ -151,6 +152,9 @@ export function renderNationDetail(host, nation, ctx) {
     <section class="wp-nat-labour" id="wp-nat-mu" data-npanel="mu"${_ntab === 'mu' ? '' : ' hidden'}></section>
 
     <section class="wp-nat-citizens" data-npanel="citizens"${_ntab === 'citizens' ? '' : ' hidden'}>
+      <!-- WarEra+ (2026-11-20): la popolazione attiva della nazione nel tempo
+           (populationChart.js), sopra l'elenco di chi la compone. -->
+      ${populationSlotHtml()}
       <h3 class="wp-nat-section-title">
         ${escapeHtml(natT('citizenList'))}
         <span class="wp-nat-count" id="wp-nat-citizen-count"></span>
@@ -198,6 +202,7 @@ export function renderNationDetail(host, nation, ctx) {
 
   paintToday(nation);
   paintRankTrend(nation);
+  paintPopulation(host.querySelector('[data-npanel="citizens"]'), nation);
   _painted = new Set();
   paintTab(_ntab);
   loadCitizens(nation);
