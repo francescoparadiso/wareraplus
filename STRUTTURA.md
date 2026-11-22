@@ -404,7 +404,8 @@ wareraPlus/
     │   ├── blocWealthHistory.js ← NUOVO (2026-11-22) — la ricchezza (somma dei
     │   │                        tesori, countryWealth) di un GRUPPO di nazioni giorno
     │   │                        per giorno: nella pagina di un'alleanza e, sovrapposte,
-    │   │                        nel Fazione 1 vs 2. Dati da /treasury-history (lo
+    │   │                        nel Fazione 1 vs 2 e nel 1 vs 2 di Statistiche nazioni
+    │   │                        (nationCompare.js). Dati da /treasury-history (lo
     │   │                        scatto delle 02:05 di dayHistory.js, nessun poll nuovo),
     │   │                        più il valore di adesso come ultimo punto. ⚠️ Parte dal
     │   │                        19 set 2026: i giorni importati non hanno il tesoro.

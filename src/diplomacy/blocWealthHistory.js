@@ -121,8 +121,10 @@ function sumSeries(json, ids, now) {
  * ({ label, color, ids, now }). `emptyText`: cosa scrivere se il server
  * non ha la rotta (null = la sezione resta vuota). `title`: un titolo
  * proprio, per dove non c'è l'intestazione di una sezione (il 1 vs 2).
+ * `nations`: la nota per il 1 vs 2 di Statistiche nazioni, dove i lati
+ * sono nazioni scelte a mano e non i membri di un'alleanza.
  */
-export async function renderGroupWealth(host, groups, { emptyText = null, title = false } = {}) {
+export async function renderGroupWealth(host, groups, { emptyText = null, title = false, nations = false } = {}) {
   const token = Symbol('wealth');
   host._wpWealth = token;
   injectCurveStyles();
@@ -138,16 +140,18 @@ export async function renderGroupWealth(host, groups, { emptyText = null, title 
     host.innerHTML = emptyText ? `<p class="bs-cv-empty">${esc(emptyText)}</p>` : '';
     return;
   }
-  paint(host, ready, groups.length, title);
+  paint(host, ready, groups.length, title, nations);
 }
 
-function paint(host, groups, asked, title) {
+function paint(host, groups, asked, title, nations) {
   const multi = asked > 1;
   const from = groups.map(g => g.from).filter(Boolean).sort()[0];
   host.innerHTML = `
     <div class="bs-cv bs-wh">
       ${title ? `<div class="bs-cv-title">${bT('Wealth over time')}</div>` : ''}
-      <p class="bs-cv-note">${esc(bT('Sum of the treasuries of today\'s member nations, read once a day (02:05 Italian time) plus the value now. Recorded since {date}: earlier days were never saved, and a nation that joined later counts for the whole period.', { date: fmtDay(from, true) }))}</p>
+      <p class="bs-cv-note">${esc(nations
+        ? bT('Treasury of each side, read once a day (02:05 Italian time) plus the value now. Recorded since {date}: earlier days were never saved.', { date: fmtDay(from, true) })
+        : bT('Sum of the treasuries of today\'s member nations, read once a day (02:05 Italian time) plus the value now. Recorded since {date}: earlier days were never saved, and a nation that joined later counts for the whole period.', { date: fmtDay(from, true) }))}</p>
       ${multi && asked > groups.length ? `<p class="bs-cv-note">${bT('One of the two sides has no wealth history yet.')}</p>` : ''}
       <div class="bs-cv-card">
         <div class="bs-cv-head">
@@ -167,7 +171,7 @@ function paint(host, groups, asked, title) {
     if (!btn) return;
     _days = Number(btn.dataset.d);
     try { localStorage.setItem(RANGE_KEY, String(_days)); } catch { /* storage negato */ }
-    paint(host, groups, asked, title);
+    paint(host, groups, asked, title, nations);
   });
 
   const slot = host.querySelector('[data-slot="wealth"]');

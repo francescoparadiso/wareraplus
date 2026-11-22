@@ -123,6 +123,38 @@ function montaCurve(host, a, b, nomeLato) {
     .catch(() => { slot.innerHTML = ''; });
 }
 
+/* WarEra+ (2026-11-22) — la ricchezza dei due schieramenti nel tempo.
+   Richiesta dell'utente, dopo lo stesso grafico nel Fazione 1 vs 2: «fai lo
+   stesso per le nazioni singole». È diplomacy/blocWealthHistory.js con i
+   gruppi = le nazioni di A e di B: il tesoro (countryWealth) allo scatto
+   delle 02:05 da /treasury-history, più il valore di adesso. Dato pubblico,
+   quindi FUORI dal cancello dei governi delle curve qui sopra; senza server
+   il riquadro non compare. Stesso riuso delle curve: la ricerca ridisegna a
+   ogni lettera, e il grafico già fatto si rimette al suo posto. */
+let _wealth = { key: '', el: null, at: 0 };
+
+function montaRicchezza(host, a, b, nomeLato) {
+  const slot = host.querySelector('.wp-nat-vs-wealth');
+  if (!slot) { _wealth = { key: '', el: null, at: 0 }; return; }
+  const key = [document.documentElement.lang, a.map(n => n._id).join(','), b.map(n => n._id).join(',')].join('|');
+  if (_wealth.key === key && _wealth.el && Date.now() - _wealth.at < REUSE_MS) {
+    slot.replaceWith(_wealth.el);
+    return;
+  }
+  _wealth = { key, el: slot, at: Date.now() };
+  const groups = [['a', a], ['b', b]]
+    .filter(([, list]) => list.length)
+    .map(([side, list]) => ({
+      label: nomeLato(list),
+      color: curveColors()[side],
+      ids: list.map(n => n._id),
+      now: list.reduce((s, n) => s + (Number(metricValue(n, 'wealth')) || 0), 0),
+    }));
+  import('../diplomacy/blocWealthHistory.js')
+    .then(m => m.renderGroupWealth(slot, groups, { title: true, nations: true }))
+    .catch(() => { slot.innerHTML = ''; });
+}
+
 /* Le metriche in due riquadri, come i gruppi del versus dei giocatori.
    Una metrica che metrics.js aggiunge un giorno e che qui non è elencata
    finisce nel primo: meglio una riga in più che una misura sparita. */
@@ -218,6 +250,7 @@ export function renderNationCompare(host, ctx) {
         ${groups.map((g, gi) => vsGroup({ ...g, g: gi })).join('')}
       </section>
       <p class="wp-vs-note">${escapeHtml(sost(natT('vsNote'), { t: t.tot }))}</p>
+      <div class="wp-nat-vs-wealth"></div>
       <div class="wp-nat-vs-curves"></div>`;
   } else {
     section = `
@@ -282,6 +315,7 @@ export function renderNationCompare(host, ctx) {
     </div>`;
 
   if (intro) countUpScore(host);
+  montaRicchezza(host, a, b, nomeLato);
   montaCurve(host, a, b, nomeLato);
 
   // Griglia: il lato è quello dell'elenco su cui si è cliccato.
