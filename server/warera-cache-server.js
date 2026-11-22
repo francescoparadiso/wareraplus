@@ -207,7 +207,7 @@ const {
 // nient'altro era mai stato salvato nel tempo. Adesso questi quattro campi
 // lo sono. Zero fetch: legge le cache che il server riempie gia'.
 const {
-  initDayHistory, snapshotDay, readDay, statoDayHistory, treasuryByDay, treasuryOfCountry,
+  initDayHistory, snapshotDay, readDay, statoDayHistory, treasuryByDay, treasuryOfCountry, treasuryHistory,
 } = require('./dayHistory');
 // WarEra+ (2026-11-20): la popolazione attiva nel tempo, mondo e nazioni.
 const { initPopulationHistory, snapshotPopulation, readPopulationHistory, statoPopulationHistory } = require('./populationHistory');
@@ -3782,6 +3782,16 @@ app.get('/population-history', (req, res) => {
   const cid = String(req.query.countryId || '');
   if (cid && !/^[0-9a-f]{24}$/.test(cid)) return res.status(400).json({ error: 'countryId non valido' });
   res.json(readPopulationHistory(cid || null));
+});
+
+// Il tesoro giorno per giorno di un gruppo di nazioni (dayHistory.js:
+// treasuryHistory), per lo storico della ricchezza in Statistiche alleanze.
+// Tetto a 200 id come /damage-timeline: piu' di tutte le nazioni del gioco.
+app.get('/treasury-history', (req, res) => {
+  const ids = String(req.query.countryIds || '').split(',').map(x => x.trim()).filter(x => /^[a-f0-9]{24}$/i.test(x)).slice(0, 200);
+  if (!ids.length) return res.status(400).json({ error: 'countryIds mancanti' });
+  const days = Math.min(Math.max(Number(req.query.days) || 400, 1), 400);
+  res.json(treasuryHistory(ids, days));
 });
 
 // Lavoro e tasse (server/labourHistory.js): una nazione per volta, piu' il

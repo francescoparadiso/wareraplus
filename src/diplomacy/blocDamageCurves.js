@@ -692,3 +692,7 @@ function injectStyles() {
   `;
   document.head.appendChild(s);
 }
+
+// WarEra+ (2026-11-22) — carta, assi, legenda e tooltip li riusa lo storico
+// della ricchezza (blocWealthHistory.js), invece di clonarli.
+export { injectStyles as injectCurveStyles, bindTip as bindCurveTip };

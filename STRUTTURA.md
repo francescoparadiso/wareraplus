@@ -401,6 +401,16 @@ wareraPlus/
     │   │                        comune no) + admin: senza token nessuna richiesta
     │   │                        e la sezione non compare. Cancello di interfaccia,
     │   │                        la serie per nazione resta pubblica.
+    │   ├── blocWealthHistory.js ← NUOVO (2026-11-22) — la ricchezza (somma dei
+    │   │                        tesori, countryWealth) di un GRUPPO di nazioni giorno
+    │   │                        per giorno: nella pagina di un'alleanza e, sovrapposte,
+    │   │                        nel Fazione 1 vs 2. Dati da /treasury-history (lo
+    │   │                        scatto delle 02:05 di dayHistory.js, nessun poll nuovo),
+    │   │                        più il valore di adesso come ultimo punto. ⚠️ Parte dal
+    │   │                        19 set 2026: i giorni importati non hanno il tesoro.
+    │   │                        Nazioni = membri di OGGI. Pubblica, nessun cancello;
+    │   │                        senza rideploy del cache-server la rotta è 404 e la
+    │   │                        sezione lo dice (pagina) o non compare (1 vs 2).
     │   ├── blocStatsI18n.js ← NUOVO — traduzioni (9 lingue) di Statistiche
     │   │                        alleanze: la CHIAVE è il testo inglese, bT('Weekly
     │   │                        damage'), e ciò che manca ricade sull'inglese.

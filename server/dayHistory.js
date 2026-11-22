@@ -294,6 +294,52 @@ function treasuryOfCountry(countryId, giorni = 90) {
   return out.sort((a, b) => (a[0] < b[0] ? -1 : 1));
 }
 
+/* WarEra+ (2026-11-22) — il tesoro giorno per giorno di un GRUPPO di
+   nazioni, per lo storico della ricchezza in Statistiche alleanze (pagina
+   di un'alleanza e Fazione 1 vs 2, src/diplomacy/blocWealthHistory.js).
+   Stessa colonna di treasuryByDay (la 4: countryWealth allo scatto delle
+   02:05), ma per nazione invece che sommata sul mondo: la somma la fa il
+   client, che sa quali nazioni stanno in quale lato.
+
+   ⚠️ I giorni IMPORTATI (13 apr → 17 set 2026) hanno il tesoro a null su
+   tutte le righe: l'altro tool salvava `money`, non countryWealth (vedi
+   import/diplomazia.js). Quindi la serie parte dal primo giorno che ha
+   almeno un tesoro (`coverageFrom`, oggi il 19 settembre), non dal 13
+   aprile: prima non c'è un numero da mostrare, e la vista lo dichiara.
+
+   Una nazione ASSENTE dalle righe di un giorno vale 0 (non esisteva: lo
+   scatto copre tutte le nazioni di getAllCountries); una presente col
+   tesoro a null vale null, e il client la tratta come un buco.
+
+   Risposta: { countryIds, days: ['YYYY-MM-DD'…], series: { id: [v|null…] },
+   coverageFrom }. `countryIds` ripetuto, come /damage-timeline: è come il
+   client riconosce una risposta vera. */
+function treasuryHistory(ids, giorni = RETENTION_GIORNI) {
+  const store = _read(FILE_DIPL);
+  const voluti = [...new Set((ids || []).filter(Boolean))];
+  const da = giornoMeno(giornoDi(), Math.max(1, giorni));
+
+  let coverageFrom = null;
+  for (const [giorno, righe] of Object.entries(store.days)) {
+    if ((righe || []).some(r => Number.isFinite(r?.[4])) && (!coverageFrom || giorno < coverageFrom)) coverageFrom = giorno;
+  }
+
+  const days = Object.keys(store.days)
+    .filter(g => g >= da && coverageFrom && g >= coverageFrom && (store.days[g] || []).length)
+    .sort();
+  const series = Object.fromEntries(voluti.map(id => [id, []]));
+  for (const giorno of days) {
+    const perId = new Map();
+    for (const r of store.days[giorno]) if (r?.[0]) perId.set(r[0], r[4]);
+    for (const id of voluti) {
+      if (!perId.has(id)) { series[id].push(0); continue; }
+      const v = perId.get(id);
+      series[id].push(Number.isFinite(v) ? Math.round(v) : null);
+    }
+  }
+  return { countryIds: voluti, days, series, coverageFrom };
+}
+
 /** Per /health. */
 function statoDayHistory() {
   const storeD = _read(FILE_DIPL);
@@ -332,5 +378,6 @@ module.exports = {
   statoDayHistory,
   treasuryByDay,
   treasuryOfCountry,
+  treasuryHistory,
   forgetDayHistoryCache,
 };

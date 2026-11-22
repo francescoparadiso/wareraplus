@@ -1293,6 +1293,7 @@ function renderBlocDetail() {
     ${(() => { try { return secHtml('bonuses', bT('Alliance bonuses'), bonusSectionHtml(bloc), closed); } catch (err) { console.warn('WarEra+ bonus d\u2019alleanza:', err); return ''; } })()}
     ${secHtml('mobilization', bT('Mobilization'), '', closed, 'bloc-popup-ps')}
     ${secHtml('trend', bT('Players over time'), '', closed, 'bloc-detail-trend')}
+    ${secHtml('wealth', bT('Wealth over time'), '', closed, 'bloc-detail-wealth')}
     ${secHtml('curves', bT('Hourly damage & pilled players'), '', closed, 'bloc-popup-curves')}
     ${secHtml('nations', bT('Nations'), `<div class="bs-breakdown-header">
       <span style="flex:1">${bT('Nation')}</span>
@@ -1353,6 +1354,21 @@ function renderBlocDetail() {
       .catch(err => {
         console.warn('WarEra+ blocStats: andamento guerra/eco non disegnato:', err.message);
         trendHost.innerHTML = '';
+      });
+  }
+
+  // WarEra+ — la ricchezza nel tempo (2026-11-22): i tesori delle nazioni
+  // membre sommati giorno per giorno (src/diplomacy/blocWealthHistory.js).
+  // Dato pubblico come lo stile di gioco, quindi nessun cancello. Il punto
+  // finale è il valore di adesso, lo stesso della riga Wealth del riepilogo.
+  const wealthHost = page.querySelector('#bloc-detail-wealth');
+  if (wealthHost && bloc.members.length) {
+    import('./blocWealthHistory.js')
+      .then(m => m.renderGroupWealth(wealthHost, [{ label: bloc.name, color: bloc.color, ids: bloc.members.map(x => x.id), now: bloc.totalMoney }],
+        { emptyText: bT('Wealth history is not available right now.') }))
+      .catch(err => {
+        console.warn('WarEra+ blocStats: storico ricchezza non disegnato:', err.message);
+        wealthHost.innerHTML = '';
       });
   }
 
@@ -2189,6 +2205,7 @@ function render1vs1() {
     ${factionSel(2, f2)}
   </div>
   ${cmpStats(f1, f2)}
+  <div id="bs-fcmp-wealth"></div>
   <div id="bs-fcmp-curves"></div>`;
 }
 
@@ -2207,8 +2224,16 @@ function mountFactionCurves() {
   const host = document.getElementById('bs-fcmp-curves');
   if (!host) return;
   const groups = [aggFaction(faction1Blocs), aggFaction(faction2Blocs)]
-    .map((f, i) => ({ label: f.name, color: FACTION_COLORS[i], ids: f.members.map(m => m.id) }))
+    .map((f, i) => ({ label: f.name, color: FACTION_COLORS[i], ids: f.members.map(m => m.id), now: f.totalMoney }))
     .filter(g => g.ids.length);
+  // WarEra+ (2026-11-22) — la ricchezza delle due fazioni nel tempo, sugli
+  // stessi assi (blocWealthHistory.js). Pubblica, quindi sopra le curve del
+  // danno che sono solo per i governi; senza server non compare.
+  const wealthHost = document.getElementById('bs-fcmp-wealth');
+  if (wealthHost) {
+    if (!groups.length) wealthHost.innerHTML = '';
+    else import('./blocWealthHistory.js').then(m => m.renderGroupWealth(wealthHost, groups, { title: true })).catch(() => { wealthHost.innerHTML = ''; });
+  }
   if (!groups.length) { host.innerHTML = ''; return; }
   import('./blocDamageCurves.js')
     .then(m => m.renderGroupCurves(host, groups))
