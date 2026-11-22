@@ -222,6 +222,47 @@ function readPlayerMoney(giorni = 90) {
   };
 }
 
+/* WarEra+ (2026-11-22) — la ricchezza dei CITTADINI di un gruppo di
+   nazioni giorno per giorno, accanto al tesoro (dayHistory: treasuryHistory)
+   nello storico della ricchezza di Statistiche alleanze e nazioni
+   (src/diplomacy/blocWealthHistory.js, src/nations/ecoSection.js).
+   Richiesta dell'utente: «la treasury mostra la wealth nazionale, io voglio
+   anche vedere lo storico dell'aggregato della wealth dei cittadini».
+
+   È `byCountry` degli aggregati del giorno: `total` (aziende +
+   equipaggiamento + armi + oggetti + soldi, come lo conta il gioco) e `m`
+   (i soli soldi) sommati sui giocatori della classifica che QUEL giorno
+   erano cittadini di quella nazione — la nazione la porta la riga della
+   classifica, non quella di oggi. Per questo non si allunga all'indietro
+   con l'archivio di plusApi (dal 19 giugno): quello non ha la nazione, e
+   attribuirgli la cittadinanza di adesso sposterebbe chi è migrato.
+
+   Un giorno senza giro (fallito, server fermo) MANCA da `days`: è un buco,
+   mai uno zero. In un giorno che c'è, una nazione senza riga in `byCountry`
+   vale 0 (nessun suo cittadino in classifica).
+
+   Risposta: { countryIds, days, series: {id: [totale…]}, money: {id:
+   [soldi…]}, players: {id: [giocatori…]}, coverageFrom }. `countryIds`
+   ripetuto: è come il client riconosce la risposta di questa rotta. */
+function readCitizensWealth(ids, giorni = 400) {
+  const store = _agg();
+  const voluti = [...new Set((ids || []).filter(Boolean))];
+  const tutti = Object.keys(store.days).sort();
+  const da = giornoDi(Date.now() - Math.max(1, giorni) * 86400_000);
+  const days = tutti.filter(g => g >= da && store.days[g]?.byCountry);
+  const series = {}, money = {}, players = {};
+  for (const id of voluti) {
+    series[id] = []; money[id] = []; players[id] = [];
+    for (const g of days) {
+      const r = store.days[g].byCountry[id];
+      series[id].push(r ? Math.round(r[1]) : 0);
+      money[id].push(r ? Math.round(r[0]) : 0);
+      players[id].push(r ? r[2] : 0);
+    }
+  }
+  return { countryIds: voluti, days, series, money, players, coverageFrom: tutti[0] || null };
+}
+
 /** Per /health. */
 function statoPlayerParts() {
   const giorni = Object.keys(_agg().days).sort();
@@ -244,5 +285,6 @@ module.exports = {
   sweepAlPrimoAvvio,
   readPlayerParts,
   readPlayerMoney,
+  readCitizensWealth,
   statoPlayerParts,
 };

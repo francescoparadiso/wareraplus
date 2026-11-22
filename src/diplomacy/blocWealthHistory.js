@@ -64,12 +64,30 @@ const rangeLabel = (d) => (d ? bT('{n}d', { n: d }) : bT('All'));
 
 /* ── Dati ──────────────────────────────────────────────────────── */
 
-const _cache = new Map();   // id ordinati → { at, p }
+/* WarEra+ (2026-11-22) — DUE serie, una alla volta col selettore in cima:
+     · `treasury`: i tesori delle nazioni (countryWealth), /treasury-history;
+     · `citizens`: la ricchezza dei loro CITTADINI (aziende, equipaggiamento,
+       armi, oggetti e soldi, come la conta il gioco), /citizens-wealth-history
+       — gli aggregati del giro giornaliero di server/playerParts.js, dove ogni
+       giocatore sta nella nazione di cui era cittadino QUEL giorno.
+   Stanno in grafici separati e non sovrapposti perché la seconda è un ordine
+   di grandezza sopra la prima: sullo stesso asse il tesoro sarebbe una riga
+   piatta sul fondo. `time` è l'ora approssimativa dello scatto, per l'asse. */
+const KINDS = {
+  treasury: { path: '/treasury-history', time: 'T01:05:00Z', live: true },
+  citizens: { path: '/citizens-wealth-history', time: 'T04:30:00Z', live: false },
+};
+const KIND_KEY = 'we_bloc_wealth_kind';
+let _kind = (() => {
+  try { const v = localStorage.getItem(KIND_KEY); return KINDS[v] ? v : 'treasury'; } catch { return 'treasury'; }
+})();
 
-async function fetchTreasury(ids) {
+const _cache = new Map();   // tipo + id ordinati → { at, p }
+
+async function fetchKind(kind, ids) {
   const list = [...new Set((ids || []).filter(Boolean))].sort();
   if (!list.length) return null;
-  const key = list.join(',');
+  const key = `${kind}|${list.join(',')}`;
   const hit = _cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.p;
 
@@ -77,13 +95,13 @@ async function fetchTreasury(ids) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
     try {
-      const res = await fetch(`${WARERA_CACHE_BASE}/treasury-history?countryIds=${key}`, { signal: ctrl.signal });
+      const res = await fetch(`${WARERA_CACHE_BASE}${KINDS[kind].path}?countryIds=${list.join(',')}`, { signal: ctrl.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       // Senza l'eco di `countryIds` non è una risposta di questa rotta.
       return json && Array.isArray(json.countryIds) && Array.isArray(json.days) ? json : null;
     } catch (err) {
-      console.warn('WarEra+ blocStats: /treasury-history non disponibile:', err.message);
+      console.warn(`WarEra+ blocStats: ${KINDS[kind].path} non disponibile:`, err.message);
       return null;
     } finally {
       clearTimeout(timer);
@@ -94,23 +112,33 @@ async function fetchTreasury(ids) {
   return p;
 }
 
-/** Ora (ms) di uno scatto: le 02:05 italiane di quel giorno, a un'ora
- *  circa di precisione (ora legale o no) — basta per l'asse. */
-const dayTime = (day) => Date.parse(`${day}T01:05:00Z`);
+const nextDay = (day) => new Date(Date.parse(`${day}T12:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
 
-/** [{ t, day, v }] sommati sul gruppo; v null se manca anche una nazione. */
-function sumSeries(json, ids, now) {
+/** [{ t, day, v, n?, m? }] sommati sul gruppo; v null se manca anche una
+ *  nazione, e un giorno di calendario senza scatto diventa una riga null
+ *  (la linea si spezza: un giorno non letto non è un giorno uguale agli
+ *  altri). `n`/`m`: giocatori e soldi, solo per i cittadini. */
+function sumSeries(json, ids, now, kind) {
+  const time = KINDS[kind].time;
   const list = ids.filter(id => json.series?.[id]);
-  const out = json.days.map((day, i) => {
-    let s = 0;
+  const byDay = new Map(json.days.map((day, i) => {
+    let s = 0, n = 0, m = 0;
     for (const id of list) {
       const v = json.series[id][i];
-      if (v == null) return { t: dayTime(day), day, v: null };
+      if (v == null) return [day, { v: null }];
       s += v;
+      n += json.players?.[id]?.[i] || 0;
+      m += json.money?.[id]?.[i] || 0;
     }
-    return { t: dayTime(day), day, v: s };
-  });
-  if (Number.isFinite(now) && out.length) out.push({ t: Date.now(), day: null, v: now, live: true });
+    return [day, json.players ? { v: s, n, m } : { v: s }];
+  }));
+  const out = [];
+  if (json.days.length) {
+    for (let d = json.days[0], last = json.days[json.days.length - 1]; d <= last; d = nextDay(d)) {
+      out.push({ t: Date.parse(`${d}${time}`), day: d, ...(byDay.get(d) || { v: null }) });
+    }
+  }
+  if (KINDS[kind].live && Number.isFinite(now) && out.length) out.push({ t: Date.now(), day: null, v: now, live: true });
   return out;
 }
 
@@ -119,10 +147,10 @@ function sumSeries(json, ids, now) {
 /**
  * Disegna lo storico dentro `host` per uno o due gruppi
  * ({ label, color, ids, now }). `emptyText`: cosa scrivere se il server
- * non ha la rotta (null = la sezione resta vuota). `title`: un titolo
- * proprio, per dove non c'è l'intestazione di una sezione (il 1 vs 2).
- * `nations`: la nota per il 1 vs 2 di Statistiche nazioni, dove i lati
- * sono nazioni scelte a mano e non i membri di un'alleanza.
+ * non ha nessuna delle due rotte (null = la sezione resta vuota). `title`:
+ * un titolo proprio, per dove non c'è l'intestazione di una sezione (il
+ * 1 vs 2). `nations`: le note per il 1 vs 2 di Statistiche nazioni, dove i
+ * lati sono nazioni scelte a mano e non i membri di un'alleanza.
  */
 export async function renderGroupWealth(host, groups, { emptyText = null, title = false, nations = false } = {}) {
   const token = Symbol('wealth');
@@ -131,32 +159,58 @@ export async function renderGroupWealth(host, groups, { emptyText = null, title 
   injectStyles();
   host.innerHTML = `<div class="bs-cv-loading">${bT('Loading wealth history…')}</div>`;
 
-  const data = await Promise.all(groups.map(g => fetchTreasury(g.ids)));
+  const kinds = Object.keys(KINDS);
+  const data = await Promise.all(groups.flatMap(g => kinds.map(k => fetchKind(k, g.ids))));
   if (host._wpWealth !== token || !host.isConnected) return;
-  const ready = groups
-    .map((g, i) => (data[i] ? { ...g, rows: sumSeries(data[i], g.ids, g.now), from: data[i].coverageFrom } : null))
-    .filter(g => g && g.rows.some(r => r.v != null && !r.live));
-  if (!ready.length) {
+  const full = groups.map((g, gi) => {
+    const byKind = {};
+    kinds.forEach((k, ki) => {
+      const json = data[gi * kinds.length + ki];
+      if (!json) return;
+      const rows = sumSeries(json, g.ids, g.now, k);
+      if (rows.some(r => r.v != null && !r.live)) byKind[k] = { rows, from: json.coverageFrom };
+    });
+    return { ...g, byKind };
+  });
+  const available = kinds.filter(k => full.some(g => g.byKind[k]));
+  if (!available.length) {
     host.innerHTML = emptyText ? `<p class="bs-cv-empty">${esc(emptyText)}</p>` : '';
     return;
   }
-  paint(host, ready, groups.length, title, nations);
+  paint(host, { full, available, asked: groups.length, title, nations });
 }
 
-function paint(host, groups, asked, title, nations) {
-  const multi = asked > 1;
+function noteFor(kind, nations, from) {
+  const date = fmtDay(from, true);
+  if (kind === 'citizens') {
+    return nations
+      ? bT('Wealth of each side\'s citizens (companies, equipment, weapons, items and money, as the game counts it), read once a day between 05:00 and 07:00 Italian time. Each player counts for the nation they were a citizen of that day. Recorded since {date}: a missing day is a gap, not a zero.', { date })
+      : bT('Wealth of the citizens of today\'s member nations (companies, equipment, weapons, items and money, as the game counts it), read once a day between 05:00 and 07:00 Italian time. Each player counts for the nation they were a citizen of that day. Recorded since {date}: a missing day is a gap, not a zero.', { date });
+  }
+  return nations
+    ? bT('Treasury of each side, read once a day (02:05 Italian time) plus the value now. Recorded since {date}: earlier days were never saved.', { date })
+    : bT('Sum of the treasuries of today\'s member nations, read once a day (02:05 Italian time) plus the value now. Recorded since {date}: earlier days were never saved, and a nation that joined later counts for the whole period.', { date });
+}
+
+const KIND_LABEL = { treasury: 'National treasury', citizens: 'Citizens\' wealth' };
+
+function paint(host, st) {
+  const kind = st.available.includes(_kind) ? _kind : st.available[0];
+  const groups = st.full.filter(g => g.byKind[kind]).map(g => ({ ...g, rows: g.byKind[kind].rows, from: g.byKind[kind].from }));
+  const multi = st.asked > 1;
   const from = groups.map(g => g.from).filter(Boolean).sort()[0];
   host.innerHTML = `
     <div class="bs-cv bs-wh">
-      ${title ? `<div class="bs-cv-title">${bT('Wealth over time')}</div>` : ''}
-      <p class="bs-cv-note">${esc(nations
-        ? bT('Treasury of each side, read once a day (02:05 Italian time) plus the value now. Recorded since {date}: earlier days were never saved.', { date: fmtDay(from, true) })
-        : bT('Sum of the treasuries of today\'s member nations, read once a day (02:05 Italian time) plus the value now. Recorded since {date}: earlier days were never saved, and a nation that joined later counts for the whole period.', { date: fmtDay(from, true) }))}</p>
-      ${multi && asked > groups.length ? `<p class="bs-cv-note">${bT('One of the two sides has no wealth history yet.')}</p>` : ''}
+      ${st.title ? `<div class="bs-cv-title">${bT('Wealth over time')}</div>` : ''}
+      ${st.available.length > 1 ? `<div class="bs-cv-range bs-wh-kind" role="group">
+        ${st.available.map(k => `<button type="button" data-k="${k}" class="${k === kind ? 'active' : ''}">${esc(bT(KIND_LABEL[k]))}</button>`).join('')}
+      </div>` : ''}
+      <p class="bs-cv-note">${esc(noteFor(kind, st.nations, from))}</p>
+      ${multi && st.asked > groups.length ? `<p class="bs-cv-note">${bT('One of the two sides has no wealth history yet.')}</p>` : ''}
       <div class="bs-cv-card">
         <div class="bs-cv-head">
-          ${legendHtml(groups, multi)}
-          <div class="bs-cv-range" role="group">
+          ${legendHtml(groups, multi, kind)}
+          <div class="bs-cv-range bs-wh-days" role="group">
             ${RANGES.map(d => `<button type="button" data-d="${d}" class="${d === _days ? 'active' : ''}">${rangeLabel(d)}</button>`).join('')}
           </div>
         </div>
@@ -166,12 +220,19 @@ function paint(host, groups, asked, title, nations) {
       </div>
     </div>`;
 
-  host.querySelector('.bs-cv-range')?.addEventListener('click', (e) => {
+  host.querySelector('.bs-wh-days')?.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-d]');
     if (!btn) return;
     _days = Number(btn.dataset.d);
     try { localStorage.setItem(RANGE_KEY, String(_days)); } catch { /* storage negato */ }
-    paint(host, groups, asked, title, nations);
+    paint(host, st);
+  });
+  host.querySelector('.bs-wh-kind')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-k]');
+    if (!btn || btn.dataset.k === kind) return;
+    _kind = btn.dataset.k;
+    try { localStorage.setItem(KIND_KEY, _kind); } catch { /* storage negato */ }
+    paint(host, st);
   });
 
   const slot = host.querySelector('[data-slot="wealth"]');
@@ -217,9 +278,10 @@ function inWindow(rows) {
   return rows.filter(r => r.t >= t0);
 }
 
-function legendHtml(groups, multi) {
+function legendHtml(groups, multi, kind) {
   if (!multi) {
-    return `<ul class="bs-cv-legend"><li><span class="bs-cv-sw" style="background:${groups[0].color}"></span>${bT('Treasury of member nations')}</li></ul>`;
+    const what = kind === 'citizens' ? bT('Wealth of their citizens') : bT('Treasury of member nations');
+    return `<ul class="bs-cv-legend"><li><span class="bs-cv-sw" style="background:${groups[0].color}"></span>${what}</li></ul>`;
   }
   return `<ul class="bs-cv-legend">
     ${groups.map(g => `<li><span class="bs-cv-sw" style="background:${g.color}"></span>${esc(g.label)}</li>`).join('')}
@@ -243,7 +305,12 @@ function statsHtml(groups, multi) {
   const pTxt = (c) => (c.pct == null ? '—' : `${sign(c.pct)}${Math.abs(c.pct).toFixed(1)}%`);
   const cls = (c) => (c.d > 0 ? ' up' : c.d < 0 ? ' down' : '');
   const when = (r) => (r.live ? bT('now') : fmtDay(r.day));
-  const startLabel = _days ? bT('{n} days ago', { n: _days }) : bT('Start');
+  // "{n} giorni fa" solo se lo storico arriva davvero fin lì: con una serie
+  // più corta della finestra il primo punto è l'inizio dell'archivio, e
+  // chiamarlo "30 giorni fa" metterebbe una data falsa sopra al numero.
+  const t0 = Date.now() - _days * DAY_MS;
+  const corto = !_days || rows.some(r => r.c.first.t > t0 + 1.5 * DAY_MS);
+  const startLabel = corto ? bT('Start') : bT('{n} days ago', { n: _days });
   if (!multi) {
     const { c } = rows[0];
     const tile = (label, n, sub, extra = '') => `<div class="bs-cv-ptile bs-wh-tile${extra}"><span>${esc(label)}</span><strong>${n}</strong><em>${esc(sub)}</em></div>`;
@@ -297,8 +364,9 @@ function draw(slot, groups, multi) {
     for (const r of inWindow(g.rows)) {
       const k = r.live ? 'live' : r.day;
       let row = byKey.get(k);
-      if (!row) { row = { t: r.t, day: r.day, live: !!r.live, v: groups.map(() => null) }; byKey.set(k, row); }
+      if (!row) { row = { t: r.t, day: r.day, live: !!r.live, v: groups.map(() => null), src: groups.map(() => null) }; byKey.set(k, row); }
       row.v[gi] = r.v;
+      row.src[gi] = r;
       if (r.live) row.t = Math.max(row.t, r.t);
     }
   });
@@ -387,7 +455,10 @@ function draw(slot, groups, multi) {
       if (v == null) return name + `<li><span>${bT('not measured')}</span></li>`;
       const pv = prev?.v[gi];
       const d = pv != null ? v - pv : null;
+      const src = r.src[gi];
       return name + `<li><span>${bT('Wealth')}</span><strong>${fmt(v)}</strong></li>`
+        + (src?.m != null ? `<li><span>${bT('of which money')}</span><strong>${fmt(src.m)}</strong></li>` : '')
+        + (src?.n != null ? `<li><span>${bT('Citizens counted')}</span><strong>${src.n.toLocaleString(lang())}</strong></li>` : '')
         + (d != null ? `<li><span>${bT('vs previous point')}</span><strong>${d >= 0 ? '+' : '−'}${fmt(Math.abs(d))}</strong></li>` : '');
     }).join('');
     return `<div class="bs-cv-tip-head">${esc(head)}</div><ul>${items}</ul>`;
@@ -404,6 +475,8 @@ function injectStyles() {
   s.id = 'bs-wh-styles';
   s.textContent = `
     .bs-wh{margin-top:4px}
+    .bs-wh-kind{margin:0 0 8px;flex-wrap:wrap}
+    .bs-wh-kind button{font-size:12px;padding:3px 10px}
     /* Le regole delle curve del danno colorano i numeri di viola (pillati):
        qui verde = ricchezza nelle caselle, neutro nella tabella del 1 vs 2
        (il colore lì è quello della fazione, nel quadratino), e la

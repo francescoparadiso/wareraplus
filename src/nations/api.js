@@ -190,6 +190,35 @@ export function fetchTreasury(countryId) {
   return p;
 }
 
+const _citWealth = new Map();   // countryId → Promise<[[giorno, totale, giocatori]] | null>
+
+/**
+ * WarEra+ (2026-11-22) — la ricchezza dei CITTADINI di una nazione giorno
+ * per giorno (/citizens-wealth-history, server/playerParts.js): ogni
+ * giocatore conta per la nazione di cui era cittadino quel giorno. Parte dal
+ * primo giro di playerParts (4 novembre 2026) e non si ricostruisce
+ * all'indietro. `null` se il server non ce l'ha: la scheda lo dice.
+ */
+export function fetchCitizensWealth(countryId) {
+  if (!countryId) return Promise.resolve(null);
+  if (_citWealth.has(countryId)) return _citWealth.get(countryId);
+  const p = (async () => {
+    try {
+      const json = await cacheJson(`/citizens-wealth-history?countryIds=${encodeURIComponent(countryId)}`);
+      if (!json || !Array.isArray(json.countryIds) || !json.days?.length) return null;
+      const tot = json.series?.[countryId] || [];
+      const n = json.players?.[countryId] || [];
+      return { from: json.coverageFrom, days: json.days.map((d, i) => [d, tot[i], n[i]]) };
+    } catch (err) {
+      console.warn('WarEra+ nations: /citizens-wealth-history non disponibile:', err.message);
+      return null;
+    }
+  })();
+  _citWealth.set(countryId, p);
+  p.then(v => { if (!v && _citWealth.get(countryId) === p) _citWealth.delete(countryId); });
+  return p;
+}
+
 const _happiness = new Map();   // countryId → Promise<risposta | null>
 
 /**

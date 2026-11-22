@@ -43,7 +43,7 @@ import { fetchMoneyTransfers } from '../battles/moneyTransfers.js';
 import { state } from '../diplomacy/state.js';
 import { donutHtml } from './charts.js';
 import { fetchMuDirectory } from '../mu/api.js';
-import { fetchDonations, fetchDonationsByCountry, fetchTreasury, fetchEmployeeHappiness, getNations } from './api.js';
+import { fetchDonations, fetchDonationsByCountry, fetchTreasury, fetchEmployeeHappiness, fetchCitizensWealth, getNations } from './api.js';
 import { metricValue } from './metrics.js';
 import { ecoT } from './i18nEco.js';
 
@@ -129,7 +129,7 @@ function paintShell() {
 async function load() {
   const nation = _nation;
   const range = _range;
-  const [treasury, donations, transfers, directory, byCountry, happiness] = await Promise.all([
+  const [treasury, donations, transfers, directory, byCountry, happiness, citizens] = await Promise.all([
     fetchTreasury(nation._id).catch(() => null),
     fetchDonations(nation._id, range).catch(() => null),
     fetchMoneyTransfers().catch(() => null),
@@ -138,12 +138,14 @@ async function load() {
     fetchMuDirectory().catch(() => null),
     fetchDonationsByCountry(range).catch(() => null),
     fetchEmployeeHappiness(nation._id).catch(() => null),
+    fetchCitizensWealth(nation._id).catch(() => null),
   ]);
   // Nazione o intervallo cambiati mentre si aspettava: questo disegno è vecchio.
   if (_nation?._id !== nation._id || _range !== range || !_host?.isConnected) return;
   const body = _host.querySelector('#wp-nat-eco-body');
   if (!body) return;
   body.innerHTML = tilesAndTreasury(treasury, transfers)
+    + citizensWealthHtml(citizens)
     + happinessHtml(happiness)
     + transfersHtml(transfers)
     + donationsHtml(donations)
@@ -217,6 +219,34 @@ function tilesAndTreasury(treasury, transfers) {
     <div class="wp-nat-curve-card">
       <h4 class="wp-nat-chart-title">${escapeHtml(ecoT('ecoTreasuryChart'))}</h4>
       <div class="wp-nat-curve-slot">${chart}</div>
+    </div>`;
+}
+
+/* WarEra+ (2026-11-22) — la ricchezza dei CITTADINI accanto al tesoro.
+   Richiesta dell'utente: «la treasury mostra la wealth nazionale, io voglio
+   anche vedere lo storico dell'aggregato della wealth dei cittadini». Una
+   carta a sé e non una seconda linea sul grafico del tesoro: è un ordine di
+   grandezza sopra, e sullo stesso asse il tesoro diventerebbe piatto.
+   Stesso intervallo dei bottoni in cima alla scheda. Ogni giocatore conta per
+   la nazione di cui era cittadino QUEL giorno (vedi readCitizensWealth in
+   server/playerParts.js), quindi lo storico parte dal primo giro e non si
+   allunga all'indietro con la nazionalità di oggi. */
+const C_CITIZENS = '#58a6ff';
+
+function citizensWealthHtml(cit) {
+  const since = Date.now() - _range * DAY_MS;
+  const pts = (cit?.days || []).filter(([d, v]) => d >= dayOf(since) && Number.isFinite(v)).map(([d, v]) => [d, v]);
+  const last = cit?.days?.length ? cit.days[cit.days.length - 1] : null;
+  const fmtDay = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString(document.documentElement.lang || undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  const body = cit && pts.length > 1
+    ? lineChartHtml(pts, { color: C_CITIZENS, label: ecoT('citChart'), aria: ecoT('citChart') })
+    : `<p class="wp-nat-lab-note">${escapeHtml(ecoT('citNoHist'))}</p>`;
+  return `
+    <div class="wp-nat-curve-card">
+      <h4 class="wp-nat-chart-title">${escapeHtml(ecoT('citChart'))}</h4>
+      ${last ? `<p class="wp-nat-lab-note">${escapeHtml(ecoT('citLatest', { v: oro(last[1]), n: Number(last[2] || 0).toLocaleString(document.documentElement.lang || undefined), date: fmtDay(last[0]) }))}</p>` : ''}
+      <div class="wp-nat-curve-slot">${body}</div>
+      ${cit?.from ? `<p class="wp-nat-lab-note">${escapeHtml(ecoT('citNote', { date: fmtDay(cit.from) }))}</p>` : ''}
     </div>`;
 }
 

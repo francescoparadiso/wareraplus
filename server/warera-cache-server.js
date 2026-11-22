@@ -224,7 +224,7 @@ const {
 // su tutta la classifica, archivio sqlite su disco. Vedi il blocco in testa
 // a server/playerParts.js.
 const {
-  initPlayerParts, sweepSeDovuto, sweepAlPrimoAvvio, readPlayerParts, readPlayerMoney, statoPlayerParts,
+  initPlayerParts, sweepSeDovuto, sweepAlPrimoAvvio, readPlayerParts, readPlayerMoney, readCitizensWealth, statoPlayerParts,
 } = require('./playerParts');
 // WarEra+ mercato dell'equipaggiamento: vendite vere (con i tiri del pezzo),
 // craft e casse aperte, da `transaction.getPaginatedTransactions` (chiave del
@@ -3659,6 +3659,16 @@ app.get('/player-parts', (req, res) => {
 app.get('/player-money', (req, res) => {
   const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 3650);
   res.json(readPlayerMoney(days));
+});
+
+// La ricchezza dei cittadini di un gruppo di nazioni, giorno per giorno
+// (playerParts.js: readCitizensWealth), accanto a /treasury-history nello
+// storico della ricchezza. Stesso tetto di 200 id.
+app.get('/citizens-wealth-history', (req, res) => {
+  const ids = String(req.query.countryIds || '').split(',').map(x => x.trim()).filter(x => /^[a-f0-9]{24}$/i.test(x)).slice(0, 200);
+  if (!ids.length) return res.status(400).json({ error: 'countryIds mancanti' });
+  const days = Math.min(Math.max(Number(req.query.days) || 400, 1), 3650);
+  res.json(readCitizensWealth(ids, days));
 });
 
 app.get('/order-money', (req, res) => {

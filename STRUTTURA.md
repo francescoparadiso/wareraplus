@@ -409,6 +409,12 @@ wareraPlus/
     │   │                        scatto delle 02:05 di dayHistory.js, nessun poll nuovo),
     │   │                        più il valore di adesso come ultimo punto. ⚠️ Parte dal
     │   │                        19 set 2026: i giorni importati non hanno il tesoro.
+    │   │                        Selettore «Ricchezza dei cittadini»: la somma della
+    │   │                        ricchezza dei cittadini (/citizens-wealth-history,
+    │   │                        aggregati di server/playerParts.js, dal 4 nov 2026),
+    │   │                        ogni giocatore nella nazione di cui era cittadino QUEL
+    │   │                        giorno; la stessa serie ha una carta sua nella scheda
+    │   │                        Economia della nazione (ecoSection.js).
     │   │                        Nazioni = membri di OGGI. Pubblica, nessun cancello;
     │   │                        senza rideploy del cache-server la rotta è 404 e la
     │   │                        sezione lo dice (pagina) o non compare (1 vs 2).

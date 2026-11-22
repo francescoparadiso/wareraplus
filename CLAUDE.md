@@ -281,7 +281,7 @@ serve a ridurre i 429. Espone fra gli altri: `/money-transfers`, `/mu-directory`
 `/mu-playstyle-by-country`, `/mu-playstyle-history`, `/country-citizens`,
 `/citizen-moves`, `/migration-flows`, `/battle-timeline`,
 `/daily-damage`, `/damage-history`, `/damage-timeline`, `/damage-pulse`, `/price-history`, `/order-money`, `/day-history`,
-`/alliance-history`, `/treasury-history`,
+`/alliance-history`, `/treasury-history`, `/citizens-wealth-history`,
 `/labour-history`, `/company-census`, `/player-wealth`,
 `/political-history`, `/political-overview`, `/presidents`,
 `/ticker` + `/ticker/summary`,
