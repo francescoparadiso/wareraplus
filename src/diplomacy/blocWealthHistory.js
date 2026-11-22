@@ -363,7 +363,15 @@ function draw(slot, groups, multi) {
   slot.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="bs-cv-svg" role="img"
     aria-label="${esc(bT('Wealth over time'))}">${grid}${body}${labels}${hits}</svg>`;
 
-  bindCurveTip(slot, rows, (r) => {
+  // Il ResizeObserver ridisegna nello STESSO slot: il tooltip si aggancia una
+  // volta sola, a un array che a ogni disegno si riempie di nuovo.
+  if (!slot._whRows) {
+    slot._whRows = [];
+    bindCurveTip(slot, slot._whRows, (r) => slot._whBuild(r));
+  }
+  slot._whRows.length = 0;
+  slot._whRows.push(...rows);
+  slot._whBuild = (r) => {
     const i = rows.indexOf(r);
     const prev = rows[i - 1];
     const head = r.live
@@ -379,7 +387,7 @@ function draw(slot, groups, multi) {
         + (d != null ? `<li><span>${bT('vs previous point')}</span><strong>${d >= 0 ? '+' : '−'}${fmt(Math.abs(d))}</strong></li>` : '');
     }).join('');
     return `<div class="bs-cv-tip-head">${esc(head)}</div><ul>${items}</ul>`;
-  });
+  };
 }
 
 /* ── Stile (solo quello che le curve del danno non hanno) ───────── */
