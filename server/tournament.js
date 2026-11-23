@@ -41,6 +41,13 @@
 // 4. COMPOSIZIONE di una squadra (/tournament/team): iscritti col danno
 //    degli ultimi 7 giorni e quello fatto nel torneo (`damageByEntity`).
 //
+// 5. CAPACITÀ (dal 2026-11-23, solo tornei MU): il danno che la rosa può
+//    fare in 12 ore con vita, fame e statistiche, al tetto di rarità del
+//    torneo — vedi server/tournamentCapacity.js. Prevede meglio del
+//    settimanale, ed è la misura di partenza della vista. Costa una
+//    getUserById per iscritto (con la chiave): le squadre in gara ogni
+//    mezz'ora, le eliminate una volta.
+//
 // ⚠️ Il modello qui sotto è lo STESSO di src/tournament/model.js (fit e
 // probabilità): il server lo usa solo per il registro, il client per tutto
 // il resto e quando il server manca. Se cambi l'uno, cambia l'altro.
@@ -52,6 +59,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const cap = require('./tournamentCapacity');
 
 const LIST_LIMIT = 8;
 const WEEKLY_TTL_MS = 30 * 60 * 1000;   // = TTL di weeklyUserDamages in fullRanking.js
@@ -64,6 +72,11 @@ const SNAP_KEEP_MS = 10 * DAY;
 const BATTLES_FILE = 'tournament-battles';
 const PREDS_FILE = 'tournament-predictions';
 const LATE_AFTER_MS = 15 * 60 * 1000;
+const PLAYERS_FILE = 'tournament-players';
+const PLAYER_TTL_MS = 30 * 60 * 1000;   // squadre in gara: barre e pillole cambiano di ora in ora
+const MAX_PER_POLL = 1000;              // getUserById per giro (20 blocchi da 50)
+const CAP_COMPLETE = 0.98;              // quota di iscritti letti perché la capacità valga
+const METRIC_KEYS = ['potential', 'average', 'capacity'];
 
 let deps = null;
 let _list = [];                 // tornei, dal più recente
@@ -73,7 +86,10 @@ let _weekly = null;             // Map userId -> danno della settimana in corso
 let _weeklyAt = 0;
 let _rolling = null;            // { map, mode, from }
 let _battles = null;            // { battleId: [aDmg, dDmg, rounds] }
-let _preds = null;              // { tournamentId: { "n:idx": { a, d, p: [pot, avg], late, at } } }
+let _preds = null;              // { tournamentId: { "n:idx": { a, d, p: [pot, avg, cap], late, at } } }
+let _players = null;            // { userId: giocatore compatto (tournamentCapacity.compactPlayer) }
+let _caps = null;               // massimi per rarità, da gameConfig
+let _capsAt = 0;
 let _lastError = null;
 
 function initTournament(tools) {
@@ -194,18 +210,113 @@ function rolling() {
 
 /* ── Squadre ────────────────────────────────────────────────────────── */
 
-function sumRoster(roster) {
+function sumRoster(roster, rarity = null) {
   const map = rolling()?.map;
-  let potential = 0, fighters = 0;
+  const players = loadPlayers();
+  const c = capsFor(rarity);
+  let potential = 0, fighters = 0, capacity = 0, capKnown = 0;
   for (const u of roster) {
     const v = map?.get(u) || 0;
     potential += v;
     if (v > 0) fighters++;
+    const p = players[u];
+    if (p) { capacity += cap.playerCapacity(p, c); capKnown++; }
   }
-  return { potential, fighters };
+  return { potential, fighters, capacity: Math.round(capacity), capKnown };
 }
 
-async function refreshTeams(id) {
+/* ── 5. Iscritti: vita, fame, statistiche (capacità) ────────────────── */
+
+function loadPlayers() {
+  if (!_players) _players = deps.readCache?.(PLAYERS_FILE, {}) || {};
+  return _players;
+}
+
+/** Massimi dell'equipaggiamento per la rarità del torneo (null = nessun tetto). */
+function capsFor(rarity) {
+  return rarity ? (_caps || cap.CAPS_FALLBACK)[rarity] || null : null;
+}
+
+async function refreshCaps() {
+  if (_caps && Date.now() - _capsAt < DAY) return;
+  try {
+    const cfg = await one('gameConfig.getGameConfig', {});
+    if (cfg?.items) { _caps = cap.capsFromConfig(cfg); _capsAt = Date.now(); }
+  } catch { /* resta il ripiego */ }
+}
+
+/** Legge (o rilegge) gli iscritti di un torneo MU: prima quelli delle
+ *  squadre in gara più vecchi di PLAYER_TTL_MS, poi quelli mai letti delle
+ *  eliminate. Al massimo MAX_PER_POLL a giro. */
+async function refreshPlayers(t) {
+  const entry = _teams.get(t._id);
+  if (!entry || t.type !== 'mu') return;
+  await refreshCaps();
+  const players = loadPlayers();
+  const now = Date.now();
+  const stale = [], missing = [];
+  for (const r of entry.rows) {
+    const alive = t.status !== 'ended' && r.status !== 'eliminated';
+    for (const u of r._participants) {
+      const p = players[u];
+      if (!p) (alive ? stale : missing).push(u);
+      else if (alive && now - p.at > PLAYER_TTL_MS) stale.push(u);
+    }
+  }
+  const want = [...new Set([...stale, ...missing])].slice(0, MAX_PER_POLL);
+  if (!want.length) return;
+  const res = await deps.trpcBatch(want.map(id => ['user.getUserById', { userId: id }]), { useWorker: true, maxBatch: 50 });
+  let got = 0;
+  res.forEach((u, i) => {
+    const p = u ? cap.compactPlayer(u, Date.now()) : null;
+    if (p) { players[want[i]] = p; got++; }
+  });
+  // Potatura: solo gli iscritti dei tornei in memoria.
+  const keep = new Set();
+  for (const e of _teams.values()) for (const r of e.rows) for (const u of r._participants) keep.add(u);
+  for (const u of Object.keys(players)) if (!keep.has(u)) delete players[u];
+  deps.writeCache?.(PLAYERS_FILE, players);
+  for (const r of entry.rows) Object.assign(r, sumRoster(r._participants, entry.rarity));
+  console.log(`[tournament] iscritti letti: ${got}/${want.length} (${stale.length} in gara da rileggere, ${missing.length} eliminati mai letti)`);
+}
+
+/** Quanto le due squadre possono ancora fare nelle partite IN CORSO del
+ *  turno attivo, nelle 12 ore dall'inizio della battaglia:
+ *  { battleId: [attaccante, difensore] } (tournamentCapacity.playerCapacityIn).
+ *  Vuoto se la capacità non è completa. */
+function matchCapacities(t, entry) {
+  if (t.type !== 'mu' || !capacityOk(entry)) return {};
+  const players = loadPlayers();
+  const c = capsFor(entry.rarity);
+  const byId = new Map(entry.rows.map(r => [r._id, r]));
+  const now = Date.now();
+  const sum = (teamId, start) => {
+    let s = 0;
+    for (const u of byId.get(teamId)?._participants || []) {
+      const p = players[u];
+      if (p) s += cap.playerCapacityIn(p, c, start, now);
+    }
+    return Math.round(s);
+  };
+  const out = {};
+  for (const m of t.rounds?.[t.activeRound]?.matches || []) {
+    if (m.wonBy || !m.battle || !m.attacker || !m.defender) continue;
+    const start = cap.battleStart(m.battle);
+    if (start) out[m.battle] = [sum(m.attacker, start), sum(m.defender, start)];
+  }
+  return out;
+}
+
+/** La capacità vale solo con quasi tutti gli iscritti letti: una squadra a
+ *  metà lettura sembrerebbe la metà di quello che è. */
+function capacityOk(entry) {
+  if (!entry) return false;
+  let n = 0, k = 0;
+  for (const r of entry.rows) { n += r.roster; k += r.capKnown || 0; }
+  return n > 0 && k / n >= CAP_COMPLETE;
+}
+
+async function refreshTeams(id, rarity = null) {
   const res = await one('tournamentTeam.getByTournamentId', { tournamentId: id });
   const raw = Array.isArray(res) ? res : res?.items;
   if (!Array.isArray(raw)) throw new Error(`squadre di ${id}: forma inattesa`);
@@ -226,17 +337,17 @@ async function refreshTeams(id) {
       totalDamage: t.totalDamage || 0,
       roster: roster.length,
       tourFighters,
-      ...sumRoster(roster),
+      ...sumRoster(roster, rarity),
       _participants: roster,
     };
   });
-  _teams.set(id, { at: Date.now(), rows, byUser, dmg });
+  _teams.set(id, { at: Date.now(), rows, byUser, dmg, rarity });
 }
 
 /** Dopo un giro della classifica, i numeri delle squadre già in memoria. */
 function recomputeAll() {
   for (const entry of _teams.values()) {
-    for (const r of entry.rows) Object.assign(r, sumRoster(r._participants));
+    for (const r of entry.rows) Object.assign(r, sumRoster(r._participants, entry.rarity));
   }
 }
 
@@ -325,8 +436,10 @@ function fitModel(t, strength, battles, metric) {
   return { k, k1: both?.[0] ?? null, k2: both?.[1] ?? null };
 }
 
-function predict(model, a, d, fa, fd, metric) {
-  const x1 = lr(a[metric], d[metric], FLOOR);
+/** `override` = [forza a, forza d] al posto di quelle delle squadre (la
+ *  capacità di una partita in corso, vedi matchCapacities). */
+function predict(model, a, d, fa, fd, metric, override = null) {
+  const x1 = override ? lr(override[0], override[1], FLOOR) : lr(a[metric], d[metric], FLOOR);
   if (model.k2 != null && fa && fd) return sig(model.k1 * x1 + model.k2 * lr(fa.d / fa.r, fd.d / fd.r, 1));
   return sig(model.k * x1);
 }
@@ -341,9 +454,14 @@ function loadPreds() {
 async function recordPredictions(t) {
   const entry = _teams.get(t._id);
   if (!entry || t.status === 'ended') return;
-  const strength = new Map(entry.rows.map(r => [r._id, { potential: r.potential, average: r.fighters ? r.potential / r.fighters : 0 }]));
+  const capOk = capacityOk(entry);
+  const strength = new Map(entry.rows.map(r => [r._id, {
+    potential: r.potential, average: r.fighters ? r.potential / r.fighters : 0, capacity: r.capacity,
+  }]));
   const battles = loadBattles();
-  const models = { potential: fitModel(t, strength, battles, 'potential'), average: fitModel(t, strength, battles, 'average') };
+  const models = {};
+  for (const metric of METRIC_KEYS) if (metric !== 'capacity' || capOk) models[metric] = fitModel(t, strength, battles, metric);
+  const live = matchCapacities(t, entry);
   const form = formUpTo(t, battles, Infinity);
   const book = (loadPreds()[t._id] ||= {});
   const fresh = [];
@@ -357,7 +475,10 @@ async function recordPredictions(t) {
       if (!a || !d) continue;
       book[key] = {
         a: ta, d: td,
-        p: ['potential', 'average'].map(metric => Math.round(predict(models[metric], a, d, form.get(ta), form.get(td), metric) * 1000) / 1000),
+        p: METRIC_KEYS.map(metric => models[metric]
+          ? Math.round(predict(models[metric], a, d, form.get(ta), form.get(td), metric,
+            metric === 'capacity' && m.battle && m.attacker === ta ? live[m.battle] : null) * 1000) / 1000
+          : null),
         late: false,
         at: Date.now(),
       };
@@ -387,11 +508,11 @@ function predictionReport(t) {
     for (const m of r.matches || []) if (m.wonBy) outcome.set(`${n}:${m.matchIndex}`, m.wonBy === 'attacker');
   }
   const report = {};
-  ['potential', 'average'].forEach((metric, i) => {
+  METRIC_KEYS.forEach((metric, i) => {
     let n = 0, hits = 0, brier = 0;
     const buckets = [[0.5, 0.6], [0.6, 0.7], [0.7, 0.8], [0.8, 0.9], [0.9, 1.01]].map(([lo, hi]) => ({ lo, hi, n: 0, p: 0, won: 0 }));
     for (const [key, rec] of Object.entries(book)) {
-      if (rec.late || !outcome.has(key)) continue;
+      if (rec.late || !outcome.has(key) || rec.p[i] == null) continue;
       const aWon = outcome.get(key);
       const p = rec.p[i];
       n++;
@@ -404,7 +525,9 @@ function predictionReport(t) {
     }
     report[metric] = { n, hits, brier: n ? brier / n : null, buckets: buckets.filter(b => b.n).map(b => ({ lo: b.lo, n: b.n, p: b.p / b.n, won: b.won / b.n })) };
   });
-  for (const [key, rec] of Object.entries(book)) byKey[key] = [rec.p[0], rec.p[1], rec.late ? 1 : 0];
+  // [potenziale, media, tardiva, capacità]: la capacità in fondo, così gli
+  // indici 0-2 restano quelli di prima.
+  for (const [key, rec] of Object.entries(book)) byKey[key] = [rec.p[0], rec.p[1], rec.late ? 1 : 0, rec.p[2] ?? null];
   const ats = Object.values(book).map(r => r.at);
   return { since: ats.length ? Math.min(...ats) : null, report, byKey };
 }
@@ -425,8 +548,9 @@ async function pollTournament() {
     for (const type of ['mu', 'country']) {
       const t = _list.find(x => x.type === type);
       if (!t) continue;
-      if (t.status !== 'ended' || !_teams.has(t._id)) await refreshTeams(t._id);
+      if (t.status !== 'ended' || !_teams.has(t._id)) await refreshTeams(t._id, t.maxRarity || null);
       await refreshBattles(t);
+      if (type === 'mu') await refreshPlayers(t).catch(err => console.error('[tournament] iscritti:', err.message));
       await recordPredictions(t);
     }
     if (changed) recomputeAll();
@@ -448,7 +572,7 @@ async function readTournament({ type, id, me }) {
   if (!t) return { list: listMeta(), tournament: null, teams: [] };
   if (!_teams.has(t._id)) {
     if (!_weekly) await refreshWeekly().catch(() => {});
-    await refreshTeams(t._id);
+    await refreshTeams(t._id, t.maxRarity || null);
     await refreshBattles(t).catch(() => {});
   }
   const entry = _teams.get(t._id);
@@ -481,6 +605,11 @@ async function readTournament({ type, id, me }) {
       } : r;
     }),
     battles,
+    // Capacità (punto 5): valida solo con quasi tutti gli iscritti letti,
+    // altrimenti il client resta sul settimanale.
+    capacityOk: capacityOk(entry),
+    capacityHours: cap.H,
+    matchCap: matchCapacities(t, entry),
     predictions: predictionReport(t),
     weeklyOk: !!_weekly,
     weeklyMode: roll?.mode || null,
@@ -498,7 +627,12 @@ function readTournamentTeam({ id, team, limit = 60 }) {
   if (!row) return null;
   const map = rolling()?.map;
   const dmg = entry.dmg.get(team) || {};
-  const rows = row._participants.map(u => ({ u, w: Math.round(map?.get(u) || 0), t: dmg[u] || 0 }))
+  const players = loadPlayers();
+  const c = capsFor(entry.rarity);
+  const rows = row._participants.map(u => ({
+    u, w: Math.round(map?.get(u) || 0), t: dmg[u] || 0,
+    c: players[u] ? Math.round(cap.playerCapacity(players[u], c)) : null,
+  }))
     .sort((a, b) => (b.t - a.t) || (b.w - a.w));
   return {
     total: rows.length,
@@ -532,6 +666,12 @@ function statoTournament() {
     primaFotografia: snaps[0] ? new Date(snaps[0].t).toISOString() : null,
     partiteConForma: Object.keys(loadBattles()).length,
     previsioniRegistrate: Object.values(loadPreds()).reduce((s, b) => s + Object.keys(b).length, 0),
+    iscrittiLetti: Object.keys(loadPlayers()).length,
+    capacita: [..._teams.entries()].map(([id, e]) => ({
+      id, ok: capacityOk(e),
+      letti: e.rows.reduce((s, r) => s + (r.capKnown || 0), 0),
+      iscritti: e.rows.reduce((s, r) => s + r.roster, 0),
+    })),
     squadreInMemoria: [..._teams.values()].reduce((s, e) => s + e.rows.length, 0),
     errore: _lastError,
   };

@@ -39,7 +39,26 @@
 
 import { countryName } from '../mu/ui.js';
 
+/* ── CAPACITÀ (dal 2026-11-23) ─────────────────────────────────────
+   Terza misura, e quella di partenza quando c'è: il danno che la rosa può
+   fare in 12 ore con vita, fame e statistiche, al tetto di rarità del
+   torneo (server/tournamentCapacity.js, solo tornei MU, solo dal server).
+   Nata da Legio Gemini – PRAETORIANS (turno 4 del torneo di novembre, tetto
+   uncommon): il settimanale è fatto con l'equipaggiamento proprio, fino ai
+   jet mitici, e nel torneo non vale. Sulle 192 partite dei turni 2 e 3 la
+   capacità indovina il 71% contro il 66% del settimanale, e con la forma
+   la log-loss scende da 0,470 a 0,414.
+   Sulle partite IN CORSO la forza è `matchCap`: quanto le due squadre
+   possono ancora fare nelle 12 ore dall'inizio della battaglia, con le
+   barre e le pillole di adesso — meccanica del gioco, non tarata. */
 export const METRICS = ['potential', 'average'];
+export const ALL_METRICS = ['capacity', 'potential', 'average'];
+
+/** Le misure disponibili per un modello: la capacità solo se il server
+ *  l'ha calcolata su (quasi) tutti gli iscritti. */
+export function metricsOf(model) {
+  return model?.capacityOk ? ALL_METRICS : METRICS;
+}
 
 /**
  * @param {object} t        torneo (tournament.getById)
@@ -110,6 +129,9 @@ export function buildModel(t, rawTeams, src) {
     // Solo dal server: senza, il modello non ha la forma nel torneo.
     battles: src.battles || {},
     predictions: src.predictions || null,
+    capacityOk: !!src.capacityOk && type === 'mu',
+    capacityHours: src.capacityHours || 12,
+    matchCap: src.matchCap || {},   // battleId → [attaccante, difensore], partite in corso
     teams,
     rounds,
     levels,
@@ -197,10 +219,11 @@ function buildTeam(raw, type, { weekly, weeklyOk, muDir, nations }) {
     fighters,
     potential,
     average: fighters ? potential / fighters : 0,
+    capacity: pre && typeof raw.capacity === 'number' ? raw.capacity : 0,
     entityWeekly,
     tourDamage: raw.totalDamage || 0,
     status: raw.status || null,        // 'active' | 'eliminated' | 'winner'
-    rank: { potential: null, average: null },
+    rank: { potential: null, average: null, capacity: null },
   };
 }
 
@@ -212,7 +235,7 @@ function nationWeekly(nations, id) {
  *  torneo concluso), per le due misure. */
 function rankTeams(model) {
   const pool = [...model.teams.values()].filter(t => model.status === 'ended' || t.status !== 'eliminated');
-  for (const metric of METRICS) {
+  for (const metric of metricsOf(model)) {
     [...pool].sort((x, y) => y[metric] - x[metric]).forEach((t, i) => { t.rank[metric] = i + 1; });
   }
   model.aliveCount = pool.length;
@@ -412,7 +435,8 @@ export function teamPath(model, teamId) {
    probabilità di incontrarsi è il prodotto delle due di arrivarci.
    ══════════════════════════════════════════════════════════════ */
 
-export const DEFAULT_K = { potential: 0.95, average: 0.85 };
+// capacity: misurato sui turni 2-3 del torneo MU del 20 novembre (192 partite).
+export const DEFAULT_K = { potential: 0.95, average: 0.85, capacity: 1.45 };
 const MIN_GAMES = 30;
 const FLOOR = 1e3;   // una squadra a zero non deve dare 0% o 100% secchi
 
@@ -463,7 +487,7 @@ function calibrate(model) {
   }
   model.k = {}; model.k1 = {}; model.k2 = {};
   model.calib = {};
-  for (const metric of METRICS) {
+  for (const metric of metricsOf(model)) {
     const rows = single.map(g => ({ x: [lr(g.a[metric], g.d[metric], FLOOR)], y: g.y }));
     const withForm = single.filter(g => g.fa && g.fd)
       .map(g => ({ x: [lr(g.a[metric], g.d[metric], FLOOR), lr(g.fa.d / g.fa.r, g.fd.d / g.fd.r, 1)], y: g.y }));
@@ -481,9 +505,11 @@ function calibrate(model) {
   }
 }
 
-/** Probabilità che la squadra `a` batta `b` (oggetti squadra del modello). */
-function pPair(model, a, b, metric) {
-  const x1 = lr(a?.[metric], b?.[metric], FLOOR);
+/** Probabilità che la squadra `a` batta `b` (oggetti squadra del modello).
+ *  `live` = [forza a, forza b] al posto di quelle delle squadre: la capacità
+ *  rimasta in una partita in corso (`matchCap`). */
+function pPair(model, a, b, metric, live = null) {
+  const x1 = live ? lr(live[0], live[1], FLOOR) : lr(a?.[metric], b?.[metric], FLOOR);
   const k2 = model.k2?.[metric];
   if (k2 != null && a?.form && b?.form) return sig(model.k1[metric] * x1 + k2 * lr(a.form, b.form, 1));
   return sig((model.k?.[metric] ?? DEFAULT_K[metric]) * x1);
@@ -560,8 +586,10 @@ export function bracketOdds(model, metric, scores = new Map(), forced = new Map(
   const wins = new Map();
 
   const pair = (m, ta, td) => {
-    const base = pPair(model, model.teams.get(ta), model.teams.get(td), metric);
-    const s = m.battle && m.a === ta && m.d === td ? scores.get(m.battle) : null;
+    const real = m.battle && m.a === ta && m.d === td;
+    const live = real && metric === 'capacity' ? model.matchCap?.[m.battle] || null : null;
+    const base = pPair(model, model.teams.get(ta), model.teams.get(td), metric, live);
+    const s = real ? scores.get(m.battle) : null;
     return s ? seriesFromScore(base, s.toWin || 2, s.a || 0, s.d || 0) : base;
   };
 

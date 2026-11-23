@@ -40,7 +40,12 @@ import '../styles/tournament.css';
 import { state } from '../diplomacy/state.js';
 import { trnT } from './i18n.js';
 import { fetchTournamentBundle, fetchTournamentList, fetchTournament, fetchTeams, fetchWeeklyByUser, fetchLiveScores, fetchTeamRoster } from './api.js';
-import { buildModel, teamLabel, roundKind, matchState, subtree, bracketViews, viewForTeam, teamPath, difficultyOf, winProb, bracketOdds, sideTeam, METRICS } from './model.js';
+import { buildModel, teamLabel, roundKind, matchState, subtree, bracketViews, viewForTeam, teamPath, difficultyOf, winProb, bracketOdds, sideTeam, metricsOf } from './model.js';
+
+// Etichetta e indice nel registro delle previsioni (server/tournament.js,
+// byKey = [potenziale, media, tardiva, capacità]) di ogni misura.
+const METRIC_LABEL = { capacity: 'mCapacity', potential: 'mPotential', average: 'mAverage' };
+const PRED_IDX = { potential: 0, average: 1, capacity: 3 };
 import { fetchNames } from '../players/api.js';
 import { escapeHtml, flagImg, avatarImg, countryName, fmtCompact, fmtFull, fmtDate } from '../mu/ui.js';
 import { fetchMuDirectory, fetchUsersLite } from '../mu/api.js';
@@ -65,6 +70,10 @@ let _model = null;
 let _loading = false;
 let _error = null;
 let _teamId = null;
+// La misura scelta (`_metricPref`, di partenza la capacità) e quella in uso:
+// un torneo senza capacità (nazioni, server non aggiornato) ricade sul
+// potenziale senza perdere la scelta per il torneo dopo.
+let _metricPref = 'capacity';
 let _metric = 'potential';
 let _viewId = null;
 let _query = '';
@@ -143,6 +152,7 @@ async function load({ refresh = false } = {}) {
       _model = buildModel(bundle.tournament, bundle.teams, {
         weeklyOk: !!bundle.weeklyOk, myTeam: bundle.myTeam,
         weeklyMode: bundle.weeklyMode, battles: bundle.battles, predictions: bundle.predictions,
+        capacityOk: bundle.capacityOk, capacityHours: bundle.capacityHours, matchCap: bundle.matchCap,
         muDir: _muDir || new Map(), nations: _nations || new Map(),
       });
       afterModel(refresh);
@@ -178,6 +188,7 @@ async function load({ refresh = false } = {}) {
 
 /** Squadra da aprire e vista del tabellone, dopo ogni (ri)caricamento. */
 function afterModel(refresh) {
+  _metric = metricsOf(_model).includes(_metricPref) ? _metricPref : 'potential';
   if (_pending?.team && _model.teams.has(_pending.team)) _teamId = _pending.team;
   _pending = null;
   if (_teamId && !_model.teams.has(_teamId)) _teamId = null;
@@ -305,6 +316,7 @@ function bodyHtml() {
   else if (_model.weeklyMode === 'rolling') notices.push(`<p class="wp-trn-notice">${trnT('noteRolling')}</p>`);
   else if (_model.weeklyMode === 'estimate') notices.push(`<p class="wp-trn-notice">${trnT('noteEstimate')}</p>`);
   else notices.push(`<p class="wp-trn-notice">${trnT('weeklyNote')}</p>`);
+  if (_metric === 'capacity') notices.push(`<p class="wp-trn-notice">${trnT('noteCapacity', { h: _model.capacityHours, r: _model.maxRarity ? trnT(`r_${_model.maxRarity}`) : '—' })}</p>`);
   // Torneo concluso: la classifica settimanale è quella di OGGI, non di
   // quando si è giocato. Il danno nel torneo invece è quello vero.
   if (_model.status === 'ended') notices.push(`<p class="wp-trn-notice warn">${trnT('endedNote')}</p>`);
@@ -357,9 +369,9 @@ function toolbarHtml() {
       ${mine ? `<button type="button" class="wp-trn-btn${mine === _teamId ? ' active' : ''}" data-team="${escapeHtml(mine)}">${trnT(_type === 'mu' ? 'myMu' : 'myCountry')}</button>` : ''}
       <div class="wp-trn-seg" role="group" aria-label="${escapeHtml(trnT('metric'))}">
         <span class="wp-trn-lbl">${trnT('metric')}</span>
-        ${METRICS.map(k => {
-          const key = k === 'potential' ? 'mPotential' : 'mAverage';
-          return `<button type="button" class="wp-trn-segbtn${_metric === k ? ' active' : ''}" data-metric="${k}" title="${escapeHtml(trnT(`${key}Tip`))}">${trnT(key)}</button>`;
+        ${metricsOf(_model).map(k => {
+          const key = METRIC_LABEL[k];
+          return `<button type="button" class="wp-trn-segbtn${_metric === k ? ' active' : ''}" data-metric="${k}" title="${escapeHtml(trnT(`${key}Tip`, { h: _model.capacityHours }))}">${trnT(key)}</button>`;
         }).join('')}
       </div>
     </div>`;
@@ -427,8 +439,9 @@ function matchHtml(m, round, c, j, path, oppSet) {
   // cosa diceva il modello, e se ci ha preso.
   let pred = '';
   const rec = st === 'done' ? _model.predictions?.byKey?.[`${round.n}:${m.idx}`] : null;
-  if (rec && !rec[2]) {
-    const p = rec[_metric === 'potential' ? 0 : 1];
+  const recP = rec && !rec[2] ? rec[PRED_IDX[_metric]] : null;
+  if (recP != null) {
+    const p = recP;
     const fav = Math.max(p, 1 - p);
     const ok = (p >= 0.5) === (m.wonBy === 'attacker');
     pred = `<span class="wp-trn-mpred ${ok ? 'ok' : 'ko'}" title="${escapeHtml(trnT(ok ? 'predOk' : 'predKo'))}">${ok ? '✓' : '✗'} ${trnT('predShort', { p: pct(fav) })}</span>`;
@@ -477,7 +490,7 @@ function slotHtml(m, side, round, oppSet) {
         ${teamBadge(t)}${origin}
         <span class="wp-trn-sname">${escapeHtml(label(t))}</span>
         ${pSide != null
-          ? `<span class="wp-trn-sval pct d-${difficultyOf(pSide)}" title="${escapeHtml(trnT('pWinTip'))}">${pct(pSide)}</span>`
+          ? `<span class="wp-trn-sval pct d-${difficultyOf(pSide)}" title="${escapeHtml(trnT(_metric === 'capacity' ? 'pWinTipCap' : 'pWinTip'))}">${pct(pSide)}</span>`
           : `<span class="wp-trn-sval">${escapeHtml(fmtCompact(metricVal(t)))}</span>`}
         ${score}
       </button>`;
@@ -561,7 +574,7 @@ function pct(p) {
 /** Come sono tarate le percentuali, detto in chiaro sopra il tabellone. */
 function calibText() {
   const c = _model.calib?.[_metric];
-  const m = trnT(_metric === 'potential' ? 'mPotential' : 'mAverage').toLowerCase();
+  const m = trnT(METRIC_LABEL[_metric]).toLowerCase();
   if (c?.own) {
     const form = _model.k2?.[_metric] != null ? ` ${trnT('calibForm', { n: c.nForm })}` : '';
     return trnT('calibOwn', { m, n: c.n, h: c.hits, p: pct(c.n ? c.hits / c.n : 0), k: String(_model.k[_metric]).replace('.', ',') }) + form;
@@ -600,6 +613,7 @@ function teamCardHtml(t) {
   const n = _model.aliveCount;
   const rankP = t.rank.potential ? `<span class="wp-trn-rank">${trnT('rankOf', { n: t.rank.potential, m: n })}</span>` : '';
   const rankA = t.rank.average ? `<span class="wp-trn-rank">${trnT('rankOf', { n: t.rank.average, m: n })}</span>` : '';
+  const rankC = t.rank.capacity ? `<span class="wp-trn-rank">${trnT('rankOf', { n: t.rank.capacity, m: n })}</span>` : '';
   const extra = t.type === 'mu'
     ? stat(trnT('statMuWeekly'), fmtCompact(t.entityWeekly))
     : stat(trnT('statNatWeekly'), fmtCompact(t.entityWeekly), trnT('nationsN', { n: t.entityIds.length }));
@@ -619,6 +633,7 @@ function teamCardHtml(t) {
       </div>
       ${nations}
       <div class="wp-trn-stats">
+        ${_model.capacityOk ? stat(trnT('statCapacity'), fmtCompact(t.capacity), `${rankC} ${trnT('capacityNote', { h: _model.capacityHours })}`, _metric === 'capacity') : ''}
         ${stat(trnT('statPotential'), fmtCompact(t.potential), rankP, _metric === 'potential')}
         ${stat(trnT('statAverage'), fmtCompact(t.average), rankA, _metric === 'average')}
         ${stat(trnT('statRoster'), fmtFull(t.roster), trnT('fightersOf', { n: t.fighters, m: t.roster }))}
@@ -654,13 +669,17 @@ function rosterHtml(t) {
   if (!r.rows.length) return `<p class="wp-trn-hint">${trnT('compNone')}</p>`;
   const shown = r.open ? r.rows : r.rows.slice(0, ROSTER_PREVIEW);
   const hidden = r.total - shown.length;
+  // Capacità del singolo iscritto (12 ore, barre piene, tetto del torneo):
+  // solo dal server, e solo se l'ha letto.
+  const withCap = r.rows.some(x => x.c != null);
   return `
-    <div class="wp-trn-roster">
-      <div class="wp-trn-rrow head"><span></span><span>${trnT('compWeek')}</span><span>${trnT('compTour')}</span></div>
+    <div class="wp-trn-roster${withCap ? ' cap' : ''}">
+      <div class="wp-trn-rrow head"><span></span>${withCap ? `<span title="${escapeHtml(trnT('capacityNote', { h: _model.capacityHours }))}">${trnT('compCap', { h: _model.capacityHours })}</span>` : ''}<span>${trnT('compWeek')}</span><span>${trnT('compTour')}</span></div>
       ${shown.map(x => {
         const n = r.names.get(x.u);
         return `<div class="wp-trn-rrow${x.t > 0 ? '' : ' absent'}">
           <a class="wp-trn-rname" href="https://app.warera.io/user/${escapeHtml(x.u)}" data-player="${escapeHtml(x.u)}">${avatarImg(n?.avatarUrl, n?.username || '?', 'wp-trn-av wp-trn-av-sm')}<span>${escapeHtml(n?.username || '…')}</span></a>
+          ${withCap ? `<span>${x.c > 0 ? escapeHtml(fmtCompact(x.c)) : '—'}</span>` : ''}
           <span>${x.w > 0 ? escapeHtml(fmtCompact(x.w)) : '—'}</span>
           <span>${x.t > 0 ? escapeHtml(fmtCompact(x.t)) : '—'}</span>
         </div>`;
@@ -774,7 +793,7 @@ function probPill(me, opp, step = null) {
     if (pA != null) p = step.side === 'a' ? pA : 1 - pA;
   }
   const d = difficultyOf(p);
-  return `<span class="wp-trn-diff d-${d}" title="${escapeHtml(`${trnT('pWinTip')} · ${trnT(`d_${d}`)}`)}">${pct(p)}</span>`;
+  return `<span class="wp-trn-diff d-${d}" title="${escapeHtml(`${trnT(_metric === 'capacity' ? 'pWinTipCap' : 'pWinTip')} · ${trnT(`d_${d}`)}`)}">${pct(p)}</span>`;
 }
 
 /** Elenco dei possibili avversari di un turno, dal più forte. La barra è
@@ -938,7 +957,7 @@ function wire() {
     load();
   });
   c.querySelectorAll('[data-metric]').forEach(btn => btn.addEventListener('click', () => {
-    _metric = btn.dataset.metric;
+    _metric = _metricPref = btn.dataset.metric;
     paint({ keepScroll: true });
   }));
   c.querySelectorAll('[data-view]').forEach(btn => btn.addEventListener('click', () => {

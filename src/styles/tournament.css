@@ -378,6 +378,8 @@ button.wp-trn-slot:hover { background: color-mix(in srgb, var(--wp-trn-acc) 9%, 
   display: grid; grid-template-columns: minmax(0, 1fr) 70px 70px; gap: 8px; align-items: center;
   padding: 4px 6px; border-radius: 6px; font-size: 12px; font-variant-numeric: tabular-nums;
 }
+/* Con la capacità del singolo iscritto (WarEra+ 2026-11-23): una colonna in più. */
+.wp-trn-roster.cap .wp-trn-rrow { grid-template-columns: minmax(0, 1fr) 62px 62px 62px; gap: 6px; }
 .wp-trn-rrow > span { text-align: right; color: var(--wp-trn-dim); }
 .wp-trn-rrow > span:last-child { color: var(--wp-ov-text, #e6edf3); font-weight: 600; }
 .wp-trn-rrow.head { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }

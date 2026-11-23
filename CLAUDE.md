@@ -876,6 +876,19 @@ tempo, da sapere prima di crederle rotte:
   contano. ⚠️ Non "riempirlo" ricalcolando le partite passate col modello di
   oggi: sarebbe indovinare col senno di poi, esattamente quello che il
   registro esiste per evitare.
+- la **capacità** (dal 2026-11-23, solo tornei MU, misura di partenza):
+  danno che la rosa può fare in 12 ore con vita, fame e statistiche, al
+  tetto di rarità del torneo (`server/tournamentCapacity.js`). Sui turni 2-3
+  del torneo di novembre prevede meglio del settimanale (71% contro 66%;
+  con la forma log-loss 0,414 contro 0,470). Una `getUserById` per iscritto
+  (chiave), 1.000 a giro: dopo un deploy servono ~25 minuti perché
+  `capacityOk` diventi vero, e fino ad allora la vista resta sul
+  settimanale. Sulle partite in corso usa `matchCap` (12 ore dall'INIZIO
+  della battaglia, ora dall'id della battaglia, barre e pillole di adesso):
+  quella parte non è tarata. ⚠️ La forma nel torneo è stata provata
+  "corretta" per le vittorie facili (il danno basso perché l'altro non
+  spara): 9 varianti, tutte peggiori della grezza. Non toglierla senza
+  rimisurare.
 
 Il **danno ora per ora** e la **curva a 14 giorni** nella scheda nazione
 (`src/nations/damageCurves.js` + `server/damageTimeline.js`) dipendono da

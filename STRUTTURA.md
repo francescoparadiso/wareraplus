@@ -108,6 +108,11 @@ wareraPlus/
 │   │                             della classifica in cache/weekly-snaps/ ogni 6 ore),
 │   │                             danno per round delle partite finite, registro delle
 │   │                             previsioni scritte prima di ogni partita.
+│   ├── tournamentCapacity.js   ← NUOVO (2026-11-23) — capacità di un iscritto a un
+│   │                             torneo MU: danno in 12 ore da vita, fame e statistiche
+│   │                             col tetto di rarità del torneo, e (partite in corso)
+│   │                             quanto resta dall'inizio della battaglia con le pillole.
+│   │                             Usato da tournament.js (cache/tournament-players).
 │   ├── priceHistory.js         ← NUOVO — storico dei prezzi: un campione all'ora di
 │   │                              itemTrading.getPrices (PUBBLICA, tutte le risorse
 │   │                              in una richiesta) ridotto a una candela al giorno
