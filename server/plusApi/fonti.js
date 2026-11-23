@@ -43,14 +43,37 @@ async function dalCache(percorso, timeoutMs = 15_000) {
  * dieci ministri che aprono l'area alle 21:00 sarebbero dieci letture
  * identiche dello stesso dato. E se la lettura fallisce ma c'è un valore
  * vecchio, si restituisce quello (vedi la testata).
+ *
+ * ⚠️ WarEra+ — la promessa condivisa ha una SCADENZA (MEMO_SCADENZA_MS).
+ * Il 2026-11-22 verso l'01:00 UTC una lettura di paesiMappa sull'istanza
+ * live non si è più chiusa (nessun socket aperto, nessun errore: una fetch
+ * rimasta appesa nonostante AbortSignal.timeout). Siccome la promessa in
+ * corso si restituisce a tutti, da lì ogni chiamante l'ha aspettata per
+ * sempre: confini e istantanee fermi per 32 ore, la rilettura
+ * dell'alleanza ferma, e dalle 07:00 del 23 ogni giro e ogni bottone del
+ * bot dei contratti in timeout. Tutto silenzioso, nessuna riga nei log.
+ * Con la scadenza una lettura appesa diventa un errore come gli altri:
+ * si torna l'ultimo valore buono e il giro dopo riprova.
  */
+const MEMO_SCADENZA_MS = 90_000;
+
 function memo(ttlMs, fn) {
   const m = new Map(); // chiave → { at, val, p }
   return (chiave = '_') => {
     const e = m.get(chiave);
     if (e && 'val' in e && Date.now() - e.at < ttlMs) return Promise.resolve(e.val);
     if (e?.p) return e.p;
-    const p = fn(chiave)
+    let timer;
+    const scadenza = new Promise((_, rifiuta) => {
+      timer = setTimeout(() => {
+        // Una riga nel log: è l'unico segno che resta di un guasto così.
+        console.warn(`[fonti] lettura ${fn.name || 'memo'}(${chiave}) oltre ${MEMO_SCADENZA_MS / 1000} s: abbandonata`);
+        rifiuta(new Error(`lettura oltre ${MEMO_SCADENZA_MS / 1000} s, abbandonata`));
+      }, MEMO_SCADENZA_MS);
+      timer.unref?.();
+    });
+    const p = Promise.race([fn(chiave), scadenza])
+      .finally(() => clearTimeout(timer))
       .then((val) => { m.set(chiave, { at: Date.now(), val }); return val; })
       .catch((err) => {
         const vecchio = m.get(chiave);
