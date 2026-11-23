@@ -311,10 +311,18 @@ const PRIVILEGED_API_BASE = SERVER_API_TOKEN ? 'https://api2.warera.io' : WORKER
 // vera (input sbagliato, 429 da rispettare), non un host giu'.
 const PRIVILEGED_COOLDOWN_MS = 2 * 60 * 1000;
 let privilegedDownUntil = 0;
+// WarEra+ 2026-11-23: le procedure che la chiave del Worker NON può chiamare
+// (401 verificato: dipendenti, eventi dei dipendenti, transazioni) non
+// ripiegano mai. Il ripiego le faceva solo fallire in un altro modo: nelle
+// notti del 21-23 novembre un 500 isolato di api2 su un blocco di rose
+// mandava al Worker i ~70 blocchi successivi, tutti 401, e il censimento
+// aziende chiudeva con un terzo delle rose (scartate). Né le fa partire il
+// cooldown acceso da altri: per loro api2 è l'unica strada.
+const SOLO_CHIAVE_VPS = //trpc/(?:[^?]*,)?(?:employee|employeeEvent|transaction)./;
 async function privilegedFetch(url) {
   if (!SERVER_API_TOKEN) return fetch(url);
   const viaWorker = () => fetch(WORKER_API_BASE + url.slice(PRIVILEGED_API_BASE.length));
-  if (!url.startsWith(PRIVILEGED_API_BASE)) return fetch(url, { headers: { 'X-API-Key': SERVER_API_TOKEN } });
+  if (!url.startsWith(PRIVILEGED_API_BASE) || SOLO_CHIAVE_VPS.test(url)) return fetch(url, { headers: { 'X-API-Key': SERVER_API_TOKEN } });
   if (Date.now() < privilegedDownUntil) return viaWorker();
   try {
     const res = await fetch(url, { headers: { 'X-API-Key': SERVER_API_TOKEN } });

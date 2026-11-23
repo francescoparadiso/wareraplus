@@ -159,6 +159,18 @@
    diventa "ne ha in rosa adesso". Se un giorno le statistiche tornano,
    il giro torna da solo alla forma di prima.
 
+   ── LE ROSE PERSE (2026-11-23) ─────────────────────────────────────────
+   Dopo il giro forzato del 20 (125.016 rose su 133.524) le tre notti
+   seguenti hanno chiuso con ~45.000 rose, sotto MIN_ROSE: scartate, e la
+   felicità ferma al 20. Causa: un 500 isolato di api2 su un blocco faceva
+   ripiegare il server sul Worker per 2 minuti, e la chiave del Worker non
+   può chiedere le rose (401): ~70 blocchi persi per ogni 500. Due rimedi:
+   le procedure solo-chiave non ripiegano più (SOLO_CHIAVE_VPS nel server),
+   e un blocco fallito PER INTERO (tutte null) si rimette in coda e si
+   richiede alla fine, dopo 3 minuti, a blocchi da 5 e poi da 1
+   (PASSI_ROSA). Le null singole sono l'azienda, non la rete: non si
+   ripetono.
+
    ── LE AZIENDE ALL'ESTERO (2026-10-26) ────────────────────────────────
    Richiesta dell'area riservata: quali cittadini di una nazione hanno
    aziende in regioni di un'ALTRA nazione (tasse sui salari e produzione
@@ -185,6 +197,11 @@ const CHUNK_STATS = 25;     // ~3 KB ad azienda: 25 per batch tengono la rispost
 const CHUNK_ROSTER = 20;    // ~2 KB a dipendente, 1-3 dipendenti: ~100 KB a batch
 const GIORNI_ROSA = 7;      // si chiede la rosa a chi ha prodotto in questi giorni
 const MIN_ROSE = 0.9;       // quota di rose che deve rispondere per fidarsi del conteggio
+// Rose dei blocchi falliti INTERI (errore HTTP, non la singola azienda): si
+// richiedono alla fine, dopo una pausa e a blocchi più piccoli (vedi
+// «LE ROSE PERSE» in testata).
+const PASSI_ROSA = [CHUNK_ROSTER, 5, 1];
+const PAUSA_RIPRESA_MS = 3 * 60 * 1000;
 const PERCENTILI = [10, 25, 50, 75, 90];
 const PAUSA_MS = 700;       // fra un blocco e l'altro: un giro lento, non un picco
 const PER_PAGE = 100;       // aziende per proprietario: il tetto è ben sotto (skills.companies ≤ 12)
@@ -482,12 +499,26 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
     const felicita = {};              // cid → accumulatore (vedi _felicitaAcc), più WORLD
     let conAttrezzo = 0, dipendentiVisti = 0;
     let roseOk = 0;
-    await _perBlocchi('employee.getCompanyRoster',
-      daRosa.map((x) => ({ companyId: x.id })), CHUNK_ROSTER, (res, inizio) => {
+    let restano = daRosa;
+    for (let passo = 0; passo < PASSI_ROSA.length && restano.length; passo++) {
+      if (passo) {
+        console.log(`[company-census] ${restano.length} rose di blocchi falliti: le richiedo a blocchi da ${PASSI_ROSA[passo]}`);
+        await sleep(PAUSA_RIPRESA_MS);
+      }
+      const lista = restano;
+      const falliti = [];
+      await _perBlocchi('employee.getCompanyRoster',
+      lista.map((x) => ({ companyId: x.id })), PASSI_ROSA[passo], (res, inizio) => {
+        // Tutte null = il blocco è fallito per intero (HTTP, rete): si riprova.
+        // Una null fra le altre è quell'azienda, e riprovarla non serve.
+        if (res.length && res.every((r) => r == null)) {
+          falliti.push(...lista.slice(inizio, inizio + res.length));
+          return;
+        }
         res.forEach((r, j) => {
           if (!Array.isArray(r?.employees)) return;
           roseOk++;
-          const { id, code, cid } = daRosa[inizio + j];
+          const { id, code, cid } = lista[inizio + j];
           dipendentiDi.set(id, r.employees.length);
           const rif = rifPerCode[code] || (rifPerCode[code] = { cost: [], pts: [], stat: [] });
           for (const e of r.employees) {
@@ -504,6 +535,9 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
           }
         });
       });
+      restano = falliti;
+    }
+    if (restano.length) console.warn(`[company-census] ${restano.length} rose perse anche dopo ${PASSI_ROSA.length} passi`);
     // Il conteggio vale solo se ha risposto quasi tutto: vedi testata.
     const rosaValida = daRosa.length > 0 && roseOk >= daRosa.length * MIN_ROSE;
     const contaDip = conteggioNoto || rosaValida;
