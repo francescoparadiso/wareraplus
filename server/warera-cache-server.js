@@ -318,7 +318,7 @@ let privilegedDownUntil = 0;
 // mandava al Worker i ~70 blocchi successivi, tutti 401, e il censimento
 // aziende chiudeva con un terzo delle rose (scartate). Né le fa partire il
 // cooldown acceso da altri: per loro api2 è l'unica strada.
-const SOLO_CHIAVE_VPS = //trpc/(?:[^?]*,)?(?:employee|employeeEvent|transaction)./;
+const SOLO_CHIAVE_VPS = new RegExp('/trpc/(?:[^?]*,)?(?:employee|employeeEvent|transaction)\\.');
 async function privilegedFetch(url) {
   if (!SERVER_API_TOKEN) return fetch(url);
   const viaWorker = () => fetch(WORKER_API_BASE + url.slice(PRIVILEGED_API_BASE.length));
