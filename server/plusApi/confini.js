@@ -108,7 +108,18 @@ async function leggiCostruzioni(regionIds) {
       + `?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`;
     let risposte;
     try {
-      const res = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
+      // WarEra+ — un 429 non fa più saltare il gruppo: si aspetta e si
+      // riprova, al massimo due volte. api6 senza chiave tiene 100 chiamate
+      // al minuto per IP, e live e dev leggono i confini dallo stesso VPS
+      // (~500 procedure insieme dopo un riavvio comune). Prima il gruppo si
+      // perdeva e le sue regioni restavano alla lettura di dieci minuti fa.
+      let res;
+      for (let tentativo = 0; ; tentativo++) {
+        res = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
+        if (res.status !== 429 || tentativo >= 2) break;
+        const dopo = Number(res.headers.get('retry-after')) || 0;
+        await new Promise((ok) => setTimeout(ok, Math.min(Math.max(dopo * 1000, 15_000), 60_000)));
+      }
       // 207 = qualche costruzione inesistente in mezzo alle altre: normale.
       // ⚠️ E se in un gruppo NON ne esiste NESSUNA il gioco risponde 404 al
       // batch intero, ma col corpo normale: un NOT_FOUND per voce (misurato

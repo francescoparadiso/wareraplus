@@ -24,7 +24,7 @@
    mezza banca dati.
    ══════════════════════════════════════════════════════════════════════ */
 
-const { getWebhook, getBotChannel, registraEventoBot, getRichiesta, boardPerRichiesta, boardPerAvviso } = require('./db');
+const { getWebhook, deleteWebhook, getBotChannel, registraEventoBot, getRichiesta, boardPerRichiesta, boardPerAvviso } = require('./db');
 
 /** C'e' un canale del bot per questo avviso? Per una NAZIONE dipende dalla battaglia della
  *  richiesta (ogni battaglia puo' avere la sua board), per un'unita' e' il suo canale. */
@@ -55,7 +55,15 @@ async function inviaA(url, contenuto) {
       body: JSON.stringify({ content: contenuto.slice(0, 1900), allowed_mentions: { parse: [] } }),
       signal: ctrl.signal,
     });
-    if (!res.ok) console.warn(`[notify] webhook ha risposto ${res.status}`);
+    if (!res.ok) {
+      // WarEra+ — 404 con codice 10015 ("Unknown Webhook") = il webhook è
+      // stato cancellato su Discord e non tornerà: chi chiama lo toglie.
+      // Prima lo si riprovava a ogni avviso, per sempre (nel dev: due
+      // webhook morti, una riga di errore a ogni giro dei confini).
+      const corpo = res.status === 404 ? await res.json().catch(() => null) : null;
+      if (corpo?.code === 10015) return 'sconosciuto';
+      console.warn(`[notify] webhook ha risposto ${res.status}`);
+    }
     return res.ok;
   } catch (err) {
     // Mai l'URL nel messaggio: contiene il token del webhook.
@@ -93,7 +101,13 @@ function avvisa(scopeType, scopeId, contenuto, meta = null) {
   const w = getWebhook(scopeType, scopeId);
   if (!w) return;
   // Volutamente senza await: l'esito non cambia niente per il chiamante.
-  inviaA(w.url, contenuto).catch(() => {});
+  inviaA(w.url, contenuto).then((esito) => {
+    if (esito !== 'sconosciuto') return;
+    // Solo se nel frattempo nessuno l'ha sostituito con uno nuovo.
+    if (getWebhook(scopeType, scopeId)?.url !== w.url) return;
+    deleteWebhook(scopeType, scopeId);
+    console.warn(`[notify] webhook ${scopeType}/${scopeId} cancellato su Discord: tolto`);
+  }).catch(() => {});
 }
 
 /** Aggiorna la carta della richiesta sul canale della nazione, SOLO via bot:
