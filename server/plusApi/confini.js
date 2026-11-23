@@ -97,6 +97,22 @@ let _inCorso = false;
  * @returns {Promise<Map<string, {base?: object|null, bunker?: object|null}>>}
  *   solo le coppie lette davvero; null = la costruzione non esiste.
  */
+const PROXY_CHIAVE = `${(process.env.CACHE_BASE || 'http://127.0.0.1:3001').replace(/\/+$/, '')}/trpc`;
+
+/** Un gruppo di letture: prima dal proxy con la chiave, poi da api6 senza.
+ *  Si ricade solo se il proxy non c'è o non sa rispondere (rete, 403 di
+ *  allowlist, 5xx): un 429 o un 404 del gioco sono risposte vere. */
+async function leggiGruppo(percorso) {
+  try {
+    const res = await fetch(PROXY_CHIAVE + percorso, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
+    if (res.status !== 403 && res.status < 500) return res;
+    console.warn(`[confini] proxy con chiave: HTTP ${res.status}, ripiego su api6`);
+  } catch (err) {
+    console.warn('[confini] proxy con chiave non raggiungibile, ripiego su api6:', err.message);
+  }
+  return fetch(API + percorso, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
+}
+
 async function leggiCostruzioni(regionIds) {
   const coppie = [];
   for (const id of regionIds) for (const tipo of TIPI) coppie.push([id, tipo]);
@@ -104,18 +120,23 @@ async function leggiCostruzioni(regionIds) {
   for (let i = 0; i < coppie.length; i += CHIAMATE_PER_BATCH) {
     const pezzo = coppie.slice(i, i + CHIAMATE_PER_BATCH);
     const input = Object.fromEntries(pezzo.map(([regionId, upgradeType], k) => [k, { upgradeType, regionId }]));
-    const url = `${API}/${pezzo.map(() => 'upgrade.getUpgradeByTypeAndEntity').join(',')}`
+    const percorso = `/${pezzo.map(() => 'upgrade.getUpgradeByTypeAndEntity').join(',')}`
       + `?batch=1&input=${encodeURIComponent(JSON.stringify(input))}`;
     let risposte;
     try {
-      // WarEra+ — un 429 non fa più saltare il gruppo: si aspetta e si
-      // riprova, al massimo due volte. api6 senza chiave tiene 100 chiamate
-      // al minuto per IP, e live e dev leggono i confini dallo stesso VPS
-      // (~500 procedure insieme dopo un riavvio comune). Prima il gruppo si
-      // perdeva e le sue regioni restavano alla lettura di dieci minuti fa.
+      // WarEra+ — CON LA CHIAVE (2026-11-23). Si passa dal proxy /trpc del
+      // cache-server sulla loopback, che aggiunge X-API-Key: tetto 500/min
+      // invece dei 100/min anonimi che api6 divide fra TUTTE le chiamate
+      // senza chiave di questo VPS (lì nascevano i 429 nei log). La chiave
+      // resta solo nel cache-server, come dice la testata di wareraApi.js.
+      // Se il proxy non risponde (cache-server giù o in riavvio) si torna ad
+      // api6 senza chiave, com'era prima.
+      // Un 429 non fa saltare il gruppo: si aspetta e si riprova, al massimo
+      // due volte. Prima il gruppo si perdeva e le sue regioni restavano alla
+      // lettura di dieci minuti fa.
       let res;
       for (let tentativo = 0; ; tentativo++) {
-        res = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
+        res = await leggiGruppo(percorso);
         if (res.status !== 429 || tentativo >= 2) break;
         const dopo = Number(res.headers.get('retry-after')) || 0;
         await new Promise((ok) => setTimeout(ok, Math.min(Math.max(dopo * 1000, 15_000), 60_000)));
