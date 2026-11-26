@@ -38,6 +38,42 @@
 
 export const CHANGELOG = [
   {
+    id: '2026-11-26',
+    title: { en: 'Alliances in Wars, war accounts and links', it: 'Alleanze nelle Guerre, conti di guerra e link' },
+    items: [
+      {
+        tag: 'new',
+        en: 'Battles: Wars and the battle archive can now be grouped by alliance — battles won and lost, damage dealt and taken, bounties and contracts, the fronts against each other alliance, the member nations and their wars. Each battle counts for the alliance its nations were in on that day. Every war also gets its own table by alliance.',
+        it: 'Battaglie: Guerre e archivio battaglie si possono raggruppare per alleanza — battaglie vinte e perse, danno fatto e subito, taglie e contratti, i fronti contro ogni altra alleanza, le nazioni membre e le loro guerre. Ogni battaglia conta per l\'alleanza di cui le sue nazioni erano membri quel giorno. Anche ogni guerra ha la sua tabella per alleanza.',
+      },
+      {
+        tag: 'new',
+        en: 'War expenses: a new "Accounts" column set puts spending next to the treasury (now, change over the period, spending as a share of it) and the citizens\' money and wealth. A nation or alliance page adds day-by-day charts of the treasury with war spending, and of citizens\' money with what their units earned from contracts.',
+        it: 'Spese di guerra: le nuove colonne "Conti" mettono la spesa accanto al tesoro (adesso, quanto è cambiato nel periodo, quanto pesa la spesa) e ai soldi e alla ricchezza dei cittadini. La pagina di una nazione o alleanza aggiunge i grafici giorno per giorno del tesoro con la spesa di guerra, e dei soldi dei cittadini con quanto le unità hanno incassato dai contratti.',
+      },
+      {
+        tag: 'improved',
+        en: 'Battles: every battle that belongs to a war links straight to it, and the address follows what you are looking at (tab, war, alliance, nation, period), so any view can be shared. A "Copy link" button sits on wars, battles and expense pages.',
+        it: 'Battaglie: ogni battaglia che fa parte di una guerra porta un link diretto alla guerra, e l\'indirizzo segue quello che stai guardando (scheda, guerra, alleanza, nazione, periodo), quindi ogni vista si può condividere. Su guerre, battaglie e pagine delle spese c\'è il bottone "Copia link".',
+      },
+      {
+        tag: 'new',
+        en: 'Wealth over time: treasury history on alliance pages and in Faction 1 vs 2, wealth in the 1 vs 2 between nations, and citizens\' wealth over time for alliances and in a nation\'s Economy tab.',
+        it: 'Ricchezza nel tempo: storico del tesoro nella pagina alleanza e nel Fazione 1 vs 2, ricchezza nel 1 vs 2 fra nazioni, e ricchezza dei cittadini nel tempo per le alleanze e nella scheda Economia di una nazione.',
+      },
+      {
+        tag: 'new',
+        en: 'Nation statistics: active population over time (world and nation by nation) and employee happiness. The Citizens list now shows the whole nation, not just the first 1,000. Crafting: price history of each piece in three roll bands.',
+        it: 'Statistiche nazioni: popolazione attiva nel tempo (mondo e nazione per nazione) e felicità dei dipendenti. L\'elenco Cittadini mostra tutta la nazione, non più i primi 1.000. Crafting: prezzi nel tempo di ogni pezzo in tre fasce di tiro.',
+      },
+      {
+        tag: 'improved',
+        en: 'Tournaments: team strength is now the damage a roster can deal in 12 hours from its players\' health, hunger and stats at the tournament\'s rarity cap — it predicts results better than last week\'s damage. All charts now show a cursor line with a dot on each line where you point.',
+        it: 'Tornei: la forza di una squadra è ora il danno che la rosa può fare in 12 ore con vita, fame e statistiche dei giocatori al tetto di rarità del torneo — prevede i risultati meglio del danno della settimana. Tutti i grafici mostrano una linea-cursore con un punto su ogni linea dove punti.',
+      },
+    ],
+  },
+  {
     id: '2026-11-19',
     title: { en: 'Battle figures by nation, fixed', it: 'Numeri per nazione delle battaglie, corretti' },
     items: [
