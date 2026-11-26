@@ -242,6 +242,11 @@ wareraPlus/
 │   │                              nazione del proprietario, le aziende in regioni di
 │   │                              ALTRE nazioni (file company-abroad, zero richieste in
 │   │                              più). Endpoint: /company-abroad?countryId=.
+│   │                              Dal 2026-11-26 tiene anche, notte per notte, QUANTE
+│   │                              aziende stanno in ogni nazione (`countryDays`, per
+│   │                              nazione della regione); le notti prima vengono dai
+│   │                              backup (company-count-backfill.json, vedi
+│   │                              import/aziendeDaiBackup.js). Endpoint: /company-count.
 │   ├── import/                 ← NUOVO — import UNA TANTUM da un archivio esterno
 │   │   ├── bonifici.js            (il dump PostgreSQL di un altro tool della
 │   │   ├── ricchezza.js            comunità, passato dal suo autore). Servono solo
@@ -249,6 +254,9 @@ wareraPlus/
 │   │   ├── diplomazia.js           bonifici fra tesori, ricchezza giornaliera dei
 │   │   ├── battaglie.js            giocatori, prezzi, diplomazia, battaglie aperte,
 │   │   ├── lavoro.js               salari e tasse.
+│   │   ├── aziendeDaiBackup.js     (nemmeno questo: rilegge il company-census.json di
+│   │   │                            ogni backup, disco + bucket, e ne tiene le aziende
+│   │   │                            per nazione di quella notte → company-count-backfill)
 │   │   ├── muBattleSeed.js         (questo NON viene dal dump: estrae id e fine delle
 │   │   │                            15.240 battaglie del vecchio bootstrap da 255 MB,
 │   │   │                            il seme del recupero di muBattleDamage.js)
@@ -597,7 +605,14 @@ wareraPlus/
     │   │                          cittadini dal cache-server (/country-citizens), con
     │   │                          fallback diretto LIMITATO a 150 utenti se il server manca
     │   ├── metrics.js           ← le metriche in un posto solo (panoramica, 1vs2 e scheda
-    │   │                          leggono le stesse definizioni)
+    │   │                          leggono le stesse definizioni). «Aziende» è l'unica
+    │   │                          che viene dal server (/company-count, companyCount.js)
+    │   ├── companyCount.js      ← NUOVO (2026-11-26) — aziende che STANNO nella nazione:
+    │   │                          /company-count (tutte, ultima notte → colonna) e
+    │   │                          ?countryId= (serie → carta della scheda Economia, con
+    │   │                          selettore 7/30/60/90 g). Dizionario a 9 lingue dentro.
+    │   │                          ⚠️ proprietari attivi negli ultimi 3 giorni (soglia del
+    │   │                          censimento); notti prima del 26/11 dai backup, buchi veri.
     │   ├── charts.js            ← ciambelle/barre in SVG scritto a mano, niente Chart.js
     │   ├── labourSection.js     ← NUOVO — "Lavoro e tasse" nella scheda nazione:
     │   │                          salari incassati dai cittadini, quota guadagnata
@@ -611,8 +626,10 @@ wareraPlus/
     │   │                          e variazione 7/30 giorni, bonifici fra tesori in
     │   │                          entrata/uscita, DONAZIONI dei giocatori giorno per
     │   │                          giorno (al tesoro della nazione / alle sue unità), e
-    │   │                          quanto ha ricevuto ogni unità.
-    │   │                          Dati: /country-treasury, /money-transfers, /donations.
+    │   │                          quanto ha ricevuto ogni unità. Dal 2026-11-26 anche le
+    │   │                          AZIENDE nella nazione nel tempo (companyCount.js).
+    │   │                          Dati: /country-treasury, /money-transfers, /donations,
+    │   │                          /company-count.
     │   │                          ⚠️ una donation va da un giocatore (buyerId) a chi
     │   │                          riceve (seller*Id), non viceversa: vedi server/donations.js.
     │   ├── muSection.js         ← NUOVO (2026-11-13) — scheda UNITÀ MILITARI della

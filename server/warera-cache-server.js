@@ -265,7 +265,7 @@ const { initBattleNations, readBattleNations, statoBattleNations } = require('./
 // giorno di notte, partendo dai cittadini attivi del censimento. Vedi il
 // blocco in testa a server/companyCensus.js.
 const {
-  initCompanyCensus, runCompanyCensus, companyCensusDovuto, readCompanyCensus, readCompanyAbroad, readEmployeeBenchmarks, readEmployeeHappiness, statoCompanyCensus,
+  initCompanyCensus, runCompanyCensus, companyCensusDovuto, readCompanyCensus, readCompanyAbroad, readEmployeeBenchmarks, readEmployeeHappiness, readCompanyCount, statoCompanyCensus,
 } = require('./companyCensus');
 // WarEra+ tornei: tabellone e forza delle squadre (danno settimanale dei
 // loro iscritti) gia' calcolata, per non far scaricare a ogni browser la
@@ -3743,6 +3743,17 @@ app.get('/employee-benchmarks', (req, res) => {
 app.get('/employee-happiness', (req, res) => {
   const countryId = /^[a-f0-9]{24}$/.test(String(req.query.countryId || '')) ? String(req.query.countryId) : null;
   res.json(readEmployeeHappiness(countryId));
+});
+
+// Quante aziende stanno in ogni nazione (regioni della nazione), notte per
+// notte, dallo stesso giro: le notti prima del 2026-11-26 vengono dai backup
+// (vedi "QUANTE AZIENDE" in server/companyCensus.js). Senza `countryId` solo
+// l'ultima notte per tutte le nazioni (l'elenco di Statistiche nazioni);
+// con `countryId` anche la serie di quella nazione.
+app.get('/company-count', (req, res) => {
+  const countryId = /^[a-f0-9]{24}$/.test(String(req.query.countryId || '')) ? String(req.query.countryId) : null;
+  const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 365);
+  res.json(readCompanyCount({ countryId, days }));
 });
 
 // Le aziende dei cittadini di una nazione in regioni di altre nazioni,

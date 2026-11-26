@@ -183,6 +183,24 @@
    ospite sulle regioni di adesso, quindi una nostra regione persa in
    giornata cambia bandiera subito; una conquistata in giornata, invece,
    aspetta il giro dopo.
+
+   ── QUANTE AZIENDE STANNO IN UNA NAZIONE, NEL TEMPO (2026-11-26) ──────
+   Richiesta dell'utente: per ogni nazione il numero di aziende che stanno
+   nelle sue regioni, con la curva a 7/30/60/90 giorni. Il giro lo conta già
+   (`latest.countries`, per risorsa), ma ne teneva solo l'ultima notte: lo
+   storico per nazione non c'era, solo quello del mondo (`counts`). Da qui
+   `countryDays` (giorno → {cid: aziende}), una riga a notte, ~3 KB.
+   Stesso perimetro di tutto il censimento: aziende di proprietari ATTIVI
+   negli ultimi 3 giorni, nella nazione che possedeva la regione QUELLA
+   notte. Quindi il numero si muove anche quando cambia quanta gente gioca,
+   e la vista lo dice.
+   ⚠️ I giorni prima del 26 novembre NON sono ricostruiti col dato di oggi:
+   vengono dai backup (settimanali sul VPS dall'11 ottobre, giornalieri nel
+   bucket dal 27 ottobre), ognuno dei quali contiene il `company-census.json`
+   di quella notte, cioè la fotografia vera. Li estrae una volta
+   `import/aziendeDaiBackup.js` in `company-count-backfill.json`, che qui si
+   legge e basta. Dove un backup non c'è (prima del 27 ottobre, fra una
+   domenica e l'altra) c'è un buco, e il grafico lo lascia vedere.
    ═══════════════════════════════════════════════════════════════════════ */
 
 let deps = null;
@@ -253,7 +271,19 @@ function _vuoto() {
     staff: null,           // riferimenti mondiali dalla rosa (vedi testata), dell'ultimo giro buono
     happiness: null,       // felicità per nazione dell'ultimo giro buono (vedi "LA FELICITÀ")
     happinessDays: {},     // giorno → {cid: [media, dipendenti]}, si accumula
+    countryDays: {},       // giorno → {cid: aziende}, si accumula (vedi "QUANTE AZIENDE")
   };
+}
+
+/** Aziende per nazione di una fotografia `latest.countries` (code → [c, …]). */
+function _aziendePerNazione(countries) {
+  const out = {};
+  for (const [cid, perCode] of Object.entries(countries || {})) {
+    let n = 0;
+    for (const v of Object.values(perCode)) n += Number(v?.[0]) || 0;
+    out[cid] = n;
+  }
+  return out;
 }
 
 // ── La felicità dei dipendenti ─────────────────────────────────────────
@@ -330,6 +360,11 @@ function _read() {
   for (const g of Object.keys(_mem.wages)) {
     const m = _mem.measured[g];
     if (m && g < giornoMeno(m, BACKFILL_GIORNI)) { delete _mem.wages[g]; delete _mem.measured[g]; }
+  }
+  // WarEra+ (2026-11-26): l'ultima fotografia è già il primo giorno dello
+  // storico per nazione, anche se è stata scattata prima che esistesse.
+  if (_mem.latest && _mem.day && !_mem.countryDays[_mem.day]) {
+    _mem.countryDays[_mem.day] = _aziendePerNazione(_mem.latest.countries);
   }
   return _mem;
 }
@@ -617,6 +652,7 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
 
     store.latest = { items, countries };
     store.counts[oggi] = items;
+    store.countryDays = { ...(store.countryDays || {}), [oggi]: _aziendePerNazione(countries) };
     store.rates = aliquote;
     if (rosaValida) {
       const perCode = {};
@@ -854,6 +890,69 @@ function readEmployeeHappiness(countryId = null) {
   };
 }
 
+// ── Quante aziende stanno in una nazione (vedi "QUANTE AZIENDE") ───────
+const FILE_RECUPERO = 'company-count-backfill';
+// Il file si scrive una volta, a mano: letto, resta in memoria. Se manca si
+// riguarda ogni 10 minuti, così un import lanciato a server acceso entra
+// senza riavvio.
+let _recupero = null, _recuperoLettoAlle = 0;
+
+function _giorniRecuperati() {
+  if (!_recupero && Date.now() - _recuperoLettoAlle > 10 * 60 * 1000) {
+    _recuperoLettoAlle = Date.now();
+    const f = deps.readCache(FILE_RECUPERO, null);
+    _recupero = f?.days && typeof f.days === 'object' ? f : null;
+  }
+  return _recupero;
+}
+
+/** Tutte le notti note, dalla più vecchia: [giorno, {cid: aziende}, origine].
+ *  Una notte registrata dal giro vince sempre su quella dei backup. */
+function _nottiAziende(store) {
+  const notti = new Map();
+  for (const [g, v] of Object.entries(_giorniRecuperati()?.days || {})) notti.set(g, [g, v, 'backup']);
+  for (const [g, v] of Object.entries(store.countryDays || {})) notti.set(g, [g, v, 'census']);
+  return [...notti.values()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+}
+
+/**
+ * Il numero di aziende per nazione dove STANNO (regione della nazione),
+ * dal censimento notturno.
+ *
+ *   countries   [[cid, aziende]] dell'ultima notte, dalla più grande
+ *   world       aziende contate nel mondo l'ultima notte (anche fuori nazione)
+ *   series      [[giorno, aziende]] della nazione, ultimi `days` giorni
+ *               (solo con `countryId`; un giorno senza fotografia non c'è)
+ *   coverageFrom      prima notte nota per QUALUNQUE nazione
+ *   recordedFrom      prima notte registrata dal giro (prima: dai backup)
+ */
+function readCompanyCount({ countryId = null, days = 90 } = {}) {
+  const store = _read();
+  if (!store.latest) return { available: false };
+  const notti = _nottiAziende(store);
+  const ultima = store.countryDays[store.day] || _aziendePerNazione(store.latest.countries);
+  const world = Object.values(store.latest.items || {}).reduce((s, v) => s + (Number(v?.[0]) || 0), 0);
+  const out = {
+    available: true,
+    day: store.day,
+    updatedAt: store.updatedAt,
+    coverageFrom: notti[0]?.[0] || null,
+    recordedFrom: Object.keys(store.countryDays || {}).sort()[0] || null,
+    ownerDays: 3,
+    world,
+    countries: Object.entries(ultima).sort((a, b) => b[1] - a[1]),
+    countryId,
+  };
+  if (countryId) {
+    const dal = giornoMeno(giornoDi(), Math.max(1, Math.min(Number(days) || 90, MAX_GIORNI)));
+    // Una nazione che quella notte non aveva aziende contate vale 0 solo se
+    // la notte c'è: la riga della notte elenca tutte le nazioni con almeno
+    // un'azienda, quindi la sua assenza lì è davvero zero.
+    out.series = notti.filter(([g]) => g >= dal).map(([g, v, o]) => [g, Number(v[countryId]) || 0, o === 'backup' ? 1 : 0]);
+  }
+  return out;
+}
+
 /** Per /health. */
 function statoCompanyCensus() {
   const store = _read();
@@ -870,6 +969,10 @@ function statoCompanyCensus() {
     felicita: store.happiness
       ? { giorno: store.happiness.day, nazioni: Object.keys(store.happiness.countries).length - 1, giorniInArchivio: Object.keys(store.happinessDays || {}).length }
       : null,
+    aziendePerNazione: {
+      notti: Object.keys(store.countryDays || {}).length,
+      dalBackup: Object.keys(_giorniRecuperati()?.days || {}).length,
+    },
   };
 }
 
@@ -881,5 +984,6 @@ module.exports = {
   readCompanyAbroad,
   readEmployeeBenchmarks,
   readEmployeeHappiness,
+  readCompanyCount,
   statoCompanyCensus,
 };

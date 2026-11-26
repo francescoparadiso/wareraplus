@@ -15,12 +15,15 @@
 
    I dati vengono tutti da `state.nazioniGlobal`, cioè dall'unica
    country.getAllCountries che l'app fa al boot: nessuna metrica qui
-   dentro costa una richiesta.
+   dentro costa una richiesta. L'unica eccezione (2026-11-26) è «Aziende»,
+   una sola /company-count per tutte le nazioni all'apertura della vista
+   (main.js), che senza server resta «—».
    ══════════════════════════════════════════════════════════════ */
 
 import { fmtCompact, fmtFull } from '../mu/ui.js';
 import { state } from '../diplomacy/state.js';
 import { isRevenueEra, revenueOf } from '../diplomacy/productionHeatmap.js';
+import { companyCountOf, companyCountsKnown } from './companyCount.js';
 
 const num = v => (Number.isFinite(v) ? v : 0);
 
@@ -41,7 +44,13 @@ export const METRICS = [
   // totali (somma danni / somma devcore), vedi nationCompare.js.
   { key: 'dmgCore', label: 'dmgPerCore',  get: n => (num(n.coreDevelopment) > 0 ? num(n.rankings?.weeklyCountryDamages?.value) / n.coreDevelopment : 0), fmt: fmtCompact, ratio: ['weekly', 'coreDev'] },
   { key: 'regions', label: 'regions',     get: n => num(n.rankings?.countryRegionDiff?.value), fmt: v => signed(v), signed: true },
-  { key: 'wars',    label: 'wars',        get: n => (n.warsWith?.length || 0), fmt: v => String(v), cmp: 0 },
+  // WarEra+ (2026-11-26) — aziende che stanno nelle regioni della nazione,
+  // dal censimento notturno del server (/company-count, vedi
+  // companyCount.js): l'unica metrica che non viene da state.nazioniGlobal.
+  // Finché il dato non è arrivato vale 0 per l'ordinamento ma si mostra «—»,
+  // mai uno zero che sembri misurato.
+  { key: 'companies', label: 'companies', get: n => num(companyCountOf(n._id)), fmt: v => (companyCountsKnown() ? fmtCompact(v) : '—') },
+  { key: 'wars',    label: 'wars',       get: n => (n.warsWith?.length || 0), fmt: v => String(v), cmp: 0 },
   // WarEra+ — `n.allies` è un FOSSILE: le coppie delle alleanze bilaterali
   // congelate il 10 giugno 2026, quando il gioco è passato ai blocchi (vedi
   // server/allianceHistory.js). Qui si contano i patti difensivi di adesso,

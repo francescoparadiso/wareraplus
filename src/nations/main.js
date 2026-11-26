@@ -24,6 +24,7 @@ import { renderNationDetail } from './nationDetail.js';
 import { METRICS, metricValue } from './metrics.js';
 import { donutHtml, barsHtml } from './charts.js';
 import { populationSlotHtml, paintPopulation } from './populationChart.js';
+import { loadCompanyCounts } from './companyCount.js';
 import { escapeHtml, flagImg, fmtCompact } from '../mu/ui.js';
 import { trackEvent } from '../shared/analytics.js';
 import { syncBack } from '../app/backNav.js';
@@ -60,6 +61,12 @@ export async function initNationsView(container) {
 
   render();
   trackEvent('nations-open', { nations: getNations().length });
+  // WarEra+ (2026-11-26): la colonna «Aziende» viene dal server; quando
+  // arriva si ridisegna l'elenco, ma non una scheda già aperta (la si
+  // ricostruirebbe da capo, fetch comprese): lì il numero compare al giro dopo.
+  loadCompanyCounts().then((nuovo) => {
+    if (nuovo && rootEl && !openCountryId && tab !== 'charts') render();
+  });
 }
 
 function bindLangChange() {

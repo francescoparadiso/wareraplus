@@ -46,6 +46,7 @@ import { fetchMuDirectory } from '../mu/api.js';
 import { fetchDonations, fetchDonationsByCountry, fetchTreasury, fetchEmployeeHappiness, fetchCitizensWealth, getNations } from './api.js';
 import { metricValue } from './metrics.js';
 import { ecoT } from './i18nEco.js';
+import { fetchCompanyCount, cocT, COC_RANGES } from './companyCount.js';
 
 const W = 640, H = 150, PAD_T = 10, PAD_B = 4;
 const C_TREASURY = '#e3b341';
@@ -129,7 +130,7 @@ function paintShell() {
 async function load() {
   const nation = _nation;
   const range = _range;
-  const [treasury, donations, transfers, directory, byCountry, happiness, citizens] = await Promise.all([
+  const [treasury, donations, transfers, directory, byCountry, happiness, citizens, companies] = await Promise.all([
     fetchTreasury(nation._id).catch(() => null),
     fetchDonations(nation._id, range).catch(() => null),
     fetchMoneyTransfers().catch(() => null),
@@ -139,6 +140,7 @@ async function load() {
     fetchDonationsByCountry(range).catch(() => null),
     fetchEmployeeHappiness(nation._id).catch(() => null),
     fetchCitizensWealth(nation._id).catch(() => null),
+    fetchCompanyCount(nation._id).catch(() => null),
   ]);
   // Nazione o intervallo cambiati mentre si aspettava: questo disegno è vecchio.
   if (_nation?._id !== nation._id || _range !== range || !_host?.isConnected) return;
@@ -146,12 +148,14 @@ async function load() {
   if (!body) return;
   body.innerHTML = tilesAndTreasury(treasury, transfers)
     + citizensWealthHtml(citizens)
+    + companyCountHtml(companies)
     + happinessHtml(happiness)
     + transfersHtml(transfers)
     + donationsHtml(donations)
     + unitsHtml(donations, directory)
     + compareHtml(byCountry);
   body.querySelector('#wp-nat-eco-units')?.addEventListener('click', openUnit);
+  bindCompanyCount(body);
   body.querySelector('#wp-nat-cmp-sort')?.addEventListener('change', (e) => {
     _cmpSort = e.target.value;
     const slot = body.querySelector('#wp-nat-cmp-body');
@@ -254,7 +258,11 @@ function citizensWealthHtml(cit) {
  *  tempo, perché lo storico ha buchi e i buchi non devono sembrare
  *  continuità. Etichette in HTML, non nell'SVG, per restare leggibili su
  *  telefono (vedi la nota in labourSection.js). */
-function lineChartHtml(points, { fmt = oro, color = C_TREASURY, label = ecoT('ecoTreasury'), aria = ecoT('ecoTreasuryChart') } = {}) {
+/*  WarEra+ (2026-11-26): `breakDays` interrompe linea e area dove due punti
+ *  vicini distano più di tanti giorni (le notti senza backup delle aziende:
+ *  unirle direbbe che lo sappiamo); un punto rimasto solo fra due buchi si
+ *  disegna come pallino. `tipExtra(i)` aggiunge righe al tooltip del punto. */
+function lineChartHtml(points, { fmt = oro, color = C_TREASURY, label = ecoT('ecoTreasury'), aria = ecoT('ecoTreasuryChart'), breakDays = 0, tipExtra = null } = {}) {
   const t0 = dayMs(points[0][0]);
   const t1 = dayMs(points[points.length - 1][0]);
   const span = Math.max(1, t1 - t0);
@@ -267,8 +275,17 @@ function lineChartHtml(points, { fmt = oro, color = C_TREASURY, label = ecoT('ec
   const x = (d) => ((dayMs(d) - t0) / span) * W;
   const y = (v) => PAD_T + h - ((v - lo) / (hi - lo)) * h;
 
-  const path = points.map(([d, v], i) => `${i ? 'L' : 'M'}${x(d).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-  const area = `${path} L${W},${H - PAD_B} L0,${H - PAD_B} Z`;
+  const segs = [];
+  points.forEach((p, i) => {
+    if (!i || (breakDays && dayMs(p[0]) - dayMs(points[i - 1][0]) > breakDays * DAY_MS)) segs.push([]);
+    segs[segs.length - 1].push(p);
+  });
+  const segPath = (seg) => seg.map(([d, v], i) => `${i ? 'L' : 'M'}${x(d).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const path = segs.map(segPath).join(' ');
+  const area = segs.filter(s => s.length > 1).map(s =>
+    `${segPath(s)} L${x(s[s.length - 1][0]).toFixed(1)},${H - PAD_B} L${x(s[0][0]).toFixed(1)},${H - PAD_B} Z`).join(' ');
+  const soli = segs.filter(s => s.length === 1).map(([[d, v]]) =>
+    `<line x1="${x(d).toFixed(1)}" x2="${x(d).toFixed(1)}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="${color}" stroke-width="5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`).join('');
   // WarEra+ (2026-11-20): ogni colonna porta il suo cursore — linea verticale
   // e punto sul valore — acceso quando è quella puntata (hover, o wp-tip-on al
   // tocco). L'SVG è preserveAspectRatio="none": il punto è una linea di
@@ -284,7 +301,7 @@ function lineChartHtml(points, { fmt = oro, color = C_TREASURY, label = ecoT('ec
           <line class="wp-nat-cur-dot" x1="${px}" x2="${px}" y1="${py}" y2="${py}" stroke="${color}" vector-effect="non-scaling-stroke"/>
         </g>
         <rect class="wp-tip-hit" x="${xa.toFixed(1)}" y="0" width="${Math.max(1, xb - xa).toFixed(1)}" height="${H}"${tipAttr(
-      fmtData(d), `${label}\t${fmt(v)}`)}/>
+      fmtData(d), `${label}\t${fmt(v)}`, ...(tipExtra ? tipExtra(i) : []))}/>
       </g>`;
   }).join('');
 
@@ -293,9 +310,105 @@ function lineChartHtml(points, { fmt = oro, color = C_TREASURY, label = ecoT('ec
     <svg class="wp-nat-lab-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(aria)}">
       <path d="${area}" fill="${color}" fill-opacity=".14"/>
       <path d="${path}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>
+      ${soli}
       ${hits}
     </svg>
     <div class="wp-nat-lab-axisrow"><span>${escapeHtml(fmtData(points[0][0]))}</span><span>${escapeHtml(fmtData(points[points.length - 1][0]))}</span></div>`;
+}
+
+/* ── 1a. quante aziende stanno nella nazione (/company-count) ──── */
+
+/* WarEra+ (2026-11-26) — richiesta dell'utente: il numero di aziende nelle
+   regioni della nazione e la sua curva a 7/30/60/90 giorni. Ha il SUO
+   selettore e non quello in cima alla scheda: quello va da 24 ore a 90
+   giorni per le donazioni, qui il dato è uno a notte e 24 ore non
+   direbbero niente. Dati, perimetro e buchi: vedi src/nations/companyCount.js. */
+const C_COMPANIES = '#a371f7';
+const COC_KEY = 'we_nat_coc_range';
+let _cocRange = (() => {
+  try { const v = Number(localStorage.getItem(COC_KEY)); return COC_RANGES.includes(v) ? v : 30; }
+  catch { return 30; }
+})();
+let _coc = null;
+
+function companyCountHtml(d) {
+  _coc = d;
+  return `<div class="wp-nat-curve-card" id="wp-nat-coc">${companyCountBody()}</div>`;
+}
+
+function companyCountBody() {
+  const d = _coc;
+  const nome = _nation.name || '—';
+  const head = `
+    <div class="wp-nat-curve-head">
+      <h4 class="wp-nat-chart-title" data-sec="eco-companies">${escapeHtml(cocT('title'))}</h4>
+      <div class="wp-nat-curve-range" id="wp-nat-coc-range" role="group">
+        ${COC_RANGES.map(r => `<button type="button" data-r="${r}" class="${r === _cocRange ? 'active' : ''}">${escapeHtml(cocT('r' + r))}</button>`).join('')}
+      </div>
+    </div>`;
+  if (!d) return `${head}<p class="wp-nat-lab-note">${escapeHtml(cocT('none'))}</p>`;
+
+  const lang = document.documentElement.lang || undefined;
+  const intero = (v) => Number(v).toLocaleString(lang);
+  const fmtDay = (g) => new Date(`${g}T12:00:00Z`).toLocaleDateString(lang, { day: 'numeric', month: 'short', year: 'numeric' });
+  const serie = d.series || [];
+  const ora = d.countries.find(r => r[0] === _nation._id)?.[1] ?? 0;
+  const pos = d.countries.findIndex(r => r[0] === _nation._id);
+  // Il confronto vuole la notte giusta o quella prima: con un buco di più
+  // notti si lascia «—» invece di confrontare con un giorno diverso.
+  const fa = (n) => {
+    const bersaglio = dayOf(dayMs(d.day) - n * DAY_MS);
+    const ieri = dayOf(dayMs(bersaglio) - DAY_MS);
+    const r = serie.find(p => p[0] === bersaglio) || serie.find(p => p[0] === ieri);
+    return r ? ora - r[1] : null;
+  };
+  const d7 = fa(7), d30 = fa(30);
+  const sgn = (v) => (v == null ? '' : v >= 0 ? 'wp-nat-up' : 'wp-nat-down');
+  const signedInt = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${intero(v)}`);
+  const tile = (lab, val, cls = '') => `
+    <div class="wp-nat-lab-tile">
+      <span class="wp-nat-lab-lab">${escapeHtml(lab)}</span>
+      <strong class="wp-nat-lab-val ${cls}">${escapeHtml(val)}</strong>
+    </div>`;
+  const tiles = [
+    tile(cocT('now'), intero(ora)),
+    tile(cocT('ch7'), signedInt(d7), sgn(d7)),
+    tile(cocT('ch30'), signedInt(d30), sgn(d30)),
+    tile(cocT('share'), d.world ? `${decimale((ora / d.world) * 100, 2)}%` : '—'),
+    tile(cocT('rank'), pos >= 0 && ora > 0 ? cocT('rankOf', { r: pos + 1, n: d.countries.length }) : '—'),
+  ].join('');
+
+  const dal = dayOf(dayMs(d.day) - (_cocRange - 1) * DAY_MS);
+  const pts = serie.filter(p => p[0] >= dal);
+  const grafico = pts.length > 1
+    ? lineChartHtml(pts.map(p => [p[0], p[1]]), {
+      fmt: intero, color: C_COMPANIES, label: cocT('lbl'), aria: cocT('chart', { nation: nome }),
+      breakDays: 1.5, tipExtra: (i) => (pts[i][2] ? [cocT('fromBackup')] : []),
+    })
+    : `<p class="wp-nat-lab-note">${escapeHtml(cocT('noHist'))}</p>`;
+
+  const note = [];
+  if (d.coverageFrom && d.coverageFrom > dal) note.push(cocT('coverShort', { d: fmtDay(d.coverageFrom) }));
+  if (d.coverageFrom && d.recordedFrom && d.coverageFrom < d.recordedFrom) {
+    note.push(cocT('cover', { d: fmtDay(d.coverageFrom), r: fmtDay(d.recordedFrom) }));
+  }
+  return `${head}
+    <p class="wp-nat-lab-note">${escapeHtml(cocT('sub', { nation: nome }))}</p>
+    <div class="wp-nat-lab-tiles">${tiles}</div>
+    <div class="wp-nat-curve-slot">${grafico}</div>
+    <p class="wp-nat-lab-note">${escapeHtml(cocT('scope', { d: fmtDay(d.day) }))}</p>
+    ${note.map(n => `<p class="wp-nat-lab-note">${escapeHtml(n)}</p>`).join('')}`;
+}
+
+function bindCompanyCount(body) {
+  body.querySelector('#wp-nat-coc')?.addEventListener('click', (e) => {
+    const b = e.target.closest('#wp-nat-coc-range button[data-r]');
+    if (!b || Number(b.dataset.r) === _cocRange) return;
+    _cocRange = Number(b.dataset.r);
+    try { localStorage.setItem(COC_KEY, String(_cocRange)); } catch { /* storage negato */ }
+    const card = body.querySelector('#wp-nat-coc');
+    if (card) card.innerHTML = companyCountBody();
+  });
 }
 
 /* ── 1b. felicità dei dipendenti (/employee-happiness) ─────────── */
