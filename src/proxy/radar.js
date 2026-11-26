@@ -287,7 +287,10 @@ export function runRadar() {
 
       const { fetchMuDirectory } = await import('../mu/api.js');
       const directory = await fetchMuDirectory();
-      if (!Array.isArray(directory) || !directory.length) return new Map();
+      // Directory vuota = radar vuoto ma FINITO, come nel catch qui sotto:
+      // altrimenti isRadarReady() resterebbe falso per sempre con la promessa
+      // già risolta, e la vista Sfere aspetterebbe un dato che non arriva.
+      if (!Array.isArray(directory) || !directory.length) { _radar = new Map(); return _radar; }
 
       const mix = buildMuMix(directory);
       const medianDamage = weeklyDamagePerCitizenMedian(nations);

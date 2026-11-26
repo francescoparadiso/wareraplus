@@ -40,6 +40,7 @@ import { syncDamagePulse } from './damagePulse.js';
 import { syncMapPulses } from './mapPulses.js';
 import { buildWeeklyDamageColorExpression } from './weeklyDamage.js';
 import { buildSphereColorExpression } from './sphereOfInfluence.js';
+import { isRadarReady, runRadar } from '../proxy/radar.js';
 import { buildBattleHeatmapColorExpression } from './battleHeatmap.js';
 import { initNationTooltip } from './nationTooltip.js';
 import { initShipTooltip } from './shipTooltip.js';
@@ -638,6 +639,15 @@ export function renderMap() {
     fillExpr = buildWeeklyDamageColorExpression(state.mapSource === 'original');
   } else if (state.coloringMode === 'sphereOfInfluence') {
     fillExpr = buildSphereColorExpression(state.mapSource === 'original');
+    // WarEra+ (2026-11-26): il radar lo lanciava solo il pannello. Su mobile
+    // (pannello dietro la linguetta) o con la vista ripristinata all'avvio
+    // il pannello non si apre, e la mappa restava grigia per sempre. Le
+    // chiamate ripetute tornano la stessa promessa: un solo calcolo.
+    if (!isRadarReady() && state.nazioniGlobal?.length) {
+      runRadar().then(() => {
+        if (isRadarReady() && state.coloringMode === 'sphereOfInfluence') renderMap();
+      });
+    }
   } else if (state.coloringMode === 'blocs') {
     if (state.selectedBlocId) {
       fillExpr = buildBlocFocusColorExpression(state.selectedBlocId, state.mapSource === 'original' ? 'initialCountryId' : 'countryId');
@@ -695,7 +705,15 @@ export function renderMap() {
   // delle alleanze restano pieni come quelli della vista Diplomazia (la
   // tavolozza la decide alliances.js, così mappa, legenda e pannello
   // mostrano lo stesso colore). Spegnerle qui le rendeva fangose.
-  if (state.map.getLayer(LYR_FILL)) {
+  // WarEra+ (2026-11-26): durante una dissolvenza i colori NUOVI stanno sul
+  // velo e LYR_FILL tiene quelli vecchi; l'ultimo passo rimetteva su LYR_FILL
+  // i colori fotografati all'inizio. Un renderMap arrivato a metà (il radar
+  // delle sfere che risponde in quei 600 ms) veniva così cancellato alla fine
+  // e la vista Sfere restava grigia. Ora va sul velo e diventa il traguardo.
+  if (_heatmapFadeRAF && state.map.getLayer(LYR_HEATMAP_FADE)) {
+    state.map.setPaintProperty(LYR_HEATMAP_FADE, 'fill-color', fillExpr);
+    _heatmapFadeToExpr = fillExpr;
+  } else if (state.map.getLayer(LYR_FILL)) {
     state.map.setPaintProperty(LYR_FILL, 'fill-color', fillExpr);
     state.map.setPaintProperty(LYR_FILL, 'fill-opacity', 0.9);
   }
@@ -1184,6 +1202,7 @@ export function flashBlocOnMap(allianceId) {
    ══════════════════════════════════════════════════════════════ */
 let _heatmapFadeRAF = null;
 let _heatmapFadeFromExpr = null;
+let _heatmapFadeToExpr = null;   // traguardo della dissolvenza, aggiornato da renderMap
 
 /* WarEra+ — dissolvenza RIMANDATA per le viste che caricano i dati dopo.
    Regioni contese, storico bellico e guerra vs eco fanno il fetch DOPO il
@@ -1203,6 +1222,10 @@ function _viewDataReady(mode) {
   if (mode === 'politics')     return !!(state.openElections || state.openElectionsError);
   if (mode === 'migration')    return !!(state.migration?.data || state.migration?.error);
   if (mode === 'funding')      return !!(state.funding?.data || state.funding?.error);
+  // WarEra+ (2026-11-26): senza il CSV le sfere arrivano solo dal radar;
+  // se non ha finito, la vista aspetta invece di dissolversi verso il grigio.
+  // Un radar fallito è comunque "pronto" (mappa vuota), vedi runRadar.
+  if (mode === 'sphereOfInfluence') return isRadarReady();
   return true;
 }
 
@@ -1243,6 +1266,7 @@ export function startHeatmapFadeIn(durationMs = 750) {
   // nello stesso task, quindi nello stesso frame: l'occhio non vede
   // nessun passaggio intermedio.
   const toExpr = map.getPaintProperty(LYR_FILL, 'fill-color');
+  _heatmapFadeToExpr = toExpr;
   map.setPaintProperty(LYR_HEATMAP_FADE, 'fill-color', toExpr);
   map.setPaintProperty(LYR_HEATMAP_FADE, 'fill-opacity', 0);
   map.setPaintProperty(LYR_FILL, 'fill-color', _heatmapFadeFromExpr);
@@ -1260,7 +1284,7 @@ export function startHeatmapFadeIn(durationMs = 750) {
       // successivi renderMap/aggiornamenti live) e il velo si spegne. In
       // questo istante i due mostrano gli stessi identici colori, quindi
       // lo scambio è invisibile.
-      map.setPaintProperty(LYR_FILL, 'fill-color', toExpr);
+      map.setPaintProperty(LYR_FILL, 'fill-color', _heatmapFadeToExpr || toExpr);
       map.setPaintProperty(LYR_HEATMAP_FADE, 'fill-opacity', 0);
       _heatmapFadeRAF = null;
       return;
@@ -1280,6 +1304,7 @@ export function startHeatmapFadeIn(durationMs = 750) {
 export function clearHeatmapFade() {
   if (_heatmapFadeRAF) { cancelAnimationFrame(_heatmapFadeRAF); _heatmapFadeRAF = null; }
   _heatmapFadeFromExpr = null;
+  _heatmapFadeToExpr = null;
   if (state.map?.getLayer(LYR_HEATMAP_FADE)) {
     state.map.setPaintProperty(LYR_HEATMAP_FADE, 'fill-opacity', 0);
   }
