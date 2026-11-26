@@ -156,6 +156,7 @@ async function load() {
     + compareHtml(byCountry);
   body.querySelector('#wp-nat-eco-units')?.addEventListener('click', openUnit);
   bindCompanyCount(body);
+  bindHappyRange(body);
   body.querySelector('#wp-nat-cmp-sort')?.addEventListener('change', (e) => {
     _cmpSort = e.target.value;
     const slot = body.querySelector('#wp-nat-cmp-body');
@@ -538,10 +539,8 @@ function happinessHtml(d) {
           <span class="wp-nat-lab-num ${c.delta >= 0 ? 'wp-nat-up' : 'wp-nat-down'}">${escapeHtml(`${c.delta > 0 ? '+' : ''}${decimale(c.delta)}`)}</span>
         </li>`).join('');
 
-  const curva = d.countryDays.map(([g, m]) => [g, m]);
-  const grafico = curva.length > 1
-    ? lineChartHtml(curva, { fmt: (v) => decimale(v), color: C_HAPPY, label: ecoT('hapChartLbl'), aria: ecoT('hapChart') })
-    : `<p class="wp-nat-lab-note">${escapeHtml(ecoT('hapNoHist'))}</p>`;
+  _hapDays = d.countryDays;
+  _hapDay = d.day;
 
   return `${title}
     <p class="wp-nat-curve-note">${escapeHtml(ecoT(d.scope === 'all' ? 'hapSubAll' : 'hapSub', { nation: nome, d: fmtData(d.day) }))}</p>
@@ -557,8 +556,50 @@ function happinessHtml(d) {
     </div>
     <div class="wp-nat-curve-card">
       <h4 class="wp-nat-chart-title">${escapeHtml(ecoT('hapChart'))}</h4>
-      <div class="wp-nat-curve-slot">${grafico}</div>
+      <div class="wp-nat-curve-range wp-nat-coc-filter" id="wp-nat-hap-range" role="group">
+        ${COC_RANGES.map(r => `<button type="button" data-r="${r}" class="${r === _hapRange ? 'active' : ''}">${escapeHtml(cocT('r' + r))}</button>`).join('')}
+      </div>
+      <div id="wp-nat-hap-curve">${happyCurveHtml()}</div>
     </div>`;
+}
+
+/* WarEra+ (2026-11-26) — richiesta dell'utente: la curva della felicità
+   «su più periodi», come le aziende. Stesso selettore 7/30/60/90 giorni e
+   stessa memoria per chi guarda, filtrato qui sulla serie già arrivata (il
+   server la manda tutta: una riga a notte). La serie parte dal primo giro con
+   la rosa valida, quindi una finestra più lunga dello storico lo dice; le
+   notti scartate (rose perse) restano un buco e la linea si interrompe. */
+const HAP_KEY = 'we_nat_hap_range';
+let _hapRange = (() => {
+  try { const v = Number(localStorage.getItem(HAP_KEY)); return COC_RANGES.includes(v) ? v : 30; }
+  catch { return 30; }
+})();
+let _hapDays = [];
+let _hapDay = null;
+
+function happyCurveHtml() {
+  const oggi = _hapDay || dayOf(Date.now());
+  const dal = dayOf(dayMs(oggi) - (_hapRange - 1) * DAY_MS);
+  const curva = (_hapDays || []).filter(([g]) => g >= dal).map(([g, m]) => [g, m]);
+  const grafico = curva.length > 1
+    ? lineChartHtml(curva, { fmt: (v) => decimale(v), color: C_HAPPY, label: ecoT('hapChartLbl'), aria: ecoT('hapChart'), breakDays: 1.5 })
+    : `<p class="wp-nat-lab-note">${escapeHtml(ecoT('hapNoHist'))}</p>`;
+  const primo = _hapDays?.[0]?.[0];
+  const nota = primo && primo > dal
+    ? `<p class="wp-nat-lab-note">${escapeHtml(cocT('coverShort', { d: fmtData(primo) }))}</p>` : '';
+  return `<div class="wp-nat-curve-slot">${grafico}</div>${nota}`;
+}
+
+function bindHappyRange(body) {
+  body.querySelector('#wp-nat-hap-range')?.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-r]');
+    if (!b || Number(b.dataset.r) === _hapRange) return;
+    _hapRange = Number(b.dataset.r);
+    try { localStorage.setItem(HAP_KEY, String(_hapRange)); } catch { /* storage negato */ }
+    body.querySelectorAll('#wp-nat-hap-range button').forEach(x => x.classList.toggle('active', x === b));
+    const slot = body.querySelector('#wp-nat-hap-curve');
+    if (slot) slot.innerHTML = happyCurveHtml();
+  });
 }
 
 /* ── 2. bonifici fra tesori ────────────────────────────────────── */
