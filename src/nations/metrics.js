@@ -49,10 +49,12 @@ export const METRICS = [
   // companyCount.js): l'unica metrica che non viene da state.nazioniGlobal.
   // Finché il dato non è arrivato vale 0 per l'ordinamento ma si mostra «—»,
   // mai uno zero che sembri misurato.
-  { key: 'companies', label: 'companies', get: n => num(companyCountOf(n._id)), fmt: v => (companyCountsKnown() ? fmtCompact(v) : '—') },
+  // `list: false` (richiesta dell'utente, stesso giorno): due colonne in più
+  // allungavano troppo la tabella dell'elenco; restano in scheda e confronto.
+  { key: 'companies', label: 'companies', list: false, get: n => num(companyCountOf(n._id)), fmt: v => (companyCountsKnown() ? fmtCompact(v) : '—') },
   // Attive = con almeno un dipendente in rosa (vedi companyCount.js); «—»
   // finché il server non le conta.
-  { key: 'compActive', label: 'companiesActive', get: n => num(companyActiveOf(n._id)), fmt: v => (companyActiveKnown() ? fmtCompact(v) : '—') },
+  { key: 'compActive', label: 'companiesActive', list: false, get: n => num(companyActiveOf(n._id)), fmt: v => (companyActiveKnown() ? fmtCompact(v) : '—') },
   { key: 'wars',    label: 'wars',       get: n => (n.warsWith?.length || 0), fmt: v => String(v), cmp: 0 },
   // WarEra+ — `n.allies` è un FOSSILE: le coppie delle alleanze bilaterali
   // congelate il 10 giugno 2026, quando il gioco è passato ai blocchi (vedi

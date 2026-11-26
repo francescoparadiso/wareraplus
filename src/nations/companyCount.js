@@ -5,9 +5,10 @@
    aziende che stanno nelle sue regioni, e la sua curva a 7/30/60/90
    giorni. Due posti:
 
-     · la colonna «Aziende» dell'elenco di tutte le nazioni (una metrica
-       in metrics.js, quindi anche scheda e confronto 1 vs 2), da
-       /company-count senza nazione: l'ultima notte per tutte;
+     · le metriche «Aziende» e «Aziende attive» (metrics.js) della scheda
+       nazione e del confronto 1 vs 2, da /company-count senza nazione:
+       l'ultima notte per tutte. NON nell'elenco di tutte le nazioni: due
+       colonne in più allungavano troppo la tabella (richiesta dell'utente);
      · la carta «Aziende nella nazione» della scheda Economia
        (ecoSection.js), da /company-count?countryId=: la serie.
 
@@ -23,7 +24,7 @@
    modo di filtrarle». ATTIVA = almeno un dipendente in rosa quella notte,
    INATTIVA = nessuno, DISABILITATA = spenta dal gioco (`disabledAt`, lente a
    parte). La carta ha un filtro Tutte / Attive / Inattive / Disabilitate
-   che cambia tessere e curva; l'elenco ha la colonna «Aziende attive».
+   che cambia tessere e curva.
    Attive e inattive esistono dal 20 novembre (prima il censimento non
    chiedeva la rosa a tutte), le disabilitate dal censimento del 27: la
    carta lo dichiara quando il filtro le mostra.

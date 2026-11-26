@@ -16,6 +16,10 @@ import { scrollHintHtml } from '../shared/scrollHint.js';
 import { METRICS, metricValue } from './metrics.js';
 import { escapeHtml, flagImg } from '../mu/ui.js';
 
+// WarEra+ (2026-11-26): le metriche con `list: false` (le aziende) stanno in
+// scheda e confronto ma non qui, dove allungherebbero troppo la tabella.
+const LIST_METRICS = METRICS.filter(m => m.list !== false);
+
 export function renderNationList(host, ctx) {
   const { nations, sort, search } = ctx;
 
@@ -32,13 +36,13 @@ export function renderNationList(host, ctx) {
 
   const head = `
     <button type="button" class="wp-nat-th wp-nat-th-name${sort.key === 'name' ? ' active' : ''}" data-sort="name">${escapeHtml(natT('nation'))}</button>
-    ${METRICS.map(m => `
+    ${LIST_METRICS.map(m => `
       <button type="button" class="wp-nat-th wp-nat-num${sort.key === m.key ? ' active' : ''}" data-sort="${m.key}">${escapeHtml(natT(m.label))}</button>`).join('')}`;
 
   const body = rows.map(n => `
     <div class="wp-nat-row" role="button" tabindex="0" data-country="${escapeHtml(n._id)}">
       <span class="wp-nat-th-name">${flagImg(n._id)}<span class="wp-nat-name">${escapeHtml(n.name || '—')}</span></span>
-      ${METRICS.map(m => `<span class="wp-nat-num ${m.cls || ''}">${escapeHtml(m.fmt(m.get(n)))}</span>`).join('')}
+      ${LIST_METRICS.map(m => `<span class="wp-nat-num ${m.cls || ''}">${escapeHtml(m.fmt(m.get(n)))}</span>`).join('')}
     </div>`).join('');
 
   host.innerHTML = `

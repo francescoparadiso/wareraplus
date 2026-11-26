@@ -667,9 +667,10 @@ giro delle 03:20; la curva notte per notte si accumula da lì e non si
 ricostruisce.
 
 Le **aziende nella nazione** (carta della scheda Economia con 7/30/60/90 giorni e
-colonna «Aziende» dell'elenco, `src/nations/companyCount.js` +
+metriche «Aziende» / «Aziende attive» di scheda e confronto 1 vs 2, NON nell'elenco
+— troppe colonne —, `src/nations/companyCount.js` +
 `server/companyCensus.js`, `/company-count`, dal 2026-11-26) dipendono dal
-rideploy del **cache-server**: senza, la colonna mostra «—» e la carta dice che
+rideploy del **cache-server**: senza, le metriche mostrano «—» e la carta dice che
 lo storico manca. Stesso perimetro del censimento (proprietari attivi negli ultimi
 3 giorni, nazione della regione quella notte). Lo storico per nazione prima del
 26 novembre NON si ricostruisce col dato di oggi: si rilegge dai backup

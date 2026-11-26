@@ -61,11 +61,12 @@ export async function initNationsView(container) {
 
   render();
   trackEvent('nations-open', { nations: getNations().length });
-  // WarEra+ (2026-11-26): la colonna «Aziende» viene dal server; quando
-  // arriva si ridisegna l'elenco, ma non una scheda già aperta (la si
-  // ricostruirebbe da capo, fetch comprese): lì il numero compare al giro dopo.
+  // WarEra+ (2026-11-26): le aziende vengono dal server e stanno nel
+  // confronto 1 vs 2 e nella scheda (non nell'elenco, vedi nationList.js).
+  // Quando arrivano si ridisegna il confronto aperto, non una scheda già
+  // aperta (la si ricostruirebbe da capo, fetch comprese).
   loadCompanyCounts().then((nuovo) => {
-    if (nuovo && rootEl && !openCountryId && tab !== 'charts') render();
+    if (nuovo && rootEl && !openCountryId && tab === 'compare') render();
   });
 }
 

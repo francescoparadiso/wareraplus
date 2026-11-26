@@ -609,14 +609,15 @@ wareraPlus/
     │   │                          leggono le stesse definizioni). «Aziende» è l'unica
     │   │                          che viene dal server (/company-count, companyCount.js)
     │   ├── companyCount.js      ← NUOVO (2026-11-26) — aziende che STANNO nella nazione:
-    │   │                          /company-count (tutte, ultima notte → colonna) e
+    │   │                          /company-count (tutte, ultima notte → scheda e 1vs2) e
     │   │                          ?countryId= (serie → carta della scheda Economia, con
     │   │                          selettore 7/30/60/90 g). Dizionario a 9 lingue dentro.
     │   │                          ⚠️ proprietari attivi negli ultimi 3 giorni (soglia del
     │   │                          censimento); notti prima del 26/11 dai backup, buchi veri.
     │   │                          Filtro attive (dipendenti in rosa) / inattive /
     │   │                          disabilitate (disabledAt): attive dal 20/11, disabilitate
-    │   │                          dal 27/11. Colonne «Aziende» e «Aziende attive».
+    │   │                          dal 27/11. Metriche «Aziende» e «Aziende attive» con
+    │   │                          `list: false`: in scheda e 1vs2, non nell'elenco.
     │   ├── charts.js            ← ciambelle/barre in SVG scritto a mano, niente Chart.js
     │   ├── labourSection.js     ← NUOVO — "Lavoro e tasse" nella scheda nazione:
     │   │                          salari incassati dai cittadini, quota guadagnata
