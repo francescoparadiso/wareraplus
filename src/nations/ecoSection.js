@@ -425,16 +425,18 @@ function companyCountBody() {
     })
     : `<p class="wp-nat-lab-note">${escapeHtml(cocT('noHist'))}</p>`;
 
+  // Una nota sola su «da quando»: ogni filtro ha la sua data, e la nota dei
+  // backup dice già da quando parte lo storico.
   const note = [];
   const daQuando = serie[0]?.[0];
-  if (daQuando && daQuando > dal) note.push(cocT('coverShort', { d: fmtDay(daQuando) }));
   if (_cocFilter === 'active' || _cocFilter === 'inactive') {
     if (d.workersFrom) note.push(cocT('wFrom', { d: fmtDay(d.workersFrom) }));
   } else if (_cocFilter === 'disabled') {
     note.push(d.disabledFrom ? cocT('dFrom', { d: fmtDay(d.disabledFrom) }) : cocT('dNone'));
-  }
-  if (d.coverageFrom && d.recordedFrom && d.coverageFrom < d.recordedFrom && _cocFilter !== 'disabled') {
+  } else if (d.coverageFrom && d.recordedFrom && d.coverageFrom < d.recordedFrom) {
     note.push(cocT('cover', { d: fmtDay(d.coverageFrom), r: fmtDay(d.recordedFrom) }));
+  } else if (daQuando && daQuando > dal) {
+    note.push(cocT('coverShort', { d: fmtDay(daQuando) }));
   }
   return `${head}
     <p class="wp-nat-lab-note">${escapeHtml(cocT('sub', { nation: nome }))}</p>

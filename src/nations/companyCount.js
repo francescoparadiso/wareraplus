@@ -38,7 +38,9 @@
 import { WARERA_CACHE_BASE } from '../diplomacy/config.js';
 import { getLang } from '../shared/i18n.js';
 
-const TIMEOUT_MS = 8000;
+// Più largo degli 8 s di api.js: all'apertura della scheda Economia partono
+// sette richieste insieme, e con il VPS impegnato la prima prova scadeva.
+const TIMEOUT_MS = 15000;
 const TTL_MS = 10 * 60 * 1000;   // il dato cambia una volta a notte
 export const COC_RANGES = [7, 30, 60, 90];
 
