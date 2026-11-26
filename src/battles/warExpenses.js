@@ -44,6 +44,20 @@
    Il dettaglio di una nazione o alleanza elenca a chi paga e da chi incassa.
    Senza il rideploy del server (flows === null) la vista è identica a prima
    salvo l'interruttore per alleanza, e lo dichiara.
+
+   ── I CONTI ACCANTO ALLA SPESA (WarEra+, 2026-11-26) ───────────────
+   Richiesta dell'utente: «capire se una spesa economica di una nazione si
+   riversa sui conti dei cittadini/nazioni». Interruttore "Colonne: Spese /
+   Conti": la seconda mette accanto alla spesa il TESORO (adesso e quanto è
+   cambiato nella finestra, e quanto pesa la spesa sul tesoro di partenza)
+   e i CITTADINI (variazione dei soldi e della ricchezza), più l'incassato
+   delle unità. Nel dettaglio due grafici giorno per giorno: tesoro con la
+   spesa sotto, soldi dei cittadini con gli incassi delle unità sotto.
+   Fonti e capi della variazione in api.js (getWarEconomy, econDelta).
+   ⚠️ Non è un conto causale: il tesoro si muove anche per tasse, bonifici e
+   donazioni, i cittadini per lavoro, mercato e trasferimenti di
+   cittadinanza. Le due cose accanto dicono se si muovono insieme, e la nota
+   in fondo lo scrive. Per un'alleanza sono le somme dei membri di OGGI.
    ══════════════════════════════════════════════════════════════ */
 
 import { state } from '../diplomacy/state.js';
@@ -51,7 +65,10 @@ import { escapeHtml } from '../diplomacy/utils.js';
 import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 import { btlT } from './i18n.js';
 import { scrollHintHtml } from '../shared/scrollHint.js';
-import { aggregateExpenses, aggregateFlows, countrySeries, coveredDays, effectiveDays } from './api.js';
+import { tipAttr } from '../shared/chartTip.js';
+import { aggregateExpenses, aggregateFlows, countrySeries, coveredDays, effectiveDays,
+  econDelta, econDaily, earnedDaily } from './api.js';
+import { copyLinkHtml, battlesHref } from './links.js';
 
 const WINDOWS = [
   { days: 7, key: 'days7' },
@@ -64,8 +81,28 @@ let _sort = 'total';          // 'total' | 'bounty' | 'contracts' | 'earned' | '
 let _group = 'nation';        // 'nation' | 'alliance'
 let _selected = null;         // countryId aperto nel dettaglio
 let _selectedAlliance = null; // allianceId (o NO_ALLIANCE) aperto nel dettaglio
+let _cols = 'spend';          // 'spend' | 'econ' — WarEra+ 2026-11-26
 const NO_ALLIANCE = '__none';
+const ECON_SORTS = new Set(['total', 'treasury', 'dTreasury', 'spendShare', 'dMoney', 'dWealth', 'earned']);
+const SPEND_SORTS = new Set(['total', 'bounty', 'contracts', 'earned', 'net']);
 
+/** Stato da mettere nel link (main.js: linkState). */
+export function getExpensesLinkState() {
+  return {
+    by: _group === 'alliance' ? 'alliance' : undefined,
+    nation: _selected || undefined,
+    ally: _selectedAlliance || undefined,
+    days: _days !== 30 ? _days : undefined,
+    cols: _cols === 'econ' ? 'econ' : undefined,
+  };
+}
+export function setExpensesLinkState({ by, nation, ally, days, cols } = {}) {
+  if (by === 'alliance') _group = 'alliance';
+  if (WINDOWS.some(w => w.days === Number(days))) _days = Number(days);
+  if (cols === 'econ') _cols = 'econ';
+  if (ally) _selectedAlliance = ally;
+  if (nation && /^[0-9a-f]{24}$/i.test(nation)) _selected = nation;
+}
 function fmtMoney(n) {
   if (n == null || !Number.isFinite(n)) return '—';
   if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
@@ -111,16 +148,37 @@ function buildNationRows(data, flowAgg, showBounty) {
     const v = exp.get(cid) || zero;
     const e = flowAgg.earned.get(cid);
     const earned = e?.c || 0;
+    const total = (showBounty ? v.bounty : 0) + v.contracts;
     return {
       cid, ...v,
-      total: (showBounty ? v.bounty : 0) + v.contracts,
+      total,
       earned, earnedCount: e?.n || 0,
       net: earned - (expSame?.get(cid)?.contracts || 0),
+      ...econOf(data.econ, [cid], total),
     };
   }).filter(r => r.total > 0 || r.earned > 0);
 }
 
-function buildAllianceRows(nationRows, flowAgg) {
+/** I conti di un gruppo di nazioni nella finestra (vedi la testata). I
+ *  campi piatti servono all'ordinamento delle colonne; `econ` porta le
+ *  variazioni intere (capi, date, quante nazioni avevano il dato). */
+function econOf(econ, ids, total) {
+  if (!econ) return { econ: null };
+  const t = econDelta(econ.treasury, 'series', ids, _days);
+  const m = econDelta(econ.citizens, 'money', ids, _days);
+  const w = econDelta(econ.citizens, 'series', ids, _days);
+  const p = econDelta(econ.citizens, 'players', ids, _days);
+  return {
+    econ: { t, m, w, p },
+    treasury: t?.end ?? null,
+    dTreasury: t?.delta ?? null,
+    spendShare: t && t.start > 0 ? total / t.start : null,
+    dMoney: m?.delta ?? null,
+    dWealth: w?.delta ?? null,
+  };
+}
+
+function buildAllianceRows(nationRows, flowAgg, econ) {
   const acc = new Map();
   for (const r of nationRows) {
     const aids = [...(state.nationAlliancesMap?.get(r.cid) || [])];
@@ -140,7 +198,20 @@ function buildAllianceRows(nationRows, flowAgg) {
       for (const [to, v] of flowAgg.pairs.get(payer) || []) if (ids.has(to)) a.internal += v.c;
     }
   }
+  // I conti di un'alleanza sono di TUTTI i suoi membri, anche di chi nella
+  // finestra non ha speso niente: il tesoro di un membro in pace è comunque
+  // parte dei conti del blocco.
+  for (const a of acc.values()) {
+    a.econIds = a.aid === NO_ALLIANCE ? a.members.map(m => m.cid) : allianceMemberIds(a.aid, a.members);
+    Object.assign(a, econOf(econ, a.econIds, a.total));
+  }
   return [...acc.values()];
+}
+
+function allianceMemberIds(aid, members) {
+  const ids = new Set(members.map(m => m.cid));
+  for (const [cid, set] of state.nationAlliancesMap || []) if (set.has(aid)) ids.add(cid);
+  return [...ids];
 }
 
 function sumSeries(byDay, ids, days) {
@@ -232,7 +303,7 @@ function detailHtml(data, sel, flowAgg, nationRows) {
   const showBounty = !data.bountyMissing;
   const hasFlows = flowAgg.days > 0;
   const isAlliance = sel.kind === 'alliance';
-  const aRow = isAlliance ? buildAllianceRows(nationRows, flowAgg).find(a => a.aid === sel.id) : null;
+  const aRow = isAlliance ? buildAllianceRows(nationRows, flowAgg, data.econ).find(a => a.aid === sel.id) : null;
   const nRow = !isAlliance ? nationRows.find(r => r.cid === sel.id) : null;
   const members = isAlliance ? (aRow?.members || []) : [];
   const ids = isAlliance ? members.map(m => m.cid) : [sel.id];
@@ -281,11 +352,125 @@ function detailHtml(data, sel, flowAgg, nationRows) {
           ${isAlliance && aRow && aRow.aid !== NO_ALLIANCE ? `<div class="wp-btl-card"><span>${btlT('internalCard')}</span><strong>${fmtMoney(aRow.internal)}</strong></div>` : ''}` : ''}
       </div>
       ${seriesChart(series, showBounty)}
+      ${econSectionHtml(data, isAlliance ? (aRow?.econIds || ids) : [sel.id], series, showBounty, total)}
       ${hasFlows ? flowListsHtml(ids, flowAgg) : ''}
       ${isAlliance && memberRows.length ? `
         <h3 class="wp-btl-h3">${btlT('membersTitle')}</h3>
         ${tableHtml(memberRows, { kind: 'nation', max: memberMax, denom, showBounty, hasFlows })}` : ''}
       ${isAlliance ? '' : `<button type="button" class="wp-btl-seebattles" data-see="${escapeHtml(sel.id)}">${btlT('tabArchive')} →</button>`}
+    </div>`;
+}
+
+/* ══ SITUAZIONE ECONOMICA (dettaglio) ═══════════════════════════
+   Caselle con le variazioni nella finestra e due grafici giorno per giorno:
+   tesoro (linea) con la spesa (barre) sotto; soldi dei cittadini (linea)
+   con gli incassi delle unità (barre) sotto. Linea e barre hanno scale
+   DIVERSE, e le etichette lo dicono: sulla stessa scala la spesa di un
+   giorno sarebbe una riga piatta sotto un tesoro cento volte più grande. */
+function signedCard(label, d, { pct = null } = {}) {
+  if (!d) return `<div class="wp-btl-card"><span>${label}</span><strong class="wp-btl-dim">—</strong></div>`;
+  return `<div class="wp-btl-card"><span>${label}</span><strong class="${netClass(d.delta)}">${fmtSigned(d.delta)}</strong>
+    <em>${fmtMoney(d.start)} → ${fmtMoney(d.end)}${pct != null ? ` · ${pct}` : ''}</em></div>`;
+}
+
+function econSectionHtml(data, ids, series, showBounty, total) {
+  const econ = data.econ;
+  const head = `<h3 class="wp-btl-h3" data-sec="btl-econ">${btlT('econTitle')}</h3>`;
+  if (econ === undefined) return `${head}<div class="wp-btl-loading">${btlT('loading')}</div>`;
+  if (!econ || (!econ.treasury && !econ.citizens)) return `${head}<div class="wp-btl-notice warn">${btlT('econMissing')}</div>`;
+
+  const e = econOf(econ, ids, total).econ;
+  const dayList = series.map(d => d.day);
+  const spendByDay = new Map(series.map(d => [d.day, (showBounty ? d.bounty : 0) + d.contracts]));
+  const pctOf = (v, base) => (base > 0 ? `${((v / base) * 100).toFixed(1)}%` : null);
+  const share = e.t && e.t.start > 0 ? pctOf(total, e.t.start) : null;
+  const from = (d) => (d?.partial ? btlT('econSince', { d: d.from }) : null);
+  const partialNote = [from(e.t) && `${btlT('econTreasury')}: ${from(e.t)}`, from(e.m) && `${btlT('econCitizens')}: ${from(e.m)}`]
+    .filter(Boolean).join(' · ');
+
+  const charts = [];
+  if (econ.treasury) {
+    charts.push(econChart({
+      days: dayList, line: econDaily(econ.treasury, 'series', ids), bars: spendByDay,
+      lineLabel: btlT('econTreasury'), barLabel: btlT('econSpendDay'), lineClass: 'wp-btl-econ-line-t', barClass: 'wp-btl-bar-c',
+      title: btlT('econChartTreasury'),
+    }));
+  }
+  if (econ.citizens) {
+    charts.push(econChart({
+      days: dayList, line: econDaily(econ.citizens, 'money', ids), bars: earnedDaily(data.flows, ids),
+      lineLabel: btlT('econCitMoney'), barLabel: btlT('econEarnedDay'), lineClass: 'wp-btl-econ-line-c', barClass: 'wp-btl-bar-in',
+      title: btlT('econChartCitizens'),
+    }));
+  }
+
+  return `
+    ${head}
+    <div class="wp-btl-cards">
+      ${signedCard(btlT('econTreasury'), e.t)}
+      <div class="wp-btl-card"><span>${btlT('econShare')}</span><strong>${share || '—'}</strong><em>${btlT('econShareSub')}</em></div>
+      ${signedCard(btlT('econCitMoney'), e.m)}
+      ${signedCard(btlT('econCitWealth'), e.w)}
+      ${e.p ? `<div class="wp-btl-card"><span>${btlT('econCitCount')}</span><strong>${Math.round(e.p.end).toLocaleString()}</strong>
+        <em>${e.p.delta ? `${e.p.delta > 0 ? '+' : '−'}${Math.abs(Math.round(e.p.delta))} · ` : ''}${btlT('econSince', { d: e.p.from })}</em></div>` : ''}
+    </div>
+    ${partialNote ? `<p class="wp-btl-meta">${escapeHtml(partialNote)}</p>` : ''}
+    <div class="wp-btl-econcharts">${charts.join('')}</div>
+    <p class="wp-btl-foot">${btlT('econNote')}</p>`;
+}
+
+function econChart({ days, line, bars, lineLabel, barLabel, lineClass, barClass, title }) {
+  const n = days.length;
+  const lv = days.map(d => (line.has(d) ? line.get(d) : null));
+  const bv = days.map(d => bars.get(d) || 0);
+  const vals = lv.filter(v => v != null);
+  if (vals.length < 2) {
+    return `<div class="wp-btl-econchart"><div class="wp-btl-econchart-t">${title}</div><div class="wp-btl-empty">${btlT('econNoSeries')}</div></div>`;
+  }
+  const W = Math.max(320, n * 18), H = 170, padL = 52, padR = 6, padT = 10, padB = 18;
+  const plotH = H - padT - padB;
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const span = hi - lo || Math.max(1, Math.abs(hi) * 0.05);
+  lo -= span * 0.08; hi += span * 0.08;
+  const bmax = Math.max(...bv, 1);
+  const bw = (W - padL - padR) / n;
+  const x = (i) => padL + (i + 0.5) * bw;
+  const y = (v) => padT + (1 - (v - lo) / (hi - lo)) * plotH;
+
+  // Linea spezzata sui buchi: un giorno senza scatto non è un giorno uguale.
+  let d = '', pen = false;
+  lv.forEach((v, i) => {
+    if (v == null) { pen = false; return; }
+    d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)} `;
+    pen = true;
+  });
+  // Le barre stanno nella metà bassa, con la loro scala.
+  const barH = (v) => (v / bmax) * plotH * 0.45;
+  const barsSvg = bv.map((v, i) => (v > 0
+    ? `<rect x="${(x(i) - bw / 2 + 1).toFixed(1)}" y="${(H - padB - barH(v)).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${barH(v).toFixed(1)}" class="${barClass}" rx="1"/>`
+    : '')).join('');
+  const hits = days.map((day, i) => `<rect class="wp-tip-hit" x="${(x(i) - bw / 2).toFixed(1)}" y="${padT}" width="${bw.toFixed(1)}" height="${plotH}"${tipAttr(
+    day, `${lineLabel}\t${lv[i] == null ? '—' : fmtMoney(lv[i])}`, `${barLabel}\t${fmtMoney(bv[i])}`)}/>`).join('');
+
+  return `
+    <div class="wp-btl-econchart">
+      <div class="wp-btl-econchart-t">${title}</div>
+      <div class="wp-btl-chartwrap">
+        <svg class="wp-btl-chart" width="${W}" height="${H}" role="img" aria-label="${escapeHtml(title)}">
+          <line x1="${padL}" y1="${H - padB}" x2="${W - padR}" y2="${H - padB}" class="wp-btl-axis"/>
+          <text x="${padL - 4}" y="${padT + 8}" class="wp-btl-axislbl" text-anchor="end">${fmtMoney(hi)}</text>
+          <text x="${padL - 4}" y="${H - padB - 2}" class="wp-btl-axislbl" text-anchor="end">${fmtMoney(lo)}</text>
+          ${barsSvg}
+          <path d="${d.trim()}" class="${lineClass}" fill="none"/>
+          ${hits}
+          <text x="${padL}" y="${H - 4}" class="wp-btl-axislbl">${days[0].slice(5)}</text>
+          <text x="${W - padR}" y="${H - 4}" class="wp-btl-axislbl" text-anchor="end">${days[n - 1].slice(5)}</text>
+        </svg>
+      </div>
+      <div class="wp-btl-legend">
+        <span class="wp-btl-key"><i class="wp-btl-sw-line ${lineClass}"></i>${lineLabel}</span>
+        <span class="wp-btl-key"><i class="${barClass === 'wp-btl-bar-in' ? 'wp-btl-sw-in' : 'wp-btl-sw-c'}"></i>${barLabel} · ${btlT('econBarScale', { v: fmtMoney(bmax) })}</span>
+      </div>
     </div>`;
 }
 
@@ -359,8 +544,60 @@ function tableHtml(rows, { kind, max, denom, showBounty, hasFlows }) {
     </div>`;
 }
 
+/** Colonne "Conti": la spesa accanto al tesoro e ai cittadini. Stesse righe
+ *  (e stesso clic) della tabella delle spese, altre colonne. */
+function econTableHtml(rows, { kind, hasFlows, econ }) {
+  const isAlliance = kind === 'alliance';
+  const sortable = (key, label, tip) =>
+    `<th class="wp-btl-num wp-btl-tight wp-btl-sortable${_sort === key ? ' active' : ''}" data-sort="${key}"${tip ? ` title="${escapeHtml(tip)}"` : ''}>${label}${_sort === key ? '<span class="wp-btl-caret">▾</span>' : ''}</th>`;
+  const nameCell = (r) => isAlliance
+    ? `<span class="wp-btl-nation">${allianceSwatch(r.aid)}${escapeHtml(allianceName(r.aid))}<span class="wp-btl-sub">${btlT('nationsCount', { n: (r.econIds || r.members).length })}</span></span>`
+    : `<span class="wp-btl-nation">${flagHtml(r.cid)}${escapeHtml(nationName(r.cid))}</span>`;
+  const signed = (v) => `<td class="wp-btl-num wp-btl-tight ${v == null ? 'wp-btl-dim' : netClass(v)}">${v == null ? '—' : fmtSigned(v)}</td>`;
+  const share = (r) => {
+    if (r.spendShare == null) return '<td class="wp-btl-num wp-btl-tight wp-btl-dim">—</td>';
+    const p = r.spendShare * 100;
+    return `<td class="wp-btl-num wp-btl-tight${p >= 100 ? ' wp-btl-neg' : ''}">${p >= 10 ? p.toFixed(0) : p.toFixed(1)}%</td>`;
+  };
+  return `${scrollHintHtml(640)}
+    <div class="wp-btl-tablewrap">
+      <table class="wp-btl-table wp-btl-xp wp-btl-econ">
+        <thead><tr>
+          <th class="wp-btl-rank">#</th>
+          <th class="wp-btl-xp-name">${isAlliance ? btlT('colAlliance') : btlT('colNation')}</th>
+          ${sortable('total', btlT('econColSpend'))}
+          ${econ?.treasury ? `${sortable('treasury', btlT('econColTreasury'), btlT('econTreasuryTip'))}
+          ${sortable('dTreasury', btlT('econColDTreasury'))}
+          ${sortable('spendShare', btlT('econColShare'), btlT('econShareTip'))}` : ''}
+          ${econ?.citizens ? `${sortable('dMoney', btlT('econColDMoney'), btlT('econCitTip'))}
+          ${sortable('dWealth', btlT('econColDWealth'), btlT('econCitTip'))}` : ''}
+          ${hasFlows ? sortable('earned', btlT('colEarned'), btlT('earnedTip')) : ''}
+        </tr></thead>
+        <tbody>
+          ${rows.map((r, i) => `
+            <tr class="wp-btl-row wp-btl-clickable" ${isAlliance ? `data-alliance="${escapeHtml(r.aid)}"` : `data-country="${escapeHtml(r.cid)}"`}>
+              <td class="wp-btl-rank">${i + 1}</td>
+              <td class="wp-btl-xp-name">${nameCell(r)}</td>
+              <td class="wp-btl-num wp-btl-tight wp-btl-total">${fmtMoney(r.total)}</td>
+              ${econ?.treasury ? `<td class="wp-btl-num wp-btl-tight">${r.treasury == null ? '—' : fmtMoney(r.treasury)}</td>${signed(r.dTreasury)}${share(r)}` : ''}
+              ${econ?.citizens ? `${signed(r.dMoney)}${signed(r.dWealth)}` : ''}
+              ${hasFlows ? `<td class="wp-btl-num wp-btl-tight wp-btl-earned">${r.earned > 0 ? fmtMoney(r.earned) : '—'}</td>` : ''}
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+/** Ordinamento con i "non lo so" in fondo, mai mescolati agli zeri. */
+function sortRows(rows) {
+  const v = (r) => (r[_sort] == null || !Number.isFinite(r[_sort]) ? -Infinity : r[_sort]);
+  return rows.sort((a, b) => { const x = v(a), y = v(b); return x === y ? 0 : (y > x ? 1 : -1); });
+}
+
 export function renderWarExpenses(data) {
   const showBounty = !data.bountyMissing;
+  // Una colonna di ordinamento che nelle colonne scelte non c'è torna al totale.
+  if (!(_cols === 'econ' ? ECON_SORTS : SPEND_SORTS).has(_sort)) _sort = 'total';
   const flowAgg = aggregateFlows(data.flows, _days);
   const hasFlows = flowAgg.days > 0;
 
@@ -392,17 +629,22 @@ export function renderWarExpenses(data) {
         <span class="wp-btl-lbl">${btlT('windowLabel')}</span>
         ${WINDOWS.map(w => `<button type="button" class="wp-btl-chip${_days === w.days ? ' active' : ''}" data-days="${w.days}">${btlT(w.key)}</button>`).join('')}
       </div>
+      <div class="wp-btl-filters">
+        <span class="wp-btl-lbl">${btlT('colsLabel')}</span>
+        <button type="button" class="wp-btl-chip${_cols === 'spend' ? ' active' : ''}" data-cols="spend">${btlT('colsSpend')}</button>
+        <button type="button" class="wp-btl-chip${_cols === 'econ' ? ' active' : ''}" data-cols="econ">${btlT('colsEcon')}</button>
+      </div>
       <span class="wp-btl-meta">${btlT('coverage', { n: covered })}${flowPartial ? ` · ${btlT('flowSince', { d: flowAgg.from })}` : ''}</span>
     </div>`;
 
   const nationRows = buildNationRows(data, flowAgg, showBounty);
+  const linkBar = (params) => `<div class="wp-btl-linkbar">${copyLinkHtml(battlesHref({ tab: 'expenses', ...getExpensesLinkState(), ...params }))}</div>`;
 
-  if (_selected) return head + detailHtml(data, { kind: 'nation', id: _selected }, flowAgg, nationRows);
-  if (_selectedAlliance) return head + detailHtml(data, { kind: 'alliance', id: _selectedAlliance }, flowAgg, nationRows);
+  if (_selected) return head + linkBar({ ally: undefined }) + detailHtml(data, { kind: 'nation', id: _selected }, flowAgg, nationRows);
+  if (_selectedAlliance) return head + linkBar({}) + detailHtml(data, { kind: 'alliance', id: _selectedAlliance }, flowAgg, nationRows);
 
   const isAlliance = _group === 'alliance';
-  const rows = (isAlliance ? buildAllianceRows(nationRows, flowAgg) : nationRows)
-    .sort((a, b) => (b[_sort] || 0) - (a[_sort] || 0));
+  const rows = sortRows(isAlliance ? buildAllianceRows(nationRows, flowAgg, data.econ) : nationRows);
 
   if (!rows.length) return head + `<div class="wp-btl-empty">${btlT('noExpenses')}</div>`;
 
@@ -411,6 +653,26 @@ export function renderWarExpenses(data) {
   // occhi e due schermate della stessa tabella non sarebbero confrontabili.
   const max = Math.max(...rows.map(r => r.total), 1);
   const denom = effectiveDays(data.byDay, _days);
+
+  if (_cols === 'econ') {
+    const econ = data.econ;
+    const econNotices = [];
+    if (econ === undefined) econNotices.push(`<div class="wp-btl-notice">${btlT('econLoading')}</div>`);
+    else if (!econ?.treasury && !econ?.citizens) econNotices.push(`<div class="wp-btl-notice warn">${btlT('econMissing')}</div>`);
+    else {
+      // Da quando contano davvero le due variazioni, se la finestra parte prima.
+      const any = rows.find(r => r.econ?.t) || {};
+      const anyC = rows.find(r => r.econ?.m) || {};
+      const parts = [];
+      if (any.econ?.t) parts.push(`${btlT('econTreasury')}: ${any.econ.t.from} → ${any.econ.t.to}`);
+      if (anyC.econ?.m) parts.push(`${btlT('econCitizens')}: ${anyC.econ.m.from} → ${anyC.econ.m.to}`);
+      if (parts.length) econNotices.push(`<p class="wp-btl-meta">${btlT('econPeriod')} ${escapeHtml(parts.join(' · '))}</p>`);
+    }
+    return head + econNotices.join('') + econTableHtml(rows, { kind: isAlliance ? 'alliance' : 'nation', hasFlows, econ }) + `
+      <p class="wp-btl-foot">${btlT('econNote')}</p>
+      ${isAlliance ? `<p class="wp-btl-foot">${btlT('econAllianceNote')}</p>` : ''}
+      <p class="wp-btl-foot">${btlT('notCountryBounty')}</p>`;
+  }
 
   return head + tableHtml(rows, { kind: isAlliance ? 'alliance' : 'nation', max, denom, showBounty, hasFlows }) + `
     <p class="wp-btl-foot">${btlT('bountyNote')}</p>
@@ -434,6 +696,10 @@ export function wireWarExpenses(root, data, { onRepaint, onSeeBattles }) {
       _selected = null; _selectedAlliance = null;
       onRepaint();
     });
+  });
+
+  root.querySelectorAll('.wp-btl-chip[data-cols]').forEach(chip => {
+    chip.addEventListener('click', () => { _cols = chip.dataset.cols; onRepaint(); });
   });
 
   root.querySelectorAll('.wp-btl-sortable').forEach(th => {

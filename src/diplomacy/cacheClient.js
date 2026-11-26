@@ -772,6 +772,28 @@ export async function fetchPlayerPartsViaCache(userId, days = 3650) {
   }
 }
 
+/** WarEra+ (2026-11-26) — tesori e ricchezza dei cittadini giorno per
+ *  giorno, per la "Situazione economica" delle Spese di guerra. Le stesse
+ *  rotte dello storico della ricchezza in Statistiche alleanze
+ *  (diplomacy/blocWealthHistory.js): /treasury-history (dayHistory, dal 19
+ *  set 2026) e /citizens-wealth-history (playerParts, dal 4 nov 2026), tetto
+ *  di 200 id ciascuna — più delle nazioni del gioco. null se il server non
+ *  risponde o non ha la rotta: la vista lo dichiara e resta sulle spese. */
+async function _fetchCountryDays(path, countryIds, days) {
+  const ids = [...new Set((countryIds || []).filter(Boolean))].sort().slice(0, 200);
+  if (!ids.length) return null;
+  try {
+    const json = await _fetchCacheJsonRaw(`${path}?countryIds=${ids.join(',')}&days=${encodeURIComponent(days)}`);
+    if (!json || !Array.isArray(json.days) || typeof json.series !== 'object') return null;
+    return json;
+  } catch (err) {
+    console.warn(`WarEra+ cache: ${path} non disponibile:`, err.message);
+    return null;
+  }
+}
+export const fetchTreasuryHistoryViaCache = (ids, days = 100) => _fetchCountryDays('/treasury-history', ids, days);
+export const fetchCitizensWealthHistoryViaCache = (ids, days = 100) => _fetchCountryDays('/citizens-wealth-history', ids, days);
+
 /** Serie giornaliera per nazione: { fetchedAt, retentionDays, tz, byDay }
  *  con byDay[YYYY-MM-DD][countryId] = {bounty, contracts, contractCount,
  *  battles}. Ritorna null se il server non ce l'ha. */

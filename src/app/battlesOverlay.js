@@ -39,8 +39,10 @@ export function initBattlesOverlay() {
 }
 
 /** Con `battleId` apre direttamente la scheda di quella battaglia
- *  dell'archivio (link condivisibile ?section=battles&battle=). */
-export async function openBattlesView(battleId) {
+ *  dell'archivio (link condivisibile ?section=battles&battle=). `link` porta
+ *  il resto del link (WarEra+ 2026-11-26: ?tab= &war= &by= &ally= &nation=
+ *  &days= &cols=, vedi applyLinkState in battles/main.js). */
+export async function openBattlesView(battleId, link = null) {
   overlayEl.classList.add('open');
   overlayEl.setAttribute('aria-hidden', 'false');
   rootEl.style.display = 'block';
@@ -53,6 +55,7 @@ export async function openBattlesView(battleId) {
   await withModuleLoading('battles', async () => {
     viewMod = await loadModule(() => import('../battles/main.js'), 'battles');
     if (battleId) viewMod.openBattleDetail(battleId);
+    if (link) viewMod.applyLinkState(link);
     await viewMod.initBattlesView(rootEl);
   });
 

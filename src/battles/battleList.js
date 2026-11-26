@@ -32,6 +32,8 @@ import { btlT } from './i18n.js';
 import { getBattleBounty, getBattleContracts } from './api.js';
 import { splitArchiveBounty } from '../diplomacy/battleSpending.js';
 import { righeStima } from '../shared/battleTiming.js';
+import { buildAllianceAgg, createAllianceView, allianceName, archiveKey } from './alliances.js';
+import { warLinkHtml } from './links.js';
 
 /** WarEra+: sotto una battaglia in corso, quando può finire il round (per
  *  lato, come il gioco ai lati del timer) e la battaglia. Calcolo e testi
@@ -49,6 +51,21 @@ const PAGE = 60;
 let _shown = PAGE;
 let _query = '';
 let _typeFilter = 'all';
+// WarEra+ (2026-11-26): elenco o somma per alleanza (alliances.js). La
+// vista per alleanza usa gli stessi filtri (tipo, in corso/concluse, testo).
+let _mode = 'list';            // 'list' | 'alliance'
+const _allyView = createAllianceView({ mode: 'archive' });
+
+export function getArchiveLinkState() {
+  return _mode === 'alliance' ? { by: 'alliance', ally: _allyView.getOpen() } : {};
+}
+export function setArchiveLinkState({ by, ally } = {}) {
+  if (by === 'alliance') { _mode = 'alliance'; if (ally) _allyView.setOpen(ally); }
+}
+export function takeArchiveFocus() {
+  const a = _mode === 'alliance' ? _allyView.takeFocus() : null;
+  return a ? `[data-ally="${CSS.escape(a)}"]` : null;
+}
 
 function fmtNum(n) {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -128,7 +145,10 @@ function matches(b) {
   if (TYPE_IDS.has(_typeFilter) && b.type !== _typeFilter) return false;
   if (!_query) return true;
   const q = _query.toLowerCase();
-  return [nationName(b.attacker.countryId), nationName(b.defender.countryId), regionName(b.regionId)]
+  // WarEra+: anche il nome dell'alleanza (di oggi) di uno dei due lati.
+  const allyNames = (cid) => [...(state.nationAlliancesMap?.get(cid) || [])].map(allianceName);
+  return [nationName(b.attacker.countryId), nationName(b.defender.countryId), regionName(b.regionId),
+    ...allyNames(b.attacker.countryId), ...allyNames(b.defender.countryId)]
     .some(s => s && s.toLowerCase().includes(q));
 }
 
@@ -150,6 +170,7 @@ function rowHtml(b) {
         <span class="wp-btl-vs">vs</span>
         ${sideHtml(b.attacker, atkWon)}
         <span class="wp-btl-type">${typeLabel(b.type)}</span>
+        ${warLinkHtml(b.warId)}
       </td>
       <td class="wp-btl-region">${escapeHtml(regionName(b.regionId) || '—')}</td>
       <td class="wp-btl-num wp-btl-dmg" data-label="${escapeHtml(btlT('colDamage'))}">${fmtNum(b.defender.damages)}<span class="wp-btl-sep">/</span>${fmtNum(b.attacker.damages)}</td>
@@ -168,6 +189,7 @@ export function renderBattleList(archive, presetCountry) {
   // è una scelta esplicita dell'utente, deve vincere su quella vecchia.
   if (presetCountry) {
     _query = nationName(presetCountry) || '';
+    _mode = 'list';
     _shown = PAGE;
   }
 
@@ -177,6 +199,36 @@ export function renderBattleList(archive, presetCountry) {
   const live = (archive.live || []).filter(matches);
   const showLive = _typeFilter !== 'ended';
   const showEnded = _typeFilter !== 'live';
+
+  const typeChips = [['all', 'filterAll'], ['live', 'filterLive'], ['ended', 'filterEnded'],
+    ['war', 'typeWar'], ['resistance', 'typeResistance'], ['tournament', 'typeTournament']]
+    .map(([id, k]) => `<button type="button" class="wp-btl-chip${_typeFilter === id ? ' active' : ''}${id === 'live' ? ' wp-btl-chip-live' : ''}" data-type="${id}">${id === 'live' ? '<span class="wp-btl-livedot"></span>' : ''}${btlT(k)}${id === 'live' && live.length ? ` <span class="wp-btl-sub">${live.length}</span>` : ''}</button>`)
+    .join('');
+  const modeChips = `
+      <div class="wp-btl-filters">
+        <span class="wp-btl-lbl">${btlT('viewLabel')}</span>
+        <button type="button" class="wp-btl-chip${_mode === 'list' ? ' active' : ''}" data-amode="list">${btlT('viewBattles')}</button>
+        <button type="button" class="wp-btl-chip${_mode === 'alliance' ? ' active' : ''}" data-amode="alliance">${btlT('viewAlliance')}</button>
+      </div>`;
+
+  // WarEra+: per alleanza. Le battaglie passano i filtri di tipo e stato; il
+  // testo cerca alleanze e nazioni membre (lo fa la vista per alleanza).
+  if (_mode === 'alliance') {
+    const typeOk = (b) => !TYPE_IDS.has(_typeFilter) || b.type === _typeFilter;
+    const agg = buildAllianceAgg(
+      showEnded ? archive.battles.filter(typeOk) : [],
+      showLive ? (archive.live || []).filter(typeOk) : [],
+      `arch|${_typeFilter}|${archiveKey(archive)}`);
+    return `
+      ${archive.degraded ? `<div class="wp-btl-notice warn">${btlT('degraded')}</div>` : ''}
+      <div class="wp-btl-toolbar">
+        <input type="search" class="wp-btl-search" id="wp-btl-search" placeholder="${btlT('allySearch')}" value="${escapeHtml(_query)}">
+        ${modeChips}
+        <div class="wp-btl-filters">${typeChips}</div>
+      </div>
+      ${_allyView.render(agg, { query: _query, warInfo: null })}
+      <p class="wp-btl-foot">${btlT('bountyNote')}</p>`;
+  }
 
   const list = showEnded ? archive.battles.filter(matches) : [];
   const visible = list.slice(0, _shown);
@@ -201,12 +253,8 @@ export function renderBattleList(archive, presetCountry) {
     <div class="wp-btl-toolbar">
       <input type="search" class="wp-btl-search" id="wp-btl-search"
              placeholder="${btlT('search')}" value="${escapeHtml(_query)}">
-      <div class="wp-btl-filters">
-        ${[['all', 'filterAll'], ['live', 'filterLive'], ['ended', 'filterEnded'],
-           ['war', 'typeWar'], ['resistance', 'typeResistance'], ['tournament', 'typeTournament']]
-          .map(([id, k]) => `<button type="button" class="wp-btl-chip${_typeFilter === id ? ' active' : ''}${id === 'live' ? ' wp-btl-chip-live' : ''}" data-type="${id}">${id === 'live' ? '<span class="wp-btl-livedot"></span>' : ''}${btlT(k)}${id === 'live' && live.length ? ` <span class="wp-btl-sub">${live.length}</span>` : ''}</button>`)
-          .join('')}
-      </div>
+      ${modeChips}
+      <div class="wp-btl-filters">${typeChips}</div>
       ${archive.liveAt ? `<span class="wp-btl-meta" id="wp-btl-liveat">${btlT('liveUpdated', { t: new Date(archive.liveAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) })}</span>` : ''}
     </div>
     ${(liveRows.length || visible.length) ? `
@@ -246,13 +294,24 @@ export function wireBattleList(root, archive, repaint, onOpenDetail) {
     });
   }
 
-  root.querySelectorAll('.wp-btl-chip').forEach(chip => {
+  root.querySelectorAll('.wp-btl-chip[data-type]').forEach(chip => {
     chip.addEventListener('click', () => {
       _typeFilter = chip.dataset.type;
       _shown = PAGE;
       repaint();
     });
   });
+
+  root.querySelectorAll('.wp-btl-chip[data-amode]').forEach(chip => {
+    chip.addEventListener('click', () => { _mode = chip.dataset.amode; _shown = PAGE; repaint(); });
+  });
+
+  const findAny = (id) =>
+    (archive.live || []).find(x => x.id === id) || archive.battles.find(x => x.id === id);
+  if (_mode === 'alliance') {
+    _allyView.wire(root, { repaint, onOpenBattle: onOpenDetail, findBattle: findAny });
+    return;
+  }
 
   const more = root.querySelector('#wp-btl-more');
   if (more) more.addEventListener('click', () => { _shown += PAGE; repaint(); });
@@ -270,6 +329,7 @@ export function wireBattleList(root, archive, repaint, onOpenDetail) {
   if (!tbody) return;
 
   tbody.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-war-link]')) return;   // ⚔ Guerra: lo gestisce main.js
     const btn = e.target.closest('.wp-btl-load');
 
     // Costo su richiesta: due chiamate per la taglia e una per i contratti,

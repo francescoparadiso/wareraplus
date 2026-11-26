@@ -29,7 +29,10 @@ import {
   fetchWarExpensesViaCache,
   fetchWarFlowsViaCache,
   fetchBattleNationsViaCache,
+  fetchTreasuryHistoryViaCache,
+  fetchCitizensWealthHistoryViaCache,
 } from '../diplomacy/cacheClient.js';
+import { state } from '../diplomacy/state.js';
 import { fillMissingNations } from '../shared/battleNations.js';
 import { fetchActiveBattles } from '../diplomacy/battleHeatmap.js';
 
@@ -711,6 +714,97 @@ export function aggregateFlows(flows, days) {
         p.c += c; p.n += n; row.set(to, p);
       }
     }
+  }
+  return out;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SITUAZIONE ECONOMICA (WarEra+, 2026-11-26)
+   ------------------------------------------------------------------
+   Richiesta dell'utente: accanto a quanto una nazione spende in taglie e
+   contratti, i suoi CONTI — il tesoro e i soldi dei cittadini — per capire
+   se la spesa di guerra si riversa da qualche parte. Due rotte che il
+   server ha già per lo storico della ricchezza delle alleanze, una
+   richiesta ciascuna per tutte le nazioni (≤ 200 id), mezz'ora di cache.
+     · tesoro: /treasury-history, scatto delle 02:05 italiane, dal 19 set;
+     · cittadini: /citizens-wealth-history (soldi, ricchezza, quanti sono),
+       giro di playerParts.js delle 05-07, dal 4 nov, con qualche giorno
+       saltato. Ogni giocatore sta nella nazione di cui era cittadino QUEL
+       giorno: chi si sposta esce da un conto ed entra nell'altro.
+   La variazione si misura dall'ultimo scatto PRIMA della finestra
+   all'ultimo di tutti, così copre i giorni della finestra; se l'archivio
+   parte dopo, si parte dal primo scatto e la vista dice da quando
+   (`partial`, `from`). Mai una differenza su un capo vuoto.
+   ══════════════════════════════════════════════════════════════ */
+const ECON_TTL_MS = 30 * 60 * 1000;
+let _econCache = null;
+
+export function getWarEconomy({ force = false } = {}) {
+  if (!force && _econCache && Date.now() - _econCache.at < ECON_TTL_MS) return _econCache.p;
+  const ids = [...(state.nationMap?.keys() || [])];
+  const p = Promise.all([fetchTreasuryHistoryViaCache(ids, 100), fetchCitizensWealthHistoryViaCache(ids, 100)])
+    .then(([treasury, citizens]) => ({ treasury, citizens }));
+  _econCache = { at: Date.now(), p };
+  p.then(v => { if (!v.treasury && !v.citizens && _econCache?.p === p) _econCache = null; });
+  return p;
+}
+
+/** Variazione di un campo (`series` | `money` | `players`) sommata su
+ *  `ids`, dentro la finestra di `days` giorni. null se il dato non c'è. */
+export function econDelta(json, field, ids, days) {
+  if (!json?.days?.length || !json[field]) return null;
+  const windowFrom = _day(Date.now() - (days - 1) * 24 * 60 * 60 * 1000);
+  const ds = json.days;
+  let i0 = -1;
+  for (let i = 0; i < ds.length; i++) { if (ds[i] < windowFrom) i0 = i; else break; }
+  const partial = i0 < 0;
+  if (i0 < 0) i0 = 0;
+  const i1 = ds.length - 1;
+  if (i1 <= i0) return null;
+  let start = 0, end = 0, n = 0;
+  for (const id of ids) {
+    const s = json[field][id];
+    if (!s) continue;
+    // Un capo vuoto (null) si salta in avanti / indietro fino al primo
+    // scatto buono: meglio un giorno in meno che una differenza col nulla.
+    let a = i0; while (a < i1 && s[a] == null) a++;
+    let b = i1; while (b > a && s[b] == null) b--;
+    if (b <= a || s[a] == null || s[b] == null) continue;
+    start += s[a]; end += s[b]; n++;
+  }
+  if (!n) return null;
+  return { start, end, delta: end - start, from: ds[i0], to: ds[i1], partial, n };
+}
+
+/** Valore giorno per giorno, sommato su `ids`: Map giorno → numero, o null
+ *  se a quel giorno manca anche una sola nazione (la linea si spezza). */
+export function econDaily(json, field, ids) {
+  const out = new Map();
+  if (!json?.days?.length || !json[field]) return out;
+  const list = ids.filter(id => json[field][id]);
+  if (!list.length) return out;
+  json.days.forEach((d, i) => {
+    let s = 0;
+    for (const id of list) {
+      const v = json[field][id][i];
+      if (v == null) { s = null; break; }
+      s += v;
+    }
+    out.set(d, s);
+  });
+  return out;
+}
+
+/** Incassi delle unità giorno per giorno per le nazioni `ids` (dai flussi
+ *  dei contratti): Map giorno → monete. */
+export function earnedDaily(flows, ids) {
+  const out = new Map();
+  if (!flows?.byDay) return out;
+  const set = new Set(ids);
+  for (const [d, byPayer] of Object.entries(flows.byDay)) {
+    let s = 0;
+    for (const byTo of Object.values(byPayer)) for (const [to, [c]] of Object.entries(byTo)) if (set.has(to)) s += c;
+    if (s) out.set(d, s);
   }
   return out;
 }

@@ -45,7 +45,11 @@ const SENTINEL = 'wpBack';
 /** Le chiavi dell'URL che appartengono ai livelli: le altre non si toccano.
  *  ⚠️ `view` NO: è dello sfondo di Wallpaper Engine (?wallpaper=1&view=). */
 export const URL_KEYS = ['map', 'focus', 'days', 'region', 'country', 'alliance',
-  'sphere', 'battle', 'section', 'tab', 'item', 'mu', 'mua', 'mub', 'nation', 'senate', 'player', 'vs', 'vote', 'team'];
+  'sphere', 'battle', 'section', 'tab', 'item', 'mu', 'mua', 'mub', 'nation', 'senate', 'player', 'vs', 'vote', 'team',
+  // WarEra+ (2026-11-26) Battaglie: guerra aperta, vista per alleanza,
+  // alleanza aperta nelle spese, colonne "Conti". ⚠️ `ally` e non
+  // `alliance`: quella apre l'alleanza sulla MAPPA (main.js, passo 2).
+  'war', 'by', 'ally', 'cols'];
 
 /** @type {{ id: string, onBack: () => void, isOpen?: () => boolean, params?: object }[]} */
 const stack = [];

@@ -31,12 +31,45 @@ import { state } from '../diplomacy/state.js';
 import { escapeHtml } from '../diplomacy/utils.js';
 import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 import { btlT } from './i18n.js';
+import { buildAllianceAgg, allianceSummaryTable, createAllianceView, archiveKey } from './alliances.js';
+import { warHref, copyLinkHtml } from './links.js';
 
 const PAGE = 40;
 let _shown = PAGE;
 let _query = '';
 let _sort = 'cost';            // 'cost' | 'damage' | 'last' | 'battles'
 const _open = new Set();       // guerre espanse
+// WarEra+ (2026-11-26): vista per guerra o per alleanza, e la guerra aperta
+// per ultima (va nel link: ?tab=wars&war=). _focus = arrivata da un link o
+// dal ⚔ di una battaglia: aprila, mettila nella pagina e scorrici sopra.
+let _mode = 'war';             // 'war' | 'alliance'
+let _lastOpen = null;
+let _focus = null;
+const _allyView = createAllianceView({ mode: 'wars' });
+
+/** Stato da mettere nel link (main.js: linkState). */
+export function getWarsLinkState() {
+  if (_mode === 'alliance') return { by: 'alliance', ally: _allyView.getOpen() };
+  const war = _lastOpen && _open.has(_lastOpen) ? _lastOpen : (_open.size ? [..._open].at(-1) : null);
+  return { war };
+}
+/** Da un link, o dal ⚔ accanto a una battaglia. */
+export function openWar(id) {
+  if (!id) return;
+  _mode = 'war';
+  _open.add(id);
+  _lastOpen = id;
+  _focus = id;
+}
+export function setWarsLinkState({ by, ally } = {}) {
+  if (by === 'alliance') { _mode = 'alliance'; if (ally) _allyView.setOpen(ally); }
+}
+/** La riga da portare in vista dopo il disegno (una volta sola). */
+export function takeWarsFocus() {
+  if (_mode === 'alliance') { const a = _allyView.takeFocus(); return a ? `[data-ally="${CSS.escape(a)}"]` : null; }
+  const f = _focus; _focus = null;
+  return f ? `[data-war="${CSS.escape(f)}"]` : null;
+}
 
 /* ── Formati (gli stessi dell'elenco battaglie: monete sotto la decina) ── */
 function fmtNum(n) {
@@ -209,6 +242,7 @@ function detailHtml(w) {
   return `
     <tr class="wp-war-exp"><td colspan="7">
       <div class="wp-war-exp-in">
+        ${copyLinkHtml(warHref(w.id))}
         <h3 class="wp-btl-h3">${btlT('warSides')}</h3>
         <div class="wp-btl-tablewrap">
           <table class="wp-btl-table">
@@ -233,6 +267,8 @@ function detailHtml(w) {
               </tr>`).join('')}</tbody>
           </table>
         </div>
+        <h3 class="wp-btl-h3">${btlT('warSidesAlliance')}</h3>
+        ${allianceSummaryTable(buildAllianceAgg(w.battles.filter(b => !b.live), w.battles.filter(b => b.live)))}
         <h3 class="wp-btl-h3">${btlT('warBattlesTitle')} <span class="wp-btl-sub">${w.battles.length}</span></h3>
         <div class="wp-btl-tablewrap">
           <table class="wp-btl-table wp-btl-list">
@@ -248,20 +284,65 @@ function detailHtml(w) {
     </td></tr>`;
 }
 
+// Le guerre si ricalcolano solo se cambia l'archivio (o le battaglie vive):
+// la ricerca ridisegna a ogni lettera.
+let _warsMemo = null;
+function warsOf(archive) {
+  if (_warsMemo && _warsMemo.battles === archive.battles && _warsMemo.live === archive.live) return _warsMemo.out;
+  const out = buildWars(archive);
+  out.byId = new Map(out.wars.map(w => [w.id, w]));
+  _warsMemo = { battles: archive.battles, live: archive.live, out };
+  return out;
+}
+
 export function renderWars(archive) {
-  const { wars, withoutWar } = buildWars(archive);
-  const list = sortWars(wars.filter(matches));
-  const visible = list.slice(0, _shown);
+  const { wars, withoutWar, byId } = warsOf(archive);
 
   const notices = [];
   if (archive.degraded) notices.push(`<div class="wp-btl-notice warn">${btlT('warsDegraded')}</div>`);
   else if (archive.retentionDays) notices.push(`<div class="wp-btl-notice">${btlT('warsCoverage', { n: archive.retentionDays })}</div>`);
   if (withoutWar) notices.push(`<div class="wp-btl-notice">${btlT('warsPending', { n: withoutWar })}</div>`);
 
+  // Una guerra chiesta da un link che non c'è (più vecchia dell'archivio):
+  // si dice, invece di mostrare l'elenco come se il link non portasse niente.
+  if (_focus && !byId.has(_focus)) {
+    notices.push(`<div class="wp-btl-notice warn">${btlT('warNotFound')}</div>`);
+    _open.delete(_focus);
+    _focus = null;
+  }
+  // Una guerra aperta da un link deve vedersi anche se la ricerca corrente
+  // la nasconderebbe o se sta oltre la pagina.
+  if (_focus && _query && !matches(byId.get(_focus))) _query = '';
+  const list = sortWars(wars.filter(matches));
+  if (_focus) { const i = list.findIndex(w => w.id === _focus); if (i >= _shown) _shown = i + 1; }
+  const visible = list.slice(0, _shown);
+
+  const modeChips = `
+      <div class="wp-btl-filters">
+        <span class="wp-btl-lbl">${btlT('viewLabel')}</span>
+        <button type="button" class="wp-btl-chip${_mode === 'war' ? ' active' : ''}" data-wmode="war">${btlT('viewWar')}</button>
+        <button type="button" class="wp-btl-chip${_mode === 'alliance' ? ' active' : ''}" data-wmode="alliance">${btlT('viewAlliance')}</button>
+      </div>`;
+
+  if (_mode === 'alliance') {
+    const withWar = (archive.battles || []).filter(b => b.warId);
+    const liveWar = (archive.live || []).filter(b => b.warId);
+    const agg = buildAllianceAgg(withWar, liveWar, `wars|${archiveKey(archive)}`);
+    return `
+      ${notices.join('')}
+      <div class="wp-btl-toolbar">
+        <input type="search" class="wp-btl-search" id="wp-war-search" placeholder="${btlT('allySearch')}" value="${escapeHtml(_query)}">
+        ${modeChips}
+      </div>
+      ${_allyView.render(agg, { query: _query, warInfo: (id) => byId.get(id) })}
+      <p class="wp-btl-foot">${btlT('warsNote')}</p>`;
+  }
+
   return `
     ${notices.join('')}
     <div class="wp-btl-toolbar">
       <input type="search" class="wp-btl-search" id="wp-war-search" placeholder="${btlT('warsSearch')}" value="${escapeHtml(_query)}">
+      ${modeChips}
       <div class="wp-btl-filters">
         <span class="wp-btl-meta">${btlT('warsSortBy')}</span>
         ${[['cost', 'warSortCost'], ['damage', 'warSortDamage'], ['last', 'warSortLast'], ['battles', 'warSortBattles']]
@@ -305,13 +386,22 @@ export function wireWars(root, repaint, onOpenBattle, findBattle) {
   });
   root.querySelector('#wp-war-more')?.addEventListener('click', () => { _shown += PAGE; repaint(); });
 
+  // Cambiare vista azzera la ricerca solo se cercava una cosa che nell'altra
+  // vista non ha senso: qui le due ricerche cercano entrambe per nome, quindi
+  // il testo resta.
+  root.querySelectorAll('[data-wmode]').forEach(btn => {
+    btn.addEventListener('click', () => { _mode = btn.dataset.wmode; _shown = PAGE; repaint(); });
+  });
+  if (_mode === 'alliance') _allyView.wire(root, { repaint, onOpenBattle, findBattle });
+
   root.querySelector('.wp-war-table tbody')?.addEventListener('click', (e) => {
+    if (e.target.closest('[data-war-link]')) return;          // lo gestisce main.js
     const bt = e.target.closest('[data-battle]');
     if (bt) { const b = findBattle(bt.dataset.battle); if (b) onOpenBattle(b); return; }
     const tr = e.target.closest('.wp-war-row');
     if (!tr) return;
     const id = tr.dataset.war;
-    if (_open.has(id)) _open.delete(id); else _open.add(id);
+    if (_open.has(id)) _open.delete(id); else { _open.add(id); _lastOpen = id; }
     repaint();
   });
 }

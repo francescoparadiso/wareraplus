@@ -35,6 +35,7 @@ import { state } from '../diplomacy/state.js';
 import { escapeHtml } from '../diplomacy/utils.js';
 import { getFlagUrl, getNationCode } from '../panel/nationFlag.js';
 import { btlT } from './i18n.js';
+import { warLinkHtml, copyLinkHtml, battlesHref } from './links.js';
 import { trackEvent, trackThrottled } from '../shared/analytics.js';
 import { getBattleDetail, getBattleMuBreakdown, getRoundRanking } from './api.js';
 import { trpcCall } from '../shared/trpcClient.js';
@@ -759,6 +760,10 @@ export function renderBattleDetail(battle) {
       ${flagHtml(battle.attacker.countryId)}${escapeHtml(nationName(battle.attacker.countryId) || '—')}
       <span class="wp-btl-type">${typeLabel(battle.type)}</span>
     </h2>
+    <div class="wp-btl-linkbar">
+      ${warLinkHtml(battle.warId)}
+      ${copyLinkHtml(battlesHref({ battle: battle.id }))}
+    </div>
     ${_tl?.k?.length >= 3 && _tl?.s?.length
       ? `<button type="button" class="wp-btl-replay" data-btl-replay>▶ ${btlT('replayOnMap')}</button>`
       : ''}

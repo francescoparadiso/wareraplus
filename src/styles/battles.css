@@ -1261,3 +1261,88 @@ body.light-theme .wp-btl { --wp-btl-in: #1a7f37; --wp-btl-out: #cf222e; }
 .wp-btl-flowcol:nth-child(2) .wp-btl-flowbar i { background: var(--wp-btl-in); }
 /* v0.28.3: etichetta del selettore del tipo d'unità nella scheda Bonus */
 .wp-btl-bman-lab { font-size: 12px; font-weight: 700; color: var(--wp-ov-text-dim, #8b949e); }
+
+/* ══════════════════════════════════════════════════════════════
+   Link, viste per alleanza, conti (WarEra+, 2026-11-26)
+   ------------------------------------------------------------------
+   Il ⚔ della guerra è un <a> vero, piccolo e nella tinta della sezione:
+   sta dentro la cella della battaglia e non deve sembrare un'etichetta
+   del tipo (grigia, maiuscola) né un bottone. Le linee dei conti hanno
+   colori loro (tesoro azzurro, cittadini verde acqua), lontani da ambra e
+   viola della spesa e dal verde/rosso di entrate/uscite.
+   ══════════════════════════════════════════════════════════════ */
+.wp-btl { --wp-btl-treasury: #58a6ff; --wp-btl-citizens: #39c5bb; }
+body.light-theme .wp-btl { --wp-btl-treasury: #0969da; --wp-btl-citizens: #1b7c83; }
+
+.wp-btl-warlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--wp-ov-accent, #f85149);
+  border: 1px solid color-mix(in srgb, var(--wp-ov-accent, #f85149) 45%, transparent);
+  background: color-mix(in srgb, var(--wp-ov-accent, #f85149) 8%, transparent);
+}
+.wp-btl-warlink:hover, .wp-btl-warlink:focus-visible {
+  background: color-mix(in srgb, var(--wp-ov-accent, #f85149) 18%, transparent);
+  text-decoration: none;
+}
+
+.wp-btl-linkbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 12px;
+}
+.wp-btl-linkbar .wp-btl-warlink { margin-left: 0; font-size: 12px; padding: 3px 10px; }
+.wp-btl-copylink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  color: var(--wp-ov-text-dim, #8b949e);
+  border: 1px solid var(--wp-ov-border, rgba(255, 255, 255, .14));
+  text-decoration: none;
+}
+.wp-war-exp-in > .wp-btl-copylink { margin-bottom: 4px; }
+.wp-btl-copylink:hover { color: var(--wp-ov-text, #e6edf3); text-decoration: none; }
+.wp-btl-copylink.copied { color: var(--wp-btl-in); border-color: currentColor; }
+
+.wp-btl-toolbar-sub { margin-top: -4px; }
+.wp-ally-row .wp-btl-xp-name { min-width: 180px; }
+.wp-ally-row .wp-btl-ally-flags { margin-left: 17px; }
+.wp-ally-row.open { background: var(--wp-ov-surface, rgba(255, 255, 255, .04)); }
+.wp-ally-row .wp-btl-livetag { margin-left: 6px; }
+
+/* Conti: due grafici affiancati su desktop, uno sotto l'altro su telefono. */
+.wp-btl-econcharts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px 22px;
+  margin: 8px 0 6px;
+}
+.wp-btl-econchart { min-width: 0; }
+.wp-btl-econchart-t { font-size: 12px; color: var(--wp-ov-text-dim, #8b949e); margin: 0 0 4px; }
+.wp-btl-econ-line-t { stroke: var(--wp-btl-treasury); stroke-width: 2; fill: none; }
+.wp-btl-econ-line-c { stroke: var(--wp-btl-citizens); stroke-width: 2; fill: none; }
+.wp-btl-bar-in { fill: var(--wp-btl-in); opacity: .55; }
+.wp-btl-sw-in { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--wp-btl-in); opacity: .7; }
+.wp-btl-sw-line { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; }
+.wp-btl-sw-line.wp-btl-econ-line-t { border-color: var(--wp-btl-treasury); }
+.wp-btl-sw-line.wp-btl-econ-line-c { border-color: var(--wp-btl-citizens); }
+.wp-btl-econ th { white-space: nowrap; }
+
+@media (max-width: 767px) {
+  .wp-btl-warlink { margin: 4px 0 0; }
+  .wp-btl-econcharts { grid-template-columns: 1fr; }
+}

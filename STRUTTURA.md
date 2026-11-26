@@ -884,10 +884,27 @@ wareraPlus/
     │   │                            dell'archivio raggruppate per `war` (costi, danno, vittorie
     │   │                            per nazione), riga espandibile → battaglie → dettaglio.
     │   │                            Dipende da `wr` nell'archivio del server (vedi CLAUDE.md)
+    │   │                            Dal 2026-11-26 anche "Per alleanza" (alliances.js) e, in
+    │   │                            ogni guerra, la tabella per alleanza.
+    │   ├── alliances.js          ← NUOVO (2026-11-26) — viste "per alleanza" di Guerre e
+    │   │                            Archivio: battaglie sommate per alleanza (vinte/perse,
+    │   │                            danno fatto/subito, taglie, contratti, fronti, membri,
+    │   │                            guerre). Alleanza del GIORNO della battaglia (blocIdAt di
+    │   │                            app/timeMachineAlliances.js, ora dall'ObjectId), ripiego
+    │   │                            su quella di oggi dichiarato. Battaglie interne: una
+    │   │                            volta, né vinte né perse.
+    │   ├── links.js              ← NUOVO (2026-11-26) — i link: ⚔ alla guerra di ogni
+    │   │                            battaglia (<a href> vero), "🔗 Copia link". L'URL segue
+    │   │                            la vista (?tab= &war= &by= &ally= &nation= &days= &cols=,
+    │   │                            linkState/applyLinkState in main.js, URL_KEYS in backNav).
     │   ├── main.js, battleList.js, warExpenses.js, i18n.js (9 lingue)
     │   │                       warExpenses.js: vista per nazione o per ALLEANZA (somma sui
     │   │                       membri, state.nationAlliancesMap) + colonne Incassato/Saldo
-    │   │                       dal flusso /war-flows (aggregateFlows in api.js).
+    │   │                       dal flusso /war-flows (aggregateFlows in api.js). Dal
+    │   │                       2026-11-26 colonne "Conti" (tesoro, Δ tesoro, spesa/tesoro,
+    │   │                       Δ soldi e ricchezza dei cittadini) e "Situazione economica"
+    │   │                       nel dettaglio, da /treasury-history e /citizens-wealth-history
+    │   │                       (getWarEconomy/econDelta in api.js). Non causale: lo dice.
     ├── tournament/               ← NUOVO (2026-10-25) — Tornei: voce di Approfondimenti,
     │   │                            schede Unità militari / Nazioni, ognuna dal torneo
     │   │                            più recente del suo tipo (menù per i precedenti).

@@ -160,3 +160,32 @@ export function alliancesAt(countryId, ts) {
   }
   return null;
 }
+
+/* WarEra+ (2026-11-26) — l'alleanza a blocco di MOLTE battaglie in fila,
+   per le viste "per alleanza" di Guerre e Archivio (src/battles/alliances.js).
+   alliancesAt() rifà la mappa a ogni istante diverso e conta i membri a ogni
+   chiamata: su ~4.000 battaglie sarebbero 4.000 ricostruzioni. Qui la mappa
+   si tiene per secchi di 6 ore (≤ 360 mappe su 90 giorni): un cambio di
+   alleanza dentro le stesse 6 ore della battaglia può finire dalla parte
+   sbagliata, che è il prezzo accettato. Ha la SUA cache: quella di
+   _blocchiA (un istante solo) è della time machine durante il playback.
+     · undefined → registro assente o istante prima dei blocchi: chi chiama
+       ricade sull'appartenenza di oggi;
+     · null      → nessun blocco in quel momento;
+     · id        → l'alleanza. */
+const BLOC_BUCKET_MS = 6 * 3600 * 1000;
+const _bucketMaps = new Map();
+
+export function blocIdAt(countryId, ts) {
+  if (!_dati || !_dati.blocFrom || !ts || ts < _dati.blocFrom) return undefined;
+  const k = Math.floor(ts / BLOC_BUCKET_MS);
+  let m = _bucketMaps.get(k);
+  if (!m) { m = _blocchiA(k * BLOC_BUCKET_MS + BLOC_BUCKET_MS / 2); _bucketMaps.set(k, m); }
+  return m.get(countryId) || null;
+}
+
+/** Nome dell'alleanza (quello di oggi, o l'ultimo noto se non esiste più). */
+export function blocName(allianceId) {
+  if (!_dati || !allianceId) return null;
+  return _dati.current.get(allianceId) || _dati.names.get(allianceId)?.at(-1)?.[1] || null;
+}

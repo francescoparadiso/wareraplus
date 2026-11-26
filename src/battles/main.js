@@ -28,13 +28,14 @@
 
 import '../styles/battles.css';
 import { btlT } from './i18n.js';
-import { getBattleArchive, getWarExpenses, getLiveBattles } from './api.js';
-import { renderBattleList, wireBattleList } from './battleList.js';
+import { getBattleArchive, getWarExpenses, getLiveBattles, getWarEconomy } from './api.js';
+import { renderBattleList, wireBattleList, getArchiveLinkState, setArchiveLinkState, takeArchiveFocus } from './battleList.js';
 import { renderBattleDetail, wireBattleDetail, loadBattleDetail, resetBattleDetail, refreshBattleDetail } from './battleDetail.js';
-import { renderWarExpenses, wireWarExpenses } from './warExpenses.js';
-import { renderWars, wireWars } from './wars.js';
+import { renderWarExpenses, wireWarExpenses, getExpensesLinkState, setExpensesLinkState } from './warExpenses.js';
+import { renderWars, wireWars, getWarsLinkState, openWar, setWarsLinkState, takeWarsFocus } from './wars.js';
+import { loadBlocHistory } from './alliances.js';
 import { trackEvent } from '../shared/analytics.js';
-import { syncBack } from '../app/backNav.js';
+import { syncBack, updateBackParams } from '../app/backNav.js';
 
 let _container = null;
 let _tab = 'archive';       // 'archive' | 'wars' | 'expenses'
@@ -79,10 +80,92 @@ function shellHtml() {
     </div>`;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   I LINK (WarEra+, 2026-11-26)
+   ------------------------------------------------------------------
+   «Devono sempre esserci i link»: l'indirizzo segue quello che si guarda
+   (scheda, guerra aperta, vista per alleanza, nazione o alleanza aperta
+   nelle spese, finestra, colonne) e chi lo apre ritrova la stessa vista
+   (applyLinkState, chiamata da app/battlesOverlay.js prima dell'init).
+   La battaglia aperta sta nel livello figlio 'battles/detail' (?battle=).
+   I link ⚔ alla guerra e "🔗 Copia link" sono <a href> veri (links.js):
+   il clic normale si intercetta qui, una volta sul contenitore.
+   ══════════════════════════════════════════════════════════════ */
+const LINK_KEYS = { tab: undefined, war: undefined, by: undefined, ally: undefined, nation: undefined, days: undefined, cols: undefined };
+
+function linkState() {
+  const base = { ...LINK_KEYS, tab: _tab === 'archive' ? undefined : _tab };
+  if (_openBattle) return base;
+  if (_tab === 'wars') return { ...base, ...getWarsLinkState() };
+  if (_tab === 'archive') return { ...base, ...getArchiveLinkState() };
+  return { ...base, ...getExpensesLinkState() };
+}
+
+/** Da un link condivisibile: va chiamata PRIMA di initBattlesView. */
+export function applyLinkState({ tab, war, by, ally, nation, days, cols } = {}) {
+  if (TABS.some(t => t.id === tab)) _tab = tab;
+  if (war) { _tab = 'wars'; openWar(war); }
+  if (_tab === 'wars') setWarsLinkState({ by, ally });
+  else if (_tab === 'archive') setArchiveLinkState({ by, ally });
+  else setExpensesLinkState({ by, nation, ally, days, cols });
+}
+
+/** Il ⚔ accanto a una battaglia: la sua guerra, aperta e in vista. */
+function jumpToWar(id) {
+  _openBattle = null;
+  resetBattleDetail();
+  openWar(id);
+  if (_tab === 'wars') paintBody(); else switchTab('wars');
+  trackEvent('battles-jump-to-war');
+}
+
+function copyLink(a) {
+  const url = new URL(a.getAttribute('href'), location.href).href;
+  const done = () => {
+    const old = a.textContent;
+    a.textContent = `✓ ${btlT('linkCopied')}`;
+    a.classList.add('copied');
+    setTimeout(() => { a.textContent = old; a.classList.remove('copied'); }, 1600);
+  };
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(url).then(done, () => window.prompt(btlT('copyLink'), url));
+  else window.prompt(btlT('copyLink'), url);
+  trackEvent('battles-copy-link');
+}
+
+const _delegated = new WeakSet();
+function wireLinks(container) {
+  if (_delegated.has(container)) return;
+  _delegated.add(container);
+  container.addEventListener('click', (e) => {
+    const a = e.target.closest('a[data-war-link], a[data-copy-link]');
+    // Tasto centrale, Ctrl/⌘-clic: il browser apre il link dove vuole l'utente.
+    if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (a.dataset.warLink) jumpToWar(a.dataset.warLink); else copyLink(a);
+  });
+}
+
+/** Una riga chiesta da un link (o dal ⚔): portata in vista, una volta. */
+function scrollToFocus() {
+  if (_openBattle || !_archive) return;
+  const sel = _tab === 'wars' ? takeWarsFocus() : _tab === 'archive' ? takeArchiveFocus() : null;
+  if (!sel) return;
+  requestAnimationFrame(() => {
+    document.getElementById('wp-btl-body')?.querySelector(sel)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
+}
+
+function paintBody() {
+  paintBodyInner();
+  updateBackParams('battles', linkState());
+  scrollToFocus();
+}
+
 /** Disegna la scheda attiva. Le due schede ricevono i dati già pronti:
  *  non fanno fetch per conto loro, così cambiare scheda non ricompra
  *  nulla (api.js tiene comunque una cache di sessione). */
-function paintBody() {
+function paintBodyInner() {
   const body = document.getElementById('wp-btl-body');
   if (!body) return;
 
@@ -175,7 +258,35 @@ function switchTab(id) {
 /** Carica solo quello che serve alla scheda aperta. La scheda spese e
  *  l'archivio hanno due sorgenti diverse: chi apre solo l'archivio non
  *  deve pagare anche la serie giornaliera. */
+let _econLoading = false;
+let _blocRepainted = false;
+
 async function ensureData() {
+  // Il registro delle alleanze nel tempo (viste per alleanza, ~80 KB, una
+  // volta per sessione): finché non arriva si usa l'appartenenza di oggi,
+  // dichiarata, e all'arrivo si ridisegna una volta.
+  if (onArchiveData()) {
+    loadBlocHistory().then(ok => {
+      if (ok && !_blocRepainted) { _blocRepainted = true; if (onArchiveData() && !_openBattle && _archive) paintBody(); }
+    });
+  }
+  if (_tab === 'expenses') {
+    if (!_expenses) {
+      _expenses = await getWarExpenses();
+      if (_tab === 'expenses') paintBody();
+    }
+    // I conti (tesori, cittadini) arrivano dopo, senza fermare la scheda.
+    if (_expenses && _expenses.econ === undefined && !_econLoading) {
+      _econLoading = true;
+      const exp = _expenses;
+      getWarEconomy().then(econ => {
+        exp.econ = econ;
+        _econLoading = false;
+        if (_tab === 'expenses' && _expenses === exp) paintBody();
+      });
+    }
+    return;
+  }
   if (onArchiveData() && !_archive) {
     _archive = await getBattleArchive();
     // Le battaglie in corso si attaccano all'oggetto archivio invece di
@@ -190,9 +301,6 @@ async function ensureData() {
     // dieci volte in un minuto resta una richiesta sola.
     await refreshLive();
     if (onArchiveData()) paintBody();
-  } else if (_tab === 'expenses' && !_expenses) {
-    _expenses = await getWarExpenses();
-    if (_tab === 'expenses') paintBody();
   }
 }
 
@@ -280,6 +388,7 @@ export async function initBattlesView(container) {
   _container = container;
   container.innerHTML = shellHtml();
   wireShell();
+  wireLinks(container);
 
   if (!_langHandler) {
     _langHandler = onLangChange;

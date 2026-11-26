@@ -210,7 +210,10 @@ async function handleIncomingDeepLink() {
       { tab: params.get('tab'), a: params.get('mua'), b: params.get('mub') }),
     nations: () => openNationsView(params.get('nation') || undefined),
     players: () => openPlayersView(params.get('player') || undefined, params.get('vs') || undefined),
-    battles: () => openBattlesView(params.get('battle') || undefined),
+    battles: () => openBattlesView(params.get('battle') || undefined, {
+      tab: params.get('tab'), war: params.get('war'), by: params.get('by'), ally: params.get('ally'),
+      nation: params.get('nation'), days: params.get('days'), cols: params.get('cols'),
+    }),
     accordi: () => openAccordiView(),
     tournament: () => openTournamentView({ type: params.get('tab') || undefined, team: params.get('team') || undefined }),
     guide: () => openGuideView(),
