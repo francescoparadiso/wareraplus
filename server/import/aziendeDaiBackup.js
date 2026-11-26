@@ -17,7 +17,8 @@
        più tardi ne trova MENO, mai di più.
    Da ogni archivio estrae solo cache/company-census.json, in streaming
    (~45 MB a copia, niente su disco), e ne tiene il giorno italiano della
-   fotografia (`day`) e le aziende per nazione. Due backup della stessa notte
+   fotografia (`day`) e le aziende per nazione, più quante con dipendenti
+   nelle sole notti con la rosa a tutte le aziende. Due backup della stessa notte
    (il settimanale e il giornaliero della domenica) sono la stessa
    fotografia; se differiscono (un giro forzato nello stesso giorno) vince
    quella scattata più tardi, come avrebbe fatto il server.
@@ -91,16 +92,20 @@ for (const [src, cmd] of copie()) {
   try { j = JSON.parse(sh(cmd).toString()); }
   catch (e) { console.warn(`${src}: illeggibile (${e.message.slice(0, 80)})`); continue; }
   if (!j?.day || !j.latest?.countries) { console.warn(`${src}: niente fotografia per nazione`); continue; }
+  // [aziende, con dipendenti | null, disabilitate (sempre null: i backup non
+  // le contavano)]. «Con dipendenti» solo con la rosa chiesta a TUTTE le
+  // aziende: vedi _aziendePerNazione in companyCensus.js.
+  const conDip = j.coverage?.rosterScope === 'all';
   const countries = {};
   for (const [cid, perCode] of Object.entries(j.latest.countries)) {
-    let n = 0;
-    for (const v of Object.values(perCode)) n += Number(v?.[0]) || 0;
-    countries[cid] = n;
+    let n = 0, w = 0;
+    for (const v of Object.values(perCode)) { n += Number(v?.[0]) || 0; w += Number(v?.[1]) || 0; }
+    countries[cid] = [n, conDip ? w : null, null];
   }
   const world = Object.values(j.latest.items || {}).reduce((s, v) => s + (Number(v?.[0]) || 0), 0);
   const prima = notti[j.day];
   if (!prima || (j.updatedAt || 0) > prima.updatedAt) notti[j.day] = { updatedAt: j.updatedAt || 0, countries, world, src };
-  console.log(`${src}: notte ${j.day}, ${world} aziende, ${Object.keys(countries).length} nazioni`);
+  console.log(`${src}: notte ${j.day}, ${world} aziende, ${Object.keys(countries).length} nazioni${conDip ? ', con dipendenti' : ''}`);
 }
 
 const giorni = Object.keys(notti).sort();

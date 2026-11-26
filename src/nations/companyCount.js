@@ -19,6 +19,15 @@
    ricostruite col dato di oggi), e dove un backup manca c'è un buco: il
    grafico interrompe la linea invece di unire i punti come se sapesse.
 
+   Stesso giorno, seconda richiesta: «conti sulle aziende attive/inattive e
+   modo di filtrarle». ATTIVA = almeno un dipendente in rosa quella notte,
+   INATTIVA = nessuno, DISABILITATA = spenta dal gioco (`disabledAt`, lente a
+   parte). La carta ha un filtro Tutte / Attive / Inattive / Disabilitate
+   che cambia tessere e curva; l'elenco ha la colonna «Aziende attive».
+   Attive e inattive esistono dal 20 novembre (prima il censimento non
+   chiedeva la rosa a tutte), le disabilitate dal censimento del 27: la
+   carta lo dichiara quando il filtro le mostra.
+
    Senza la rotta (server non rideployato) la colonna mostra «—» e la carta
    dice che lo storico manca: nessun ripiego, il browser non può contare
    centomila aziende da sé.
@@ -35,6 +44,17 @@ export const COC_RANGES = [7, 30, 60, 90];
 
 const DICT = {
   en: {
+    fAll: "All",
+    fActive: "Active",
+    fInactive: "Inactive",
+    fDisabled: "Disabled",
+    fLbl: "Show",
+    activeShare: "Active share",
+    split: "Active (with employees) {a} · inactive (no employees) {i} · disabled {d}",
+    what: "Active = at least one employee on the roster that night; inactive = none (the owner can still work it). Disabled = switched off by the game (disabledAt), a separate lens that cuts across the other two.",
+    wFrom: "Active and inactive are counted from {d}: before that the census did not ask every company for its roster.",
+    dNone: "Disabled companies are counted from the next nightly census.",
+    dFrom: "Disabled companies are counted from {d}.",
     title: 'Companies in the nation',
     sub: 'Companies located in the regions of {nation}, counted every night by the company census.',
     now: 'Companies now', ch7: 'vs 7 days ago', ch30: 'vs 30 days ago', share: 'Share of the world', rank: 'World rank',
@@ -48,6 +68,17 @@ const DICT = {
     zero: 'No company counted in {nation} that night.',
   },
   it: {
+    fAll: "Tutte",
+    fActive: "Attive",
+    fInactive: "Inattive",
+    fDisabled: "Disabilitate",
+    fLbl: "Mostra",
+    activeShare: "Quota attive",
+    split: "Attive (con dipendenti) {a} · inattive (senza dipendenti) {i} · disabilitate {d}",
+    what: "Attiva = almeno un dipendente in rosa quella notte; inattiva = nessuno (il proprietario può ancora lavorarci). Disabilitata = spenta dal gioco (disabledAt), una lente a parte che taglia le altre due.",
+    wFrom: "Attive e inattive si contano dal {d}: prima il censimento non chiedeva la rosa a tutte le aziende.",
+    dNone: "Le disabilitate si contano dal prossimo censimento notturno.",
+    dFrom: "Le disabilitate si contano dal {d}.",
     title: 'Aziende nella nazione',
     sub: 'Aziende che stanno nelle regioni di {nation}, contate ogni notte dal censimento aziende.',
     now: 'Aziende adesso', ch7: 'rispetto a 7 giorni fa', ch30: 'rispetto a 30 giorni fa', share: 'Quota del mondo', rank: 'Posizione mondiale',
@@ -61,6 +92,17 @@ const DICT = {
     zero: 'Nessuna azienda contata in {nation} quella notte.',
   },
   es: {
+    fAll: "Todas",
+    fActive: "Activas",
+    fInactive: "Inactivas",
+    fDisabled: "Desactivadas",
+    fLbl: "Mostrar",
+    activeShare: "Cuota de activas",
+    split: "Activas (con empleados) {a} · inactivas (sin empleados) {i} · desactivadas {d}",
+    what: "Activa = al menos un empleado en plantilla esa noche; inactiva = ninguno (el dueño aún puede trabajarla). Desactivada = apagada por el juego (disabledAt), una lente aparte que corta las otras dos.",
+    wFrom: "Activas e inactivas se cuentan desde el {d}: antes el censo no pedía la plantilla a todas las empresas.",
+    dNone: "Las desactivadas se cuentan desde el próximo censo nocturno.",
+    dFrom: "Las desactivadas se cuentan desde el {d}.",
     title: 'Empresas en la nación',
     sub: 'Empresas situadas en las regiones de {nation}, contadas cada noche por el censo de empresas.',
     now: 'Empresas ahora', ch7: 'frente a hace 7 días', ch30: 'frente a hace 30 días', share: 'Cuota del mundo', rank: 'Posición mundial',
@@ -74,6 +116,17 @@ const DICT = {
     zero: 'Ninguna empresa contada en {nation} esa noche.',
   },
   de: {
+    fAll: "Alle",
+    fActive: "Aktiv",
+    fInactive: "Inaktiv",
+    fDisabled: "Deaktiviert",
+    fLbl: "Zeigen",
+    activeShare: "Anteil aktiv",
+    split: "Aktiv (mit Angestellten) {a} · inaktiv (ohne Angestellte) {i} · deaktiviert {d}",
+    what: "Aktiv = mindestens ein Angestellter im Kader in jener Nacht; inaktiv = keiner (der Besitzer kann noch selbst arbeiten). Deaktiviert = vom Spiel abgeschaltet (disabledAt), eine eigene Sicht quer zu den anderen beiden.",
+    wFrom: "Aktiv und inaktiv werden seit {d} gezählt: vorher hat der Zensus nicht jedes Unternehmen nach seinem Kader gefragt.",
+    dNone: "Deaktivierte Unternehmen werden ab dem nächsten nächtlichen Zensus gezählt.",
+    dFrom: "Deaktivierte Unternehmen werden seit {d} gezählt.",
     title: 'Unternehmen in der Nation',
     sub: 'Unternehmen in den Regionen von {nation}, jede Nacht vom Unternehmenszensus gezählt.',
     now: 'Unternehmen jetzt', ch7: 'ggü. vor 7 Tagen', ch30: 'ggü. vor 30 Tagen', share: 'Anteil an der Welt', rank: 'Weltrang',
@@ -87,6 +140,17 @@ const DICT = {
     zero: 'In jener Nacht wurde in {nation} kein Unternehmen gezählt.',
   },
   fr: {
+    fAll: "Toutes",
+    fActive: "Actives",
+    fInactive: "Inactives",
+    fDisabled: "Désactivées",
+    fLbl: "Afficher",
+    activeShare: "Part d’actives",
+    split: "Actives (avec employés) {a} · inactives (sans employés) {i} · désactivées {d}",
+    what: "Active = au moins un employé dans l’effectif cette nuit-là ; inactive = aucun (le propriétaire peut encore y travailler). Désactivée = éteinte par le jeu (disabledAt), une lentille à part qui recoupe les deux autres.",
+    wFrom: "Actives et inactives sont comptées depuis le {d} : avant, le recensement ne demandait pas l’effectif à toutes les entreprises.",
+    dNone: "Les entreprises désactivées seront comptées à partir du prochain recensement nocturne.",
+    dFrom: "Les entreprises désactivées sont comptées depuis le {d}.",
     title: 'Entreprises dans la nation',
     sub: 'Entreprises situées dans les régions de {nation}, comptées chaque nuit par le recensement des entreprises.',
     now: 'Entreprises maintenant', ch7: 'vs il y a 7 jours', ch30: 'vs il y a 30 jours', share: 'Part du monde', rank: 'Rang mondial',
@@ -100,6 +164,17 @@ const DICT = {
     zero: 'Aucune entreprise comptée en {nation} cette nuit-là.',
   },
   nl: {
+    fAll: "Alle",
+    fActive: "Actief",
+    fInactive: "Inactief",
+    fDisabled: "Uitgeschakeld",
+    fLbl: "Toon",
+    activeShare: "Aandeel actief",
+    split: "Actief (met werknemers) {a} · inactief (zonder werknemers) {i} · uitgeschakeld {d}",
+    what: "Actief = minstens één werknemer op de lijst die nacht; inactief = geen (de eigenaar kan er nog zelf werken). Uitgeschakeld = door het spel uitgezet (disabledAt), een aparte blik dwars door de andere twee.",
+    wFrom: "Actief en inactief worden geteld sinds {d}: daarvoor vroeg de census niet elk bedrijf om zijn personeelslijst.",
+    dNone: "Uitgeschakelde bedrijven worden geteld vanaf de volgende nachtelijke census.",
+    dFrom: "Uitgeschakelde bedrijven worden geteld sinds {d}.",
     title: 'Bedrijven in de natie',
     sub: 'Bedrijven in de regio’s van {nation}, elke nacht geteld door de bedrijvencensus.',
     now: 'Bedrijven nu', ch7: 't.o.v. 7 dagen geleden', ch30: 't.o.v. 30 dagen geleden', share: 'Aandeel van de wereld', rank: 'Wereldpositie',
@@ -113,6 +188,17 @@ const DICT = {
     zero: 'Die nacht is er in {nation} geen bedrijf geteld.',
   },
   sv: {
+    fAll: "Alla",
+    fActive: "Aktiva",
+    fInactive: "Inaktiva",
+    fDisabled: "Avstängda",
+    fLbl: "Visa",
+    activeShare: "Andel aktiva",
+    split: "Aktiva (med anställda) {a} · inaktiva (utan anställda) {i} · avstängda {d}",
+    what: "Aktiv = minst en anställd på listan den natten; inaktiv = ingen (ägaren kan fortfarande arbeta där). Avstängd = avstängd av spelet (disabledAt), en egen lins tvärs över de andra två.",
+    wFrom: "Aktiva och inaktiva räknas sedan {d}: innan dess bad räkningen inte alla företag om personallistan.",
+    dNone: "Avstängda företag räknas från nästa nattliga räkning.",
+    dFrom: "Avstängda företag räknas sedan {d}.",
     title: 'Företag i nationen',
     sub: 'Företag i regionerna i {nation}, räknade varje natt av företagsräkningen.',
     now: 'Företag nu', ch7: 'jämfört med för 7 dagar sedan', ch30: 'jämfört med för 30 dagar sedan', share: 'Andel av världen', rank: 'Världsplacering',
@@ -126,6 +212,17 @@ const DICT = {
     zero: 'Inget företag räknades i {nation} den natten.',
   },
   pt: {
+    fAll: "Todas",
+    fActive: "Ativas",
+    fInactive: "Inativas",
+    fDisabled: "Desativadas",
+    fLbl: "Mostrar",
+    activeShare: "Fatia de ativas",
+    split: "Ativas (com funcionários) {a} · inativas (sem funcionários) {i} · desativadas {d}",
+    what: "Ativa = pelo menos um funcionário no quadro naquela noite; inativa = nenhum (o dono ainda pode trabalhar nela). Desativada = desligada pelo jogo (disabledAt), uma lente à parte que corta as outras duas.",
+    wFrom: "Ativas e inativas são contadas desde {d}: antes o censo não pedia o quadro a todas as empresas.",
+    dNone: "As desativadas são contadas a partir do próximo censo noturno.",
+    dFrom: "As desativadas são contadas desde {d}.",
     title: 'Empresas na nação',
     sub: 'Empresas situadas nas regiões de {nation}, contadas todas as noites pelo censo de empresas.',
     now: 'Empresas agora', ch7: 'vs há 7 dias', ch30: 'vs há 30 dias', share: 'Fatia do mundo', rank: 'Posição mundial',
@@ -139,6 +236,17 @@ const DICT = {
     zero: 'Nenhuma empresa contada em {nation} naquela noite.',
   },
   ar: {
+    fAll: "الكل",
+    fActive: "نشطة",
+    fInactive: "غير نشطة",
+    fDisabled: "معطلة",
+    fLbl: "عرض",
+    activeShare: "حصة النشطة",
+    split: "نشطة (بموظفين) {a} · غير نشطة (بلا موظفين) {i} · معطلة {d}",
+    what: "نشطة = موظف واحد على الأقل في القائمة تلك الليلة؛ غير نشطة = لا أحد (يمكن للمالك أن يعمل فيها). معطلة = أوقفها اللعبة (disabledAt)، عدسة منفصلة تتقاطع مع الأخريين.",
+    wFrom: "تُحصى النشطة وغير النشطة منذ {d}: قبل ذلك لم يكن التعداد يطلب قائمة الموظفين من كل الشركات.",
+    dNone: "تُحصى الشركات المعطلة ابتداءً من التعداد الليلي القادم.",
+    dFrom: "تُحصى الشركات المعطلة منذ {d}.",
     title: 'الشركات في الدولة',
     sub: 'الشركات الموجودة في مناطق {nation}، يحصيها تعداد الشركات كل ليلة.',
     now: 'الشركات الآن', ch7: 'مقارنة بقبل 7 أيام', ch30: 'مقارنة بقبل 30 يومًا', share: 'الحصة من العالم', rank: 'الترتيب العالمي',
@@ -175,7 +283,11 @@ async function cacheJson(path) {
 /* ── tutte le nazioni, ultima notte (colonna dell'elenco) ─────────── */
 
 let _all = null;          // { at, p } — la promessa dell'ultima lettura
-let _counts = null;       // Map cid → aziende, appena arrivata
+let _counts = null;       // Map cid → [aziende, con dipendenti | null, disabilitate | null]
+
+/** [cid, aziende, conDip, dis] → Map. Regge anche la prima forma della rotta
+ *  ([cid, aziende]), servita per qualche ora il 2026-11-26. */
+const toMap = (rows) => new Map(rows.map(r => [r[0], [Number(r[1]) || 0, r[2] ?? null, r[3] ?? null]]));
 
 /** Carica (una volta ogni TTL) il conteggio di tutte le nazioni. Risolve a
  *  true se c'è un dato nuovo da disegnare. */
@@ -185,7 +297,7 @@ export function loadCompanyCounts() {
     try {
       const json = await cacheJson('/company-count');
       if (json?.available !== true || !Array.isArray(json.countries)) return false;
-      _counts = new Map(json.countries);
+      _counts = toMap(json.countries);
       return true;
     } catch (err) {
       console.warn('WarEra+ nations: /company-count non disponibile:', err.message);
@@ -200,8 +312,15 @@ export function loadCompanyCounts() {
 /** null finché il dato non c'è (la colonna mostra «—», non 0). */
 export function companyCountOf(countryId) {
   if (!_counts) return null;
-  return _counts.get(countryId) || 0;
+  return _counts.get(countryId)?.[0] || 0;
 }
+/** Attive (con dipendenti in rosa): null se il server non le conta. */
+export function companyActiveOf(countryId) {
+  if (!_counts) return null;
+  const r = _counts.get(countryId);
+  return r ? r[1] : 0;
+}
+export const companyActiveKnown = () => !!_counts && [..._counts.values()].some(r => r[1] != null);
 export const companyCountsKnown = () => !!_counts;
 
 /* ── una nazione, con la serie (carta della scheda Economia) ──────── */
@@ -217,7 +336,7 @@ export function fetchCompanyCount(countryId) {
       const json = await cacheJson(`/company-count?countryId=${encodeURIComponent(countryId)}&days=${Math.max(...COC_RANGES) + 1}`);
       if (json?.available !== true) return null;
       // La stessa risposta porta l'ultima notte di tutte: la colonna la riusa.
-      if (Array.isArray(json.countries)) _counts = new Map(json.countries);
+      if (Array.isArray(json.countries)) _counts = toMap(json.countries);
       return json;
     } catch (err) {
       console.warn('WarEra+ nations: /company-count non disponibile:', err.message);

@@ -676,7 +676,11 @@ lo storico manca. Stesso perimetro del censimento (proprietari attivi negli ulti
 (`server/import/aziendeDaiBackup.js` → `cache/company-count-backfill.json`, una
 volta sola: il bucket pota i giornalieri a 30 giorni, rilanciarlo dopo ne trova
 meno), che contengono la fotografia di quelle notti. Dove manca una notte la
-linea si interrompe. `/health` → `companyCensus.aziendePerNazione`.
+linea si interrompe. `/health` → `companyCensus.aziendePerNazione`. Il filtro
+**attive / inattive / disabilitate** (attiva = almeno un dipendente in rosa;
+disabilitata = `disabledAt`) ha due date sue: attive e inattive solo dalle notti
+con la rosa a TUTTE le aziende (`rosterScope: 'all'`, dal 20 novembre: dal 4 al
+19 il conto era zero per tutti), le disabilitate dal giro del 27 novembre.
 
 La vista **Potere d'acquisto** della scheda Ricchezza di Giocatori
 (`src/players/purchasingPower.js`) è solo client: divide per un indice dei

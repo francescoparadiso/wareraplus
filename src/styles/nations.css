@@ -564,6 +564,8 @@ body.light-theme .wp-nat-lv-tip { box-shadow: 0 8px 22px rgba(0, 0, 0, .16); }
 }
 .wp-nat-curve-range button:hover { color: var(--wp-ov-text, #e6edf3); }
 .wp-nat-curve-range button.active { background: var(--wp-ov-surface, #161b22); color: var(--wp-ov-text, #e6edf3); }
+/* WarEra+ (2026-11-26): il filtro attive/inattive della carta Aziende, sotto il titolo. */
+.wp-nat-coc-filter { margin: 2px 0 10px; flex-wrap: wrap; }
 
 .wp-nat-curve-legend {
   list-style: none; display: flex; flex-wrap: wrap; gap: 4px 14px;

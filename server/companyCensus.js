@@ -201,6 +201,14 @@
    `import/aziendeDaiBackup.js` in `company-count-backfill.json`, che qui si
    legge e basta. Dove un backup non c'è (prima del 27 ottobre, fra una
    domenica e l'altra) c'è un buco, e il grafico lo lascia vedere.
+   Accanto al totale, per nazione (richiesta dell'utente, stesso giorno):
+   ATTIVE = con dipendenti in rosa, INATTIVE = senza, e DISABILITATE
+   (`disabledAt` del gioco, una lente a parte che taglia le altre due).
+   «Con dipendenti» si tiene solo dalle notti in cui la rosa si chiedeva a
+   TUTTE le aziende (`rosterScope: 'all'`, dal 20 novembre): prima voleva
+   dire "ha prodotto ieri" o "ha prodotto in settimana", e dal 4 al 19
+   novembre era zero per tutti (statistiche premium). Le disabilitate le
+   conta il giro da stanotte; i backup non le avevano.
    ═══════════════════════════════════════════════════════════════════════ */
 
 let deps = null;
@@ -275,16 +283,25 @@ function _vuoto() {
   };
 }
 
-/** Aziende per nazione di una fotografia `latest.countries` (code → [c, …]). */
-function _aziendePerNazione(countries) {
+/** Aziende per nazione di una fotografia `latest.countries` (code → [c, cw, w]):
+ *  cid → [aziende, con dipendenti, disabilitate]. «Con dipendenti» vale solo
+ *  se la rosa è stata chiesta a TUTTE le aziende (`rosterScope: 'all'`): con
+ *  le altre forme del giro (vedi testata) il secondo numero diceva un'altra
+ *  cosa, o zero, e resta null. Le disabilitate le conta il giro da sé
+ *  (`disabili`, cid → n) e prima del 2026-11-26 non c'erano: null. */
+function _aziendePerNazione(countries, { conDip = false, disabili = null } = {}) {
   const out = {};
   for (const [cid, perCode] of Object.entries(countries || {})) {
-    let n = 0;
-    for (const v of Object.values(perCode)) n += Number(v?.[0]) || 0;
-    out[cid] = n;
+    let n = 0, w = 0;
+    for (const v of Object.values(perCode)) { n += Number(v?.[0]) || 0; w += Number(v?.[1]) || 0; }
+    out[cid] = [n, conDip ? w : null, disabili ? disabili[cid] || 0 : null];
   }
   return out;
 }
+
+/** Una riga di `countryDays` o del file di recupero → [n, conDip, dis].
+ *  Accetta anche il numero nudo (aziende e basta). */
+const _riga = (v) => (Array.isArray(v) ? [Number(v[0]) || 0, v[1] ?? null, v[2] ?? null] : [Number(v) || 0, null, null]);
 
 // ── La felicità dei dipendenti ─────────────────────────────────────────
 const WORLD = '_world';
@@ -364,7 +381,8 @@ function _read() {
   // WarEra+ (2026-11-26): l'ultima fotografia è già il primo giorno dello
   // storico per nazione, anche se è stata scattata prima che esistesse.
   if (_mem.latest && _mem.day && !_mem.countryDays[_mem.day]) {
-    _mem.countryDays[_mem.day] = _aziendePerNazione(_mem.latest.countries);
+    _mem.countryDays[_mem.day] = _aziendePerNazione(_mem.latest.countries,
+      { conDip: _mem.coverage?.rosterScope === 'all' });
   }
   return _mem;
 }
@@ -652,7 +670,15 @@ async function runCompanyCensus({ motivo = 'programmato', forza = false } = {}) 
 
     store.latest = { items, countries };
     store.counts[oggi] = items;
-    store.countryDays = { ...(store.countryDays || {}), [oggi]: _aziendePerNazione(countries) };
+    // Disabilitate (`disabledAt` del gioco) per nazione della regione: già in
+    // mano dal passo 2, zero richieste in più.
+    const disabili = {};
+    for (const c of aziende) {
+      const cid = nazioneDi(c.region);
+      if (cid && c.disabledAt) disabili[cid] = (disabili[cid] || 0) + 1;
+    }
+    store.countryDays = { ...(store.countryDays || {}), [oggi]: _aziendePerNazione(countries,
+      { conDip: !conteggioNoto && rosaValida && ambitoRosa === 'all', disabili }) };
     store.rates = aliquote;
     if (rosaValida) {
       const perCode = {};
@@ -931,24 +957,37 @@ function readCompanyCount({ countryId = null, days = 90 } = {}) {
   if (!store.latest) return { available: false };
   const notti = _nottiAziende(store);
   const ultima = store.countryDays[store.day] || _aziendePerNazione(store.latest.countries);
-  const world = Object.values(store.latest.items || {}).reduce((s, v) => s + (Number(v?.[0]) || 0), 0);
+  const righe = Object.entries(ultima).map(([cid, v]) => [cid, ..._riga(v)]);
+  const somma = (i) => (righe.some((r) => r[i] == null) ? null : righe.reduce((s, r) => s + r[i], 0));
+  // Da che notte c'è ciascuno dei due conti in più (vedi _aziendePerNazione).
+  const primaCon = (i) => notti.find(([, v]) => Object.values(v).some((x) => _riga(x)[i] != null))?.[0] || null;
   const out = {
     available: true,
     day: store.day,
     updatedAt: store.updatedAt,
     coverageFrom: notti[0]?.[0] || null,
     recordedFrom: Object.keys(store.countryDays || {}).sort()[0] || null,
+    workersFrom: primaCon(1),
+    disabledFrom: primaCon(2),
     ownerDays: 3,
-    world,
-    countries: Object.entries(ultima).sort((a, b) => b[1] - a[1]),
+    // [aziende, con dipendenti, disabilitate] del mondo, l'ultima notte
+    world: [somma(1) ?? 0, somma(2), somma(3)],
+    // [cid, aziende, con dipendenti | null, disabilitate | null], dalla più grande
+    countries: righe.sort((a, b) => b[1] - a[1]),
     countryId,
   };
   if (countryId) {
     const dal = giornoMeno(giornoDi(), Math.max(1, Math.min(Number(days) || 90, MAX_GIORNI)));
     // Una nazione che quella notte non aveva aziende contate vale 0 solo se
     // la notte c'è: la riga della notte elenca tutte le nazioni con almeno
-    // un'azienda, quindi la sua assenza lì è davvero zero.
-    out.series = notti.filter(([g]) => g >= dal).map(([g, v, o]) => [g, Number(v[countryId]) || 0, o === 'backup' ? 1 : 0]);
+    // un'azienda, quindi la sua assenza lì è davvero zero. Per i due conti in
+    // più, zero solo se quella notte li aveva per qualcuno.
+    out.series = notti.filter(([g]) => g >= dal).map(([g, v, o]) => {
+      const r = v[countryId] != null ? _riga(v[countryId]) : [0, null, null];
+      const tutti = Object.values(v).map(_riga);
+      for (const i of [1, 2]) if (r[i] == null && tutti.some((x) => x[i] != null)) r[i] = 0;
+      return [g, r[0], r[1], r[2], o === 'backup' ? 1 : 0];
+    });
   }
   return out;
 }

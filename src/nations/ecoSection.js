@@ -325,9 +325,24 @@ function lineChartHtml(points, { fmt = oro, color = C_TREASURY, label = ecoT('ec
    direbbero niente. Dati, perimetro e buchi: vedi src/nations/companyCount.js. */
 const C_COMPANIES = '#a371f7';
 const COC_KEY = 'we_nat_coc_range';
+const COC_FKEY = 'we_nat_coc_filter';
+/* Filtro attive / inattive (seconda richiesta dello stesso giorno): ogni voce
+   dice quale numero prendere da una riga [cid, tot, attive, disabilitate].
+   null = quella notte il conto non c'era, e il punto non si disegna. */
+const COC_FILTERS = {
+  all: (r) => r[1],
+  active: (r) => r[2],
+  inactive: (r) => (r[2] == null ? null : r[1] - r[2]),
+  disabled: (r) => r[3],
+};
+const FILTER_LBL = { all: 'fAll', active: 'fActive', inactive: 'fInactive', disabled: 'fDisabled' };
 let _cocRange = (() => {
   try { const v = Number(localStorage.getItem(COC_KEY)); return COC_RANGES.includes(v) ? v : 30; }
   catch { return 30; }
+})();
+let _cocFilter = (() => {
+  try { const v = localStorage.getItem(COC_FKEY); return v in COC_FILTERS ? v : 'all'; }
+  catch { return 'all'; }
 })();
 let _coc = null;
 
@@ -335,6 +350,10 @@ function companyCountHtml(d) {
   _coc = d;
   return `<div class="wp-nat-curve-card" id="wp-nat-coc">${companyCountBody()}</div>`;
 }
+
+/** [giorno, tot, attive, disabilitate, dal backup] da una riga della serie.
+ *  La prima forma della rotta era [giorno, tot, dal backup]. */
+const cocPoint = (p) => (p.length === 3 ? [p[0], p[1], null, null, p[2]] : [p[0], p[1], p[2] ?? null, p[3] ?? null, p[4] || 0]);
 
 function companyCountBody() {
   const d = _coc;
@@ -349,63 +368,98 @@ function companyCountBody() {
   if (!d) return `${head}<p class="wp-nat-lab-note">${escapeHtml(cocT('none'))}</p>`;
 
   const lang = document.documentElement.lang || undefined;
-  const intero = (v) => Number(v).toLocaleString(lang);
+  const intero = (v) => (v == null ? '—' : Number(v).toLocaleString(lang));
+  const pct = (a, b) => (a == null || !b ? '—' : `${decimale((a / b) * 100, 1)}%`);
   const fmtDay = (g) => new Date(`${g}T12:00:00Z`).toLocaleDateString(lang, { day: 'numeric', month: 'short', year: 'numeric' });
-  const serie = d.series || [];
-  const ora = d.countries.find(r => r[0] === _nation._id)?.[1] ?? 0;
-  const pos = d.countries.findIndex(r => r[0] === _nation._id);
+  const val = COC_FILTERS[_cocFilter];
+  const righe = d.countries.map(r => [r[0], Number(r[1]) || 0, r[2] ?? null, r[3] ?? null]);
+  const mia = righe.find(r => r[0] === _nation._id) || [_nation._id, 0, null, null];
+  // La serie del filtro scelto: [giorno, valore, dal backup].
+  const serie = (d.series || []).map(cocPoint)
+    .map(p => [p[0], val([null, p[1], p[2], p[3]]), p[4]])
+    .filter(p => p[1] != null);
+  const ora = val(mia);
+  const classifica = righe.filter(r => val(r) != null).sort((a, b) => val(b) - val(a));
+  const pos = classifica.findIndex(r => r[0] === _nation._id);
+  const mondo = classifica.reduce((s, r) => s + val(r), 0);
+
   // Il confronto vuole la notte giusta o quella prima: con un buco di più
   // notti si lascia «—» invece di confrontare con un giorno diverso.
   const fa = (n) => {
     const bersaglio = dayOf(dayMs(d.day) - n * DAY_MS);
     const ieri = dayOf(dayMs(bersaglio) - DAY_MS);
     const r = serie.find(p => p[0] === bersaglio) || serie.find(p => p[0] === ieri);
-    return r ? ora - r[1] : null;
+    return r && ora != null ? ora - r[1] : null;
   };
   const d7 = fa(7), d30 = fa(30);
   const sgn = (v) => (v == null ? '' : v >= 0 ? 'wp-nat-up' : 'wp-nat-down');
   const signedInt = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${intero(v)}`);
-  const tile = (lab, val, cls = '') => `
+  const tile = (lab, v, cls = '') => `
     <div class="wp-nat-lab-tile">
       <span class="wp-nat-lab-lab">${escapeHtml(lab)}</span>
-      <strong class="wp-nat-lab-val ${cls}">${escapeHtml(val)}</strong>
+      <strong class="wp-nat-lab-val ${cls}">${escapeHtml(v)}</strong>
     </div>`;
+  const etichetta = _cocFilter === 'all' ? cocT('now') : `${cocT(FILTER_LBL[_cocFilter])} · ${cocT('now')}`;
   const tiles = [
-    tile(cocT('now'), intero(ora)),
+    tile(etichetta, intero(ora)),
     tile(cocT('ch7'), signedInt(d7), sgn(d7)),
     tile(cocT('ch30'), signedInt(d30), sgn(d30)),
-    tile(cocT('share'), d.world ? `${decimale((ora / d.world) * 100, 2)}%` : '—'),
-    tile(cocT('rank'), pos >= 0 && ora > 0 ? cocT('rankOf', { r: pos + 1, n: d.countries.length }) : '—'),
+    tile(cocT('share'), ora == null ? '—' : pct(ora, mondo)),
+    tile(cocT('rank'), pos >= 0 && ora > 0 ? cocT('rankOf', { r: pos + 1, n: classifica.length }) : '—'),
+    tile(cocT('activeShare'), pct(mia[2], mia[1]), mia[2] == null ? '' : mia[2] / (mia[1] || 1) >= 0.5 ? 'wp-nat-up' : 'wp-nat-down'),
   ].join('');
+  const ripartizione = mia[2] != null || mia[3] != null
+    ? `<p class="wp-nat-lab-note">${escapeHtml(cocT('split', {
+      a: mia[2] == null ? '—' : `${intero(mia[2])} (${pct(mia[2], mia[1])})`,
+      i: mia[2] == null ? '—' : `${intero(mia[1] - mia[2])} (${pct(mia[1] - mia[2], mia[1])})`,
+      d: mia[3] == null ? '—' : `${intero(mia[3])} (${pct(mia[3], mia[1])})`,
+    }))}</p>` : '';
 
   const dal = dayOf(dayMs(d.day) - (_cocRange - 1) * DAY_MS);
   const pts = serie.filter(p => p[0] >= dal);
   const grafico = pts.length > 1
     ? lineChartHtml(pts.map(p => [p[0], p[1]]), {
-      fmt: intero, color: C_COMPANIES, label: cocT('lbl'), aria: cocT('chart', { nation: nome }),
+      fmt: intero, color: C_COMPANIES, label: cocT(_cocFilter === 'all' ? 'lbl' : FILTER_LBL[_cocFilter]),
+      aria: cocT('chart', { nation: nome }),
       breakDays: 1.5, tipExtra: (i) => (pts[i][2] ? [cocT('fromBackup')] : []),
     })
     : `<p class="wp-nat-lab-note">${escapeHtml(cocT('noHist'))}</p>`;
 
   const note = [];
-  if (d.coverageFrom && d.coverageFrom > dal) note.push(cocT('coverShort', { d: fmtDay(d.coverageFrom) }));
-  if (d.coverageFrom && d.recordedFrom && d.coverageFrom < d.recordedFrom) {
+  const daQuando = serie[0]?.[0];
+  if (daQuando && daQuando > dal) note.push(cocT('coverShort', { d: fmtDay(daQuando) }));
+  if (_cocFilter === 'active' || _cocFilter === 'inactive') {
+    if (d.workersFrom) note.push(cocT('wFrom', { d: fmtDay(d.workersFrom) }));
+  } else if (_cocFilter === 'disabled') {
+    note.push(d.disabledFrom ? cocT('dFrom', { d: fmtDay(d.disabledFrom) }) : cocT('dNone'));
+  }
+  if (d.coverageFrom && d.recordedFrom && d.coverageFrom < d.recordedFrom && _cocFilter !== 'disabled') {
     note.push(cocT('cover', { d: fmtDay(d.coverageFrom), r: fmtDay(d.recordedFrom) }));
   }
   return `${head}
     <p class="wp-nat-lab-note">${escapeHtml(cocT('sub', { nation: nome }))}</p>
+    <div class="wp-nat-curve-range wp-nat-coc-filter" id="wp-nat-coc-filter" role="group" aria-label="${escapeHtml(cocT('fLbl'))}">
+      ${Object.keys(COC_FILTERS).map(f => `<button type="button" data-f="${f}" class="${f === _cocFilter ? 'active' : ''}">${escapeHtml(cocT(FILTER_LBL[f]))}</button>`).join('')}
+    </div>
     <div class="wp-nat-lab-tiles">${tiles}</div>
+    ${ripartizione}
     <div class="wp-nat-curve-slot">${grafico}</div>
-    <p class="wp-nat-lab-note">${escapeHtml(cocT('scope', { d: fmtDay(d.day) }))}</p>
-    ${note.map(n => `<p class="wp-nat-lab-note">${escapeHtml(n)}</p>`).join('')}`;
+    ${note.map(n => `<p class="wp-nat-lab-note">${escapeHtml(n)}</p>`).join('')}
+    <p class="wp-nat-lab-note">${escapeHtml(cocT('what'))}</p>
+    <p class="wp-nat-lab-note">${escapeHtml(cocT('scope', { d: fmtDay(d.day) }))}</p>`;
 }
 
 function bindCompanyCount(body) {
   body.querySelector('#wp-nat-coc')?.addEventListener('click', (e) => {
-    const b = e.target.closest('#wp-nat-coc-range button[data-r]');
-    if (!b || Number(b.dataset.r) === _cocRange) return;
-    _cocRange = Number(b.dataset.r);
-    try { localStorage.setItem(COC_KEY, String(_cocRange)); } catch { /* storage negato */ }
+    const r = e.target.closest('#wp-nat-coc-range button[data-r]');
+    const f = e.target.closest('#wp-nat-coc-filter button[data-f]');
+    if (r && Number(r.dataset.r) !== _cocRange) {
+      _cocRange = Number(r.dataset.r);
+      try { localStorage.setItem(COC_KEY, String(_cocRange)); } catch { /* storage negato */ }
+    } else if (f && f.dataset.f !== _cocFilter) {
+      _cocFilter = f.dataset.f;
+      try { localStorage.setItem(COC_FKEY, _cocFilter); } catch { /* storage negato */ }
+    } else return;
     const card = body.querySelector('#wp-nat-coc');
     if (card) card.innerHTML = companyCountBody();
   });

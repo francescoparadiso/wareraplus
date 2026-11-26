@@ -243,7 +243,8 @@ wareraPlus/
 │   │                              ALTRE nazioni (file company-abroad, zero richieste in
 │   │                              più). Endpoint: /company-abroad?countryId=.
 │   │                              Dal 2026-11-26 tiene anche, notte per notte, QUANTE
-│   │                              aziende stanno in ogni nazione (`countryDays`, per
+│   │                              aziende stanno in ogni nazione (`countryDays`: [tot, con
+│   │                              dipendenti, disabilitate], per
 │   │                              nazione della regione); le notti prima vengono dai
 │   │                              backup (company-count-backfill.json, vedi
 │   │                              import/aziendeDaiBackup.js). Endpoint: /company-count.
@@ -613,6 +614,9 @@ wareraPlus/
     │   │                          selettore 7/30/60/90 g). Dizionario a 9 lingue dentro.
     │   │                          ⚠️ proprietari attivi negli ultimi 3 giorni (soglia del
     │   │                          censimento); notti prima del 26/11 dai backup, buchi veri.
+    │   │                          Filtro attive (dipendenti in rosa) / inattive /
+    │   │                          disabilitate (disabledAt): attive dal 20/11, disabilitate
+    │   │                          dal 27/11. Colonne «Aziende» e «Aziende attive».
     │   ├── charts.js            ← ciambelle/barre in SVG scritto a mano, niente Chart.js
     │   ├── labourSection.js     ← NUOVO — "Lavoro e tasse" nella scheda nazione:
     │   │                          salari incassati dai cittadini, quota guadagnata

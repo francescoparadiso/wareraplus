@@ -19,7 +19,7 @@ const N_DICT = {
     // WarEra+: ponte verso Political (nationDetail.js)
     politicalView: 'Political situation',
     citizens: 'Citizens', wealth: 'Wealth', weekly: 'Weekly dmg', today: 'Today', total: 'Total dmg',
-    development: 'Development', coreDev: 'Core dev.', regions: 'Regions', companies: 'Companies', wars: 'Wars', allies: 'Defensive pacts',
+    development: 'Development', coreDev: 'Core dev.', regions: 'Regions', companies: 'Companies', companiesActive: 'Active companies', wars: 'Wars', allies: 'Defensive pacts',
     taxes: 'Taxes', unrest: 'Unrest', dmgPerCore: 'Dmg / core dev', perCitizen: 'per citizen', newCitizens: 'New (7d)',
     production: 'Production bonus',
     revenue: 'Revenue / day',
@@ -107,7 +107,7 @@ const N_DICT = {
     // WarEra+: ponte verso Political (nationDetail.js)
     politicalView: 'Situazione politica',
     citizens: 'Cittadini', wealth: 'Ricchezza', weekly: 'Danni sett.', today: 'Oggi', total: 'Danni tot.',
-    development: 'Sviluppo', coreDev: 'Sviluppo core', regions: 'Regioni', companies: 'Aziende', wars: 'Guerre', allies: 'Patti difensivi',
+    development: 'Sviluppo', coreDev: 'Sviluppo core', regions: 'Regioni', companies: 'Aziende', companiesActive: 'Aziende attive', wars: 'Guerre', allies: 'Patti difensivi',
     taxes: 'Tasse', unrest: 'Malcontento', dmgPerCore: 'Danno / sviluppo core', perCitizen: 'per cittadino', newCitizens: 'Nuovi (7g)',
     production: 'Bonus produzione',
     revenue: 'Rendita / giorno',
@@ -195,7 +195,7 @@ const N_DICT = {
     // WarEra+: ponte verso Political (nationDetail.js)
     politicalView: 'Situación política',
     citizens: 'Ciudadanos', wealth: 'Riqueza', weekly: 'Daño sem.', today: 'Hoy', total: 'Daño total',
-    development: 'Desarrollo', coreDev: 'Desarrollo core', regions: 'Regiones', companies: 'Empresas', wars: 'Guerras', allies: 'Pactos defensivos',
+    development: 'Desarrollo', coreDev: 'Desarrollo core', regions: 'Regiones', companies: 'Empresas', companiesActive: 'Empresas activas', wars: 'Guerras', allies: 'Pactos defensivos',
     taxes: 'Impuestos', unrest: 'Descontento', dmgPerCore: 'Daño / desarrollo core', perCitizen: 'por ciudadano', newCitizens: 'Nuevos (7d)',
     production: 'Bonus de producción',
     revenue: 'Ingresos / día',
@@ -283,7 +283,7 @@ const N_DICT = {
     // WarEra+: ponte verso Political (nationDetail.js)
     politicalView: 'Politische Lage',
     citizens: 'Bürger', wealth: 'Vermögen', weekly: 'Wöch. Schaden', today: 'Heute', total: 'Ges. Schaden',
-    development: 'Entwicklung', coreDev: 'Kernentwicklung', regions: 'Regionen', companies: 'Unternehmen', wars: 'Kriege', allies: 'Verteidigungspakte',
+    development: 'Entwicklung', coreDev: 'Kernentwicklung', regions: 'Regionen', companies: 'Unternehmen', companiesActive: 'Aktive Unternehmen', wars: 'Kriege', allies: 'Verteidigungspakte',
     taxes: 'Steuern', unrest: 'Unruhe', dmgPerCore: 'Schaden / Kernentwicklung', perCitizen: 'pro Bürger', newCitizens: 'Neu (7T)',
     production: 'Produktionsbonus',
     revenue: 'Einnahmen / Tag',
@@ -371,7 +371,7 @@ const N_DICT = {
     // WarEra+: ponte verso Political (nationDetail.js)
     politicalView: 'Situation politique',
     citizens: 'Citoyens', wealth: 'Richesse', weekly: 'Dégâts hebdo.', today: "Aujourd'hui", total: 'Dégâts totaux',
-    development: 'Développement', coreDev: 'Dév. central', regions: 'Régions', companies: 'Entreprises', wars: 'Guerres', allies: 'Pactes défensifs',
+    development: 'Développement', coreDev: 'Dév. central', regions: 'Régions', companies: 'Entreprises', companiesActive: 'Entreprises actives', wars: 'Guerres', allies: 'Pactes défensifs',
     taxes: 'Impôts', unrest: 'Mécontentement', dmgPerCore: 'Dégâts / dév. central', perCitizen: 'par citoyen', newCitizens: 'Nouveaux (7j)',
     production: 'Bonus de production',
     revenue: 'Revenu / jour',
@@ -459,7 +459,7 @@ const N_DICT = {
     // WarEra+: ponte verso Political (nationDetail.js)
     politicalView: 'Politieke situatie',
     citizens: 'Burgers', wealth: 'Rijkdom', weekly: 'Wekel. schade', today: 'Vandaag', total: 'Totale schade',
-    development: 'Ontwikkeling', coreDev: 'Kernontwikkeling', regions: 'Regio\'s', companies: 'Bedrijven', wars: 'Oorlogen', allies: 'Verdedigingspacten',
+    development: 'Ontwikkeling', coreDev: 'Kernontwikkeling', regions: 'Regio\'s', companies: 'Bedrijven', companiesActive: 'Actieve bedrijven', wars: 'Oorlogen', allies: 'Verdedigingspacten',
     taxes: 'Belastingen', unrest: 'Onrust', dmgPerCore: 'Schade / kernontwikkeling', perCitizen: 'per burger', newCitizens: 'Nieuw (7d)',
     production: 'Productiebonus',
     revenue: 'Inkomsten / dag',
@@ -547,7 +547,7 @@ const N_DICT = {
     // WarEra+: ponte verso Political (nationDetail.js)
     politicalView: 'Politiskt läge',
     citizens: 'Medborgare', wealth: 'Förmögenhet', weekly: 'Veckoskada', today: 'Idag', total: 'Total skada',
-    development: 'Utveckling', coreDev: 'Kärnutveckling', regions: 'Regioner', companies: 'Företag', wars: 'Krig', allies: 'Försvarspakter',
+    development: 'Utveckling', coreDev: 'Kärnutveckling', regions: 'Regioner', companies: 'Företag', companiesActive: 'Aktiva företag', wars: 'Krig', allies: 'Försvarspakter',
     taxes: 'Skatter', unrest: 'Oro', dmgPerCore: 'Skada / kärnutveckling', perCitizen: 'per medborgare', newCitizens: 'Nya (7d)',
     production: 'Produktionsbonus',
     revenue: 'Intäkt / dag',
@@ -635,7 +635,7 @@ const N_DICT = {
     // WarEra+: ponte verso Political (nationDetail.js)
     politicalView: 'Situação política',
     citizens: 'Cidadãos', wealth: 'Riqueza', weekly: 'Dano sem.', today: 'Hoje', total: 'Dano total',
-    development: 'Desenvolvimento', coreDev: 'Desenv. central', regions: 'Regiões', companies: 'Empresas', wars: 'Guerras', allies: 'Pactos defensivos',
+    development: 'Desenvolvimento', coreDev: 'Desenv. central', regions: 'Regiões', companies: 'Empresas', companiesActive: 'Empresas ativas', wars: 'Guerras', allies: 'Pactos defensivos',
     taxes: 'Impostos', unrest: 'Descontentamento', dmgPerCore: 'Dano / desenv. central', perCitizen: 'por cidadão', newCitizens: 'Novos (7d)',
     production: 'Bónus de produção',
     revenue: 'Receita / dia',
@@ -723,7 +723,7 @@ const N_DICT = {
     // WarEra+: ponte verso Political (nationDetail.js)
     politicalView: 'الوضع السياسي',
     citizens: 'المواطنون', wealth: 'الثروة', weekly: 'الضرر الأسبوعي', today: 'اليوم', total: 'الضرر الإجمالي',
-    development: 'التطور', coreDev: 'التطور الأساسي', regions: 'المناطق', companies: 'الشركات', wars: 'الحروب', allies: 'اتفاقيات الدفاع',
+    development: 'التطور', coreDev: 'التطور الأساسي', regions: 'المناطق', companies: 'الشركات', companiesActive: 'الشركات النشطة', wars: 'الحروب', allies: 'اتفاقيات الدفاع',
     taxes: 'الضرائب', unrest: 'الاضطراب', dmgPerCore: 'الضرر / التطور الأساسي', perCitizen: 'لكل مواطن', newCitizens: 'جدد (7 أيام)',
     production: 'مكافأة الإنتاج',
     revenue: 'الإيراد / يوم',
