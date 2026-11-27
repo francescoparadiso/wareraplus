@@ -38,6 +38,27 @@
 
 export const CHANGELOG = [
   {
+    id: '2026-11-27',
+    title: { en: 'Companies in each nation, and spheres back on the map', it: 'Aziende in ogni nazione, e le sfere tornano sulla mappa' },
+    items: [
+      {
+        tag: 'new',
+        en: 'Nation statistics: how many companies are in a nation, now and over the last 7, 30, 60 or 90 days, in the Economy tab. A filter splits them into active (at least one employee), inactive and disabled. "Companies" and "Active companies" are also on the nation page and in the 1 vs 2 comparison.',
+        it: 'Statistiche nazioni: quante aziende ci sono in una nazione, adesso e negli ultimi 7, 30, 60 o 90 giorni, nella scheda Economia. Un filtro le divide in attive (almeno un dipendente), inattive e disabilitate. «Aziende» e «Aziende attive» ci sono anche nella scheda della nazione e nel confronto 1 vs 2.',
+      },
+      {
+        tag: 'improved',
+        en: 'Employee happiness: the chart now has the same 7 / 30 / 60 / 90 day choice as the companies chart.',
+        it: 'Felicità dei dipendenti: il grafico ha ora la stessa scelta 7 / 30 / 60 / 90 giorni del grafico delle aziende.',
+      },
+      {
+        tag: 'fix',
+        en: 'Spheres of influence: the map was staying grey instead of colouring each sphere, especially on mobile or when the tool opened straight on that view. It colours again.',
+        it: 'Sfere d\'influenza: la mappa restava grigia invece di colorare ogni sfera, soprattutto su mobile o aprendo il tool direttamente su quella vista. Ora si colora di nuovo.',
+      },
+    ],
+  },
+  {
     id: '2026-11-26',
     title: { en: 'Alliances in Wars, war accounts and links', it: 'Alleanze nelle Guerre, conti di guerra e link' },
     items: [
